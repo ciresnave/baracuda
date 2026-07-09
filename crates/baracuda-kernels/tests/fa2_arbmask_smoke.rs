@@ -18,10 +18,10 @@
 //! `fa2` cargo feature — it's its own SDPA SKU. The test file is
 //! cargo-feature-free.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 const F32_TOL_REL: f32 = 1e-4;
@@ -106,7 +106,9 @@ fn host_sdpa_f32(
 }
 
 fn gen_f32(n: usize, phase: f32, scale: f32) -> Vec<f32> {
-    (0..n).map(|i| ((i as f32) * 0.013 + phase).sin() * scale).collect()
+    (0..n)
+        .map(|i| ((i as f32) * 0.013 + phase).sin() * scale)
+        .collect()
 }
 
 fn assert_close_f32(got: &[f32], expect: &[f32], label: &str) {
@@ -170,34 +172,44 @@ fn arbmask_random_f32_matches_host_ref() {
     let sm = [B, H, Q, K];
 
     let scale = 1.0 / (D as f32).sqrt();
-    let desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        D,
-        D,
-        scale,
-        false,
-        ElementKind::F32,
-    );
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, D, D, scale, false, ElementKind::F32);
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: Some(TensorRef {
                 data: dm.as_slice(),
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
-                    alibi_slopes: None,
+            alibi_slopes: None,
         },
     )
     .expect("arbmask run");
@@ -207,8 +219,18 @@ fn arbmask_random_f32_matches_host_ref() {
     dy.copy_to_host(&mut got).expect("dl");
 
     let expect = host_sdpa_f32(
-        B as usize, H as usize, Q as usize, K as usize, D as usize, D as usize,
-        &q_h, &k_h, &v_h, Some(&m_h), scale, false,
+        B as usize,
+        H as usize,
+        Q as usize,
+        K as usize,
+        D as usize,
+        D as usize,
+        &q_h,
+        &k_h,
+        &v_h,
+        Some(&m_h),
+        scale,
+        false,
     );
     assert_close_f32(&got, &expect, "arbmask random f32");
 }
@@ -244,7 +266,7 @@ fn arbmask_tree_attention_pattern() {
     // Layout: K-axis = [P prefix tokens, t0, t1, t2, t3, t4]
     // total K = P + 5 ; Q-axis only writes the 5 new tokens.
     const P: i32 = 16; // prefix length
-    const Q: i32 = 5;  // 5 draft tokens (t0..t4)
+    const Q: i32 = 5; // 5 draft tokens (t0..t4)
     const K: i32 = P + Q;
     const B: i32 = 1;
     const H: i32 = 2;
@@ -329,34 +351,44 @@ fn arbmask_tree_attention_pattern() {
     let sm = [B, H, Q, K];
 
     let scale = 1.0 / (D as f32).sqrt();
-    let desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        D,
-        D,
-        scale,
-        false,
-        ElementKind::F32,
-    );
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, D, D, scale, false, ElementKind::F32);
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: Some(TensorRef {
                 data: dm.as_slice(),
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
-                    alibi_slopes: None,
+            alibi_slopes: None,
         },
     )
     .expect("arbmask tree run");
@@ -368,8 +400,18 @@ fn arbmask_tree_attention_pattern() {
     // Reference: host SDPA with the same mask. Validates the kernel
     // applies the additive mask correctly (with -INFINITY suppression).
     let expect = host_sdpa_f32(
-        B as usize, H as usize, Q as usize, K as usize, D as usize, D as usize,
-        &q_h, &k_h, &v_h, Some(&mask_h), scale, false,
+        B as usize,
+        H as usize,
+        Q as usize,
+        K as usize,
+        D as usize,
+        D as usize,
+        &q_h,
+        &k_h,
+        &v_h,
+        Some(&mask_h),
+        scale,
+        false,
     );
     assert_close_f32(&got, &expect, "arbmask tree");
 
@@ -396,17 +438,37 @@ fn arbmask_tree_attention_pattern() {
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv2.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy2.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse2.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv2.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy2.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse2.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: Some(TensorRef {
                 data: dm.as_slice(),
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
-                    alibi_slopes: None,
+            alibi_slopes: None,
         },
     )
     .expect("arbmask tree run 2");
@@ -429,8 +491,7 @@ fn arbmask_tree_attention_pattern() {
         for b in 0..(B as usize) {
             for h in 0..(H as usize) {
                 for d in 0..(D as usize) {
-                    let idx =
-                        ((b * (H as usize) + h) * (Q as usize) + qi) * (D as usize) + d;
+                    let idx = ((b * (H as usize) + h) * (Q as usize) + qi) * (D as usize) + d;
                     let diff = (got[idx] - got2[idx]).abs();
                     assert!(
                         diff <= F32_TOL_ABS,
@@ -483,9 +544,7 @@ fn arbmask_sliding_window_matches_naive() {
                 for j in 0..(K as usize) {
                     let jj = j as i32;
                     if jj >= lo && jj < hi {
-                        let idx = ((b * (H as usize) + h) * (Q as usize) + i)
-                            * (K as usize)
-                            + j;
+                        let idx = ((b * (H as usize) + h) * (Q as usize) + i) * (K as usize) + j;
                         mask_h[idx] = 0.0;
                     }
                 }
@@ -509,34 +568,44 @@ fn arbmask_sliding_window_matches_naive() {
     let sm = [B, H, Q, K];
 
     let scale = 1.0 / (D as f32).sqrt();
-    let desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        D,
-        D,
-        scale,
-        false,
-        ElementKind::F32,
-    );
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, D, D, scale, false, ElementKind::F32);
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: Some(TensorRef {
                 data: dm.as_slice(),
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
-                    alibi_slopes: None,
+            alibi_slopes: None,
         },
     )
     .expect("arbmask window run");
@@ -546,8 +615,18 @@ fn arbmask_sliding_window_matches_naive() {
     dy.copy_to_host(&mut got).expect("dl");
 
     let expect = host_sdpa_f32(
-        B as usize, H as usize, Q as usize, K as usize, D as usize, D as usize,
-        &q_h, &k_h, &v_h, Some(&mask_h), scale, false,
+        B as usize,
+        H as usize,
+        Q as usize,
+        K as usize,
+        D as usize,
+        D as usize,
+        &q_h,
+        &k_h,
+        &v_h,
+        Some(&mask_h),
+        scale,
+        false,
     );
     assert_close_f32(&got, &expect, "arbmask sliding-window");
 }
@@ -598,34 +677,44 @@ fn arbmask_with_causal_compose() {
     let sm = [B, H, Q, K];
 
     let scale = 1.0 / (D as f32).sqrt();
-    let desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        D,
-        D,
-        scale,
-        true,
-        ElementKind::F32,
-    );
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, D, D, scale, true, ElementKind::F32);
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
         &stream,
         Workspace::None,
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: Some(TensorRef {
                 data: dm.as_slice(),
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
-                    alibi_slopes: None,
+            alibi_slopes: None,
         },
     )
     .expect("arbmask+causal run");
@@ -635,8 +724,18 @@ fn arbmask_with_causal_compose() {
     dy.copy_to_host(&mut got).expect("dl");
 
     let expect = host_sdpa_f32(
-        B as usize, H as usize, Q as usize, K as usize, D as usize, D as usize,
-        &q_h, &k_h, &v_h, Some(&m_h), scale, true,
+        B as usize,
+        H as usize,
+        Q as usize,
+        K as usize,
+        D as usize,
+        D as usize,
+        &q_h,
+        &k_h,
+        &v_h,
+        Some(&m_h),
+        scale,
+        true,
     );
     assert_close_f32(&got, &expect, "arbmask + causal");
 }

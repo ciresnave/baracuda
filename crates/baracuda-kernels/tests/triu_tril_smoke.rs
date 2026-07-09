@@ -9,12 +9,12 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test triu_tril_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, TrilArgs,
-    TrilBackwardArgs, TrilBackwardDescriptor, TrilBackwardPlan, TrilDescriptor, TrilPlan,
-    TriuArgs, TriuBackwardArgs, TriuBackwardDescriptor, TriuBackwardPlan, TriuDescriptor,
-    TriuPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, TrilArgs, TrilBackwardArgs,
+    TrilBackwardDescriptor, TrilBackwardPlan, TrilDescriptor, TrilPlan, TriuArgs, TriuBackwardArgs,
+    TriuBackwardDescriptor, TriuBackwardPlan, TriuDescriptor, TriuPlan, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -337,9 +337,8 @@ fn triu_bw_f32_3x3_diagonal_0() {
         diagonal: 0,
         element: ElementKind::F32,
     };
-    let plan =
-        TriuBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+    let plan = TriuBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = TriuBackwardArgs::<f32, 2> {
         grad_output: TensorRef {
             data: dev_dy.as_slice(),
@@ -378,9 +377,8 @@ fn tril_bw_f32_3x3_diagonal_neg1() {
         diagonal: -1,
         element: ElementKind::F32,
     };
-    let plan =
-        TrilBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+    let plan = TrilBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = TrilBackwardArgs::<f32, 2> {
         grad_output: TensorRef {
             data: dev_dy.as_slice(),

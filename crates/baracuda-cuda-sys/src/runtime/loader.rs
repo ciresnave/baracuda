@@ -6,7 +6,7 @@
 
 use std::sync::OnceLock;
 
-use baracuda_core::{platform, Library, LoaderError};
+use baracuda_core::{Library, LoaderError, platform};
 
 use super::functions::*;
 

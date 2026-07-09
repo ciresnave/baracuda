@@ -90,21 +90,21 @@ pub mod col2im1d;
 pub mod im2col;
 pub mod im2col1d;
 
+pub use conv_transpose1d::{
+    ConvTranspose1dArgs, ConvTranspose1dBwArgs, ConvTranspose1dDescriptor, ConvTranspose1dDwArgs,
+    ConvTranspose1dPlan,
+};
+pub use conv_transpose2d::{
+    ConvTranspose2dArgs, ConvTranspose2dBwArgs, ConvTranspose2dDescriptor, ConvTranspose2dDwArgs,
+    ConvTranspose2dPlan,
+};
+pub use conv_transpose3d::{
+    ConvTranspose3dArgs, ConvTranspose3dBwArgs, ConvTranspose3dDescriptor, ConvTranspose3dDwArgs,
+    ConvTranspose3dPlan,
+};
 pub use conv1d::{Conv1dArgs, Conv1dBwArgs, Conv1dDescriptor, Conv1dDwArgs, Conv1dPlan};
 pub use conv2d::{Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan};
 pub use conv3d::{Conv3dArgs, Conv3dBwArgs, Conv3dDescriptor, Conv3dDwArgs, Conv3dPlan};
-pub use conv_transpose1d::{
-    ConvTranspose1dArgs, ConvTranspose1dBwArgs, ConvTranspose1dDescriptor,
-    ConvTranspose1dDwArgs, ConvTranspose1dPlan,
-};
-pub use conv_transpose2d::{
-    ConvTranspose2dArgs, ConvTranspose2dBwArgs, ConvTranspose2dDescriptor,
-    ConvTranspose2dDwArgs, ConvTranspose2dPlan,
-};
-pub use conv_transpose3d::{
-    ConvTranspose3dArgs, ConvTranspose3dBwArgs, ConvTranspose3dDescriptor,
-    ConvTranspose3dDwArgs, ConvTranspose3dPlan,
-};
 
 pub use col2im1d::{Col2Im1dArgs, Col2Im1dDescriptor, Col2Im1dPlan};
 pub use im2col::{Im2ColArgs, Im2ColDescriptor, Im2ColPlan};

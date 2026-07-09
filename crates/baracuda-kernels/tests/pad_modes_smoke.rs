@@ -11,10 +11,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test pad_modes_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PadArgs, PadDescriptor, PadMode, PadPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PadArgs, PadDescriptor, PadMode, PadPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -52,18 +52,10 @@ fn map_coord(mode: PadMode, out_coord: i64, pad_low: i32, extent: i32) -> i64 {
                 0
             } else if c < 0 {
                 let r = -c;
-                if r >= e {
-                    e - 1
-                } else {
-                    r
-                }
+                if r >= e { e - 1 } else { r }
             } else if c >= e {
                 let r = 2 * e - 2 - c;
-                if r < 0 {
-                    0
-                } else {
-                    r
-                }
+                if r < 0 { 0 } else { r }
             } else {
                 c
             }

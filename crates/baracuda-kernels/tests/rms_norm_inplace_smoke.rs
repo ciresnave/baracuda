@@ -23,7 +23,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 fn setup() -> (Context, Stream) {
@@ -93,7 +93,8 @@ fn rms_norm_f32_inplace_matches_non_aliased() {
             core::ptr::null(),
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rms_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -104,7 +105,8 @@ fn rms_norm_f32_inplace_matches_non_aliased() {
 
     // --- Aliased run: x_ptr == y_ptr ---
     let mut dev_inplace = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x_inplace");
-    let mut dev_rms_inplace: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, outer).expect("alloc rms inplace");
+    let mut dev_rms_inplace: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, outer).expect("alloc rms inplace");
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rms_norm_f32_run(
@@ -121,28 +123,37 @@ fn rms_norm_f32_inplace_matches_non_aliased() {
             core::ptr::null(),
             p as *mut c_void,
             dev_rms_inplace.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
     assert_eq!(status, 0, "aliased (in-place) run");
     stream.synchronize().expect("sync aliased");
     let mut aliased_out = vec![0_f32; numel];
-    dev_inplace.copy_to_host(&mut aliased_out).expect("dl aliased");
+    dev_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("dl aliased");
 
     // Aliased output must match non-aliased reference bit-for-bit
     // (same kernel runs in both cases — Phase 65b SMEM-staged path,
     // deterministic accumulation order).
     for i in 0..numel {
         assert_eq!(
-            aliased_out[i].to_bits(), ref_out[i].to_bits(),
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
             "f32 in-place RMSNorm @ {i}: aliased={} non-aliased={}",
-            aliased_out[i], ref_out[i]
+            aliased_out[i],
+            ref_out[i]
         );
         // Also confirm we match the CPU reference within tolerance.
         let tol = (expected_y[i].abs() * 16.0 * f32::EPSILON).max(16.0 * f32::EPSILON);
-        assert!((aliased_out[i] - expected_y[i]).abs() <= tol,
-            "f32 RMSNorm vs CPU @ {i}: got={} want={}", aliased_out[i], expected_y[i]);
+        assert!(
+            (aliased_out[i] - expected_y[i]).abs() <= tol,
+            "f32 RMSNorm vs CPU @ {i}: got={} want={}",
+            aliased_out[i],
+            expected_y[i]
+        );
     }
 }
 
@@ -168,14 +179,21 @@ fn rms_norm_f16_inplace_matches_non_aliased() {
     let mut dev_rms_ref: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, outer).expect("alloc");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rms_norm_f16_run(
-            eps, numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_rms.as_ptr(),
-            0b10, inner as i32,
+            eps,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_rms.as_ptr(),
+            0b10,
+            inner as i32,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
             core::ptr::null(),
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rms_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -189,14 +207,21 @@ fn rms_norm_f16_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rms_norm_f16_run(
-            eps, numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_rms.as_ptr(),
-            0b10, inner as i32,
+            eps,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_rms.as_ptr(),
+            0b10,
+            inner as i32,
             p as *const c_void,
             core::ptr::null(),
             p as *mut c_void,
             dev_rms_inplace.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -206,9 +231,13 @@ fn rms_norm_f16_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
             "f16 in-place RMSNorm @ {i}: aliased={} non-aliased={}",
-            aliased_out[i].to_f32(), ref_out[i].to_f32());
+            aliased_out[i].to_f32(),
+            ref_out[i].to_f32()
+        );
     }
 }
 
@@ -234,14 +263,21 @@ fn rms_norm_bf16_inplace_matches_non_aliased() {
     let mut dev_rms_ref: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, outer).expect("alloc");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rms_norm_bf16_run(
-            eps, numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_rms.as_ptr(),
-            0b10, inner as i32,
+            eps,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_rms.as_ptr(),
+            0b10,
+            inner as i32,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
             core::ptr::null(),
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rms_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -255,14 +291,21 @@ fn rms_norm_bf16_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rms_norm_bf16_run(
-            eps, numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_rms.as_ptr(),
-            0b10, inner as i32,
+            eps,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_rms.as_ptr(),
+            0b10,
+            inner as i32,
             p as *const c_void,
             core::ptr::null(),
             p as *mut c_void,
             dev_rms_inplace.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -272,8 +315,11 @@ fn rms_norm_bf16_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
-            "bf16 in-place RMSNorm @ {i}");
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
+            "bf16 in-place RMSNorm @ {i}"
+        );
     }
 }
 
@@ -300,14 +346,21 @@ fn rms_norm_f64_inplace_matches_non_aliased() {
     let mut dev_rms_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, outer).expect("alloc");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rms_norm_f64_run(
-            eps, numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_rms.as_ptr(),
-            0b10, inner as i32,
+            eps,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_rms.as_ptr(),
+            0b10,
+            inner as i32,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
             core::ptr::null(),
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rms_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -321,14 +374,21 @@ fn rms_norm_f64_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rms_norm_f64_run(
-            eps, numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_rms.as_ptr(),
-            0b10, inner as i32,
+            eps,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_rms.as_ptr(),
+            0b10,
+            inner as i32,
             p as *const c_void,
             core::ptr::null(),
             p as *mut c_void,
             dev_rms_inplace.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -338,8 +398,12 @@ fn rms_norm_f64_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
             "f64 in-place RMSNorm @ {i}: aliased={} non-aliased={}",
-            aliased_out[i], ref_out[i]);
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }

@@ -24,11 +24,11 @@
 //! helpers below were a red herring — they measured ∂L/∂log_probs,
 //! which differs from the kernel's PyTorch-convention output.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, CtcLossArgs, CtcLossBackwardArgs, CtcLossBackwardDescriptor,
-    CtcLossBackwardPlan, CtcLossDescriptor, CtcLossPlan, ElementKind, LossReduction,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    CtcLossArgs, CtcLossBackwardArgs, CtcLossBackwardDescriptor, CtcLossBackwardPlan,
+    CtcLossDescriptor, CtcLossPlan, ElementKind, LossReduction, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -66,8 +66,7 @@ where
     let dev_in_lens = DeviceBuffer::from_slice(ctx, host_in_lens).expect("up in");
     let dev_tgt_lens = DeviceBuffer::from_slice(ctx, host_tgt_lens).expect("up tgt_lens");
     let loss_numel = n as usize;
-    let mut dev_loss: DeviceBuffer<T> =
-        DeviceBuffer::zeros(ctx, loss_numel).expect("alloc loss");
+    let mut dev_loss: DeviceBuffer<T> = DeviceBuffer::zeros(ctx, loss_numel).expect("alloc loss");
     let desc = CtcLossDescriptor {
         max_time: t_max,
         batch_size: n,
@@ -78,14 +77,12 @@ where
         zero_infinity: false,
         element: elem,
     };
-    let plan = CtcLossPlan::<T>::select(stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan = CtcLossPlan::<T>::select(stream, &desc, PlanPreference::default()).expect("select");
     let alpha_bytes = plan.alpha_workspace_size();
     let aux_bytes = plan.workspace_size();
     let mut dev_alpha: DeviceBuffer<u8> =
         DeviceBuffer::zeros(ctx, alpha_bytes).expect("alloc alpha");
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(ctx, aux_bytes).expect("alloc ws");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, aux_bytes).expect("alloc ws");
     let loss_shape = [loss_numel as i32];
     let args = CtcLossArgs::<T> {
         log_probs: TensorRef {
@@ -158,8 +155,7 @@ where
     let dev_in_lens = DeviceBuffer::from_slice(ctx, host_in_lens).expect("up in");
     let dev_tgt_lens = DeviceBuffer::from_slice(ctx, host_tgt_lens).expect("up tgt_lens");
     let loss_numel = n as usize;
-    let mut dev_loss: DeviceBuffer<T> =
-        DeviceBuffer::zeros(ctx, loss_numel).expect("alloc loss");
+    let mut dev_loss: DeviceBuffer<T> = DeviceBuffer::zeros(ctx, loss_numel).expect("alloc loss");
     let fw_desc = CtcLossDescriptor {
         max_time: t_max,
         batch_size: n,
@@ -170,14 +166,13 @@ where
         zero_infinity: false,
         element: elem,
     };
-    let fw_plan = CtcLossPlan::<T>::select(stream, &fw_desc, PlanPreference::default())
-        .expect("fw select");
+    let fw_plan =
+        CtcLossPlan::<T>::select(stream, &fw_desc, PlanPreference::default()).expect("fw select");
     let alpha_bytes = fw_plan.alpha_workspace_size();
     let aux_bytes = fw_plan.workspace_size();
     let mut dev_alpha: DeviceBuffer<u8> =
         DeviceBuffer::zeros(ctx, alpha_bytes).expect("alloc alpha");
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(ctx, aux_bytes).expect("alloc ws");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, aux_bytes).expect("alloc ws");
     let loss_shape = [loss_numel as i32];
     {
         let fw_args = CtcLossArgs::<T> {
@@ -222,8 +217,7 @@ where
     }
     let dev_dloss = DeviceBuffer::from_slice(ctx, host_dloss).expect("up dloss");
     let dx_numel = (t_max * n * c) as usize;
-    let mut dev_dlp: DeviceBuffer<T> =
-        DeviceBuffer::zeros(ctx, dx_numel).expect("alloc dlp");
+    let mut dev_dlp: DeviceBuffer<T> = DeviceBuffer::zeros(ctx, dx_numel).expect("alloc dlp");
     let bw_desc = CtcLossBackwardDescriptor {
         max_time: t_max,
         batch_size: n,
@@ -317,15 +311,23 @@ fn make_log_probs() -> (Vec<f32>, i32, i32, i32, i32, Vec<i64>, Vec<i64>, Vec<i6
     let host_tgt = vec![1i64, 2, 2, 1];
     let host_in_lens = vec![4i64, 4];
     let host_tgt_lens = vec![2i64, 2];
-    (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens)
+    (
+        host_lp,
+        t_max,
+        n,
+        c,
+        s_max,
+        host_tgt,
+        host_in_lens,
+        host_tgt_lens,
+    )
 }
 
 /// Finite-difference check: BW[t*, n*, c*] vs central-diff of FW loss
 /// w.r.t. log_probs[t*, n*, c*].
 fn fd_check_f32(eps: f32, tol: f32) {
     let (ctx, stream) = setup();
-    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs();
+    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
     // Compute analytic gradient at the unperturbed point with dloss=1
     // (so per-sample gradient flows back unscaled).
     let host_dloss = vec![1f32; n as usize];
@@ -347,9 +349,9 @@ fn fd_check_f32(eps: f32, tol: f32) {
     // target class position.
     let pick = [
         (0usize, 0usize, 1usize), // sample 0, t=0, c=1 (target class first)
-        (1, 0, 2),                 // sample 0, t=1, c=2 (target class second)
-        (2, 0, 0),                 // sample 0, t=2, c=0 (blank)
-        (1, 1, 2),                 // sample 1, t=1, c=2 (target class)
+        (1, 0, 2),                // sample 0, t=1, c=2 (target class second)
+        (2, 0, 0),                // sample 0, t=2, c=0 (blank)
+        (1, 1, 2),                // sample 1, t=1, c=2 (target class)
     ];
     let lp_at = |t: usize, n_: usize, c_: usize, lp: &[f32]| -> usize {
         t * n as usize * c as usize + n_ * c as usize + c_
@@ -398,8 +400,7 @@ fn fd_check_f32(eps: f32, tol: f32) {
 
 fn fd_check_f64(eps: f64, tol: f64) {
     let (ctx, stream) = setup();
-    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs();
+    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
     let host_lp: Vec<f64> = host_lp_f32.iter().map(|&v| v as f64).collect();
     let host_dloss = vec![1f64; n as usize];
     let got_grad = run_bw::<f64>(
@@ -474,7 +475,7 @@ fn ctc_bw_f32_uniform_t2_hand_computed() {
     let (ctx, stream) = setup();
     let log_p = -(2.0f32.ln());
     let host_lp = vec![log_p; 2 * 1 * 2]; // T=2, N=1, C=2
-    let host_tgt = vec![1i64; 1];          // S=1
+    let host_tgt = vec![1i64; 1]; // S=1
     let host_in_lens = vec![2i64];
     let host_tgt_lens = vec![1i64];
     let host_dloss = vec![1f32; 1];
@@ -500,7 +501,9 @@ fn ctc_bw_f32_uniform_t2_hand_computed() {
         assert!(
             diff <= 1e-5,
             "hand-computed BW @ flat idx {i}: got={} want={} diff={}",
-            got[i], w, diff
+            got[i],
+            w,
+            diff
         );
     }
 }
@@ -519,10 +522,7 @@ fn _ctc_bw_f64_finite_difference_helper() {
 
 fn _to_f64_via_bytes<T: Copy + 'static>(v: T, elem: ElementKind) -> f64 {
     let bytes = unsafe {
-        core::slice::from_raw_parts(
-            (&v as *const T) as *const u8,
-            core::mem::size_of::<T>(),
-        )
+        core::slice::from_raw_parts((&v as *const T) as *const u8, core::mem::size_of::<T>())
     };
     match core::mem::size_of::<T>() {
         4 => f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as f64,
@@ -573,13 +573,21 @@ fn check_pytorch_invariant<T: Copy + 'static>(
 #[ignore]
 fn ctc_bw_f32_pytorch_invariant() {
     let (ctx, stream) = setup();
-    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs();
+    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
     let host_dloss = vec![1f32; n as usize];
     let got = run_bw::<f32>(
-        &ctx, &stream, ElementKind::F32,
-        &host_lp, &host_tgt, &host_in_lens, &host_tgt_lens, &host_dloss,
-        t_max, n, c, s_max,
+        &ctx,
+        &stream,
+        ElementKind::F32,
+        &host_lp,
+        &host_tgt,
+        &host_in_lens,
+        &host_tgt_lens,
+        &host_dloss,
+        t_max,
+        n,
+        c,
+        s_max,
     );
     check_pytorch_invariant(&got, t_max, n, c, ElementKind::F32, 1e-4);
 }
@@ -588,14 +596,22 @@ fn ctc_bw_f32_pytorch_invariant() {
 #[ignore]
 fn ctc_bw_f16_pytorch_invariant() {
     let (ctx, stream) = setup();
-    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs();
+    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
     let host_lp: Vec<f16> = host_lp_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let host_dloss = vec![f16::from_f32(1.0); n as usize];
     let got = run_bw::<f16>(
-        &ctx, &stream, ElementKind::F16,
-        &host_lp, &host_tgt, &host_in_lens, &host_tgt_lens, &host_dloss,
-        t_max, n, c, s_max,
+        &ctx,
+        &stream,
+        ElementKind::F16,
+        &host_lp,
+        &host_tgt,
+        &host_in_lens,
+        &host_tgt_lens,
+        &host_dloss,
+        t_max,
+        n,
+        c,
+        s_max,
     );
     // Half-precision: row sum drift from per-cell quantization at the
     // final store. 5 cells × ~1 ULP ≈ 5e-3 worst case.
@@ -606,14 +622,22 @@ fn ctc_bw_f16_pytorch_invariant() {
 #[ignore]
 fn ctc_bw_bf16_pytorch_invariant() {
     let (ctx, stream) = setup();
-    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs();
+    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
     let host_lp: Vec<bf16> = host_lp_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let host_dloss = vec![bf16::from_f32(1.0); n as usize];
     let got = run_bw::<bf16>(
-        &ctx, &stream, ElementKind::Bf16,
-        &host_lp, &host_tgt, &host_in_lens, &host_tgt_lens, &host_dloss,
-        t_max, n, c, s_max,
+        &ctx,
+        &stream,
+        ElementKind::Bf16,
+        &host_lp,
+        &host_tgt,
+        &host_in_lens,
+        &host_tgt_lens,
+        &host_dloss,
+        t_max,
+        n,
+        c,
+        s_max,
     );
     check_pytorch_invariant(&got, t_max, n, c, ElementKind::Bf16, 4e-2);
 }
@@ -643,20 +667,37 @@ fn make_log_probs_f64() -> (Vec<f64>, i32, i32, i32, i32, Vec<i64>, Vec<i64>, Ve
     let host_tgt = vec![1i64, 2, 2, 1];
     let host_in_lens = vec![4i64, 4];
     let host_tgt_lens = vec![2i64, 2];
-    (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens)
+    (
+        host_lp,
+        t_max,
+        n,
+        c,
+        s_max,
+        host_tgt,
+        host_in_lens,
+        host_tgt_lens,
+    )
 }
 
 #[test]
 #[ignore]
 fn ctc_bw_f64_pytorch_invariant() {
     let (ctx, stream) = setup();
-    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs_f64();
+    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs_f64();
     let host_dloss = vec![1f64; n as usize];
     let got = run_bw::<f64>(
-        &ctx, &stream, ElementKind::F64,
-        &host_lp, &host_tgt, &host_in_lens, &host_tgt_lens, &host_dloss,
-        t_max, n, c, s_max,
+        &ctx,
+        &stream,
+        ElementKind::F64,
+        &host_lp,
+        &host_tgt,
+        &host_in_lens,
+        &host_tgt_lens,
+        &host_dloss,
+        t_max,
+        n,
+        c,
+        s_max,
     );
     check_pytorch_invariant(&got, t_max, n, c, ElementKind::F64, 1e-12);
 }
@@ -690,8 +731,7 @@ fn ctc_bw_f32_finite_and_nonzero() {
     // Does NOT validate numerical correctness (see module docs for the
     // known γ-accumulation kernel bug).
     let (ctx, stream) = setup();
-    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs();
+    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
     let host_dloss = vec![1f32; n as usize];
     let got = run_bw::<f32>(
         &ctx,
@@ -714,8 +754,7 @@ fn ctc_bw_f32_finite_and_nonzero() {
 #[ignore]
 fn ctc_bw_f64_finite_and_nonzero() {
     let (ctx, stream) = setup();
-    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs();
+    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
     let host_lp: Vec<f64> = host_lp_f32.iter().map(|&v| v as f64).collect();
     let host_dloss = vec![1f64; n as usize];
     let got = run_bw::<f64>(
@@ -739,10 +778,7 @@ fn check_finite<T: Copy + 'static>(got: &[T], elem: ElementKind) {
     for (i, v) in got.iter().enumerate() {
         let f = {
             let bytes = unsafe {
-                core::slice::from_raw_parts(
-                    (v as *const T) as *const u8,
-                    core::mem::size_of::<T>(),
-                )
+                core::slice::from_raw_parts((v as *const T) as *const u8, core::mem::size_of::<T>())
             };
             match core::mem::size_of::<T>() {
                 2 => {
@@ -756,18 +792,12 @@ fn check_finite<T: Copy + 'static>(got: &[T], elem: ElementKind) {
                 _ => panic!("expected half-precision"),
             }
         };
-        assert!(
-            f.is_finite(),
-            "ctc bw {elem:?} non-finite @ {i}: {f}"
-        );
+        assert!(f.is_finite(), "ctc bw {elem:?} non-finite @ {i}: {f}");
     }
     // Verify some gradient is nonzero — kernel can't be a no-op.
     let any_nonzero = got.iter().any(|v| {
         let bytes = unsafe {
-            core::slice::from_raw_parts(
-                (v as *const T) as *const u8,
-                core::mem::size_of::<T>(),
-            )
+            core::slice::from_raw_parts((v as *const T) as *const u8, core::mem::size_of::<T>())
         };
         let bits = u16::from_le_bytes([bytes[0], bytes[1]]);
         bits != 0
@@ -779,8 +809,7 @@ fn check_finite<T: Copy + 'static>(got: &[T], elem: ElementKind) {
 #[ignore]
 fn ctc_bw_f16_finite_and_nonzero() {
     let (ctx, stream) = setup();
-    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs();
+    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
     let host_lp: Vec<f16> = host_lp_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let host_dloss = vec![f16::from_f32(1.0); n as usize];
     let got = run_bw::<f16>(
@@ -804,8 +833,7 @@ fn ctc_bw_f16_finite_and_nonzero() {
 #[ignore]
 fn ctc_bw_bf16_finite_and_nonzero() {
     let (ctx, stream) = setup();
-    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) =
-        make_log_probs();
+    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
     let host_lp: Vec<bf16> = host_lp_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let host_dloss = vec![bf16::from_f32(1.0); n as usize];
     let got = run_bw::<bf16>(

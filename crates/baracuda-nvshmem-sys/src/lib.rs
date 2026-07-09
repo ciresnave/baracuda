@@ -191,8 +191,7 @@ pub type PFN_nvshmem_my_pe = unsafe extern "C" fn() -> c_int;
 /// `int nvshmem_n_pes(void)`.
 pub type PFN_nvshmem_n_pes = unsafe extern "C" fn() -> c_int;
 /// `void nvshmem_info_get_version(int *major, int *minor)`.
-pub type PFN_nvshmem_info_get_version =
-    unsafe extern "C" fn(major: *mut c_int, minor: *mut c_int);
+pub type PFN_nvshmem_info_get_version = unsafe extern "C" fn(major: *mut c_int, minor: *mut c_int);
 
 // Unique-id bootstrap.
 
@@ -243,11 +242,9 @@ pub type PFN_nvshmem_malloc = unsafe extern "C" fn(size: usize) -> *mut c_void;
 /// `void nvshmem_free(void *ptr)`.
 pub type PFN_nvshmem_free = unsafe extern "C" fn(ptr: *mut c_void);
 /// `void *nvshmem_align(size_t alignment, size_t size)`.
-pub type PFN_nvshmem_align =
-    unsafe extern "C" fn(alignment: usize, size: usize) -> *mut c_void;
+pub type PFN_nvshmem_align = unsafe extern "C" fn(alignment: usize, size: usize) -> *mut c_void;
 /// `void *nvshmem_calloc(size_t count, size_t size)`.
-pub type PFN_nvshmem_calloc =
-    unsafe extern "C" fn(count: usize, size: usize) -> *mut c_void;
+pub type PFN_nvshmem_calloc = unsafe extern "C" fn(count: usize, size: usize) -> *mut c_void;
 
 // Host-initiated RMA.
 

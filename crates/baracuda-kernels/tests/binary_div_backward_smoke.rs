@@ -17,10 +17,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_div_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan,
-    BinaryKind, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan, BinaryKind, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -44,8 +44,8 @@ fn div_backward_f32_3d() {
     let shape = [8i32, 128, 128];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
     let host_dy: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.5 - 17.25).collect();
-    let host_a:  Vec<f32> = (0..numel).map(|i| (i as f32) * 0.125 + 1.0).collect();
-    let host_b:  Vec<f32> = (0..numel).map(|i| (i as f32) * 0.0625 + 1.0).collect();
+    let host_a: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.125 + 1.0).collect();
+    let host_b: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.0625 + 1.0).collect();
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
@@ -60,11 +60,31 @@ fn div_backward_f32_3d() {
     let plan = BinaryBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        a: Some(TensorRef { data: dev_a.as_slice(), shape, stride }),
-        b: Some(TensorRef { data: dev_b.as_slice(), shape, stride }),
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        a: Some(TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        }),
+        b: Some(TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        }),
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -75,12 +95,17 @@ fn div_backward_f32_3d() {
     for i in 0..numel {
         let exp_da = host_dy[i] / host_b[i];
         let exp_db = -(host_dy[i] * host_a[i]) / (host_b[i] * host_b[i]);
-        assert_eq!(got_da[i].to_bits(), exp_da.to_bits(), "div backward f32 da @ {i}");
+        assert_eq!(
+            got_da[i].to_bits(),
+            exp_da.to_bits(),
+            "div backward f32 da @ {i}"
+        );
         let tol = exp_db.abs().max(1.0) * F32_DB_REL_EPS;
         assert!(
             (got_db[i] - exp_db).abs() <= tol,
             "div backward f32 db @ {i}: got {}, exp {}, tol {tol}",
-            got_db[i], exp_db,
+            got_db[i],
+            exp_db,
         );
     }
 }
@@ -91,9 +116,15 @@ fn div_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
-    let host_dy: Vec<f16> = (0..numel).map(|i| f16::from_f32((i % 41) as f32 * 0.25 - 5.0)).collect();
-    let host_a:  Vec<f16> = (0..numel).map(|i| f16::from_f32((i % 37) as f32 * 0.125 + 1.0)).collect();
-    let host_b:  Vec<f16> = (0..numel).map(|i| f16::from_f32((i % 29) as f32 * 0.0625 + 1.0)).collect();
+    let host_dy: Vec<f16> = (0..numel)
+        .map(|i| f16::from_f32((i % 41) as f32 * 0.25 - 5.0))
+        .collect();
+    let host_a: Vec<f16> = (0..numel)
+        .map(|i| f16::from_f32((i % 37) as f32 * 0.125 + 1.0))
+        .collect();
+    let host_b: Vec<f16> = (0..numel)
+        .map(|i| f16::from_f32((i % 29) as f32 * 0.0625 + 1.0))
+        .collect();
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
@@ -108,11 +139,31 @@ fn div_backward_f16_3d() {
     let plan = BinaryBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        a: Some(TensorRef { data: dev_a.as_slice(), shape, stride }),
-        b: Some(TensorRef { data: dev_b.as_slice(), shape, stride }),
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        a: Some(TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        }),
+        b: Some(TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        }),
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -131,8 +182,14 @@ fn div_backward_f16_3d() {
         // Use 2× tolerance on db (multi-op fused arithmetic).
         let tol_da = exp_da.abs().max(1.0) * F16_EPS;
         let tol_db = exp_db.abs().max(1.0) * F16_EPS * 2.0;
-        assert!((gd - exp_da).abs() <= tol_da, "div backward f16 da @ {i}: got {gd}, exp {exp_da}");
-        assert!((gdb - exp_db).abs() <= tol_db, "div backward f16 db @ {i}: got {gdb}, exp {exp_db}");
+        assert!(
+            (gd - exp_da).abs() <= tol_da,
+            "div backward f16 da @ {i}: got {gd}, exp {exp_da}"
+        );
+        assert!(
+            (gdb - exp_db).abs() <= tol_db,
+            "div backward f16 db @ {i}: got {gdb}, exp {exp_db}"
+        );
     }
 }
 
@@ -142,9 +199,15 @@ fn div_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
-    let host_dy: Vec<bf16> = (0..numel).map(|i| bf16::from_f32((i % 41) as f32 * 0.25 - 5.0)).collect();
-    let host_a:  Vec<bf16> = (0..numel).map(|i| bf16::from_f32((i % 37) as f32 * 0.125 + 1.0)).collect();
-    let host_b:  Vec<bf16> = (0..numel).map(|i| bf16::from_f32((i % 29) as f32 * 0.0625 + 1.0)).collect();
+    let host_dy: Vec<bf16> = (0..numel)
+        .map(|i| bf16::from_f32((i % 41) as f32 * 0.25 - 5.0))
+        .collect();
+    let host_a: Vec<bf16> = (0..numel)
+        .map(|i| bf16::from_f32((i % 37) as f32 * 0.125 + 1.0))
+        .collect();
+    let host_b: Vec<bf16> = (0..numel)
+        .map(|i| bf16::from_f32((i % 29) as f32 * 0.0625 + 1.0))
+        .collect();
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
@@ -159,11 +222,31 @@ fn div_backward_bf16_3d() {
     let plan = BinaryBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        a: Some(TensorRef { data: dev_a.as_slice(), shape, stride }),
-        b: Some(TensorRef { data: dev_b.as_slice(), shape, stride }),
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        a: Some(TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        }),
+        b: Some(TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        }),
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -181,8 +264,14 @@ fn div_backward_bf16_3d() {
         let gdb = got_db[i].to_f32();
         let tol_da = exp_da.abs().max(1.0) * BF16_EPS;
         let tol_db = exp_db.abs().max(1.0) * BF16_EPS * 2.0;
-        assert!((gd - exp_da).abs() <= tol_da, "div backward bf16 da @ {i}: got {gd}, exp {exp_da}");
-        assert!((gdb - exp_db).abs() <= tol_db, "div backward bf16 db @ {i}: got {gdb}, exp {exp_db}");
+        assert!(
+            (gd - exp_da).abs() <= tol_da,
+            "div backward bf16 da @ {i}: got {gd}, exp {exp_da}"
+        );
+        assert!(
+            (gdb - exp_db).abs() <= tol_db,
+            "div backward bf16 db @ {i}: got {gdb}, exp {exp_db}"
+        );
     }
 }
 
@@ -193,8 +282,8 @@ fn div_backward_f64_3d() {
     let shape = [8i32, 128, 128];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
     let host_dy: Vec<f64> = (0..numel).map(|i| (i as f64) * 0.5 - 17.25).collect();
-    let host_a:  Vec<f64> = (0..numel).map(|i| (i as f64) * 0.125 + 1.0).collect();
-    let host_b:  Vec<f64> = (0..numel).map(|i| (i as f64) * 0.0625 + 1.0).collect();
+    let host_a: Vec<f64> = (0..numel).map(|i| (i as f64) * 0.125 + 1.0).collect();
+    let host_b: Vec<f64> = (0..numel).map(|i| (i as f64) * 0.0625 + 1.0).collect();
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
@@ -209,11 +298,31 @@ fn div_backward_f64_3d() {
     let plan = BinaryBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        a: Some(TensorRef { data: dev_a.as_slice(), shape, stride }),
-        b: Some(TensorRef { data: dev_b.as_slice(), shape, stride }),
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        a: Some(TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        }),
+        b: Some(TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        }),
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -224,12 +333,17 @@ fn div_backward_f64_3d() {
     for i in 0..numel {
         let exp_da = host_dy[i] / host_b[i];
         let exp_db = -(host_dy[i] * host_a[i]) / (host_b[i] * host_b[i]);
-        assert_eq!(got_da[i].to_bits(), exp_da.to_bits(), "div backward f64 da @ {i}");
+        assert_eq!(
+            got_da[i].to_bits(),
+            exp_da.to_bits(),
+            "div backward f64 da @ {i}"
+        );
         let tol = exp_db.abs().max(1.0) * F64_DB_REL_EPS;
         assert!(
             (got_db[i] - exp_db).abs() <= tol,
             "div backward f64 db @ {i}: got {}, exp {}, tol {tol}",
-            got_db[i], exp_db,
+            got_db[i],
+            exp_db,
         );
     }
 }

@@ -29,10 +29,10 @@
 
 use core::ffi::c_void;
 
-use baracuda_cuda_sys::{driver, CUstream};
+use baracuda_cuda_sys::{CUstream, driver};
 use baracuda_types::KernelArg;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::module::Function;
 use crate::stream::Stream;
 
@@ -158,29 +158,31 @@ impl<'f> LaunchBuilder<'f> {
     ///    to manage this.
     /// 3. Grid and block dimensions are within the device's supported
     ///    limits (see [`crate::Device::attribute`]).
-    pub unsafe fn launch(mut self) -> Result<()> { unsafe {
-        let d = driver()?;
-        let cu = d.cu_launch_kernel()?;
-        let stream_handle: CUstream = self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
-        let args_ptr = if self.args.is_empty() {
-            core::ptr::null_mut()
-        } else {
-            self.args.as_mut_ptr()
-        };
-        check(cu(
-            self.function.as_raw(),
-            self.grid.x,
-            self.grid.y,
-            self.grid.z,
-            self.block.x,
-            self.block.y,
-            self.block.z,
-            self.shared_mem_bytes,
-            stream_handle,
-            args_ptr,
-            core::ptr::null_mut(), // extras — unused; we always pass args via the kernel_params slot
-        ))
-    }}
+    pub unsafe fn launch(mut self) -> Result<()> {
+        unsafe {
+            let d = driver()?;
+            let cu = d.cu_launch_kernel()?;
+            let stream_handle: CUstream = self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
+            let args_ptr = if self.args.is_empty() {
+                core::ptr::null_mut()
+            } else {
+                self.args.as_mut_ptr()
+            };
+            check(cu(
+                self.function.as_raw(),
+                self.grid.x,
+                self.grid.y,
+                self.grid.z,
+                self.block.x,
+                self.block.y,
+                self.block.z,
+                self.shared_mem_bytes,
+                stream_handle,
+                args_ptr,
+                core::ptr::null_mut(), // extras — unused; we always pass args via the kernel_params slot
+            ))
+        }
+    }
 
     /// Enqueue the kernel via `cuLaunchKernelEx` (CUDA 12.0+), letting the
     /// caller attach launch attributes (cluster dims, programmatic stream
@@ -196,36 +198,38 @@ impl<'f> LaunchBuilder<'f> {
     pub unsafe fn launch_ex(
         mut self,
         attributes: &mut [baracuda_cuda_sys::types::CUlaunchAttribute],
-    ) -> Result<()> { unsafe {
-        let d = driver()?;
-        let cu = d.cu_launch_kernel_ex()?;
-        let stream_handle: CUstream = self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
-        let args_ptr = if self.args.is_empty() {
-            core::ptr::null_mut()
-        } else {
-            self.args.as_mut_ptr()
-        };
-        let config = baracuda_cuda_sys::types::CUlaunchConfig {
-            grid_dim_x: self.grid.x,
-            grid_dim_y: self.grid.y,
-            grid_dim_z: self.grid.z,
-            block_dim_x: self.block.x,
-            block_dim_y: self.block.y,
-            block_dim_z: self.block.z,
-            shared_mem_bytes: self.shared_mem_bytes,
-            stream: stream_handle,
-            attrs: if attributes.is_empty() {
+    ) -> Result<()> {
+        unsafe {
+            let d = driver()?;
+            let cu = d.cu_launch_kernel_ex()?;
+            let stream_handle: CUstream = self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
+            let args_ptr = if self.args.is_empty() {
                 core::ptr::null_mut()
             } else {
-                attributes.as_mut_ptr()
-            },
-            num_attrs: attributes.len() as core::ffi::c_uint,
-        };
-        check(cu(
-            &config,
-            self.function.as_raw(),
-            args_ptr,
-            core::ptr::null_mut(),
-        ))
-    }}
+                self.args.as_mut_ptr()
+            };
+            let config = baracuda_cuda_sys::types::CUlaunchConfig {
+                grid_dim_x: self.grid.x,
+                grid_dim_y: self.grid.y,
+                grid_dim_z: self.grid.z,
+                block_dim_x: self.block.x,
+                block_dim_y: self.block.y,
+                block_dim_z: self.block.z,
+                shared_mem_bytes: self.shared_mem_bytes,
+                stream: stream_handle,
+                attrs: if attributes.is_empty() {
+                    core::ptr::null_mut()
+                } else {
+                    attributes.as_mut_ptr()
+                },
+                num_attrs: attributes.len() as core::ffi::c_uint,
+            };
+            check(cu(
+                &config,
+                self.function.as_raw(),
+                args_ptr,
+                core::ptr::null_mut(),
+            ))
+        }
+    }
 }

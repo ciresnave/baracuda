@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `GaussianNllLossPlan`. FW × 4 dtypes × Mean.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GaussianNllLossArgs, GaussianNllLossDescriptor,
-    GaussianNllLossPlan, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, GaussianNllLossArgs, GaussianNllLossDescriptor, GaussianNllLossPlan,
+    LossReduction, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -54,16 +54,32 @@ fn loss_gaussian_nll_f32_mean() {
         eps,
         element: ElementKind::F32,
     };
-    let plan = GaussianNllLossPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .unwrap();
+    let plan =
+        GaussianNllLossPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GaussianNllLossArgs {
-            input: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            var: TensorRef { data: dev_v.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            var: TensorRef {
+                data: dev_v.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -71,7 +87,12 @@ fn loss_gaussian_nll_f32_mean() {
     let mut got = [0f32; 1];
     dev_y.copy_to_host(&mut got).unwrap();
     let tol = expected.abs() * 8.0 * f32::EPSILON + 1e-5;
-    assert!((got[0] - expected).abs() <= tol, "f32 Gauss: got={} want={}", got[0], expected);
+    assert!(
+        (got[0] - expected).abs() <= tol,
+        "f32 Gauss: got={} want={}",
+        got[0],
+        expected
+    );
 }
 
 #[test]
@@ -98,16 +119,32 @@ fn loss_gaussian_nll_f64_mean() {
         eps,
         element: ElementKind::F64,
     };
-    let plan = GaussianNllLossPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .unwrap();
+    let plan =
+        GaussianNllLossPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GaussianNllLossArgs {
-            input: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            var: TensorRef { data: dev_v.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            var: TensorRef {
+                data: dev_v.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -148,16 +185,32 @@ fn loss_gaussian_nll_f16_mean() {
         eps,
         element: ElementKind::F16,
     };
-    let plan = GaussianNllLossPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
-        .unwrap();
+    let plan =
+        GaussianNllLossPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GaussianNllLossArgs {
-            input: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            var: TensorRef { data: dev_v.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            var: TensorRef {
+                data: dev_v.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -166,7 +219,12 @@ fn loss_gaussian_nll_f16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 16.0 * 9.77e-4_f32 + 1e-2;
-    assert!((got_f32 - expected).abs() <= tol, "f16 Gauss: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "f16 Gauss: got={} want={}",
+        got_f32,
+        expected
+    );
 }
 
 #[test]
@@ -199,16 +257,32 @@ fn loss_gaussian_nll_bf16_mean() {
         eps,
         element: ElementKind::Bf16,
     };
-    let plan = GaussianNllLossPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
-        .unwrap();
+    let plan =
+        GaussianNllLossPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GaussianNllLossArgs {
-            input: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            var: TensorRef { data: dev_v.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            var: TensorRef {
+                data: dev_v.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -217,5 +291,10 @@ fn loss_gaussian_nll_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 16.0 * 7.81e-3_f32 + 3e-2;
-    assert!((got_f32 - expected).abs() <= tol, "bf16 Gauss: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "bf16 Gauss: got={} want={}",
+        got_f32,
+        expected
+    );
 }

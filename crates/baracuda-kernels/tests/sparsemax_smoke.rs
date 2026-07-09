@@ -6,10 +6,10 @@
 //!   2. Row-sums-to-1 invariant on a random input.
 //!   3. All outputs `>= 0`, with some genuinely zero (sparsity).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SparsemaxArgs, SparsemaxDescriptor,
-    SparsemaxPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SparsemaxArgs, SparsemaxDescriptor, SparsemaxPlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -29,7 +29,11 @@ fn host_sparsemax_f32(shape: [i32; 2], axis: usize, x: &[f32]) -> Vec<f32> {
     let mut y = vec![0f32; numel];
     for o in 0..other {
         let idx = |j: usize| -> usize {
-            if axis == 1 { o * shape[1] as usize + j } else { j * shape[1] as usize + o }
+            if axis == 1 {
+                o * shape[1] as usize + j
+            } else {
+                j * shape[1] as usize + o
+            }
         };
         // Sort descending.
         let mut row: Vec<f32> = (0..extent).map(|j| x[idx(j)]).collect();
@@ -74,10 +78,22 @@ fn sparsemax_f32_known_reference() {
     };
     let plan =
         SparsemaxPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-    plan.run(&stream, Workspace::None, SparsemaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    })
+    plan.run(
+        &stream,
+        Workspace::None,
+        SparsemaxArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
     .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 3];
@@ -86,8 +102,12 @@ fn sparsemax_f32_known_reference() {
     let expected = [1.0_f32, 0.0, 0.0];
     for i in 0..3 {
         let tol = (expected[i].abs() * eps).max(eps);
-        assert!((got[i] - expected[i]).abs() <= tol,
-            "sparsemax @ {i}: got={} want={}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "sparsemax @ {i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 
     // Second case: sparsemax([0.6, 0.5, 0.4]) — closer logits should
@@ -100,19 +120,35 @@ fn sparsemax_f32_known_reference() {
     let host_x2 = vec![0.6_f32, 0.5, 0.4];
     let dev_x2 = DeviceBuffer::from_slice(&ctx, &host_x2).expect("up");
     let mut dev_y2: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 3).expect("alloc");
-    plan.run(&stream, Workspace::None, SparsemaxArgs {
-        x: TensorRef { data: dev_x2.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y2.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    })
+    plan.run(
+        &stream,
+        Workspace::None,
+        SparsemaxArgs {
+            x: TensorRef {
+                data: dev_x2.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y2.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
     .expect("run");
     stream.synchronize().expect("sync");
     let mut got2 = vec![0f32; 3];
     dev_y2.copy_to_host(&mut got2).expect("dl");
-    let expected2 = [0.6 - 1.0/6.0_f32, 0.5 - 1.0/6.0, 0.4 - 1.0/6.0];
+    let expected2 = [0.6 - 1.0 / 6.0_f32, 0.5 - 1.0 / 6.0, 0.4 - 1.0 / 6.0];
     for i in 0..3 {
         let tol = 1e-5_f32;
-        assert!((got2[i] - expected2[i]).abs() <= tol,
-            "sparsemax case2 @ {i}: got={} want={}", got2[i], expected2[i]);
+        assert!(
+            (got2[i] - expected2[i]).abs() <= tol,
+            "sparsemax case2 @ {i}: got={} want={}",
+            got2[i],
+            expected2[i]
+        );
     }
 }
 
@@ -134,10 +170,22 @@ fn sparsemax_f32_2d_axis_1() {
     };
     let plan =
         SparsemaxPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-    plan.run(&stream, Workspace::None, SparsemaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    })
+    plan.run(
+        &stream,
+        Workspace::None,
+        SparsemaxArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
     .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; numel];
@@ -146,13 +194,23 @@ fn sparsemax_f32_2d_axis_1() {
     let eps = 8.0 * f32::EPSILON;
     for i in 0..numel {
         let tol = (expected[i].abs() * eps).max(eps);
-        assert!((got[i] - expected[i]).abs() <= tol,
-            "f32 sparsemax @ {i}: got={} want={}", got[i], expected[i]);
-        assert!(got[i] >= 0.0, "f32 sparsemax non-negative @ {i}: {}", got[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 sparsemax @ {i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
+        assert!(
+            got[i] >= 0.0,
+            "f32 sparsemax non-negative @ {i}: {}",
+            got[i]
+        );
     }
     for row in 0..4 {
         let mut sum = 0f32;
-        for j in 0..6 { sum += got[row * 6 + j]; }
+        for j in 0..6 {
+            sum += got[row * 6 + j];
+        }
         assert!((sum - 1.0).abs() <= 1e-5, "row-sum row={row} = {sum}");
     }
 }
@@ -193,10 +251,22 @@ fn sparsemax_f64_2d() {
     };
     let plan =
         SparsemaxPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-    plan.run(&stream, Workspace::None, SparsemaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    })
+    plan.run(
+        &stream,
+        Workspace::None,
+        SparsemaxArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
     .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f64; numel];
@@ -214,7 +284,9 @@ fn sparsemax_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
     let numel = 15usize;
-    let host_x_f32: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.25 - 0.5).cos()).collect();
+    let host_x_f32: Vec<f32> = (0..numel)
+        .map(|i| ((i as f32) * 0.25 - 0.5).cos())
+        .collect();
     let expected_f32 = host_sparsemax_f32(shape, 1, &host_x_f32);
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
 
@@ -227,10 +299,22 @@ fn sparsemax_f16_2d() {
     };
     let plan =
         SparsemaxPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-    plan.run(&stream, Workspace::None, SparsemaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    })
+    plan.run(
+        &stream,
+        Workspace::None,
+        SparsemaxArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
     .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![f16::ZERO; numel];
@@ -249,7 +333,9 @@ fn sparsemax_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
     let numel = 15usize;
-    let host_x_f32: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.25 - 1.0).sin()).collect();
+    let host_x_f32: Vec<f32> = (0..numel)
+        .map(|i| ((i as f32) * 0.25 - 1.0).sin())
+        .collect();
     let expected_f32 = host_sparsemax_f32(shape, 1, &host_x_f32);
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
 
@@ -262,10 +348,22 @@ fn sparsemax_bf16_2d() {
     };
     let plan =
         SparsemaxPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-    plan.run(&stream, Workspace::None, SparsemaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    })
+    plan.run(
+        &stream,
+        Workspace::None,
+        SparsemaxArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
     .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![bf16::ZERO; numel];

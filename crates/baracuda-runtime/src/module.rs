@@ -9,9 +9,9 @@ use std::ffi::CString;
 use std::sync::Arc;
 
 use baracuda_cuda_sys::runtime::{cudaKernel_t, cudaLibrary_t, runtime};
-use baracuda_types::{supports, CudaVersion, Feature};
+use baracuda_types::{CudaVersion, Feature, supports};
 
-use crate::error::{check, Error, Result};
+use crate::error::{Error, Result, check};
 
 /// A loaded CUDA library (CUDA 12.0+).
 #[derive(Clone)]

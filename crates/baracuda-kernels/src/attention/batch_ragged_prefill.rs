@@ -29,7 +29,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-
 /// Descriptor for a batched ragged-KV prefill op.
 #[derive(Copy, Clone, Debug)]
 pub struct BatchRaggedPrefillDescriptor {
@@ -91,7 +90,9 @@ impl<T: Element> BatchRaggedPrefillPlan<T> {
         _pref: PlanPreference,
     ) -> Result<Self> {
         if desc.element != T::KIND {
-            return Err(Error::Unsupported("BatchRaggedPrefillPlan: descriptor element != T"));
+            return Err(Error::Unsupported(
+                "BatchRaggedPrefillPlan: descriptor element != T",
+            ));
         }
         if desc.batch_size <= 0
             || desc.total_num_rows <= 0
@@ -99,7 +100,9 @@ impl<T: Element> BatchRaggedPrefillPlan<T> {
             || desc.num_qo_heads <= 0
             || desc.num_kv_heads <= 0
         {
-            return Err(Error::InvalidProblem("BatchRaggedPrefillPlan: extents must be positive"));
+            return Err(Error::InvalidProblem(
+                "BatchRaggedPrefillPlan: extents must be positive",
+            ));
         }
         if desc.num_qo_heads % desc.num_kv_heads != 0 {
             return Err(Error::InvalidProblem(
@@ -107,7 +110,9 @@ impl<T: Element> BatchRaggedPrefillPlan<T> {
             ));
         }
         if !matches!(desc.head_dim, 64 | 128 | 256) {
-            return Err(Error::Unsupported("BatchRaggedPrefillPlan: head_dim must be 64, 128, or 256"));
+            return Err(Error::Unsupported(
+                "BatchRaggedPrefillPlan: head_dim must be 64, 128, or 256",
+            ));
         }
         if !matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16) {
             return Err(Error::Unsupported(
@@ -131,7 +136,11 @@ impl<T: Element> BatchRaggedPrefillPlan<T> {
             backend: BackendKind::FlashInfer,
             precision_guarantee,
         };
-        Ok(Self { desc: *desc, sku, _marker: PhantomData })
+        Ok(Self {
+            desc: *desc,
+            sku,
+            _marker: PhantomData,
+        })
     }
 
     /// Validate args against the descriptor.
@@ -139,11 +148,15 @@ impl<T: Element> BatchRaggedPrefillPlan<T> {
         let d = &self.desc;
         let qo_shape = [d.total_num_rows, d.num_qo_heads, d.head_dim];
         if args.q.shape != qo_shape || args.o.shape != qo_shape {
-            return Err(Error::InvalidProblem("BatchRaggedPrefillPlan: q/o shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "BatchRaggedPrefillPlan: q/o shape mismatch",
+            ));
         }
         let kv_shape = [d.total_kv_rows, d.num_kv_heads, d.head_dim];
         if args.k_data.shape != kv_shape || args.v_data.shape != kv_shape {
-            return Err(Error::InvalidProblem("BatchRaggedPrefillPlan: k_data/v_data shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "BatchRaggedPrefillPlan: k_data/v_data shape mismatch",
+            ));
         }
         if args.q_indptr.shape != [d.batch_size + 1] || args.kv_indptr.shape != [d.batch_size + 1] {
             return Err(Error::InvalidProblem(
@@ -161,7 +174,9 @@ impl<T: Element> BatchRaggedPrefillPlan<T> {
             || !args.o.is_contiguous()
             || !args.lse.is_contiguous()
         {
-            return Err(Error::Unsupported("BatchRaggedPrefillPlan: tensors must be contiguous"));
+            return Err(Error::Unsupported(
+                "BatchRaggedPrefillPlan: tensors must be contiguous",
+            ));
         }
         Ok(())
     }
@@ -216,22 +231,50 @@ impl<T: Element> BatchRaggedPrefillPlan<T> {
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_ragged_prefill_f16_run(
-                        d.batch_size, d.total_num_rows, d.total_kv_rows, d.head_dim,
-                        d.num_qo_heads, d.num_kv_heads, d.sm_scale, causal, enable_split,
-                        k_ptr, v_ptr, kv_indptr_ptr, q_ptr, q_indptr_ptr, o_ptr, lse_ptr, stream_ptr,
+                        d.batch_size,
+                        d.total_num_rows,
+                        d.total_kv_rows,
+                        d.head_dim,
+                        d.num_qo_heads,
+                        d.num_kv_heads,
+                        d.sm_scale,
+                        causal,
+                        enable_split,
+                        k_ptr,
+                        v_ptr,
+                        kv_indptr_ptr,
+                        q_ptr,
+                        q_indptr_ptr,
+                        o_ptr,
+                        lse_ptr,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_ragged_prefill_bf16_run(
-                        d.batch_size, d.total_num_rows, d.total_kv_rows, d.head_dim,
-                        d.num_qo_heads, d.num_kv_heads, d.sm_scale, causal, enable_split,
-                        k_ptr, v_ptr, kv_indptr_ptr, q_ptr, q_indptr_ptr, o_ptr, lse_ptr, stream_ptr,
+                        d.batch_size,
+                        d.total_num_rows,
+                        d.total_kv_rows,
+                        d.head_dim,
+                        d.num_qo_heads,
+                        d.num_kv_heads,
+                        d.sm_scale,
+                        causal,
+                        enable_split,
+                        k_ptr,
+                        v_ptr,
+                        kv_indptr_ptr,
+                        q_ptr,
+                        q_indptr_ptr,
+                        o_ptr,
+                        lse_ptr,
+                        stream_ptr,
                     )
                 },
                 _ => {
                     return Err(Error::Unsupported(
                         "BatchRaggedPrefillPlan::run reached an unimplemented dtype",
-                    ))
+                    ));
                 }
             };
             map_status(status)

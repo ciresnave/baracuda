@@ -7,10 +7,10 @@
 
 use core::ffi::c_void;
 
-use baracuda_cublas_sys::functions::cudaDataType_t;
 use baracuda_cublas_sys::cublas;
+use baracuda_cublas_sys::functions::cudaDataType_t;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// `y = alpha * x + y` with explicit types. See [`cudaDataType_t`] for tag values.
 ///
@@ -29,23 +29,25 @@ pub unsafe fn axpy(
     y_type: cudaDataType_t,
     incy: i32,
     exec_type: cudaDataType_t,
-) -> Result<()> { unsafe {
-    let c = cublas()?;
-    let f = c.cublas_axpy_ex()?;
-    check(f(
-        handle.as_raw(),
-        n,
-        alpha,
-        alpha_type,
-        x,
-        x_type,
-        incx,
-        y,
-        y_type,
-        incy,
-        exec_type,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cublas()?;
+        let f = c.cublas_axpy_ex()?;
+        check(f(
+            handle.as_raw(),
+            n,
+            alpha,
+            alpha_type,
+            x,
+            x_type,
+            incx,
+            y,
+            y_type,
+            incy,
+            exec_type,
+        ))
+    }
+}
 
 /// `result = x · y` with explicit types.
 ///
@@ -64,23 +66,25 @@ pub unsafe fn dot(
     result: *mut c_void,
     result_type: cudaDataType_t,
     exec_type: cudaDataType_t,
-) -> Result<()> { unsafe {
-    let c = cublas()?;
-    let f = c.cublas_dot_ex()?;
-    check(f(
-        handle.as_raw(),
-        n,
-        x,
-        x_type,
-        incx,
-        y,
-        y_type,
-        incy,
-        result,
-        result_type,
-        exec_type,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cublas()?;
+        let f = c.cublas_dot_ex()?;
+        check(f(
+            handle.as_raw(),
+            n,
+            x,
+            x_type,
+            incx,
+            y,
+            y_type,
+            incy,
+            result,
+            result_type,
+            exec_type,
+        ))
+    }
+}
 
 /// Conjugate dot product: `result = xᴴ · y` with explicit types.
 ///
@@ -99,23 +103,25 @@ pub unsafe fn dotc(
     result: *mut c_void,
     result_type: cudaDataType_t,
     exec_type: cudaDataType_t,
-) -> Result<()> { unsafe {
-    let c = cublas()?;
-    let f = c.cublas_dotc_ex()?;
-    check(f(
-        handle.as_raw(),
-        n,
-        x,
-        x_type,
-        incx,
-        y,
-        y_type,
-        incy,
-        result,
-        result_type,
-        exec_type,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cublas()?;
+        let f = c.cublas_dotc_ex()?;
+        check(f(
+            handle.as_raw(),
+            n,
+            x,
+            x_type,
+            incx,
+            y,
+            y_type,
+            incy,
+            result,
+            result_type,
+            exec_type,
+        ))
+    }
+}
 
 /// `result = ||x||_2` with explicit types.
 ///
@@ -131,20 +137,22 @@ pub unsafe fn nrm2(
     result: *mut c_void,
     result_type: cudaDataType_t,
     exec_type: cudaDataType_t,
-) -> Result<()> { unsafe {
-    let c = cublas()?;
-    let f = c.cublas_nrm2_ex()?;
-    check(f(
-        handle.as_raw(),
-        n,
-        x,
-        x_type,
-        incx,
-        result,
-        result_type,
-        exec_type,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cublas()?;
+        let f = c.cublas_nrm2_ex()?;
+        check(f(
+            handle.as_raw(),
+            n,
+            x,
+            x_type,
+            incx,
+            result,
+            result_type,
+            exec_type,
+        ))
+    }
+}
 
 /// `x = alpha * x` in place with explicit types.
 ///
@@ -160,20 +168,22 @@ pub unsafe fn scal(
     x_type: cudaDataType_t,
     incx: i32,
     exec_type: cudaDataType_t,
-) -> Result<()> { unsafe {
-    let c = cublas()?;
-    let f = c.cublas_scal_ex()?;
-    check(f(
-        handle.as_raw(),
-        n,
-        alpha,
-        alpha_type,
-        x,
-        x_type,
-        incx,
-        exec_type,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cublas()?;
+        let f = c.cublas_scal_ex()?;
+        check(f(
+            handle.as_raw(),
+            n,
+            alpha,
+            alpha_type,
+            x,
+            x_type,
+            incx,
+            exec_type,
+        ))
+    }
+}
 
 /// Givens rotation: `(x_i, y_i) = (c*x_i + s*y_i, -s*x_i + c*y_i)`.
 ///
@@ -193,21 +203,23 @@ pub unsafe fn rot(
     s_sin: *const c_void,
     cs_type: cudaDataType_t,
     exec_type: cudaDataType_t,
-) -> Result<()> { unsafe {
-    let c = cublas()?;
-    let f = c.cublas_rot_ex()?;
-    check(f(
-        handle.as_raw(),
-        n,
-        x,
-        x_type,
-        incx,
-        y,
-        y_type,
-        incy,
-        c_cos,
-        s_sin,
-        cs_type,
-        exec_type,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cublas()?;
+        let f = c.cublas_rot_ex()?;
+        check(f(
+            handle.as_raw(),
+            n,
+            x,
+            x_type,
+            incx,
+            y,
+            y_type,
+            incy,
+            c_cos,
+            s_sin,
+            cs_type,
+            exec_type,
+        ))
+    }
+}

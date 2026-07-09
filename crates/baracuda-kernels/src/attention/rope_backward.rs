@@ -80,11 +80,7 @@ impl<T: Element> RopeBackwardPlan<T> {
                 "baracuda-kernels::RopeBackwardPlan: descriptor element != T",
             ));
         }
-        if desc.batch_size < 0
-            || desc.num_heads < 0
-            || desc.seq_len < 0
-            || desc.head_dim < 0
-        {
+        if desc.batch_size < 0 || desc.num_heads < 0 || desc.seq_len < 0 || desc.head_dim < 0 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RopeBackwardPlan: extents must be non-negative",
             ));
@@ -227,62 +223,70 @@ impl<T: Element> RopeBackwardPlan<T> {
         let status = unsafe {
             if contig {
                 match T::KIND {
-                    ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_rope_backward_f32_run(
-                        self.desc.batch_size,
-                        self.desc.num_heads,
-                        self.desc.seq_len,
-                        self.desc.head_dim,
-                        self.desc.base,
-                        pos_default_flag,
-                        dy_ptr,
-                        pos_ptr,
-                        dx_ptr,
-                        core::ptr::null_mut(),
-                        0,
-                        stream_ptr,
-                    ),
-                    ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_rope_backward_f16_run(
-                        self.desc.batch_size,
-                        self.desc.num_heads,
-                        self.desc.seq_len,
-                        self.desc.head_dim,
-                        self.desc.base,
-                        pos_default_flag,
-                        dy_ptr,
-                        pos_ptr,
-                        dx_ptr,
-                        core::ptr::null_mut(),
-                        0,
-                        stream_ptr,
-                    ),
-                    ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_rope_backward_bf16_run(
-                        self.desc.batch_size,
-                        self.desc.num_heads,
-                        self.desc.seq_len,
-                        self.desc.head_dim,
-                        self.desc.base,
-                        pos_default_flag,
-                        dy_ptr,
-                        pos_ptr,
-                        dx_ptr,
-                        core::ptr::null_mut(),
-                        0,
-                        stream_ptr,
-                    ),
-                    ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_rope_backward_f64_run(
-                        self.desc.batch_size,
-                        self.desc.num_heads,
-                        self.desc.seq_len,
-                        self.desc.head_dim,
-                        self.desc.base,
-                        pos_default_flag,
-                        dy_ptr,
-                        pos_ptr,
-                        dx_ptr,
-                        core::ptr::null_mut(),
-                        0,
-                        stream_ptr,
-                    ),
+                    ElementKind::F32 => {
+                        baracuda_kernels_sys::baracuda_kernels_rope_backward_f32_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.seq_len,
+                            self.desc.head_dim,
+                            self.desc.base,
+                            pos_default_flag,
+                            dy_ptr,
+                            pos_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::F16 => {
+                        baracuda_kernels_sys::baracuda_kernels_rope_backward_f16_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.seq_len,
+                            self.desc.head_dim,
+                            self.desc.base,
+                            pos_default_flag,
+                            dy_ptr,
+                            pos_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::Bf16 => {
+                        baracuda_kernels_sys::baracuda_kernels_rope_backward_bf16_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.seq_len,
+                            self.desc.head_dim,
+                            self.desc.base,
+                            pos_default_flag,
+                            dy_ptr,
+                            pos_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::F64 => {
+                        baracuda_kernels_sys::baracuda_kernels_rope_backward_f64_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.seq_len,
+                            self.desc.head_dim,
+                            self.desc.base,
+                            pos_default_flag,
+                            dy_ptr,
+                            pos_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
                     _ => {
                         return Err(Error::Unsupported(
                             "baracuda-kernels::RopeBackwardPlan::run reached an unimplemented dtype",
@@ -298,66 +302,94 @@ impl<T: Element> RopeBackwardPlan<T> {
                 let sdxh = args.dx.stride[1];
                 let sdxs = args.dx.stride[2];
                 match T::KIND {
-                    ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_rope_backward_f32_strided_run(
-                        self.desc.batch_size,
-                        self.desc.num_heads,
-                        self.desc.seq_len,
-                        self.desc.head_dim,
-                        sdyb, sdyh, sdys, sdxb, sdxh, sdxs,
-                        self.desc.base,
-                        pos_default_flag,
-                        dy_ptr,
-                        pos_ptr,
-                        dx_ptr,
-                        core::ptr::null_mut(),
-                        0,
-                        stream_ptr,
-                    ),
-                    ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_rope_backward_f16_strided_run(
-                        self.desc.batch_size,
-                        self.desc.num_heads,
-                        self.desc.seq_len,
-                        self.desc.head_dim,
-                        sdyb, sdyh, sdys, sdxb, sdxh, sdxs,
-                        self.desc.base,
-                        pos_default_flag,
-                        dy_ptr,
-                        pos_ptr,
-                        dx_ptr,
-                        core::ptr::null_mut(),
-                        0,
-                        stream_ptr,
-                    ),
-                    ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_rope_backward_bf16_strided_run(
-                        self.desc.batch_size,
-                        self.desc.num_heads,
-                        self.desc.seq_len,
-                        self.desc.head_dim,
-                        sdyb, sdyh, sdys, sdxb, sdxh, sdxs,
-                        self.desc.base,
-                        pos_default_flag,
-                        dy_ptr,
-                        pos_ptr,
-                        dx_ptr,
-                        core::ptr::null_mut(),
-                        0,
-                        stream_ptr,
-                    ),
-                    ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_rope_backward_f64_strided_run(
-                        self.desc.batch_size,
-                        self.desc.num_heads,
-                        self.desc.seq_len,
-                        self.desc.head_dim,
-                        sdyb, sdyh, sdys, sdxb, sdxh, sdxs,
-                        self.desc.base,
-                        pos_default_flag,
-                        dy_ptr,
-                        pos_ptr,
-                        dx_ptr,
-                        core::ptr::null_mut(),
-                        0,
-                        stream_ptr,
-                    ),
+                    ElementKind::F32 => {
+                        baracuda_kernels_sys::baracuda_kernels_rope_backward_f32_strided_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.seq_len,
+                            self.desc.head_dim,
+                            sdyb,
+                            sdyh,
+                            sdys,
+                            sdxb,
+                            sdxh,
+                            sdxs,
+                            self.desc.base,
+                            pos_default_flag,
+                            dy_ptr,
+                            pos_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::F16 => {
+                        baracuda_kernels_sys::baracuda_kernels_rope_backward_f16_strided_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.seq_len,
+                            self.desc.head_dim,
+                            sdyb,
+                            sdyh,
+                            sdys,
+                            sdxb,
+                            sdxh,
+                            sdxs,
+                            self.desc.base,
+                            pos_default_flag,
+                            dy_ptr,
+                            pos_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::Bf16 => {
+                        baracuda_kernels_sys::baracuda_kernels_rope_backward_bf16_strided_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.seq_len,
+                            self.desc.head_dim,
+                            sdyb,
+                            sdyh,
+                            sdys,
+                            sdxb,
+                            sdxh,
+                            sdxs,
+                            self.desc.base,
+                            pos_default_flag,
+                            dy_ptr,
+                            pos_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::F64 => {
+                        baracuda_kernels_sys::baracuda_kernels_rope_backward_f64_strided_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.seq_len,
+                            self.desc.head_dim,
+                            sdyb,
+                            sdyh,
+                            sdys,
+                            sdxb,
+                            sdxh,
+                            sdxs,
+                            self.desc.base,
+                            pos_default_flag,
+                            dy_ptr,
+                            pos_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
                     _ => {
                         return Err(Error::Unsupported(
                             "baracuda-kernels::RopeBackwardPlan::run reached an unimplemented dtype",

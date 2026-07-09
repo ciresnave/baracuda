@@ -23,8 +23,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    contiguous_stride, ArchSku, BackendKind, Element, ElementKind, GatedActivationKind, KernelSku,
-    MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, BackendKind, Element, ElementKind, GatedActivationKind, KernelSku, MathPrecision,
+    OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 /// Descriptor for a gated-activation forward op.
@@ -252,121 +253,265 @@ impl<T: Element, const N: usize> GatedActivationPlan<T, N> {
         let status = match (self.desc.kind, T::KIND) {
             (GatedActivationKind::SwiGlu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_swiglu_f32_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::SwiGlu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_swiglu_f16_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::SwiGlu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_swiglu_bf16_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::SwiGlu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_swiglu_f64_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::Glu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_glu_f32_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::Glu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_glu_f16_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::Glu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_glu_bf16_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::Glu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_glu_f64_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::ReGlu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_reglu_f32_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::ReGlu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_reglu_f16_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::ReGlu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_reglu_bf16_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::ReGlu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_reglu_f64_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::GeGlu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_geglu_f32_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::GeGlu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_geglu_f16_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::GeGlu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_geglu_bf16_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (GatedActivationKind::GeGlu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gated_geglu_f64_run(
-                    output_numel, rank, output_shape.as_ptr(), split_dim, x_half_offset,
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    output_numel,
+                    rank,
+                    output_shape.as_ptr(),
+                    split_dim,
+                    x_half_offset,
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {
                 return Err(Error::Unsupported(
                     "baracuda-kernels::GatedActivationPlan::run reached an unimplemented \
                      (kind, dtype) pair — select() should have caught this",
-                ))
+                ));
             }
         };
         map_status(status)

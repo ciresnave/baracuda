@@ -12,7 +12,7 @@ pub mod loader;
 pub mod status;
 pub mod types;
 
-pub use loader::{cublas, Cublas};
+pub use loader::{Cublas, cublas};
 pub use status::cublasStatus_t;
 pub use types::{
     cublasAtomicsMode_t, cublasHandle_t, cublasMath_t, cublasOperation_t, cublasPointerMode_t,

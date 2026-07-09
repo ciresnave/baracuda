@@ -14,7 +14,7 @@ use baracuda_cublas_sys::{cublas, cublasHandle_t, cublasOperation_t, cublasStatu
 use baracuda_types::{Complex32, Complex64, DeviceRepr};
 
 use crate::blas_scalar::Op;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Dispatch trait for `gemm_batched` (fixed, non-strided pointer arrays).
 pub trait BatchedGemmScalar: DeviceRepr + batched_sealed::Sealed {
@@ -56,28 +56,30 @@ impl BatchedGemmScalar for f32 {
         c: *const *mut f32,
         ldc: i32,
         batch: i32,
-    ) -> cublasStatus_t { unsafe {
-        match cublas().and_then(|c| c.cublas_sgemm_batched()) {
-            Ok(f) => f(
-                h,
-                ta,
-                tb,
-                m,
-                n,
-                k,
-                alpha,
-                a,
-                lda,
-                b,
-                ldb,
-                beta,
-                c as *mut *mut f32,
-                ldc,
-                batch,
-            ),
-            Err(_) => cublasStatus_t::NOT_INITIALIZED,
+    ) -> cublasStatus_t {
+        unsafe {
+            match cublas().and_then(|c| c.cublas_sgemm_batched()) {
+                Ok(f) => f(
+                    h,
+                    ta,
+                    tb,
+                    m,
+                    n,
+                    k,
+                    alpha,
+                    a,
+                    lda,
+                    b,
+                    ldb,
+                    beta,
+                    c as *mut *mut f32,
+                    ldc,
+                    batch,
+                ),
+                Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            }
         }
-    }}
+    }
 }
 
 impl BatchedGemmScalar for f64 {
@@ -97,28 +99,30 @@ impl BatchedGemmScalar for f64 {
         c: *const *mut f64,
         ldc: i32,
         batch: i32,
-    ) -> cublasStatus_t { unsafe {
-        match cublas().and_then(|c| c.cublas_dgemm_batched()) {
-            Ok(f) => f(
-                h,
-                ta,
-                tb,
-                m,
-                n,
-                k,
-                alpha,
-                a,
-                lda,
-                b,
-                ldb,
-                beta,
-                c as *mut *mut f64,
-                ldc,
-                batch,
-            ),
-            Err(_) => cublasStatus_t::NOT_INITIALIZED,
+    ) -> cublasStatus_t {
+        unsafe {
+            match cublas().and_then(|c| c.cublas_dgemm_batched()) {
+                Ok(f) => f(
+                    h,
+                    ta,
+                    tb,
+                    m,
+                    n,
+                    k,
+                    alpha,
+                    a,
+                    lda,
+                    b,
+                    ldb,
+                    beta,
+                    c as *mut *mut f64,
+                    ldc,
+                    batch,
+                ),
+                Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            }
         }
-    }}
+    }
 }
 
 impl BatchedGemmScalar for Complex32 {
@@ -138,28 +142,30 @@ impl BatchedGemmScalar for Complex32 {
         c: *const *mut Complex32,
         ldc: i32,
         batch: i32,
-    ) -> cublasStatus_t { unsafe {
-        match cublas().and_then(|c| c.cublas_cgemm_batched()) {
-            Ok(f) => f(
-                h,
-                ta,
-                tb,
-                m,
-                n,
-                k,
-                alpha as *const _ as *const cuComplex,
-                a as *const *const cuComplex,
-                lda,
-                b as *const *const cuComplex,
-                ldb,
-                beta as *const _ as *const cuComplex,
-                c as *mut *mut cuComplex,
-                ldc,
-                batch,
-            ),
-            Err(_) => cublasStatus_t::NOT_INITIALIZED,
+    ) -> cublasStatus_t {
+        unsafe {
+            match cublas().and_then(|c| c.cublas_cgemm_batched()) {
+                Ok(f) => f(
+                    h,
+                    ta,
+                    tb,
+                    m,
+                    n,
+                    k,
+                    alpha as *const _ as *const cuComplex,
+                    a as *const *const cuComplex,
+                    lda,
+                    b as *const *const cuComplex,
+                    ldb,
+                    beta as *const _ as *const cuComplex,
+                    c as *mut *mut cuComplex,
+                    ldc,
+                    batch,
+                ),
+                Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            }
         }
-    }}
+    }
 }
 
 impl BatchedGemmScalar for Complex64 {
@@ -179,28 +185,30 @@ impl BatchedGemmScalar for Complex64 {
         c: *const *mut Complex64,
         ldc: i32,
         batch: i32,
-    ) -> cublasStatus_t { unsafe {
-        match cublas().and_then(|c| c.cublas_zgemm_batched()) {
-            Ok(f) => f(
-                h,
-                ta,
-                tb,
-                m,
-                n,
-                k,
-                alpha as *const _ as *const cuDoubleComplex,
-                a as *const *const cuDoubleComplex,
-                lda,
-                b as *const *const cuDoubleComplex,
-                ldb,
-                beta as *const _ as *const cuDoubleComplex,
-                c as *mut *mut cuDoubleComplex,
-                ldc,
-                batch,
-            ),
-            Err(_) => cublasStatus_t::NOT_INITIALIZED,
+    ) -> cublasStatus_t {
+        unsafe {
+            match cublas().and_then(|c| c.cublas_zgemm_batched()) {
+                Ok(f) => f(
+                    h,
+                    ta,
+                    tb,
+                    m,
+                    n,
+                    k,
+                    alpha as *const _ as *const cuDoubleComplex,
+                    a as *const *const cuDoubleComplex,
+                    lda,
+                    b as *const *const cuDoubleComplex,
+                    ldb,
+                    beta as *const _ as *const cuDoubleComplex,
+                    c as *mut *mut cuDoubleComplex,
+                    ldc,
+                    batch,
+                ),
+                Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            }
         }
-    }}
+    }
 }
 
 mod batched_sealed {
@@ -237,26 +245,28 @@ pub unsafe fn gemm_batched<T: BatchedGemmScalar>(
     c_ptrs: *const *mut T,
     ldc: i32,
     batch_count: i32,
-) -> Result<()> { unsafe {
-    let status = T::gemm_batched_raw(
-        handle.as_raw(),
-        transa.raw(),
-        transb.raw(),
-        m,
-        n,
-        k,
-        &alpha,
-        a_ptrs,
-        lda,
-        b_ptrs,
-        ldb,
-        &beta,
-        c_ptrs,
-        ldc,
-        batch_count,
-    );
-    check(status)
-}}
+) -> Result<()> {
+    unsafe {
+        let status = T::gemm_batched_raw(
+            handle.as_raw(),
+            transa.raw(),
+            transb.raw(),
+            m,
+            n,
+            k,
+            &alpha,
+            a_ptrs,
+            lda,
+            b_ptrs,
+            ldb,
+            &beta,
+            c_ptrs,
+            ldc,
+            batch_count,
+        );
+        check(status)
+    }
+}
 
 /// Mixed-precision, type-erased GEMM (`cublasGemmEx`).
 ///
@@ -287,31 +297,33 @@ pub unsafe fn gemm_ex(
     ldc: i32,
     compute_type: cublasComputeType_t,
     algo: i32,
-) -> Result<()> { unsafe {
-    let c_api = cublas()?;
-    let f = c_api.cublas_gemm_ex()?;
-    check(f(
-        handle.as_raw(),
-        transa.raw(),
-        transb.raw(),
-        m,
-        n,
-        k,
-        alpha,
-        a,
-        a_type,
-        lda,
-        b,
-        b_type,
-        ldb,
-        beta,
-        c,
-        c_type,
-        ldc,
-        compute_type,
-        algo,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c_api = cublas()?;
+        let f = c_api.cublas_gemm_ex()?;
+        check(f(
+            handle.as_raw(),
+            transa.raw(),
+            transb.raw(),
+            m,
+            n,
+            k,
+            alpha,
+            a,
+            a_type,
+            lda,
+            b,
+            b_type,
+            ldb,
+            beta,
+            c,
+            c_type,
+            ldc,
+            compute_type,
+            algo,
+        ))
+    }
+}
 
 /// Strided-batched mixed-precision GEMM (`cublasGemmStridedBatchedEx`).
 ///
@@ -343,32 +355,34 @@ pub unsafe fn gemm_strided_batched_ex(
     batch_count: i32,
     compute_type: cublasComputeType_t,
     algo: i32,
-) -> Result<()> { unsafe {
-    let c_api = cublas()?;
-    let f = c_api.cublas_gemm_strided_batched_ex()?;
-    check(f(
-        handle.as_raw(),
-        transa.raw(),
-        transb.raw(),
-        m,
-        n,
-        k,
-        alpha,
-        a,
-        a_type,
-        lda,
-        stride_a,
-        b,
-        b_type,
-        ldb,
-        stride_b,
-        beta,
-        c,
-        c_type,
-        ldc,
-        stride_c,
-        batch_count,
-        compute_type,
-        algo,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c_api = cublas()?;
+        let f = c_api.cublas_gemm_strided_batched_ex()?;
+        check(f(
+            handle.as_raw(),
+            transa.raw(),
+            transb.raw(),
+            m,
+            n,
+            k,
+            alpha,
+            a,
+            a_type,
+            lda,
+            stride_a,
+            b,
+            b_type,
+            ldb,
+            stride_b,
+            beta,
+            c,
+            c_type,
+            ldc,
+            stride_c,
+            batch_count,
+            compute_type,
+            algo,
+        ))
+    }
+}

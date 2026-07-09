@@ -6,10 +6,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test random_uniform_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RandomArgs, RandomDescriptor, RandomKind,
-    RandomPlan, TensorMut, Workspace,
+    ElementKind, PlanPreference, RandomArgs, RandomDescriptor, RandomKind, RandomPlan, TensorMut,
+    Workspace, contiguous_stride,
 };
 
 const N: usize = 1024 * 1024;
@@ -48,7 +48,8 @@ fn uniform_f32_unit_interval() {
             stride,
         },
     };
-    plan.run(&stream, Workspace::None, args).expect("uniform f32 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("uniform f32 run");
     stream.synchronize().expect("sync");
 
     let mut host = vec![0f32; N];
@@ -106,7 +107,8 @@ fn uniform_f64_unit_interval() {
             stride,
         },
     };
-    plan.run(&stream, Workspace::None, args).expect("uniform f64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("uniform f64 run");
     stream.synchronize().expect("sync");
 
     let mut host = vec![0f64; N];
@@ -151,8 +153,8 @@ fn uniform_f32_affine_range() {
         param2: 7.0,
         seed: 0xDEAD_BEEF_0000_1111,
     };
-    let plan = RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RandomArgs::<f32, 1> {
         y: TensorMut {
             data: dev_y.as_slice_mut(),
@@ -160,7 +162,8 @@ fn uniform_f32_affine_range() {
             stride,
         },
     };
-    plan.run(&stream, Workspace::None, args).expect("uniform affine run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("uniform affine run");
     stream.synchronize().expect("sync");
 
     let mut host = vec![0f32; N];

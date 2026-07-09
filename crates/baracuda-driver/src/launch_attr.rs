@@ -18,10 +18,10 @@
 //! # let _ = attrs;
 //! ```
 
+use baracuda_cuda_sys::CUevent;
 use baracuda_cuda_sys::types::{
     CUaccessPolicyWindow, CUlaunchAttribute, CUlaunchAttributeID, CUlaunchAttributeValue,
 };
-use baracuda_cuda_sys::CUevent;
 
 pub use baracuda_cuda_sys::types::CUaccessPolicyWindow as AccessPolicyWindow;
 

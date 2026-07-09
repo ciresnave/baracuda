@@ -1,7 +1,7 @@
 //! GPU-gated nvJPEG smoke test: decode a 1×1 JPEG into an RGB device buffer.
 
 use baracuda_driver::{Context, Device, DeviceBuffer};
-use baracuda_nvjpeg::{decode_interleaved, Handle, PixelFormat, State};
+use baracuda_nvjpeg::{Handle, PixelFormat, State, decode_interleaved};
 
 /// A minimal valid baseline JPEG encoding a 1×1 grayscale image.
 /// Standard Huffman tables, 8×8 quantization block, single MCU. ≈200 bytes.

@@ -11,13 +11,13 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
     BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
     PagedKvCacheDescriptor,
 };
 use baracuda_flashinfer::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -58,7 +58,8 @@ fn paged_prefill_plan_select_validates() {
     let mut f32_desc = desc;
     f32_desc.paged_kv.element = ElementKind::F32;
     assert!(
-        BatchPagedPrefillPlan::<f32>::select(&stream, &f32_desc, PlanPreference::default()).is_err(),
+        BatchPagedPrefillPlan::<f32>::select(&stream, &f32_desc, PlanPreference::default())
+            .is_err(),
         "f32 prefill must be rejected",
     );
 
@@ -116,7 +117,12 @@ fn make_fixture(ctx: &Context, qo_len: usize, kv_len: usize, v_vals: &[f32]) -> 
 }
 
 fn run_prefill(
-    stream: &Stream, fx: &mut Fixture, qo_len: usize, kv_len: usize, causal: bool, enable_split: bool,
+    stream: &Stream,
+    fx: &mut Fixture,
+    qo_len: usize,
+    kv_len: usize,
+    causal: bool,
+    enable_split: bool,
 ) -> Vec<f32> {
     let paged = PagedKvCacheDescriptor {
         page_size: kv_len as i32, // single page holds the whole history
@@ -143,15 +149,51 @@ fn run_prefill(
         stream,
         Workspace::None,
         BatchPagedPrefillArgs {
-            q: TensorRef { data: fx.q.as_slice(), shape: qo_shape, stride: contiguous_stride(qo_shape) },
-            q_indptr: TensorRef { data: fx.q_indptr.as_slice(), shape: [2], stride: [1] },
-            k_data: TensorRef { data: fx.k.as_slice(), shape: cache_shape, stride: contiguous_stride(cache_shape) },
-            v_data: TensorRef { data: fx.v.as_slice(), shape: cache_shape, stride: contiguous_stride(cache_shape) },
-            kv_indices: TensorRef { data: fx.kv_indices.as_slice(), shape: [1], stride: [1] },
-            kv_indptr: TensorRef { data: fx.kv_indptr.as_slice(), shape: [2], stride: [1] },
-            last_page_len: TensorRef { data: fx.last_page_len.as_slice(), shape: [1], stride: [1] },
-            o: TensorMut { data: fx.o.as_slice_mut(), shape: qo_shape, stride: contiguous_stride(qo_shape) },
-            lse: TensorMut { data: fx.lse.as_slice_mut(), shape: [qo_len as i32, 1], stride: contiguous_stride([qo_len as i32, 1]) },
+            q: TensorRef {
+                data: fx.q.as_slice(),
+                shape: qo_shape,
+                stride: contiguous_stride(qo_shape),
+            },
+            q_indptr: TensorRef {
+                data: fx.q_indptr.as_slice(),
+                shape: [2],
+                stride: [1],
+            },
+            k_data: TensorRef {
+                data: fx.k.as_slice(),
+                shape: cache_shape,
+                stride: contiguous_stride(cache_shape),
+            },
+            v_data: TensorRef {
+                data: fx.v.as_slice(),
+                shape: cache_shape,
+                stride: contiguous_stride(cache_shape),
+            },
+            kv_indices: TensorRef {
+                data: fx.kv_indices.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            kv_indptr: TensorRef {
+                data: fx.kv_indptr.as_slice(),
+                shape: [2],
+                stride: [1],
+            },
+            last_page_len: TensorRef {
+                data: fx.last_page_len.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            o: TensorMut {
+                data: fx.o.as_slice_mut(),
+                shape: qo_shape,
+                stride: contiguous_stride(qo_shape),
+            },
+            lse: TensorMut {
+                data: fx.lse.as_slice_mut(),
+                shape: [qo_len as i32, 1],
+                stride: contiguous_stride([qo_len as i32, 1]),
+            },
         },
     )
     .expect("prefill run");
@@ -171,7 +213,9 @@ fn paged_prefill_uniform_key_non_causal_is_mean() {
     let v_vals = [1.0f32, 3.0];
     let mean = (v_vals[0] + v_vals[1]) / 2.0; // 2.0
     let mut fx = make_fixture(&ctx, /*qo_len=*/ 2, /*kv_len=*/ 2, &v_vals);
-    let got = run_prefill(&stream, &mut fx, 2, 2, /*causal=*/ false, /*enable_split=*/ false);
+    let got = run_prefill(
+        &stream, &mut fx, 2, 2, /*causal=*/ false, /*enable_split=*/ false,
+    );
     for (r, &g) in got.iter().enumerate() {
         assert!(
             (g - mean).abs() < 3e-2,
@@ -188,10 +232,20 @@ fn paged_prefill_uniform_key_causal_is_prefix_mean() {
     let (ctx, stream) = setup();
     let v_vals = [1.0f32, 3.0];
     let mut fx = make_fixture(&ctx, /*qo_len=*/ 2, /*kv_len=*/ 2, &v_vals);
-    let got = run_prefill(&stream, &mut fx, 2, 2, /*causal=*/ true, /*enable_split=*/ false);
+    let got = run_prefill(
+        &stream, &mut fx, 2, 2, /*causal=*/ true, /*enable_split=*/ false,
+    );
     // row 0 attends KV[0] only → V0; row 1 attends KV[0..=1] → mean.
-    assert!((got[0] - 1.0).abs() < 3e-2, "causal row 0: got {}, expected V0 = 1.0", got[0]);
-    assert!((got[1] - 2.0).abs() < 3e-2, "causal row 1: got {}, expected mean = 2.0", got[1]);
+    assert!(
+        (got[0] - 1.0).abs() < 3e-2,
+        "causal row 0: got {}, expected V0 = 1.0",
+        got[0]
+    );
+    assert!(
+        (got[1] - 2.0).abs() < 3e-2,
+        "causal row 1: got {}, expected mean = 2.0",
+        got[1]
+    );
 }
 
 /// KV-split parallelism must produce the SAME result as the no-split path.
@@ -209,17 +263,30 @@ fn paged_prefill_kv_split_matches_no_split() {
 
     let got_nosplit = {
         let mut fx = make_fixture(&ctx, 1, kv_len, &v_vals);
-        run_prefill(&stream, &mut fx, 1, kv_len, /*causal=*/ false, /*enable_split=*/ false)
+        run_prefill(
+            &stream, &mut fx, 1, kv_len, /*causal=*/ false, /*enable_split=*/ false,
+        )
     };
     let got_split = {
         let mut fx = make_fixture(&ctx, 1, kv_len, &v_vals);
-        run_prefill(&stream, &mut fx, 1, kv_len, /*causal=*/ false, /*enable_split=*/ true)
+        run_prefill(
+            &stream, &mut fx, 1, kv_len, /*causal=*/ false, /*enable_split=*/ true,
+        )
     };
-    assert!((got_nosplit[0] - mean).abs() < 5e-2, "no-split: {} vs mean {mean}", got_nosplit[0]);
-    assert!((got_split[0] - mean).abs() < 5e-2, "split: {} vs mean {mean}", got_split[0]);
+    assert!(
+        (got_nosplit[0] - mean).abs() < 5e-2,
+        "no-split: {} vs mean {mean}",
+        got_nosplit[0]
+    );
+    assert!(
+        (got_split[0] - mean).abs() < 5e-2,
+        "split: {} vs mean {mean}",
+        got_split[0]
+    );
     assert!(
         (got_split[0] - got_nosplit[0]).abs() < 2e-2,
         "split {} must match no-split {}",
-        got_split[0], got_nosplit[0],
+        got_split[0],
+        got_nosplit[0],
     );
 }

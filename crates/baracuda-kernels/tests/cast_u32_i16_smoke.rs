@@ -5,7 +5,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -25,8 +25,7 @@ fn ffi_cast_f32_u32_matches_cpp_static_cast() {
     let expected: Vec<u32> = host_x.iter().map(|&x| x as u32).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<u32> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<u32> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_cast_f32_u32_run(
@@ -57,8 +56,7 @@ fn ffi_cast_u32_f32_matches_cpp_static_cast() {
     let expected: Vec<f32> = host_x.iter().map(|&x| x as f32).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_cast_u32_f32_run(
@@ -77,8 +75,11 @@ fn ffi_cast_u32_f32_matches_cpp_static_cast() {
     dev_y.copy_to_host(&mut got).expect("download");
 
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(),
-            "cast_u32_f32 mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "cast_u32_f32 mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -92,8 +93,7 @@ fn ffi_cast_f32_i16_matches_cpp_static_cast() {
     let expected: Vec<i16> = host_x.iter().map(|&x| x as i16).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<i16> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<i16> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_cast_f32_i16_run(
@@ -115,8 +115,11 @@ fn ffi_cast_f32_i16_matches_cpp_static_cast() {
         // Cast may differ from Rust's saturating-`as` for out-of-range
         // floats; clamp the comparison range.
         if host_x[i] >= -32768.0 && host_x[i] < 32768.0 {
-            assert_eq!(g, e, "cast_f32_i16 mismatch @ {i}: x={} got {g} expected {e}",
-                host_x[i]);
+            assert_eq!(
+                g, e,
+                "cast_f32_i16 mismatch @ {i}: x={} got {g} expected {e}",
+                host_x[i]
+            );
         }
     }
 }
@@ -129,8 +132,7 @@ fn ffi_cast_i16_f32_sign_extends() {
     let expected: Vec<f32> = host_x.iter().map(|&x| x as f32).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_cast_i16_f32_run(
@@ -149,8 +151,11 @@ fn ffi_cast_i16_f32_sign_extends() {
     dev_y.copy_to_host(&mut got).expect("download");
 
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(),
-            "cast_i16_f32 mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "cast_i16_f32 mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -164,8 +169,7 @@ fn ffi_cast_u32_i16_truncates_low_bits() {
     let expected: Vec<i16> = host_x.iter().map(|&x| x as i16).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<i16> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<i16> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_cast_u32_i16_run(
@@ -184,7 +188,10 @@ fn ffi_cast_u32_i16_truncates_low_bits() {
     dev_y.copy_to_host(&mut got).expect("download");
 
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g, e, "cast_u32_i16 mismatch @ {i}: u32={} got {g} expected {e}",
-            host_x[i]);
+        assert_eq!(
+            g, e,
+            "cast_u32_i16 mismatch @ {i}: u32={} got {g} expected {e}",
+            host_x[i]
+        );
     }
 }

@@ -21,15 +21,15 @@ use core::ffi::c_void;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cudnnCreate, cudnnCreatePoolingDescriptor, cudnnCreateTensorDescriptor, cudnnDestroy,
-    cudnnDestroyPoolingDescriptor, cudnnDestroyTensorDescriptor, cudnnHandle_t,
-    cudnnPoolingBackward, cudnnPoolingDescriptor_t, cudnnPoolingForward,
-    cudnnSetPoolingNdDescriptor, cudnnSetStream, cudnnSetTensorNdDescriptor,
-    cudnnTensorDescriptor_t, CUDNN_NOT_PROPAGATE_NAN,
+    CUDNN_NOT_PROPAGATE_NAN, cudnnCreate, cudnnCreatePoolingDescriptor,
+    cudnnCreateTensorDescriptor, cudnnDestroy, cudnnDestroyPoolingDescriptor,
+    cudnnDestroyTensorDescriptor, cudnnHandle_t, cudnnPoolingBackward, cudnnPoolingDescriptor_t,
+    cudnnPoolingForward, cudnnSetPoolingNdDescriptor, cudnnSetStream, cudnnSetTensorNdDescriptor,
+    cudnnTensorDescriptor_t,
 };
 use baracuda_kernels_types::{Element, ElementKind};
 
-use super::max_pool2d::{cudnn_dtype, cudnn_pool_mode, is_double_compute, PoolMode};
+use super::max_pool2d::{PoolMode, cudnn_dtype, cudnn_pool_mode, is_double_compute};
 
 /// Spatial-axes-only output-dim formula
 /// `out = floor((in + 2·pad - window) / stride) + 1`. Used by 1-D / 3-D
@@ -96,13 +96,7 @@ fn create_tensor_nd<T: Element>(
     }
     let dt = cudnn_dtype::<T>();
     let status = unsafe {
-        cudnnSetTensorNdDescriptor(
-            td,
-            dt,
-            nb_dims as i32,
-            padded.as_ptr(),
-            strides.as_ptr(),
-        )
+        cudnnSetTensorNdDescriptor(td, dt, nb_dims as i32, padded.as_ptr(), strides.as_ptr())
     };
     if status != 0 {
         unsafe {

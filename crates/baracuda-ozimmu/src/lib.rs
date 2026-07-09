@@ -217,9 +217,9 @@ impl OzakiVariant {
     pub fn to_ffi(self) -> i32 {
         match self {
             OzakiVariant::Base => sys::OZIMMU_VARIANT_BASE,
-            OzakiVariant::EF   => sys::OZIMMU_VARIANT_EF,
-            OzakiVariant::RN   => sys::OZIMMU_VARIANT_RN,
-            OzakiVariant::H    => sys::OZIMMU_VARIANT_H,
+            OzakiVariant::EF => sys::OZIMMU_VARIANT_EF,
+            OzakiVariant::RN => sys::OZIMMU_VARIANT_RN,
+            OzakiVariant::H => sys::OZIMMU_VARIANT_H,
         }
     }
 }

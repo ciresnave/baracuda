@@ -23,17 +23,16 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cudnnCreate, cudnnHandle_t, cudnnPoolingDescriptor_t, cudnnSetStream,
-    cudnnTensorDescriptor_t,
+    cudnnCreate, cudnnHandle_t, cudnnPoolingDescriptor_t, cudnnSetStream, cudnnTensorDescriptor_t,
 };
 use baracuda_kernels_types::{
     Element, KernelSku, PlanPreference, PoolKind, PrecisionGuarantee, Workspace,
 };
 
 use super::max_pool2d::{
-    build_sku, check_bw_args, check_fw_args, drop_pool_descriptors, ensure_pool_descriptors,
-    run_bw_inner, run_fw_inner, validate_descriptor, Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs,
-    PoolMode,
+    Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs, PoolMode, build_sku, check_bw_args,
+    check_fw_args, drop_pool_descriptors, ensure_pool_descriptors, run_bw_inner, run_fw_inner,
+    validate_descriptor,
 };
 
 /// 2-D average-pool plan (cuDNN-backed) — forward + backward over NCHW.
@@ -202,12 +201,7 @@ impl<T: Element> AvgPool2dPlan<T> {
     }
 
     fn ensure_descriptors(&self) -> Result<()> {
-        ensure_pool_descriptors::<T>(
-            &self.desc,
-            &self.x_desc,
-            &self.y_desc,
-            &self.pool_desc,
-        )
+        ensure_pool_descriptors::<T>(&self.desc, &self.x_desc, &self.y_desc, &self.pool_desc)
     }
 }
 

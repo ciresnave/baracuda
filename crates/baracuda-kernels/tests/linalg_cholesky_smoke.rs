@@ -7,10 +7,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, CholeskyArgs, CholeskyDescriptor, CholeskyPlan, ElementKind,
-    PlanPreference, TensorMut, Workspace,
+    CholeskyArgs, CholeskyDescriptor, CholeskyPlan, ElementKind, PlanPreference, TensorMut,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

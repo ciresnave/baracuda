@@ -13,12 +13,10 @@ use baracuda_kernels_types::{
     Element, KernelSku, PlanPreference, PoolKind, PrecisionGuarantee, Workspace,
 };
 
-use super::adaptive_avg_pool1d::{
-    build_sku, dispatch_max_bw, dispatch_max_fw, map_status,
-};
+use super::adaptive_avg_pool1d::{build_sku, dispatch_max_bw, dispatch_max_fw, map_status};
 use super::adaptive_avg_pool2d::{
-    check_bw_args, check_fw_args, validate_descriptor, AdaptivePool2dBwArgs,
-    AdaptivePool2dDescriptor, AdaptivePool2dFwArgs,
+    AdaptivePool2dBwArgs, AdaptivePool2dDescriptor, AdaptivePool2dFwArgs, check_bw_args,
+    check_fw_args, validate_descriptor,
 };
 
 /// Adaptive 2-D max-pool plan (bit-exact PyTorch, bespoke kernel).
@@ -89,8 +87,12 @@ impl<T: Element> AdaptiveMaxPool2dPlan<T> {
             y_ptr,
             nc,
             2,
-            1, self.desc.h_in, self.desc.w_in,
-            1, self.desc.h_out, self.desc.w_out,
+            1,
+            self.desc.h_in,
+            self.desc.w_in,
+            1,
+            self.desc.h_out,
+            self.desc.w_out,
             stream_ptr,
         );
         map_status(status)
@@ -116,8 +118,12 @@ impl<T: Element> AdaptiveMaxPool2dPlan<T> {
             dx_ptr,
             nc,
             2,
-            1, self.desc.h_in, self.desc.w_in,
-            1, self.desc.h_out, self.desc.w_out,
+            1,
+            self.desc.h_in,
+            self.desc.w_in,
+            1,
+            self.desc.h_out,
+            self.desc.w_out,
             stream_ptr,
         );
         map_status(status)

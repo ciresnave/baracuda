@@ -20,9 +20,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    baracuda_kernels_scale_inplace_c32_run, baracuda_kernels_scale_inplace_c64_run, cufftComplex,
-    cufftDestroy, cufftDoubleComplex, cufftExecC2C, cufftExecZ2Z, cufftHandle, cufftPlan1d,
-    cufftSetStream, CUFFT_C2C, CUFFT_FORWARD, CUFFT_INVERSE, CUFFT_Z2Z,
+    CUFFT_C2C, CUFFT_FORWARD, CUFFT_INVERSE, CUFFT_Z2Z, baracuda_kernels_scale_inplace_c32_run,
+    baracuda_kernels_scale_inplace_c64_run, cufftComplex, cufftDestroy, cufftDoubleComplex,
+    cufftExecC2C, cufftExecZ2Z, cufftHandle, cufftPlan1d, cufftSetStream,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FftKind, KernelSku,
@@ -375,11 +375,7 @@ impl<T: Element> Drop for FftPlan<T> {
 /// success is `0`; any non-zero is surfaced as a negative
 /// `CutlassInternal(-code)` so the origin remains visible.
 pub(crate) fn cufft_to_status(cufft_code: i32) -> i32 {
-    if cufft_code == 0 {
-        0
-    } else {
-        -cufft_code
-    }
+    if cufft_code == 0 { 0 } else { -cufft_code }
 }
 
 /// Map a bespoke-kernel status integer (the `0/1/2/3/4/5` ABI shared

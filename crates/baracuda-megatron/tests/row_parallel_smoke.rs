@@ -82,7 +82,9 @@ fn row_parallel_f32_forward_single_rank_matches_linear() {
     let in_f = 24usize;
     let out_f = 16usize;
 
-    let x_host: Vec<f32> = (0..batch * in_f).map(|i| (i as f32) * 0.013 - 0.4).collect();
+    let x_host: Vec<f32> = (0..batch * in_f)
+        .map(|i| (i as f32) * 0.013 - 0.4)
+        .collect();
     let w_host: Vec<f32> = (0..out_f * in_f)
         .map(|i| ((i % 19) as f32) * 0.06 - 0.35)
         .collect();

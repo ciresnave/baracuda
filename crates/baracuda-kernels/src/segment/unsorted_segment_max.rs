@@ -16,7 +16,7 @@ use baracuda_kernels_types::{
 };
 
 use super::map_status;
-use super::segment_sum::{validate_desc, SegDescView};
+use super::segment_sum::{SegDescView, validate_desc};
 use super::unsorted_segment_sum::{build_unsorted_sku, validate_unsorted_args};
 
 /// Descriptor for an `unsorted_segment_max` op.

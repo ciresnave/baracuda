@@ -3,10 +3,10 @@
 //! Verifies bit-exact (within rounding) `dx[i] = dy[i] * mask[i] * scale`.
 //! No randomness involved — the mask is a deterministic input.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Bool, DropoutBackwardArgs, DropoutBackwardDescriptor, DropoutBackwardPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    Bool, DropoutBackwardArgs, DropoutBackwardDescriptor, DropoutBackwardPlan, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 const N: usize = 1024 * 1024;
@@ -29,7 +29,9 @@ fn dropout_backward_f32_p_half() {
     // Construct a deterministic mask (alternating-pattern) and a
     // deterministic dy.
     let host_dy: Vec<f32> = (0..N).map(|i| ((i as f32) * 0.125) - 4.0).collect();
-    let host_mask: Vec<Bool> = (0..N).map(|i| Bool(if i % 3 == 0 { 0 } else { 1 })).collect();
+    let host_mask: Vec<Bool> = (0..N)
+        .map(|i| Bool(if i % 3 == 0 { 0 } else { 1 }))
+        .collect();
 
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let dev_mask = DeviceBuffer::from_slice(&ctx, &host_mask).expect("upload mask");
@@ -43,15 +45,27 @@ fn dropout_backward_f32_p_half() {
         element: ElementKind::F32,
         p,
     };
-    let plan =
-        DropoutBackwardPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+    let plan = DropoutBackwardPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = DropoutBackwardArgs::<f32, 1> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        mask: TensorRef { data: dev_mask.as_slice(), shape, stride },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        mask: TensorRef {
+            data: dev_mask.as_slice(),
+            shape,
+            stride,
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("dropout BW run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("dropout BW run");
     stream.synchronize().expect("sync");
 
     let mut host_dx = vec![0f32; N];
@@ -69,7 +83,10 @@ fn dropout_backward_f32_p_half() {
         if diff > tol {
             mismatches += 1;
             if mismatches <= 3 {
-                eprintln!("cell {i}: got {got} expected {expected} (dy = {dyi}, mask = {})", mi.0);
+                eprintln!(
+                    "cell {i}: got {got} expected {expected} (dy = {dyi}, mask = {})",
+                    mi.0
+                );
             }
         }
     }
@@ -84,7 +101,9 @@ fn dropout_backward_f64_p_one_third() {
     let stride = contiguous_stride(shape);
 
     let host_dy: Vec<f64> = (0..N).map(|i| ((i as f64) * 0.0625) - 7.0).collect();
-    let host_mask: Vec<Bool> = (0..N).map(|i| Bool(if i % 5 < 2 { 0 } else { 1 })).collect();
+    let host_mask: Vec<Bool> = (0..N)
+        .map(|i| Bool(if i % 5 < 2 { 0 } else { 1 }))
+        .collect();
 
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let dev_mask = DeviceBuffer::from_slice(&ctx, &host_mask).expect("upload mask");
@@ -101,9 +120,21 @@ fn dropout_backward_f64_p_one_third() {
     let plan =
         DropoutBackwardPlan::<f64, 1>::select(&stream, &desc, PlanPreference::default()).unwrap();
     let args = DropoutBackwardArgs::<f64, 1> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        mask: TensorRef { data: dev_mask.as_slice(), shape, stride },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        mask: TensorRef {
+            data: dev_mask.as_slice(),
+            shape,
+            stride,
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).unwrap();
     stream.synchronize().unwrap();

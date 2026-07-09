@@ -88,12 +88,10 @@ pub mod xt;
 
 pub use baracuda_cublas_sys::functions::{cublasComputeType_t, cudaDataType_t};
 pub use baracuda_cublas_sys::{cublasMath_t, cublasPointerMode_t};
-pub use batched::{gemm_batched, gemm_ex, gemm_strided_batched_ex, BatchedGemmScalar};
-pub use blas_scalar::{axpy, gemm, gemm_strided_batched, BlasScalar, Op};
+pub use batched::{BatchedGemmScalar, gemm_batched, gemm_ex, gemm_strided_batched_ex};
+pub use blas_scalar::{BlasScalar, Op, axpy, gemm, gemm_strided_batched};
 pub use error::{Error, Result};
 pub use handle::Handle;
-pub use level1::{asum, copy, dot, iamax, iamin, nrm2, scal, L1Scalar};
-pub use level2::{gemv, ger, symv, syr, trmv, trsv, L2Real, L2Scalar};
-pub use level3::{
-    hemm, herk, symm, syrk, trmm, trsm, Diag, Fill, HermitianScalar, L3Scalar, Side,
-};
+pub use level1::{L1Scalar, asum, copy, dot, iamax, iamin, nrm2, scal};
+pub use level2::{L2Real, L2Scalar, gemv, ger, symv, syr, trmv, trsv};
+pub use level3::{Diag, Fill, HermitianScalar, L3Scalar, Side, hemm, herk, symm, syrk, trmm, trsm};

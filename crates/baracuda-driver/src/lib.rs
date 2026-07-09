@@ -73,15 +73,15 @@ pub use array::{
 };
 pub use context::{Context, PrimaryContext};
 pub use device::Device;
-pub use error::{error_name, error_string, Error, Result};
+pub use error::{Error, Result, error_name, error_string};
 pub use event::Event;
-pub use graph::{instantiate_flags, CaptureMode, Graph, GraphExec, GraphNode};
+pub use graph::{CaptureMode, Graph, GraphExec, GraphNode, instantiate_flags};
 pub use init::{init, version};
 pub use launch::{Dim3, LaunchBuilder};
 pub use memory::{
-    mem_get_info, DeviceBuffer, DevicePtr, DevicePtrMut, DeviceSlice, DeviceSliceMut,
-    ManagedAttach, ManagedBuffer, MemAdvise,
+    DeviceBuffer, DevicePtr, DevicePtrMut, DeviceSlice, DeviceSliceMut, ManagedAttach,
+    ManagedBuffer, MemAdvise, mem_get_info,
 };
-pub use pinned::{PinnedBuffer, PinnedRegistration};
 pub use module::{Function, Module};
+pub use pinned::{PinnedBuffer, PinnedRegistration};
 pub use stream::Stream;

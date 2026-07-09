@@ -1,11 +1,10 @@
 //! Real-GPU smoke test for `CrossEntropyLossPlan` with `target_kind=SoftProb`.
 //! FW × 4 dtypes × Mean.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, CrossEntropyLossArgs, CrossEntropyLossDescriptor, CrossEntropyLossPlan,
-    CrossEntropyTargetKind, ElementKind, LossReduction, PlanPreference, TensorMut, TensorRef,
-    Workspace,
+    CrossEntropyLossArgs, CrossEntropyLossDescriptor, CrossEntropyLossPlan, CrossEntropyTargetKind,
+    ElementKind, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -17,12 +16,7 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
-fn host_soft_ce_mean_f64(
-    input: &[f64],
-    target: &[f64],
-    n_rows: usize,
-    classes: usize,
-) -> f64 {
+fn host_soft_ce_mean_f64(input: &[f64], target: &[f64], n_rows: usize, classes: usize) -> f64 {
     let mut s = 0.0;
     for i in 0..n_rows {
         let row = &input[i * classes..(i + 1) * classes];
@@ -85,8 +79,8 @@ fn loss_cross_entropy_soft_f32_mean() {
         target_kind: CrossEntropyTargetKind::SoftProb,
         element: ElementKind::F32,
     };
-    let plan = CrossEntropyLossPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .unwrap();
+    let plan =
+        CrossEntropyLossPlan::<f32>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
@@ -102,7 +96,11 @@ fn loss_cross_entropy_soft_f32_mean() {
                 shape: [n_rows, class_extent],
                 stride: contiguous_stride([n_rows, class_extent]),
             }),
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1], stride: [1] },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -110,7 +108,12 @@ fn loss_cross_entropy_soft_f32_mean() {
     let mut got = [0f32; 1];
     dev_y.copy_to_host(&mut got).unwrap();
     let tol = expected.abs() * 16.0 * f32::EPSILON + 1e-5;
-    assert!((got[0] - expected).abs() <= tol, "f32 soft CE: got={} want={}", got[0], expected);
+    assert!(
+        (got[0] - expected).abs() <= tol,
+        "f32 soft CE: got={} want={}",
+        got[0],
+        expected
+    );
 }
 
 #[test]
@@ -124,9 +127,8 @@ fn loss_cross_entropy_soft_f64_mean() {
         .collect();
     let host_t_f32 = make_soft_target(n_rows as usize, class_extent as usize);
     let host_t: Vec<f64> = host_t_f32.iter().map(|&v| v as f64).collect();
-    let expected = host_soft_ce_mean_f64(
-        &host_inp, &host_t, n_rows as usize, class_extent as usize,
-    );
+    let expected =
+        host_soft_ce_mean_f64(&host_inp, &host_t, n_rows as usize, class_extent as usize);
 
     let dev_inp = DeviceBuffer::from_slice(&ctx, &host_inp).unwrap();
     let dev_t = DeviceBuffer::from_slice(&ctx, &host_t).unwrap();
@@ -140,8 +142,8 @@ fn loss_cross_entropy_soft_f64_mean() {
         target_kind: CrossEntropyTargetKind::SoftProb,
         element: ElementKind::F64,
     };
-    let plan = CrossEntropyLossPlan::<f64>::select(&stream, &desc, PlanPreference::default())
-        .unwrap();
+    let plan =
+        CrossEntropyLossPlan::<f64>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
@@ -157,7 +159,11 @@ fn loss_cross_entropy_soft_f64_mean() {
                 shape: [n_rows, class_extent],
                 stride: contiguous_stride([n_rows, class_extent]),
             }),
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1], stride: [1] },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -182,9 +188,8 @@ fn loss_cross_entropy_soft_f16_mean() {
     let host_t: Vec<f16> = host_t_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let inp64: Vec<f64> = host_inp.iter().map(|&v| v.to_f32() as f64).collect();
     let t64: Vec<f64> = host_t.iter().map(|&v| v.to_f32() as f64).collect();
-    let expected = host_soft_ce_mean_f64(
-        &inp64, &t64, n_rows as usize, class_extent as usize,
-    ) as f32;
+    let expected =
+        host_soft_ce_mean_f64(&inp64, &t64, n_rows as usize, class_extent as usize) as f32;
 
     let dev_inp = DeviceBuffer::from_slice(&ctx, &host_inp).unwrap();
     let dev_t = DeviceBuffer::from_slice(&ctx, &host_t).unwrap();
@@ -198,8 +203,8 @@ fn loss_cross_entropy_soft_f16_mean() {
         target_kind: CrossEntropyTargetKind::SoftProb,
         element: ElementKind::F16,
     };
-    let plan = CrossEntropyLossPlan::<f16>::select(&stream, &desc, PlanPreference::default())
-        .unwrap();
+    let plan =
+        CrossEntropyLossPlan::<f16>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
@@ -215,7 +220,11 @@ fn loss_cross_entropy_soft_f16_mean() {
                 shape: [n_rows, class_extent],
                 stride: contiguous_stride([n_rows, class_extent]),
             }),
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1], stride: [1] },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -224,7 +233,12 @@ fn loss_cross_entropy_soft_f16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 32.0 * 9.77e-4_f32 + 1e-2;
-    assert!((got_f32 - expected).abs() <= tol, "f16 soft CE: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "f16 soft CE: got={} want={}",
+        got_f32,
+        expected
+    );
 }
 
 #[test]
@@ -241,9 +255,8 @@ fn loss_cross_entropy_soft_bf16_mean() {
     let host_t: Vec<bf16> = host_t_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let inp64: Vec<f64> = host_inp.iter().map(|&v| v.to_f32() as f64).collect();
     let t64: Vec<f64> = host_t.iter().map(|&v| v.to_f32() as f64).collect();
-    let expected = host_soft_ce_mean_f64(
-        &inp64, &t64, n_rows as usize, class_extent as usize,
-    ) as f32;
+    let expected =
+        host_soft_ce_mean_f64(&inp64, &t64, n_rows as usize, class_extent as usize) as f32;
 
     let dev_inp = DeviceBuffer::from_slice(&ctx, &host_inp).unwrap();
     let dev_t = DeviceBuffer::from_slice(&ctx, &host_t).unwrap();
@@ -257,8 +270,8 @@ fn loss_cross_entropy_soft_bf16_mean() {
         target_kind: CrossEntropyTargetKind::SoftProb,
         element: ElementKind::Bf16,
     };
-    let plan = CrossEntropyLossPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
-        .unwrap();
+    let plan =
+        CrossEntropyLossPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
@@ -274,7 +287,11 @@ fn loss_cross_entropy_soft_bf16_mean() {
                 shape: [n_rows, class_extent],
                 stride: contiguous_stride([n_rows, class_extent]),
             }),
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1], stride: [1] },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -283,5 +300,10 @@ fn loss_cross_entropy_soft_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 32.0 * 7.81e-3_f32 + 3e-2;
-    assert!((got_f32 - expected).abs() <= tol, "bf16 soft CE: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "bf16 soft CE: got={} want={}",
+        got_f32,
+        expected
+    );
 }

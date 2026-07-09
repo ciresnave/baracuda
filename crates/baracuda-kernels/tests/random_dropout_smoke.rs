@@ -7,10 +7,10 @@
 //!    statistical tolerance.
 //! 3. Per-cell: `mask = 0 ⇒ y == 0`, `mask = 1 ⇒ y == x / (1 - p)`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Bool, DropoutArgs, DropoutDescriptor, DropoutPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    Bool, DropoutArgs, DropoutDescriptor, DropoutPlan, ElementKind, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 const N: usize = 1024 * 1024;
@@ -46,9 +46,21 @@ fn run_case_f32(p: f32, seed: u64) {
     let plan = DropoutPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select DropoutPlan<f32>");
     let args = DropoutArgs::<f32, 1> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-        mask: TensorMut { data: dev_mask.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
+        mask: TensorMut {
+            data: dev_mask.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
         .expect("dropout f32 run");
@@ -57,11 +69,17 @@ fn run_case_f32(p: f32, seed: u64) {
     let mut host_y = vec![0f32; N];
     let mut host_mask = vec![Bool(0); N];
     dev_y.copy_to_host(&mut host_y).expect("download y");
-    dev_mask.copy_to_host(&mut host_mask).expect("download mask");
+    dev_mask
+        .copy_to_host(&mut host_mask)
+        .expect("download mask");
 
     let scale = 1.0_f32 / (1.0 - p);
     let mut kept: usize = 0;
-    for (i, (xi, (yi, mi))) in host_x.iter().zip(host_y.iter().zip(host_mask.iter())).enumerate() {
+    for (i, (xi, (yi, mi))) in host_x
+        .iter()
+        .zip(host_y.iter().zip(host_mask.iter()))
+        .enumerate()
+    {
         if mi.0 == 1 {
             kept += 1;
             let expected = xi * scale;
@@ -70,10 +88,7 @@ fn run_case_f32(p: f32, seed: u64) {
                 "mask=1 cell {i}: y = {yi}, expected x*scale = {expected} (x = {xi})"
             );
         } else if mi.0 == 0 {
-            assert!(
-                *yi == 0.0,
-                "mask=0 cell {i}: y = {yi}, expected 0"
-            );
+            assert!(*yi == 0.0, "mask=0 cell {i}: y = {yi}, expected 0");
         } else {
             panic!("non-canonical mask byte at cell {i}: {}", mi.0);
         }
@@ -116,8 +131,7 @@ fn dropout_f64_p_half() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
     let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, N).expect("alloc y");
     let mut dev_mask: DeviceBuffer<Bool> = DeviceBuffer::zeros(&ctx, N).expect("alloc mask");
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, N * 4).expect("alloc workspace");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, N * 4).expect("alloc workspace");
 
     let desc = DropoutDescriptor {
         shape,
@@ -127,11 +141,24 @@ fn dropout_f64_p_half() {
     };
     let plan = DropoutPlan::<f64, 1>::select(&stream, &desc, PlanPreference::default()).unwrap();
     let args = DropoutArgs::<f64, 1> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-        mask: TensorMut { data: dev_mask.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
+        mask: TensorMut {
+            data: dev_mask.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args).unwrap();
+    plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
+        .unwrap();
     stream.synchronize().unwrap();
 
     let mut host_y = vec![0f64; N];
@@ -141,7 +168,11 @@ fn dropout_f64_p_half() {
 
     let scale = 1.0_f64 / 0.5;
     let mut kept = 0usize;
-    for (i, (xi, (yi, mi))) in host_x.iter().zip(host_y.iter().zip(host_mask.iter())).enumerate() {
+    for (i, (xi, (yi, mi))) in host_x
+        .iter()
+        .zip(host_y.iter().zip(host_mask.iter()))
+        .enumerate()
+    {
         if mi.0 == 1 {
             kept += 1;
             let expected = xi * scale;

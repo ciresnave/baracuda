@@ -19,7 +19,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_cublas::{gemm, gemm_ex, Handle as CublasHandle, Op};
+use baracuda_cublas::{Handle as CublasHandle, Op, gemm, gemm_ex};
 use baracuda_cublas_sys::functions::{cublasComputeType_t, cudaDataType_t};
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
@@ -27,10 +27,10 @@ use baracuda_kernels::{
     PlanPreference, Workspace,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, gemm_flops, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline, CROSS_GEMM_KN_SWEEP, CROSS_GEMM_M_SWEEP,
+    CROSS_GEMM_KN_SWEEP, CROSS_GEMM_M_SWEEP, PhaseTwentyNineRow, PytorchBaseline, append_csv_row,
+    gemm_flops, measure_median_ns, setup_device, time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use half::{bf16, f16};
 
 const BENCH_NAME: &str = "gemm_vs_cublas";
@@ -98,7 +98,8 @@ fn bench_baracuda_f32(c: &mut Criterion) {
                     alpha: 1.0,
                     beta: 0.0,
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda f32 gemm");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda f32 gemm");
             };
 
             warmup(&stream, run);
@@ -129,7 +130,8 @@ fn bench_baracuda_f32(c: &mut Criterion) {
                     alpha: 1.0_f32,
                     beta: 0.0_f32,
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda f32 gemm");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda f32 gemm");
             });
             append_csv_row(
                 BENCH_NAME,
@@ -172,7 +174,8 @@ fn bench_baracuda_f32(c: &mut Criterion) {
                             alpha: 1.0,
                             beta: 0.0,
                         };
-                        plan.run(&stream, Workspace::None, args).expect("baracuda f32 gemm");
+                        plan.run(&stream, Workspace::None, args)
+                            .expect("baracuda f32 gemm");
                     })
                 });
             });
@@ -381,7 +384,8 @@ fn bench_baracuda_half<T>(
                     alpha,
                     beta,
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda half gemm");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda half gemm");
             });
 
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
@@ -409,7 +413,8 @@ fn bench_baracuda_half<T>(
                     alpha,
                     beta,
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda half gemm");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda half gemm");
             });
             // Stash with reference=None — `bench_cublas_half` will emit
             // the matching reference-side row.
@@ -454,7 +459,8 @@ fn bench_baracuda_half<T>(
                             alpha,
                             beta,
                         };
-                        plan.run(&stream, Workspace::None, args).expect("baracuda half gemm");
+                        plan.run(&stream, Workspace::None, args)
+                            .expect("baracuda half gemm");
                     })
                 });
             });

@@ -16,11 +16,11 @@ use core::ffi::c_void;
 use core::mem::size_of;
 use core::ops::{Deref, DerefMut};
 
-use baracuda_cuda_sys::{driver, CUdeviceptr};
+use baracuda_cuda_sys::{CUdeviceptr, driver};
 use baracuda_types::DeviceRepr;
 
 use crate::context::Context;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Flags for [`PinnedBuffer::with_flags`] / [`PinnedRegistration::register_with_flags`].
 ///

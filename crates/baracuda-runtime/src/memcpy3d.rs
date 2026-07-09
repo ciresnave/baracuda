@@ -6,7 +6,7 @@ use baracuda_cuda_sys::runtime::runtime;
 use baracuda_cuda_sys::runtime::types::{cudaExtent, cudaMemcpy3DParms, cudaPitchedPtr};
 use baracuda_types::DeviceRepr;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// A pitched 3D device allocation (from `cudaMalloc3D`). Freed on drop.
@@ -90,65 +90,75 @@ impl<T: DeviceRepr> Drop for Pitched3dBuffer<T> {
 ///
 /// Every pointer inside `params` (both array handles and pitched ptrs)
 /// must be valid for the copy region.
-pub unsafe fn memcpy_3d(params: &cudaMemcpy3DParms) -> Result<()> { unsafe {
-    let r = runtime()?;
-    let cu = r.cuda_memcpy_3d()?;
-    check(cu(params as *const cudaMemcpy3DParms as *const c_void))
-}}
+pub unsafe fn memcpy_3d(params: &cudaMemcpy3DParms) -> Result<()> {
+    unsafe {
+        let r = runtime()?;
+        let cu = r.cuda_memcpy_3d()?;
+        check(cu(params as *const cudaMemcpy3DParms as *const c_void))
+    }
+}
 
 /// `cudaMemcpy3DAsync`.
 ///
 /// # Safety
 ///
 /// Same as [`memcpy_3d`]; caller owns synchronization.
-pub unsafe fn memcpy_3d_async(params: &cudaMemcpy3DParms, stream: &Stream) -> Result<()> { unsafe {
-    let r = runtime()?;
-    let cu = r.cuda_memcpy_3d_async()?;
-    check(cu(
-        params as *const cudaMemcpy3DParms as *const c_void,
-        stream.as_raw(),
-    ))
-}}
+pub unsafe fn memcpy_3d_async(params: &cudaMemcpy3DParms, stream: &Stream) -> Result<()> {
+    unsafe {
+        let r = runtime()?;
+        let cu = r.cuda_memcpy_3d_async()?;
+        check(cu(
+            params as *const cudaMemcpy3DParms as *const c_void,
+            stream.as_raw(),
+        ))
+    }
+}
 
 /// `cudaMemcpy3DPeer`.
 ///
 /// # Safety
 ///
 /// Same as [`memcpy_3d`]. `params` must include `srcDevice` / `dstDevice`.
-pub unsafe fn memcpy_3d_peer(params: &cudaMemcpy3DParms) -> Result<()> { unsafe {
-    let r = runtime()?;
-    let cu = r.cuda_memcpy_3d_peer()?;
-    check(cu(params as *const cudaMemcpy3DParms as *const c_void))
-}}
+pub unsafe fn memcpy_3d_peer(params: &cudaMemcpy3DParms) -> Result<()> {
+    unsafe {
+        let r = runtime()?;
+        let cu = r.cuda_memcpy_3d_peer()?;
+        check(cu(params as *const cudaMemcpy3DParms as *const c_void))
+    }
+}
 
 /// `cudaMemcpy3DPeerAsync`.
 ///
 /// # Safety
 ///
 /// Same as [`memcpy_3d_peer`].
-pub unsafe fn memcpy_3d_peer_async(params: &cudaMemcpy3DParms, stream: &Stream) -> Result<()> { unsafe {
-    let r = runtime()?;
-    let cu = r.cuda_memcpy_3d_peer_async()?;
-    check(cu(
-        params as *const cudaMemcpy3DParms as *const c_void,
-        stream.as_raw(),
-    ))
-}}
+pub unsafe fn memcpy_3d_peer_async(params: &cudaMemcpy3DParms, stream: &Stream) -> Result<()> {
+    unsafe {
+        let r = runtime()?;
+        let cu = r.cuda_memcpy_3d_peer_async()?;
+        check(cu(
+            params as *const cudaMemcpy3DParms as *const c_void,
+            stream.as_raw(),
+        ))
+    }
+}
 
 /// `cudaMemset3D` — fill a 3D region with a byte value.
 ///
 /// # Safety
 ///
 /// `pitched` must cover the `extent` region.
-pub unsafe fn memset_3d(pitched: cudaPitchedPtr, value: i32, extent: cudaExtent) -> Result<()> { unsafe {
-    let r = runtime()?;
-    let cu = r.cuda_memset_3d()?;
-    // Note: the C signature takes cudaPitchedPtr by value, but we pass a
-    // pointer for portability (matches how the PFN is typed at sys layer).
-    let mut p = pitched;
-    check(cu(
-        &mut p as *mut cudaPitchedPtr as *mut c_void,
-        value,
-        &extent as *const cudaExtent as *const c_void,
-    ))
-}}
+pub unsafe fn memset_3d(pitched: cudaPitchedPtr, value: i32, extent: cudaExtent) -> Result<()> {
+    unsafe {
+        let r = runtime()?;
+        let cu = r.cuda_memset_3d()?;
+        // Note: the C signature takes cudaPitchedPtr by value, but we pass a
+        // pointer for portability (matches how the PFN is typed at sys layer).
+        let mut p = pitched;
+        check(cu(
+            &mut p as *mut cudaPitchedPtr as *mut c_void,
+            value,
+            &extent as *const cudaExtent as *const c_void,
+        ))
+    }
+}

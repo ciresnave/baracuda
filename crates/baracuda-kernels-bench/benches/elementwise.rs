@@ -10,14 +10,14 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, PlanPreference,
-    TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind, UnaryPlan, Workspace,
+    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, PlanPreference, TensorMut, TensorRef,
+    UnaryArgs, UnaryDescriptor, UnaryKind, UnaryPlan, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline,
+    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns, setup_device,
+    time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use half::f16;
 
 const BENCH_NAME: &str = "elementwise";
@@ -35,8 +35,7 @@ fn bench_binary<T>(
     dtype_label: &str,
     fill: T,
     baseline: Option<&PytorchBaseline>,
-)
-where
+) where
     T: baracuda_kernels::Element + Copy + 'static,
 {
     let (ctx, stream) = setup_device();
@@ -162,8 +161,7 @@ fn bench_unary<T>(
     dtype_label: &str,
     fill: T,
     baseline: Option<&PytorchBaseline>,
-)
-where
+) where
     T: baracuda_kernels::Element + Copy + 'static,
 {
     let (ctx, stream) = setup_device();
@@ -279,8 +277,22 @@ fn benches(c: &mut Criterion) {
     bench_unary::<f16>(c, UnaryKind::Silu, "silu", "f16", f16::ONE, baseline_ref);
     bench_unary::<f32>(c, UnaryKind::Tanh, "tanh", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Tanh, "tanh", "f16", f16::ONE, baseline_ref);
-    bench_unary::<f32>(c, UnaryKind::Sigmoid, "sigmoid", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::Sigmoid, "sigmoid", "f16", f16::ONE, baseline_ref);
+    bench_unary::<f32>(
+        c,
+        UnaryKind::Sigmoid,
+        "sigmoid",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_unary::<f16>(
+        c,
+        UnaryKind::Sigmoid,
+        "sigmoid",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
     // Phase 73.5: comprehensive elementwise coverage. Activations,
     // basic math unaries, additional binaries — all via the existing
     // bench_unary / bench_binary harness.
@@ -288,26 +300,124 @@ fn benches(c: &mut Criterion) {
     // Additional activations.
     bench_unary::<f32>(c, UnaryKind::Mish, "mish", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Mish, "mish", "f16", f16::ONE, baseline_ref);
-    bench_unary::<f32>(c, UnaryKind::Hardswish, "hardswish", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::Hardswish, "hardswish", "f16", f16::ONE, baseline_ref);
-    bench_unary::<f32>(c, UnaryKind::Hardsigmoid, "hardsigmoid", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::Hardsigmoid, "hardsigmoid", "f16", f16::ONE, baseline_ref);
-    bench_unary::<f32>(c, UnaryKind::Hardtanh, "hardtanh", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::Hardtanh, "hardtanh", "f16", f16::ONE, baseline_ref);
-    bench_unary::<f32>(c, UnaryKind::LeakyRelu, "leaky_relu", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::LeakyRelu, "leaky_relu", "f16", f16::ONE, baseline_ref);
+    bench_unary::<f32>(
+        c,
+        UnaryKind::Hardswish,
+        "hardswish",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_unary::<f16>(
+        c,
+        UnaryKind::Hardswish,
+        "hardswish",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
+    bench_unary::<f32>(
+        c,
+        UnaryKind::Hardsigmoid,
+        "hardsigmoid",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_unary::<f16>(
+        c,
+        UnaryKind::Hardsigmoid,
+        "hardsigmoid",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
+    bench_unary::<f32>(
+        c,
+        UnaryKind::Hardtanh,
+        "hardtanh",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_unary::<f16>(
+        c,
+        UnaryKind::Hardtanh,
+        "hardtanh",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
+    bench_unary::<f32>(
+        c,
+        UnaryKind::LeakyRelu,
+        "leaky_relu",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_unary::<f16>(
+        c,
+        UnaryKind::LeakyRelu,
+        "leaky_relu",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
     bench_unary::<f32>(c, UnaryKind::Elu, "elu", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Elu, "elu", "f16", f16::ONE, baseline_ref);
     bench_unary::<f32>(c, UnaryKind::Selu, "selu", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Selu, "selu", "f16", f16::ONE, baseline_ref);
     bench_unary::<f32>(c, UnaryKind::Relu6, "relu6", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Relu6, "relu6", "f16", f16::ONE, baseline_ref);
-    bench_unary::<f32>(c, UnaryKind::Softplus, "softplus", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::Softplus, "softplus", "f16", f16::ONE, baseline_ref);
-    bench_unary::<f32>(c, UnaryKind::Softsign, "softsign", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::Softsign, "softsign", "f16", f16::ONE, baseline_ref);
-    bench_unary::<f32>(c, UnaryKind::GeluTanh, "gelu_tanh", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::GeluTanh, "gelu_tanh", "f16", f16::ONE, baseline_ref);
+    bench_unary::<f32>(
+        c,
+        UnaryKind::Softplus,
+        "softplus",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_unary::<f16>(
+        c,
+        UnaryKind::Softplus,
+        "softplus",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
+    bench_unary::<f32>(
+        c,
+        UnaryKind::Softsign,
+        "softsign",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_unary::<f16>(
+        c,
+        UnaryKind::Softsign,
+        "softsign",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
+    bench_unary::<f32>(
+        c,
+        UnaryKind::GeluTanh,
+        "gelu_tanh",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_unary::<f16>(
+        c,
+        UnaryKind::GeluTanh,
+        "gelu_tanh",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
     // Basic math unaries.
     bench_unary::<f32>(c, UnaryKind::Abs, "abs", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Abs, "abs", "f16", f16::ONE, baseline_ref);
@@ -315,14 +425,35 @@ fn benches(c: &mut Criterion) {
     bench_unary::<f16>(c, UnaryKind::Neg, "neg", "f16", f16::ONE, baseline_ref);
     bench_unary::<f32>(c, UnaryKind::Sign, "sign", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Sign, "sign", "f16", f16::ONE, baseline_ref);
-    bench_unary::<f32>(c, UnaryKind::Reciprocal, "reciprocal", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::Reciprocal, "reciprocal", "f16", f16::ONE, baseline_ref);
+    bench_unary::<f32>(
+        c,
+        UnaryKind::Reciprocal,
+        "reciprocal",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_unary::<f16>(
+        c,
+        UnaryKind::Reciprocal,
+        "reciprocal",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
     bench_unary::<f32>(c, UnaryKind::Sqrt, "sqrt", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Sqrt, "sqrt", "f16", f16::ONE, baseline_ref);
     bench_unary::<f32>(c, UnaryKind::Rsqrt, "rsqrt", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Rsqrt, "rsqrt", "f16", f16::ONE, baseline_ref);
     bench_unary::<f32>(c, UnaryKind::Square, "square", "f32", 1.0_f32, baseline_ref);
-    bench_unary::<f16>(c, UnaryKind::Square, "square", "f16", f16::ONE, baseline_ref);
+    bench_unary::<f16>(
+        c,
+        UnaryKind::Square,
+        "square",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
     bench_unary::<f32>(c, UnaryKind::Exp, "exp", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Exp, "exp", "f16", f16::ONE, baseline_ref);
     bench_unary::<f32>(c, UnaryKind::Log, "log", "f32", 1.0_f32, baseline_ref);
@@ -338,10 +469,38 @@ fn benches(c: &mut Criterion) {
     bench_binary::<f16>(c, BinaryKind::Sub, "sub", "f16", f16::ONE, baseline_ref);
     bench_binary::<f32>(c, BinaryKind::Div, "div", "f32", 1.0_f32, baseline_ref);
     bench_binary::<f16>(c, BinaryKind::Div, "div", "f16", f16::ONE, baseline_ref);
-    bench_binary::<f32>(c, BinaryKind::Maximum, "maximum", "f32", 1.0_f32, baseline_ref);
-    bench_binary::<f16>(c, BinaryKind::Maximum, "maximum", "f16", f16::ONE, baseline_ref);
-    bench_binary::<f32>(c, BinaryKind::Minimum, "minimum", "f32", 1.0_f32, baseline_ref);
-    bench_binary::<f16>(c, BinaryKind::Minimum, "minimum", "f16", f16::ONE, baseline_ref);
+    bench_binary::<f32>(
+        c,
+        BinaryKind::Maximum,
+        "maximum",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_binary::<f16>(
+        c,
+        BinaryKind::Maximum,
+        "maximum",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
+    bench_binary::<f32>(
+        c,
+        BinaryKind::Minimum,
+        "minimum",
+        "f32",
+        1.0_f32,
+        baseline_ref,
+    );
+    bench_binary::<f16>(
+        c,
+        BinaryKind::Minimum,
+        "minimum",
+        "f16",
+        f16::ONE,
+        baseline_ref,
+    );
     bench_binary::<f32>(c, BinaryKind::Pow, "pow", "f32", 1.0_f32, baseline_ref);
     bench_binary::<f16>(c, BinaryKind::Pow, "pow", "f16", f16::ONE, baseline_ref);
 }

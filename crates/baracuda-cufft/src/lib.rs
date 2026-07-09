@@ -671,11 +671,13 @@ pub mod xt {
     ///
     /// `plan` must be a fresh (unexecuted) handle; all ordinals in
     /// `which_gpus` must be live CUDA devices.
-    pub unsafe fn set_gpus(plan: cufftHandle, which_gpus: &mut [i32]) -> Result<()> { unsafe {
-        let c = cufft()?;
-        let cu = c.cufft_xt_set_gpus()?;
-        check(cu(plan, which_gpus.len() as i32, which_gpus.as_mut_ptr()))
-    }}
+    pub unsafe fn set_gpus(plan: cufftHandle, which_gpus: &mut [i32]) -> Result<()> {
+        unsafe {
+            let c = cufft()?;
+            let cu = c.cufft_xt_set_gpus()?;
+            check(cu(plan, which_gpus.len() as i32, which_gpus.as_mut_ptr()))
+        }
+    }
 
     /// Allocate a multi-GPU `cudaLibXtDesc*` matching the plan.
     /// Returns an opaque pointer that must be freed with [`free`].
@@ -683,27 +685,28 @@ pub mod xt {
     /// # Safety
     ///
     /// `plan` must have been configured with [`set_gpus`] first.
-    pub unsafe fn malloc(
-        plan: cufftHandle,
-        subformat: i32,
-    ) -> Result<*mut core::ffi::c_void> { unsafe {
-        let c = cufft()?;
-        let cu = c.cufft_xt_malloc()?;
-        let mut desc: *mut core::ffi::c_void = core::ptr::null_mut();
-        check(cu(plan, &mut desc, subformat))?;
-        Ok(desc)
-    }}
+    pub unsafe fn malloc(plan: cufftHandle, subformat: i32) -> Result<*mut core::ffi::c_void> {
+        unsafe {
+            let c = cufft()?;
+            let cu = c.cufft_xt_malloc()?;
+            let mut desc: *mut core::ffi::c_void = core::ptr::null_mut();
+            check(cu(plan, &mut desc, subformat))?;
+            Ok(desc)
+        }
+    }
 
     /// Free an XT descriptor from [`malloc`].
     ///
     /// # Safety
     ///
     /// `desc` must come from [`malloc`].
-    pub unsafe fn free(desc: *mut core::ffi::c_void) -> Result<()> { unsafe {
-        let c = cufft()?;
-        let cu = c.cufft_xt_free()?;
-        check(cu(desc))
-    }}
+    pub unsafe fn free(desc: *mut core::ffi::c_void) -> Result<()> {
+        unsafe {
+            let c = cufft()?;
+            let cu = c.cufft_xt_free()?;
+            check(cu(desc))
+        }
+    }
 
     /// Multi-GPU memcpy between host / device / XT descriptors.
     ///
@@ -715,11 +718,13 @@ pub mod xt {
         dst: *mut core::ffi::c_void,
         src: *mut core::ffi::c_void,
         ty: i32,
-    ) -> Result<()> { unsafe {
-        let c = cufft()?;
-        let cu = c.cufft_xt_memcpy()?;
-        check(cu(plan, dst, src, ty))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cufft()?;
+            let cu = c.cufft_xt_memcpy()?;
+            check(cu(plan, dst, src, ty))
+        }
+    }
 
     /// Execute the plan on its XT descriptors.
     ///
@@ -731,11 +736,13 @@ pub mod xt {
         input: *mut core::ffi::c_void,
         output: *mut core::ffi::c_void,
         direction: Direction,
-    ) -> Result<()> { unsafe {
-        let c = cufft()?;
-        let cu = c.cufft_xt_exec_descriptor()?;
-        check(cu(plan, input, output, direction.raw()))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cufft()?;
+            let cu = c.cufft_xt_exec_descriptor()?;
+            check(cu(plan, input, output, direction.raw()))
+        }
+    }
 }
 
 /// Set a user-allocated scratch work area (`cufftSetWorkArea`).
@@ -744,11 +751,13 @@ pub mod xt {
 ///
 /// `plan` must have `SetAutoAllocation(false)` first; `work_area` must
 /// be a live device pointer.
-pub unsafe fn set_work_area(plan: cufftHandle, work_area: *mut core::ffi::c_void) -> Result<()> { unsafe {
-    let c = cufft()?;
-    let cu = c.cufft_set_work_area()?;
-    check(cu(plan, work_area))
-}}
+pub unsafe fn set_work_area(plan: cufftHandle, work_area: *mut core::ffi::c_void) -> Result<()> {
+    unsafe {
+        let c = cufft()?;
+        let cu = c.cufft_set_work_area()?;
+        check(cu(plan, work_area))
+    }
+}
 
 /// Disable / re-enable automatic work-area allocation.
 pub fn set_auto_allocation(plan: cufftHandle, auto: bool) -> Result<()> {
@@ -823,13 +832,7 @@ impl Plan {
     }
 
     /// Finalize as a 3-D plan. Returns workspace size in bytes.
-    pub fn make_plan_3d(
-        &self,
-        nx: i32,
-        ny: i32,
-        nz: i32,
-        transform: Transform,
-    ) -> Result<usize> {
+    pub fn make_plan_3d(&self, nx: i32, ny: i32, nz: i32, transform: Transform) -> Result<usize> {
         let c = cufft()?;
         let cu = c.cufft_make_plan_3d()?;
         let mut size: usize = 0;
@@ -858,27 +861,29 @@ impl Plan {
         odist: i32,
         transform: Transform,
         batch: i32,
-    ) -> Result<usize> { unsafe {
-        assert_eq!(n.len() as i32, rank, "n.len() must equal rank");
-        let c = cufft()?;
-        let cu = c.cufft_make_plan_many()?;
-        let mut size: usize = 0;
-        check(cu(
-            self.handle,
-            rank,
-            n.as_mut_ptr(),
-            inembed,
-            istride,
-            idist,
-            onembed,
-            ostride,
-            odist,
-            transform.raw(),
-            batch,
-            &mut size,
-        ))?;
-        Ok(size)
-    }}
+    ) -> Result<usize> {
+        unsafe {
+            assert_eq!(n.len() as i32, rank, "n.len() must equal rank");
+            let c = cufft()?;
+            let cu = c.cufft_make_plan_many()?;
+            let mut size: usize = 0;
+            check(cu(
+                self.handle,
+                rank,
+                n.as_mut_ptr(),
+                inembed,
+                istride,
+                idist,
+                onembed,
+                ostride,
+                odist,
+                transform.raw(),
+                batch,
+                &mut size,
+            ))?;
+            Ok(size)
+        }
+    }
 
     /// 64-bit variant of [`make_plan_many`] — use this when any
     /// dimension or stride exceeds `i32::MAX`.
@@ -899,27 +904,29 @@ impl Plan {
         odist: i64,
         transform: Transform,
         batch: i64,
-    ) -> Result<usize> { unsafe {
-        assert_eq!(n.len() as i32, rank, "n.len() must equal rank");
-        let c = cufft()?;
-        let cu = c.cufft_make_plan_many64()?;
-        let mut size: usize = 0;
-        check(cu(
-            self.handle,
-            rank,
-            n.as_mut_ptr(),
-            inembed,
-            istride,
-            idist,
-            onembed,
-            ostride,
-            odist,
-            transform.raw(),
-            batch,
-            &mut size,
-        ))?;
-        Ok(size)
-    }}
+    ) -> Result<usize> {
+        unsafe {
+            assert_eq!(n.len() as i32, rank, "n.len() must equal rank");
+            let c = cufft()?;
+            let cu = c.cufft_make_plan_many64()?;
+            let mut size: usize = 0;
+            check(cu(
+                self.handle,
+                rank,
+                n.as_mut_ptr(),
+                inembed,
+                istride,
+                idist,
+                onembed,
+                ostride,
+                odist,
+                transform.raw(),
+                batch,
+                &mut size,
+            ))?;
+            Ok(size)
+        }
+    }
 
     /// Bind subsequent exec calls to `stream`.
     pub fn set_stream(&self, stream: &Stream) -> Result<()> {
@@ -998,21 +1005,23 @@ pub mod callback {
         callback_routine: &mut [*mut core::ffi::c_void],
         cb_type: CallbackType,
         caller_info: &mut [*mut core::ffi::c_void],
-    ) -> Result<()> { unsafe {
-        assert_eq!(
-            callback_routine.len(),
-            caller_info.len(),
-            "callback_routine and caller_info must have the same length"
-        );
-        let c = cufft()?;
-        let cu = c.cufft_xt_set_callback()?;
-        check(cu(
-            plan,
-            callback_routine.as_mut_ptr(),
-            cb_type as i32,
-            caller_info.as_mut_ptr(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            assert_eq!(
+                callback_routine.len(),
+                caller_info.len(),
+                "callback_routine and caller_info must have the same length"
+            );
+            let c = cufft()?;
+            let cu = c.cufft_xt_set_callback()?;
+            check(cu(
+                plan,
+                callback_routine.as_mut_ptr(),
+                cb_type as i32,
+                caller_info.as_mut_ptr(),
+            ))
+        }
+    }
 
     /// Detach any previously set callback of `cb_type`.
     pub fn clear(plan: cufftHandle, cb_type: CallbackType) -> Result<()> {

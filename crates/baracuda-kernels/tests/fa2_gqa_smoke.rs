@@ -14,10 +14,10 @@
 
 #![cfg(feature = "fa2")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor,
-    FlashSdpaPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -30,8 +30,8 @@ fn setup() -> (Context, Stream) {
 }
 
 const B: i32 = 1;
-const NH_Q: i32 = 32;     // query heads
-const NH_K: i32 = 8;      // K/V heads — ratio = 4 (typical Llama GQA)
+const NH_Q: i32 = 32; // query heads
+const NH_K: i32 = 8; // K/V heads — ratio = 4 (typical Llama GQA)
 const Q_LEN: i32 = 1024;
 const K_LEN: i32 = 1024;
 const D: i32 = 128;
@@ -126,11 +126,31 @@ fn fa2_gqa_f16_vs_dense_bespoke() {
             &stream,
             Workspace::None,
             FlashSdpaArgs {
-                q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                k: TensorRef { data: dk_dense.as_slice(), shape: sk_dense, stride: contiguous_stride(sk_dense) },
-                v: TensorRef { data: dv_dense.as_slice(), shape: sv_dense, stride: contiguous_stride(sv_dense) },
-                y: TensorMut { data: dy_ref.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-                lse: TensorMut { data: dlse_ref.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: contiguous_stride(sq),
+                },
+                k: TensorRef {
+                    data: dk_dense.as_slice(),
+                    shape: sk_dense,
+                    stride: contiguous_stride(sk_dense),
+                },
+                v: TensorRef {
+                    data: dv_dense.as_slice(),
+                    shape: sv_dense,
+                    stride: contiguous_stride(sv_dense),
+                },
+                y: TensorMut {
+                    data: dy_ref.as_slice_mut(),
+                    shape: sy,
+                    stride: contiguous_stride(sy),
+                },
+                lse: TensorMut {
+                    data: dlse_ref.as_slice_mut(),
+                    shape: sl,
+                    stride: contiguous_stride(sl),
+                },
                 mask: None,
                 alibi_slopes: None,
             },
@@ -149,18 +169,37 @@ fn fa2_gqa_f16_vs_dense_bespoke() {
     let plan_fa2 = FlashSdpaPlan::<f16>::select(&stream, &desc, pref_f).expect("sel fa2");
     assert_eq!(plan_fa2.backend(), BackendKind::FlashAttentionV2);
     let ws_bytes = plan_fa2.workspace_size();
-    let mut ws_buf: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc fa2 ws");
+    let mut ws_buf: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc fa2 ws");
     plan_fa2
         .run(
             &stream,
             Workspace::Borrowed(ws_buf.as_slice_mut()),
             FlashSdpaArgs {
-                q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                k: TensorRef { data: dk_gqa.as_slice(), shape: sk_gqa, stride: contiguous_stride(sk_gqa) },
-                v: TensorRef { data: dv_gqa.as_slice(), shape: sv_gqa, stride: contiguous_stride(sv_gqa) },
-                y: TensorMut { data: dy_fa2.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-                lse: TensorMut { data: dlse_fa2.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: contiguous_stride(sq),
+                },
+                k: TensorRef {
+                    data: dk_gqa.as_slice(),
+                    shape: sk_gqa,
+                    stride: contiguous_stride(sk_gqa),
+                },
+                v: TensorRef {
+                    data: dv_gqa.as_slice(),
+                    shape: sv_gqa,
+                    stride: contiguous_stride(sv_gqa),
+                },
+                y: TensorMut {
+                    data: dy_fa2.as_slice_mut(),
+                    shape: sy,
+                    stride: contiguous_stride(sy),
+                },
+                lse: TensorMut {
+                    data: dlse_fa2.as_slice_mut(),
+                    shape: sl,
+                    stride: contiguous_stride(sl),
+                },
                 mask: None,
                 alibi_slopes: None,
             },

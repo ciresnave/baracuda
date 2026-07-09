@@ -20,7 +20,7 @@ use core::ffi::c_char;
 use std::ptr;
 use std::sync::OnceLock;
 
-use baracuda_core::{platform, stream_mode, Library, LoaderError};
+use baracuda_core::{Library, LoaderError, platform, stream_mode};
 use baracuda_types::StreamMode;
 
 use crate::functions::*;
@@ -565,23 +565,27 @@ impl Driver {
     /// `T` must be a function-pointer type whose signature matches the C
     /// declaration of `symbol` in `cuda.h`. The symbol names we pass come
     /// from the macro above and are checked against the NVIDIA docs.
-    unsafe fn resolve<T: Copy>(&self, symbol: &'static str) -> Result<T, LoaderError> { unsafe {
-        if symbol == "cuGetProcAddress" || has_version_suffix(symbol) {
-            return self.resolve_via_dlsym(symbol);
+    unsafe fn resolve<T: Copy>(&self, symbol: &'static str) -> Result<T, LoaderError> {
+        unsafe {
+            if symbol == "cuGetProcAddress" || has_version_suffix(symbol) {
+                return self.resolve_via_dlsym(symbol);
+            }
+            self.resolve_via_get_proc_address(symbol)
         }
-        self.resolve_via_get_proc_address(symbol)
-    }}
+    }
 
     /// Direct `dlsym` / `GetProcAddress`; used for `cuGetProcAddress` itself.
-    unsafe fn resolve_via_dlsym<T: Copy>(&self, symbol: &'static str) -> Result<T, LoaderError> { unsafe {
-        debug_assert_eq!(
-            core::mem::size_of::<T>(),
-            core::mem::size_of::<*mut ()>(),
-            "Driver::resolve_via_dlsym<T>: T must be a function-pointer type",
-        );
-        let raw: *mut () = self.lib.raw_symbol(symbol)?;
-        Ok(core::mem::transmute_copy::<*mut (), T>(&raw))
-    }}
+    unsafe fn resolve_via_dlsym<T: Copy>(&self, symbol: &'static str) -> Result<T, LoaderError> {
+        unsafe {
+            debug_assert_eq!(
+                core::mem::size_of::<T>(),
+                core::mem::size_of::<*mut ()>(),
+                "Driver::resolve_via_dlsym<T>: T must be a function-pointer type",
+            );
+            let raw: *mut () = self.lib.raw_symbol(symbol)?;
+            Ok(core::mem::transmute_copy::<*mut (), T>(&raw))
+        }
+    }
 
     /// Cached driver-reported CUDA version. Probed once via a direct
     /// `dlsym` on `cuDriverGetVersion`. Falls back to the baracuda floor
@@ -611,45 +615,47 @@ impl Driver {
     unsafe fn resolve_via_get_proc_address<T: Copy>(
         &self,
         symbol: &'static str,
-    ) -> Result<T, LoaderError> { unsafe {
-        debug_assert_eq!(
-            core::mem::size_of::<T>(),
-            core::mem::size_of::<*mut ()>(),
-            "Driver::resolve_via_get_proc_address<T>: T must be a function-pointer type",
-        );
-        let gpa = self.cu_get_proc_address()?;
-        let flags = match stream_mode::get() {
-            StreamMode::Legacy => CU_GET_PROC_ADDRESS_LEGACY_STREAM,
-            StreamMode::PerThread => CU_GET_PROC_ADDRESS_PER_THREAD_DEFAULT_STREAM,
-        };
-        let c_sym: Vec<u8> = symbol.bytes().chain(std::iter::once(0)).collect();
-        let mut pfn: *mut core::ffi::c_void = ptr::null_mut();
+    ) -> Result<T, LoaderError> {
+        unsafe {
+            debug_assert_eq!(
+                core::mem::size_of::<T>(),
+                core::mem::size_of::<*mut ()>(),
+                "Driver::resolve_via_get_proc_address<T>: T must be a function-pointer type",
+            );
+            let gpa = self.cu_get_proc_address()?;
+            let flags = match stream_mode::get() {
+                StreamMode::Legacy => CU_GET_PROC_ADDRESS_LEGACY_STREAM,
+                StreamMode::PerThread => CU_GET_PROC_ADDRESS_PER_THREAD_DEFAULT_STREAM,
+            };
+            let c_sym: Vec<u8> = symbol.bytes().chain(std::iter::once(0)).collect();
+            let mut pfn: *mut core::ffi::c_void = ptr::null_mut();
 
-        // Two-stage resolution:
-        //   1. Query at the baracuda floor (CUDA 11.4). This pins the ABI
-        //      for symbols that have `_v2`/`_v3` variants — we want the
-        //      11.4-era shape because that's what our `PFN_*` type matches.
-        //   2. If the driver returns NOT_FOUND / VERSION_NOT_SUFFICIENT,
-        //      retry at the driver's own reported version. That catches
-        //      CUDA-12+ additions (cuLibraryLoadData, cuLaunchKernelEx)
-        //      without upgrading older symbols to their newer ABIs.
-        let floor = baracuda_types::CudaVersion::FLOOR.raw() as core::ffi::c_int;
-        let mut res = gpa(c_sym.as_ptr() as *const c_char, &mut pfn, floor, flags);
-        if res != CUresult::SUCCESS || pfn.is_null() {
-            let installed = self.detected_cuda_version();
-            if installed > floor {
-                pfn = ptr::null_mut();
-                res = gpa(c_sym.as_ptr() as *const c_char, &mut pfn, installed, flags);
+            // Two-stage resolution:
+            //   1. Query at the baracuda floor (CUDA 11.4). This pins the ABI
+            //      for symbols that have `_v2`/`_v3` variants — we want the
+            //      11.4-era shape because that's what our `PFN_*` type matches.
+            //   2. If the driver returns NOT_FOUND / VERSION_NOT_SUFFICIENT,
+            //      retry at the driver's own reported version. That catches
+            //      CUDA-12+ additions (cuLibraryLoadData, cuLaunchKernelEx)
+            //      without upgrading older symbols to their newer ABIs.
+            let floor = baracuda_types::CudaVersion::FLOOR.raw() as core::ffi::c_int;
+            let mut res = gpa(c_sym.as_ptr() as *const c_char, &mut pfn, floor, flags);
+            if res != CUresult::SUCCESS || pfn.is_null() {
+                let installed = self.detected_cuda_version();
+                if installed > floor {
+                    pfn = ptr::null_mut();
+                    res = gpa(c_sym.as_ptr() as *const c_char, &mut pfn, installed, flags);
+                }
             }
+            if res != CUresult::SUCCESS || pfn.is_null() {
+                return Err(LoaderError::SymbolNotFound {
+                    library: "cuda-driver",
+                    symbol,
+                });
+            }
+            Ok(core::mem::transmute_copy::<*mut core::ffi::c_void, T>(&pfn))
         }
-        if res != CUresult::SUCCESS || pfn.is_null() {
-            return Err(LoaderError::SymbolNotFound {
-                library: "cuda-driver",
-                symbol,
-            });
-        }
-        Ok(core::mem::transmute_copy::<*mut core::ffi::c_void, T>(&pfn))
-    }}
+    }
 }
 
 /// `true` if `sym` ends with `_v<N>` (version pin) or `_ptsz` / `_ptds`

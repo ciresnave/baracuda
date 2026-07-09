@@ -12,10 +12,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test pad_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PadArgs, PadDescriptor, PadMode, PadPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PadArgs, PadDescriptor, PadMode, PadPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -106,7 +106,8 @@ fn pad_constant_3d_f16() {
     let host_x: Vec<f16> = (0..in_numel)
         .map(|i| f16::from_f32(((i % 41) as f32) * 0.5 - 10.0))
         .collect();
-    let expected = cpu_pad_constant::<f16, 3>(&host_x, input_shape, pad_low, output_shape, pad_value_h);
+    let expected =
+        cpu_pad_constant::<f16, 3>(&host_x, input_shape, pad_low, output_shape, pad_value_h);
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
@@ -120,8 +121,8 @@ fn pad_constant_3d_f16() {
         value: pad_value_f32,
         element: ElementKind::F16,
     };
-    let plan = PadPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select f16");
+    let plan =
+        PadPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select f16");
     let args = PadArgs::<f16, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -178,8 +179,8 @@ fn pad_constant_3d_bf16() {
         value: pad_value_f32,
         element: ElementKind::Bf16,
     };
-    let plan = PadPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select bf16");
+    let plan =
+        PadPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select bf16");
     let args = PadArgs::<bf16, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -236,8 +237,8 @@ fn pad_constant_3d_f64() {
         value: pad_value_f32,
         element: ElementKind::F64,
     };
-    let plan = PadPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select f64");
+    let plan =
+        PadPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select f64");
     let args = PadArgs::<f64, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),

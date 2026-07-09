@@ -1,11 +1,11 @@
 //! Real-GPU smoke test for `UnsortedSegmentSumBackwardPlan<T>`
 //! (Phase 7 7.6). `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef,
-    UnsortedSegmentSumBackwardArgs, UnsortedSegmentSumBackwardDescriptor,
-    UnsortedSegmentSumBackwardPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnsortedSegmentSumBackwardArgs,
+    UnsortedSegmentSumBackwardDescriptor, UnsortedSegmentSumBackwardPlan, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -43,12 +43,9 @@ fn unsorted_segment_sum_backward_f32_scrambled() {
         num_segments: ns,
         element: ElementKind::F32,
     };
-    let plan = UnsortedSegmentSumBackwardPlan::<f32>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .expect("select");
+    let plan =
+        UnsortedSegmentSumBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = UnsortedSegmentSumBackwardArgs::<f32> {
         d_output: TensorRef {
             data: dev_dout.as_slice(),

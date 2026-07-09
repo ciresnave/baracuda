@@ -5,10 +5,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, AlibiBackwardArgs, AlibiBackwardDescriptor, AlibiBackwardPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    AlibiBackwardArgs, AlibiBackwardDescriptor, AlibiBackwardPlan, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -82,8 +82,8 @@ fn alibi_backward_f32_basic() {
         key_len: k,
         element: ElementKind::F32,
     };
-    let plan = AlibiBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        AlibiBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let shape = [batch, heads, q, k];
     plan.run(
         &stream,
@@ -172,8 +172,8 @@ fn alibi_backward_f64_basic() {
         key_len: k,
         element: ElementKind::F64,
     };
-    let plan = AlibiBackwardPlan::<f64>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        AlibiBackwardPlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let shape = [batch, heads, q, k];
     plan.run(
         &stream,
@@ -254,8 +254,8 @@ fn alibi_backward_f16_basic() {
         key_len: k,
         element: ElementKind::F16,
     };
-    let plan = AlibiBackwardPlan::<f16>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        AlibiBackwardPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let shape = [batch, heads, q, k];
     plan.run(
         &stream,
@@ -340,8 +340,8 @@ fn alibi_backward_bf16_basic() {
         key_len: k,
         element: ElementKind::Bf16,
     };
-    let plan = AlibiBackwardPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        AlibiBackwardPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let shape = [batch, heads, q, k];
     plan.run(
         &stream,

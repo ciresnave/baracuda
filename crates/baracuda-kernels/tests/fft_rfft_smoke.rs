@@ -7,10 +7,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Complex32, Complex64, ElementKind, IrfftArgs, IrfftDescriptor, IrfftPlan,
-    PlanPreference, RfftArgs, RfftDescriptor, RfftPlan, TensorMut, TensorRef, Workspace,
+    Complex32, Complex64, ElementKind, IrfftArgs, IrfftDescriptor, IrfftPlan, PlanPreference,
+    RfftArgs, RfftDescriptor, RfftPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 const N: i32 = 8;
@@ -41,8 +41,7 @@ fn rfft_irfft_roundtrip_f32() {
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex32> =
         DeviceBuffer::zeros(&ctx, total_freq).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
+    let mut dev_xr: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
     let real_shape = [BATCH, N];
     let real_stride = contiguous_stride(real_shape);
@@ -55,8 +54,8 @@ fn rfft_irfft_roundtrip_f32() {
         batch: BATCH,
         element: ElementKind::F32,
     };
-    let fwd_plan =
-        RfftPlan::<f32>::select(&stream, &fwd_desc, PlanPreference::default()).expect("select rfft");
+    let fwd_plan = RfftPlan::<f32>::select(&stream, &fwd_desc, PlanPreference::default())
+        .expect("select rfft");
     {
         let args = RfftArgs::<f32, Complex32> {
             x: TensorRef {
@@ -132,8 +131,7 @@ fn rfft_irfft_roundtrip_f64() {
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex64> =
         DeviceBuffer::zeros(&ctx, total_freq).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
+    let mut dev_xr: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
     let real_shape = [BATCH, N];
     let real_stride = contiguous_stride(real_shape);
@@ -145,8 +143,8 @@ fn rfft_irfft_roundtrip_f64() {
         batch: BATCH,
         element: ElementKind::F64,
     };
-    let fwd_plan =
-        RfftPlan::<f64>::select(&stream, &fwd_desc, PlanPreference::default()).expect("select rfft");
+    let fwd_plan = RfftPlan::<f64>::select(&stream, &fwd_desc, PlanPreference::default())
+        .expect("select rfft");
     {
         let args = RfftArgs::<f64, Complex64> {
             x: TensorRef {

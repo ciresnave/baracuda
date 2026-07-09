@@ -14,11 +14,11 @@
 
 #![cfg(feature = "fa2")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BackendKind, ElementKind, FlashSdpaVarlenArgs,
-    FlashSdpaVarlenBackwardArgs, FlashSdpaVarlenBackwardPlan, FlashSdpaVarlenDescriptor,
-    FlashSdpaVarlenPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    BackendKind, ElementKind, FlashSdpaVarlenArgs, FlashSdpaVarlenBackwardArgs,
+    FlashSdpaVarlenBackwardPlan, FlashSdpaVarlenDescriptor, FlashSdpaVarlenPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -49,7 +49,16 @@ fn gen_f16(n: usize, phase: f32) -> Vec<f16> {
 fn fa2_varlen_fw_plan_selects_fa2_backend() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaVarlenDescriptor::new(
-        3, 4, 4, 64, 64, 64, 64, default_scale(64), false, ElementKind::F16,
+        3,
+        4,
+        4,
+        64,
+        64,
+        64,
+        64,
+        default_scale(64),
+        false,
+        ElementKind::F16,
     );
     let plan = FlashSdpaVarlenPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("varlen FW select");
@@ -64,7 +73,16 @@ fn fa2_varlen_lse_size_matches_formula() {
     let h = 4_i32;
     let total_q = 100_i32;
     let desc = FlashSdpaVarlenDescriptor::new(
-        b, h, h, 64, 64, 64, 64, default_scale(64), false, ElementKind::F16,
+        b,
+        h,
+        h,
+        64,
+        64,
+        64,
+        64,
+        default_scale(64),
+        false,
+        ElementKind::F16,
     );
     let plan =
         FlashSdpaVarlenPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("");
@@ -113,7 +131,16 @@ fn fa2_varlen_fw_smoke_f16() {
     let cu_k = DeviceBuffer::from_slice(&ctx, &cu_q_host).expect("up cu_k");
 
     let desc = FlashSdpaVarlenDescriptor::new(
-        batch, h, h, max_q, max_q, dk, dv, default_scale(dk), false, ElementKind::F16,
+        batch,
+        h,
+        h,
+        max_q,
+        max_q,
+        dk,
+        dv,
+        default_scale(dk),
+        false,
+        ElementKind::F16,
     );
     let plan = FlashSdpaVarlenPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("varlen FW select");
@@ -132,13 +159,41 @@ fn fa2_varlen_fw_smoke_f16() {
         &stream,
         Workspace::None,
         FlashSdpaVarlenArgs {
-            q: TensorRef { data: dq.as_slice(), shape: s_q, stride: contiguous_stride(s_q) },
-            k: TensorRef { data: dk_buf.as_slice(), shape: s_k, stride: contiguous_stride(s_k) },
-            v: TensorRef { data: dv_buf.as_slice(), shape: s_v, stride: contiguous_stride(s_v) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: s_y, stride: contiguous_stride(s_y) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: s_lse, stride: contiguous_stride(s_lse) },
-            cu_seqlens_q: TensorRef { data: cu_q.as_slice(), shape: s_cu, stride: contiguous_stride(s_cu) },
-            cu_seqlens_k: TensorRef { data: cu_k.as_slice(), shape: s_cu, stride: contiguous_stride(s_cu) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: s_q,
+                stride: contiguous_stride(s_q),
+            },
+            k: TensorRef {
+                data: dk_buf.as_slice(),
+                shape: s_k,
+                stride: contiguous_stride(s_k),
+            },
+            v: TensorRef {
+                data: dv_buf.as_slice(),
+                shape: s_v,
+                stride: contiguous_stride(s_v),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: s_y,
+                stride: contiguous_stride(s_y),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: s_lse,
+                stride: contiguous_stride(s_lse),
+            },
+            cu_seqlens_q: TensorRef {
+                data: cu_q.as_slice(),
+                shape: s_cu,
+                stride: contiguous_stride(s_cu),
+            },
+            cu_seqlens_k: TensorRef {
+                data: cu_k.as_slice(),
+                shape: s_cu,
+                stride: contiguous_stride(s_cu),
+            },
             alibi_slopes: None,
         },
     )
@@ -191,7 +246,16 @@ fn fa2_varlen_bw_smoke_f16() {
     let cu_k = DeviceBuffer::from_slice(&ctx, &cu_q_host).expect("");
 
     let desc = FlashSdpaVarlenDescriptor::new(
-        batch, h, h, max_q, max_q, dk, dv, default_scale(dk), true, ElementKind::F16,
+        batch,
+        h,
+        h,
+        max_q,
+        max_q,
+        dk,
+        dv,
+        default_scale(dk),
+        true,
+        ElementKind::F16,
     );
     let fw_plan = FlashSdpaVarlenPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("fw plan");
@@ -207,23 +271,50 @@ fn fa2_varlen_bw_smoke_f16() {
             &stream,
             Workspace::None,
             FlashSdpaVarlenArgs {
-                q: TensorRef { data: dq.as_slice(), shape: s_q, stride: contiguous_stride(s_q) },
-                k: TensorRef { data: dkb.as_slice(), shape: s_q, stride: contiguous_stride(s_q) },
-                v: TensorRef { data: dvb.as_slice(), shape: s_v, stride: contiguous_stride(s_v) },
-                y: TensorMut { data: dy_out.as_slice_mut(), shape: s_v, stride: contiguous_stride(s_v) },
-                lse: TensorMut { data: dlse.as_slice_mut(), shape: s_lse, stride: contiguous_stride(s_lse) },
-                cu_seqlens_q: TensorRef { data: cu_q.as_slice(), shape: s_cu, stride: contiguous_stride(s_cu) },
-                cu_seqlens_k: TensorRef { data: cu_k.as_slice(), shape: s_cu, stride: contiguous_stride(s_cu) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: s_q,
+                    stride: contiguous_stride(s_q),
+                },
+                k: TensorRef {
+                    data: dkb.as_slice(),
+                    shape: s_q,
+                    stride: contiguous_stride(s_q),
+                },
+                v: TensorRef {
+                    data: dvb.as_slice(),
+                    shape: s_v,
+                    stride: contiguous_stride(s_v),
+                },
+                y: TensorMut {
+                    data: dy_out.as_slice_mut(),
+                    shape: s_v,
+                    stride: contiguous_stride(s_v),
+                },
+                lse: TensorMut {
+                    data: dlse.as_slice_mut(),
+                    shape: s_lse,
+                    stride: contiguous_stride(s_lse),
+                },
+                cu_seqlens_q: TensorRef {
+                    data: cu_q.as_slice(),
+                    shape: s_cu,
+                    stride: contiguous_stride(s_cu),
+                },
+                cu_seqlens_k: TensorRef {
+                    data: cu_k.as_slice(),
+                    shape: s_cu,
+                    stride: contiguous_stride(s_cu),
+                },
                 alibi_slopes: None,
             },
         )
         .expect("varlen FW run");
     stream.synchronize().expect("");
 
-    let bw_plan = FlashSdpaVarlenBackwardPlan::<f16>::select(
-        &stream, &desc, PlanPreference::default(),
-    )
-    .expect("bw plan");
+    let bw_plan =
+        FlashSdpaVarlenBackwardPlan::<f16>::select(&stream, &desc, PlanPreference::default())
+            .expect("bw plan");
     let ws_bytes = bw_plan.workspace_size(total_q);
     assert!(ws_bytes > 0);
     let mut ws: DeviceBuffer<u8> =
@@ -238,17 +329,61 @@ fn fa2_varlen_bw_smoke_f16() {
             &stream,
             Workspace::Borrowed(ws.as_slice_mut()),
             FlashSdpaVarlenBackwardArgs {
-                q: TensorRef { data: dq.as_slice(), shape: s_q, stride: contiguous_stride(s_q) },
-                k: TensorRef { data: dkb.as_slice(), shape: s_q, stride: contiguous_stride(s_q) },
-                v: TensorRef { data: dvb.as_slice(), shape: s_v, stride: contiguous_stride(s_v) },
-                y: TensorRef { data: dy_out.as_slice(), shape: s_v, stride: contiguous_stride(s_v) },
-                dy: TensorRef { data: ddy.as_slice(), shape: s_v, stride: contiguous_stride(s_v) },
-                lse: TensorRef { data: dlse.as_slice(), shape: s_lse, stride: contiguous_stride(s_lse) },
-                cu_seqlens_q: TensorRef { data: cu_q.as_slice(), shape: s_cu, stride: contiguous_stride(s_cu) },
-                cu_seqlens_k: TensorRef { data: cu_k.as_slice(), shape: s_cu, stride: contiguous_stride(s_cu) },
-                dq: TensorMut { data: ddq.as_slice_mut(), shape: s_q, stride: contiguous_stride(s_q) },
-                dk: TensorMut { data: ddk.as_slice_mut(), shape: s_q, stride: contiguous_stride(s_q) },
-                dv: TensorMut { data: ddv.as_slice_mut(), shape: s_v, stride: contiguous_stride(s_v) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: s_q,
+                    stride: contiguous_stride(s_q),
+                },
+                k: TensorRef {
+                    data: dkb.as_slice(),
+                    shape: s_q,
+                    stride: contiguous_stride(s_q),
+                },
+                v: TensorRef {
+                    data: dvb.as_slice(),
+                    shape: s_v,
+                    stride: contiguous_stride(s_v),
+                },
+                y: TensorRef {
+                    data: dy_out.as_slice(),
+                    shape: s_v,
+                    stride: contiguous_stride(s_v),
+                },
+                dy: TensorRef {
+                    data: ddy.as_slice(),
+                    shape: s_v,
+                    stride: contiguous_stride(s_v),
+                },
+                lse: TensorRef {
+                    data: dlse.as_slice(),
+                    shape: s_lse,
+                    stride: contiguous_stride(s_lse),
+                },
+                cu_seqlens_q: TensorRef {
+                    data: cu_q.as_slice(),
+                    shape: s_cu,
+                    stride: contiguous_stride(s_cu),
+                },
+                cu_seqlens_k: TensorRef {
+                    data: cu_k.as_slice(),
+                    shape: s_cu,
+                    stride: contiguous_stride(s_cu),
+                },
+                dq: TensorMut {
+                    data: ddq.as_slice_mut(),
+                    shape: s_q,
+                    stride: contiguous_stride(s_q),
+                },
+                dk: TensorMut {
+                    data: ddk.as_slice_mut(),
+                    shape: s_q,
+                    stride: contiguous_stride(s_q),
+                },
+                dv: TensorMut {
+                    data: ddv.as_slice_mut(),
+                    shape: s_v,
+                    stride: contiguous_stride(s_v),
+                },
                 alibi_slopes: None,
             },
         )
@@ -308,10 +443,19 @@ fn fa2_varlen_gqa_fw_smoke_bf16() {
     let cu_k = DeviceBuffer::from_slice(&ctx, &cu_q_host).expect("");
 
     let desc = FlashSdpaVarlenDescriptor::new(
-        batch, h, h_k, max_q, max_q, dk, dv, default_scale(dk), false, ElementKind::Bf16,
+        batch,
+        h,
+        h_k,
+        max_q,
+        max_q,
+        dk,
+        dv,
+        default_scale(dk),
+        false,
+        ElementKind::Bf16,
     );
-    let plan = FlashSdpaVarlenPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
-        .expect("");
+    let plan =
+        FlashSdpaVarlenPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("");
     let lse_n = plan.lse_size(total_q);
     let mut dlse: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, lse_n).expect("");
 
@@ -326,13 +470,41 @@ fn fa2_varlen_gqa_fw_smoke_bf16() {
         &stream,
         Workspace::None,
         FlashSdpaVarlenArgs {
-            q: TensorRef { data: dq.as_slice(), shape: s_q, stride: contiguous_stride(s_q) },
-            k: TensorRef { data: dkb.as_slice(), shape: s_k, stride: contiguous_stride(s_k) },
-            v: TensorRef { data: dvb.as_slice(), shape: s_v, stride: contiguous_stride(s_v) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: s_y, stride: contiguous_stride(s_y) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: s_lse, stride: contiguous_stride(s_lse) },
-            cu_seqlens_q: TensorRef { data: cu_q.as_slice(), shape: s_cu, stride: contiguous_stride(s_cu) },
-            cu_seqlens_k: TensorRef { data: cu_k.as_slice(), shape: s_cu, stride: contiguous_stride(s_cu) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: s_q,
+                stride: contiguous_stride(s_q),
+            },
+            k: TensorRef {
+                data: dkb.as_slice(),
+                shape: s_k,
+                stride: contiguous_stride(s_k),
+            },
+            v: TensorRef {
+                data: dvb.as_slice(),
+                shape: s_v,
+                stride: contiguous_stride(s_v),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: s_y,
+                stride: contiguous_stride(s_y),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: s_lse,
+                stride: contiguous_stride(s_lse),
+            },
+            cu_seqlens_q: TensorRef {
+                data: cu_q.as_slice(),
+                shape: s_cu,
+                stride: contiguous_stride(s_cu),
+            },
+            cu_seqlens_k: TensorRef {
+                data: cu_k.as_slice(),
+                shape: s_cu,
+                stride: contiguous_stride(s_cu),
+            },
             alibi_slopes: None,
         },
     )

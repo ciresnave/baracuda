@@ -22,9 +22,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CUDA_COMPUTE_CAP");
 
     if env::var_os("DOCS_RS").is_some() {
-        println!(
-            "cargo:warning=baracuda-optim: DOCS_RS=1 detected; skipping nvcc build."
-        );
+        println!("cargo:warning=baracuda-optim: DOCS_RS=1 detected; skipping nvcc build.");
         return;
     }
 

@@ -477,7 +477,10 @@ fn weight(n: &ENode) -> u64 {
     match n {
         // Coord sits in the leaf tier: on the strided schedule the unraveled
         // c{d} already exists for the offset math, so reading it costs a cast.
-        ENode::Input(_) | ENode::Param(_) | ENode::Const(_) | ENode::Reduced(_)
+        ENode::Input(_)
+        | ENode::Param(_)
+        | ENode::Const(_)
+        | ENode::Reduced(_)
         | ENode::Coord(_) => 1,
         ENode::Add(..) | ENode::Sub(..) | ENode::Mul(..) => 2,
         ENode::Div(..) => 8,
@@ -669,7 +672,10 @@ mod tests {
             matches!(e, ScalarExpr::Unary(UnaryOp::Neg, ref x) if matches!(**x, ScalarExpr::Const(v) if v.is_nan())),
             "neg(NaN) stays symbolic, got {e:?}"
         );
-        assert!(matches!(opt(konst(f64::NAN) + konst(1.0)), ScalarExpr::Add(_, _)));
+        assert!(matches!(
+            opt(konst(f64::NAN) + konst(1.0)),
+            ScalarExpr::Add(_, _)
+        ));
     }
 
     #[test]
@@ -735,7 +741,10 @@ mod tests {
 
     #[test]
     fn neg_neg_cancels() {
-        assert_eq!(optimize(&neg(neg(ScalarExpr::Input(0)))), ScalarExpr::Input(0));
+        assert_eq!(
+            optimize(&neg(neg(ScalarExpr::Input(0)))),
+            ScalarExpr::Input(0)
+        );
     }
 
     #[test]
@@ -754,7 +763,10 @@ mod tests {
     fn transcendentals_are_not_const_folded() {
         // exp(1.0) is left symbolic (host-f64 vs device-f32), not folded to a const.
         let e = opt(konst(1.0).exp());
-        assert_eq!(e, ScalarExpr::Unary(UnaryOp::Exp, Box::new(ScalarExpr::Const(1.0))));
+        assert_eq!(
+            e,
+            ScalarExpr::Unary(UnaryOp::Exp, Box::new(ScalarExpr::Const(1.0)))
+        );
     }
 
     #[test]
@@ -801,9 +813,18 @@ mod tests {
         assert_eq!(optimize(&trunc(-3.7)), ScalarExpr::Const(-3.0));
         assert_eq!(optimize(&trunc(2.9)), ScalarExpr::Const(2.0));
         // Non-finite stays symbolic (house lesson: no non-finite const folds).
-        assert!(matches!(optimize(&trunc(f64::INFINITY)), ScalarExpr::Unary(UnaryOp::Trunc, _)));
-        assert!(matches!(optimize(&trunc(f64::NEG_INFINITY)), ScalarExpr::Unary(UnaryOp::Trunc, _)));
-        assert!(matches!(optimize(&trunc(f64::NAN)), ScalarExpr::Unary(UnaryOp::Trunc, _)));
+        assert!(matches!(
+            optimize(&trunc(f64::INFINITY)),
+            ScalarExpr::Unary(UnaryOp::Trunc, _)
+        ));
+        assert!(matches!(
+            optimize(&trunc(f64::NEG_INFINITY)),
+            ScalarExpr::Unary(UnaryOp::Trunc, _)
+        ));
+        assert!(matches!(
+            optimize(&trunc(f64::NAN)),
+            ScalarExpr::Unary(UnaryOp::Trunc, _)
+        ));
     }
 
     #[test]
@@ -974,12 +995,10 @@ mod tests {
 
     #[test]
     fn coord_is_an_opaque_leaf_with_no_rules() {
-        use crate::ir::{coord, BinaryOp};
+        use crate::ir::{BinaryOp, coord};
         // Representative Coord bodies round-trip optimize() UNCHANGED — the
         // triu-mask predicate multiply and the alibi relative-position body.
-        let triu = (input(0)
-            * coord(1).binary(BinaryOp::CmpGe, coord(0) + konst(0.0)))
-        .0;
+        let triu = (input(0) * coord(1).binary(BinaryOp::CmpGe, coord(0) + konst(0.0))).0;
         assert_eq!(optimize(&triu), triu, "triu-mask body must round-trip");
         let alibi = ((coord(1) - coord(0)) * crate::ir::param(0)).0;
         assert_eq!(optimize(&alibi), alibi, "alibi body must round-trip");
@@ -995,7 +1014,12 @@ mod tests {
             Box::new(ScalarExpr::Coord(0)),
         );
         assert_eq!(optimize(&sub_same), sub_same);
-        for op in [BinaryOp::CmpEq, BinaryOp::CmpGe, BinaryOp::Max, BinaryOp::Min] {
+        for op in [
+            BinaryOp::CmpEq,
+            BinaryOp::CmpGe,
+            BinaryOp::Max,
+            BinaryOp::Min,
+        ] {
             let e = ScalarExpr::Binary(
                 op,
                 Box::new(ScalarExpr::Coord(0)),
@@ -1040,7 +1064,11 @@ mod tests {
         // …as do infinite operands and finite operands whose floored-mod
         // composite overflows to ±inf (a -INFINITY literal is forbidden under
         // the headerless-nvrtc discipline).
-        for e in [rem(f64::INFINITY, 2.0), rem(5.0, f64::NEG_INFINITY), rem(1e308, 1e-308)] {
+        for e in [
+            rem(f64::INFINITY, 2.0),
+            rem(5.0, f64::NEG_INFINITY),
+            rem(1e308, 1e-308),
+        ] {
             assert!(
                 matches!(optimize(&e), ScalarExpr::Binary(BinaryOp::Rem, _, _)),
                 "non-finite-in or non-finite-out Rem must stay symbolic"

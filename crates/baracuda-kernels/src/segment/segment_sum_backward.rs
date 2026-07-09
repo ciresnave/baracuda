@@ -19,7 +19,7 @@ use baracuda_kernels_types::{
 };
 
 use super::map_status;
-use super::segment_sum::{build_sku, validate_desc, SegDescView};
+use super::segment_sum::{SegDescView, build_sku, validate_desc};
 
 /// Descriptor for a `segment_sum_backward` op.
 #[derive(Copy, Clone, Debug)]
@@ -182,7 +182,7 @@ impl<T: Element> SegmentSumBackwardPlan<T> {
             _ => {
                 return Err(Error::Unsupported(
                     "baracuda-kernels::SegmentSumBackwardPlan::run reached an unimplemented dtype",
-                ))
+                ));
             }
         };
         map_status(status)

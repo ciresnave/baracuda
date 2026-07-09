@@ -12,10 +12,10 @@ use core::ffi::c_void;
 
 use baracuda_cuda_sys::runtime::runtime;
 use baracuda_cuda_sys::runtime::types::cudaMemGenericAllocationHandle_t;
-use baracuda_types::{supports, Feature};
+use baracuda_types::{Feature, supports};
 
 use crate::device::Device;
-use crate::error::{check, Error, Result};
+use crate::error::{Error, Result, check};
 
 /// Properties passed to [`MulticastObject::new`]. Layout matches
 /// `cudaMulticastObjectProp`.
@@ -91,18 +91,20 @@ impl MulticastObject {
         mem_offset: usize,
         size: usize,
         flags: u64,
-    ) -> Result<()> { unsafe {
-        let r = runtime()?;
-        let cu = r.cuda_multicast_bind_mem()?;
-        check(cu(
-            self.handle,
-            mc_offset,
-            mem_handle,
-            mem_offset,
-            size,
-            flags,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let r = runtime()?;
+            let cu = r.cuda_multicast_bind_mem()?;
+            check(cu(
+                self.handle,
+                mc_offset,
+                mem_handle,
+                mem_offset,
+                size,
+                flags,
+            ))
+        }
+    }
 
     /// Bind a device address (instead of a handle).
     ///
@@ -115,11 +117,13 @@ impl MulticastObject {
         mem_ptr: *mut c_void,
         size: usize,
         flags: u64,
-    ) -> Result<()> { unsafe {
-        let r = runtime()?;
-        let cu = r.cuda_multicast_bind_addr()?;
-        check(cu(self.handle, mc_offset, mem_ptr, size, flags))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let r = runtime()?;
+            let cu = r.cuda_multicast_bind_addr()?;
+            check(cu(self.handle, mc_offset, mem_ptr, size, flags))
+        }
+    }
 
     /// Unbind the region `[mc_offset, mc_offset + size)` from `device`.
     pub fn unbind(&self, device: &Device, mc_offset: usize, size: usize) -> Result<()> {

@@ -19,7 +19,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 fn setup() -> (Context, Stream) {
@@ -48,12 +48,19 @@ fn log_softmax_f32_inplace_matches_non_aliased() {
     let mut dev_y_ref: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_log_softmax_f32_run(
-            numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(),
-            1, inner as i32, 1, 1,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            1,
+            inner as i32,
+            1,
+            1,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -66,12 +73,19 @@ fn log_softmax_f32_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_log_softmax_f32_run(
-            numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(),
-            1, inner as i32, 1, 1,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            1,
+            inner as i32,
+            1,
+            1,
             p as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -85,7 +99,8 @@ fn log_softmax_f32_inplace_matches_non_aliased() {
             aliased_out[i].to_bits(),
             ref_out[i].to_bits(),
             "f32 in-place log_softmax @ {i}: aliased={} non-aliased={}",
-            aliased_out[i], ref_out[i]
+            aliased_out[i],
+            ref_out[i]
         );
     }
 }
@@ -109,12 +124,19 @@ fn log_softmax_f16_inplace_matches_non_aliased() {
     let mut dev_y_ref: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, numel).expect("alloc");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_log_softmax_f16_run(
-            numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(),
-            1, inner as i32, 1, 1,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            1,
+            inner as i32,
+            1,
+            1,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -127,12 +149,19 @@ fn log_softmax_f16_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_log_softmax_f16_run(
-            numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(),
-            1, inner as i32, 1, 1,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            1,
+            inner as i32,
+            1,
+            1,
             p as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -142,9 +171,13 @@ fn log_softmax_f16_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
             "f16 in-place log_softmax @ {i}: aliased={} non-aliased={}",
-            aliased_out[i].to_f32(), ref_out[i].to_f32());
+            aliased_out[i].to_f32(),
+            ref_out[i].to_f32()
+        );
     }
 }
 
@@ -167,12 +200,19 @@ fn log_softmax_bf16_inplace_matches_non_aliased() {
     let mut dev_y_ref: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, numel).expect("alloc");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_log_softmax_bf16_run(
-            numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(),
-            1, inner as i32, 1, 1,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            1,
+            inner as i32,
+            1,
+            1,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -185,12 +225,19 @@ fn log_softmax_bf16_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_log_softmax_bf16_run(
-            numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(),
-            1, inner as i32, 1, 1,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            1,
+            inner as i32,
+            1,
+            1,
             p as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -200,8 +247,11 @@ fn log_softmax_bf16_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
-            "bf16 in-place log_softmax @ {i}");
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
+            "bf16 in-place log_softmax @ {i}"
+        );
     }
 }
 
@@ -224,12 +274,19 @@ fn log_softmax_f64_inplace_matches_non_aliased() {
     let mut dev_y_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_log_softmax_f64_run(
-            numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(),
-            1, inner as i32, 1, 1,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            1,
+            inner as i32,
+            1,
+            1,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -242,12 +299,19 @@ fn log_softmax_f64_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_log_softmax_f64_run(
-            numel as i64, 2, shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(),
-            1, inner as i32, 1, 1,
+            numel as i64,
+            2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            1,
+            inner as i32,
+            1,
+            1,
             p as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -257,8 +321,12 @@ fn log_softmax_f64_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
             "f64 in-place log_softmax @ {i}: aliased={} non-aliased={}",
-            aliased_out[i], ref_out[i]);
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }

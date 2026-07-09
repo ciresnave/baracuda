@@ -9,7 +9,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 const ROPE_DEFAULT_BASE: f32 = 10000.0;
@@ -145,8 +145,7 @@ fn rope_apply_backward_f32_matches_default() {
     let dev_sin = DeviceBuffer::from_slice(&ctx, &sin_t).expect("up sin");
     let mut dev_dx_apply: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, numel).expect("alloc dx apply");
-    let mut dev_dx_ref: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc dx ref");
+    let mut dev_dx_ref: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc dx ref");
 
     let status_ref = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rope_backward_f32_run(
@@ -356,12 +355,16 @@ fn rope_apply_bf16_matches_default() {
 
 #[test]
 fn can_implement_rejects_negative_dims() {
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_can_implement(-1, 8, 4, 0) };
+    let s =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_can_implement(-1, 8, 4, 0) };
     assert_ne!(s, 0, "should reject negative bh");
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_can_implement(2, 8, 5, 0) };
+    let s =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_can_implement(2, 8, 5, 0) };
     assert_ne!(s, 0, "should reject odd head_dim");
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_can_implement(2, 7, 4, 0) };
+    let s =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_can_implement(2, 7, 4, 0) };
     assert_ne!(s, 0, "should reject td % d != 0");
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_can_implement(2, 16, 4, 0) };
+    let s =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_can_implement(2, 16, 4, 0) };
     assert_eq!(s, 0, "valid: bh=2 td=16 d=4 stride_b=0");
 }

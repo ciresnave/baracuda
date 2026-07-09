@@ -2,10 +2,10 @@
 //!
 //! `#[ignore]`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, DequantizePerGroupArgs, DequantizePerGroupDescriptor, DequantizePerGroupPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, S8,
+    DequantizePerGroupArgs, DequantizePerGroupDescriptor, DequantizePerGroupPlan, ElementKind,
+    PlanPreference, S8, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -26,10 +26,22 @@ fn dequantize_per_group_f32_s8_basic() {
     let num_groups: i32 = axis_size / group_size;
 
     let host_q: Vec<S8> = vec![
-        S8(1), S8(2), S8(-3), S8(4),
-        S8(5), S8(-6), S8(7), S8(-8),
-        S8(10), S8(2), S8(0), S8(-1),
-        S8(3), S8(-3), S8(1), S8(-2),
+        S8(1),
+        S8(2),
+        S8(-3),
+        S8(4),
+        S8(5),
+        S8(-6),
+        S8(7),
+        S8(-8),
+        S8(10),
+        S8(2),
+        S8(0),
+        S8(-1),
+        S8(3),
+        S8(-3),
+        S8(1),
+        S8(-2),
     ];
     let host_scale: Vec<f32> = vec![0.1, 1.0, 0.5, 0.1];
     let host_zp: Vec<i32> = vec![0, 0, 0, 0];
@@ -41,8 +53,7 @@ fn dequantize_per_group_f32_s8_basic() {
             let g_idx = j / group_size as usize;
             let sg = o * num_groups as usize + g_idx;
             let q = host_q[o * axis_size as usize + j].0 as f32;
-            expected[o * axis_size as usize + j] =
-                (q - host_zp[sg] as f32) * host_scale[sg];
+            expected[o * axis_size as usize + j] = (q - host_zp[sg] as f32) * host_scale[sg];
         }
     }
 
@@ -58,9 +69,8 @@ fn dequantize_per_group_f32_s8_basic() {
         input_element: ElementKind::F32,
         output_element: ElementKind::S8,
     };
-    let plan =
-        DequantizePerGroupPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+    let plan = DequantizePerGroupPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = DequantizePerGroupArgs::<f32, S8> {
         input: TensorRef {
             data: dev_q.as_slice(),

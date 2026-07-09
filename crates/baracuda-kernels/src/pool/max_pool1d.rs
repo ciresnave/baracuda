@@ -20,7 +20,7 @@ use baracuda_kernels_types::{
     TensorRef, Workspace,
 };
 
-use super::max_pool2d::{build_sku, PoolMode};
+use super::max_pool2d::{PoolMode, build_sku};
 use super::pool_nd::{
     bind_stream, drop_descriptors_nd, ensure_descriptors_nd, ensure_handle, out_dim, run_bw_nd,
     run_fw_nd, validate_dtype,
@@ -184,7 +184,12 @@ impl<T: Element> MaxPool1dPlan<T> {
     /// `L_out` under the configured window / pad / stride.
     #[inline]
     pub fn output_dim(&self) -> i32 {
-        out_dim(self.desc.l_in, self.desc.pad, self.desc.window, self.desc.stride)
+        out_dim(
+            self.desc.l_in,
+            self.desc.pad,
+            self.desc.window,
+            self.desc.stride,
+        )
     }
 
     /// Run the forward pass. Computes `y := max_pool(x)`.

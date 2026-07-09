@@ -288,7 +288,7 @@ mod tests {
         // that makes in-place dispatch UNSAFE — strides_equal must
         // return false here.
         let contig = contiguous_stride([4, 8]); // [8, 1]
-        let transposed = [1_i64, 4_i64];        // shape [4,8] transposed → stride [1, 4] mapped to [4,1] on T()
+        let transposed = [1_i64, 4_i64]; // shape [4,8] transposed → stride [1, 4] mapped to [4,1] on T()
         assert!(!strides_equal(&contig, &transposed));
     }
 
@@ -298,7 +298,7 @@ mod tests {
         // the regular target — confirms strides_equal will reject
         // aliasing a broadcast input with the output.
         let contig = contiguous_stride([4, 8]); // [8, 1]
-        let broadcast = [0_i64, 1_i64];          // broadcast over axis 0
+        let broadcast = [0_i64, 1_i64]; // broadcast over axis 0
         assert!(!strides_equal(&contig, &broadcast));
     }
 

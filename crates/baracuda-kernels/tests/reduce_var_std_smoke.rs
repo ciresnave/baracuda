@@ -8,10 +8,10 @@
 //! - f64: Welford in f64 end-to-end. Bit-stable vs host f64 Welford for
 //!   var; 4 ULP for std.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceArgs, ReduceDescriptor, ReduceKind,
-    ReducePlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceArgs, ReduceDescriptor, ReduceKind, ReducePlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -129,13 +129,10 @@ fn run_case(kind: ReduceKind, reduce_axis: usize, correction: i32) {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 16, 32];
     let in_numel: usize = input_shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<f32> = (0..in_numel)
-        .map(|i| (i as f32) * 0.0625 - 1.0)
-        .collect();
+    let host_x: Vec<f32> = (0..in_numel).map(|i| (i as f32) * 0.0625 - 1.0).collect();
     let do_sqrt = matches!(kind, ReduceKind::Std);
-    let (expected, output_shape) = cpu_welford_axis(
-        &host_x, input_shape, reduce_axis, correction, do_sqrt,
-    );
+    let (expected, output_shape) =
+        cpu_welford_axis(&host_x, input_shape, reduce_axis, correction, do_sqrt);
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -148,8 +145,8 @@ fn run_case(kind: ReduceKind, reduce_axis: usize, correction: i32) {
         element: ElementKind::F32,
         correction,
     };
-    let plan = ReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<f32, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -196,9 +193,7 @@ fn run_case_f16(kind: ReduceKind, reduce_axis: usize, correction: i32) {
     // Smaller / friendlier magnitudes for f16 dynamic range.
     let input_shape = [3i32, 4, 5];
     let in_numel: usize = input_shape.iter().map(|&d| d as usize).product();
-    let host_x_f32: Vec<f32> = (0..in_numel)
-        .map(|i| 0.25 + 0.05 * (i as f32))
-        .collect();
+    let host_x_f32: Vec<f32> = (0..in_numel).map(|i| 0.25 + 0.05 * (i as f32)).collect();
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
     // Round trip the host values through f16 so the reference uses what
     // the GPU actually sees (else the input-quantization error would
@@ -206,9 +201,8 @@ fn run_case_f16(kind: ReduceKind, reduce_axis: usize, correction: i32) {
     // care about).
     let host_x_round: Vec<f32> = host_x.iter().map(|v| v.to_f32()).collect();
     let do_sqrt = matches!(kind, ReduceKind::Std);
-    let (expected_f32, output_shape) = cpu_welford_axis(
-        &host_x_round, input_shape, reduce_axis, correction, do_sqrt,
-    );
+    let (expected_f32, output_shape) =
+        cpu_welford_axis(&host_x_round, input_shape, reduce_axis, correction, do_sqrt);
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
@@ -221,8 +215,8 @@ fn run_case_f16(kind: ReduceKind, reduce_axis: usize, correction: i32) {
         element: ElementKind::F16,
         correction,
     };
-    let plan = ReducePlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ReducePlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ReduceArgs::<f16, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -260,15 +254,12 @@ fn run_case_bf16(kind: ReduceKind, reduce_axis: usize, correction: i32) {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];
     let in_numel: usize = input_shape.iter().map(|&d| d as usize).product();
-    let host_x_f32: Vec<f32> = (0..in_numel)
-        .map(|i| 0.25 + 0.05 * (i as f32))
-        .collect();
+    let host_x_f32: Vec<f32> = (0..in_numel).map(|i| 0.25 + 0.05 * (i as f32)).collect();
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let host_x_round: Vec<f32> = host_x.iter().map(|v| v.to_f32()).collect();
     let do_sqrt = matches!(kind, ReduceKind::Std);
-    let (expected_f32, output_shape) = cpu_welford_axis(
-        &host_x_round, input_shape, reduce_axis, correction, do_sqrt,
-    );
+    let (expected_f32, output_shape) =
+        cpu_welford_axis(&host_x_round, input_shape, reduce_axis, correction, do_sqrt);
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
@@ -281,8 +272,8 @@ fn run_case_bf16(kind: ReduceKind, reduce_axis: usize, correction: i32) {
         element: ElementKind::Bf16,
         correction,
     };
-    let plan = ReducePlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ReducePlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ReduceArgs::<bf16, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -319,9 +310,7 @@ fn run_case_f64(kind: ReduceKind, reduce_axis: usize, correction: i32) {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];
     let in_numel: usize = input_shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<f64> = (0..in_numel)
-        .map(|i| 0.25 + 0.05 * (i as f64))
-        .collect();
+    let host_x: Vec<f64> = (0..in_numel).map(|i| 0.25 + 0.05 * (i as f64)).collect();
     let do_sqrt = matches!(kind, ReduceKind::Std);
     let (expected, output_shape) =
         cpu_welford_axis_f64(&host_x, input_shape, reduce_axis, correction, do_sqrt);
@@ -337,8 +326,8 @@ fn run_case_f64(kind: ReduceKind, reduce_axis: usize, correction: i32) {
         element: ElementKind::F64,
         correction,
     };
-    let plan = ReducePlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ReducePlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ReduceArgs::<f64, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),

@@ -16,10 +16,10 @@
 use std::sync::Arc;
 
 use baracuda_cuda_sys::runtime::{
-    cudaGraphExec_t, cudaGraphNode_t, cudaGraph_t, runtime, types::cudaStreamCaptureStatus,
+    cudaGraph_t, cudaGraphExec_t, cudaGraphNode_t, runtime, types::cudaStreamCaptureStatus,
 };
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// Stream-capture mode (matches `cudaStreamCaptureMode`).
@@ -100,7 +100,10 @@ impl Stream {
         }
 
         self.begin_capture(mode)?;
-        let mut guard = CaptureGuard { stream: self, armed: true };
+        let mut guard = CaptureGuard {
+            stream: self,
+            armed: true,
+        };
         let inner_result = f(self);
         // Disarm the guard before our explicit end_capture so we don't
         // double-end on the normal path.
@@ -213,28 +216,30 @@ impl Graph {
         block: crate::Dim3,
         shared_mem_bytes: u32,
         args: &mut [*mut core::ffi::c_void],
-    ) -> Result<GraphNode> { unsafe {
-        use baracuda_cuda_sys::runtime::types::{cudaKernelNodeParams, dim3};
-        let r = runtime()?;
-        let cu = r.cuda_graph_add_kernel_node()?;
-        let params = cudaKernelNodeParams {
-            func: kernel.as_launch_ptr() as *mut core::ffi::c_void,
-            grid_dim: dim3::new(grid.x, grid.y, grid.z),
-            block_dim: dim3::new(block.x, block.y, block.z),
-            shared_mem_bytes,
-            kernel_params: if args.is_empty() {
-                core::ptr::null_mut()
-            } else {
-                args.as_mut_ptr()
-            },
-            extra: core::ptr::null_mut(),
-        };
-        let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
-        let (dp, dl) = deps_raw(&deps);
-        let mut node: cudaGraphNode_t = core::ptr::null_mut();
-        check(cu(&mut node, self.inner.handle, dp, dl, &params))?;
-        Ok(GraphNode { raw: node })
-    }}
+    ) -> Result<GraphNode> {
+        unsafe {
+            use baracuda_cuda_sys::runtime::types::{cudaKernelNodeParams, dim3};
+            let r = runtime()?;
+            let cu = r.cuda_graph_add_kernel_node()?;
+            let params = cudaKernelNodeParams {
+                func: kernel.as_launch_ptr() as *mut core::ffi::c_void,
+                grid_dim: dim3::new(grid.x, grid.y, grid.z),
+                block_dim: dim3::new(block.x, block.y, block.z),
+                shared_mem_bytes,
+                kernel_params: if args.is_empty() {
+                    core::ptr::null_mut()
+                } else {
+                    args.as_mut_ptr()
+                },
+                extra: core::ptr::null_mut(),
+            };
+            let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
+            let (dp, dl) = deps_raw(&deps);
+            let mut node: cudaGraphNode_t = core::ptr::null_mut();
+            check(cu(&mut node, self.inner.handle, dp, dl, &params))?;
+            Ok(GraphNode { raw: node })
+        }
+    }
 
     /// Add a memset node filling `count` 4-byte words at `dst` with `value`.
     pub fn add_memset_u32_node(
@@ -274,20 +279,22 @@ impl Graph {
         dependencies: &[GraphNode],
         fn_: unsafe extern "C" fn(*mut core::ffi::c_void),
         user_data: *mut core::ffi::c_void,
-    ) -> Result<GraphNode> { unsafe {
-        use baracuda_cuda_sys::runtime::types::cudaHostNodeParams;
-        let r = runtime()?;
-        let cu = r.cuda_graph_add_host_node()?;
-        let params = cudaHostNodeParams {
-            fn_: Some(fn_),
-            user_data,
-        };
-        let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
-        let (dp, dl) = deps_raw(&deps);
-        let mut node: cudaGraphNode_t = core::ptr::null_mut();
-        check(cu(&mut node, self.inner.handle, dp, dl, &params))?;
-        Ok(GraphNode { raw: node })
-    }}
+    ) -> Result<GraphNode> {
+        unsafe {
+            use baracuda_cuda_sys::runtime::types::cudaHostNodeParams;
+            let r = runtime()?;
+            let cu = r.cuda_graph_add_host_node()?;
+            let params = cudaHostNodeParams {
+                fn_: Some(fn_),
+                user_data,
+            };
+            let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
+            let (dp, dl) = deps_raw(&deps);
+            let mut node: cudaGraphNode_t = core::ptr::null_mut();
+            check(cu(&mut node, self.inner.handle, dp, dl, &params))?;
+            Ok(GraphNode { raw: node })
+        }
+    }
 
     /// Add a child-graph node.
     pub fn add_child_graph_node(
@@ -380,15 +387,17 @@ impl Graph {
         &self,
         dependencies: &[GraphNode],
         dptr: *mut core::ffi::c_void,
-    ) -> Result<GraphNode> { unsafe {
-        let r = runtime()?;
-        let cu = r.cuda_graph_add_mem_free_node()?;
-        let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
-        let (dp, dl) = deps_raw(&deps);
-        let mut node: cudaGraphNode_t = core::ptr::null_mut();
-        check(cu(&mut node, self.inner.handle, dp, dl, dptr))?;
-        Ok(GraphNode { raw: node })
-    }}
+    ) -> Result<GraphNode> {
+        unsafe {
+            let r = runtime()?;
+            let cu = r.cuda_graph_add_mem_free_node()?;
+            let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
+            let (dp, dl) = deps_raw(&deps);
+            let mut node: cudaGraphNode_t = core::ptr::null_mut();
+            check(cu(&mut node, self.inner.handle, dp, dl, dptr))?;
+            Ok(GraphNode { raw: node })
+        }
+    }
 
     /// Create a conditional-node handle (CUDA 12.3+). The returned u64
     /// is an opaque driver handle used by `cuGraphAddNode`-style
@@ -398,7 +407,7 @@ impl Graph {
     /// the default. Returns [`crate::Error::FeatureNotSupported`] on
     /// older CUDA.
     pub fn conditional_handle_create(&self, default_launch_value: u32, flags: u32) -> Result<u64> {
-        use baracuda_types::{supports, Feature};
+        use baracuda_types::{Feature, supports};
         let installed = crate::init::driver_version()?;
         if !supports(installed, Feature::GraphConditionalNodes) {
             return Err(crate::error::Error::FeatureNotSupported {
@@ -428,15 +437,17 @@ impl Graph {
         &self,
         dependencies: &[GraphNode],
         node_params: *mut core::ffi::c_void,
-    ) -> Result<GraphNode> { unsafe {
-        let r = runtime()?;
-        let cu = r.cuda_graph_add_node()?;
-        let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
-        let (dp, dl) = deps_raw(&deps);
-        let mut node: cudaGraphNode_t = core::ptr::null_mut();
-        check(cu(&mut node, self.inner.handle, dp, dl, node_params))?;
-        Ok(GraphNode { raw: node })
-    }}
+    ) -> Result<GraphNode> {
+        unsafe {
+            let r = runtime()?;
+            let cu = r.cuda_graph_add_node()?;
+            let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
+            let (dp, dl) = deps_raw(&deps);
+            let mut node: cudaGraphNode_t = core::ptr::null_mut();
+            check(cu(&mut node, self.inner.handle, dp, dl, node_params))?;
+            Ok(GraphNode { raw: node })
+        }
+    }
 
     /// Add dependency edges `from[i] -> to[i]`.
     pub fn add_dependencies(&self, from: &[GraphNode], to: &[GraphNode]) -> Result<()> {

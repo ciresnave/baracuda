@@ -161,8 +161,12 @@ impl<T: Element> AdaptiveAvgPool3dPlan<T> {
             y_ptr,
             nc,
             3,
-            self.desc.d_in, self.desc.h_in, self.desc.w_in,
-            self.desc.d_out, self.desc.h_out, self.desc.w_out,
+            self.desc.d_in,
+            self.desc.h_in,
+            self.desc.w_in,
+            self.desc.d_out,
+            self.desc.h_out,
+            self.desc.w_out,
             stream_ptr,
         );
         map_status(status)
@@ -185,8 +189,12 @@ impl<T: Element> AdaptiveAvgPool3dPlan<T> {
             dx_ptr,
             nc,
             3,
-            self.desc.d_in, self.desc.h_in, self.desc.w_in,
-            self.desc.d_out, self.desc.h_out, self.desc.w_out,
+            self.desc.d_in,
+            self.desc.h_in,
+            self.desc.w_in,
+            self.desc.d_out,
+            self.desc.h_out,
+            self.desc.w_out,
             stream_ptr,
         );
         map_status(status)
@@ -197,9 +205,7 @@ impl<T: Element> AdaptiveAvgPool3dPlan<T> {
 // Shared adaptive-3d helpers (used by sibling adaptive_max_pool3d)
 // =============================================================================
 
-pub(crate) fn validate_descriptor<T: Element>(
-    desc: &AdaptivePool3dDescriptor,
-) -> Result<()> {
+pub(crate) fn validate_descriptor<T: Element>(desc: &AdaptivePool3dDescriptor) -> Result<()> {
     validate_dtype::<T>()?;
     if desc.element != T::KIND {
         return Err(Error::Unsupported(
@@ -233,7 +239,13 @@ pub(crate) fn check_fw_args<T: Element>(
     args: &AdaptivePool3dFwArgs<'_, T>,
 ) -> Result<()> {
     let x_shape = [desc.batch, desc.channels, desc.d_in, desc.h_in, desc.w_in];
-    let y_shape = [desc.batch, desc.channels, desc.d_out, desc.h_out, desc.w_out];
+    let y_shape = [
+        desc.batch,
+        desc.channels,
+        desc.d_out,
+        desc.h_out,
+        desc.w_out,
+    ];
     if args.x.shape != x_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::AdaptivePool3dPlan: x shape != [N, C, D_in, H_in, W_in]",
@@ -252,7 +264,13 @@ pub(crate) fn check_bw_args<T: Element>(
     args: &AdaptivePool3dBwArgs<'_, T>,
 ) -> Result<()> {
     let x_shape = [desc.batch, desc.channels, desc.d_in, desc.h_in, desc.w_in];
-    let y_shape = [desc.batch, desc.channels, desc.d_out, desc.h_out, desc.w_out];
+    let y_shape = [
+        desc.batch,
+        desc.channels,
+        desc.d_out,
+        desc.h_out,
+        desc.w_out,
+    ];
     if args.x.shape != x_shape || args.dx.shape != x_shape {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::AdaptivePool3dPlan: x/dx shape != [N, C, D_in, H_in, W_in]",

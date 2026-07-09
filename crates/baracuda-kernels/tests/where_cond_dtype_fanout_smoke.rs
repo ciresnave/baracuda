@@ -20,7 +20,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 fn setup() -> (Context, Stream) {
@@ -41,7 +41,15 @@ fn ffi_where_u32cond_f32_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 4096;
     // u32 cond: every 3rd cell zero (false), rest non-zero (true).
-    let host_cond: Vec<u32> = (0..n).map(|i| if i % 3 == 0 { 0 } else { 7u32.wrapping_mul(i as u32) }).collect();
+    let host_cond: Vec<u32> = (0..n)
+        .map(|i| {
+            if i % 3 == 0 {
+                0
+            } else {
+                7u32.wrapping_mul(i as u32)
+            }
+        })
+        .collect();
     let host_a: Vec<f32> = (0..n).map(|i| (i as f32) * 0.125 - 32.0).collect();
     let host_b: Vec<f32> = (0..n).map(|i| (i as f32) * -0.0625 + 17.5).collect();
     let expected: Vec<f32> = host_cond
@@ -132,8 +140,12 @@ fn ffi_where_u32cond_f16_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 2048;
     let host_cond: Vec<u32> = (0..n).map(|i| (i as u32) % 4).collect(); // 0,1,2,3,...
-    let host_a: Vec<f16> = (0..n).map(|i| f16::from_f32((i as f32) * 0.0125 - 10.0)).collect();
-    let host_b: Vec<f16> = (0..n).map(|i| f16::from_f32((i as f32) * 0.00625 - 5.0)).collect();
+    let host_a: Vec<f16> = (0..n)
+        .map(|i| f16::from_f32((i as f32) * 0.0125 - 10.0))
+        .collect();
+    let host_b: Vec<f16> = (0..n)
+        .map(|i| f16::from_f32((i as f32) * 0.00625 - 5.0))
+        .collect();
     let expected: Vec<f16> = host_cond
         .iter()
         .zip(host_a.iter())
@@ -173,9 +185,15 @@ fn ffi_where_u32cond_f16_matches_cpu_ref() {
 fn ffi_where_i64cond_bf16_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 2048;
-    let host_cond: Vec<i64> = (0..n).map(|i| if i % 4 < 2 { 0 } else { -(i as i64) }).collect();
-    let host_a: Vec<bf16> = (0..n).map(|i| bf16::from_f32((i as f32) * 0.0125 - 10.0)).collect();
-    let host_b: Vec<bf16> = (0..n).map(|i| bf16::from_f32((i as f32) * 0.00625 - 5.0)).collect();
+    let host_cond: Vec<i64> = (0..n)
+        .map(|i| if i % 4 < 2 { 0 } else { -(i as i64) })
+        .collect();
+    let host_a: Vec<bf16> = (0..n)
+        .map(|i| bf16::from_f32((i as f32) * 0.0125 - 10.0))
+        .collect();
+    let host_b: Vec<bf16> = (0..n)
+        .map(|i| bf16::from_f32((i as f32) * 0.00625 - 5.0))
+        .collect();
     let expected: Vec<bf16> = host_cond
         .iter()
         .zip(host_a.iter())
@@ -303,8 +321,12 @@ fn ffi_where_u8cond_i64_matches_cpu_ref() {
 fn ffi_where_u32cond_u32_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 2048;
-    let host_cond: Vec<u32> = (0..n).map(|i| if i % 3 == 0 { 0 } else { (i as u32) | 1 }).collect();
-    let host_a: Vec<u32> = (0..n).map(|i| (i as u32).wrapping_mul(2654435761)).collect();
+    let host_cond: Vec<u32> = (0..n)
+        .map(|i| if i % 3 == 0 { 0 } else { (i as u32) | 1 })
+        .collect();
+    let host_a: Vec<u32> = (0..n)
+        .map(|i| (i as u32).wrapping_mul(2654435761))
+        .collect();
     let host_b: Vec<u32> = (0..n).map(|i| (i as u32) * 7).collect();
     let expected: Vec<u32> = host_cond
         .iter()
@@ -387,7 +409,9 @@ fn ffi_where_i64cond_i16_matches_cpu_ref() {
 fn ffi_where_u32cond_i8_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 1024;
-    let host_cond: Vec<u32> = (0..n).map(|i| if i % 5 < 3 { (i as u32) + 1 } else { 0 }).collect();
+    let host_cond: Vec<u32> = (0..n)
+        .map(|i| if i % 5 < 3 { (i as u32) + 1 } else { 0 })
+        .collect();
     let host_a: Vec<i8> = (0..n).map(|i| (i as i8).wrapping_sub(64)).collect();
     let host_b: Vec<i8> = (0..n).map(|i| (i as i8).wrapping_mul(3)).collect();
     let expected: Vec<i8> = host_cond
@@ -484,14 +508,20 @@ fn ffi_where_u8cond_f32_strided_per_row_mask() {
     let n: usize = numel as usize;
 
     // One cond value per row (cond shape = [rows, 1]).
-    let host_cond: Vec<u8> = (0..rows as usize).map(|r| if r % 2 == 0 { 1u8 } else { 0u8 }).collect();
+    let host_cond: Vec<u8> = (0..rows as usize)
+        .map(|r| if r % 2 == 0 { 1u8 } else { 0u8 })
+        .collect();
     let host_a: Vec<f32> = (0..n).map(|i| (i as f32) * 0.5 - 50.0).collect();
     let host_b: Vec<f32> = (0..n).map(|i| (i as f32) * -0.25 + 25.0).collect();
     let mut expected = vec![0f32; n];
     for r in 0..rows as usize {
         for c in 0..cols as usize {
             let idx = r * (cols as usize) + c;
-            expected[idx] = if host_cond[r] != 0 { host_a[idx] } else { host_b[idx] };
+            expected[idx] = if host_cond[r] != 0 {
+                host_a[idx]
+            } else {
+                host_b[idx]
+            };
         }
     }
 
@@ -533,7 +563,11 @@ fn ffi_where_u8cond_f32_strided_per_row_mask() {
     let mut got = vec![0f32; n];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "u8cond_f32 strided mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "u8cond_f32 strided mismatch @ {i}"
+        );
     }
 }
 
@@ -546,14 +580,20 @@ fn ffi_where_u32cond_i32_strided_per_row_mask() {
     let numel: i64 = (rows as i64) * (cols as i64);
     let n: usize = numel as usize;
 
-    let host_cond: Vec<u32> = (0..rows as usize).map(|r| if r % 3 == 0 { 0 } else { (r as u32) + 1 }).collect();
+    let host_cond: Vec<u32> = (0..rows as usize)
+        .map(|r| if r % 3 == 0 { 0 } else { (r as u32) + 1 })
+        .collect();
     let host_a: Vec<i32> = (0..n).map(|i| (i as i32) - 500).collect();
     let host_b: Vec<i32> = (0..n).map(|i| -(i as i32) * 2).collect();
     let mut expected = vec![0i32; n];
     for r in 0..rows as usize {
         for c in 0..cols as usize {
             let idx = r * (cols as usize) + c;
-            expected[idx] = if host_cond[r] != 0 { host_a[idx] } else { host_b[idx] };
+            expected[idx] = if host_cond[r] != 0 {
+                host_a[idx]
+            } else {
+                host_b[idx]
+            };
         }
     }
 
@@ -612,7 +652,11 @@ fn ffi_where_i64cond_f32_strided_per_row_mask() {
     for r in 0..rows as usize {
         for c in 0..cols as usize {
             let idx = r * (cols as usize) + c;
-            expected[idx] = if host_cond[r] != 0 { host_a[idx] } else { host_b[idx] };
+            expected[idx] = if host_cond[r] != 0 {
+                host_a[idx]
+            } else {
+                host_b[idx]
+            };
         }
     }
 
@@ -649,7 +693,11 @@ fn ffi_where_i64cond_f32_strided_per_row_mask() {
     let mut got = vec![0f32; n];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "i64cond_f32 strided mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "i64cond_f32 strided mismatch @ {i}"
+        );
     }
 }
 

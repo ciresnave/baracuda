@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `ArgsortPlan<T>` (Phase 9 Category O).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ArgsortArgs, ArgsortDescriptor, ArgsortPlan, ElementKind, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ArgsortArgs, ArgsortDescriptor, ArgsortPlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -23,8 +23,7 @@ fn argsort_f32_basic() {
     let row_len: i32 = 6;
     let input: Vec<f32> = vec![3.0, 1.0, 4.0, 1.5, 5.0, 9.0];
     let dev_in = DeviceBuffer::from_slice(&ctx, &input).expect("up");
-    let mut dev_i: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, input.len()).expect("alloc i");
+    let mut dev_i: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, input.len()).expect("alloc i");
 
     let desc = ArgsortDescriptor {
         batch,

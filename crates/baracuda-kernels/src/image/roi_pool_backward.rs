@@ -134,8 +134,12 @@ impl<T: Element> RoiPoolBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RoiPoolBackwardArgs<'_, T>) -> Result<()> {
-        let dout_shape =
-            [self.desc.num_rois, self.desc.c, self.desc.pooled_h, self.desc.pooled_w];
+        let dout_shape = [
+            self.desc.num_rois,
+            self.desc.c,
+            self.desc.pooled_h,
+            self.desc.pooled_w,
+        ];
         if args.dout.shape != dout_shape || args.argmax.shape != dout_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiPoolBackwardPlan: dout / argmax shape mismatch",
@@ -191,18 +195,38 @@ impl<T: Element> RoiPoolBackwardPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_roi_pool_backward_f32_run(
-                    self.desc.n, self.desc.c, self.desc.h, self.desc.w,
-                    self.desc.num_rois, self.desc.pooled_h, self.desc.pooled_w,
-                    dout_ptr, rois_ptr, arg_ptr, din_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.h,
+                    self.desc.w,
+                    self.desc.num_rois,
+                    self.desc.pooled_h,
+                    self.desc.pooled_w,
+                    dout_ptr,
+                    rois_ptr,
+                    arg_ptr,
+                    din_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_roi_pool_backward_f64_run(
-                    self.desc.n, self.desc.c, self.desc.h, self.desc.w,
-                    self.desc.num_rois, self.desc.pooled_h, self.desc.pooled_w,
-                    dout_ptr, rois_ptr, arg_ptr, din_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.h,
+                    self.desc.w,
+                    self.desc.num_rois,
+                    self.desc.pooled_h,
+                    self.desc.pooled_w,
+                    dout_ptr,
+                    rois_ptr,
+                    arg_ptr,
+                    din_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

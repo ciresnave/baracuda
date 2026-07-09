@@ -23,10 +23,10 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    baracuda_kernels_scale_inplace_real_f32_run, baracuda_kernels_scale_inplace_real_f64_run,
-    cufftComplex, cufftDestroy, cufftDoubleComplex, cufftExecC2R, cufftExecD2Z, cufftExecR2C,
-    cufftExecZ2D, cufftHandle, cufftPlan1d, cufftSetStream, CUFFT_C2R, CUFFT_D2Z, CUFFT_R2C,
-    CUFFT_Z2D,
+    CUFFT_C2R, CUFFT_D2Z, CUFFT_R2C, CUFFT_Z2D, baracuda_kernels_scale_inplace_real_f32_run,
+    baracuda_kernels_scale_inplace_real_f64_run, cufftComplex, cufftDestroy, cufftDoubleComplex,
+    cufftExecC2R, cufftExecD2Z, cufftExecR2C, cufftExecZ2D, cufftHandle, cufftPlan1d,
+    cufftSetStream,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FftKind, KernelSku,
@@ -391,11 +391,7 @@ pub struct IrfftPlan<T: Element> {
 
 impl<T: Element> IrfftPlan<T> {
     /// Pick a kernel + validate the descriptor.
-    pub fn select(
-        _stream: &Stream,
-        desc: &IrfftDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &IrfftDescriptor, _pref: PlanPreference) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::IrfftPlan: descriptor.element != T::KIND",

@@ -14,14 +14,14 @@ use core::mem::size_of;
 use std::sync::Arc;
 
 use baracuda_cuda_sys::types::{
-    CUarrayMapInfo, CUmemorytype, CUDA_ARRAY3D_DESCRIPTOR, CUDA_MEMCPY3D,
+    CUDA_ARRAY3D_DESCRIPTOR, CUDA_MEMCPY3D, CUarrayMapInfo, CUmemorytype,
 };
-use baracuda_cuda_sys::{driver, CUarray, CUmipmappedArray};
+use baracuda_cuda_sys::{CUarray, CUmipmappedArray, driver};
 use baracuda_types::DeviceRepr;
 
 use crate::array::ArrayFormat;
 use crate::context::Context;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// A 3-D CUDA array. Element format chosen at creation; channels are 1/2/4.

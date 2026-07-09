@@ -12,10 +12,10 @@
 //!     --test fft_fft_smoke -- --ignored
 //! ```
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Complex32, Complex64, ElementKind, FftArgs, FftDescriptor, FftPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    Complex32, Complex64, ElementKind, FftArgs, FftDescriptor, FftPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 const N: i32 = 8;
@@ -39,17 +39,14 @@ fn fft_ifft_roundtrip_complex32() {
     let mut x_host = vec![Complex32::default(); total];
     for b in 0..BATCH as usize {
         for i in 0..N as usize {
-            x_host[b * N as usize + i] =
-                Complex32::new(i as f32 + 0.5 * b as f32, -(i as f32));
+            x_host[b * N as usize + i] = Complex32::new(i as f32 + 0.5 * b as f32, -(i as f32));
         }
     }
 
     let mut dev_x: DeviceBuffer<Complex32> =
         DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
+    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_xr: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
 
     let shape = [BATCH, N];
     let stride = contiguous_stride(shape);
@@ -135,17 +132,14 @@ fn fft_ifft_roundtrip_complex64() {
     let mut x_host = vec![Complex64::default(); total];
     for b in 0..BATCH as usize {
         for i in 0..N as usize {
-            x_host[b * N as usize + i] =
-                Complex64::new(i as f64 + 0.5 * b as f64, -(i as f64));
+            x_host[b * N as usize + i] = Complex64::new(i as f64 + 0.5 * b as f64, -(i as f64));
         }
     }
 
     let mut dev_x: DeviceBuffer<Complex64> =
         DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex64> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<Complex64> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
+    let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_xr: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
 
     let shape = [BATCH, N];
     let stride = contiguous_stride(shape);
@@ -237,8 +231,7 @@ fn fft_forward_constant_signal() {
         }
     }
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
-    let mut dev_y: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
 
     let shape = [BATCH, N];
     let stride = contiguous_stride(shape);

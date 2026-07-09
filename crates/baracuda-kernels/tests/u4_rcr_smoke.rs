@@ -12,7 +12,7 @@
 
 #![cfg(feature = "sm89")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     EpilogueKind, Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan, LayoutSku, MatrixMut, MatrixRef,
     PlanPreference, U4, Workspace,
@@ -104,12 +104,8 @@ fn run_u4_rcr_identity(m: i32, n: i32, k: i32) {
     // Logical u4 values in [0, 4] — well within u4 range [0, 15] and
     // small enough that |acc| stays modest. alpha is tuned so the
     // output spans most of [0, 15] without hard-saturating most cells.
-    let mk_a = |i: usize, kk: usize| -> i32 {
-        (((i as i32 * 7 + kk as i32 * 3) % 5)).clamp(0, 15)
-    };
-    let mk_b = |kk: usize, j: usize| -> i32 {
-        (((j as i32 * 11 + kk as i32 * 5) % 5)).clamp(0, 15)
-    };
+    let mk_a = |i: usize, kk: usize| -> i32 { ((i as i32 * 7 + kk as i32 * 3) % 5).clamp(0, 15) };
+    let mk_b = |kk: usize, j: usize| -> i32 { ((j as i32 * 11 + kk as i32 * 5) % 5).clamp(0, 15) };
 
     let mut host_a_bytes = vec![0u8; mu * k_bytes];
     for i in 0..mu {
@@ -134,9 +130,13 @@ fn run_u4_rcr_identity(m: i32, n: i32, k: i32) {
     let mut expected_bytes = vec![0u8; mu * n_bytes];
     let mut expected_i32 = vec![0i32; mu * nu];
     cpu_u4_gemm_rcr_identity(
-        mu, nu, ku,
-        &host_a_bytes, k_bytes,
-        &host_b_bytes, k_bytes,
+        mu,
+        nu,
+        ku,
+        &host_a_bytes,
+        k_bytes,
+        &host_b_bytes,
+        k_bytes,
         alpha,
         &mut expected_bytes,
         &mut expected_i32,
@@ -147,11 +147,12 @@ fn run_u4_rcr_identity(m: i32, n: i32, k: i32) {
     let dev_b_bytes = DeviceBuffer::from_slice(&ctx, &host_b_bytes).expect("upload B");
     let dev_a = dev_a_bytes.view_as::<U4>();
     let dev_b = dev_b_bytes.view_as::<U4>();
-    let mut dev_d: DeviceBuffer<U4> =
-        DeviceBuffer::zeros(&ctx, mu * n_bytes).expect("alloc D");
+    let mut dev_d: DeviceBuffer<U4> = DeviceBuffer::zeros(&ctx, mu * n_bytes).expect("alloc D");
 
     let desc = Int4GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Identity,
     };
@@ -159,10 +160,25 @@ fn run_u4_rcr_identity(m: i32, n: i32, k: i32) {
         .expect("select U4 RCR plan");
 
     let args = Int4GemmArgs::<U4> {
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k_bytes as i64 },
-        b: MatrixRef { data: dev_b, rows: k, cols: n, ld: k_bytes as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k_bytes as i64,
+        },
+        b: MatrixRef {
+            data: dev_b,
+            rows: k,
+            cols: n,
+            ld: k_bytes as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n_bytes as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n_bytes as i64,
+        },
         bias: None,
         alpha,
         beta,
@@ -214,22 +230,26 @@ fn run_u4_rcr_identity(m: i32, n: i32, k: i32) {
     }
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_identity_64_64_64() {
     run_u4_rcr_identity(64, 64, 64);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_identity_128_128_128() {
     run_u4_rcr_identity(128, 128, 128);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_identity_256_128_64() {
     run_u4_rcr_identity(256, 128, 64);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_identity_100_70_64() {
     run_u4_rcr_identity(100, 70, 64);
 }

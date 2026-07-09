@@ -7,7 +7,7 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     Complex32, Complex64, ElementKind, IrfftNdArgs, IrfftNdDescriptor, IrfftNdPlan, PlanPreference,
     RfftNdArgs, RfftNdDescriptor, RfftNdPlan, Workspace,
@@ -47,8 +47,7 @@ fn rfft2_irfft2_roundtrip_f32() {
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex32> =
         DeviceBuffer::zeros(&ctx, total_complex).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
+    let mut dev_xr: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
     let fwd_desc = RfftNdDescriptor {
         dims: [H, W, 0, 0],
@@ -119,8 +118,7 @@ fn rfft2_irfft2_roundtrip_f64() {
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex64> =
         DeviceBuffer::zeros(&ctx, total_complex).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
+    let mut dev_xr: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
     let fwd_desc = RfftNdDescriptor {
         dims: [H, W, 0, 0],

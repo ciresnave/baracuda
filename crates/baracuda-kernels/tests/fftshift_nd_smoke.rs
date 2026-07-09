@@ -8,11 +8,11 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Complex32, ElementKind, FftShiftNdArgs, FftShiftNdDescriptor,
-    FftShiftNdPlan, PlanPreference, TensorMut, TensorRef, Workspace, FFTSHIFT_ND_MAX_RANK,
-    FFTSHIFT_ND_MAX_SHIFT_AXES,
+    Complex32, ElementKind, FFTSHIFT_ND_MAX_RANK, FFTSHIFT_ND_MAX_SHIFT_AXES, FftShiftNdArgs,
+    FftShiftNdDescriptor, FftShiftNdPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -160,7 +160,9 @@ fn fftshift_nd_2d_odd_f32_both_axes_fft_vs_ifft() {
             stride,
         },
     };
-    f_plan.run(&stream, Workspace::None, f_args).expect("run fft");
+    f_plan
+        .run(&stream, Workspace::None, f_args)
+        .expect("run fft");
 
     // ifftshift on the fftshift output -> identity.
     let i_desc = build_desc::<2>(shape, [0, 1], 2, true, ElementKind::F32);
@@ -310,7 +312,9 @@ fn fftshift_nd_3d_batched_inner_two_axes_f64() {
             stride,
         },
     };
-    f_plan.run(&stream, Workspace::None, f_args).expect("run fft");
+    f_plan
+        .run(&stream, Workspace::None, f_args)
+        .expect("run fft");
     stream.synchronize().expect("sync");
 
     let mut got_fwd = vec![0f64; numel];
@@ -341,7 +345,10 @@ fn fftshift_nd_3d_batched_inner_two_axes_f64() {
 
     let mut got_rt = vec![0f64; numel];
     dev_rt.copy_to_host(&mut got_rt).expect("dl rt");
-    assert_eq!(got_rt, x_host, "ifftshift(fftshift(x)) != x for 3-D batched");
+    assert_eq!(
+        got_rt, x_host,
+        "ifftshift(fftshift(x)) != x for 3-D batched"
+    );
 }
 
 #[test]

@@ -9,10 +9,10 @@
 //! `#[ignore]` by default; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -32,12 +32,8 @@ fn run_case<const N: usize>(shape: [i32; N]) {
     // Deterministic-but-non-pathological inputs. Mix in some half-
     // integer-ish values so a kernel that accidentally rounded would
     // show up.
-    let host_a: Vec<f32> = (0..numel)
-        .map(|i| (i as f32) * 0.5 - 17.25)
-        .collect();
-    let host_b: Vec<f32> = (0..numel)
-        .map(|i| (i as f32) * 0.125 + 3.75)
-        .collect();
+    let host_a: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.5 - 17.25).collect();
+    let host_b: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.125 + 3.75).collect();
     let host_expected: Vec<f32> = host_a
         .iter()
         .zip(host_b.iter())
@@ -46,8 +42,7 @@ fn run_case<const N: usize>(shape: [i32; N]) {
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload B");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc Y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc Y");
 
     let stride = contiguous_stride(shape);
 
@@ -76,7 +71,8 @@ fn run_case<const N: usize>(shape: [i32; N]) {
             stride,
         },
     };
-    plan.run(&stream, Workspace::None, args).expect("binary mul run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("binary mul run");
     stream.synchronize().expect("stream sync");
 
     let mut host_got = vec![0f32; numel];
@@ -153,11 +149,24 @@ fn run_case_f16_3d(shape: [i32; 3]) {
     let plan = BinaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<f16, 3>");
     let args = BinaryArgs::<f16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("binary mul f16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("binary mul f16 run");
     stream.synchronize().expect("stream sync");
 
     let mut host_got = vec![f16::from_f32(0.0); numel];
@@ -171,7 +180,9 @@ fn run_case_f16_3d(shape: [i32; 3]) {
         let tol = ef.abs().max(1.0) * F16_EPS;
         if !((gf - ef).abs() <= tol) {
             mismatches += 1;
-            if first.is_none() { first = Some((i, *g, *e)); }
+            if first.is_none() {
+                first = Some((i, *g, *e));
+            }
         }
     }
     if mismatches > 0 {
@@ -180,7 +191,10 @@ fn run_case_f16_3d(shape: [i32; 3]) {
             "binary mul f16: {mismatches} mismatches over {numel} cells \
              for shape {shape:?}; first @ {i}: got {} (bits {:#x}) \
              expected {} (bits {:#x})",
-            g.to_f32(), g.to_bits(), e.to_f32(), e.to_bits()
+            g.to_f32(),
+            g.to_bits(),
+            e.to_f32(),
+            e.to_bits()
         );
     }
 }
@@ -218,11 +232,24 @@ fn run_case_bf16_3d(shape: [i32; 3]) {
     let plan = BinaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<bf16, 3>");
     let args = BinaryArgs::<bf16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("binary mul bf16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("binary mul bf16 run");
     stream.synchronize().expect("stream sync");
 
     let mut host_got = vec![bf16::from_f32(0.0); numel];
@@ -236,7 +263,9 @@ fn run_case_bf16_3d(shape: [i32; 3]) {
         let tol = ef.abs().max(1.0) * BF16_EPS;
         if !((gf - ef).abs() <= tol) {
             mismatches += 1;
-            if first.is_none() { first = Some((i, *g, *e)); }
+            if first.is_none() {
+                first = Some((i, *g, *e));
+            }
         }
     }
     if mismatches > 0 {
@@ -245,7 +274,10 @@ fn run_case_bf16_3d(shape: [i32; 3]) {
             "binary mul bf16: {mismatches} mismatches over {numel} cells \
              for shape {shape:?}; first @ {i}: got {} (bits {:#x}) \
              expected {} (bits {:#x})",
-            g.to_f32(), g.to_bits(), e.to_f32(), e.to_bits()
+            g.to_f32(),
+            g.to_bits(),
+            e.to_f32(),
+            e.to_bits()
         );
     }
 }
@@ -260,7 +292,11 @@ fn run_case_f64_3d(shape: [i32; 3]) {
 
     let host_a: Vec<f64> = (0..numel).map(|i| (i as f64) * 0.5 - 17.25).collect();
     let host_b: Vec<f64> = (0..numel).map(|i| (i as f64) * 0.125 + 3.75).collect();
-    let host_expected: Vec<f64> = host_a.iter().zip(host_b.iter()).map(|(a, b)| a * b).collect();
+    let host_expected: Vec<f64> = host_a
+        .iter()
+        .zip(host_b.iter())
+        .map(|(a, b)| a * b)
+        .collect();
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload B");
@@ -275,11 +311,24 @@ fn run_case_f64_3d(shape: [i32; 3]) {
     let plan = BinaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<f64, 3>");
     let args = BinaryArgs::<f64, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("binary mul f64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("binary mul f64 run");
     stream.synchronize().expect("stream sync");
 
     let mut host_got = vec![0f64; numel];
@@ -290,7 +339,9 @@ fn run_case_f64_3d(shape: [i32; 3]) {
     for (i, (g, e)) in host_got.iter().zip(host_expected.iter()).enumerate() {
         if g.to_bits() != e.to_bits() {
             mismatches += 1;
-            if first.is_none() { first = Some((i, *g, *e)); }
+            if first.is_none() {
+                first = Some((i, *g, *e));
+            }
         }
     }
     if mismatches > 0 {
@@ -299,7 +350,8 @@ fn run_case_f64_3d(shape: [i32; 3]) {
             "binary mul f64: {mismatches} mismatches over {numel} cells \
              for shape {shape:?}; first @ {i}: got {g} (bits {:#x}) \
              expected {e} (bits {:#x})",
-            g.to_bits(), e.to_bits()
+            g.to_bits(),
+            e.to_bits()
         );
     }
 }

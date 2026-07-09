@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `PReluPlan`. FW × 4 dtypes × {per-channel, scalar}.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PReluArgs, PReluDescriptor, PReluPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PReluArgs, PReluDescriptor, PReluPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -49,9 +49,21 @@ fn prelu_f32_per_channel() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [3], stride: [1] },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [3],
+                stride: [1],
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -60,7 +72,12 @@ fn prelu_f32_per_channel() {
     dev_y.copy_to_host(&mut got).unwrap();
     for i in 0..n_total {
         let tol = expected[i].abs() * 4.0 * f32::EPSILON + 1e-7;
-        assert!((got[i] - expected[i]).abs() <= tol, "PReLU @{i}: got={} want={}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "PReLU @{i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -72,7 +89,10 @@ fn prelu_f32_scalar() {
     let n_total = 4 * 5;
     let h_x: Vec<f32> = (0..n_total).map(|i| (i as f32) * 0.1 - 1.0).collect();
     let h_w: Vec<f32> = vec![0.3];
-    let expected: Vec<f32> = h_x.iter().map(|&x| if x > 0.0 { x } else { h_w[0] * x }).collect();
+    let expected: Vec<f32> = h_x
+        .iter()
+        .map(|&x| if x > 0.0 { x } else { h_w[0] * x })
+        .collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &h_x).unwrap();
     let dev_w = DeviceBuffer::from_slice(&ctx, &h_w).unwrap();
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, n_total).unwrap();
@@ -86,9 +106,21 @@ fn prelu_f32_scalar() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [1], stride: [1] },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -131,9 +163,21 @@ fn prelu_f64_per_channel() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [3], stride: [1] },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [3],
+                stride: [1],
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -154,7 +198,10 @@ fn prelu_f64_scalar() {
     let n_total = 4 * 5;
     let h_x: Vec<f64> = (0..n_total).map(|i| (i as f64) * 0.1 - 1.0).collect();
     let h_w: Vec<f64> = vec![0.3];
-    let expected: Vec<f64> = h_x.iter().map(|&x| if x > 0.0 { x } else { h_w[0] * x }).collect();
+    let expected: Vec<f64> = h_x
+        .iter()
+        .map(|&x| if x > 0.0 { x } else { h_w[0] * x })
+        .collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &h_x).unwrap();
     let dev_w = DeviceBuffer::from_slice(&ctx, &h_w).unwrap();
     let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, n_total).unwrap();
@@ -168,9 +215,21 @@ fn prelu_f64_scalar() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [1], stride: [1] },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -215,9 +274,21 @@ fn prelu_f16_per_channel() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [3], stride: [1] },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [3],
+                stride: [1],
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -228,7 +299,12 @@ fn prelu_f16_per_channel() {
         let g = got[i].to_f32();
         let e = expected[i];
         let tol = e.abs().max(1.0) * 8.0 * F16_EPS + 1e-3;
-        assert!((g - e).abs() <= tol, "PReLU f16 per-chan @{i}: got={} want={}", g, e);
+        assert!(
+            (g - e).abs() <= tol,
+            "PReLU f16 per-chan @{i}: got={} want={}",
+            g,
+            e
+        );
     }
 }
 
@@ -241,7 +317,8 @@ fn prelu_f16_scalar() {
     let h_x_f32: Vec<f32> = (0..n_total).map(|i| (i as f32) * 0.1 - 1.0).collect();
     let h_x: Vec<f16> = h_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let h_w: Vec<f16> = vec![f16::from_f32(0.3)];
-    let expected: Vec<f32> = h_x.iter()
+    let expected: Vec<f32> = h_x
+        .iter()
         .map(|x| {
             let xv = x.to_f32();
             if xv > 0.0 { xv } else { h_w[0].to_f32() * xv }
@@ -260,9 +337,21 @@ fn prelu_f16_scalar() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [1], stride: [1] },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -273,7 +362,12 @@ fn prelu_f16_scalar() {
         let g = got[i].to_f32();
         let e = expected[i];
         let tol = e.abs().max(1.0) * 8.0 * F16_EPS + 1e-3;
-        assert!((g - e).abs() <= tol, "PReLU f16 scalar @{i}: got={} want={}", g, e);
+        assert!(
+            (g - e).abs() <= tol,
+            "PReLU f16 scalar @{i}: got={} want={}",
+            g,
+            e
+        );
     }
 }
 
@@ -309,9 +403,21 @@ fn prelu_bf16_per_channel() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [3], stride: [1] },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [3],
+                stride: [1],
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -322,7 +428,12 @@ fn prelu_bf16_per_channel() {
         let g = got[i].to_f32();
         let e = expected[i];
         let tol = e.abs().max(1.0) * 8.0 * BF16_EPS + 1e-2;
-        assert!((g - e).abs() <= tol, "PReLU bf16 per-chan @{i}: got={} want={}", g, e);
+        assert!(
+            (g - e).abs() <= tol,
+            "PReLU bf16 per-chan @{i}: got={} want={}",
+            g,
+            e
+        );
     }
 }
 
@@ -335,7 +446,8 @@ fn prelu_bf16_scalar() {
     let h_x_f32: Vec<f32> = (0..n_total).map(|i| (i as f32) * 0.1 - 1.0).collect();
     let h_x: Vec<bf16> = h_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let h_w: Vec<bf16> = vec![bf16::from_f32(0.3)];
-    let expected: Vec<f32> = h_x.iter()
+    let expected: Vec<f32> = h_x
+        .iter()
         .map(|x| {
             let xv = x.to_f32();
             if xv > 0.0 { xv } else { h_w[0].to_f32() * xv }
@@ -354,9 +466,21 @@ fn prelu_bf16_scalar() {
         &stream,
         Workspace::None,
         PReluArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [1], stride: [1] },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -367,6 +491,11 @@ fn prelu_bf16_scalar() {
         let g = got[i].to_f32();
         let e = expected[i];
         let tol = e.abs().max(1.0) * 8.0 * BF16_EPS + 1e-2;
-        assert!((g - e).abs() <= tol, "PReLU bf16 scalar @{i}: got={} want={}", g, e);
+        assert!(
+            (g - e).abs() <= tol,
+            "PReLU bf16 scalar @{i}: got={} want={}",
+            g,
+            e
+        );
     }
 }

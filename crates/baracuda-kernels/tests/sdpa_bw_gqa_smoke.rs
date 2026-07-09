@@ -20,11 +20,10 @@
 //! `[B, 1, K, D]` by summing across the Q-head axis. That sum is what
 //! the broadcast path's atomicAdd should compute.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SdpaArgs, SdpaBackwardArgs,
-    SdpaBackwardDescriptor, SdpaBackwardPlan, SdpaDescriptor, SdpaPlan, TensorMut, TensorRef,
-    Workspace,
+    ElementKind, PlanPreference, SdpaArgs, SdpaBackwardArgs, SdpaBackwardDescriptor,
+    SdpaBackwardPlan, SdpaDescriptor, SdpaPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -259,7 +258,8 @@ fn run_bw_strided_f32(
         has_mask: false,
         element: ElementKind::F32,
     };
-    let fw_plan = SdpaPlan::<f32>::select(stream, &fw_desc, PlanPreference::default()).expect("fw sel");
+    let fw_plan =
+        SdpaPlan::<f32>::select(stream, &fw_desc, PlanPreference::default()).expect("fw sel");
     fw_plan
         .run(
             stream,
@@ -396,10 +396,18 @@ fn sdpa_bw_gqa_broadcast_f32() {
     let v_phys_n = (batch * kv_unique * k_len * d_v) as usize;
     let dy_n = (batch * heads * q_len * d_v) as usize;
 
-    let host_q: Vec<f32> = (0..q_n).map(|i| ((i as f32) * 0.013 - 0.5).sin() * 0.5).collect();
-    let host_k_phys: Vec<f32> = (0..k_phys_n).map(|i| ((i as f32) * 0.017 + 0.2).cos() * 0.5).collect();
-    let host_v_phys: Vec<f32> = (0..v_phys_n).map(|i| ((i as f32) * 0.011 - 0.1).sin() * 0.7).collect();
-    let host_dy: Vec<f32> = (0..dy_n).map(|i| ((i as f32) * 0.019 + 0.3).cos() * 0.4).collect();
+    let host_q: Vec<f32> = (0..q_n)
+        .map(|i| ((i as f32) * 0.013 - 0.5).sin() * 0.5)
+        .collect();
+    let host_k_phys: Vec<f32> = (0..k_phys_n)
+        .map(|i| ((i as f32) * 0.017 + 0.2).cos() * 0.5)
+        .collect();
+    let host_v_phys: Vec<f32> = (0..v_phys_n)
+        .map(|i| ((i as f32) * 0.011 - 0.1).sin() * 0.7)
+        .collect();
+    let host_dy: Vec<f32> = (0..dy_n)
+        .map(|i| ((i as f32) * 0.019 + 0.3).cos() * 0.4)
+        .collect();
 
     let stride_k: [i64; 4] = [
         (kv_unique as i64) * (k_len as i64) * (d_k as i64),
@@ -469,9 +477,22 @@ fn sdpa_bw_gqa_broadcast_f32() {
     );
 
     let (got_dq, got_dk, got_dv) = run_bw_strided_f32(
-        &ctx, &stream, batch, heads, q_len, k_len, d_k, d_v, scale,
-        &host_q, &host_k_phys, &host_v_phys, &host_dy,
-        stride_k, stride_v, kv_unique,
+        &ctx,
+        &stream,
+        batch,
+        heads,
+        q_len,
+        k_len,
+        d_k,
+        d_v,
+        scale,
+        &host_q,
+        &host_k_phys,
+        &host_v_phys,
+        &host_dy,
+        stride_k,
+        stride_v,
+        kv_unique,
     );
 
     let tol = 5e-4f32;
@@ -511,10 +532,18 @@ fn sdpa_bw_gqa_broadcast_f16() {
     let dq_n = (batch * heads * q_len * d_k) as usize;
     let y_n = (batch * heads * q_len * d_v) as usize;
 
-    let host_q_f32: Vec<f32> = (0..q_n).map(|i| ((i as f32) * 0.04 - 0.3).sin() * 0.3).collect();
-    let host_k_phys_f32: Vec<f32> = (0..k_phys_n).map(|i| ((i as f32) * 0.06 + 0.2).cos() * 0.3).collect();
-    let host_v_phys_f32: Vec<f32> = (0..v_phys_n).map(|i| ((i as f32) * 0.02 - 0.05).sin() * 0.4).collect();
-    let host_dy_f32: Vec<f32> = (0..dy_n).map(|i| ((i as f32) * 0.03 + 0.1).cos() * 0.3).collect();
+    let host_q_f32: Vec<f32> = (0..q_n)
+        .map(|i| ((i as f32) * 0.04 - 0.3).sin() * 0.3)
+        .collect();
+    let host_k_phys_f32: Vec<f32> = (0..k_phys_n)
+        .map(|i| ((i as f32) * 0.06 + 0.2).cos() * 0.3)
+        .collect();
+    let host_v_phys_f32: Vec<f32> = (0..v_phys_n)
+        .map(|i| ((i as f32) * 0.02 - 0.05).sin() * 0.4)
+        .collect();
+    let host_dy_f32: Vec<f32> = (0..dy_n)
+        .map(|i| ((i as f32) * 0.03 + 0.1).cos() * 0.3)
+        .collect();
 
     let stride_k: [i64; 4] = [
         (kv_unique as i64) * (k_len as i64) * (d_k as i64),
@@ -535,20 +564,49 @@ fn sdpa_bw_gqa_broadcast_f16() {
     let host_k_phys_f64: Vec<f64> = host_k_phys_f32.iter().map(|&x| x as f64).collect();
     let host_v_phys_f64: Vec<f64> = host_v_phys_f32.iter().map(|&x| x as f64).collect();
     let host_k_exp = expand_kv_f64(
-        &host_k_phys_f64, batch as usize, kv_unique as usize, heads as usize, k_len as usize, d_k as usize,
+        &host_k_phys_f64,
+        batch as usize,
+        kv_unique as usize,
+        heads as usize,
+        k_len as usize,
+        d_k as usize,
     );
     let host_v_exp = expand_kv_f64(
-        &host_v_phys_f64, batch as usize, kv_unique as usize, heads as usize, k_len as usize, d_v as usize,
+        &host_v_phys_f64,
+        batch as usize,
+        kv_unique as usize,
+        heads as usize,
+        k_len as usize,
+        d_v as usize,
     );
     let (_dq_ref, dk_exp_ref, dv_exp_ref) = host_sdpa_bw_f64_contig(
-        batch as usize, heads as usize, q_len as usize, k_len as usize, d_k as usize, d_v as usize,
-        &host_q_f64, &host_k_exp, &host_v_exp, &host_dy_f64, scale as f64,
+        batch as usize,
+        heads as usize,
+        q_len as usize,
+        k_len as usize,
+        d_k as usize,
+        d_v as usize,
+        &host_q_f64,
+        &host_k_exp,
+        &host_v_exp,
+        &host_dy_f64,
+        scale as f64,
     );
     let dk_ref = collapse_kv_grad_f64(
-        &dk_exp_ref, batch as usize, heads as usize, kv_unique as usize, k_len as usize, d_k as usize,
+        &dk_exp_ref,
+        batch as usize,
+        heads as usize,
+        kv_unique as usize,
+        k_len as usize,
+        d_k as usize,
     );
     let dv_ref = collapse_kv_grad_f64(
-        &dv_exp_ref, batch as usize, heads as usize, kv_unique as usize, k_len as usize, d_v as usize,
+        &dv_exp_ref,
+        batch as usize,
+        heads as usize,
+        kv_unique as usize,
+        k_len as usize,
+        d_v as usize,
     );
 
     // f16 upload.
@@ -578,42 +636,120 @@ fn sdpa_bw_gqa_broadcast_f16() {
     let mut dev_dv: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, dv_phys_n).expect("dv");
 
     let fw_desc = SdpaDescriptor {
-        batch_size: batch, num_heads: heads, query_len: q_len, key_len: k_len,
-        d_k, d_v, scale, is_causal: false, has_mask: false, element: ElementKind::F16,
+        batch_size: batch,
+        num_heads: heads,
+        query_len: q_len,
+        key_len: k_len,
+        d_k,
+        d_v,
+        scale,
+        is_causal: false,
+        has_mask: false,
+        element: ElementKind::F16,
     };
-    let fw_plan = SdpaPlan::<f16>::select(&stream, &fw_desc, PlanPreference::default()).expect("fw sel");
-    fw_plan.run(
-        &stream, Workspace::None,
-        SdpaArgs {
-            q: TensorRef { data: dev_q.as_slice(), shape: shape_q, stride: contiguous_stride(shape_q) },
-            k: TensorRef { data: dev_k.as_slice(), shape: shape_k, stride: stride_k },
-            v: TensorRef { data: dev_v.as_slice(), shape: shape_v, stride: stride_v },
-            mask: None,
-            y: TensorMut { data: dev_y.as_slice_mut(), shape: shape_y, stride: contiguous_stride(shape_y) },
-            attn: TensorMut { data: dev_attn.as_slice_mut(), shape: shape_attn, stride: contiguous_stride(shape_attn) },
-        },
-    ).expect("fw run");
+    let fw_plan =
+        SdpaPlan::<f16>::select(&stream, &fw_desc, PlanPreference::default()).expect("fw sel");
+    fw_plan
+        .run(
+            &stream,
+            Workspace::None,
+            SdpaArgs {
+                q: TensorRef {
+                    data: dev_q.as_slice(),
+                    shape: shape_q,
+                    stride: contiguous_stride(shape_q),
+                },
+                k: TensorRef {
+                    data: dev_k.as_slice(),
+                    shape: shape_k,
+                    stride: stride_k,
+                },
+                v: TensorRef {
+                    data: dev_v.as_slice(),
+                    shape: shape_v,
+                    stride: stride_v,
+                },
+                mask: None,
+                y: TensorMut {
+                    data: dev_y.as_slice_mut(),
+                    shape: shape_y,
+                    stride: contiguous_stride(shape_y),
+                },
+                attn: TensorMut {
+                    data: dev_attn.as_slice_mut(),
+                    shape: shape_attn,
+                    stride: contiguous_stride(shape_attn),
+                },
+            },
+        )
+        .expect("fw run");
     stream.synchronize().expect("sync fw");
 
     let bw_desc = SdpaBackwardDescriptor {
-        batch_size: batch, num_heads: heads, query_len: q_len, key_len: k_len,
-        d_k, d_v, scale, element: ElementKind::F16,
+        batch_size: batch,
+        num_heads: heads,
+        query_len: q_len,
+        key_len: k_len,
+        d_k,
+        d_v,
+        scale,
+        element: ElementKind::F16,
     };
-    let bw_plan = SdpaBackwardPlan::<f16>::select(&stream, &bw_desc, PlanPreference::default()).expect("bw sel");
-    bw_plan.run(
-        &stream, Workspace::None,
-        SdpaBackwardArgs {
-            q: TensorRef { data: dev_q.as_slice(), shape: shape_q, stride: contiguous_stride(shape_q) },
-            k: TensorRef { data: dev_k.as_slice(), shape: shape_k, stride: stride_k },
-            v: TensorRef { data: dev_v.as_slice(), shape: shape_v, stride: stride_v },
-            attn: TensorRef { data: dev_attn.as_slice(), shape: shape_attn, stride: contiguous_stride(shape_attn) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: shape_y, stride: contiguous_stride(shape_y) },
-            dscores_ws: TensorMut { data: dev_ws.as_slice_mut(), shape: shape_attn, stride: contiguous_stride(shape_attn) },
-            dq: TensorMut { data: dev_dq.as_slice_mut(), shape: shape_q, stride: contiguous_stride(shape_q) },
-            dk: TensorMut { data: dev_dk.as_slice_mut(), shape: shape_k, stride: stride_k },
-            dv: TensorMut { data: dev_dv.as_slice_mut(), shape: shape_v, stride: stride_v },
-        },
-    ).expect("bw run");
+    let bw_plan = SdpaBackwardPlan::<f16>::select(&stream, &bw_desc, PlanPreference::default())
+        .expect("bw sel");
+    bw_plan
+        .run(
+            &stream,
+            Workspace::None,
+            SdpaBackwardArgs {
+                q: TensorRef {
+                    data: dev_q.as_slice(),
+                    shape: shape_q,
+                    stride: contiguous_stride(shape_q),
+                },
+                k: TensorRef {
+                    data: dev_k.as_slice(),
+                    shape: shape_k,
+                    stride: stride_k,
+                },
+                v: TensorRef {
+                    data: dev_v.as_slice(),
+                    shape: shape_v,
+                    stride: stride_v,
+                },
+                attn: TensorRef {
+                    data: dev_attn.as_slice(),
+                    shape: shape_attn,
+                    stride: contiguous_stride(shape_attn),
+                },
+                dy: TensorRef {
+                    data: dev_dy.as_slice(),
+                    shape: shape_y,
+                    stride: contiguous_stride(shape_y),
+                },
+                dscores_ws: TensorMut {
+                    data: dev_ws.as_slice_mut(),
+                    shape: shape_attn,
+                    stride: contiguous_stride(shape_attn),
+                },
+                dq: TensorMut {
+                    data: dev_dq.as_slice_mut(),
+                    shape: shape_q,
+                    stride: contiguous_stride(shape_q),
+                },
+                dk: TensorMut {
+                    data: dev_dk.as_slice_mut(),
+                    shape: shape_k,
+                    stride: stride_k,
+                },
+                dv: TensorMut {
+                    data: dev_dv.as_slice_mut(),
+                    shape: shape_v,
+                    stride: stride_v,
+                },
+            },
+        )
+        .expect("bw run");
     stream.synchronize().expect("sync bw");
 
     let mut got_dk = vec![f16::ZERO; dk_phys_n];
@@ -626,14 +762,16 @@ fn sdpa_bw_gqa_broadcast_f16() {
         let t = ((*r).abs() as f32 * tol).max(tol);
         assert!(
             (g.to_f32() - *r as f32).abs() <= t,
-            "dk f16 @ {i}: got={} ref={r}", g.to_f32()
+            "dk f16 @ {i}: got={} ref={r}",
+            g.to_f32()
         );
     }
     for (i, (g, r)) in got_dv.iter().zip(dv_ref.iter()).enumerate() {
         let t = ((*r).abs() as f32 * tol).max(tol);
         assert!(
             (g.to_f32() - *r as f32).abs() <= t,
-            "dv f16 @ {i}: got={} ref={r}", g.to_f32()
+            "dv f16 @ {i}: got={} ref={r}",
+            g.to_f32()
         );
     }
 }
@@ -658,10 +796,18 @@ fn sdpa_bw_no_broadcast_strided() {
     let v_n = (batch * heads * k_len * d_v) as usize;
     let dy_n = (batch * heads * q_len * d_v) as usize;
 
-    let host_q: Vec<f32> = (0..q_n).map(|i| ((i as f32) * 0.013 - 0.5).sin() * 0.5).collect();
-    let host_k: Vec<f32> = (0..k_n).map(|i| ((i as f32) * 0.017 + 0.2).cos() * 0.5).collect();
-    let host_v: Vec<f32> = (0..v_n).map(|i| ((i as f32) * 0.011 - 0.1).sin() * 0.7).collect();
-    let host_dy: Vec<f32> = (0..dy_n).map(|i| ((i as f32) * 0.019 + 0.3).cos() * 0.4).collect();
+    let host_q: Vec<f32> = (0..q_n)
+        .map(|i| ((i as f32) * 0.013 - 0.5).sin() * 0.5)
+        .collect();
+    let host_k: Vec<f32> = (0..k_n)
+        .map(|i| ((i as f32) * 0.017 + 0.2).cos() * 0.5)
+        .collect();
+    let host_v: Vec<f32> = (0..v_n)
+        .map(|i| ((i as f32) * 0.011 - 0.1).sin() * 0.7)
+        .collect();
+    let host_dy: Vec<f32> = (0..dy_n)
+        .map(|i| ((i as f32) * 0.019 + 0.3).cos() * 0.4)
+        .collect();
 
     // K/V contig, but pass them through the strided FFI (head stride != 0).
     let stride_k: [i64; 4] = contiguous_stride([batch, heads, k_len, d_k]);
@@ -673,14 +819,22 @@ fn sdpa_bw_no_broadcast_strided() {
     let host_v_f64: Vec<f64> = host_v.iter().map(|&x| x as f64).collect();
     let host_dy_f64: Vec<f64> = host_dy.iter().map(|&x| x as f64).collect();
     let (dq_ref, dk_ref, dv_ref) = host_sdpa_bw_f64_contig(
-        batch as usize, heads as usize, q_len as usize, k_len as usize, d_k as usize, d_v as usize,
-        &host_q_f64, &host_k_f64, &host_v_f64, &host_dy_f64, scale as f64,
+        batch as usize,
+        heads as usize,
+        q_len as usize,
+        k_len as usize,
+        d_k as usize,
+        d_v as usize,
+        &host_q_f64,
+        &host_k_f64,
+        &host_v_f64,
+        &host_dy_f64,
+        scale as f64,
     );
 
     let (got_dq, got_dk, got_dv) = run_bw_strided_f32(
-        &ctx, &stream, batch, heads, q_len, k_len, d_k, d_v, scale,
-        &host_q, &host_k, &host_v, &host_dy,
-        stride_k, stride_v, heads, // kv_phys_heads == heads (no broadcast)
+        &ctx, &stream, batch, heads, q_len, k_len, d_k, d_v, scale, &host_q, &host_k, &host_v,
+        &host_dy, stride_k, stride_v, heads, // kv_phys_heads == heads (no broadcast)
     );
 
     let tol = 1e-4f32;

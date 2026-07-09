@@ -21,7 +21,7 @@
 use core::ffi::{c_char, c_int, c_void};
 use std::sync::OnceLock;
 
-use baracuda_core::{platform, Library, LoaderError};
+use baracuda_core::{Library, LoaderError, platform};
 use baracuda_types::CudaStatus;
 
 // ---- opaque handles -----------------------------------------------------
@@ -205,22 +205,16 @@ pub type PFN_cudfTableGetColumn = unsafe extern "C" fn(
 ) -> cudfStatus_t;
 
 /// read CSV into a GPU dataframe.
-pub type PFN_cudfReadCsv = unsafe extern "C" fn(
-    filepath: *const c_char,
-    out_table: *mut cudfTable_t,
-) -> cudfStatus_t;
+pub type PFN_cudfReadCsv =
+    unsafe extern "C" fn(filepath: *const c_char, out_table: *mut cudfTable_t) -> cudfStatus_t;
 
 /// read PARQUET into a GPU dataframe.
-pub type PFN_cudfReadParquet = unsafe extern "C" fn(
-    filepath: *const c_char,
-    out_table: *mut cudfTable_t,
-) -> cudfStatus_t;
+pub type PFN_cudfReadParquet =
+    unsafe extern "C" fn(filepath: *const c_char, out_table: *mut cudfTable_t) -> cudfStatus_t;
 
 /// write a GPU dataframe to PARQUET.
-pub type PFN_cudfWriteParquet = unsafe extern "C" fn(
-    filepath: *const c_char,
-    table: cudfTable_t,
-) -> cudfStatus_t;
+pub type PFN_cudfWriteParquet =
+    unsafe extern "C" fn(filepath: *const c_char, table: cudfTable_t) -> cudfStatus_t;
 
 // ---- loader --------------------------------------------------------------
 

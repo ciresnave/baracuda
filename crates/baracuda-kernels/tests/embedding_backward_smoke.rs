@@ -5,10 +5,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, EmbeddingBackwardArgs, EmbeddingBackwardDescriptor,
-    EmbeddingBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, EmbeddingBackwardArgs, EmbeddingBackwardDescriptor, EmbeddingBackwardPlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -40,8 +40,7 @@ fn embedding_backward_f32_duplicate_indices() {
     }
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up dout");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_dw: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
+    let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
 
     let desc = EmbeddingBackwardDescriptor {
         num_embeddings: v as i32,
@@ -106,8 +105,7 @@ fn embedding_backward_f32_padding_idx_skipped() {
     }
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up dout");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_dw: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
+    let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
 
     let desc = EmbeddingBackwardDescriptor {
         num_embeddings: v as i32,
@@ -178,8 +176,7 @@ fn embedding_backward_f64_basic() {
     }
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up dout");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_dw: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
+    let mut dev_dw: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
 
     let desc = EmbeddingBackwardDescriptor {
         num_embeddings: v as i32,

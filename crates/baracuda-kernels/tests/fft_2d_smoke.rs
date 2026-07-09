@@ -12,7 +12,7 @@
 //!     --test fft_2d_smoke -- --ignored
 //! ```
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     Complex32, Complex64, ElementKind, FftNdArgs, FftNdDescriptor, FftNdPlan, PlanPreference,
     Workspace,
@@ -52,10 +52,8 @@ fn fft2_ifft2_roundtrip_complex32() {
 
     let mut dev_x: DeviceBuffer<Complex32> =
         DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
+    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_xr: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
 
     // Forward FFT2 — x → y.
     let fwd_desc = FftNdDescriptor {
@@ -137,10 +135,8 @@ fn fft2_ifft2_roundtrip_complex64() {
 
     let mut dev_x: DeviceBuffer<Complex64> =
         DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex64> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<Complex64> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
+    let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_xr: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
 
     let fwd_desc = FftNdDescriptor {
         dims: [H, W, 0, 0],
@@ -215,8 +211,7 @@ fn fft2_forward_constant_signal() {
         }
     }
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
-    let mut dev_y: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
 
     let desc = FftNdDescriptor {
         dims: [H, W, 0, 0],
@@ -225,8 +220,8 @@ fn fft2_forward_constant_signal() {
         inverse: false,
         element: ElementKind::Complex32,
     };
-    let plan = FftNdPlan::<Complex32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        FftNdPlan::<Complex32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = FftNdArgs::<Complex32> {
         x: dev_x.as_slice(),
         y: dev_y.as_slice_mut(),

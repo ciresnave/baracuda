@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `SegmentMeanPlan<T>` (Phase 7 7.6).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SegmentMeanArgs, SegmentMeanDescriptor,
-    SegmentMeanPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SegmentMeanArgs, SegmentMeanDescriptor, SegmentMeanPlan,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -56,8 +56,8 @@ fn segment_mean_f32_basic() {
         num_segments: ns,
         element: ElementKind::F32,
     };
-    let plan = SegmentMeanPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        SegmentMeanPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = SegmentMeanArgs::<f32> {
         input: TensorRef {
             data: dev_in.as_slice(),

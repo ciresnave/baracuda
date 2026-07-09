@@ -24,17 +24,17 @@ fn main() {
 #[cfg(feature = "cudnn")]
 mod cudnn_impl {
     use baracuda_cudnn::{
-        reduce_tensor, DType, Handle as CudnnHandle, ReduceOp, ReduceTensorDescriptor,
-        TensorDescriptor, TensorFormat,
+        DType, Handle as CudnnHandle, ReduceOp, ReduceTensorDescriptor, TensorDescriptor,
+        TensorFormat, reduce_tensor,
     };
     use baracuda_driver::DeviceBuffer;
     use baracuda_kernels::{
-        contiguous_stride, ElementKind, PlanPreference, ReduceArgs, ReduceDescriptor, ReduceKind,
-        ReducePlan, TensorMut, TensorRef, Workspace,
+        ElementKind, PlanPreference, ReduceArgs, ReduceDescriptor, ReduceKind, ReducePlan,
+        TensorMut, TensorRef, Workspace, contiguous_stride,
     };
     use baracuda_kernels_bench::{
+        CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP, PhaseTwentyNineRow, PytorchBaseline,
         append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-        PhaseTwentyNineRow, PytorchBaseline, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
     };
     use criterion::{BenchmarkId, Criterion};
 
@@ -44,14 +44,9 @@ mod cudnn_impl {
         Box::leak(s.to_owned().into_boxed_str())
     }
 
-    fn bench_baracuda_one(
-        c: &mut Criterion,
-        kind: ReduceKind,
-        kind_label: &str,
-    ) {
+    fn bench_baracuda_one(c: &mut Criterion, kind: ReduceKind, kind_label: &str) {
         let (ctx, stream) = setup_device();
-        let mut group =
-            c.benchmark_group(format!("reductions_vs_cudnn/baracuda/{kind_label}_f32"));
+        let mut group = c.benchmark_group(format!("reductions_vs_cudnn/baracuda/{kind_label}_f32"));
 
         for &rows in CROSS_SEQLEN_SWEEP {
             for &hidden in CROSS_HIDDEN_SWEEP {
@@ -63,11 +58,10 @@ mod cudnn_impl {
                     Ok(b) => b,
                     Err(_) => continue,
                 };
-                let mut dev_y: DeviceBuffer<f32> =
-                    match DeviceBuffer::zeros(&ctx, rows as usize) {
-                        Ok(b) => b,
-                        Err(_) => continue,
-                    };
+                let mut dev_y: DeviceBuffer<f32> = match DeviceBuffer::zeros(&ctx, rows as usize) {
+                    Ok(b) => b,
+                    Err(_) => continue,
+                };
 
                 let desc = ReduceDescriptor::<2> {
                     kind,
@@ -76,14 +70,11 @@ mod cudnn_impl {
                     element: ElementKind::F32,
                     correction: 1,
                 };
-                let plan = match ReducePlan::<f32, 2>::select(
-                    &stream,
-                    &desc,
-                    PlanPreference::default(),
-                ) {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
+                let plan =
+                    match ReducePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()) {
+                        Ok(p) => p,
+                        Err(_) => continue,
+                    };
                 let xs = [rows, hidden];
                 let stx = contiguous_stride(xs);
                 let ys = [rows, 1];
@@ -102,7 +93,8 @@ mod cudnn_impl {
                             stride: sty,
                         },
                     };
-                    plan.run(&stream, Workspace::None, args).expect("baracuda reduce");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("baracuda reduce");
                 });
                 let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                     let args = ReduceArgs::<f32, 2> {
@@ -117,7 +109,8 @@ mod cudnn_impl {
                             stride: sty,
                         },
                     };
-                    plan.run(&stream, Workspace::None, args).expect("baracuda reduce");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("baracuda reduce");
                 });
                 append_csv_row(
                     BENCH_NAME,
@@ -146,7 +139,8 @@ mod cudnn_impl {
                                     stride: sty,
                                 },
                             };
-                            plan.run(&stream, Workspace::None, args).expect("baracuda reduce");
+                            plan.run(&stream, Workspace::None, args)
+                                .expect("baracuda reduce");
                         })
                     });
                 });
@@ -165,8 +159,7 @@ mod cudnn_impl {
         let cudnn = CudnnHandle::new().expect("cudnn handle");
         cudnn.set_stream(&stream).expect("cudnn set_stream");
 
-        let mut group =
-            c.benchmark_group(format!("reductions_vs_cudnn/cudnn/{kind_label}_f32"));
+        let mut group = c.benchmark_group(format!("reductions_vs_cudnn/cudnn/{kind_label}_f32"));
 
         for &rows in CROSS_SEQLEN_SWEEP {
             for &hidden in CROSS_HIDDEN_SWEEP {
@@ -178,23 +171,16 @@ mod cudnn_impl {
                     Ok(b) => b,
                     Err(_) => continue,
                 };
-                let mut dev_y: DeviceBuffer<f32> = match DeviceBuffer::zeros(&ctx, rows as usize)
-                {
+                let mut dev_y: DeviceBuffer<f32> = match DeviceBuffer::zeros(&ctx, rows as usize) {
                     Ok(b) => b,
                     Err(_) => continue,
                 };
 
                 // Input: 4-D (rows, hidden, 1, 1), output (rows, 1, 1, 1).
                 // cuDNN reduces axes where the output extent is 1.
-                let x_desc = TensorDescriptor::new_4d(
-                    TensorFormat::Nchw,
-                    DType::F32,
-                    rows,
-                    hidden,
-                    1,
-                    1,
-                )
-                .expect("x_desc");
+                let x_desc =
+                    TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, rows, hidden, 1, 1)
+                        .expect("x_desc");
                 let y_desc =
                     TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, rows, 1, 1, 1)
                         .expect("y_desc");
@@ -208,14 +194,28 @@ mod cudnn_impl {
 
                 warmup(&stream, || {
                     reduce_tensor(
-                        &cudnn, &reducer, &mut dev_ws, 1.0, &x_desc, &dev_x, 0.0, &y_desc,
+                        &cudnn,
+                        &reducer,
+                        &mut dev_ws,
+                        1.0,
+                        &x_desc,
+                        &dev_x,
+                        0.0,
+                        &y_desc,
                         &mut dev_y,
                     )
                     .expect("cudnn reduce");
                 });
                 let cudnn_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                     reduce_tensor(
-                        &cudnn, &reducer, &mut dev_ws, 1.0, &x_desc, &dev_x, 0.0, &y_desc,
+                        &cudnn,
+                        &reducer,
+                        &mut dev_ws,
+                        1.0,
+                        &x_desc,
+                        &dev_x,
+                        0.0,
+                        &y_desc,
                         &mut dev_y,
                     )
                     .expect("cudnn reduce");
@@ -237,8 +237,15 @@ mod cudnn_impl {
                     bb.iter_custom(|iters| {
                         time_with_events(&ctx, &stream, iters, || {
                             reduce_tensor(
-                                &cudnn, &reducer, &mut dev_ws, 1.0, &x_desc, &dev_x, 0.0,
-                                &y_desc, &mut dev_y,
+                                &cudnn,
+                                &reducer,
+                                &mut dev_ws,
+                                1.0,
+                                &x_desc,
+                                &dev_x,
+                                0.0,
+                                &y_desc,
+                                &mut dev_y,
                             )
                             .expect("cudnn reduce");
                         })

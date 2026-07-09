@@ -17,10 +17,10 @@ pub mod status;
 /// `types` — submodule grouping related items.
 pub mod types;
 
-pub use loader::{runtime, Runtime};
+pub use loader::{Runtime, runtime};
 pub use status::cudaError_t;
 pub use types::{
-    cudaArray_t, cudaEvent_t, cudaExternalMemory_t, cudaExternalSemaphore_t, cudaGraphExec_t,
-    cudaGraphNode_t, cudaGraph_t, cudaKernel_t, cudaLibrary_t, cudaMemPool_t, cudaMemcpyKind,
+    cudaArray_t, cudaEvent_t, cudaExternalMemory_t, cudaExternalSemaphore_t, cudaGraph_t,
+    cudaGraphExec_t, cudaGraphNode_t, cudaKernel_t, cudaLibrary_t, cudaMemPool_t, cudaMemcpyKind,
     cudaStream_t, cudaUserObject_t, dim3,
 };

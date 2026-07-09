@@ -12,7 +12,7 @@ use std::ffi::CString;
 
 use baracuda_cuda_sys::runtime::runtime;
 
-use crate::error::{check, Error, Result};
+use crate::error::{Error, Result, check};
 
 /// Typed outcome of [`driver_entry_point`]. `status` mirrors the
 /// `cudaDriverEntryPointQueryResult` enum reported by the runtime:

@@ -5,10 +5,10 @@
 //! Bit-exact comparison — pure integer accumulation of `(x != 0 ? 1 :
 //! 0)`, no FP math.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Bool, CountReduceArgs, CountReduceDescriptor, CountReducePlan, ElementKind,
-    PlanPreference, ReduceKind, TensorMut, TensorRef, Workspace,
+    Bool, CountReduceArgs, CountReduceDescriptor, CountReducePlan, ElementKind, PlanPreference,
+    ReduceKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -44,12 +44,7 @@ fn fill_pattern_f32(host: &mut Vec<f32>) {
     }
 }
 
-fn run_count<T>(
-    ctx: &Context,
-    stream: &Stream,
-    host_x: &[T],
-    element: ElementKind,
-) -> Vec<i64>
+fn run_count<T>(ctx: &Context, stream: &Stream, host_x: &[T], element: ElementKind) -> Vec<i64>
 where
     T: baracuda_kernels::Element,
 {
@@ -164,10 +159,7 @@ fn count_nonzero_bool() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
     fill_pattern_f32(&mut host_f32);
-    let host: Vec<Bool> = host_f32
-        .iter()
-        .map(|&v| Bool::new(v != 0.0))
-        .collect();
+    let host: Vec<Bool> = host_f32.iter().map(|&v| Bool::new(v != 0.0)).collect();
     let got = run_count::<Bool>(&ctx, &stream, &host, ElementKind::Bool);
     assert_expected(&got);
 }

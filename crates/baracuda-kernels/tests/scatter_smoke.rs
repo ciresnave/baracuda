@@ -6,10 +6,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ScatterArgs, ScatterDescriptor, ScatterPlan,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ScatterArgs, ScatterDescriptor, ScatterPlan, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -31,7 +31,7 @@ fn scatter_f32_2d_dim1_disjoint() {
     // Disjoint per-row: each row's idx values are unique within the row
     // (and the scatter axis is `dim=1`, so cross-row collisions don't
     // matter — different rows write to different cells anyway).
-    let host_idx: Vec<i32> = vec![0, 1, 2, 5,  3, 0, 4, 1,  5, 4, 0, 2];
+    let host_idx: Vec<i32> = vec![0, 1, 2, 5, 3, 0, 4, 1, 5, 4, 0, 2];
     let host_upd: Vec<f32> = (0..upd_numel).map(|i| (i as f32) * 0.5 + 1.0).collect();
     let host_out_init: Vec<f32> = (0..out_numel).map(|i| (i as f32) * 0.1).collect();
     // Reference: copy init, then for each (i,j) overwrite expected[i, idx[i,j]] = upd[i,j].
@@ -52,8 +52,8 @@ fn scatter_f32_2d_dim1_disjoint() {
         out_dim_size: 6,
         element: ElementKind::F32,
     };
-    let plan = ScatterPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ScatterPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ScatterArgs::<f32, 2> {
         updates: TensorRef {
             data: dev_upd.as_slice(),
@@ -96,7 +96,7 @@ fn scatter_f64_2d_dim0_disjoint() {
     let upd_numel: usize = 4 * 3;
     // Per-column disjoint along dim=0: each column's 4 index entries pick
     // 4 distinct rows from {0..6}.
-    let host_idx: Vec<i32> = vec![0, 1, 2,  1, 2, 3,  3, 4, 4,  5, 0, 5];
+    let host_idx: Vec<i32> = vec![0, 1, 2, 1, 2, 3, 3, 4, 4, 5, 0, 5];
     let host_upd: Vec<f64> = (0..upd_numel).map(|i| (i as f64) * 0.25 + 2.0).collect();
     let host_out_init: Vec<f64> = (0..out_numel).map(|i| -(i as f64)).collect();
     let mut expected = host_out_init.clone();
@@ -116,8 +116,8 @@ fn scatter_f64_2d_dim0_disjoint() {
         out_dim_size: 6,
         element: ElementKind::F64,
     };
-    let plan = ScatterPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ScatterPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ScatterArgs::<f64, 2> {
         updates: TensorRef {
             data: dev_upd.as_slice(),
@@ -157,7 +157,7 @@ fn scatter_f32_2d_dim1_i64idx() {
     let upd_shape = [2i32, 3];
     let out_numel: usize = 2 * 5;
     let upd_numel: usize = 2 * 3;
-    let host_idx: Vec<i64> = vec![0, 2, 4,  1, 3, 4];
+    let host_idx: Vec<i64> = vec![0, 2, 4, 1, 3, 4];
     let host_upd: Vec<f32> = (0..upd_numel).map(|i| (i as f32) + 10.0).collect();
     let host_out_init: Vec<f32> = vec![0.0; out_numel];
     let mut expected = host_out_init.clone();
@@ -177,8 +177,8 @@ fn scatter_f32_2d_dim1_i64idx() {
         out_dim_size: 5,
         element: ElementKind::F32,
     };
-    let plan = ScatterPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ScatterPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ScatterArgs::<f32, 2, i64> {
         updates: TensorRef {
             data: dev_upd.as_slice(),

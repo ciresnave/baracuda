@@ -6,10 +6,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test pad_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PadBackwardArgs, PadBackwardDescriptor, PadBackwardPlan,
-    PadMode, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, PadBackwardArgs, PadBackwardDescriptor, PadBackwardPlan, PadMode, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -141,7 +141,11 @@ fn pad_backward_f32_3d_zero_pad_is_copy() {
     let mut got = vec![0f32; dy_numel];
     dev_dx.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(host_dy.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "f32 pad BW zero-pad mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "f32 pad BW zero-pad mismatch @ {i}"
+        );
     }
 }
 

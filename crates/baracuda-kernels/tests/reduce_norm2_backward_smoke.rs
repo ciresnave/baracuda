@@ -7,10 +7,10 @@
 //! `y != 0` (which means at least one `x` in each reduced group is
 //! non-zero).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceBackwardArgs,
-    ReduceBackwardDescriptor, ReduceBackwardPlan, ReduceKind, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceBackwardArgs, ReduceBackwardDescriptor, ReduceBackwardPlan,
+    ReduceKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -103,10 +103,26 @@ fn norm2_backward_f32_3d_axis1() {
     let plan = ReduceBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -115,8 +131,12 @@ fn norm2_backward_f32_3d_axis1() {
     let eps = 4.0 * f32::EPSILON;
     for i in 0..dx_numel {
         let tol = (expected_dx[i].abs() * eps).max(eps);
-        assert!((got[i] - expected_dx[i]).abs() <= tol,
-            "f32 norm2 BW @ {i}: got={} want={}", got[i], expected_dx[i]);
+        assert!(
+            (got[i] - expected_dx[i]).abs() <= tol,
+            "f32 norm2 BW @ {i}: got={} want={}",
+            got[i],
+            expected_dx[i]
+        );
     }
 }
 
@@ -160,10 +180,26 @@ fn norm2_backward_f64_3d_axis2() {
     let plan = ReduceBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -189,7 +225,8 @@ fn norm2_backward_f16_3d_axis0() {
 
     let host_x_f32: Vec<f32> = (0..dx_numel).map(|i| 0.5 + 0.1 * (i as f32)).collect();
     let host_dy_f32: Vec<f32> = (0..dy_numel).map(|i| 0.3 + 0.15 * (i as f32)).collect();
-    let (host_y_f32, expected_dx_f32) = host_norm2_bw_f32(input_shape, axis, &host_x_f32, &host_dy_f32);
+    let (host_y_f32, expected_dx_f32) =
+        host_norm2_bw_f32(input_shape, axis, &host_x_f32, &host_dy_f32);
 
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let host_y: Vec<f16> = host_y_f32.iter().map(|&v| f16::from_f32(v)).collect();
@@ -209,10 +246,26 @@ fn norm2_backward_f16_3d_axis0() {
     let plan = ReduceBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -239,7 +292,8 @@ fn norm2_backward_bf16_3d_axis1() {
 
     let host_x_f32: Vec<f32> = (0..dx_numel).map(|i| 0.5 + 0.1 * (i as f32)).collect();
     let host_dy_f32: Vec<f32> = (0..dy_numel).map(|i| 0.3 + 0.15 * (i as f32)).collect();
-    let (host_y_f32, expected_dx_f32) = host_norm2_bw_f32(input_shape, axis, &host_x_f32, &host_dy_f32);
+    let (host_y_f32, expected_dx_f32) =
+        host_norm2_bw_f32(input_shape, axis, &host_x_f32, &host_dy_f32);
 
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let host_y: Vec<bf16> = host_y_f32.iter().map(|&v| bf16::from_f32(v)).collect();
@@ -259,10 +313,26 @@ fn norm2_backward_bf16_3d_axis1() {
     let plan = ReduceBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

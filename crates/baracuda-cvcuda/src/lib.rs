@@ -17,7 +17,7 @@
 use core::ffi::c_void;
 
 use baracuda_cvcuda_sys::{
-    cvcuda, CVCUDA_OperatorHandle, NVCVInterpolationType, NVCVStatus, NVCVTensorHandle,
+    CVCUDA_OperatorHandle, NVCVInterpolationType, NVCVStatus, NVCVTensorHandle, cvcuda,
 };
 
 pub use baracuda_cvcuda_sys::NVCVColorConversionCode;
@@ -159,17 +159,19 @@ impl Resize {
         input: &Tensor,
         output: &Tensor,
         interp: Interpolation,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.resize_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            interp.raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.resize_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                interp.raw(),
+            ))
+        }
+    }
 }
 
 /// Color-conversion operator.
@@ -202,17 +204,19 @@ impl CvtColor {
         input: &Tensor,
         output: &Tensor,
         code: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.cvt_color_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            code,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.cvt_color_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                code,
+            ))
+        }
+    }
 }
 
 /// Convert-to operator (`output = alpha * input + beta`, with dtype change).
@@ -245,18 +249,20 @@ impl ConvertTo {
         output: &Tensor,
         alpha: f64,
         beta: f64,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.convert_to_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            alpha,
-            beta,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.convert_to_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                alpha,
+                beta,
+            ))
+        }
+    }
 }
 
 /// Flip operator. `flip_code`: 0 = vertical, 1 = horizontal, -1 = both.
@@ -286,17 +292,19 @@ impl Flip {
         input: &Tensor,
         output: &Tensor,
         flip_code: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.flip_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            flip_code,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.flip_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                flip_code,
+            ))
+        }
+    }
 }
 
 /// Normalize operator (ML pre-processing: `(x - base) * scale` + tweaks).
@@ -334,22 +342,24 @@ impl Normalize {
         shift: f32,
         epsilon: f32,
         flags: u32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.normalize_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            base.as_raw(),
-            scale.as_raw(),
-            output.as_raw(),
-            global_scale,
-            shift,
-            epsilon,
-            flags,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.normalize_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                base.as_raw(),
+                scale.as_raw(),
+                output.as_raw(),
+                global_scale,
+                shift,
+                epsilon,
+                flags,
+            ))
+        }
+    }
 }
 
 // ------------------------------------------------------------------
@@ -428,17 +438,19 @@ impl PillowResize {
         input: &Tensor,
         output: &Tensor,
         interp: Interpolation,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.pillow_resize_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            interp.raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.pillow_resize_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                interp.raw(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -464,20 +476,22 @@ impl WarpAffine {
         flags: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.warp_affine_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            xform.as_ptr(),
-            flags,
-            border_mode,
-            border_value.as_ptr(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.warp_affine_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                xform.as_ptr(),
+                flags,
+                border_mode,
+                border_value.as_ptr(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -499,20 +513,22 @@ impl WarpPerspective {
         flags: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.warp_perspective_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            xform.as_ptr(),
-            flags,
-            border_mode,
-            border_value.as_ptr(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.warp_perspective_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                xform.as_ptr(),
+                flags,
+                border_mode,
+                border_value.as_ptr(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -537,23 +553,25 @@ impl Remap {
         align_corners: bool,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.remap_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            map.as_raw(),
-            src_interp.raw(),
-            map_interp.raw(),
-            map_value_type,
-            align_corners,
-            border_mode,
-            border_value.as_ptr(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.remap_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                map.as_raw(),
+                src_interp.raw(),
+                map_interp.raw(),
+                map_value_type,
+                align_corners,
+                border_mode,
+                border_value.as_ptr(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -573,19 +591,21 @@ impl Rotate {
         angle_deg: f64,
         shift: &[f64; 2],
         interp: Interpolation,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.rotate_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            angle_deg,
-            shift.as_ptr(),
-            interp.raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.rotate_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                angle_deg,
+                shift.as_ptr(),
+                interp.raw(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -603,17 +623,19 @@ impl CenterCrop {
         input: &Tensor,
         output: &Tensor,
         crop_size: NVCVSize2D,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.center_crop_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            crop_size,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.center_crop_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                crop_size,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -633,17 +655,19 @@ impl CustomCrop {
         input: &Tensor,
         output: &Tensor,
         rect: &[i32; 4],
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.custom_crop_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            rect.as_ptr(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.custom_crop_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                rect.as_ptr(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -665,20 +689,22 @@ impl CopyMakeBorder {
         left: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.copy_make_border_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            top,
-            left,
-            border_mode,
-            border_value.as_ptr(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.copy_make_border_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                top,
+                left,
+                border_mode,
+                border_value.as_ptr(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -695,11 +721,13 @@ impl Reformat {
         stream: *mut c_void,
         input: &Tensor,
         output: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.reformat_submit()?;
-        check(cu(self.raw(), stream, input.as_raw(), output.as_raw()))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.reformat_submit()?;
+            check(cu(self.raw(), stream, input.as_raw(), output.as_raw()))
+        }
+    }
 }
 
 // ---------------------- Filters ----------------------
@@ -721,19 +749,21 @@ impl Gaussian {
         kernel_size: NVCVSize2D,
         sigma: NVCVFloat2,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.gaussian_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            kernel_size,
-            sigma,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.gaussian_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                kernel_size,
+                sigma,
+                border_mode,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -751,17 +781,19 @@ impl MedianBlur {
         input: &Tensor,
         output: &Tensor,
         kernel_size: NVCVSize2D,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.median_blur_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            kernel_size,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.median_blur_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                kernel_size,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -782,19 +814,21 @@ impl AverageBlur {
         kernel_size: NVCVSize2D,
         anchor: NVCVSize2D,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.average_blur_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            kernel_size,
-            anchor,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.average_blur_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                kernel_size,
+                anchor,
+                border_mode,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -814,19 +848,21 @@ impl Laplacian {
         ksize: i32,
         scale: f32,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.laplacian_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            ksize,
-            scale,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.laplacian_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                ksize,
+                scale,
+                border_mode,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -848,20 +884,22 @@ impl BilateralFilter {
         sigma_color: f32,
         sigma_space: f32,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.bilateral_filter_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            diameter,
-            sigma_color,
-            sigma_space,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.bilateral_filter_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                diameter,
+                sigma_color,
+                sigma_space,
+                border_mode,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -881,19 +919,21 @@ impl MotionBlur {
         kernel_size: NVCVSize2D,
         angle: f32,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.motion_blur_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            kernel_size,
-            angle,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.motion_blur_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                kernel_size,
+                angle,
+                border_mode,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -913,19 +953,21 @@ impl Conv2D {
         kernel: &Tensor,
         anchor: NVCVSize2D,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.conv2d_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            kernel.as_raw(),
-            anchor,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.conv2d_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                kernel.as_raw(),
+                anchor,
+                border_mode,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -946,19 +988,21 @@ impl BoxFilter {
         kernel_size: NVCVSize2D,
         anchor: NVCVSize2D,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.box_filter_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            kernel_size,
-            anchor,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.box_filter_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                kernel_size,
+                anchor,
+                border_mode,
+            ))
+        }
+    }
 }
 
 // ---------------------- Morphology ----------------------
@@ -984,22 +1028,24 @@ impl Morphology {
         anchor: NVCVSize2D,
         iteration: i32,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.morphology_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            workspace.as_raw(),
-            morph_type,
-            mask_size,
-            anchor,
-            iteration,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.morphology_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                workspace.as_raw(),
+                morph_type,
+                mask_size,
+                anchor,
+                iteration,
+                border_mode,
+            ))
+        }
+    }
 }
 
 // ---------------------- Edge / Stat ----------------------
@@ -1023,20 +1069,22 @@ impl Canny {
         threshold_high: f64,
         aperture_size: i32,
         l2_gradient: bool,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.canny_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            threshold_low,
-            threshold_high,
-            aperture_size,
-            l2_gradient,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.canny_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                threshold_low,
+                threshold_high,
+                aperture_size,
+                l2_gradient,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -1054,17 +1102,19 @@ impl Histogram {
         input: &Tensor,
         mask: &Tensor,
         histogram: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.histogram_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            mask.as_raw(),
-            histogram.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.histogram_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                mask.as_raw(),
+                histogram.as_raw(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -1081,11 +1131,13 @@ impl HistogramEq {
         stream: *mut c_void,
         input: &Tensor,
         output: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.histogram_eq_submit()?;
-        check(cu(self.raw(), stream, input.as_raw(), output.as_raw()))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.histogram_eq_submit()?;
+            check(cu(self.raw(), stream, input.as_raw(), output.as_raw()))
+        }
+    }
 }
 
 simple_op! {
@@ -1108,21 +1160,23 @@ impl MinMaxLoc {
         max_val: &Tensor,
         max_loc: &Tensor,
         num_max: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.min_max_loc_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            min_val.as_raw(),
-            min_loc.as_raw(),
-            num_min.as_raw(),
-            max_val.as_raw(),
-            max_loc.as_raw(),
-            num_max.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.min_max_loc_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                min_val.as_raw(),
+                min_loc.as_raw(),
+                num_min.as_raw(),
+                max_val.as_raw(),
+                max_loc.as_raw(),
+                num_max.as_raw(),
+            ))
+        }
+    }
 }
 
 // ---------------------- Thresholds ----------------------
@@ -1157,18 +1211,20 @@ impl Threshold {
         output: &Tensor,
         thresh: &Tensor,
         maxval: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.threshold_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            thresh.as_raw(),
-            maxval.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.threshold_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                thresh.as_raw(),
+                maxval.as_raw(),
+            ))
+        }
+    }
 }
 
 /// Adaptive threshold operator.
@@ -1204,21 +1260,23 @@ impl AdaptiveThreshold {
         threshold_type: u32,
         block_size: i32,
         c_scalar: f64,
-    ) -> Result<()> { unsafe {
-        let lib = cvcuda()?;
-        let cu = lib.adaptive_threshold_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            max_value,
-            adaptive_method,
-            threshold_type,
-            block_size,
-            c_scalar,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let lib = cvcuda()?;
+            let cu = lib.adaptive_threshold_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                max_value,
+                adaptive_method,
+                threshold_type,
+                block_size,
+                c_scalar,
+            ))
+        }
+    }
 }
 
 // ---------------------- Color ----------------------
@@ -1238,17 +1296,19 @@ impl ColorTwist {
         input: &Tensor,
         output: &Tensor,
         twist: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.color_twist_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            twist.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.color_twist_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                twist.as_raw(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -1270,20 +1330,22 @@ impl BrightnessContrast {
         contrast: &Tensor,
         brightness_shift: &Tensor,
         contrast_center: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.brightness_contrast_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            brightness.as_raw(),
-            contrast.as_raw(),
-            brightness_shift.as_raw(),
-            contrast_center.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.brightness_contrast_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                brightness.as_raw(),
+                contrast.as_raw(),
+                brightness_shift.as_raw(),
+                contrast_center.as_raw(),
+            ))
+        }
+    }
 }
 
 /// Gamma-correction operator.
@@ -1314,17 +1376,19 @@ impl GammaContrast {
         input: &Tensor,
         output: &Tensor,
         gamma: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.gamma_contrast_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            gamma.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.gamma_contrast_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                gamma.as_raw(),
+            ))
+        }
+    }
 }
 
 // ---------------------- Composite / channel ----------------------
@@ -1345,18 +1409,20 @@ impl Composite {
         background: &Tensor,
         fg_mask: &Tensor,
         output: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.composite_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            foreground.as_raw(),
-            background.as_raw(),
-            fg_mask.as_raw(),
-            output.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.composite_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                foreground.as_raw(),
+                background.as_raw(),
+                fg_mask.as_raw(),
+                output.as_raw(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -1373,11 +1439,13 @@ impl Stack {
         stream: *mut c_void,
         input_batch: *mut c_void,
         output: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.stack_submit()?;
-        check(cu(self.raw(), stream, input_batch, output.as_raw()))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.stack_submit()?;
+            check(cu(self.raw(), stream, input_batch, output.as_raw()))
+        }
+    }
 }
 
 simple_op! {
@@ -1395,18 +1463,20 @@ impl ChannelReorder {
         input: &Tensor,
         output: &Tensor,
         order: &[i32],
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.channel_reorder_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            order.as_ptr(),
-            order.len() as i32,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.channel_reorder_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                order.as_ptr(),
+                order.len() as i32,
+            ))
+        }
+    }
 }
 
 // ---------------------- Misc ----------------------
@@ -1446,23 +1516,25 @@ impl Erase {
         random: bool,
         seed: u32,
         inplace: bool,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.erase_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            anchor.as_raw(),
-            erasing.as_raw(),
-            values.as_raw(),
-            imgidx.as_raw(),
-            random,
-            seed,
-            inplace,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.erase_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                anchor.as_raw(),
+                erasing.as_raw(),
+                values.as_raw(),
+                imgidx.as_raw(),
+                random,
+                seed,
+                inplace,
+            ))
+        }
+    }
 }
 
 /// Mask-based inpainting.
@@ -1494,18 +1566,20 @@ impl Inpaint {
         masks: &Tensor,
         output: &Tensor,
         inpaint_radius: f64,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.inpaint_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            masks.as_raw(),
-            output.as_raw(),
-            inpaint_radius,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.inpaint_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                masks.as_raw(),
+                output.as_raw(),
+                inpaint_radius,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -1527,20 +1601,22 @@ impl AddWeighted {
         beta: f64,
         gamma: f64,
         output: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.add_weighted_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input1.as_raw(),
-            alpha,
-            input2.as_raw(),
-            beta,
-            gamma,
-            output.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.add_weighted_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input1.as_raw(),
+                alpha,
+                input2.as_raw(),
+                beta,
+                gamma,
+                output.as_raw(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -1560,19 +1636,21 @@ impl NonMaxSuppression {
         scores: &Tensor,
         score_threshold: f32,
         iou_threshold: f32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.non_max_suppression_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            scores.as_raw(),
-            score_threshold,
-            iou_threshold,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.non_max_suppression_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                scores.as_raw(),
+                score_threshold,
+                iou_threshold,
+            ))
+        }
+    }
 }
 
 /// PadAndStack — pad a VarShape batch into a fixed-shape tensor.
@@ -1601,20 +1679,22 @@ impl PadAndStack {
         left: &Tensor,
         border_mode: i32,
         border_value: f32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.pad_and_stack_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input_batch,
-            output.as_raw(),
-            top.as_raw(),
-            left.as_raw(),
-            border_mode,
-            border_value,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.pad_and_stack_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input_batch,
+                output.as_raw(),
+                top.as_raw(),
+                left.as_raw(),
+                border_mode,
+                border_value,
+            ))
+        }
+    }
 }
 
 // ------------------------------------------------------------------
@@ -1640,20 +1720,22 @@ impl Pad {
         left: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.pad_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            top,
-            left,
-            border_mode,
-            border_value.as_ptr(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.pad_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                top,
+                left,
+                border_mode,
+                border_value.as_ptr(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -1677,21 +1759,23 @@ impl JointBilateralFilter {
         sigma_color: f32,
         sigma_space: f32,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.joint_bilateral_filter_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            input_color.as_raw(),
-            output.as_raw(),
-            diameter,
-            sigma_color,
-            sigma_space,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.joint_bilateral_filter_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                input_color.as_raw(),
+                output.as_raw(),
+                diameter,
+                sigma_color,
+                sigma_space,
+                border_mode,
+            ))
+        }
+    }
 }
 
 /// Connected-component labeling.
@@ -1736,26 +1820,28 @@ impl Label {
         connectivity: i32,
         assign_labels: i32,
         mask_type: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.label_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            bg_label.as_raw(),
-            min_threshold.as_raw(),
-            max_threshold.as_raw(),
-            min_size.as_raw(),
-            count.as_raw(),
-            stats.as_raw(),
-            mask.as_raw(),
-            connectivity,
-            assign_labels,
-            mask_type,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.label_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                bg_label.as_raw(),
+                min_threshold.as_raw(),
+                max_threshold.as_raw(),
+                min_size.as_raw(),
+                count.as_raw(),
+                stats.as_raw(),
+                mask.as_raw(),
+                connectivity,
+                assign_labels,
+                mask_type,
+            ))
+        }
+    }
 }
 
 /// Find contours of binary regions.
@@ -1786,17 +1872,19 @@ impl FindContours {
         input: &Tensor,
         points: &Tensor,
         num_points: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.find_contours_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            points.as_raw(),
-            num_points.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.find_contours_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                points.as_raw(),
+                num_points.as_raw(),
+            ))
+        }
+    }
 }
 
 /// Minimum-area rectangle around each contour.
@@ -1828,18 +1916,20 @@ impl MinAreaRect {
         output: &Tensor,
         num_points_in_contour: &Tensor,
         total_contours: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.min_area_rect_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            num_points_in_contour.as_raw(),
-            total_contours,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.min_area_rect_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                num_points_in_contour.as_raw(),
+                total_contours,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -1861,17 +1951,19 @@ impl BndBox {
         input: &Tensor,
         output: &Tensor,
         bboxes: *const c_void,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.bndbox_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            bboxes,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.bndbox_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                bboxes,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -1891,17 +1983,19 @@ impl Osd {
         input: &Tensor,
         output: &Tensor,
         elements: *const c_void,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.osd_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            elements,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.osd_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                elements,
+            ))
+        }
+    }
 }
 
 /// Random-resized-crop — the PyTorch-style augmentation.
@@ -1951,17 +2045,19 @@ impl RandomResizedCrop {
         input: &Tensor,
         output: &Tensor,
         interp: Interpolation,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.random_resized_crop_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            interp.raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.random_resized_crop_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                interp.raw(),
+            ))
+        }
+    }
 }
 
 /// Gaussian noise.
@@ -1996,20 +2092,22 @@ impl GaussianNoise {
         sigma: &Tensor,
         per_channel: bool,
         seed: u64,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.gaussian_noise_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            mu.as_raw(),
-            sigma.as_raw(),
-            per_channel,
-            seed,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.gaussian_noise_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                mu.as_raw(),
+                sigma.as_raw(),
+                per_channel,
+                seed,
+            ))
+        }
+    }
 }
 
 /// Rhomboid noise.
@@ -2041,18 +2139,20 @@ impl RhomboidNoise {
         output: &Tensor,
         beta: &Tensor,
         seed: u64,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.rhomboid_noise_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            beta.as_raw(),
-            seed,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.rhomboid_noise_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                beta.as_raw(),
+                seed,
+            ))
+        }
+    }
 }
 
 /// Salt-and-pepper noise.
@@ -2087,20 +2187,22 @@ impl SaltAndPepperNoise {
         pepper_prob: &Tensor,
         per_channel: bool,
         seed: u64,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.salt_and_pepper_noise_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            salt_prob.as_raw(),
-            pepper_prob.as_raw(),
-            per_channel,
-            seed,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.salt_and_pepper_noise_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                salt_prob.as_raw(),
+                pepper_prob.as_raw(),
+                per_channel,
+                seed,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -2119,18 +2221,20 @@ impl AdvCvtColor {
         output: &Tensor,
         code: i32,
         spec: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.adv_cvt_color_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            code,
-            spec,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.adv_cvt_color_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                code,
+                spec,
+            ))
+        }
+    }
 }
 
 /// SIFT — scale-invariant feature transform keypoint extractor.
@@ -2190,24 +2294,26 @@ impl Sift {
         edge_threshold: f32,
         init_sigma: f32,
         flags: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.sift_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            input.as_raw(),
-            feature_coords.as_raw(),
-            feature_metadata.as_raw(),
-            feature_descriptors.as_raw(),
-            num_features.as_raw(),
-            num_octave_layers,
-            contrast_threshold,
-            edge_threshold,
-            init_sigma,
-            flags,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.sift_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                input.as_raw(),
+                feature_coords.as_raw(),
+                feature_metadata.as_raw(),
+                feature_descriptors.as_raw(),
+                num_features.as_raw(),
+                num_octave_layers,
+                contrast_threshold,
+                edge_threshold,
+                init_sigma,
+                flags,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -2229,20 +2335,22 @@ impl HQResize {
         mag_interp: Interpolation,
         antialias: bool,
         roi: *const c_void,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.hq_resize_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            min_interp.raw(),
-            mag_interp.raw(),
-            antialias,
-            roi,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.hq_resize_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                min_interp.raw(),
+                mag_interp.raw(),
+                antialias,
+                roi,
+            ))
+        }
+    }
 }
 
 // ------------------------------------------------------------------
@@ -2274,25 +2382,27 @@ impl CropFlipNormalizeReformat {
         shift: f32,
         epsilon: f32,
         flags: u32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.crop_flip_normalize_reformat_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            crop_rect.as_raw(),
-            interp.raw(),
-            flip_code.as_raw(),
-            base.as_raw(),
-            scale.as_raw(),
-            global_scale,
-            shift,
-            epsilon,
-            flags,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.crop_flip_normalize_reformat_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                crop_rect.as_raw(),
+                interp.raw(),
+                flip_code.as_raw(),
+                base.as_raw(),
+                scale.as_raw(),
+                global_scale,
+                shift,
+                epsilon,
+                flags,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -2315,20 +2425,22 @@ impl GuidedFilter {
         radius: i32,
         eps: f32,
         border_mode: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.guided_filter_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            guide.as_raw(),
-            output.as_raw(),
-            radius,
-            eps,
-            border_mode,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.guided_filter_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                guide.as_raw(),
+                output.as_raw(),
+                radius,
+                eps,
+                border_mode,
+            ))
+        }
+    }
 }
 
 /// Pairwise feature-descriptor matcher (e.g. for SIFT output).
@@ -2367,24 +2479,26 @@ impl PairwiseMatcher {
         cross_check: bool,
         match_per_point: i32,
         norm_type: i32,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.pairwise_matcher_submit()?;
-        check(cu(
-            self.op.handle,
-            stream,
-            set1.as_raw(),
-            set2.as_raw(),
-            num_set1.as_raw(),
-            num_set2.as_raw(),
-            matches.as_raw(),
-            num_matches.as_raw(),
-            distances.as_raw(),
-            cross_check,
-            match_per_point,
-            norm_type,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.pairwise_matcher_submit()?;
+            check(cu(
+                self.op.handle,
+                stream,
+                set1.as_raw(),
+                set2.as_raw(),
+                num_set1.as_raw(),
+                num_set2.as_raw(),
+                matches.as_raw(),
+                num_matches.as_raw(),
+                distances.as_raw(),
+                cross_check,
+                match_per_point,
+                norm_type,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -2402,17 +2516,19 @@ impl HausdorffDistance {
         set1: &Tensor,
         set2: &Tensor,
         output: &Tensor,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.hausdorff_distance_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            set1.as_raw(),
-            set2.as_raw(),
-            output.as_raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.hausdorff_distance_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                set1.as_raw(),
+                set2.as_raw(),
+                output.as_raw(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -2440,24 +2556,26 @@ impl ResizeCropConvertReformat {
         offset: f32,
         cast_to_f32: bool,
         src_cast_to_f32: bool,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.resize_crop_convert_reformat_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            resize_size,
-            interp.raw(),
-            crop_pos,
-            manip,
-            scale,
-            offset,
-            cast_to_f32,
-            src_cast_to_f32,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.resize_crop_convert_reformat_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                resize_size,
+                interp.raw(),
+                crop_pos,
+                manip,
+                scale,
+                offset,
+                cast_to_f32,
+                src_cast_to_f32,
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -2480,19 +2598,21 @@ impl RotateBatch {
         angle_deg: &Tensor,
         shift: &Tensor,
         interp: Interpolation,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.rotate_batch_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            angle_deg.as_raw(),
-            shift.as_raw(),
-            interp.raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.rotate_batch_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                angle_deg.as_raw(),
+                shift.as_raw(),
+                interp.raw(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -2516,20 +2636,22 @@ impl WarpAffineBatch {
         flags: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.warp_affine_batch_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input.as_raw(),
-            output.as_raw(),
-            xform.as_raw(),
-            flags,
-            border_mode,
-            border_value.as_ptr(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.warp_affine_batch_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input.as_raw(),
+                output.as_raw(),
+                xform.as_raw(),
+                flags,
+                border_mode,
+                border_value.as_ptr(),
+            ))
+        }
+    }
 }
 
 simple_op! {
@@ -2547,15 +2669,17 @@ impl ResizeVarShape {
         input_batch: *mut c_void,
         output_batch: *mut c_void,
         interp: Interpolation,
-    ) -> Result<()> { unsafe {
-        let c = cvcuda()?;
-        let cu = c.resize_var_shape_submit()?;
-        check(cu(
-            self.raw(),
-            stream,
-            input_batch,
-            output_batch,
-            interp.raw(),
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cvcuda()?;
+            let cu = c.resize_var_shape_submit()?;
+            check(cu(
+                self.raw(),
+                stream,
+                input_batch,
+                output_batch,
+                interp.raw(),
+            ))
+        }
+    }
 }

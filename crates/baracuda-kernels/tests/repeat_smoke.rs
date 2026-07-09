@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `RepeatPlan<f32, N>` — per-axis tile.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RepeatArgs, RepeatDescriptor, RepeatPlan,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, RepeatArgs, RepeatDescriptor, RepeatPlan, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -36,8 +36,8 @@ fn repeat_1d() {
         repeats,
         element: ElementKind::F32,
     };
-    let plan = RepeatPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RepeatPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RepeatArgs::<f32, 1> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -87,8 +87,8 @@ fn repeat_2d() {
         repeats,
         element: ElementKind::F32,
     };
-    let plan = RepeatPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RepeatPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RepeatArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -129,8 +129,8 @@ fn repeat_one_is_identity() {
         repeats,
         element: ElementKind::F32,
     };
-    let plan = RepeatPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RepeatPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RepeatArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),

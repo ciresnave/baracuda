@@ -5,10 +5,10 @@
 //! no clipping happens — i.e. for any `q ∈ [qmin, qmax]`,
 //! `dequant(q) = scale * (q - zp)` exactly.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, DequantizePerTensorArgs, DequantizePerTensorDescriptor,
-    DequantizePerTensorPlan, ElementKind, PlanPreference, S8, TensorMut, TensorRef, Workspace,
+    DequantizePerTensorArgs, DequantizePerTensorDescriptor, DequantizePerTensorPlan, ElementKind,
+    PlanPreference, S8, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -27,9 +27,7 @@ fn dequantize_per_tensor_s8_f32_exact_inverse() {
     let zero_point: i32 = 3;
     // Choose q values entirely in [-128, 127] so there's no clipping in
     // the (notional) FW. Reference: x[i] = scale * (q[i] - zp).
-    let host_q_storage: Vec<S8> = (-5i32..5)
-        .map(|i| S8(i as i8))
-        .collect();
+    let host_q_storage: Vec<S8> = (-5i32..5).map(|i| S8(i as i8)).collect();
     let host_expected: Vec<f32> = host_q_storage
         .iter()
         .map(|q| scale * ((q.0 as i32 - zero_point) as f32))
@@ -45,12 +43,9 @@ fn dequantize_per_tensor_s8_f32_exact_inverse() {
         input_element: ElementKind::F32,
         output_element: ElementKind::S8,
     };
-    let plan = DequantizePerTensorPlan::<f32, S8>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .expect("select");
+    let plan =
+        DequantizePerTensorPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = DequantizePerTensorArgs::<f32, S8> {
         input: TensorRef {
             data: dev_q.as_slice(),

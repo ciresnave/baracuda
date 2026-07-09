@@ -340,8 +340,7 @@ pub type PFN_ncclRedOpDestroy =
 pub type PFN_ncclGetErrorString =
     unsafe extern "C" fn(result: ncclResult_t) -> *const core::ffi::c_char;
 /// Function-pointer type for `ncclGetLastError` (fetch the last error string on a communicator). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
-pub type PFN_ncclGetLastError =
-    unsafe extern "C" fn(comm: ncclComm_t) -> *const core::ffi::c_char;
+pub type PFN_ncclGetLastError = unsafe extern "C" fn(comm: ncclComm_t) -> *const core::ffi::c_char;
 
 // ---- loader --------------------------------------------------------------
 

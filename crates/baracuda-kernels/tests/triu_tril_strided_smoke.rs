@@ -16,11 +16,11 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test triu_tril_strided_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, TrilArgs,
-    TrilDescriptor, TrilPlan, TriuArgs, TriuBackwardArgs, TriuBackwardDescriptor,
-    TriuBackwardPlan, TriuDescriptor, TriuPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, TrilArgs, TrilDescriptor, TrilPlan,
+    TriuArgs, TriuBackwardArgs, TriuBackwardDescriptor, TriuBackwardPlan, TriuDescriptor, TriuPlan,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -385,7 +385,11 @@ fn triu_strided_transposed_input_i32() {
         for j in 0..n {
             let src = (i as i64) * logical_stride[0] + (j as i64) * logical_stride[1];
             let dst = (i * n + j) as usize;
-            expected[dst] = if j >= i + 0 { host_phys[src as usize] } else { 0 };
+            expected[dst] = if j >= i + 0 {
+                host_phys[src as usize]
+            } else {
+                0
+            };
         }
     }
 
@@ -419,9 +423,8 @@ fn triu_bw_strided_transposed_input_f32() {
         diagonal: 0,
         element: ElementKind::F32,
     };
-    let plan =
-        TriuBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+    let plan = TriuBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = TriuBackwardArgs::<f32, 2> {
         grad_output: TensorRef {
             data: dev_dy.as_slice(),

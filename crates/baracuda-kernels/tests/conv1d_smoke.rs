@@ -7,10 +7,10 @@
 //!
 //! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Conv1dArgs, Conv1dBwArgs, Conv1dDescriptor, Conv1dDwArgs, Conv1dPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    Conv1dArgs, Conv1dBwArgs, Conv1dDescriptor, Conv1dDwArgs, Conv1dPlan, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -235,7 +235,12 @@ fn conv1d_f32_fw_bw() {
     for i in 0..y_n {
         let diff = (got_y[i] as f64 - exp_y[i]).abs();
         let t = tol * exp_y[i].abs().max(1.0);
-        assert!(diff <= t, "conv1d FW mismatch @ {i}: got={}, want={}", got_y[i], exp_y[i]);
+        assert!(
+            diff <= t,
+            "conv1d FW mismatch @ {i}: got={}, want={}",
+            got_y[i],
+            exp_y[i]
+        );
     }
 
     // BW data
@@ -277,7 +282,12 @@ fn conv1d_f32_fw_bw() {
     for i in 0..x_n {
         let diff = (got_dx[i] as f64 - exp_dx[i]).abs();
         let t = tol * exp_dx[i].abs().max(1.0);
-        assert!(diff <= t, "conv1d BW-data mismatch @ {i}: got={}, want={}", got_dx[i], exp_dx[i]);
+        assert!(
+            diff <= t,
+            "conv1d BW-data mismatch @ {i}: got={}, want={}",
+            got_dx[i],
+            exp_dx[i]
+        );
     }
 
     // BW filter
@@ -318,6 +328,11 @@ fn conv1d_f32_fw_bw() {
     for i in 0..w_n {
         let diff = (got_dw[i] as f64 - exp_dw[i]).abs();
         let t = tol * exp_dw[i].abs().max(1.0);
-        assert!(diff <= t, "conv1d BW-filter mismatch @ {i}: got={}, want={}", got_dw[i], exp_dw[i]);
+        assert!(
+            diff <= t,
+            "conv1d BW-filter mismatch @ {i}: got={}, want={}",
+            got_dw[i],
+            exp_dw[i]
+        );
     }
 }

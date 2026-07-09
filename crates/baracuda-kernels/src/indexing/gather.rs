@@ -20,8 +20,8 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, IndexElement, IndexElementKind, IndexingKind,
-    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut,
-    TensorRef, Workspace,
+    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef,
+    Workspace,
 };
 
 /// Descriptor for a `gather` op.
@@ -129,8 +129,10 @@ impl<T: Element, const N: usize> GatherPlan<T, N> {
             }
         }
 
-        let supported =
-            matches!(T::KIND, ElementKind::F32 | ElementKind::F64 | ElementKind::I32);
+        let supported = matches!(
+            T::KIND,
+            ElementKind::F32 | ElementKind::F64 | ElementKind::I32
+        );
         if !supported {
             return Err(Error::Unsupported(
                 "baracuda-kernels::GatherPlan: today only `f32`, `f64`, `i32` wired",
@@ -261,50 +263,110 @@ impl<T: Element, const N: usize> GatherPlan<T, N> {
         let status = match (T::KIND, I::KIND) {
             (ElementKind::F32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gather_f32_run(
-                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
-                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
-                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    out_numel,
+                    rank,
+                    self.desc.gather_dim,
+                    self.desc.src_dim_size,
+                    out_shape.as_ptr(),
+                    stride_src.as_ptr(),
+                    stride_index.as_ptr(),
+                    stride_out.as_ptr(),
+                    src_ptr,
+                    idx_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gather_f64_run(
-                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
-                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
-                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    out_numel,
+                    rank,
+                    self.desc.gather_dim,
+                    self.desc.src_dim_size,
+                    out_shape.as_ptr(),
+                    stride_src.as_ptr(),
+                    stride_index.as_ptr(),
+                    stride_out.as_ptr(),
+                    src_ptr,
+                    idx_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::I32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gather_i32_run(
-                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
-                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
-                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    out_numel,
+                    rank,
+                    self.desc.gather_dim,
+                    self.desc.src_dim_size,
+                    out_shape.as_ptr(),
+                    stride_src.as_ptr(),
+                    stride_index.as_ptr(),
+                    stride_out.as_ptr(),
+                    src_ptr,
+                    idx_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, IndexElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gather_i64idx_f32_run(
-                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
-                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
-                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    out_numel,
+                    rank,
+                    self.desc.gather_dim,
+                    self.desc.src_dim_size,
+                    out_shape.as_ptr(),
+                    stride_src.as_ptr(),
+                    stride_index.as_ptr(),
+                    stride_out.as_ptr(),
+                    src_ptr,
+                    idx_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, IndexElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gather_i64idx_f64_run(
-                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
-                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
-                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    out_numel,
+                    rank,
+                    self.desc.gather_dim,
+                    self.desc.src_dim_size,
+                    out_shape.as_ptr(),
+                    stride_src.as_ptr(),
+                    stride_index.as_ptr(),
+                    stride_out.as_ptr(),
+                    src_ptr,
+                    idx_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::I32, IndexElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gather_i64idx_i32_run(
-                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
-                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
-                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    out_numel,
+                    rank,
+                    self.desc.gather_dim,
+                    self.desc.src_dim_size,
+                    out_shape.as_ptr(),
+                    stride_src.as_ptr(),
+                    stride_index.as_ptr(),
+                    stride_out.as_ptr(),
+                    src_ptr,
+                    idx_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

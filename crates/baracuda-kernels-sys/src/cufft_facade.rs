@@ -77,12 +77,12 @@
 use core::ffi::c_void;
 
 use super::{
+    CUFFT_C2C, CUFFT_C2R, CUFFT_D2Z, CUFFT_FORWARD, CUFFT_INVERSE, CUFFT_R2C, CUFFT_Z2D, CUFFT_Z2Z,
     baracuda_kernels_scale_inplace_c32_run, baracuda_kernels_scale_inplace_c64_run,
     baracuda_kernels_scale_inplace_real_f32_run, baracuda_kernels_scale_inplace_real_f64_run,
     cufftComplex, cufftDestroy, cufftDoubleComplex, cufftExecC2C, cufftExecC2R, cufftExecD2Z,
     cufftExecR2C, cufftExecZ2D, cufftExecZ2Z, cufftHandle, cufftPlan1d, cufftPlanMany,
-    cufftSetStream, CUFFT_C2C, CUFFT_C2R, CUFFT_D2Z, CUFFT_FORWARD, CUFFT_INVERSE, CUFFT_R2C,
-    CUFFT_Z2D, CUFFT_Z2Z,
+    cufftSetStream,
 };
 
 // =============================================================================
@@ -189,8 +189,7 @@ macro_rules! fft_1d_pair {
                 return INVALID;
             }
             let mut plan = CufftPlan::new();
-            let st =
-                unsafe { cufftPlan1d(&mut plan.h as *mut _, n, $cufft_type, batch) };
+            let st = unsafe { cufftPlan1d(&mut plan.h as *mut _, n, $cufft_type, batch) };
             if st != 0 {
                 return INTERNAL;
             }
@@ -198,19 +197,20 @@ macro_rules! fft_1d_pair {
             if s != OK {
                 return s;
             }
-            let direction = if inverse != 0 { CUFFT_INVERSE } else { CUFFT_FORWARD };
-            let st = unsafe {
-                $exec(plan.h, x as *mut $cell, y as *mut $cell, direction)
+            let direction = if inverse != 0 {
+                CUFFT_INVERSE
+            } else {
+                CUFFT_FORWARD
             };
+            let st = unsafe { $exec(plan.h, x as *mut $cell, y as *mut $cell, direction) };
             if st != 0 {
                 return INTERNAL;
             }
             if inverse != 0 {
                 let numel = (batch as i64) * (n as i64);
                 let scale = 1.0 as $T / (n as $T);
-                let s = unsafe {
-                    $scale_inplace(numel, scale, y, core::ptr::null_mut(), 0, stream)
-                };
+                let s =
+                    unsafe { $scale_inplace(numel, scale, y, core::ptr::null_mut(), 0, stream) };
                 if s != OK {
                     return s;
                 }
@@ -282,8 +282,7 @@ macro_rules! rfft_1d {
                 return INVALID;
             }
             let mut plan = CufftPlan::new();
-            let st =
-                unsafe { cufftPlan1d(&mut plan.h as *mut _, n, $cufft_type, batch) };
+            let st = unsafe { cufftPlan1d(&mut plan.h as *mut _, n, $cufft_type, batch) };
             if st != 0 {
                 return INTERNAL;
             }
@@ -360,8 +359,7 @@ macro_rules! irfft_1d {
                 return INVALID;
             }
             let mut plan = CufftPlan::new();
-            let st =
-                unsafe { cufftPlan1d(&mut plan.h as *mut _, n, $cufft_type, batch) };
+            let st = unsafe { cufftPlan1d(&mut plan.h as *mut _, n, $cufft_type, batch) };
             if st != 0 {
                 return INTERNAL;
             }
@@ -375,9 +373,7 @@ macro_rules! irfft_1d {
             }
             let numel = (batch as i64) * (n as i64);
             let scale = 1.0 as $T / (n as $T);
-            let s = unsafe {
-                $scale_inplace(numel, scale, y, core::ptr::null_mut(), 0, stream)
-            };
+            let s = unsafe { $scale_inplace(numel, scale, y, core::ptr::null_mut(), 0, stream) };
             if s != OK {
                 return s;
             }
@@ -511,10 +507,12 @@ macro_rules! fft_nd_pair {
             if s != OK {
                 return s;
             }
-            let direction = if inverse != 0 { CUFFT_INVERSE } else { CUFFT_FORWARD };
-            let st = unsafe {
-                $exec(plan.h, x as *mut $cell, y as *mut $cell, direction)
+            let direction = if inverse != 0 {
+                CUFFT_INVERSE
+            } else {
+                CUFFT_FORWARD
             };
+            let st = unsafe { $exec(plan.h, x as *mut $cell, y as *mut $cell, direction) };
             if st != 0 {
                 return INTERNAL;
             }

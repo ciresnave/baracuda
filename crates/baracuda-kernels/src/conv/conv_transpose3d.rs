@@ -16,18 +16,18 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16,
+    CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT, CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
     cudnnConvolutionBackwardData, cudnnConvolutionBackwardFilter, cudnnConvolutionDescriptor_t,
     cudnnConvolutionForward, cudnnCreate, cudnnCreateConvolutionDescriptor,
     cudnnCreateFilterDescriptor, cudnnCreateTensorDescriptor, cudnnDestroy,
-    cudnnDestroyConvolutionDescriptor, cudnnDestroyFilterDescriptor,
-    cudnnDestroyTensorDescriptor, cudnnFilterDescriptor_t,
-    cudnnGetConvolutionBackwardDataWorkspaceSize, cudnnGetConvolutionBackwardFilterWorkspaceSize,
-    cudnnGetConvolutionForwardWorkspaceSize, cudnnHandle_t, cudnnSetConvolutionGroupCount,
-    cudnnSetConvolutionNdDescriptor, cudnnSetFilterNdDescriptor, cudnnSetStream,
-    cudnnSetTensorNdDescriptor, cudnnTensorDescriptor_t, CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
-    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT,
-    CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
+    cudnnDestroyConvolutionDescriptor, cudnnDestroyFilterDescriptor, cudnnDestroyTensorDescriptor,
+    cudnnFilterDescriptor_t, cudnnGetConvolutionBackwardDataWorkspaceSize,
+    cudnnGetConvolutionBackwardFilterWorkspaceSize, cudnnGetConvolutionForwardWorkspaceSize,
+    cudnnHandle_t, cudnnSetConvolutionGroupCount, cudnnSetConvolutionNdDescriptor,
+    cudnnSetFilterNdDescriptor, cudnnSetStream, cudnnSetTensorNdDescriptor,
+    cudnnTensorDescriptor_t,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ConvKind, Element, ElementKind, KernelSku, MathPrecision, OpCategory,
@@ -252,12 +252,7 @@ impl<T: Element> ConvTranspose3dPlan<T> {
                 "baracuda-kernels::ConvTranspose3dPlan: dtype must be f32 / f64 / f16 / bf16",
             ));
         }
-        if desc.batch <= 0
-            || desc.c_in <= 0
-            || desc.d_in <= 0
-            || desc.h_in <= 0
-            || desc.w_in <= 0
-        {
+        if desc.batch <= 0 || desc.c_in <= 0 || desc.d_in <= 0 || desc.h_in <= 0 || desc.w_in <= 0 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose3dPlan: input shape extents must be > 0",
             ));
@@ -715,15 +710,8 @@ impl<T: Element> ConvTranspose3dPlan<T> {
         let x_s_c = d_out * h_out * w_out;
         let x_s_n = self.desc.c_out * x_s_c;
         let x_strides = [x_s_n, x_s_c, x_s_d, x_s_h, x_s_w];
-        let status = unsafe {
-            cudnnSetTensorNdDescriptor(
-                xd,
-                dt,
-                5,
-                x_dims.as_ptr(),
-                x_strides.as_ptr(),
-            )
-        };
+        let status =
+            unsafe { cudnnSetTensorNdDescriptor(xd, dt, 5, x_dims.as_ptr(), x_strides.as_ptr()) };
         if status != 0 {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(xd);
@@ -751,15 +739,8 @@ impl<T: Element> ConvTranspose3dPlan<T> {
         let y_s_c = self.desc.d_in * self.desc.h_in * self.desc.w_in;
         let y_s_n = self.desc.c_in * y_s_c;
         let y_strides = [y_s_n, y_s_c, y_s_d, y_s_h, y_s_w];
-        let status = unsafe {
-            cudnnSetTensorNdDescriptor(
-                yd,
-                dt,
-                5,
-                y_dims.as_ptr(),
-                y_strides.as_ptr(),
-            )
-        };
+        let status =
+            unsafe { cudnnSetTensorNdDescriptor(yd, dt, 5, y_dims.as_ptr(), y_strides.as_ptr()) };
         if status != 0 {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(yd);
@@ -781,9 +762,8 @@ impl<T: Element> ConvTranspose3dPlan<T> {
             self.desc.h_filt,
             self.desc.w_filt,
         ];
-        let status = unsafe {
-            cudnnSetFilterNdDescriptor(wd, dt, CUDNN_TENSOR_NCHW, 5, w_dims.as_ptr())
-        };
+        let status =
+            unsafe { cudnnSetFilterNdDescriptor(wd, dt, CUDNN_TENSOR_NCHW, 5, w_dims.as_ptr()) };
         if status != 0 {
             unsafe {
                 let _ = cudnnDestroyFilterDescriptor(wd);

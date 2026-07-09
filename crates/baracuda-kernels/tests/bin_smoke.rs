@@ -14,7 +14,7 @@
 
 #![cfg(feature = "sm89")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     Bin, BinGemmArgs, BinGemmDescriptor, BinGemmPlan, LayoutSku, MatrixMut, MatrixRef,
     PlanPreference, Workspace,
@@ -88,21 +88,27 @@ fn run_bin_rcr(m: i32, n: i32, k: i32) {
 
     let mut expected = vec![0i32; mu * nu];
     cpu_bin_gemm_rcr(
-        mu, nu, ku,
-        &host_a_bytes, k_bytes,
-        &host_b_bytes, k_bytes,
-        &mut expected, nu,
+        mu,
+        nu,
+        ku,
+        &host_a_bytes,
+        k_bytes,
+        &host_b_bytes,
+        k_bytes,
+        &mut expected,
+        nu,
     );
 
     let dev_a_bytes = DeviceBuffer::from_slice(&ctx, &host_a_bytes).expect("upload A");
     let dev_b_bytes = DeviceBuffer::from_slice(&ctx, &host_b_bytes).expect("upload B");
     let dev_a = dev_a_bytes.view_as::<Bin>();
     let dev_b = dev_b_bytes.view_as::<Bin>();
-    let mut dev_d: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
+    let mut dev_d: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
     let desc = BinGemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
     };
     let plan = BinGemmPlan::select(&stream, &desc, PlanPreference::default())
@@ -110,11 +116,26 @@ fn run_bin_rcr(m: i32, n: i32, k: i32) {
 
     let args = BinGemmArgs {
         // A: row-major [M, K]; ld in BYTES = K/8.
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k_bytes as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k_bytes as i64,
+        },
         // B: col-major [K, N] (RCR); ld in BYTES = K/8.
-        b: MatrixRef { data: dev_b, rows: k, cols: n, ld: k_bytes as i64 },
+        b: MatrixRef {
+            data: dev_b,
+            rows: k,
+            cols: n,
+            ld: k_bytes as i64,
+        },
         // D: row-major [M, N] int32; ld in ELEMENTS = N.
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
     };
     plan.run(&stream, Workspace::None, args)
         .expect("bin RCR GEMM run");
@@ -154,32 +175,37 @@ fn run_bin_rcr(m: i32, n: i32, k: i32) {
 // one K-tile and exercises padding.
 // ============================================================================
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rcr_64_64_256() {
     // Smallest tile-aligned shape (M_TILE=N_TILE=K_TILE).
     run_bin_rcr(64, 64, 256);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rcr_128_128_512() {
     // 2x2 grid, 2 K-tiles.
     run_bin_rcr(128, 128, 512);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rcr_256_128_256() {
     // 4x2 grid, 1 K-tile.
     run_bin_rcr(256, 128, 256);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rcr_100_70_128() {
     // Ragged in M and N; K=128 is below K_TILE=256 (exercises K-tile
     // padding at the boundary).
     run_bin_rcr(100, 70, 128);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rcr_65_65_264() {
     // Tile-edge ragged: M, N each 1 past tile boundary; K=264 is one
     // K-tile + 8 bits (exercises K-tile padding when the second tile

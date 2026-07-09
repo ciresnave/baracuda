@@ -234,50 +234,98 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
         let status = match (self.desc.kind, T::KIND) {
             (UnaryKind::Threshold, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_f32_run(
-                    numel, x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Threshold, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_f16_run(
-                    numel, x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Threshold, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_bf16_run(
-                    numel, x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Threshold, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_f64_run(
-                    numel, x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_f32_run(
-                    numel, x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_f16_run(
-                    numel, x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_bf16_run(
-                    numel, x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_f64_run(
-                    numel, x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {
@@ -313,34 +361,66 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
         let status = match (self.desc.kind, T::KIND) {
             (UnaryKind::PowI, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_f32_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_f16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_bf16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_f64_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

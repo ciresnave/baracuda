@@ -32,19 +32,15 @@ pub mod triu_backward;
 pub mod write_slice;
 
 pub use concat::{ConcatArgs, ConcatDescriptor, ConcatPlan};
+pub use concat_backward::{ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan};
 pub use contiguize::{ContiguizeArgs, ContiguizeDescriptor, ContiguizePlan};
 pub use fill::{FillArgs, FillDescriptor, FillPlan};
-pub use concat_backward::{
-    ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan,
-};
 pub use flip::{FlipArgs, FlipDescriptor, FlipPlan};
 pub use flip_backward::{FlipBackwardArgs, FlipBackwardDescriptor, FlipBackwardPlan};
 pub use pad::{PadArgs, PadDescriptor, PadPlan};
 pub use pad_backward::{PadBackwardArgs, PadBackwardDescriptor, PadBackwardPlan};
 pub use permute::{PermuteArgs, PermuteDescriptor, PermutePlan};
-pub use permute_backward::{
-    PermuteBackwardArgs, PermuteBackwardDescriptor, PermuteBackwardPlan,
-};
+pub use permute_backward::{PermuteBackwardArgs, PermuteBackwardDescriptor, PermuteBackwardPlan};
 pub use repeat::{RepeatArgs, RepeatDescriptor, RepeatPlan};
 pub use repeat_backward::{RepeatBackwardArgs, RepeatBackwardDescriptor, RepeatBackwardPlan};
 pub use roll::{RollArgs, RollDescriptor, RollPlan};

@@ -100,8 +100,8 @@ pub use baracuda_kernels::{Error, Result};
 
 /// Support types used across the FlashInfer plan APIs.
 pub use baracuda_kernels::{
-    contiguous_stride, BackendKind, ElementKind, PlanPreference, PrecisionGuarantee, TensorMut,
-    TensorRef, Workspace,
+    BackendKind, ElementKind, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 /// Raw C-ABI FFI surface, for callers that need to drop below the safe
@@ -121,12 +121,12 @@ pub mod prelude {
     };
     pub use crate::sampling::{
         PerRowSampler, PerRowSamplingArgs, PerRowSamplingDescriptor, PerRowSamplingPlan,
-        SamplerKind, SpeculativeSamplingArgs, SpeculativeSamplingDescriptor, SpeculativeSamplingPlan,
-        TokenPenaltyArgs, TokenPenaltyDescriptor, TokenPenaltyPlan, TopKTopPSamplingArgs,
-        TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
+        SamplerKind, SpeculativeSamplingArgs, SpeculativeSamplingDescriptor,
+        SpeculativeSamplingPlan, TokenPenaltyArgs, TokenPenaltyDescriptor, TokenPenaltyPlan,
+        TopKTopPSamplingArgs, TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
     };
     pub use crate::{
-        contiguous_stride, BackendKind, ElementKind, Error, PlanPreference, Result, TensorMut,
-        TensorRef, Workspace,
+        BackendKind, ElementKind, Error, PlanPreference, Result, TensorMut, TensorRef, Workspace,
+        contiguous_stride,
     };
 }

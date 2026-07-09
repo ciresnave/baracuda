@@ -8,10 +8,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BatchedSvdaArgs, BatchedSvdaDescriptor, BatchedSvdaPlan, ElementKind,
-    PlanPreference, TensorMut, Workspace,
+    BatchedSvdaArgs, BatchedSvdaDescriptor, BatchedSvdaPlan, ElementKind, PlanPreference,
+    TensorMut, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -314,7 +314,11 @@ fn svda_batched_f64_full_rank_reconstruct() {
     for bi in 0..b as usize {
         let s_b = &s_host[bi * r..(bi + 1) * r];
         for i in 0..r {
-            assert!(s_b[i] >= 0.0, "f64 σ < 0 at batch {bi}, idx {i}: {}", s_b[i]);
+            assert!(
+                s_b[i] >= 0.0,
+                "f64 σ < 0 at batch {bi}, idx {i}: {}",
+                s_b[i]
+            );
         }
         for i in 1..r {
             assert!(

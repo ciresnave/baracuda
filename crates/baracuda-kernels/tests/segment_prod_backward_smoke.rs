@@ -4,10 +4,10 @@
 //! BW formula: `d_input[k, d] = d_output[seg, d] * (output[seg, d] / input[k, d])`.
 //! Test uses non-zero inputs to avoid the divide-by-zero limitation.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SegmentProdBackwardArgs,
-    SegmentProdBackwardDescriptor, SegmentProdBackwardPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SegmentProdBackwardArgs, SegmentProdBackwardDescriptor,
+    SegmentProdBackwardPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

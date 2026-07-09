@@ -10,10 +10,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test reduce_any_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Bool, BoolReduceArgs, BoolReduceDescriptor, BoolReducePlan, ElementKind,
-    PlanPreference, ReduceKind, TensorMut, TensorRef, Workspace,
+    Bool, BoolReduceArgs, BoolReduceDescriptor, BoolReducePlan, ElementKind, PlanPreference,
+    ReduceKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -49,12 +49,7 @@ fn fill_pattern_f32(host: &mut Vec<f32>) {
     }
 }
 
-fn run_any<T>(
-    ctx: &Context,
-    stream: &Stream,
-    host_x: &[T],
-    element: ElementKind,
-) -> Vec<u8>
+fn run_any<T>(ctx: &Context, stream: &Stream, host_x: &[T], element: ElementKind) -> Vec<u8>
 where
     T: baracuda_kernels::Element,
 {
@@ -172,10 +167,7 @@ fn any_bool() {
     // For Bool input: non-zero in f32 → Bool(1), zero → Bool(0). The
     // "all non-zero" row keeps all Bool(1); the "one non-zero at col
     // 17" row stays as a single Bool(1).
-    let host: Vec<Bool> = host_f32
-        .iter()
-        .map(|&v| Bool::new(v != 0.0))
-        .collect();
+    let host: Vec<Bool> = host_f32.iter().map(|&v| Bool::new(v != 0.0)).collect();
     let got = run_any::<Bool>(&ctx, &stream, &host, ElementKind::Bool);
     assert_expected(&got);
 }

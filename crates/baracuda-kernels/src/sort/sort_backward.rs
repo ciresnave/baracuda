@@ -92,9 +92,7 @@ impl<T: Element> SortBackwardPlan<T> {
     /// Validate args.
     pub fn can_implement(&self, args: &SortBackwardArgs<'_, T>) -> Result<()> {
         let expected = [self.desc.batch, self.desc.row_len];
-        if args.dy.shape != expected
-            || args.indices.shape != expected
-            || args.dx.shape != expected
+        if args.dy.shape != expected || args.indices.shape != expected || args.dx.shape != expected
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SortBackwardPlan: tensor shapes != [batch, row_len]",

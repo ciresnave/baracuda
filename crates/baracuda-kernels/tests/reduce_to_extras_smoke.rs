@@ -7,7 +7,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::bf16;
 
 fn setup() -> (Context, Stream) {
@@ -31,12 +31,7 @@ fn contig_strides(shape: &[i32]) -> Vec<i64> {
 /// CPU reference for `reduce_min_to`: per-output cell, walk all input
 /// cells that broadcast TO it and take min. Empty broadcast set ⇒ the
 /// kernel returns `+inf` / `+max`.
-fn cpu_min_to_f32(
-    src: &[f32],
-    in_shape: &[i32],
-    in_stride: &[i64],
-    out_shape: &[i32],
-) -> Vec<f32> {
+fn cpu_min_to_f32(src: &[f32], in_shape: &[i32], in_stride: &[i64], out_shape: &[i32]) -> Vec<f32> {
     let rank = in_shape.len();
     let out_numel: usize = out_shape.iter().map(|&d| d as usize).product();
     let mut dst = vec![f32::INFINITY; out_numel];
@@ -52,9 +47,7 @@ fn cpu_min_to_f32(
             in_coord[d] = (lin % s) as i32;
             lin /= s;
         }
-        let in_off: i64 = (0..rank)
-            .map(|d| (in_coord[d] as i64) * in_stride[d])
-            .sum();
+        let in_off: i64 = (0..rank).map(|d| (in_coord[d] as i64) * in_stride[d]).sum();
         let mut out_lin: usize = 0;
         for d in 0..rank {
             let c = if out_shape[d] == 1 { 0 } else { in_coord[d] };
@@ -88,9 +81,7 @@ fn cpu_prod_to_f32(
             in_coord[d] = (lin % s) as i32;
             lin /= s;
         }
-        let in_off: i64 = (0..rank)
-            .map(|d| (in_coord[d] as i64) * in_stride[d])
-            .sum();
+        let in_off: i64 = (0..rank).map(|d| (in_coord[d] as i64) * in_stride[d]).sum();
         let mut out_lin: usize = 0;
         for d in 0..rank {
             let c = if out_shape[d] == 1 { 0 } else { in_coord[d] };
@@ -121,10 +112,12 @@ fn ffi_reduce_min_to_f32_3d() {
         baracuda_kernels_sys::baracuda_kernels_reduce_min_to_f32_run(
             dev_src.as_slice().as_raw().0 as *const c_void,
             dev_dst.as_slice_mut().as_raw().0 as *mut c_void,
-            in_shape.as_ptr(), in_stride.as_ptr(),
+            in_shape.as_ptr(),
+            in_stride.as_ptr(),
             in_shape.len() as i32,
             out_shape.as_ptr(),
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -137,8 +130,10 @@ fn ffi_reduce_min_to_f32_3d() {
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
         let allow = e.abs().max(1.0) * 1e-5;
-        assert!(diff <= allow,
-            "min_to f32 @ {i}: got {g} expected {e} (diff {diff} > allow {allow})");
+        assert!(
+            diff <= allow,
+            "min_to f32 @ {i}: got {g} expected {e} (diff {diff} > allow {allow})"
+        );
     }
 }
 
@@ -162,10 +157,12 @@ fn ffi_reduce_prod_to_f32_3d() {
         baracuda_kernels_sys::baracuda_kernels_reduce_prod_to_f32_run(
             dev_src.as_slice().as_raw().0 as *const c_void,
             dev_dst.as_slice_mut().as_raw().0 as *mut c_void,
-            in_shape.as_ptr(), in_stride.as_ptr(),
+            in_shape.as_ptr(),
+            in_stride.as_ptr(),
             in_shape.len() as i32,
             out_shape.as_ptr(),
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -178,8 +175,10 @@ fn ffi_reduce_prod_to_f32_3d() {
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
         let allow = e.abs().max(1.0) * 1e-5;
-        assert!(diff <= allow,
-            "prod_to f32 @ {i}: got {g} expected {e} (diff {diff} > allow {allow})");
+        assert!(
+            diff <= allow,
+            "prod_to f32 @ {i}: got {g} expected {e} (diff {diff} > allow {allow})"
+        );
     }
 }
 
@@ -206,10 +205,12 @@ fn ffi_reduce_min_to_bf16_3d() {
         baracuda_kernels_sys::baracuda_kernels_reduce_min_to_bf16_run(
             dev_src.as_slice().as_raw().0 as *const c_void,
             dev_dst.as_slice_mut().as_raw().0 as *mut c_void,
-            in_shape.as_ptr(), in_stride.as_ptr(),
+            in_shape.as_ptr(),
+            in_stride.as_ptr(),
             in_shape.len() as i32,
             out_shape.as_ptr(),
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -227,8 +228,10 @@ fn ffi_reduce_min_to_bf16_3d() {
         let e_bf16 = bf16::from_f32(*e).to_f32();
         let diff = (g_f32 - e_bf16).abs();
         let allow = e_bf16.abs().max(1.0) * 8e-3;
-        assert!(diff <= allow,
-            "min_to bf16 @ {i}: got {g_f32} expected {e_bf16} (diff {diff} > allow {allow})");
+        assert!(
+            diff <= allow,
+            "min_to bf16 @ {i}: got {g_f32} expected {e_bf16} (diff {diff} > allow {allow})"
+        );
     }
 }
 
@@ -256,10 +259,12 @@ fn ffi_reduce_prod_to_f16_3d() {
         baracuda_kernels_sys::baracuda_kernels_reduce_prod_to_f16_run(
             dev_src.as_slice().as_raw().0 as *const c_void,
             dev_dst.as_slice_mut().as_raw().0 as *mut c_void,
-            in_shape.as_ptr(), in_stride.as_ptr(),
+            in_shape.as_ptr(),
+            in_stride.as_ptr(),
             in_shape.len() as i32,
             out_shape.as_ptr(),
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -276,7 +281,9 @@ fn ffi_reduce_prod_to_f16_3d() {
         let g_f32 = g.to_f32();
         let diff = (g_f32 - e).abs();
         let allow = e.abs().max(1.0) * 1.5e-2;
-        assert!(diff <= allow,
-            "prod_to f16 @ {i}: got {g_f32} expected {e} (diff {diff} > allow {allow})");
+        assert!(
+            diff <= allow,
+            "prod_to f16 @ {i}: got {g_f32} expected {e} (diff {diff} > allow {allow})"
+        );
     }
 }

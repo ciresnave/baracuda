@@ -24,8 +24,13 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # --style-edition is passed EXPLICITLY: cargo-fmt forwards --edition from the
+      # manifest but NOT the config's style_edition, so without this flag the check
+      # silently runs the pre-2024 style and disagrees with bare `rustfmt` (which
+      # honors rustfmt.toml). With the flag, cargo-fmt, bare rustfmt, and the
+      # rustfmt.toml pin all enforce the same strict-2024 style.
       - name: cargo fmt
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all -- --check --style-edition 2024
       - name: cargo build
         run: cargo build --workspace
       - name: cargo clippy

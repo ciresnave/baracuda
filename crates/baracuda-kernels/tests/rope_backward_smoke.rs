@@ -6,10 +6,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RopeBackwardArgs, RopeBackwardDescriptor,
-    RopeBackwardPlan, TensorMut, TensorRef, Workspace, ROPE_DEFAULT_BASE,
+    ElementKind, PlanPreference, ROPE_DEFAULT_BASE, RopeBackwardArgs, RopeBackwardDescriptor,
+    RopeBackwardPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -164,8 +164,7 @@ fn rope_backward_f64_default_positions() {
                     let theta = pos * freq;
                     let c = theta.cos();
                     let si = theta.sin();
-                    let off =
-                        ((b * heads as usize + h) * seq as usize + s) * head_dim as usize;
+                    let off = ((b * heads as usize + h) * seq as usize + s) * head_dim as usize;
                     let dy_e = host_dy[off + de];
                     let dy_o = host_dy[off + d_o];
                     expected[off + de] = dy_e * c + dy_o * si;

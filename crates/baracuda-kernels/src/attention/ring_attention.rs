@@ -503,8 +503,7 @@ impl<T: Element> RingAttentionPlan<T> {
             let k_cur = cur_ptr as *const c_void;
             // V follows K in the scratch layout.
             let v_cur = unsafe {
-                (cur_ptr as *mut u8).add(k_chunk_elems * core::mem::size_of::<T>())
-                    as *const c_void
+                (cur_ptr as *mut u8).add(k_chunk_elems * core::mem::size_of::<T>()) as *const c_void
             };
 
             // Launch the per-step kernel.
@@ -692,12 +691,12 @@ fn rotate_kv<T: Element>(
         )
     };
 
-    let group_start = n.nccl_group_start().map_err(|_| {
-        Error::CutlassInternal(7000)
-    })?;
-    let group_end = n.nccl_group_end().map_err(|_| {
-        Error::CutlassInternal(7001)
-    })?;
+    let group_start = n
+        .nccl_group_start()
+        .map_err(|_| Error::CutlassInternal(7000))?;
+    let group_end = n
+        .nccl_group_end()
+        .map_err(|_| Error::CutlassInternal(7001))?;
     let send_fn = n.nccl_send().map_err(|_| Error::CutlassInternal(7002))?;
     let recv_fn = n.nccl_recv().map_err(|_| Error::CutlassInternal(7003))?;
 
@@ -744,4 +743,3 @@ fn rotate_kv<T: Element>(
     }
     Ok(())
 }
-

@@ -14,7 +14,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -114,7 +114,10 @@ fn bincount_i32_empty_input() {
     // zero unconditionally before (not) counting, so the preset is
     // overwritten with zeros.
     let expected = vec![0_i32; num_bins as usize];
-    assert_eq!(got, expected, "bincount_i32 n=0 must produce all-zero counts");
+    assert_eq!(
+        got, expected,
+        "bincount_i32 n=0 must produce all-zero counts"
+    );
 }
 
 #[test]
@@ -122,9 +125,7 @@ fn bincount_i32_empty_input() {
 fn bincount_i64_basic() {
     let (ctx, stream) = setup();
     let num_bins: i32 = 32;
-    let host_x: Vec<i64> = vec![
-        0, 0, 0, 5, 10, 15, 20, 25, 31, 32, -5, 1000, 7, 7, 7, 7,
-    ];
+    let host_x: Vec<i64> = vec![0, 0, 0, 5, 10, 15, 20, 25, 31, 32, -5, 1000, 7, 7, 7, 7];
     let expected = host_bincount_i64(&host_x, num_bins);
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");

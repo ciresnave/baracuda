@@ -63,13 +63,7 @@ pub struct AdaptivePool1dDescriptor {
 impl AdaptivePool1dDescriptor {
     /// Build a descriptor. All fields are required — adaptive pooling
     /// has no optional knobs at present.
-    pub fn new(
-        batch: i32,
-        channels: i32,
-        l_in: i32,
-        l_out: i32,
-        element: ElementKind,
-    ) -> Self {
+    pub fn new(batch: i32, channels: i32, l_in: i32, l_out: i32, element: ElementKind) -> Self {
         Self {
             batch,
             channels,
@@ -181,8 +175,12 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
             y_ptr,
             nc,
             1, // spatial_rank
-            1, 1, self.desc.l_in,
-            1, 1, self.desc.l_out,
+            1,
+            1,
+            self.desc.l_in,
+            1,
+            1,
+            self.desc.l_out,
             stream_ptr,
         );
         map_status(status)
@@ -206,8 +204,12 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
             dx_ptr,
             nc,
             1,
-            1, 1, self.desc.l_in,
-            1, 1, self.desc.l_out,
+            1,
+            1,
+            self.desc.l_in,
+            1,
+            1,
+            self.desc.l_out,
             stream_ptr,
         );
         map_status(status)
@@ -218,9 +220,7 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
 // Shared adaptive-1d helpers (used by sibling adaptive_max_pool1d)
 // =============================================================================
 
-pub(crate) fn validate_descriptor<T: Element>(
-    desc: &AdaptivePool1dDescriptor,
-) -> Result<()> {
+pub(crate) fn validate_descriptor<T: Element>(desc: &AdaptivePool1dDescriptor) -> Result<()> {
     validate_dtype::<T>()?;
     if desc.element != T::KIND {
         return Err(Error::Unsupported(
@@ -344,22 +344,62 @@ pub(crate) fn dispatch_avg_fw<T: Element>(
     match T::KIND {
         ElementKind::F16 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f16_fw_run(
-                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                y,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::Bf16 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_bf16_fw_run(
-                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                y,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::F32 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f32_fw_run(
-                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                y,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::F64 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f64_fw_run(
-                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                y,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         _ => 3, // unsupported — should be unreachable post-select
@@ -383,22 +423,62 @@ pub(crate) fn dispatch_avg_bw<T: Element>(
     match T::KIND {
         ElementKind::F16 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f16_bw_run(
-                dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                dy,
+                dx,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::Bf16 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_bf16_bw_run(
-                dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                dy,
+                dx,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::F32 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f32_bw_run(
-                dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                dy,
+                dx,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::F64 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f64_bw_run(
-                dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                dy,
+                dx,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         _ => 3,
@@ -422,22 +502,62 @@ pub(crate) fn dispatch_max_fw<T: Element>(
     match T::KIND {
         ElementKind::F16 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f16_fw_run(
-                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                y,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::Bf16 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_bf16_fw_run(
-                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                y,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::F32 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f32_fw_run(
-                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                y,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::F64 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f64_fw_run(
-                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                y,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         _ => 3,
@@ -462,22 +582,66 @@ pub(crate) fn dispatch_max_bw<T: Element>(
     match T::KIND {
         ElementKind::F16 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f16_bw_run(
-                x, dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                dy,
+                dx,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::Bf16 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_bf16_bw_run(
-                x, dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                dy,
+                dx,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::F32 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f32_bw_run(
-                x, dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                dy,
+                dx,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         ElementKind::F64 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f64_bw_run(
-                x, dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+                x,
+                dy,
+                dx,
+                nc,
+                spatial_rank,
+                in_d,
+                in_h,
+                in_w,
+                out_d,
+                out_h,
+                out_w,
+                stream,
             )
         },
         _ => 3,

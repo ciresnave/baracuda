@@ -57,7 +57,7 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ElementKind, GgufBlockFormat, KernelSku, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, Workspace, U8,
+    PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, U8, Workspace,
 };
 
 use crate::quantize::gguf::mmvq::GgufMmvqActivation;
@@ -195,8 +195,9 @@ impl<T: GgufMmvqActivation> GgufMmvqMultiMPlan<T> {
         }
         let bs = self.desc.block_format.block_size() as i32;
         let blocks_per_row = self.desc.ncols / bs;
-        let expected_bytes =
-            (self.desc.nrows as i64) * (blocks_per_row as i64) * (self.desc.block_format.type_size() as i64);
+        let expected_bytes = (self.desc.nrows as i64)
+            * (blocks_per_row as i64)
+            * (self.desc.block_format.type_size() as i64);
         let weight_len_bytes = args.weight.shape[0] as i64;
         let need_bytes = self.desc.w_start_byte_offset + expected_bytes;
         if weight_len_bytes < need_bytes {
@@ -242,7 +243,10 @@ impl<T: GgufMmvqActivation> GgufMmvqMultiMPlan<T> {
         let ws_ptr = match workspace {
             Workspace::None => {
                 if need > 0 {
-                    return Err(Error::WorkspaceTooSmall { needed: need, got: 0 });
+                    return Err(Error::WorkspaceTooSmall {
+                        needed: need,
+                        got: 0,
+                    });
                 }
                 core::ptr::null_mut()
             }
@@ -264,15 +268,8 @@ impl<T: GgufMmvqActivation> GgufMmvqMultiMPlan<T> {
         let w_off = self.desc.w_start_byte_offset;
 
         // Step 1: stage activations into Q8_1.
-        let stage_status = unsafe {
-            stage_q8_1::<T>(
-                ncols as i64,
-                self.desc.m as i64,
-                y_ptr,
-                ws_ptr,
-                stream_ptr,
-            )
-        };
+        let stage_status =
+            unsafe { stage_q8_1::<T>(ncols as i64, self.desc.m as i64, y_ptr, ws_ptr, stream_ptr) };
         map_status(stage_status)?;
 
         // Step 2: dispatch the multi-M MMVQ kernel(s). For M in {1, 2, 4, 8}
@@ -286,17 +283,24 @@ impl<T: GgufMmvqActivation> GgufMmvqMultiMPlan<T> {
             // Pointers offset by m_done * (per-row size).
             let blocks_per_row = ((ncols + 31) / 32) as i64;
             let ws_row_bytes = blocks_per_row * 36;
-            let chunk_ws_ptr = unsafe {
-                (ws_ptr as *mut u8).offset((m_done as i64 * ws_row_bytes) as isize)
-            } as *const c_void;
-            let chunk_dst_ptr = unsafe {
-                (dst_ptr as *mut f32).offset((m_done as isize) * (nrows as isize))
-            } as *mut c_void;
+            let chunk_ws_ptr =
+                unsafe { (ws_ptr as *mut u8).offset((m_done as i64 * ws_row_bytes) as isize) }
+                    as *const c_void;
+            let chunk_dst_ptr =
+                unsafe { (dst_ptr as *mut f32).offset((m_done as isize) * (nrows as isize)) }
+                    as *mut c_void;
 
             let status = unsafe {
                 dispatch_multim(
                     self.desc.block_format,
-                    m_chunk, ncols, nrows, w_ptr, w_off, chunk_ws_ptr, chunk_dst_ptr, stream_ptr,
+                    m_chunk,
+                    ncols,
+                    nrows,
+                    w_ptr,
+                    w_off,
+                    chunk_ws_ptr,
+                    chunk_dst_ptr,
+                    stream_ptr,
                 )
             };
             map_status(status)?;
@@ -331,19 +335,13 @@ unsafe fn stage_q8_1<T: GgufMmvqActivation>(
 ) -> i32 {
     match T::KIND {
         ElementKind::F32 => unsafe {
-            baracuda_kernels_sys::baracuda_kernels_quantize_q8_1_f32_run(
-                kx, ny, src, dst, stream,
-            )
+            baracuda_kernels_sys::baracuda_kernels_quantize_q8_1_f32_run(kx, ny, src, dst, stream)
         },
         ElementKind::F16 => unsafe {
-            baracuda_kernels_sys::baracuda_kernels_quantize_q8_1_f16_run(
-                kx, ny, src, dst, stream,
-            )
+            baracuda_kernels_sys::baracuda_kernels_quantize_q8_1_f16_run(kx, ny, src, dst, stream)
         },
         ElementKind::Bf16 => unsafe {
-            baracuda_kernels_sys::baracuda_kernels_quantize_q8_1_bf16_run(
-                kx, ny, src, dst, stream,
-            )
+            baracuda_kernels_sys::baracuda_kernels_quantize_q8_1_bf16_run(kx, ny, src, dst, stream)
         },
         _ => 3, // GgufMmvqActivation is sealed to f32 / f16 / bf16.
     }
@@ -375,172 +373,532 @@ unsafe fn dispatch_multim(
         // ----- Q8_0 (Phase 33) -----
         (GgufBlockFormat::Q8_0, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q8_0_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q8_0, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q8_0_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q8_0, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q8_0_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q8_0, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q8_0_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // ----- Q4_0 (Phase 34) -----
         (GgufBlockFormat::Q4_0, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_0_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q4_0, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_0_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q4_0, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_0_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q4_0, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_0_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // ----- Q4_1 -----
         (GgufBlockFormat::Q4_1, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_1_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q4_1, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_1_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q4_1, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_1_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q4_1, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_1_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // ----- Q5_0 -----
         (GgufBlockFormat::Q5_0, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_0_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q5_0, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_0_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q5_0, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_0_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q5_0, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_0_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // ----- Q5_1 -----
         (GgufBlockFormat::Q5_1, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_1_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q5_1, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_1_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q5_1, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_1_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q5_1, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_1_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // ----- Q2_K -----
         (GgufBlockFormat::Q2K, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q2_K_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q2K, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q2_K_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q2K, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q2_K_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q2K, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q2_K_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // ----- Q3_K -----
         (GgufBlockFormat::Q3K, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q3_K_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q3K, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q3_K_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q3K, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q3_K_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q3K, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q3_K_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // ----- Q4_K -----
         (GgufBlockFormat::Q4K, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_K_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q4K, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_K_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q4K, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_K_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q4K, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q4_K_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // ----- Q5_K -----
         (GgufBlockFormat::Q5K, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_K_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q5K, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_K_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q5K, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_K_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q5K, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q5_K_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // ----- Q6_K -----
         (GgufBlockFormat::Q6K, 1) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q6_K_m1_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q6K, 2) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q6_K_m2_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q6K, 4) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q6_K_m4_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         (GgufBlockFormat::Q6K, 8) => unsafe {
             sys::baracuda_kernels_mmvq_multim_q6_K_m8_run(
-                ncols, nrows, w_ptr, w_off, activations_q8_1, dst, ws, 0, stream)
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                activations_q8_1,
+                dst,
+                ws,
+                0,
+                stream,
+            )
         },
         // Q8_K is excluded at `select` time; pick_chunk_size only yields {1,2,4,8}.
         _ => 2,
@@ -568,4 +926,3 @@ fn build_sku(act_kind: ElementKind) -> KernelSku {
         },
     }
 }
-

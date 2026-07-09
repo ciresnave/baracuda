@@ -9,10 +9,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GatedActivationArgs, GatedActivationDescriptor,
-    GatedActivationKind, GatedActivationPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, GatedActivationArgs, GatedActivationDescriptor, GatedActivationKind,
+    GatedActivationPlan, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -28,20 +28,28 @@ fn setup() -> (Context, Stream) {
 }
 
 fn silu_f32(b: f32) -> f32 {
-    let s = if b >= 0.0 { 1.0 / (1.0 + (-b).exp()) } else { let e = b.exp(); e / (1.0 + e) };
+    let s = if b >= 0.0 {
+        1.0 / (1.0 + (-b).exp())
+    } else {
+        let e = b.exp();
+        e / (1.0 + e)
+    };
     b * s
 }
 fn silu_f64(b: f64) -> f64 {
-    let s = if b >= 0.0 { 1.0 / (1.0 + (-b).exp()) } else { let e = b.exp(); e / (1.0 + e) };
+    let s = if b >= 0.0 {
+        1.0 / (1.0 + (-b).exp())
+    } else {
+        let e = b.exp();
+        e / (1.0 + e)
+    };
     b * s
 }
 
 /// Compute the expected output for `y = a · silu(b)` where x is row-major
 /// `input_shape` and split along `split_dim`. Output shape has
 /// `input_shape[split_dim] / 2` along that axis.
-fn cpu_ref_swiglu_f32(
-    x: &[f32], input_shape: &[i32], split_dim: usize,
-) -> Vec<f32> {
+fn cpu_ref_swiglu_f32(x: &[f32], input_shape: &[i32], split_dim: usize) -> Vec<f32> {
     let half = input_shape[split_dim] as usize / 2;
     let mut out_shape: Vec<i32> = input_shape.to_vec();
     out_shape[split_dim] = half as i32;
@@ -82,9 +90,7 @@ fn cpu_ref_swiglu_f32(
     y
 }
 
-fn cpu_ref_swiglu_f64(
-    x: &[f64], input_shape: &[i32], split_dim: usize,
-) -> Vec<f64> {
+fn cpu_ref_swiglu_f64(x: &[f64], input_shape: &[i32], split_dim: usize) -> Vec<f64> {
     let half = input_shape[split_dim] as usize / 2;
     let mut out_shape: Vec<i32> = input_shape.to_vec();
     out_shape[split_dim] = half as i32;
@@ -127,7 +133,9 @@ fn swiglu_fw_f32() {
     let input_shape = [2i32, 4, 8];
     let split_dim: u8 = 1;
     let in_numel: usize = input_shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<f32> = (0..in_numel).map(|i| ((i % 200) as f32) * 0.05 - 5.0).collect();
+    let host_x: Vec<f32> = (0..in_numel)
+        .map(|i| ((i % 200) as f32) * 0.05 - 5.0)
+        .collect();
     let expected = cpu_ref_swiglu_f32(&host_x, &input_shape, split_dim as usize);
 
     let desc = GatedActivationDescriptor {
@@ -145,8 +153,16 @@ fn swiglu_fw_f32() {
     let plan = GatedActivationPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GatedActivationArgs::<f32, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: output_shape, stride: contiguous_stride(output_shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: output_shape,
+            stride: contiguous_stride(output_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -166,7 +182,9 @@ fn swiglu_fw_f64() {
     let input_shape = [3i32, 32];
     let split_dim: u8 = 1;
     let in_numel: usize = input_shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<f64> = (0..in_numel).map(|i| ((i % 200) as f64) * 0.05 - 5.0).collect();
+    let host_x: Vec<f64> = (0..in_numel)
+        .map(|i| ((i % 200) as f64) * 0.05 - 5.0)
+        .collect();
     let expected = cpu_ref_swiglu_f64(&host_x, &input_shape, split_dim as usize);
 
     let desc = GatedActivationDescriptor {
@@ -184,8 +202,16 @@ fn swiglu_fw_f64() {
     let plan = GatedActivationPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GatedActivationArgs::<f64, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: output_shape, stride: contiguous_stride(output_shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: output_shape,
+            stride: contiguous_stride(output_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -226,8 +252,16 @@ fn swiglu_fw_f16() {
     let plan = GatedActivationPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GatedActivationArgs::<f16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: output_shape, stride: contiguous_stride(output_shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: output_shape,
+            stride: contiguous_stride(output_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -237,7 +271,10 @@ fn swiglu_fw_f16() {
     for (i, (g, e)) in got.iter().zip(expected_f32.iter()).enumerate() {
         let g_f = g.to_f32();
         let allow = e.abs().max(1.0) * 4.0 * F16_EPS;
-        assert!((g_f - e).abs() <= allow, "swiglu f16 @ {i}: got {g_f} exp {e}");
+        assert!(
+            (g_f - e).abs() <= allow,
+            "swiglu f16 @ {i}: got {g_f} exp {e}"
+        );
     }
 }
 
@@ -269,8 +306,16 @@ fn swiglu_fw_bf16() {
     let plan = GatedActivationPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = GatedActivationArgs::<bf16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: output_shape, stride: contiguous_stride(output_shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: output_shape,
+            stride: contiguous_stride(output_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -280,6 +325,9 @@ fn swiglu_fw_bf16() {
     for (i, (g, e)) in got.iter().zip(expected_f32.iter()).enumerate() {
         let g_f = g.to_f32();
         let allow = e.abs().max(1.0) * 4.0 * BF16_EPS;
-        assert!((g_f - e).abs() <= allow, "swiglu bf16 @ {i}: got {g_f} exp {e}");
+        assert!(
+            (g_f - e).abs() <= allow,
+            "swiglu bf16 @ {i}: got {g_f} exp {e}"
+        );
     }
 }

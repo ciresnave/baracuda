@@ -4,10 +4,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GroupNormArgs, GroupNormDescriptor, GroupNormPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, GroupNormArgs, GroupNormDescriptor, GroupNormPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -25,8 +25,14 @@ fn setup() -> (Context, Stream) {
 /// CPU reference: `y[n, c, s] = (x - mean[n, g]) * rstd[n, g] * gamma[c] + beta[c]`
 /// where `g = c / (C / num_groups)`.
 fn host_group_norm_f32(
-    n: usize, c: usize, s: usize, num_groups: usize, x: &[f32],
-    gamma: Option<&[f32]>, beta: Option<&[f32]>, eps: f32,
+    n: usize,
+    c: usize,
+    s: usize,
+    num_groups: usize,
+    x: &[f32],
+    gamma: Option<&[f32]>,
+    beta: Option<&[f32]>,
+    eps: f32,
 ) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
     let group_size = c / num_groups;
     let group_extent = group_size * s;
@@ -92,8 +98,14 @@ fn group_norm_f32_with_affine() {
     let host_beta: Vec<f32> = (0..c).map(|i| -0.1 + 0.05 * i as f32).collect();
     let eps = 1e-5f32;
     let (exp_y, _, _) = host_group_norm_f32(
-        n as usize, c as usize, s, num_groups as usize,
-        &host_x, Some(&host_gamma), Some(&host_beta), eps,
+        n as usize,
+        c as usize,
+        s,
+        num_groups as usize,
+        &host_x,
+        Some(&host_gamma),
+        Some(&host_beta),
+        eps,
     );
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
@@ -112,20 +124,45 @@ fn group_norm_f32_with_affine() {
         has_affine: true,
         element: ElementKind::F32,
     };
-    let plan = GroupNormPlan::<f32, 4>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
-    plan.run(&stream, Workspace::None, GroupNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-        beta: Some(TensorRef { data: dev_b.as_slice(), shape: [c], stride: [1] }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        saved_mean: TensorMut {
-            data: dev_mean.as_slice_mut(), shape: [g_count as i32], stride: [1]
+    let plan =
+        GroupNormPlan::<f32, 4>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    plan.run(
+        &stream,
+        Workspace::None,
+        GroupNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            beta: Some(TensorRef {
+                data: dev_b.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            saved_mean: TensorMut {
+                data: dev_mean.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorMut {
+                data: dev_rstd.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
         },
-        saved_rstd: TensorMut {
-            data: dev_rstd.as_slice_mut(), shape: [g_count as i32], stride: [1]
-        },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![0f32; numel];
@@ -136,8 +173,12 @@ fn group_norm_f32_with_affine() {
     let eps_tol = 128.0 * f32::EPSILON;
     for i in 0..numel {
         let tol = (exp_y[i].abs() * eps_tol).max(eps_tol);
-        assert!((got_y[i] - exp_y[i]).abs() <= tol,
-            "gn f32 y @ {i}: got={} want={}", got_y[i], exp_y[i]);
+        assert!(
+            (got_y[i] - exp_y[i]).abs() <= tol,
+            "gn f32 y @ {i}: got={} want={}",
+            got_y[i],
+            exp_y[i]
+        );
     }
 }
 
@@ -160,8 +201,14 @@ fn group_norm_f64_with_affine() {
     let host_beta_f32: Vec<f32> = (0..c).map(|i| -0.1 + 0.05 * i as f32).collect();
     let eps = 1e-5f32;
     let (exp_y_f32, _, _) = host_group_norm_f32(
-        n as usize, c as usize, s, num_groups as usize,
-        &host_x_f32, Some(&host_gamma_f32), Some(&host_beta_f32), eps,
+        n as usize,
+        c as usize,
+        s,
+        num_groups as usize,
+        &host_x_f32,
+        Some(&host_gamma_f32),
+        Some(&host_beta_f32),
+        eps,
     );
 
     let host_x: Vec<f64> = host_x_f32.iter().map(|&v| v as f64).collect();
@@ -184,20 +231,45 @@ fn group_norm_f64_with_affine() {
         has_affine: true,
         element: ElementKind::F64,
     };
-    let plan = GroupNormPlan::<f64, 4>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
-    plan.run(&stream, Workspace::None, GroupNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-        beta: Some(TensorRef { data: dev_b.as_slice(), shape: [c], stride: [1] }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        saved_mean: TensorMut {
-            data: dev_mean.as_slice_mut(), shape: [g_count as i32], stride: [1]
+    let plan =
+        GroupNormPlan::<f64, 4>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    plan.run(
+        &stream,
+        Workspace::None,
+        GroupNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            beta: Some(TensorRef {
+                data: dev_b.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            saved_mean: TensorMut {
+                data: dev_mean.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorMut {
+                data: dev_rstd.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
         },
-        saved_rstd: TensorMut {
-            data: dev_rstd.as_slice_mut(), shape: [g_count as i32], stride: [1]
-        },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![0f64; numel];
@@ -207,8 +279,12 @@ fn group_norm_f64_with_affine() {
     for i in 0..numel {
         let want = exp_y_f32[i] as f64;
         let tol = (want.abs() * eps_tol).max(eps_tol);
-        assert!((got_y[i] - want).abs() <= tol,
-            "gn f64 y @ {i}: got={} want={}", got_y[i], want);
+        assert!(
+            (got_y[i] - want).abs() <= tol,
+            "gn f64 y @ {i}: got={} want={}",
+            got_y[i],
+            want
+        );
     }
 }
 
@@ -231,8 +307,14 @@ fn group_norm_f16_with_affine() {
     let host_beta_f32: Vec<f32> = (0..c).map(|i| -0.1 + 0.05 * i as f32).collect();
     let eps = 1e-5f32;
     let (exp_y_f32, _, _) = host_group_norm_f32(
-        n as usize, c as usize, s, num_groups as usize,
-        &host_x_f32, Some(&host_gamma_f32), Some(&host_beta_f32), eps,
+        n as usize,
+        c as usize,
+        s,
+        num_groups as usize,
+        &host_x_f32,
+        Some(&host_gamma_f32),
+        Some(&host_beta_f32),
+        eps,
     );
 
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
@@ -255,20 +337,45 @@ fn group_norm_f16_with_affine() {
         has_affine: true,
         element: ElementKind::F16,
     };
-    let plan = GroupNormPlan::<f16, 4>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
-    plan.run(&stream, Workspace::None, GroupNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-        beta: Some(TensorRef { data: dev_b.as_slice(), shape: [c], stride: [1] }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        saved_mean: TensorMut {
-            data: dev_mean.as_slice_mut(), shape: [g_count as i32], stride: [1]
+    let plan =
+        GroupNormPlan::<f16, 4>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    plan.run(
+        &stream,
+        Workspace::None,
+        GroupNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            beta: Some(TensorRef {
+                data: dev_b.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            saved_mean: TensorMut {
+                data: dev_mean.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorMut {
+                data: dev_rstd.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
         },
-        saved_rstd: TensorMut {
-            data: dev_rstd.as_slice_mut(), shape: [g_count as i32], stride: [1]
-        },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![f16::ZERO; numel];
@@ -278,9 +385,12 @@ fn group_norm_f16_with_affine() {
     for i in 0..numel {
         let tol = (exp_y_f32[i].abs() * eps_tol).max(eps_tol);
         let diff = (got_y[i].to_f32() - exp_y_f32[i]).abs();
-        assert!(diff <= tol,
+        assert!(
+            diff <= tol,
             "gn f16 y @ {i}: diff={diff} got={} want={}",
-            got_y[i].to_f32(), exp_y_f32[i]);
+            got_y[i].to_f32(),
+            exp_y_f32[i]
+        );
     }
 }
 
@@ -303,8 +413,14 @@ fn group_norm_bf16_with_affine() {
     let host_beta_f32: Vec<f32> = (0..c).map(|i| -0.1 + 0.05 * i as f32).collect();
     let eps = 1e-5f32;
     let (exp_y_f32, _, _) = host_group_norm_f32(
-        n as usize, c as usize, s, num_groups as usize,
-        &host_x_f32, Some(&host_gamma_f32), Some(&host_beta_f32), eps,
+        n as usize,
+        c as usize,
+        s,
+        num_groups as usize,
+        &host_x_f32,
+        Some(&host_gamma_f32),
+        Some(&host_beta_f32),
+        eps,
     );
 
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
@@ -327,20 +443,45 @@ fn group_norm_bf16_with_affine() {
         has_affine: true,
         element: ElementKind::Bf16,
     };
-    let plan = GroupNormPlan::<bf16, 4>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
-    plan.run(&stream, Workspace::None, GroupNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-        beta: Some(TensorRef { data: dev_b.as_slice(), shape: [c], stride: [1] }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        saved_mean: TensorMut {
-            data: dev_mean.as_slice_mut(), shape: [g_count as i32], stride: [1]
+    let plan =
+        GroupNormPlan::<bf16, 4>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    plan.run(
+        &stream,
+        Workspace::None,
+        GroupNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            beta: Some(TensorRef {
+                data: dev_b.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            saved_mean: TensorMut {
+                data: dev_mean.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorMut {
+                data: dev_rstd.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
         },
-        saved_rstd: TensorMut {
-            data: dev_rstd.as_slice_mut(), shape: [g_count as i32], stride: [1]
-        },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![bf16::ZERO; numel];
@@ -350,8 +491,11 @@ fn group_norm_bf16_with_affine() {
     for i in 0..numel {
         let tol = (exp_y_f32[i].abs() * eps_tol).max(eps_tol);
         let diff = (got_y[i].to_f32() - exp_y_f32[i]).abs();
-        assert!(diff <= tol,
+        assert!(
+            diff <= tol,
             "gn bf16 y @ {i}: diff={diff} got={} want={}",
-            got_y[i].to_f32(), exp_y_f32[i]);
+            got_y[i].to_f32(),
+            exp_y_f32[i]
+        );
     }
 }

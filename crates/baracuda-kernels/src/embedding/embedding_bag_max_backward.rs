@@ -116,8 +116,7 @@ impl<T: Element> EmbeddingBagMaxBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &EmbeddingBagMaxBackwardArgs<'_, T>) -> Result<()> {
-        if args.dout.shape[0] != self.desc.num_bags
-            || args.dout.shape[1] != self.desc.embedding_dim
+        if args.dout.shape[0] != self.desc.num_bags || args.dout.shape[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagMaxBackwardPlan: dout shape != [num_bags, embedding_dim]",

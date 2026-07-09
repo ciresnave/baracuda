@@ -427,9 +427,7 @@ impl<TIn: Fp8WideDtype> Fp8CastPlan<TIn> {
             ));
         }
         if input.is_empty() {
-            return Err(Error::InvalidArgument(
-                "Fp8CastPlan::run: empty input",
-            ));
+            return Err(Error::InvalidArgument("Fp8CastPlan::run: empty input"));
         }
 
         // SAFETY: pointers are valid + correctly typed; recipe's
@@ -493,9 +491,7 @@ impl<TOut: Fp8WideDtype> Fp8DequantPlan<TOut> {
             ));
         }
         if input.is_empty() {
-            return Err(Error::InvalidArgument(
-                "Fp8DequantPlan::run: empty input",
-            ));
+            return Err(Error::InvalidArgument("Fp8DequantPlan::run: empty input"));
         }
 
         // SAFETY: pointers are valid + correctly typed; scale_inv

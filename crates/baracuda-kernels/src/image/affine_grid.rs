@@ -171,16 +171,26 @@ impl<T: Element> AffineGridPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_affine_grid_2d_f32_run(
-                    self.desc.n, self.desc.oh, self.desc.ow,
-                    theta_ptr, grid_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.oh,
+                    self.desc.ow,
+                    theta_ptr,
+                    grid_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_affine_grid_2d_f64_run(
-                    self.desc.n, self.desc.oh, self.desc.ow,
-                    theta_ptr, grid_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.oh,
+                    self.desc.ow,
+                    theta_ptr,
+                    grid_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

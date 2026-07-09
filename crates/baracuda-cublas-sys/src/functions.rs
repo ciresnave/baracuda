@@ -1339,11 +1339,9 @@ batched_getrs!(PFN_cublasZgetrsBatched, cuDoubleComplex);
 pub type cublasXtHandle_t = *mut c_void;
 
 /// cuBLAS: Xt create. See <https://docs.nvidia.com/cuda/cublas/index.html>.
-pub type PFN_cublasXtCreate =
-    unsafe extern "C" fn(handle: *mut cublasXtHandle_t) -> cublasStatus_t;
+pub type PFN_cublasXtCreate = unsafe extern "C" fn(handle: *mut cublasXtHandle_t) -> cublasStatus_t;
 /// cuBLAS: Xt destroy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
-pub type PFN_cublasXtDestroy =
-    unsafe extern "C" fn(handle: cublasXtHandle_t) -> cublasStatus_t;
+pub type PFN_cublasXtDestroy = unsafe extern "C" fn(handle: cublasXtHandle_t) -> cublasStatus_t;
 /// cuBLAS: Xt device select. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasXtDeviceSelect = unsafe extern "C" fn(
     handle: cublasXtHandle_t,
@@ -1351,15 +1349,11 @@ pub type PFN_cublasXtDeviceSelect = unsafe extern "C" fn(
     device_id: *const c_int,
 ) -> cublasStatus_t;
 /// cuBLAS: Xt set block dim. See <https://docs.nvidia.com/cuda/cublas/index.html>.
-pub type PFN_cublasXtSetBlockDim = unsafe extern "C" fn(
-    handle: cublasXtHandle_t,
-    block_dim: c_int,
-) -> cublasStatus_t;
+pub type PFN_cublasXtSetBlockDim =
+    unsafe extern "C" fn(handle: cublasXtHandle_t, block_dim: c_int) -> cublasStatus_t;
 /// cuBLAS: Xt get block dim. See <https://docs.nvidia.com/cuda/cublas/index.html>.
-pub type PFN_cublasXtGetBlockDim = unsafe extern "C" fn(
-    handle: cublasXtHandle_t,
-    block_dim: *mut c_int,
-) -> cublasStatus_t;
+pub type PFN_cublasXtGetBlockDim =
+    unsafe extern "C" fn(handle: cublasXtHandle_t, block_dim: *mut c_int) -> cublasStatus_t;
 
 macro_rules! xt_gemm {
     ($name:ident, $scalar:ty) => {
@@ -1516,8 +1510,7 @@ pub enum cublasLtMatmulPreferenceAttributes_t {
 }
 
 /// cuBLAS: Lt create. See <https://docs.nvidia.com/cuda/cublas/index.html>.
-pub type PFN_cublasLtCreate =
-    unsafe extern "C" fn(handle: *mut cublasLtHandle_t) -> cublasStatus_t;
+pub type PFN_cublasLtCreate = unsafe extern "C" fn(handle: *mut cublasLtHandle_t) -> cublasStatus_t;
 
 /// cuBLAS: Lt destroy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtDestroy = unsafe extern "C" fn(handle: cublasLtHandle_t) -> cublasStatus_t;

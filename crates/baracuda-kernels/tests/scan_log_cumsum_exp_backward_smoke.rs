@@ -7,10 +7,10 @@
 //! Input range `|x| ≤ 2` so the CPU reference can compute `exp(x-y)`
 //! directly without saturation issues.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ScanBackwardArgs, ScanBackwardDescriptor,
-    ScanBackwardPlan, ScanKind, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ScanBackwardArgs, ScanBackwardDescriptor, ScanBackwardPlan,
+    ScanKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -125,7 +125,9 @@ fn lcse_bw_f32_2d_forward_fw() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];
     let numel = 18;
-    let host_x: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.25) % 3.0 - 1.5).collect();
+    let host_x: Vec<f32> = (0..numel)
+        .map(|i| ((i as f32) * 0.25) % 3.0 - 1.5)
+        .collect();
     let host_dy: Vec<f32> = (0..numel).map(|i| 0.1 + (i as f32) * 0.05).collect();
     let host_y = host_lcse_fw_f32::<2>(shape, 1, false, &host_x);
     let expected = host_lcse_bw_f32::<2>(shape, 1, false, &host_dy, &host_x, &host_y);
@@ -142,13 +144,29 @@ fn lcse_bw_f32_2d_forward_fw() {
         reverse: false,
         element: ElementKind::F32,
     };
-    let plan = ScanBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ScanBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanBackwardArgs::<f32, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape, stride: contiguous_stride(shape) }),
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -172,10 +190,13 @@ fn lcse_bw_f64_2d_reverse_fw() {
     let (ctx, stream) = setup();
     let shape = [4i32, 5];
     let numel = 20;
-    let host_x_f32: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.25) % 3.0 - 1.5).collect();
+    let host_x_f32: Vec<f32> = (0..numel)
+        .map(|i| ((i as f32) * 0.25) % 3.0 - 1.5)
+        .collect();
     let host_dy_f32: Vec<f32> = (0..numel).map(|i| 0.05 + (i as f32) * 0.03).collect();
     let host_y_f32 = host_lcse_fw_f32::<2>(shape, 0, true, &host_x_f32);
-    let expected_f32 = host_lcse_bw_f32::<2>(shape, 0, true, &host_dy_f32, &host_x_f32, &host_y_f32);
+    let expected_f32 =
+        host_lcse_bw_f32::<2>(shape, 0, true, &host_dy_f32, &host_x_f32, &host_y_f32);
     let host_x: Vec<f64> = host_x_f32.iter().map(|&v| v as f64).collect();
     let host_dy: Vec<f64> = host_dy_f32.iter().map(|&v| v as f64).collect();
     let host_y: Vec<f64> = host_y_f32.iter().map(|&v| v as f64).collect();
@@ -192,13 +213,29 @@ fn lcse_bw_f64_2d_reverse_fw() {
         reverse: true,
         element: ElementKind::F64,
     };
-    let plan = ScanBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ScanBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanBackwardArgs::<f64, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape, stride: contiguous_stride(shape) }),
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -222,7 +259,8 @@ fn lcse_bw_f16_2d() {
     let host_x_f32: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.2) % 2.5 - 1.0).collect();
     let host_dy_f32: Vec<f32> = (0..numel).map(|i| 0.1 + (i as f32) * 0.05).collect();
     let host_y_f32 = host_lcse_fw_f32::<2>(shape, 1, false, &host_x_f32);
-    let expected_f32 = host_lcse_bw_f32::<2>(shape, 1, false, &host_dy_f32, &host_x_f32, &host_y_f32);
+    let expected_f32 =
+        host_lcse_bw_f32::<2>(shape, 1, false, &host_dy_f32, &host_x_f32, &host_y_f32);
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let host_dy: Vec<f16> = host_dy_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let host_y: Vec<f16> = host_y_f32.iter().map(|&v| f16::from_f32(v)).collect();
@@ -239,13 +277,29 @@ fn lcse_bw_f16_2d() {
         reverse: false,
         element: ElementKind::F16,
     };
-    let plan = ScanBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ScanBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanBackwardArgs::<f16, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape, stride: contiguous_stride(shape) }),
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -275,7 +329,8 @@ fn lcse_bw_bf16_2d() {
     let host_x_f32: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.2) % 2.5 - 1.0).collect();
     let host_dy_f32: Vec<f32> = (0..numel).map(|i| 0.1 + (i as f32) * 0.05).collect();
     let host_y_f32 = host_lcse_fw_f32::<2>(shape, 1, false, &host_x_f32);
-    let expected_f32 = host_lcse_bw_f32::<2>(shape, 1, false, &host_dy_f32, &host_x_f32, &host_y_f32);
+    let expected_f32 =
+        host_lcse_bw_f32::<2>(shape, 1, false, &host_dy_f32, &host_x_f32, &host_y_f32);
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let host_dy: Vec<bf16> = host_dy_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let host_y: Vec<bf16> = host_y_f32.iter().map(|&v| bf16::from_f32(v)).collect();
@@ -295,10 +350,26 @@ fn lcse_bw_bf16_2d() {
     let plan = ScanBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ScanBackwardArgs::<bf16, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape, stride: contiguous_stride(shape) }),
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

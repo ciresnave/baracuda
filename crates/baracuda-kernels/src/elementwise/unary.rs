@@ -282,1088 +282,2123 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
             // Abs × {f32, f16, bf16, f64}
             (UnaryKind::Abs, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_abs_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Abs, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_abs_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Abs, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_abs_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Abs, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_abs_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sign × {f32, f16, bf16, f64}
             (UnaryKind::Sign, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sign_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sign, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sign_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sign, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sign_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sign, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sign_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Reciprocal × {f32, f16, bf16, f64}
             (UnaryKind::Reciprocal, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_reciprocal_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Reciprocal, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_reciprocal_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Reciprocal, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_reciprocal_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Reciprocal, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_reciprocal_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Square × {f32, f16, bf16, f64}
             (UnaryKind::Square, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_square_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Square, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_square_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Square, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_square_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Square, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_square_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Cube × {f32, f16, bf16, f64}
             (UnaryKind::Cube, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cube_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cube, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cube_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cube, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cube_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cube, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cube_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sqrt × {f32, f16, bf16, f64}
             (UnaryKind::Sqrt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sqrt_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sqrt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sqrt_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sqrt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sqrt_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sqrt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sqrt_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Rsqrt × {f32, f16, bf16, f64}
             (UnaryKind::Rsqrt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_rsqrt_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Rsqrt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_rsqrt_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Rsqrt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_rsqrt_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Rsqrt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_rsqrt_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Exp × {f32, f16, bf16, f64}
             (UnaryKind::Exp, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Expm1 × {f32, f16, bf16, f64}
             (UnaryKind::Expm1, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_expm1_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Expm1, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_expm1_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Expm1, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_expm1_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Expm1, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_expm1_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Log × {f32, f16, bf16, f64}
             (UnaryKind::Log, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Log1p × {f32, f16, bf16, f64}
             (UnaryKind::Log1p, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log1p_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log1p, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log1p_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log1p, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log1p_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log1p, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log1p_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sin × {f32, f16, bf16, f64}
             (UnaryKind::Sin, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sin_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sin, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sin_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sin, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sin_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sin, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sin_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Cos × {f32, f16, bf16, f64}
             (UnaryKind::Cos, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cos_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cos, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cos_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cos, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cos_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cos, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cos_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Tan × {f32, f16, bf16, f64}
             (UnaryKind::Tan, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tan_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tan, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tan_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tan, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tan_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tan, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tan_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sinh × {f32, f16, bf16, f64}
             (UnaryKind::Sinh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sinh_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sinh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sinh_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sinh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sinh_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sinh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sinh_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Cosh × {f32, f16, bf16, f64}
             (UnaryKind::Cosh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cosh_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cosh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cosh_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cosh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cosh_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cosh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cosh_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Tanh × {f32, f16, bf16, f64}
             (UnaryKind::Tanh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanh_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanh_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanh_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanh_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Relu × {f32, f16, bf16, f64}
             (UnaryKind::Relu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Gelu × {f32, f16, bf16, f64}
             (UnaryKind::Gelu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Gelu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Gelu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Gelu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // GeluTanh × {f32, f16, bf16, f64}
             (UnaryKind::GeluTanh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_tanh_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::GeluTanh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_tanh_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::GeluTanh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_tanh_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::GeluTanh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_tanh_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Silu × {f32, f16, bf16, f64}
             (UnaryKind::Silu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_silu_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Silu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_silu_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Silu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_silu_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Silu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_silu_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Mish × {f32, f16, bf16, f64}
             (UnaryKind::Mish, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_mish_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Mish, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_mish_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Mish, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_mish_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Mish, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_mish_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sigmoid × {f32, f16, bf16, f64}
             (UnaryKind::Sigmoid, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sigmoid_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sigmoid, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sigmoid_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sigmoid, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sigmoid_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sigmoid, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sigmoid_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Softplus × {f32, f16, bf16, f64}
             (UnaryKind::Softplus, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softplus_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softplus, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softplus_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softplus, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softplus_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softplus, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softplus_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Hardswish × {f32, f16, bf16, f64}
             (UnaryKind::Hardswish, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardswish_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardswish, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardswish_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardswish, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardswish_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardswish, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardswish_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Hardsigmoid × {f32, f16, bf16, f64}
             (UnaryKind::Hardsigmoid, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardsigmoid_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardsigmoid, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardsigmoid_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardsigmoid, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardsigmoid_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardsigmoid, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardsigmoid_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Hardtanh × {f32, f16, bf16, f64}
             (UnaryKind::Hardtanh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardtanh_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardtanh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardtanh_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardtanh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardtanh_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardtanh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardtanh_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Neg dtype fill — Neg's trailblazer f32 cell is wired above.
             (UnaryKind::Neg, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_neg_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Neg, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_neg_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Neg, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_neg_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Cbrt × {f32, f16, bf16, f64}
             (UnaryKind::Cbrt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cbrt_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cbrt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cbrt_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cbrt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cbrt_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cbrt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cbrt_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Exp2 × {f32, f16, bf16, f64}
             (UnaryKind::Exp2, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp2_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp2, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp2_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp2, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp2_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp2, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp2_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Log2 × {f32, f16, bf16, f64}
             (UnaryKind::Log2, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log2_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log2, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log2_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log2, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log2_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log2, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log2_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Log10 × {f32, f16, bf16, f64}
             (UnaryKind::Log10, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log10_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log10, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log10_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log10, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log10_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log10, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log10_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Asin × {f32, f16, bf16, f64}
             (UnaryKind::Asin, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asin_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asin, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asin_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asin, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asin_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asin, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asin_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Acos × {f32, f16, bf16, f64}
             (UnaryKind::Acos, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acos_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acos, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acos_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acos, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acos_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acos, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acos_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Atan × {f32, f16, bf16, f64}
             (UnaryKind::Atan, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atan_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atan, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atan_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atan, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atan_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atan, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atan_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Asinh × {f32, f16, bf16, f64}
             (UnaryKind::Asinh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asinh_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asinh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asinh_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asinh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asinh_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asinh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asinh_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Acosh × {f32, f16, bf16, f64}
             (UnaryKind::Acosh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acosh_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acosh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acosh_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acosh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acosh_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acosh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acosh_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Atanh × {f32, f16, bf16, f64}
             (UnaryKind::Atanh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atanh_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atanh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atanh_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atanh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atanh_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atanh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atanh_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Floor × {f32, f16, bf16, f64}
             (UnaryKind::Floor, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_floor_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Floor, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_floor_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Floor, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_floor_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Floor, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_floor_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Ceil × {f32, f16, bf16, f64}
             (UnaryKind::Ceil, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_ceil_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Ceil, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_ceil_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Ceil, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_ceil_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Ceil, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_ceil_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Round × {f32, f16, bf16, f64}
             (UnaryKind::Round, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_round_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Round, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_round_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Round, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_round_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Round, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_round_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Trunc × {f32, f16, bf16, f64}
             (UnaryKind::Trunc, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_trunc_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Trunc, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_trunc_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Trunc, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_trunc_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Trunc, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_trunc_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Frac × {f32, f16, bf16, f64}
             (UnaryKind::Frac, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_frac_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Frac, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_frac_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Frac, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_frac_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Frac, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_frac_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Erf × {f32, f16, bf16, f64}
             (UnaryKind::Erf, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erf_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erf, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erf_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erf, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erf_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erf, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erf_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Erfc × {f32, f16, bf16, f64}
             (UnaryKind::Erfc, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erfc_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erfc, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erfc_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erfc, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erfc_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erfc, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erfc_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Lgamma × {f32, f16, bf16, f64}
             (UnaryKind::Lgamma, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_lgamma_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Lgamma, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_lgamma_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Lgamma, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_lgamma_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Lgamma, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_lgamma_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Logit × {f32, f16, bf16, f64}
             (UnaryKind::Logit, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_logit_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Logit, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_logit_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Logit, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_logit_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Logit, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_logit_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Softsign × {f32, f16, bf16, f64}
             (UnaryKind::Softsign, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softsign_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softsign, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softsign_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softsign, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softsign_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softsign, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softsign_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Tanhshrink × {f32, f16, bf16, f64}
             (UnaryKind::Tanhshrink, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanhshrink_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanhshrink, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanhshrink_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanhshrink, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanhshrink_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanhshrink, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanhshrink_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Relu6 × {f32, f16, bf16, f64}
             (UnaryKind::Relu6, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu6_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu6, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu6_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu6, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu6_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu6, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu6_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Selu × {f32, f16, bf16, f64}
             (UnaryKind::Selu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_selu_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Selu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_selu_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Selu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_selu_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Selu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_selu_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // LeakyReLU (α=0.01) × {f32, f16, bf16, f64}
             (UnaryKind::LeakyRelu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_leaky_relu_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::LeakyRelu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_leaky_relu_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::LeakyRelu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_leaky_relu_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::LeakyRelu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_leaky_relu_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // ELU × {f32, f16, bf16, f64} — α threads through the FFI as
@@ -1374,92 +2409,176 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
             // descriptor-parameter session).
             (UnaryKind::Elu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f32_run(
-                    numel, x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    1.0f32,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f16_run(
-                    numel, x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    1.0f32,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_bf16_run(
-                    numel, x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    1.0f32,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f64_run(
-                    numel, x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    1.0f32,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Hardshrink (λ=0.5) × {f32, f16, bf16, f64}
             (UnaryKind::Hardshrink, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardshrink_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardshrink, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardshrink_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardshrink, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardshrink_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardshrink, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardshrink_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Softshrink (λ=0.5) × {f32, f16, bf16, f64}
             (UnaryKind::Softshrink, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softshrink, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softshrink, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softshrink, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Step (Heaviside; step(0) = 0, NaN → 0) × {f32, f16, bf16, f64}
             (UnaryKind::Step, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_step_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Step, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_step_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Step, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_step_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Step, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_step_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {
                 return Err(Error::Unsupported(
                     "baracuda-kernels::UnaryPlan::run reached an unimplemented \
                      (kind, dtype) pair — select() should have caught this",
-                ))
+                ));
             }
         };
         map_status(status)
@@ -1500,1295 +2619,2951 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
             // Abs × {f32, f16, bf16, f64}
             (UnaryKind::Abs, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_abs_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Abs, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_abs_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Abs, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_abs_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Abs, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_abs_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sign × {f32, f16, bf16, f64}
             (UnaryKind::Sign, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sign_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sign, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sign_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sign, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sign_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sign, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sign_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Reciprocal × {f32, f16, bf16, f64}
             (UnaryKind::Reciprocal, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_reciprocal_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Reciprocal, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_reciprocal_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Reciprocal, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_reciprocal_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Reciprocal, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_reciprocal_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Square × {f32, f16, bf16, f64}
             (UnaryKind::Square, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_square_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Square, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_square_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Square, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_square_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Square, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_square_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Cube × {f32, f16, bf16, f64}
             (UnaryKind::Cube, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cube_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cube, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cube_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cube, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cube_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cube, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cube_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sqrt × {f32, f16, bf16, f64}
             (UnaryKind::Sqrt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sqrt_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sqrt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sqrt_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sqrt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sqrt_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sqrt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sqrt_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Rsqrt × {f32, f16, bf16, f64}
             (UnaryKind::Rsqrt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_rsqrt_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Rsqrt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_rsqrt_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Rsqrt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_rsqrt_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Rsqrt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_rsqrt_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Exp × {f32, f16, bf16, f64}
             (UnaryKind::Exp, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Expm1 × {f32, f16, bf16, f64}
             (UnaryKind::Expm1, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_expm1_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Expm1, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_expm1_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Expm1, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_expm1_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Expm1, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_expm1_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Log × {f32, f16, bf16, f64}
             (UnaryKind::Log, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Log1p × {f32, f16, bf16, f64}
             (UnaryKind::Log1p, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log1p_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log1p, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log1p_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log1p, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log1p_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log1p, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log1p_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sin × {f32, f16, bf16, f64}
             (UnaryKind::Sin, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sin_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sin, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sin_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sin, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sin_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sin, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sin_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Cos × {f32, f16, bf16, f64}
             (UnaryKind::Cos, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cos_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cos, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cos_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cos, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cos_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cos, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cos_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Tan × {f32, f16, bf16, f64}
             (UnaryKind::Tan, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tan_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tan, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tan_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tan, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tan_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tan, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tan_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sinh × {f32, f16, bf16, f64}
             (UnaryKind::Sinh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sinh_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sinh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sinh_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sinh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sinh_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sinh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sinh_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Cosh × {f32, f16, bf16, f64}
             (UnaryKind::Cosh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cosh_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cosh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cosh_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cosh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cosh_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cosh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cosh_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Tanh × {f32, f16, bf16, f64}
             (UnaryKind::Tanh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanh_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanh_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanh_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanh_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Relu × {f32, f16, bf16, f64}
             (UnaryKind::Relu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Gelu × {f32, f16, bf16, f64}
             (UnaryKind::Gelu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Gelu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Gelu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Gelu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // GeluTanh × {f32, f16, bf16, f64}
             (UnaryKind::GeluTanh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_tanh_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::GeluTanh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_tanh_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::GeluTanh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_tanh_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::GeluTanh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_gelu_tanh_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Silu × {f32, f16, bf16, f64}
             (UnaryKind::Silu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_silu_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Silu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_silu_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Silu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_silu_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Silu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_silu_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Mish × {f32, f16, bf16, f64}
             (UnaryKind::Mish, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_mish_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Mish, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_mish_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Mish, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_mish_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Mish, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_mish_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Sigmoid × {f32, f16, bf16, f64}
             (UnaryKind::Sigmoid, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sigmoid_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sigmoid, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sigmoid_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sigmoid, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sigmoid_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Sigmoid, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_sigmoid_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Softplus × {f32, f16, bf16, f64}
             (UnaryKind::Softplus, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softplus_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softplus, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softplus_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softplus, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softplus_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softplus, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softplus_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Hardswish × {f32, f16, bf16, f64}
             (UnaryKind::Hardswish, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardswish_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardswish, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardswish_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardswish, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardswish_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardswish, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardswish_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Hardsigmoid × {f32, f16, bf16, f64}
             (UnaryKind::Hardsigmoid, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardsigmoid_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardsigmoid, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardsigmoid_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardsigmoid, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardsigmoid_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardsigmoid, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardsigmoid_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Hardtanh × {f32, f16, bf16, f64}
             (UnaryKind::Hardtanh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardtanh_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardtanh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardtanh_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardtanh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardtanh_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardtanh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardtanh_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Neg dtype fill — Neg's trailblazer f32 cell is wired above.
             (UnaryKind::Neg, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_neg_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Neg, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_neg_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Neg, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_neg_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Cbrt × {f32, f16, bf16, f64}
             (UnaryKind::Cbrt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cbrt_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cbrt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cbrt_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cbrt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cbrt_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Cbrt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_cbrt_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Exp2 × {f32, f16, bf16, f64}
             (UnaryKind::Exp2, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp2_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp2, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp2_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp2, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp2_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Exp2, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_exp2_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Log2 × {f32, f16, bf16, f64}
             (UnaryKind::Log2, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log2_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log2, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log2_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log2, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log2_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log2, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log2_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Log10 × {f32, f16, bf16, f64}
             (UnaryKind::Log10, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log10_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log10, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log10_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log10, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log10_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Log10, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_log10_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Asin × {f32, f16, bf16, f64}
             (UnaryKind::Asin, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asin_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asin, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asin_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asin, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asin_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asin, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asin_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Acos × {f32, f16, bf16, f64}
             (UnaryKind::Acos, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acos_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acos, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acos_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acos, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acos_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acos, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acos_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Atan × {f32, f16, bf16, f64}
             (UnaryKind::Atan, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atan_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atan, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atan_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atan, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atan_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atan, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atan_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Asinh × {f32, f16, bf16, f64}
             (UnaryKind::Asinh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asinh_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asinh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asinh_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asinh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asinh_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Asinh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_asinh_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Acosh × {f32, f16, bf16, f64}
             (UnaryKind::Acosh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acosh_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acosh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acosh_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acosh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acosh_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Acosh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_acosh_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Atanh × {f32, f16, bf16, f64}
             (UnaryKind::Atanh, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atanh_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atanh, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atanh_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atanh, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atanh_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Atanh, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_atanh_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Floor × {f32, f16, bf16, f64}
             (UnaryKind::Floor, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_floor_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Floor, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_floor_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Floor, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_floor_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Floor, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_floor_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Ceil × {f32, f16, bf16, f64}
             (UnaryKind::Ceil, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_ceil_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Ceil, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_ceil_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Ceil, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_ceil_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Ceil, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_ceil_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Round × {f32, f16, bf16, f64}
             (UnaryKind::Round, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_round_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Round, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_round_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Round, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_round_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Round, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_round_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Trunc × {f32, f16, bf16, f64}
             (UnaryKind::Trunc, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_trunc_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Trunc, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_trunc_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Trunc, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_trunc_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Trunc, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_trunc_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Frac × {f32, f16, bf16, f64}
             (UnaryKind::Frac, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_frac_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Frac, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_frac_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Frac, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_frac_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Frac, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_frac_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Erf × {f32, f16, bf16, f64}
             (UnaryKind::Erf, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erf_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erf, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erf_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erf, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erf_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erf, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erf_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Erfc × {f32, f16, bf16, f64}
             (UnaryKind::Erfc, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erfc_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erfc, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erfc_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erfc, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erfc_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Erfc, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_erfc_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Lgamma × {f32, f16, bf16, f64}
             (UnaryKind::Lgamma, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_lgamma_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Lgamma, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_lgamma_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Lgamma, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_lgamma_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Lgamma, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_lgamma_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Logit × {f32, f16, bf16, f64}
             (UnaryKind::Logit, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_logit_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Logit, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_logit_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Logit, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_logit_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Logit, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_logit_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Softsign × {f32, f16, bf16, f64}
             (UnaryKind::Softsign, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softsign_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softsign, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softsign_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softsign, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softsign_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softsign, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softsign_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Tanhshrink × {f32, f16, bf16, f64}
             (UnaryKind::Tanhshrink, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanhshrink_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanhshrink, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanhshrink_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanhshrink, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanhshrink_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Tanhshrink, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_tanhshrink_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Relu6 × {f32, f16, bf16, f64}
             (UnaryKind::Relu6, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu6_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu6, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu6_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu6, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu6_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Relu6, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_relu6_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Selu × {f32, f16, bf16, f64}
             (UnaryKind::Selu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_selu_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Selu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_selu_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Selu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_selu_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Selu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_selu_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // LeakyReLU (α=0.01) × {f32, f16, bf16, f64}
             (UnaryKind::LeakyRelu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_leaky_relu_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::LeakyRelu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_leaky_relu_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::LeakyRelu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_leaky_relu_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::LeakyRelu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_leaky_relu_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // ELU × {f32, f16, bf16, f64} — strided sibling; α default 1.0
@@ -2796,101 +5571,233 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
             // through every variant).
             (UnaryKind::Elu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    1.0f32,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    1.0f32,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    1.0f32,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    1.0f32,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Hardshrink (λ=0.5) × {f32, f16, bf16, f64}
             (UnaryKind::Hardshrink, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardshrink_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardshrink, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardshrink_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardshrink, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardshrink_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Hardshrink, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_hardshrink_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Softshrink (λ=0.5) × {f32, f16, bf16, f64}
             (UnaryKind::Softshrink, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softshrink, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softshrink, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Softshrink, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // Step (Heaviside; step(0) = 0, NaN → 0) × {f32, f16, bf16, f64}
             (UnaryKind::Step, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_step_f32_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Step, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_step_f16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Step, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_step_bf16_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Step, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_step_f64_strided_run(
-                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_y.as_ptr(),
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

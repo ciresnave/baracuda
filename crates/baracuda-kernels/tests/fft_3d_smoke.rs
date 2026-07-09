@@ -6,7 +6,7 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     Complex32, Complex64, ElementKind, FftNdArgs, FftNdDescriptor, FftNdPlan, PlanPreference,
     Workspace,
@@ -37,11 +37,9 @@ fn fft3_ifft3_roundtrip_complex32() {
         for k in 0..D as usize {
             for i in 0..H as usize {
                 for j in 0..W as usize {
-                    let idx =
-                        b * per + k * (H * W) as usize + i * W as usize + j;
+                    let idx = b * per + k * (H * W) as usize + i * W as usize + j;
                     x_host[idx] = Complex32::new(
-                        (i as f32) + 0.25 * (j as f32) + 0.125 * (k as f32)
-                            + 0.5 * (b as f32),
+                        (i as f32) + 0.25 * (j as f32) + 0.125 * (k as f32) + 0.5 * (b as f32),
                         -(j as f32),
                     );
                 }
@@ -51,10 +49,8 @@ fn fft3_ifft3_roundtrip_complex32() {
 
     let mut dev_x: DeviceBuffer<Complex32> =
         DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
+    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_xr: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
 
     let fwd_desc = FftNdDescriptor {
         dims: [D, H, W, 0],
@@ -124,11 +120,9 @@ fn fft3_ifft3_roundtrip_complex64() {
         for k in 0..D as usize {
             for i in 0..H as usize {
                 for j in 0..W as usize {
-                    let idx =
-                        b * per + k * (H * W) as usize + i * W as usize + j;
+                    let idx = b * per + k * (H * W) as usize + i * W as usize + j;
                     x_host[idx] = Complex64::new(
-                        (i as f64) + 0.25 * (j as f64) + 0.125 * (k as f64)
-                            + 0.5 * (b as f64),
+                        (i as f64) + 0.25 * (j as f64) + 0.125 * (k as f64) + 0.5 * (b as f64),
                         -(j as f64),
                     );
                 }
@@ -138,10 +132,8 @@ fn fft3_ifft3_roundtrip_complex64() {
 
     let mut dev_x: DeviceBuffer<Complex64> =
         DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex64> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<Complex64> =
-        DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
+    let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_xr: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
 
     let fwd_desc = FftNdDescriptor {
         dims: [D, H, W, 0],

@@ -7,10 +7,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, InstanceNormBackwardArgs, InstanceNormBackwardDescriptor,
-    InstanceNormBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, InstanceNormBackwardArgs, InstanceNormBackwardDescriptor,
+    InstanceNormBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -22,9 +22,7 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
-fn compute_saves_f32(
-    n: usize, c: usize, s: usize, x: &[f32], eps: f32,
-) -> (Vec<f32>, Vec<f32>) {
+fn compute_saves_f32(n: usize, c: usize, s: usize, x: &[f32], eps: f32) -> (Vec<f32>, Vec<f32>) {
     let gcount = n * c;
     let mut saved_mean = vec![0f32; gcount];
     let mut saved_rstd = vec![0f32; gcount];
@@ -61,8 +59,7 @@ fn instance_norm_bw_f32_with_affine() {
     let host_x: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.1 - 1.0).collect();
     let host_dy: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.05 - 0.3).collect();
     let host_gamma: Vec<f32> = (0..c).map(|i| 1.0 + 0.1 * i as f32).collect();
-    let (saved_mean, saved_rstd) =
-        compute_saves_f32(n as usize, c as usize, s, &host_x, 1e-5);
+    let (saved_mean, saved_rstd) = compute_saves_f32(n as usize, c as usize, s, &host_x, 1e-5);
     let gcount = (n as usize) * (c as usize);
 
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("dy");
@@ -82,23 +79,56 @@ fn instance_norm_bw_f32_with_affine() {
         has_affine: true,
         element: ElementKind::F32,
     };
-    let plan = InstanceNormBackwardPlan::<f32, 4>::select(
-        &stream, &desc, PlanPreference::default()
-    ).expect("sel");
+    let plan =
+        InstanceNormBackwardPlan::<f32, 4>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         InstanceNormBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-            saved_mean: TensorRef { data: dev_sm.as_slice(), shape: [gcount as i32], stride: [1] },
-            saved_rstd: TensorRef { data: dev_sr.as_slice(), shape: [gcount as i32], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dgamma: Some(TensorMut { data: dev_dg.as_slice_mut(), shape: [c], stride: [1] }),
-            dbeta: Some(TensorMut { data: dev_db.as_slice_mut(), shape: [c], stride: [1] }),
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            saved_mean: TensorRef {
+                data: dev_sm.as_slice(),
+                shape: [gcount as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorRef {
+                data: dev_sr.as_slice(),
+                shape: [gcount as i32],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dgamma: Some(TensorMut {
+                data: dev_dg.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
+            dbeta: Some(TensorMut {
+                data: dev_db.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
         },
-    ).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_dx = vec![0f32; numel];
@@ -149,23 +179,56 @@ fn instance_norm_bw_f64_with_affine() {
         has_affine: true,
         element: ElementKind::F64,
     };
-    let plan = InstanceNormBackwardPlan::<f64, 4>::select(
-        &stream, &desc, PlanPreference::default()
-    ).expect("sel");
+    let plan =
+        InstanceNormBackwardPlan::<f64, 4>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         InstanceNormBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-            saved_mean: TensorRef { data: dev_sm.as_slice(), shape: [gcount as i32], stride: [1] },
-            saved_rstd: TensorRef { data: dev_sr.as_slice(), shape: [gcount as i32], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dgamma: Some(TensorMut { data: dev_dg.as_slice_mut(), shape: [c], stride: [1] }),
-            dbeta: Some(TensorMut { data: dev_db.as_slice_mut(), shape: [c], stride: [1] }),
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            saved_mean: TensorRef {
+                data: dev_sm.as_slice(),
+                shape: [gcount as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorRef {
+                data: dev_sr.as_slice(),
+                shape: [gcount as i32],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dgamma: Some(TensorMut {
+                data: dev_dg.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
+            dbeta: Some(TensorMut {
+                data: dev_db.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
         },
-    ).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_dx = vec![0f64; numel];
@@ -216,29 +279,66 @@ fn instance_norm_bw_f16_with_affine() {
         has_affine: true,
         element: ElementKind::F16,
     };
-    let plan = InstanceNormBackwardPlan::<f16, 4>::select(
-        &stream, &desc, PlanPreference::default()
-    ).expect("sel");
+    let plan =
+        InstanceNormBackwardPlan::<f16, 4>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         InstanceNormBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-            saved_mean: TensorRef { data: dev_sm.as_slice(), shape: [gcount as i32], stride: [1] },
-            saved_rstd: TensorRef { data: dev_sr.as_slice(), shape: [gcount as i32], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dgamma: Some(TensorMut { data: dev_dg.as_slice_mut(), shape: [c], stride: [1] }),
-            dbeta: Some(TensorMut { data: dev_db.as_slice_mut(), shape: [c], stride: [1] }),
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            saved_mean: TensorRef {
+                data: dev_sm.as_slice(),
+                shape: [gcount as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorRef {
+                data: dev_sr.as_slice(),
+                shape: [gcount as i32],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dgamma: Some(TensorMut {
+                data: dev_dg.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
+            dbeta: Some(TensorMut {
+                data: dev_db.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
         },
-    ).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_dx = vec![f16::ZERO; numel];
     dev_dx.copy_to_host(&mut got_dx).expect("dl dx");
     for (i, v) in got_dx.iter().enumerate() {
-        assert!(v.to_f32().is_finite(), "in bw f16 dx[{i}] not finite: {}", v.to_f32());
+        assert!(
+            v.to_f32().is_finite(),
+            "in bw f16 dx[{i}] not finite: {}",
+            v.to_f32()
+        );
     }
 }
 
@@ -283,28 +383,65 @@ fn instance_norm_bw_bf16_with_affine() {
         has_affine: true,
         element: ElementKind::Bf16,
     };
-    let plan = InstanceNormBackwardPlan::<bf16, 4>::select(
-        &stream, &desc, PlanPreference::default()
-    ).expect("sel");
+    let plan =
+        InstanceNormBackwardPlan::<bf16, 4>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         InstanceNormBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-            saved_mean: TensorRef { data: dev_sm.as_slice(), shape: [gcount as i32], stride: [1] },
-            saved_rstd: TensorRef { data: dev_sr.as_slice(), shape: [gcount as i32], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dgamma: Some(TensorMut { data: dev_dg.as_slice_mut(), shape: [c], stride: [1] }),
-            dbeta: Some(TensorMut { data: dev_db.as_slice_mut(), shape: [c], stride: [1] }),
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            saved_mean: TensorRef {
+                data: dev_sm.as_slice(),
+                shape: [gcount as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorRef {
+                data: dev_sr.as_slice(),
+                shape: [gcount as i32],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dgamma: Some(TensorMut {
+                data: dev_dg.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
+            dbeta: Some(TensorMut {
+                data: dev_db.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
         },
-    ).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_dx = vec![bf16::ZERO; numel];
     dev_dx.copy_to_host(&mut got_dx).expect("dl dx");
     for (i, v) in got_dx.iter().enumerate() {
-        assert!(v.to_f32().is_finite(), "in bw bf16 dx[{i}] not finite: {}", v.to_f32());
+        assert!(
+            v.to_f32().is_finite(),
+            "in bw bf16 dx[{i}] not finite: {}",
+            v.to_f32()
+        );
     }
 }

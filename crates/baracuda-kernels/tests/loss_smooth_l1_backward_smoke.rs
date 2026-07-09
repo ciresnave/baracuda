@@ -1,9 +1,10 @@
 //! Real-GPU smoke test for `SmoothL1LossBackwardPlan`. BW × 4 dtypes × Mean.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, LossReduction, PlanPreference, SmoothL1LossBackwardArgs,
+    ElementKind, LossReduction, PlanPreference, SmoothL1LossBackwardArgs,
     SmoothL1LossBackwardDescriptor, SmoothL1LossBackwardPlan, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -15,20 +16,20 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
-fn host_smooth_l1_bw_f64(
-    pred: &[f64],
-    target: &[f64],
-    dy: f64,
-    n: usize,
-    beta: f64,
-) -> Vec<f64> {
+fn host_smooth_l1_bw_f64(pred: &[f64], target: &[f64], dy: f64, n: usize, beta: f64) -> Vec<f64> {
     let scale = dy / (n as f64);
     pred.iter()
         .zip(target.iter())
         .map(|(&p, &t)| {
             let x = p - t;
             let ax = x.abs();
-            let v = if ax < beta { x / beta } else if x > 0.0 { 1.0 } else { -1.0 };
+            let v = if ax < beta {
+                x / beta
+            } else if x > 0.0 {
+                1.0
+            } else {
+                -1.0
+            };
             v * scale
         })
         .collect()
@@ -47,7 +48,9 @@ fn loss_smooth_l1_backward_f32_mean() {
     let expected: Vec<f32> = host_smooth_l1_bw_f64(
         &host_p.iter().map(|&v| v as f64).collect::<Vec<_>>(),
         &host_t.iter().map(|&v| v as f64).collect::<Vec<_>>(),
-        1.0, numel, beta as f64,
+        1.0,
+        numel,
+        beta as f64,
     )
     .into_iter()
     .map(|v| v as f32)
@@ -64,16 +67,28 @@ fn loss_smooth_l1_backward_f32_mean() {
         beta,
         element: ElementKind::F32,
     };
-    let plan = SmoothL1LossBackwardPlan::<f32, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        SmoothL1LossBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         SmoothL1LossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -87,8 +102,12 @@ fn loss_smooth_l1_backward_f32_mean() {
     dev_dp.copy_to_host(&mut got).unwrap();
     for i in 0..numel {
         let tol = expected[i].abs() * 8.0 * f32::EPSILON + 1e-6;
-        assert!((got[i] - expected[i]).abs() <= tol, "f32 SmoothL1 BW @{i}: got={} want={}",
-            got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 SmoothL1 BW @{i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -115,16 +134,28 @@ fn loss_smooth_l1_backward_f64_mean() {
         beta,
         element: ElementKind::F64,
     };
-    let plan = SmoothL1LossBackwardPlan::<f64, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        SmoothL1LossBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         SmoothL1LossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -169,16 +200,28 @@ fn loss_smooth_l1_backward_f16_mean() {
         beta,
         element: ElementKind::F16,
     };
-    let plan = SmoothL1LossBackwardPlan::<f16, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        SmoothL1LossBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         SmoothL1LossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -194,7 +237,12 @@ fn loss_smooth_l1_backward_f16_mean() {
         let got_f32 = got[i].to_f32();
         let want = expected_f64[i] as f32;
         let tol = want.abs() * 8.0 * 9.77e-4_f32 + 5e-3;
-        assert!((got_f32 - want).abs() <= tol, "f16 SmoothL1 BW @{i}: got={} want={}", got_f32, want);
+        assert!(
+            (got_f32 - want).abs() <= tol,
+            "f16 SmoothL1 BW @{i}: got={} want={}",
+            got_f32,
+            want
+        );
     }
 }
 
@@ -225,16 +273,28 @@ fn loss_smooth_l1_backward_bf16_mean() {
         beta,
         element: ElementKind::Bf16,
     };
-    let plan = SmoothL1LossBackwardPlan::<bf16, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        SmoothL1LossBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         SmoothL1LossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -250,6 +310,11 @@ fn loss_smooth_l1_backward_bf16_mean() {
         let got_f32 = got[i].to_f32();
         let want = expected_f64[i] as f32;
         let tol = want.abs() * 8.0 * 7.81e-3_f32 + 2e-2;
-        assert!((got_f32 - want).abs() <= tol, "bf16 SmoothL1 BW @{i}: got={} want={}", got_f32, want);
+        assert!(
+            (got_f32 - want).abs() <= tol,
+            "bf16 SmoothL1 BW @{i}: got={} want={}",
+            got_f32,
+            want
+        );
     }
 }

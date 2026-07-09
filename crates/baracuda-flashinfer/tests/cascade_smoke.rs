@@ -14,13 +14,13 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
     CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan, CascadeMergeStatesArgs,
     CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
 };
 use baracuda_flashinfer::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -84,10 +84,26 @@ fn cascade_equal_lse_averages() {
         &stream,
         Workspace::None,
         CascadeAttentionArgs {
-            v: TensorMut { data: v_dev.as_slice_mut(), shape: v_shape, stride: contiguous_stride(v_shape) },
-            s: TensorMut { data: s_dev.as_slice_mut(), shape: s_shape, stride: contiguous_stride(s_shape) },
-            v_other: TensorRef { data: v_other_dev.as_slice(), shape: v_shape, stride: contiguous_stride(v_shape) },
-            s_other: TensorRef { data: s_other_dev.as_slice(), shape: s_shape, stride: contiguous_stride(s_shape) },
+            v: TensorMut {
+                data: v_dev.as_slice_mut(),
+                shape: v_shape,
+                stride: contiguous_stride(v_shape),
+            },
+            s: TensorMut {
+                data: s_dev.as_slice_mut(),
+                shape: s_shape,
+                stride: contiguous_stride(s_shape),
+            },
+            v_other: TensorRef {
+                data: v_other_dev.as_slice(),
+                shape: v_shape,
+                stride: contiguous_stride(v_shape),
+            },
+            s_other: TensorRef {
+                data: s_other_dev.as_slice(),
+                shape: s_shape,
+                stride: contiguous_stride(s_shape),
+            },
         },
     )
     .expect("cascade merge run");
@@ -100,7 +116,10 @@ fn cascade_equal_lse_averages() {
 
     for (i, &got) in v_host.iter().enumerate() {
         let got = got.to_f32();
-        assert!((got - 2.0).abs() < 2e-2, "v[{i}] = {got}, expected mean 2.0");
+        assert!(
+            (got - 2.0).abs() < 2e-2,
+            "v[{i}] = {got}, expected mean 2.0"
+        );
     }
     assert!(
         (s_host[0] - 1.0).abs() < 1e-3,
@@ -170,7 +189,8 @@ fn cascade_merge_states_equal_lse_averages() {
 
     let v_dev = DeviceBuffer::from_slice(&ctx, &v_h).expect("upload v");
     let s_dev = DeviceBuffer::from_slice(&ctx, &s_h).expect("upload s");
-    let mut v_merged_dev: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, HEAD_DIM).expect("alloc vm");
+    let mut v_merged_dev: DeviceBuffer<f16> =
+        DeviceBuffer::zeros(&ctx, HEAD_DIM).expect("alloc vm");
     let mut s_merged_dev: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc sm");
 
     let v_shape = [1, N as i32, 1, HEAD_DIM as i32];
@@ -181,19 +201,39 @@ fn cascade_merge_states_equal_lse_averages() {
         &stream,
         Workspace::None,
         CascadeMergeStatesArgs {
-            v: TensorRef { data: v_dev.as_slice(), shape: v_shape, stride: contiguous_stride(v_shape) },
-            s: TensorRef { data: s_dev.as_slice(), shape: s_shape, stride: contiguous_stride(s_shape) },
-            v_merged: TensorMut { data: v_merged_dev.as_slice_mut(), shape: vm_shape, stride: contiguous_stride(vm_shape) },
-            s_merged: TensorMut { data: s_merged_dev.as_slice_mut(), shape: sm_shape, stride: contiguous_stride(sm_shape) },
+            v: TensorRef {
+                data: v_dev.as_slice(),
+                shape: v_shape,
+                stride: contiguous_stride(v_shape),
+            },
+            s: TensorRef {
+                data: s_dev.as_slice(),
+                shape: s_shape,
+                stride: contiguous_stride(s_shape),
+            },
+            v_merged: TensorMut {
+                data: v_merged_dev.as_slice_mut(),
+                shape: vm_shape,
+                stride: contiguous_stride(vm_shape),
+            },
+            s_merged: TensorMut {
+                data: s_merged_dev.as_slice_mut(),
+                shape: sm_shape,
+                stride: contiguous_stride(sm_shape),
+            },
         },
     )
     .expect("merge_states run");
     stream.synchronize().expect("sync");
 
     let mut vm_host = vec![f16::ZERO; HEAD_DIM];
-    v_merged_dev.copy_to_host(&mut vm_host).expect("download vm");
+    v_merged_dev
+        .copy_to_host(&mut vm_host)
+        .expect("download vm");
     let mut sm_host = [0.0f32];
-    s_merged_dev.copy_to_host(&mut sm_host).expect("download sm");
+    s_merged_dev
+        .copy_to_host(&mut sm_host)
+        .expect("download sm");
 
     for (i, &got) in vm_host.iter().enumerate() {
         let got = got.to_f32();

@@ -16,10 +16,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, QuantizedLinearArgs,
-    QuantizedLinearDescriptor, QuantizedLinearPlan, TensorMut, TensorRef, Workspace, S8,
+    ElementKind, PlanPreference, QuantizedLinearArgs, QuantizedLinearDescriptor,
+    QuantizedLinearPlan, S8, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -32,11 +32,7 @@ fn setup() -> (Context, Stream) {
 
 /// Offline weight quantization, per-output-channel symmetric.
 /// Returns `(weight_q[C_out, K], weight_scale[C_out])`.
-fn quantize_weight_per_channel_symmetric(
-    c_out: usize,
-    k: usize,
-    w: &[f32],
-) -> (Vec<i8>, Vec<f32>) {
+fn quantize_weight_per_channel_symmetric(c_out: usize, k: usize, w: &[f32]) -> (Vec<i8>, Vec<f32>) {
     let qmax = 127i32;
     let mut scale = vec![0f32; c_out];
     let mut wq = vec![0i8; c_out * k];
@@ -65,13 +61,7 @@ fn quantize_weight_per_channel_symmetric(
 }
 
 /// CPU full-precision reference: out[m, n] = sum_k a[m, k] * w[n, k].
-fn cpu_fp_matmul(
-    m: usize,
-    c_out: usize,
-    k: usize,
-    a: &[f32],
-    w: &[f32],
-) -> Vec<f32> {
+fn cpu_fp_matmul(m: usize, c_out: usize, k: usize, a: &[f32], w: &[f32]) -> Vec<f32> {
     let mut out = vec![0f32; m * c_out];
     for mm in 0..m {
         for nn in 0..c_out {
@@ -105,10 +95,8 @@ fn quantized_linear_w8a8_f32_basic() {
     // Weight `[C_out, K]`. Distinct magnitudes per channel.
     let host_w: Vec<f32> = vec![
         // chan 0 — small magnitude
-        0.1, -0.2, 0.15, 0.05, -0.1, 0.08, -0.12, 0.18,
-        // chan 1 — mid magnitude
-        0.4, 0.3, -0.5, 0.6, -0.45, 0.55, -0.35, 0.4,
-        // chan 2 — large magnitude
+        0.1, -0.2, 0.15, 0.05, -0.1, 0.08, -0.12, 0.18, // chan 1 — mid magnitude
+        0.4, 0.3, -0.5, 0.6, -0.45, 0.55, -0.35, 0.4, // chan 2 — large magnitude
         1.2, -0.8, 1.0, 0.9, -1.1, 0.7, 1.3, -0.95,
     ];
 

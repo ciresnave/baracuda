@@ -38,27 +38,33 @@ fn n_blocking_at_16384_matches_smaller_n_reference() {
     let n_large = 16384usize;
     let n_small = 4096usize;
 
-    let a_host: Vec<f64> =
-        (0..(m * k)).map(|i| ((i as f64) * 0.011).sin() * 0.3).collect();
+    let a_host: Vec<f64> = (0..(m * k))
+        .map(|i| ((i as f64) * 0.011).sin() * 0.3)
+        .collect();
     let b_host: Vec<f64> = (0..(k * n_large))
         .map(|i| ((i as f64) * 0.007).cos() * 0.3)
         .collect();
 
     let a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload A");
     let b_large = DeviceBuffer::from_slice(&ctx, &b_host).expect("upload B");
-    let c_large: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, m * n_large).expect("alloc C-large");
+    let c_large: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, m * n_large).expect("alloc C-large");
 
     // Run the large-N case — exercises n-blocking inside matmul_core.
     unsafe {
         h.dgemm_with_variant(
-            Op::N, Op::N,
-            m, n_large, k,
+            Op::N,
+            Op::N,
+            m,
+            n_large,
+            k,
             1.0,
-            a.as_raw().0 as *const f64, m,
-            b_large.as_raw().0 as *const f64, k,
+            a.as_raw().0 as *const f64,
+            m,
+            b_large.as_raw().0 as *const f64,
+            k,
             0.0,
-            c_large.as_raw().0 as *mut f64, m,
+            c_large.as_raw().0 as *mut f64,
+            m,
             OzakiSlices::S8,
             OzakiVariant::Base,
         )
@@ -72,19 +78,23 @@ fn n_blocking_at_16384_matches_smaller_n_reference() {
     // per-row absolute max — independent of column index, so chunking
     // can't move the result).
     let b_small_host: Vec<f64> = b_host[0..(k * n_small)].to_vec();
-    let b_small =
-        DeviceBuffer::from_slice(&ctx, &b_small_host).expect("upload B-small");
-    let c_small: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, m * n_small).expect("alloc C-small");
+    let b_small = DeviceBuffer::from_slice(&ctx, &b_small_host).expect("upload B-small");
+    let c_small: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, m * n_small).expect("alloc C-small");
     unsafe {
         h.dgemm_with_variant(
-            Op::N, Op::N,
-            m, n_small, k,
+            Op::N,
+            Op::N,
+            m,
+            n_small,
+            k,
             1.0,
-            a.as_raw().0 as *const f64, m,
-            b_small.as_raw().0 as *const f64, k,
+            a.as_raw().0 as *const f64,
+            m,
+            b_small.as_raw().0 as *const f64,
+            k,
             0.0,
-            c_small.as_raw().0 as *mut f64, m,
+            c_small.as_raw().0 as *mut f64,
+            m,
             OzakiSlices::S8,
             OzakiVariant::Base,
         )

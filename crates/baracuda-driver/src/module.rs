@@ -4,10 +4,10 @@ use core::ffi::{c_char, c_void};
 use std::ffi::CString;
 use std::sync::Arc;
 
-use baracuda_cuda_sys::{driver, CUdeviceptr, CUfunction, CUmodule};
+use baracuda_cuda_sys::{CUdeviceptr, CUfunction, CUmodule, driver};
 
 use crate::context::Context;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// A loaded CUDA module (e.g. compiled PTX).
 #[derive(Clone)]
@@ -155,30 +155,32 @@ impl Module {
         image: &[u8],
         options: &mut [i32],
         option_values: &mut [*mut core::ffi::c_void],
-    ) -> Result<Self> { unsafe {
-        assert_eq!(
-            options.len(),
-            option_values.len(),
-            "load_data_ex: options and option_values must have the same length"
-        );
-        context.set_current()?;
-        let d = driver()?;
-        let cu = d.cu_module_load_data_ex()?;
-        let mut module: CUmodule = core::ptr::null_mut();
-        check(cu(
-            &mut module,
-            image.as_ptr() as *const c_void,
-            options.len() as core::ffi::c_uint,
-            options.as_mut_ptr(),
-            option_values.as_mut_ptr(),
-        ))?;
-        Ok(Self {
-            inner: Arc::new(ModuleInner {
-                handle: module,
-                context: context.clone(),
-            }),
-        })
-    }}
+    ) -> Result<Self> {
+        unsafe {
+            assert_eq!(
+                options.len(),
+                option_values.len(),
+                "load_data_ex: options and option_values must have the same length"
+            );
+            context.set_current()?;
+            let d = driver()?;
+            let cu = d.cu_module_load_data_ex()?;
+            let mut module: CUmodule = core::ptr::null_mut();
+            check(cu(
+                &mut module,
+                image.as_ptr() as *const c_void,
+                options.len() as core::ffi::c_uint,
+                options.as_mut_ptr(),
+                option_values.as_mut_ptr(),
+            ))?;
+            Ok(Self {
+                inner: Arc::new(ModuleInner {
+                    handle: module,
+                    context: context.clone(),
+                }),
+            })
+        }
+    }
 
     /// The [`Context`] this module was loaded into.
     #[inline]

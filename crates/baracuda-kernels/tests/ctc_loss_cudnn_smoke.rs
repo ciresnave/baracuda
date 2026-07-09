@@ -17,11 +17,11 @@
 //!   logits (`exp(log_probs) − γ`), so each per-`(t, n)` row sums to
 //!   zero.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, CtcLossArgs, CtcLossCudnnArgs, CtcLossCudnnDescriptor, CtcLossCudnnPlan,
-    CtcLossDescriptor, CtcLossPlan, ElementKind, LossReduction, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    CtcLossArgs, CtcLossCudnnArgs, CtcLossCudnnDescriptor, CtcLossCudnnPlan, CtcLossDescriptor,
+    CtcLossPlan, ElementKind, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -66,8 +66,7 @@ fn run_cudnn_f32(
     let needed = plan
         .query_workspace_size(stream, host_labels, host_label_lens, host_input_lens)
         .expect("query ws");
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(ctx, needed.max(1)).expect("alloc ws");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, needed.max(1)).expect("alloc ws");
 
     let args = CtcLossCudnnArgs::<f32> {
         log_probs: TensorRef {
@@ -127,8 +126,7 @@ fn run_bespoke_f32_fw(
     let dev_tgt = DeviceBuffer::from_slice(ctx, host_targets_i64).expect("up tgt");
     let dev_in_lens = DeviceBuffer::from_slice(ctx, host_in_lens_i64).expect("up in");
     let dev_tgt_lens = DeviceBuffer::from_slice(ctx, host_tgt_lens_i64).expect("up tgt_lens");
-    let mut dev_loss: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(ctx, n as usize).expect("alloc loss");
+    let mut dev_loss: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, n as usize).expect("alloc loss");
 
     let desc = CtcLossDescriptor {
         max_time: t_max,
@@ -363,8 +361,7 @@ fn cudnn_ctc_f64_general_matches_bespoke() {
     let dev_lp_f64 = DeviceBuffer::from_slice(&ctx, &host_lp_f64).expect("up lp f64");
     let dev_tgt = DeviceBuffer::from_slice(&ctx, &host_targets_i64).expect("up tgt");
     let dev_in_lens = DeviceBuffer::from_slice(&ctx, &host_in_lens_i64).expect("up in");
-    let dev_tgt_lens =
-        DeviceBuffer::from_slice(&ctx, &host_tgt_lens_i64).expect("up tgt_lens");
+    let dev_tgt_lens = DeviceBuffer::from_slice(&ctx, &host_tgt_lens_i64).expect("up tgt_lens");
     let mut dev_loss_f64: DeviceBuffer<f64> =
         DeviceBuffer::zeros(&ctx, n as usize).expect("alloc loss");
     let bespoke_desc = CtcLossDescriptor {
@@ -423,10 +420,14 @@ fn cudnn_ctc_f64_general_matches_bespoke() {
     } else {
         Workspace::None
     };
-    bespoke_plan.run(&stream, ws, bespoke_args).expect("bespoke run f64");
+    bespoke_plan
+        .run(&stream, ws, bespoke_args)
+        .expect("bespoke run f64");
     stream.synchronize().expect("sync");
     let mut bespoke_costs = vec![0f64; n as usize];
-    dev_loss_f64.copy_to_host(&mut bespoke_costs).expect("dl bespoke");
+    dev_loss_f64
+        .copy_to_host(&mut bespoke_costs)
+        .expect("dl bespoke");
 
     // cuDNN f64 path.
     let dev_lp = DeviceBuffer::from_slice(&ctx, &host_lp_f64).expect("up lp cudnn");
@@ -475,7 +476,9 @@ fn cudnn_ctc_f64_general_matches_bespoke() {
     } else {
         Workspace::None
     };
-    cudnn_plan.run(&stream, cudnn_ws, cudnn_args).expect("cudnn run f64");
+    cudnn_plan
+        .run(&stream, cudnn_ws, cudnn_args)
+        .expect("cudnn run f64");
     stream.synchronize().expect("sync");
     let mut cudnn_costs = vec![0f64; n as usize];
     dev_costs.copy_to_host(&mut cudnn_costs).expect("dl cudnn");

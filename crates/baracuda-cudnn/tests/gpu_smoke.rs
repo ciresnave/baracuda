@@ -10,8 +10,8 @@
 //! install.
 
 use baracuda_cudnn::{
-    activation_forward, ActivationDescriptor, ActivationMode, DType, Handle, TensorDescriptor,
-    TensorFormat,
+    ActivationDescriptor, ActivationMode, DType, Handle, TensorDescriptor, TensorFormat,
+    activation_forward,
 };
 use baracuda_driver::{Context, Device, DeviceBuffer};
 

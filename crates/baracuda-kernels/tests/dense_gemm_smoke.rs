@@ -23,7 +23,7 @@
 //! `#[ignore]` by default; run with
 //! `cargo test -p baracuda-kernels --release --test dense_gemm_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     DenseGemmArgs, DenseGemmDescriptor, DenseGemmLayout, DenseGemmPlan, MatrixMut, MatrixRef,
     PlanPreference, Workspace,
@@ -142,11 +142,22 @@ fn run_dense_f32(
     let host_d: Vec<f64> = (0..d_len).map(|i| pattern(i, 0.5, 7, -3.0)).collect();
 
     let expected = cpu_dense_gemm(
-        mu, nu, ku, bu, layout,
-        &host_a, lda, stride_a,
-        &host_b, ldb, stride_b,
-        &host_d, ldd, stride_d,
-        alpha as f64, beta as f64,
+        mu,
+        nu,
+        ku,
+        bu,
+        layout,
+        &host_a,
+        lda,
+        stride_a,
+        &host_b,
+        ldb,
+        stride_b,
+        &host_d,
+        ldd,
+        stride_d,
+        alpha as f64,
+        beta as f64,
     );
 
     let host_a32: Vec<f32> = host_a.iter().map(|&v| v as f32).collect();
@@ -157,22 +168,44 @@ fn run_dense_f32(
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b32).expect("upload B");
     let mut dev_d = DeviceBuffer::from_slice(&ctx, &host_d32).expect("upload D");
 
-    let desc = DenseGemmDescriptor { m, n, k, batch, layout };
+    let desc = DenseGemmDescriptor {
+        m,
+        n,
+        k,
+        batch,
+        layout,
+    };
     let plan = DenseGemmPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select dense f32 plan");
     assert_eq!(plan.workspace_size(), 0);
 
     let args = DenseGemmArgs::<f32> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: lda as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: lda as i64,
+        },
         stride_a: stride_a as i64,
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: ldb as i64 },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: ldb as i64,
+        },
         stride_b: stride_b as i64,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: ldd as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: ldd as i64,
+        },
         stride_d: stride_d as i64,
         alpha,
         beta,
     };
-    plan.run(&stream, Workspace::None, args).expect("dense f32 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("dense f32 run");
     stream.synchronize().expect("stream sync");
 
     let mut got = vec![0f32; d_len];
@@ -218,40 +251,124 @@ fn run_dense_f32(
 #[ignore]
 fn dense_f32_rrr_basic() {
     // Tight lds, single batch, β = 0, ragged shape.
-    run_dense_f32(33, 29, 17, 1, DenseGemmLayout::Rrr, 17, 29, 29, 0, 0, 0, 1.25, 0.0);
+    run_dense_f32(
+        33,
+        29,
+        17,
+        1,
+        DenseGemmLayout::Rrr,
+        17,
+        29,
+        29,
+        0,
+        0,
+        0,
+        1.25,
+        0.0,
+    );
 }
 
 #[test]
 #[ignore]
 fn dense_f32_rcr_basic() {
     // RCR: B col-major [K, N] → ldb ≥ K.
-    run_dense_f32(33, 29, 17, 1, DenseGemmLayout::Rcr, 17, 17, 29, 0, 0, 0, 1.0, 0.0);
+    run_dense_f32(
+        33,
+        29,
+        17,
+        1,
+        DenseGemmLayout::Rcr,
+        17,
+        17,
+        29,
+        0,
+        0,
+        0,
+        1.0,
+        0.0,
+    );
 }
 
 #[test]
 #[ignore]
 fn dense_f32_crr_basic() {
     // CRR: A col-major [M, K] → lda ≥ M. The grad-weight shape.
-    run_dense_f32(33, 29, 17, 1, DenseGemmLayout::Crr, 33, 29, 29, 0, 0, 0, 1.0, 0.0);
+    run_dense_f32(
+        33,
+        29,
+        17,
+        1,
+        DenseGemmLayout::Crr,
+        33,
+        29,
+        29,
+        0,
+        0,
+        0,
+        1.0,
+        0.0,
+    );
 }
 
 #[test]
 #[ignore]
 fn dense_f32_rrr_padded_lds_beta() {
     // Padded leading dims (row-slice views) + β-accumulate in one go.
-    run_dense_f32(32, 24, 16, 1, DenseGemmLayout::Rrr, 16 + 3, 24 + 5, 24 + 2, 0, 0, 0, 0.75, 0.7);
+    run_dense_f32(
+        32,
+        24,
+        16,
+        1,
+        DenseGemmLayout::Rrr,
+        16 + 3,
+        24 + 5,
+        24 + 2,
+        0,
+        0,
+        0,
+        0.75,
+        0.7,
+    );
 }
 
 #[test]
 #[ignore]
 fn dense_f32_rcr_padded_lds() {
-    run_dense_f32(20, 31, 12, 1, DenseGemmLayout::Rcr, 12 + 4, 12 + 6, 31 + 1, 0, 0, 0, 1.5, 0.0);
+    run_dense_f32(
+        20,
+        31,
+        12,
+        1,
+        DenseGemmLayout::Rcr,
+        12 + 4,
+        12 + 6,
+        31 + 1,
+        0,
+        0,
+        0,
+        1.5,
+        0.0,
+    );
 }
 
 #[test]
 #[ignore]
 fn dense_f32_crr_padded_lds() {
-    run_dense_f32(21, 18, 11, 1, DenseGemmLayout::Crr, 21 + 2, 18 + 3, 18 + 4, 0, 0, 0, 1.0, 0.25);
+    run_dense_f32(
+        21,
+        18,
+        11,
+        1,
+        DenseGemmLayout::Crr,
+        21 + 2,
+        18 + 3,
+        18 + 4,
+        0,
+        0,
+        0,
+        1.0,
+        0.25,
+    );
 }
 
 #[test]
@@ -260,10 +377,19 @@ fn dense_f32_rrr_strided_batch() {
     // batch = 3, disjoint slots, padded D ld.
     let (m, n, k) = (16usize, 13usize, 9usize);
     run_dense_f32(
-        m as i32, n as i32, k as i32, 3, DenseGemmLayout::Rrr,
-        k, n, n + 2,
-        m * k, k * n, m * (n + 2),
-        1.0, 0.0,
+        m as i32,
+        n as i32,
+        k as i32,
+        3,
+        DenseGemmLayout::Rrr,
+        k,
+        n,
+        n + 2,
+        m * k,
+        k * n,
+        m * (n + 2),
+        1.0,
+        0.0,
     );
 }
 
@@ -273,10 +399,19 @@ fn dense_f32_rrr_batch_broadcast_a() {
     // stride_a = 0: one A shared across all 3 slots (the GQA-ish case).
     let (m, n, k) = (8usize, 12usize, 10usize);
     run_dense_f32(
-        m as i32, n as i32, k as i32, 3, DenseGemmLayout::Rrr,
-        k, n, n,
-        0, k * n, m * n,
-        1.0, 0.0,
+        m as i32,
+        n as i32,
+        k as i32,
+        3,
+        DenseGemmLayout::Rrr,
+        k,
+        n,
+        n,
+        0,
+        k * n,
+        m * n,
+        1.0,
+        0.0,
     );
 }
 
@@ -295,36 +430,74 @@ fn dense_f64_rrr_basic() {
     let host_b: Vec<f64> = (0..ku * nu).map(|i| pattern(i, 0.125, 11, -5.0)).collect();
     let host_d = vec![0f64; mu * nu];
     let expected = cpu_dense_gemm(
-        mu, nu, ku, 1, DenseGemmLayout::Rrr,
-        &host_a, ku, 0, &host_b, nu, 0, &host_d, nu, 0,
-        1.0, 0.0,
+        mu,
+        nu,
+        ku,
+        1,
+        DenseGemmLayout::Rrr,
+        &host_a,
+        ku,
+        0,
+        &host_b,
+        nu,
+        0,
+        &host_d,
+        nu,
+        0,
+        1.0,
+        0.0,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload B");
     let mut dev_d: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
-    let desc = DenseGemmDescriptor { m, n, k, batch: 1, layout: DenseGemmLayout::Rrr };
+    let desc = DenseGemmDescriptor {
+        m,
+        n,
+        k,
+        batch: 1,
+        layout: DenseGemmLayout::Rrr,
+    };
     let plan = DenseGemmPlan::<f64>::select(&stream, &desc, PlanPreference::default())
         .expect("select dense f64 plan");
     let args = DenseGemmArgs::<f64> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: ku as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: ku as i64,
+        },
         stride_a: 0,
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: nu as i64 },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: nu as i64,
+        },
         stride_b: 0,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: nu as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: nu as i64,
+        },
         stride_d: 0,
         alpha: 1.0f64,
         beta: 0.0f64,
     };
-    plan.run(&stream, Workspace::None, args).expect("dense f64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("dense f64 run");
     stream.synchronize().expect("stream sync");
 
     let mut got = vec![0f64; mu * nu];
     dev_d.copy_to_host(&mut got).expect("download D");
     for (idx, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
         let tol = e.abs().max(1.0) * 1e-12;
-        assert!((g - e).abs() <= tol, "f64 mismatch @ {idx}: got {g} expected {e}");
+        assert!(
+            (g - e).abs() <= tol,
+            "f64 mismatch @ {idx}: got {g} expected {e}"
+        );
     }
 }
 
@@ -372,29 +545,49 @@ fn run_dense_half<T, FI, FO>(
     let host_b: Vec<f64> = host_b_h.iter().map(|&v| from_half(v) as f64).collect();
     let host_d = vec![0f64; mu * nu];
     let expected = cpu_dense_gemm(
-        mu, nu, ku, 1, layout,
-        &host_a, lda, 0, &host_b, ldb, 0, &host_d, nu, 0,
-        1.0, 0.0,
+        mu, nu, ku, 1, layout, &host_a, lda, 0, &host_b, ldb, 0, &host_d, nu, 0, 1.0, 0.0,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a_h).expect("upload A");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b_h).expect("upload B");
     let mut dev_d: DeviceBuffer<T> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
-    let desc = DenseGemmDescriptor { m, n, k, batch: 1, layout };
+    let desc = DenseGemmDescriptor {
+        m,
+        n,
+        k,
+        batch: 1,
+        layout,
+    };
     let plan = DenseGemmPlan::<T>::select(&stream, &desc, PlanPreference::default())
         .expect("select dense half plan");
     let args = DenseGemmArgs::<T> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: lda as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: lda as i64,
+        },
         stride_a: 0,
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: ldb as i64 },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: ldb as i64,
+        },
         stride_b: 0,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: nu as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: nu as i64,
+        },
         stride_d: 0,
         alpha: <T::Scalar as ScalarType>::ONE,
         beta: <T::Scalar as ScalarType>::ZERO,
     };
-    plan.run(&stream, Workspace::None, args).expect("dense half run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("dense half run");
     stream.synchronize().expect("stream sync");
 
     let mut got = vec![T::default(); mu * nu];
@@ -413,8 +606,11 @@ fn run_dense_half<T, FI, FO>(
 #[ignore]
 fn dense_f16_rrr_basic() {
     run_dense_half::<f16, _, _>(
-        DenseGemmLayout::Rrr, 24, 28,
-        f16::from_f32, |v: f16| v.to_f32(),
+        DenseGemmLayout::Rrr,
+        24,
+        28,
+        f16::from_f32,
+        |v: f16| v.to_f32(),
         4e-3,
     );
 }
@@ -423,8 +619,11 @@ fn dense_f16_rrr_basic() {
 #[ignore]
 fn dense_bf16_rcr_basic() {
     run_dense_half::<bf16, _, _>(
-        DenseGemmLayout::Rcr, 24, 24,
-        bf16::from_f32, |v: bf16| v.to_f32(),
+        DenseGemmLayout::Rcr,
+        24,
+        24,
+        bf16::from_f32,
+        |v: bf16| v.to_f32(),
         1.6e-2,
     );
 }
@@ -441,15 +640,32 @@ fn dense_f32_direct_ffi() {
     let (ctx, stream) = gpu_context();
     let (m, n, k) = (8usize, 6usize, 4usize);
 
-    let host_a: Vec<f32> = (0..m * k).map(|i| pattern(i, 0.5, 7, -3.0) as f32).collect();
-    let host_b: Vec<f32> = (0..k * n).map(|i| pattern(i, 0.25, 5, -2.0) as f32).collect();
+    let host_a: Vec<f32> = (0..m * k)
+        .map(|i| pattern(i, 0.5, 7, -3.0) as f32)
+        .collect();
+    let host_b: Vec<f32> = (0..k * n)
+        .map(|i| pattern(i, 0.25, 5, -2.0) as f32)
+        .collect();
     let host_d64: Vec<f64> = vec![0.0; m * n];
     let host_a64: Vec<f64> = host_a.iter().map(|&v| v as f64).collect();
     let host_b64: Vec<f64> = host_b.iter().map(|&v| v as f64).collect();
     let expected = cpu_dense_gemm(
-        m, n, k, 1, DenseGemmLayout::Rrr,
-        &host_a64, k, 0, &host_b64, n, 0, &host_d64, n, 0,
-        1.0, 0.0,
+        m,
+        n,
+        k,
+        1,
+        DenseGemmLayout::Rrr,
+        &host_a64,
+        k,
+        0,
+        &host_b64,
+        n,
+        0,
+        &host_d64,
+        n,
+        0,
+        1.0,
+        0.0,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
@@ -458,12 +674,24 @@ fn dense_f32_direct_ffi() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_gemm_dense_f32_run(
-            m as i32, n as i32, k as i32, 1, /* layout RRR */ 0,
-            1.0f32, 0.0f32,
-            dev_a.as_slice().as_raw().0 as *const c_void, k as i64, 0,
-            dev_b.as_slice().as_raw().0 as *const c_void, n as i64, 0,
-            dev_d.as_slice_mut().as_raw().0 as *mut c_void, n as i64, 0,
-            core::ptr::null_mut(), 0,
+            m as i32,
+            n as i32,
+            k as i32,
+            1,
+            /* layout RRR */ 0,
+            1.0f32,
+            0.0f32,
+            dev_a.as_slice().as_raw().0 as *const c_void,
+            k as i64,
+            0,
+            dev_b.as_slice().as_raw().0 as *const c_void,
+            n as i64,
+            0,
+            dev_d.as_slice_mut().as_raw().0 as *mut c_void,
+            n as i64,
+            0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -575,21 +803,44 @@ fn dense_plan_rejects_undersized_and_negative_stride_buffers() {
     // D sized for ONE slot only — batch = 3 must be rejected.
     let mut dev_d: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
-    let desc = DenseGemmDescriptor { m, n, k, batch: 3, layout: DenseGemmLayout::Rrr };
-    let plan = DenseGemmPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let desc = DenseGemmDescriptor {
+        m,
+        n,
+        k,
+        batch: 3,
+        layout: DenseGemmLayout::Rrr,
+    };
+    let plan =
+        DenseGemmPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     let args = DenseGemmArgs::<f32> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: ku as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: ku as i64,
+        },
         stride_a: (mu * ku) as i64,
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: nu as i64 },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: nu as i64,
+        },
         stride_b: (ku * nu) as i64,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: nu as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: nu as i64,
+        },
         stride_d: (mu * nu) as i64,
         alpha: 1.0,
         beta: 0.0,
     };
-    let err = plan.can_implement(&args).expect_err("single-slot D must be rejected");
+    let err = plan
+        .can_implement(&args)
+        .expect_err("single-slot D must be rejected");
     assert!(
         matches!(err, baracuda_kernels::Error::BufferTooSmall { .. }),
         "expected BufferTooSmall, got {err:?}"
@@ -598,16 +849,33 @@ fn dense_plan_rejects_undersized_and_negative_stride_buffers() {
     // Negative batch stride: never in-bounds from the slice base.
     let mut dev_d3: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, mu * nu * 3).expect("alloc D3");
     let args = DenseGemmArgs::<f32> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: ku as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: ku as i64,
+        },
         stride_a: -((mu * ku) as i64),
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: nu as i64 },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: nu as i64,
+        },
         stride_b: (ku * nu) as i64,
-        d: MatrixMut { data: dev_d3.as_slice_mut(), rows: m, cols: n, ld: nu as i64 },
+        d: MatrixMut {
+            data: dev_d3.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: nu as i64,
+        },
         stride_d: (mu * nu) as i64,
         alpha: 1.0,
         beta: 0.0,
     };
-    let err = plan.can_implement(&args).expect_err("negative stride_a must be rejected");
+    let err = plan
+        .can_implement(&args)
+        .expect_err("negative stride_a must be rejected");
     assert!(
         matches!(err, baracuda_kernels::Error::InvalidProblem(_)),
         "expected InvalidProblem, got {err:?}"
@@ -635,17 +903,32 @@ fn dense_f32_concurrent_handle_pool() {
                 let (m, n, k) = (16i32, 12i32, 8i32);
                 let (mu, nu, ku) = (16usize, 12usize, 8usize);
 
-                let host_a: Vec<f32> =
-                    (0..mu * ku).map(|i| pattern(i + t, 0.25, 13, -6.0) as f32).collect();
-                let host_b: Vec<f32> =
-                    (0..ku * nu).map(|i| pattern(i + t, 0.125, 11, -5.0) as f32).collect();
+                let host_a: Vec<f32> = (0..mu * ku)
+                    .map(|i| pattern(i + t, 0.25, 13, -6.0) as f32)
+                    .collect();
+                let host_b: Vec<f32> = (0..ku * nu)
+                    .map(|i| pattern(i + t, 0.125, 11, -5.0) as f32)
+                    .collect();
                 let host_a64: Vec<f64> = host_a.iter().map(|&v| v as f64).collect();
                 let host_b64: Vec<f64> = host_b.iter().map(|&v| v as f64).collect();
                 let host_d = vec![0f64; mu * nu];
                 let expected = cpu_dense_gemm(
-                    mu, nu, ku, 1, DenseGemmLayout::Rrr,
-                    &host_a64, ku, 0, &host_b64, nu, 0, &host_d, nu, 0,
-                    1.0, 0.0,
+                    mu,
+                    nu,
+                    ku,
+                    1,
+                    DenseGemmLayout::Rrr,
+                    &host_a64,
+                    ku,
+                    0,
+                    &host_b64,
+                    nu,
+                    0,
+                    &host_d,
+                    nu,
+                    0,
+                    1.0,
+                    0.0,
                 );
 
                 let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
@@ -654,23 +937,38 @@ fn dense_f32_concurrent_handle_pool() {
                     DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
                 let desc = DenseGemmDescriptor {
-                    m, n, k, batch: 1, layout: DenseGemmLayout::Rrr,
+                    m,
+                    n,
+                    k,
+                    batch: 1,
+                    layout: DenseGemmLayout::Rrr,
                 };
-                let plan =
-                    DenseGemmPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-                        .expect("select");
+                let plan = DenseGemmPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+                    .expect("select");
                 // Several iterations per thread: first takes/creates,
                 // the rest re-take from the pool (or transiently
                 // create under contention).
                 for _ in 0..8 {
                     let args = DenseGemmArgs::<f32> {
-                        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: ku as i64 },
+                        a: MatrixRef {
+                            data: dev_a.as_slice(),
+                            rows: m,
+                            cols: k,
+                            ld: ku as i64,
+                        },
                         stride_a: 0,
-                        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: nu as i64 },
+                        b: MatrixRef {
+                            data: dev_b.as_slice(),
+                            rows: k,
+                            cols: n,
+                            ld: nu as i64,
+                        },
                         stride_b: 0,
                         d: MatrixMut {
                             data: dev_d.as_slice_mut(),
-                            rows: m, cols: n, ld: nu as i64,
+                            rows: m,
+                            cols: n,
+                            ld: nu as i64,
                         },
                         stride_d: 0,
                         alpha: 1.0,

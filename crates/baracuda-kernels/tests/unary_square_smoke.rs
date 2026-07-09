@@ -5,10 +5,10 @@
 //! range never overflows. f32 / f64 use bit-exact compare; f16 / bf16
 //! use the 1-ULP relative-tolerance scheme.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs,
-    UnaryDescriptor, UnaryKind, UnaryPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind,
+    UnaryPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -48,17 +48,27 @@ fn run_f32_contig<const N: usize>(shape: [i32; N]) {
     let plan = UnaryPlan::<f32, N>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f32, N>");
     let args = UnaryArgs::<f32, N> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("square f32 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("square f32 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f32; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "square f32 contig mismatch @ {i}: got {g} expected {e}"
         );
     }
@@ -85,10 +95,19 @@ fn run_f16_contig_3d(shape: [i32; 3]) {
     let plan = UnaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f16, 3>");
     let args = UnaryArgs::<f16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("square f16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("square f16 run");
     stream.synchronize().expect("sync");
 
     let mut host_got = vec![f16::from_f32(0.0); numel];
@@ -110,7 +129,9 @@ fn run_bf16_contig_3d(shape: [i32; 3]) {
     let (ctx, stream) = setup();
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
-    let host_x: Vec<bf16> = (0..numel).map(|i| bf16::from_f32(sq_input_f32(i))).collect();
+    let host_x: Vec<bf16> = (0..numel)
+        .map(|i| bf16::from_f32(sq_input_f32(i)))
+        .collect();
     let host_expected: Vec<bf16> = host_x.iter().map(|x| *x * *x).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -125,10 +146,19 @@ fn run_bf16_contig_3d(shape: [i32; 3]) {
     let plan = UnaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<bf16, 3>");
     let args = UnaryArgs::<bf16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("square bf16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("square bf16 run");
     stream.synchronize().expect("sync");
 
     let mut host_got = vec![bf16::from_f32(0.0); numel];
@@ -165,17 +195,27 @@ fn run_f64_contig_3d(shape: [i32; 3]) {
     let plan = UnaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f64, 3>");
     let args = UnaryArgs::<f64, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("square f64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("square f64 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f64; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "square f64 contig mismatch @ {i}: got {g} expected {e}"
         );
     }
@@ -217,11 +257,19 @@ fn square_f32_strided_transposed() {
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = UnaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        UnaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = UnaryArgs::<f32, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: x_stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: y_stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: x_shape,
+            stride: x_stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: y_shape,
+            stride: y_stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -230,7 +278,8 @@ fn square_f32_strided_transposed() {
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "square f32 strided mismatch @ {i}: got {g} expected {e}"
         );
     }

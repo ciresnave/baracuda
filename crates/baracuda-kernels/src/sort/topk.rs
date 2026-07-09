@@ -81,11 +81,7 @@ pub struct TopkPlan<T: Element> {
 
 impl<T: Element> TopkPlan<T> {
     /// Pick a kernel for `desc`.
-    pub fn select(
-        _stream: &Stream,
-        desc: &TopkDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &TopkDescriptor, _pref: PlanPreference) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::TopkPlan: descriptor element != type parameter T",

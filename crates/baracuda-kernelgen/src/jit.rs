@@ -27,12 +27,12 @@
 
 use crate::contract::contract;
 use crate::ir::{Access, BinaryOp, OpDef, ScalarExpr, UnaryOp};
-use crate::link::{link_entry, LinkEntry};
+use crate::link::{LinkEntry, link_entry};
 use crate::optimize::optimize;
-use crate::pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
-use crate::{generate, Backend};
+use crate::pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
+use crate::{Backend, generate};
 use baracuda_kernels_types::{
-    structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, MAX_OPERANDS,
+    ArchSku, ElementKind, MAX_OPERANDS, OpCategory, OperandDesc, structure_key,
 };
 
 /// A JIT synthesis request from Fuel (the strategist).
@@ -225,7 +225,8 @@ impl Compiler for NvrtcCompiler {
         // Use the low-level path so a compilation error surfaces the nvrtc log.
         use baracuda_nvrtc::Program;
         let name = format!("{entry}.cu");
-        let prog = Program::new(source, &name).map_err(|e| format!("nvrtc({entry}) create: {e}"))?;
+        let prog =
+            Program::new(source, &name).map_err(|e| format!("nvrtc({entry}) create: {e}"))?;
         let arch = format!("--gpu-architecture={}", arch_flag(self.arch));
         let mut opts = vec![arch];
         // fp16/bf16 kernels `#include <cuda_fp16.h>`/`<cuda_bf16.h>`; headerless
@@ -243,7 +244,10 @@ impl Compiler for NvrtcCompiler {
                 .map_err(|e| format!("nvrtc({entry}) ptx: {e}")),
             Err(e) => {
                 let log = prog.log().unwrap_or_default();
-                Err(format!("nvrtc({entry}): {e}\n--- nvrtc log ---\n{}", log.trim()))
+                Err(format!(
+                    "nvrtc({entry}): {e}\n--- nvrtc log ---\n{}",
+                    log.trim()
+                ))
             }
         }
     }
@@ -369,7 +373,8 @@ fn synthesize_op(
     let artifact = compiler
         .compile(&kernel.source, &kernel.name, max_compile_ms)
         .map_err(JitError::Compile)?;
-    let contract = contract(&op, &key, &kernel, backend.name()).ok_or(JitError::UnsupportedDtype)?;
+    let contract =
+        contract(&op, &key, &kernel, backend.name()).ok_or(JitError::UnsupportedDtype)?;
 
     // Both recipe halves come from the SINGLE canonical pattern node, so they are
     // structurally identical and decompose carries the scalar `extract:` routing.
@@ -734,7 +739,14 @@ pub mod seam {
         let internal = to_internal(region)?;
         let (op, derived) = region_to_op(&internal, n_inputs, fused_op_id, dtype)?;
         synthesize_op(
-            op, derived, operands, op_category, arch, max_compile_ms, backend, compiler,
+            op,
+            derived,
+            operands,
+            op_category,
+            arch,
+            max_compile_ms,
+            backend,
+            compiler,
         )
     }
 
@@ -754,12 +766,15 @@ pub mod seam {
 
     fn to_internal_at(n: &SeamNode, depth: u32) -> Result<PatternNode, JitError> {
         if depth > MAX_REGION_DEPTH {
-            return Err(JitError::UnsupportedOp("region nested past MAX_REGION_DEPTH".to_string()));
+            return Err(JitError::UnsupportedOp(
+                "region nested past MAX_REGION_DEPTH".to_string(),
+            ));
         }
         match n {
             SeamNode::Bind { index } => Ok(PatternNode::Bind(*index)),
             SeamNode::Op { op, operands, .. } => {
-                let name = optag_name(*op).ok_or_else(|| JitError::UnsupportedOp(format!("{op:?}")))?;
+                let name =
+                    optag_name(*op).ok_or_else(|| JitError::UnsupportedOp(format!("{op:?}")))?;
                 let ops = operands
                     .iter()
                     .map(|o| to_internal_at(o, depth + 1))
@@ -948,15 +963,18 @@ pub mod seam {
                         structure_key: resp.link.structure_key,
                         revision_hash: resp.link.revision_hash,
                     };
-                    self.registry.lock().unwrap_or_else(|e| e.into_inner()).insert(
-                        entry_point.clone(),
-                        SeamArtifact {
-                            artifact: resp.kernel.artifact,
-                            kind,
-                            link,
-                            contract: resp.contract,
-                        },
-                    );
+                    self.registry
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(
+                            entry_point.clone(),
+                            SeamArtifact {
+                                artifact: resp.kernel.artifact,
+                                kind,
+                                link,
+                                contract: resp.contract,
+                            },
+                        );
                     // Light handle — the heavy artifact is fetched only if Fuel's
                     // cost-gate adopts (via `take_kernel`). Cost now rides the contract's
                     // cost-expr, not the wire response.
@@ -975,7 +993,10 @@ pub mod seam {
         /// adopts). On the trait (Fuel invokes it via `&dyn Synthesizer`). `None` if
         /// never synthesized or already taken (single adopt).
         fn take_kernel(&self, entry_point: &str) -> Option<SeamArtifact> {
-            self.registry.lock().unwrap_or_else(|e| e.into_inner()).remove(entry_point)
+            self.registry
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(entry_point)
         }
     }
 
@@ -1098,12 +1119,17 @@ pub mod seam {
                 ),
                 operands: operands(ElementKind::F32, 2),
                 arch: ArchSku::Sm89,
-                budget: JitBudget { max_compile_ms: 1000 },
+                budget: JitBudget {
+                    max_compile_ms: 1000,
+                },
             };
             let SeamResponse::Declined { reason } = synth.synthesize(&req) else {
                 panic!("expected Declined");
             };
-            assert!(reason.contains("Iota"), "reason should name the tag: {reason}");
+            assert!(
+                reason.contains("Iota"),
+                "reason should name the tag: {reason}"
+            );
         }
 
         #[test]
@@ -1146,7 +1172,9 @@ pub mod seam {
                 region,
                 operands: operands(ElementKind::F32, 3),
                 arch: ArchSku::Sm89,
-                budget: JitBudget { max_compile_ms: 1000 },
+                budget: JitBudget {
+                    max_compile_ms: 1000,
+                },
             };
             let SeamResponse::Declined { reason } = synth.synthesize(&req) else {
                 panic!("expected Declined (no loadable artifact without nvrtc)");
@@ -1239,9 +1267,14 @@ pub mod seam {
                 region,
                 operands: ops,
                 arch: ArchSku::Sm89,
-                budget: JitBudget { max_compile_ms: 1000 },
+                budget: JitBudget {
+                    max_compile_ms: 1000,
+                },
             };
-            assert!(matches!(synth.synthesize(&req), SeamResponse::Declined { .. }));
+            assert!(matches!(
+                synth.synthesize(&req),
+                SeamResponse::Declined { .. }
+            ));
         }
 
         #[test]
@@ -1253,9 +1286,14 @@ pub mod seam {
                 region: op(OpTag::Gelu, vec![SeamNode::Bind { index: 0 }]),
                 operands: operands(ElementKind::F32, 2),
                 arch: ArchSku::Sm89,
-                budget: JitBudget { max_compile_ms: 1000 },
+                budget: JitBudget {
+                    max_compile_ms: 1000,
+                },
             };
-            assert!(matches!(synth.synthesize(&req), SeamResponse::Declined { .. }));
+            assert!(matches!(
+                synth.synthesize(&req),
+                SeamResponse::Declined { .. }
+            ));
         }
 
         #[test]
@@ -1278,7 +1316,9 @@ pub mod seam {
                     region: region.clone(),
                     operands: operands(dt, 3),
                     arch: ArchSku::Sm89,
-                    budget: JitBudget { max_compile_ms: 1000 },
+                    budget: JitBudget {
+                        max_compile_ms: 1000,
+                    },
                 };
                 assert!(
                     matches!(synth.synthesize(&req), SeamResponse::Declined { .. }),
@@ -1345,9 +1385,14 @@ pub mod seam {
                 ),
                 operands: operands(ElementKind::U8, 3),
                 arch: ArchSku::Sm89,
-                budget: JitBudget { max_compile_ms: 1000 },
+                budget: JitBudget {
+                    max_compile_ms: 1000,
+                },
             };
-            assert!(matches!(synth.synthesize(&req), SeamResponse::Declined { .. }));
+            assert!(matches!(
+                synth.synthesize(&req),
+                SeamResponse::Declined { .. }
+            ));
         }
 
         /// End-to-end live path on-device: a Fuel `JitRequest` through the
@@ -1369,7 +1414,9 @@ pub mod seam {
                 region,
                 operands: operands(ElementKind::F32, 3),
                 arch: ArchSku::Sm89,
-                budget: JitBudget { max_compile_ms: 5000 },
+                budget: JitBudget {
+                    max_compile_ms: 5000,
+                },
             };
             // Light handle — entry_point only.
             let SeamResponse::Synthesized { entry_point } = synth.synthesize(&req) else {
@@ -1381,7 +1428,11 @@ pub mod seam {
             // at the boundary). Single adopt: the second take_kernel is None.
             let art = synth.take_kernel(&entry_point).expect("artifact retained");
             assert_eq!(art.kind, SeamArtifactKind::Ptx);
-            assert!(String::from_utf8(art.artifact.clone()).unwrap().contains(".entry"));
+            assert!(
+                String::from_utf8(art.artifact.clone())
+                    .unwrap()
+                    .contains(".entry")
+            );
             assert!(art.contract.contains("fused_op:"));
             assert_eq!(art.link.entry_point, entry_point);
             assert_eq!(art.link.symbol, entry_point); // extern "C": symbol == entry_point
@@ -1414,7 +1465,9 @@ mod tests {
             operands,
             arch: ArchSku::Sm89,
             fused_op_id: id.to_string(),
-            budget: JitBudget { max_compile_ms: 1000 },
+            budget: JitBudget {
+                max_compile_ms: 1000,
+            },
         }
     }
 
@@ -1422,7 +1475,10 @@ mod tests {
     fn synthesize_fused_relu_add() {
         let region = op_node(
             "Relu",
-            vec![op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)])],
+            vec![op_node(
+                "Add",
+                vec![PatternNode::Bind(0), PatternNode::Bind(1)],
+            )],
         );
         let r = req(region, 2, ElementKind::F32, "jit_relu_add");
         let resp = synthesize(&r, &Cuda, &StubCompiler).unwrap();
@@ -1460,10 +1516,17 @@ mod tests {
     fn geluerf_region_maps_to_exact_erf() {
         let region = op_node(
             "GeluErf",
-            vec![op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)])],
+            vec![op_node(
+                "Add",
+                vec![PatternNode::Bind(0), PatternNode::Bind(1)],
+            )],
         );
-        let resp = synthesize(&req(region, 2, ElementKind::F32, "jit_gelu"), &Cuda, &StubCompiler)
-            .unwrap();
+        let resp = synthesize(
+            &req(region, 2, ElementKind::F32, "jit_gelu"),
+            &Cuda,
+            &StubCompiler,
+        )
+        .unwrap();
         assert!(resp.recipe.pattern.contains("op: GeluErf"));
         assert!(resp.kernel.source.contains("erf"));
     }
@@ -1474,8 +1537,12 @@ mod tests {
         // for codegen, but the recipe (pattern/decompose) must still describe the
         // ORIGINAL region so Fuel's matcher recognizes it.
         let region = op_node("Neg", vec![op_node("Neg", vec![PatternNode::Bind(0)])]);
-        let resp = synthesize(&req(region, 1, ElementKind::F32, "jit_negneg"), &Cuda, &StubCompiler)
-            .unwrap();
+        let resp = synthesize(
+            &req(region, 1, ElementKind::F32, "jit_negneg"),
+            &Cuda,
+            &StubCompiler,
+        )
+        .unwrap();
         // kernel body is the optimized identity copy — no double negation emitted.
         assert!(!resp.kernel.source.contains("-(-("));
         // recipe still carries the original Neg subgraph.
@@ -1487,8 +1554,8 @@ mod tests {
     fn unsupported_op_is_rejected() {
         // MatMul is not an elementwise op we synthesize.
         let region = op_node("MatMul", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
-        let err = synthesize(&req(region, 2, ElementKind::F32, "x"), &Cuda, &StubCompiler)
-            .unwrap_err();
+        let err =
+            synthesize(&req(region, 2, ElementKind::F32, "x"), &Cuda, &StubCompiler).unwrap_err();
         assert_eq!(err, JitError::UnsupportedOp("MatMul".to_string()));
     }
 
@@ -1496,13 +1563,21 @@ mod tests {
     fn broadened_ops_synthesize() {
         // The new binary fns + unary math now synthesize (no UnsupportedOp).
         for (region, n, id) in [
-            (op_node("Maximum", vec![PatternNode::Bind(0), PatternNode::Bind(1)]), 2u8, "jit_max"),
-            (op_node("Pow", vec![PatternNode::Bind(0), PatternNode::Bind(1)]), 2, "jit_pow"),
+            (
+                op_node("Maximum", vec![PatternNode::Bind(0), PatternNode::Bind(1)]),
+                2u8,
+                "jit_max",
+            ),
+            (
+                op_node("Pow", vec![PatternNode::Bind(0), PatternNode::Bind(1)]),
+                2,
+                "jit_pow",
+            ),
             (op_node("Floor", vec![PatternNode::Bind(0)]), 1, "jit_floor"),
             (op_node("Sin", vec![PatternNode::Bind(0)]), 1, "jit_sin"),
         ] {
-            let resp = synthesize(&req(region, n, ElementKind::F32, id), &Cuda, &StubCompiler)
-                .unwrap();
+            let resp =
+                synthesize(&req(region, n, ElementKind::F32, id), &Cuda, &StubCompiler).unwrap();
             assert!(resp.kernel.source.contains("__global__"));
         }
     }
@@ -1534,7 +1609,12 @@ mod tests {
         // …illegal: Div at any int dtype (bespoke has no int elementwise div;
         // C `/0` is device-UB) — the gate consults op×dtype legality, not just
         // the dtype, so a uniform-U8 Div region still declines.
-        for dt in [ElementKind::U8, ElementKind::S8, ElementKind::I32, ElementKind::I64] {
+        for dt in [
+            ElementKind::U8,
+            ElementKind::S8,
+            ElementKind::I32,
+            ElementKind::I64,
+        ] {
             let div = op_node("Div", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
             assert_eq!(
                 synthesize(&req(div, 2, dt, "x"), &Cuda, &StubCompiler).unwrap_err(),
@@ -1556,9 +1636,17 @@ mod tests {
         // region can name them — honest UnsupportedOp, and the mapping tables
         // were NOT extended speculatively (the invented-vocabulary trap).
         for name in [
-            "BitAnd", "BitOr", "BitXor", "Shl", "Shr",
-            "BitwiseAnd", "LeftShift", "RightShift",
-            "LogicalAnd", "LogicalOr", "LogicalXor",
+            "BitAnd",
+            "BitOr",
+            "BitXor",
+            "Shl",
+            "Shr",
+            "BitwiseAnd",
+            "LeftShift",
+            "RightShift",
+            "LogicalAnd",
+            "LogicalOr",
+            "LogicalXor",
         ] {
             let region = op_node(name, vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
             assert_eq!(
@@ -1578,10 +1666,20 @@ mod tests {
         // supports_dtype says "the dtype has a scalar C type", THIS says
         // "this body is legal at that dtype").
         let band = input(0).binary(BinaryOp::BitAnd, input(1)).0;
-        for dt in [ElementKind::I32, ElementKind::I64, ElementKind::S8, ElementKind::U8] {
+        for dt in [
+            ElementKind::I32,
+            ElementKind::I64,
+            ElementKind::S8,
+            ElementKind::U8,
+        ] {
             assert!(dtype_compatible(&band, dt), "BitAnd legal at {dt:?}");
         }
-        for dt in [ElementKind::F32, ElementKind::F16, ElementKind::Bf16, ElementKind::F64] {
+        for dt in [
+            ElementKind::F32,
+            ElementKind::F16,
+            ElementKind::Bf16,
+            ElementKind::F64,
+        ] {
             assert!(!dtype_compatible(&band, dt), "BitAnd illegal at {dt:?}");
         }
         let shl = input(0).binary(BinaryOp::Shl, input(1)).0;
@@ -1591,14 +1689,24 @@ mod tests {
         // exactly uint8_t, so wider ints reject too.
         let land = input(0).binary(BinaryOp::LogicalAnd, input(1)).0;
         assert!(dtype_compatible(&land, ElementKind::U8));
-        for dt in [ElementKind::I32, ElementKind::I64, ElementKind::S8, ElementKind::F32] {
+        for dt in [
+            ElementKind::I32,
+            ElementKind::I64,
+            ElementKind::S8,
+            ElementKind::F32,
+        ] {
             assert!(!dtype_compatible(&land, dt), "LogicalAnd illegal at {dt:?}");
         }
         // Div: float-only (int div rejected); Add: legal at ints; Const: f64-
         // spelled, rejected at ints; cmp: float-only.
         let div = (input(0) / input(1)).0;
         assert!(dtype_compatible(&div, ElementKind::F32));
-        for dt in [ElementKind::I32, ElementKind::I64, ElementKind::S8, ElementKind::U8] {
+        for dt in [
+            ElementKind::I32,
+            ElementKind::I64,
+            ElementKind::S8,
+            ElementKind::U8,
+        ] {
             assert!(!dtype_compatible(&div, dt), "Div illegal at {dt:?}");
         }
         let add = (input(0) + input(1)).0;
@@ -1606,9 +1714,15 @@ mod tests {
         assert!(dtype_compatible(&add, ElementKind::S8));
         let addk = (input(0) + crate::ir::konst(2.0)).0;
         assert!(dtype_compatible(&addk, ElementKind::F32));
-        assert!(!dtype_compatible(&addk, ElementKind::I64), "f64 Const at int rejects");
+        assert!(
+            !dtype_compatible(&addk, ElementKind::I64),
+            "f64 Const at int rejects"
+        );
         let cmp = input(0).binary(BinaryOp::CmpLt, input(1)).0;
-        assert!(!dtype_compatible(&cmp, ElementKind::I32), "int cmp rejects (bespoke is fp-only)");
+        assert!(
+            !dtype_compatible(&cmp, ElementKind::I32),
+            "int cmp rejects (bespoke is fp-only)"
+        );
     }
 
     #[test]
@@ -1675,8 +1789,14 @@ mod tests {
         // The new scalar fns have no §4.1/OpTag vocabulary, so no region can name
         // them: honest UnsupportedOp, never a panic, and the mapping tables were
         // NOT extended speculatively.
-        for (name, n) in [("Erfc", 1u8), ("Lgamma", 1), ("Atan2", 2), ("Nextafter", 2),
-                          ("FmaxIeee", 2), ("RemTrunc", 2)] {
+        for (name, n) in [
+            ("Erfc", 1u8),
+            ("Lgamma", 1),
+            ("Atan2", 2),
+            ("Nextafter", 2),
+            ("FmaxIeee", 2),
+            ("RemTrunc", 2),
+        ] {
             let operands = (0..n).map(PatternNode::Bind).collect();
             let region = op_node(name, operands);
             assert_eq!(
@@ -1717,8 +1837,8 @@ mod tests {
     #[test]
     fn bare_gelu_tanh_flavor_is_rejected() {
         let region = op_node("Gelu", vec![PatternNode::Bind(0)]);
-        let err = synthesize(&req(region, 1, ElementKind::F32, "x"), &Cuda, &StubCompiler)
-            .unwrap_err();
+        let err =
+            synthesize(&req(region, 1, ElementKind::F32, "x"), &Cuda, &StubCompiler).unwrap_err();
         assert_eq!(err, JitError::UnsupportedOp("Gelu".to_string()));
     }
 
@@ -1731,8 +1851,7 @@ mod tests {
             }
         }
         let region = op_node("Relu", vec![PatternNode::Bind(0)]);
-        let err =
-            synthesize(&req(region, 1, ElementKind::F32, "x"), &Cuda, &Failing).unwrap_err();
+        let err = synthesize(&req(region, 1, ElementKind::F32, "x"), &Cuda, &Failing).unwrap_err();
         assert!(matches!(err, JitError::Compile(m) if m.contains("synthetic failure")));
     }
 
@@ -1743,7 +1862,13 @@ mod tests {
         let mut r = req(region, 2, ElementKind::F32, "x");
         r.operands.pop(); // now 2 operands, not 3
         let err = synthesize(&r, &Cuda, &StubCompiler).unwrap_err();
-        assert_eq!(err, JitError::OperandArity { n_inputs: 2, operands: 2 });
+        assert_eq!(
+            err,
+            JitError::OperandArity {
+                n_inputs: 2,
+                operands: 2
+            }
+        );
     }
 
     #[test]
@@ -1751,7 +1876,10 @@ mod tests {
         let region = op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
         let mut r = req(region, 2, ElementKind::F32, "x");
         r.operands[1] = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F16, 256);
-        assert_eq!(synthesize(&r, &Cuda, &StubCompiler).unwrap_err(), JitError::MixedDtype);
+        assert_eq!(
+            synthesize(&r, &Cuda, &StubCompiler).unwrap_err(),
+            JitError::MixedDtype
+        );
     }
 
     #[test]
@@ -1774,13 +1902,19 @@ mod tests {
     fn nvrtc_compiles_a_synthesized_kernel() {
         let region = op_node(
             "Relu",
-            vec![op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)])],
+            vec![op_node(
+                "Add",
+                vec![PatternNode::Bind(0), PatternNode::Bind(1)],
+            )],
         );
         let r = req(region, 2, ElementKind::F32, "jit_relu_add");
         let resp = synthesize(&r, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89)).unwrap();
         assert_eq!(resp.kernel.kind, ArtifactKind::Ptx);
         let ptx = String::from_utf8(resp.kernel.artifact).expect("PTX is utf-8 text");
-        assert!(ptx.contains(".entry"), "PTX should declare the kernel entry");
+        assert!(
+            ptx.contains(".entry"),
+            "PTX should declare the kernel entry"
+        );
     }
 
     /// The broadened ops compile under nvrtc too: max(sin(a), b) exercises a new
@@ -1791,12 +1925,19 @@ mod tests {
     fn nvrtc_compiles_broadened_ops() {
         let region = op_node(
             "Maximum",
-            vec![op_node("Sin", vec![PatternNode::Bind(0)]), PatternNode::Bind(1)],
+            vec![
+                op_node("Sin", vec![PatternNode::Bind(0)]),
+                PatternNode::Bind(1),
+            ],
         );
         let r = req(region, 2, ElementKind::F32, "jit_max_sin");
         let resp = synthesize(&r, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89)).unwrap();
         assert_eq!(resp.kernel.kind, ArtifactKind::Ptx);
-        assert!(String::from_utf8(resp.kernel.artifact).unwrap().contains(".entry"));
+        assert!(
+            String::from_utf8(resp.kernel.artifact)
+                .unwrap()
+                .contains(".entry")
+        );
     }
 
     /// The increment-0a scalar-fn vocabulary compiles headerless under nvrtc —
@@ -1808,7 +1949,7 @@ mod tests {
     #[ignore = "requires nvrtc runtime + CUDA install"]
     fn nvrtc_compiles_increment_0a_vocab() {
         use crate::generate;
-        use crate::ir::{input, BinaryOp, UnaryOp};
+        use crate::ir::{BinaryOp, UnaryOp, input};
         let cc = NvrtcCompiler::new(ArchSku::Sm89);
         let ukey = |dt: ElementKind| {
             let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
@@ -1822,17 +1963,17 @@ mod tests {
             for uop in [UnaryOp::Erf, UnaryOp::Log1p] {
                 let op = OpDef::elementwise("vu", 1, &[dt], input(0).unary(uop));
                 let k = generate(&op, &ukey(dt), &Cuda);
-                let ptx = cc.compile(&k.source, &k.name, 5000).unwrap_or_else(|e| {
-                    panic!("{uop:?} {dt:?} failed headerless nvrtc: {e}")
-                });
+                let ptx = cc
+                    .compile(&k.source, &k.name, 5000)
+                    .unwrap_or_else(|e| panic!("{uop:?} {dt:?} failed headerless nvrtc: {e}"));
                 assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
             }
             for bop in [BinaryOp::Atan2, BinaryOp::RemTrunc] {
                 let op = OpDef::elementwise("vb", 2, &[dt], input(0).binary(bop, input(1)));
                 let k = generate(&op, &bkey(dt), &Cuda);
-                let ptx = cc.compile(&k.source, &k.name, 5000).unwrap_or_else(|e| {
-                    panic!("{bop:?} {dt:?} failed headerless nvrtc: {e}")
-                });
+                let ptx = cc
+                    .compile(&k.source, &k.name, 5000)
+                    .unwrap_or_else(|e| panic!("{bop:?} {dt:?} failed headerless nvrtc: {e}"));
                 assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
             }
         }
@@ -1908,7 +2049,9 @@ mod tests {
             input(0).binary(BinaryOp::CmpLt, input(1)),
         );
         let k = generate(&lt, &pred_key(ElementKind::F32), &Cuda);
-        let ptx = cc.compile(&k.source, &k.name, 5000).expect("f32/u8 cmp compiles headerless");
+        let ptx = cc
+            .compile(&k.source, &k.name, 5000)
+            .expect("f32/u8 cmp compiles headerless");
         assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
         // f16 promote form (fp16 header under nvrtc).
         let lth = OpDef::elementwise_pred(
@@ -1918,7 +2061,9 @@ mod tests {
             input(0).binary(BinaryOp::CmpLt, input(1)),
         );
         let kh = generate(&lth, &pred_key(ElementKind::F16), &Cuda);
-        let ptxh = cc.compile(&kh.source, &kh.name, 5000).expect("f16/u8 cmp compiles");
+        let ptxh = cc
+            .compile(&kh.source, &kh.name, 5000)
+            .expect("f16/u8 cmp compiles");
         assert!(String::from_utf8(ptxh).unwrap().contains(".entry"));
         // Nested mask-multiply (float out, no u8 machinery).
         let bw = OpDef::elementwise(
@@ -1932,7 +2077,9 @@ mod tests {
             structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
         };
         let kb = generate(&bw, &bkey, &Cuda);
-        let ptxb = cc.compile(&kb.source, &kb.name, 5000).expect("mask-multiply compiles");
+        let ptxb = cc
+            .compile(&kb.source, &kb.name, 5000)
+            .expect("mask-multiply compiles");
         assert!(String::from_utf8(ptxb).unwrap().contains(".entry"));
     }
 
@@ -1961,11 +2108,15 @@ mod tests {
             input(0).binary(BinaryOp::BitAnd, input(1)),
         );
         let k = generate(&band, &bkey(ElementKind::I32), &Cuda);
-        let ptx = cc.compile(&k.source, &k.name, 5000).expect("i32 bitand compiles headerless");
+        let ptx = cc
+            .compile(&k.source, &k.name, 5000)
+            .expect("i32 bitand compiles headerless");
         assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
         let addu = OpDef::elementwise("add", 2, &[ElementKind::U8], input(0) + input(1));
         let ku = generate(&addu, &bkey(ElementKind::U8), &Cuda);
-        let ptxu = cc.compile(&ku.source, &ku.name, 5000).expect("u8 add compiles headerless");
+        let ptxu = cc
+            .compile(&ku.source, &ku.name, 5000)
+            .expect("u8 add compiles headerless");
         assert!(String::from_utf8(ptxu).unwrap().contains(".entry"));
     }
 
@@ -1992,13 +2143,17 @@ mod tests {
             input(0) * coord(1).binary(BinaryOp::CmpGe, coord(0) + konst(0.0)),
         );
         let k = generate(&triu, &tkey, &Cuda);
-        let ptx = cc.compile(&k.source, &k.name, 5000).expect("triu-mask compiles headerless");
+        let ptx = cc
+            .compile(&k.source, &k.name, 5000)
+            .expect("triu-mask compiles headerless");
         assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
         let a64 = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F64, 256);
         let ikey = structure_key(OpCategory::UnaryElementwise, &[a64], ArchSku::Sm89);
         let iota = OpDef::elementwise("iota1", 0, &[ElementKind::F64], coord(1));
         let ki = generate(&iota, &ikey, &Cuda);
-        let ptxi = cc.compile(&ki.source, &ki.name, 5000).expect("f64 iota compiles headerless");
+        let ptxi = cc
+            .compile(&ki.source, &ki.name, 5000)
+            .expect("f64 iota compiles headerless");
         assert!(String::from_utf8(ptxi).unwrap().contains(".entry"));
     }
 
@@ -2012,7 +2167,7 @@ mod tests {
     #[ignore = "requires nvrtc runtime + CUDA install"]
     fn nvrtc_compiles_reduction_kernels() {
         use crate::ir::UnaryOp;
-        use crate::{generate, input, ReduceOp};
+        use crate::{ReduceOp, generate, input};
         let cc = NvrtcCompiler::new(ArchSku::Sm89);
         let red_key = |dt: ElementKind| {
             let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
@@ -2028,17 +2183,23 @@ mod tests {
             ReduceOp::Mean,
         );
         let kf32 = generate(&ms, &red_key(ElementKind::F32), &Cuda);
-        let ptx = cc.compile(&kf32.source, &kf32.name, 5000).expect("f32 reduction compiles");
+        let ptx = cc
+            .compile(&kf32.source, &kf32.name, 5000)
+            .expect("f32 reduction compiles");
         assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
         // f16 sum — exercises __half2float + cuda_fp16.h under headerless nvrtc.
         let sum = OpDef::reduction("s", 1, &[ElementKind::F16], input(0), ReduceOp::Sum);
         let kf16 = generate(&sum, &red_key(ElementKind::F16), &Cuda);
-        let ptx16 = cc.compile(&kf16.source, &kf16.name, 5000).expect("f16 reduction compiles");
+        let ptx16 = cc
+            .compile(&kf16.source, &kf16.name, 5000)
+            .expect("f16 reduction compiles");
         assert!(String::from_utf8(ptx16).unwrap().contains(".entry"));
         // 0e: Prod (block_prod cooperative reducer) compiles headerless.
         let prod = OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod);
         let kp = generate(&prod, &red_key(ElementKind::F32), &Cuda);
-        let ptxp = cc.compile(&kp.source, &kp.name, 5000).expect("f32 prod reduction compiles");
+        let ptxp = cc
+            .compile(&kp.source, &kp.name, 5000)
+            .expect("f32 prod reduction compiles");
         assert!(String::from_utf8(ptxp).unwrap().contains(".entry"));
         // 0e: norm2 = Sqrt(Sum(Sqr(x))) — the fused post-expr (sqrtf on red0)
         // compiles headerless too.
@@ -2051,7 +2212,9 @@ mod tests {
             crate::ir::reduced(0).sqrt(),
         );
         let kn = generate(&norm2, &red_key(ElementKind::F32), &Cuda);
-        let ptxn = cc.compile(&kn.source, &kn.name, 5000).expect("f32 norm2-post compiles");
+        let ptxn = cc
+            .compile(&kn.source, &kn.name, 5000)
+            .expect("f32 norm2-post compiles");
         assert!(String::from_utf8(ptxn).unwrap().contains(".entry"));
     }
 
@@ -2063,7 +2226,7 @@ mod tests {
     #[test]
     #[ignore = "requires nvrtc runtime + CUDA install"]
     fn nvrtc_compiles_rowreduce_kernels() {
-        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
+        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
         use crate::{generate, input};
         let cc = NvrtcCompiler::new(ArchSku::Sm89);
         let key = |dt: ElementKind, cat: OpCategory| {
@@ -2088,7 +2251,10 @@ mod tests {
                 1,
                 &[dt],
                 vec![
-                    ReduceStage { pre: input(0).0, op: ReduceOp::Max },
+                    ReduceStage {
+                        pre: input(0).0,
+                        op: ReduceOp::Max,
+                    },
                     ReduceStage {
                         pre: (input(0) - reduced(0)).exp().0,
                         op: ReduceOp::Sum,
@@ -2098,14 +2264,30 @@ mod tests {
             )
         };
         for (op, dt, cat) in [
-            (rms(ElementKind::F32), ElementKind::F32, OpCategory::Normalization),
+            (
+                rms(ElementKind::F32),
+                ElementKind::F32,
+                OpCategory::Normalization,
+            ),
             (sm(ElementKind::F32), ElementKind::F32, OpCategory::Softmax),
             // f16: exercises __half2float + cuda_fp16.h under headerless nvrtc.
-            (rms(ElementKind::F16), ElementKind::F16, OpCategory::Normalization),
+            (
+                rms(ElementKind::F16),
+                ElementKind::F16,
+                OpCategory::Normalization,
+            ),
             // f64 / f32-strict: the double accumulator path relies on the `double`
             // __shfl_down_sync overload compiling headerless (the critics' flag).
-            (rms(ElementKind::F64), ElementKind::F64, OpCategory::Normalization),
-            (sm(ElementKind::F32Strict), ElementKind::F32Strict, OpCategory::Softmax),
+            (
+                rms(ElementKind::F64),
+                ElementKind::F64,
+                OpCategory::Normalization,
+            ),
+            (
+                sm(ElementKind::F32Strict),
+                ElementKind::F32Strict,
+                OpCategory::Softmax,
+            ),
         ] {
             let k = generate(&op, &key(dt, cat), &Cuda);
             let ptx = cc
@@ -2135,7 +2317,10 @@ mod tests {
             3,
             &[dt],
             vec![
-                ReduceStage { pre: input(0).0, op: ReduceOp::Mean },
+                ReduceStage {
+                    pre: input(0).0,
+                    op: ReduceOp::Mean,
+                },
                 ReduceStage {
                     pre: (input(0) - reduced(0)).unary(UnaryOp::Sqr).0,
                     op: ReduceOp::Mean,
@@ -2162,7 +2347,10 @@ mod tests {
             "softmax_bw",
             2,
             &[dt],
-            vec![ReduceStage { pre: (input(0) * input(1)).0, op: ReduceOp::Sum }],
+            vec![ReduceStage {
+                pre: (input(0) * input(1)).0,
+                op: ReduceOp::Sum,
+            }],
             input(0) * (input(1) - reduced(0)),
         );
         let ln_x_hat = (input(0) - input(2)) * input(3);
@@ -2171,13 +2359,23 @@ mod tests {
             4,
             &[dt],
             vec![
-                ReduceStage { pre: input(1).0, op: ReduceOp::Mean },
-                ReduceStage { pre: (input(1) * ln_x_hat.clone()).0, op: ReduceOp::Mean },
+                ReduceStage {
+                    pre: input(1).0,
+                    op: ReduceOp::Mean,
+                },
+                ReduceStage {
+                    pre: (input(1) * ln_x_hat.clone()).0,
+                    op: ReduceOp::Mean,
+                },
             ],
             input(3) * (input(1) - reduced(0) - ln_x_hat * reduced(1)),
         );
         for (op, ops, cat) in [
-            (softmax_bw, vec![stream, stream, stream], OpCategory::Softmax),
+            (
+                softmax_bw,
+                vec![stream, stream, stream],
+                OpCategory::Softmax,
+            ),
             (
                 layer_norm_bw,
                 vec![stream, stream, rowscalar, rowscalar, stream],

@@ -9,10 +9,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test concat_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ConcatArgs, ConcatDescriptor, ConcatPlan, ElementKind, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ConcatArgs, ConcatDescriptor, ConcatPlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 

@@ -4,8 +4,8 @@
 //! unmap. We at least verify the symbols resolve and the "list GL
 //! devices" call handles "no GL context" cleanly.
 
-use baracuda_driver::graphics::gl;
 use baracuda_driver::graphics::GLDeviceList;
+use baracuda_driver::graphics::gl;
 
 #[test]
 #[ignore = "requires an NVIDIA GPU"]

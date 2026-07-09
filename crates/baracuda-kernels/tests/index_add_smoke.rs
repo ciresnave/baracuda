@@ -7,10 +7,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, IndexAddArgs, IndexAddDescriptor, IndexAddPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, IndexAddArgs, IndexAddDescriptor, IndexAddPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -54,8 +54,8 @@ fn index_add_f32_2d_dim0() {
         dst_dim_size: 5,
         element: ElementKind::F32,
     };
-    let plan = IndexAddPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        IndexAddPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = IndexAddArgs::<f32, 2> {
         src: TensorRef {
             data: dev_src.as_slice(),
@@ -120,8 +120,8 @@ fn index_add_f64_2d_dim0_duplicate_target() {
         dst_dim_size: 3,
         element: ElementKind::F64,
     };
-    let plan = IndexAddPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        IndexAddPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = IndexAddArgs::<f64, 2> {
         src: TensorRef {
             data: dev_src.as_slice(),
@@ -184,8 +184,8 @@ fn index_add_f32_i64idx_2d_dim0() {
         dst_dim_size: 4,
         element: ElementKind::F32,
     };
-    let plan = IndexAddPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        IndexAddPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = IndexAddArgs::<f32, 2, i64> {
         src: TensorRef {
             data: dev_src.as_slice(),

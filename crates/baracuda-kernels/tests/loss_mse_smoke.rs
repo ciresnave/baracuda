@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `MseLossPlan`. FW × 4 dtypes × Mean reduction.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, LossReduction, MseLossArgs, MseLossDescriptor, MseLossPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, LossReduction, MseLossArgs, MseLossDescriptor, MseLossPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -40,8 +40,7 @@ fn loss_mse_f32_mean() {
     let dev_p = DeviceBuffer::from_slice(&ctx, &host_p).expect("up p");
     let dev_t = DeviceBuffer::from_slice(&ctx, &host_t).expect("up t");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc y");
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, numel * 4).expect("alloc ws");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, numel * 4).expect("alloc ws");
 
     let desc = MseLossDescriptor {
         input_shape: shape,
@@ -53,9 +52,21 @@ fn loss_mse_f32_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MseLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .expect("run");
@@ -63,7 +74,12 @@ fn loss_mse_f32_mean() {
     let mut got = [0f32; 1];
     dev_y.copy_to_host(&mut got).unwrap();
     let tol = expected.abs() * 8.0 * f32::EPSILON + 1e-6;
-    assert!((got[0] - expected).abs() <= tol, "f32 MSE: got={} want={}", got[0], expected);
+    assert!(
+        (got[0] - expected).abs() <= tol,
+        "f32 MSE: got={} want={}",
+        got[0],
+        expected
+    );
 }
 
 #[test]
@@ -91,9 +107,21 @@ fn loss_mse_f64_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MseLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -134,9 +162,21 @@ fn loss_mse_f16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MseLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -146,7 +186,12 @@ fn loss_mse_f16_mean() {
     let got_f32 = got[0].to_f32();
     // f16 has ~3-4 decimal digits of precision; MSE is small, use absolute tol.
     let tol = expected.abs() * 16.0 * 9.77e-4_f32 + 1e-3;
-    assert!((got_f32 - expected).abs() <= tol, "f16 MSE: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "f16 MSE: got={} want={}",
+        got_f32,
+        expected
+    );
 }
 
 #[test]
@@ -179,9 +224,21 @@ fn loss_mse_bf16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MseLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -190,5 +247,10 @@ fn loss_mse_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 16.0 * 7.81e-3_f32 + 1e-2;
-    assert!((got_f32 - expected).abs() <= tol, "bf16 MSE: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "bf16 MSE: got={} want={}",
+        got_f32,
+        expected
+    );
 }

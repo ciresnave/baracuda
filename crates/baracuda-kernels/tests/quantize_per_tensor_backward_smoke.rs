@@ -11,11 +11,11 @@
 
 use std::marker::PhantomData;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, QuantizePerTensorBackwardArgs,
+    ElementKind, PlanPreference, QuantizePerTensorBackwardArgs,
     QuantizePerTensorBackwardDescriptor, QuantizePerTensorBackwardPlan, S8, TensorMut, TensorRef,
-    Workspace,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -45,8 +45,7 @@ fn quantize_per_tensor_backward_f32_s8_ste() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
-    let mut dev_dx: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc dx");
+    let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc dx");
 
     let desc = QuantizePerTensorBackwardDescriptor {
         numel,
@@ -55,12 +54,9 @@ fn quantize_per_tensor_backward_f32_s8_ste() {
         input_element: ElementKind::F32,
         output_element: ElementKind::S8,
     };
-    let plan = QuantizePerTensorBackwardPlan::<f32, S8>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .expect("select");
+    let plan =
+        QuantizePerTensorBackwardPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = QuantizePerTensorBackwardArgs::<f32, S8> {
         input: TensorRef {
             data: dev_x.as_slice(),

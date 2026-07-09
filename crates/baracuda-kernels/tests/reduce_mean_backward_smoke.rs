@@ -8,10 +8,10 @@
 //! multiplication round may diverge by 1 ULP from the host's `dy / k`
 //! single-rounded division).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceBackwardArgs,
-    ReduceBackwardDescriptor, ReduceBackwardPlan, ReduceKind, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceBackwardArgs, ReduceBackwardDescriptor, ReduceBackwardPlan,
+    ReduceKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -97,7 +97,10 @@ fn mean_backward_f32_3d_axis1() {
         let exp = host_dy[dy_linear as usize] * inv;
         let g = got[dx_linear as usize];
         let tol = exp.abs().max(1.0) * 4.0 * f32::EPSILON;
-        assert!((g - exp).abs() <= tol, "mean bw f32 @ {dx_linear}: got {g} exp {exp}");
+        assert!(
+            (g - exp).abs() <= tol,
+            "mean bw f32 @ {dx_linear}: got {g} exp {exp}"
+        );
     });
 }
 
@@ -202,7 +205,10 @@ fn mean_backward_f16_3d_axis0() {
         let exp = dy_v * inv;
         let g = got[dx_linear as usize].to_f32();
         let tol = exp.abs().max(1.0) * 4.0 * F16_EPS;
-        assert!((g - exp).abs() <= tol, "mean bw f16 @ {dx_linear}: got {g} exp {exp}");
+        assert!(
+            (g - exp).abs() <= tol,
+            "mean bw f16 @ {dx_linear}: got {g} exp {exp}"
+        );
     });
 }
 
@@ -256,6 +262,9 @@ fn mean_backward_bf16_3d_axis1() {
         let exp = dy_v * inv;
         let g = got[dx_linear as usize].to_f32();
         let tol = exp.abs().max(1.0) * 4.0 * BF16_EPS;
-        assert!((g - exp).abs() <= tol, "mean bw bf16 @ {dx_linear}: got {g} exp {exp}");
+        assert!(
+            (g - exp).abs() <= tol,
+            "mean bw bf16 @ {dx_linear}: got {g} exp {exp}"
+        );
     });
 }

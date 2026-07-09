@@ -16,9 +16,9 @@ use baracuda_kernels_types::{
     TensorRef, Workspace,
 };
 
+use super::SORT_MAX_ROW;
 use super::map_status;
 use super::sort::build_sku;
-use super::SORT_MAX_ROW;
 
 /// Descriptor for a `kthvalue_backward` op.
 #[derive(Copy, Clone, Debug)]

@@ -168,7 +168,11 @@ impl<T: Element> CtcLossPlan<T> {
     /// where `acc_type = f32` for `{f32, f16, bf16}` and `f64` for `f64`.
     #[inline]
     pub fn alpha_workspace_size(&self) -> usize {
-        let acc_size = if T::KIND == ElementKind::F64 { 8usize } else { 4usize };
+        let acc_size = if T::KIND == ElementKind::F64 {
+            8usize
+        } else {
+            4usize
+        };
         let l_max = (2 * self.desc.max_target_len as i64 + 1).max(1);
         (self.desc.max_time as usize)
             .saturating_mul(self.desc.batch_size as usize)
@@ -180,7 +184,11 @@ impl<T: Element> CtcLossPlan<T> {
     /// sizeof(acc_type)`.
     #[inline]
     pub fn workspace_size(&self) -> usize {
-        let acc_size = if T::KIND == ElementKind::F64 { 8usize } else { 4usize };
+        let acc_size = if T::KIND == ElementKind::F64 {
+            8usize
+        } else {
+            4usize
+        };
         (self.desc.batch_size as usize).saturating_mul(acc_size)
     }
 
@@ -206,7 +214,11 @@ impl<T: Element> CtcLossPlan<T> {
             return Ok(());
         }
         if args.log_probs.shape
-            != [self.desc.max_time, self.desc.batch_size, self.desc.num_classes]
+            != [
+                self.desc.max_time,
+                self.desc.batch_size,
+                self.desc.num_classes,
+            ]
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CtcLossPlan: log_probs shape must be \
@@ -467,7 +479,11 @@ impl<T: Element> CtcLossBackwardPlan<T> {
     /// sizeof(acc_type)`.
     #[inline]
     pub fn workspace_size(&self) -> usize {
-        let acc_size = if T::KIND == ElementKind::F64 { 8usize } else { 4usize };
+        let acc_size = if T::KIND == ElementKind::F64 {
+            8usize
+        } else {
+            4usize
+        };
         let l_max = (2 * self.desc.max_target_len as i64 + 1).max(1);
         (self.desc.batch_size as usize)
             .saturating_mul(l_max as usize)
@@ -496,7 +512,11 @@ impl<T: Element> CtcLossBackwardPlan<T> {
             return Ok(());
         }
         if args.dlog_probs.shape
-            != [self.desc.max_time, self.desc.batch_size, self.desc.num_classes]
+            != [
+                self.desc.max_time,
+                self.desc.batch_size,
+                self.desc.num_classes,
+            ]
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CtcLossBackwardPlan: dlog_probs shape must be \

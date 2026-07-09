@@ -363,10 +363,8 @@ pub type CUpti_EventID = u32;
 pub type CUpti_MetricID = u32;
 
 /// function pointer for `cuptiDeviceGetNumEventDomains`
-pub type PFN_cuptiDeviceGetNumEventDomains = unsafe extern "C" fn(
-    device: i32,
-    num_domains: *mut u32,
-) -> CUptiResult;
+pub type PFN_cuptiDeviceGetNumEventDomains =
+    unsafe extern "C" fn(device: i32, num_domains: *mut u32) -> CUptiResult;
 
 /// function pointer for `cuptiDeviceEnumEventDomains`
 pub type PFN_cuptiDeviceEnumEventDomains = unsafe extern "C" fn(
@@ -383,31 +381,24 @@ pub type PFN_cuptiEventGroupCreate = unsafe extern "C" fn(
 ) -> CUptiResult;
 
 /// function pointer for `cuptiEventGroupDestroy`
-pub type PFN_cuptiEventGroupDestroy = unsafe extern "C" fn(
-    event_group: CUpti_EventGroup,
-) -> CUptiResult;
+pub type PFN_cuptiEventGroupDestroy =
+    unsafe extern "C" fn(event_group: CUpti_EventGroup) -> CUptiResult;
 
 /// function pointer for `cuptiEventGroupAddEvent`
-pub type PFN_cuptiEventGroupAddEvent = unsafe extern "C" fn(
-    event_group: CUpti_EventGroup,
-    event: CUpti_EventID,
-) -> CUptiResult;
+pub type PFN_cuptiEventGroupAddEvent =
+    unsafe extern "C" fn(event_group: CUpti_EventGroup, event: CUpti_EventID) -> CUptiResult;
 
 /// function pointer for `cuptiEventGroupRemoveEvent`
-pub type PFN_cuptiEventGroupRemoveEvent = unsafe extern "C" fn(
-    event_group: CUpti_EventGroup,
-    event: CUpti_EventID,
-) -> CUptiResult;
+pub type PFN_cuptiEventGroupRemoveEvent =
+    unsafe extern "C" fn(event_group: CUpti_EventGroup, event: CUpti_EventID) -> CUptiResult;
 
 /// function pointer for `cuptiEventGroupEnable`
-pub type PFN_cuptiEventGroupEnable = unsafe extern "C" fn(
-    event_group: CUpti_EventGroup,
-) -> CUptiResult;
+pub type PFN_cuptiEventGroupEnable =
+    unsafe extern "C" fn(event_group: CUpti_EventGroup) -> CUptiResult;
 
 /// function pointer for `cuptiEventGroupDisable`
-pub type PFN_cuptiEventGroupDisable = unsafe extern "C" fn(
-    event_group: CUpti_EventGroup,
-) -> CUptiResult;
+pub type PFN_cuptiEventGroupDisable =
+    unsafe extern "C" fn(event_group: CUpti_EventGroup) -> CUptiResult;
 
 /// function pointer for `cuptiEventGroupReadEvent`
 pub type PFN_cuptiEventGroupReadEvent = unsafe extern "C" fn(
@@ -471,9 +462,8 @@ pub type PFN_cuptiMetricGetValue = unsafe extern "C" fn(
 ) -> CUptiResult;
 
 /// function pointer for `cuptiEventGroupSetsDestroy`
-pub type PFN_cuptiEventGroupSetsDestroy = unsafe extern "C" fn(
-    event_group_sets: *mut CUpti_EventGroupSets,
-) -> CUptiResult;
+pub type PFN_cuptiEventGroupSetsDestroy =
+    unsafe extern "C" fn(event_group_sets: *mut CUpti_EventGroupSets) -> CUptiResult;
 
 // ---- Profiler Host API (modern, replaces event/metric) ------------------
 
@@ -500,8 +490,7 @@ pub type PFN_cuptiProfilerEnableProfiling =
 pub type PFN_cuptiProfilerDisableProfiling =
     unsafe extern "C" fn(params: *mut c_void) -> CUptiResult;
 /// function pointer for `cuptiProfilerPushRange`
-pub type PFN_cuptiProfilerPushRange =
-    unsafe extern "C" fn(params: *mut c_void) -> CUptiResult;
+pub type PFN_cuptiProfilerPushRange = unsafe extern "C" fn(params: *mut c_void) -> CUptiResult;
 /// function pointer for `cuptiProfilerPopRange`
 pub type PFN_cuptiProfilerPopRange = unsafe extern "C" fn(params: *mut c_void) -> CUptiResult;
 /// function pointer for `cuptiProfilerGetCounterAvailability`
@@ -514,10 +503,8 @@ pub type PFN_cuptiProfilerFlushCounterData =
 // ---- PC sampling --------------------------------------------------------
 
 /// function pointer for `cuptiActivityConfigurePCSampling`
-pub type PFN_cuptiActivityConfigurePCSampling = unsafe extern "C" fn(
-    ctx: *mut c_void,
-    config: *mut c_void,
-) -> CUptiResult;
+pub type PFN_cuptiActivityConfigurePCSampling =
+    unsafe extern "C" fn(ctx: *mut c_void, config: *mut c_void) -> CUptiResult;
 
 // ---- Loader ----
 

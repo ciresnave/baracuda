@@ -16,12 +16,12 @@
 
 #![cfg(feature = "fa2")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
-use baracuda_kernels::{
-    contiguous_stride, BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor,
-    FlashSdpaPlan, PlanPreference, TensorMut, TensorRef, Workspace,
-};
 use baracuda_cutlass::Error;
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+use baracuda_kernels::{
+    BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
+};
 use half::f16;
 
 fn setup() -> (Context, Stream) {
@@ -73,7 +73,15 @@ fn run_with_softcap(softcap: f32, is_causal: bool) {
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse");
 
     let desc = FlashSdpaDescriptor::new(
-        B, H, Q, K, D, D, default_scale(), is_causal, ElementKind::F16,
+        B,
+        H,
+        Q,
+        K,
+        D,
+        D,
+        default_scale(),
+        is_causal,
+        ElementKind::F16,
     )
     .with_softcap(softcap);
 
@@ -83,18 +91,37 @@ fn run_with_softcap(softcap: f32, is_causal: bool) {
     };
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, pref).expect("sel fa2");
     let ws_bytes = plan.workspace_size();
-    let mut ws_buf: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
+    let mut ws_buf: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     plan.run(
         &stream,
         Workspace::Borrowed(ws_buf.as_slice_mut()),
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: None,
             alibi_slopes: None,
         },
@@ -135,7 +162,15 @@ fn fa2_softcap_rejected_on_bespoke() {
     let _ = ctx;
 
     let desc = FlashSdpaDescriptor::new(
-        B, H, 128, 128, D, D, default_scale(), false, ElementKind::F16,
+        B,
+        H,
+        128,
+        128,
+        D,
+        D,
+        default_scale(),
+        false,
+        ElementKind::F16,
     )
     .with_softcap(30.0);
     let pref = PlanPreference {
@@ -158,7 +193,15 @@ fn fa2_softcap_negative_rejected() {
     let _ = ctx;
 
     let desc = FlashSdpaDescriptor::new(
-        B, H, 1024, 1024, D, D, default_scale(), false, ElementKind::F16,
+        B,
+        H,
+        1024,
+        1024,
+        D,
+        D,
+        default_scale(),
+        false,
+        ElementKind::F16,
     )
     .with_softcap(-1.0);
     let pref = PlanPreference {

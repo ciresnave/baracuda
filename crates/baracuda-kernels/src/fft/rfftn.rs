@@ -27,10 +27,10 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::{DeviceSlice, DeviceSliceMut, Stream};
 use baracuda_kernels_sys::{
-    baracuda_kernels_scale_inplace_real_f32_run, baracuda_kernels_scale_inplace_real_f64_run,
-    cufftComplex, cufftDestroy, cufftDoubleComplex, cufftExecC2R, cufftExecD2Z, cufftExecR2C,
-    cufftExecZ2D, cufftHandle, cufftPlanMany, cufftSetStream, CUFFT_C2R, CUFFT_D2Z, CUFFT_R2C,
-    CUFFT_Z2D,
+    CUFFT_C2R, CUFFT_D2Z, CUFFT_R2C, CUFFT_Z2D, baracuda_kernels_scale_inplace_real_f32_run,
+    baracuda_kernels_scale_inplace_real_f64_run, cufftComplex, cufftDestroy, cufftDoubleComplex,
+    cufftExecC2R, cufftExecD2Z, cufftExecR2C, cufftExecZ2D, cufftHandle, cufftPlanMany,
+    cufftSetStream,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FftKind, KernelSku,
@@ -276,7 +276,10 @@ impl RfftNdPlan<f32> {
         _workspace: Workspace<'_>,
         args: RfftNdArgs<'_, f32, Complex32>,
     ) -> Result<()> {
-        let real_total = self.desc.real_numel().saturating_mul(self.desc.batch as i64);
+        let real_total = self
+            .desc
+            .real_numel()
+            .saturating_mul(self.desc.batch as i64);
         let complex_total = self
             .desc
             .complex_numel()
@@ -318,7 +321,10 @@ impl RfftNdPlan<f64> {
         _workspace: Workspace<'_>,
         args: RfftNdArgs<'_, f64, Complex64>,
     ) -> Result<()> {
-        let real_total = self.desc.real_numel().saturating_mul(self.desc.batch as i64);
+        let real_total = self
+            .desc
+            .real_numel()
+            .saturating_mul(self.desc.batch as i64);
         let complex_total = self
             .desc
             .complex_numel()
@@ -597,7 +603,10 @@ impl IrfftNdPlan<f32> {
         _workspace: Workspace<'_>,
         args: IrfftNdArgs<'_, f32, Complex32>,
     ) -> Result<()> {
-        let real_total = self.desc.real_numel().saturating_mul(self.desc.batch as i64);
+        let real_total = self
+            .desc
+            .real_numel()
+            .saturating_mul(self.desc.batch as i64);
         let complex_total = self
             .desc
             .complex_numel()
@@ -653,7 +662,10 @@ impl IrfftNdPlan<f64> {
         _workspace: Workspace<'_>,
         args: IrfftNdArgs<'_, f64, Complex64>,
     ) -> Result<()> {
-        let real_total = self.desc.real_numel().saturating_mul(self.desc.batch as i64);
+        let real_total = self
+            .desc
+            .real_numel()
+            .saturating_mul(self.desc.batch as i64);
         let complex_total = self
             .desc
             .complex_numel()

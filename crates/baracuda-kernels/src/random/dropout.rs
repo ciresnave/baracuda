@@ -165,8 +165,7 @@ impl<T: Element, const N: usize> DropoutPlan<T, N> {
             return Ok(g);
         }
         let mut handle: curandGenerator_t = core::ptr::null_mut();
-        let status =
-            unsafe { curandCreateGenerator(&mut handle as *mut _, 100) };
+        let status = unsafe { curandCreateGenerator(&mut handle as *mut _, 100) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
@@ -218,12 +217,7 @@ impl<const N: usize> DropoutPlan<f32, N> {
         }
         let needed = self.workspace_size();
         let (ws_ptr, ws_bytes): (*mut c_void, usize) = match workspace {
-            Workspace::None => {
-                return Err(Error::WorkspaceTooSmall {
-                    needed,
-                    got: 0,
-                })
-            }
+            Workspace::None => return Err(Error::WorkspaceTooSmall { needed, got: 0 }),
             Workspace::Borrowed(slice) => {
                 if slice.len() < needed {
                     return Err(Error::WorkspaceTooSmall {
@@ -257,7 +251,11 @@ impl<const N: usize> DropoutPlan<f32, N> {
         // that through a zero-fill instead so callers don't see NaN /
         // inf in the output.
         let p = self.desc.p;
-        let scale = if p < 1.0 { 1.0_f32 / (1.0 - p) } else { 0.0_f32 };
+        let scale = if p < 1.0 {
+            1.0_f32 / (1.0 - p)
+        } else {
+            0.0_f32
+        };
         let status = unsafe {
             baracuda_kernels_sys::baracuda_kernels_dropout_f32_run(
                 numel,
@@ -293,12 +291,7 @@ impl<const N: usize> DropoutPlan<f64, N> {
         }
         let needed = self.workspace_size();
         let (ws_ptr, ws_bytes): (*mut c_void, usize) = match workspace {
-            Workspace::None => {
-                return Err(Error::WorkspaceTooSmall {
-                    needed,
-                    got: 0,
-                })
-            }
+            Workspace::None => return Err(Error::WorkspaceTooSmall { needed, got: 0 }),
             Workspace::Borrowed(slice) => {
                 if slice.len() < needed {
                     return Err(Error::WorkspaceTooSmall {
@@ -327,7 +320,11 @@ impl<const N: usize> DropoutPlan<f64, N> {
         }
 
         let p = self.desc.p;
-        let scale = if p < 1.0 { 1.0_f64 / (1.0 - p as f64) } else { 0.0_f64 };
+        let scale = if p < 1.0 {
+            1.0_f64 / (1.0 - p as f64)
+        } else {
+            0.0_f64
+        };
         let status = unsafe {
             baracuda_kernels_sys::baracuda_kernels_dropout_f64_run(
                 numel,
@@ -518,7 +515,11 @@ impl<const N: usize> DropoutBackwardPlan<f32, N> {
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
 
         let p = self.desc.p;
-        let scale = if p < 1.0 { 1.0_f32 / (1.0 - p) } else { 0.0_f32 };
+        let scale = if p < 1.0 {
+            1.0_f32 / (1.0 - p)
+        } else {
+            0.0_f32
+        };
         let status = unsafe {
             baracuda_kernels_sys::baracuda_kernels_dropout_backward_f32_run(
                 numel,
@@ -553,7 +554,11 @@ impl<const N: usize> DropoutBackwardPlan<f64, N> {
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
 
         let p = self.desc.p;
-        let scale = if p < 1.0 { 1.0_f64 / (1.0 - p as f64) } else { 0.0_f64 };
+        let scale = if p < 1.0 {
+            1.0_f64 / (1.0 - p as f64)
+        } else {
+            0.0_f64
+        };
         let status = unsafe {
             baracuda_kernels_sys::baracuda_kernels_dropout_backward_f64_run(
                 numel,

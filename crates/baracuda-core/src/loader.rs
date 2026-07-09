@@ -118,22 +118,24 @@ impl Library {
     pub unsafe fn symbol<T>(
         &self,
         symbol: &'static str,
-    ) -> Result<libloading::Symbol<'_, T>, LoaderError> { unsafe {
-        let bytes_with_nul: Vec<u8> = symbol.bytes().chain(std::iter::once(0)).collect();
-        let cstr = CStr::from_bytes_with_nul(&bytes_with_nul).map_err(|_| {
-            LoaderError::SymbolNotFound {
-                library: self.name,
-                symbol,
+    ) -> Result<libloading::Symbol<'_, T>, LoaderError> {
+        unsafe {
+            let bytes_with_nul: Vec<u8> = symbol.bytes().chain(std::iter::once(0)).collect();
+            let cstr = CStr::from_bytes_with_nul(&bytes_with_nul).map_err(|_| {
+                LoaderError::SymbolNotFound {
+                    library: self.name,
+                    symbol,
+                }
+            })?;
+            match self.lib.get::<T>(cstr.to_bytes_with_nul()) {
+                Ok(s) => Ok(s),
+                Err(_) => Err(LoaderError::SymbolNotFound {
+                    library: self.name,
+                    symbol,
+                }),
             }
-        })?;
-        match self.lib.get::<T>(cstr.to_bytes_with_nul()) {
-            Ok(s) => Ok(s),
-            Err(_) => Err(LoaderError::SymbolNotFound {
-                library: self.name,
-                symbol,
-            }),
         }
-    }}
+    }
 
     /// Return a raw pointer to the symbol without wrapping in `libloading::Symbol`.
     /// Useful for stashing function pointers in `OnceLock`s that outlive the
@@ -145,10 +147,12 @@ impl Library {
     /// [`Library`] outlives any use of the returned pointer — in practice this
     /// means storing the [`Library`] in a `static OnceLock<Library>` or
     /// equivalent.
-    pub unsafe fn raw_symbol(&self, symbol: &'static str) -> Result<*mut (), LoaderError> { unsafe {
-        let sym: libloading::Symbol<'_, *mut ()> = self.symbol(symbol)?;
-        Ok(*sym)
-    }}
+    pub unsafe fn raw_symbol(&self, symbol: &'static str) -> Result<*mut (), LoaderError> {
+        unsafe {
+            let sym: libloading::Symbol<'_, *mut ()> = self.symbol(symbol)?;
+            Ok(*sym)
+        }
+    }
 }
 
 #[cfg(test)]

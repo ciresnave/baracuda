@@ -180,26 +180,58 @@ impl<T: Element> CrossEntropyLossPlan<T> {
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_f32_run(
-                            n_rows, class_extent, row_stride_input, mode, input_ptr, target_ptr,
-                            out_ptr, ws_ptr, ws_bytes, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            mode,
+                            input_ptr,
+                            target_ptr,
+                            out_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_f16_run(
-                            n_rows, class_extent, row_stride_input, mode, input_ptr, target_ptr,
-                            out_ptr, ws_ptr, ws_bytes, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            mode,
+                            input_ptr,
+                            target_ptr,
+                            out_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
                         )
                     },
                     ElementKind::Bf16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_bf16_run(
-                            n_rows, class_extent, row_stride_input, mode, input_ptr, target_ptr,
-                            out_ptr, ws_ptr, ws_bytes, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            mode,
+                            input_ptr,
+                            target_ptr,
+                            out_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F64 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_f64_run(
-                            n_rows, class_extent, row_stride_input, mode, input_ptr, target_ptr,
-                            out_ptr, ws_ptr, ws_bytes, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            mode,
+                            input_ptr,
+                            target_ptr,
+                            out_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
                         )
                     },
                     _ => {
@@ -225,26 +257,62 @@ impl<T: Element> CrossEntropyLossPlan<T> {
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_soft_f32_run(
-                            n_rows, class_extent, row_stride_input, row_stride_target, mode,
-                            input_ptr, target_ptr, out_ptr, ws_ptr, ws_bytes, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            row_stride_target,
+                            mode,
+                            input_ptr,
+                            target_ptr,
+                            out_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_soft_f16_run(
-                            n_rows, class_extent, row_stride_input, row_stride_target, mode,
-                            input_ptr, target_ptr, out_ptr, ws_ptr, ws_bytes, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            row_stride_target,
+                            mode,
+                            input_ptr,
+                            target_ptr,
+                            out_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
                         )
                     },
                     ElementKind::Bf16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_soft_bf16_run(
-                            n_rows, class_extent, row_stride_input, row_stride_target, mode,
-                            input_ptr, target_ptr, out_ptr, ws_ptr, ws_bytes, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            row_stride_target,
+                            mode,
+                            input_ptr,
+                            target_ptr,
+                            out_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F64 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_soft_f64_run(
-                            n_rows, class_extent, row_stride_input, row_stride_target, mode,
-                            input_ptr, target_ptr, out_ptr, ws_ptr, ws_bytes, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            row_stride_target,
+                            mode,
+                            input_ptr,
+                            target_ptr,
+                            out_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
                         )
                     },
                     _ => {
@@ -416,26 +484,66 @@ impl<T: Element> CrossEntropyLossBackwardPlan<T> {
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_backward_f32_run(
-                            n_rows, class_extent, row_stride_input, mode, inv_n_or_one, input_ptr,
-                            target_ptr, dy_ptr, dinput_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            mode,
+                            inv_n_or_one,
+                            input_ptr,
+                            target_ptr,
+                            dy_ptr,
+                            dinput_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_backward_f16_run(
-                            n_rows, class_extent, row_stride_input, mode, inv_n_or_one, input_ptr,
-                            target_ptr, dy_ptr, dinput_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            mode,
+                            inv_n_or_one,
+                            input_ptr,
+                            target_ptr,
+                            dy_ptr,
+                            dinput_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::Bf16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_backward_bf16_run(
-                            n_rows, class_extent, row_stride_input, mode, inv_n_or_one, input_ptr,
-                            target_ptr, dy_ptr, dinput_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            mode,
+                            inv_n_or_one,
+                            input_ptr,
+                            target_ptr,
+                            dy_ptr,
+                            dinput_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F64 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_loss_cross_entropy_backward_f64_run(
-                            n_rows, class_extent, row_stride_input, mode, inv_n_or_one, input_ptr,
-                            target_ptr, dy_ptr, dinput_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                            n_rows,
+                            class_extent,
+                            row_stride_input,
+                            mode,
+                            inv_n_or_one,
+                            input_ptr,
+                            target_ptr,
+                            dy_ptr,
+                            dinput_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     _ => {

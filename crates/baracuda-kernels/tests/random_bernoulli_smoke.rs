@@ -2,10 +2,10 @@
 //! Verifies the empirical mean of the Bool output matches the requested
 //! probability `p` within a statistical tolerance.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Bool, ElementKind, PlanPreference, RandomBoolArgs, RandomDescriptor,
-    RandomKind, RandomPlan, TensorMut, Workspace,
+    Bool, ElementKind, PlanPreference, RandomBoolArgs, RandomDescriptor, RandomKind, RandomPlan,
+    TensorMut, Workspace, contiguous_stride,
 };
 
 const N: usize = 1024 * 1024;
@@ -96,8 +96,7 @@ fn bernoulli_p_zero() {
     let stride = contiguous_stride(shape);
 
     let mut dev_y: DeviceBuffer<Bool> = DeviceBuffer::zeros(&ctx, N).expect("alloc y");
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, N * 4).expect("alloc workspace");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, N * 4).expect("alloc workspace");
 
     let desc = RandomDescriptor {
         kind: RandomKind::Bernoulli,
@@ -109,9 +108,14 @@ fn bernoulli_p_zero() {
     };
     let plan = RandomPlan::<Bool, 1>::select(&stream, &desc, PlanPreference::default()).unwrap();
     let args = RandomBoolArgs::<1> {
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args).unwrap();
+    plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
+        .unwrap();
     stream.synchronize().unwrap();
 
     let mut host = vec![Bool(0); N];
@@ -119,5 +123,8 @@ fn bernoulli_p_zero() {
     // cuRAND samples in (0, 1] — every sample is strictly positive, so
     // (sample < 0) is always false. Every output byte must be 0.
     let nonzero = host.iter().filter(|b| b.0 != 0).count();
-    assert_eq!(nonzero, 0, "p = 0 must yield all-zero output, got {nonzero} ones");
+    assert_eq!(
+        nonzero, 0,
+        "p = 0 must yield all-zero output, got {nonzero} ones"
+    );
 }

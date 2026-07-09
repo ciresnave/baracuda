@@ -17,14 +17,14 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, flash_flops, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline,
+    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, flash_flops, measure_median_ns,
+    setup_device, time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use half::{bf16, f16};
 
 const BENCH_NAME: &str = "sdpa_gqa";
@@ -39,12 +39,8 @@ fn leak_str(s: &str) -> &'static str {
     Box::leak(s.to_owned().into_boxed_str())
 }
 
-fn bench<T>(
-    c: &mut Criterion,
-    dtype_label: &str,
-    fill: T,
-    baseline: Option<&PytorchBaseline>,
-) where
+fn bench<T>(c: &mut Criterion, dtype_label: &str, fill: T, baseline: Option<&PytorchBaseline>)
+where
     T: baracuda_kernels::Element + Copy + 'static,
 {
     let (ctx, stream) = setup_device();
@@ -161,9 +157,9 @@ fn bench<T>(
             let s = [BATCH, NUM_Q_HEADS, SEQ_LEN, HEAD_DIM];
             let st = [
                 (SEQ_LEN as i64) * (HEAD_DIM as i64), // batch → physical [B,1,K,D]
-                0,                                     // broadcast head
-                HEAD_DIM as i64,                       // K row
-                1,                                     // D
+                0,                                    // broadcast head
+                HEAD_DIM as i64,                      // K row
+                1,                                    // D
             ];
             (s, st)
         } else {
@@ -190,11 +186,31 @@ fn bench<T>(
         // diagnostic so the rollup script knows this cell was skipped.
         {
             let probe = FlashSdpaArgs::<T> {
-                q: TensorRef { data: dq.as_slice(), shape: sq, stride: stq },
-                k: TensorRef { data: dk.as_slice(), shape: skv, stride: stkv },
-                v: TensorRef { data: dv.as_slice(), shape: skv, stride: stkv },
-                y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: sty },
-                lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: stl },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: stq,
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: skv,
+                    stride: stkv,
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: skv,
+                    stride: stkv,
+                },
+                y: TensorMut {
+                    data: dy.as_slice_mut(),
+                    shape: sy,
+                    stride: sty,
+                },
+                lse: TensorMut {
+                    data: dlse.as_slice_mut(),
+                    shape: sl,
+                    stride: stl,
+                },
                 mask: None,
                 alibi_slopes: None,
             };
@@ -247,8 +263,8 @@ fn bench<T>(
                     shape: sl,
                     stride: stl,
                 },
-                            mask: None,
-                            alibi_slopes: None,
+                mask: None,
+                alibi_slopes: None,
             };
             let ws = match workspace.as_mut() {
                 Some(b) => Workspace::Borrowed(b.as_slice_mut()),
@@ -283,8 +299,8 @@ fn bench<T>(
                     shape: sl,
                     stride: stl,
                 },
-                            mask: None,
-                            alibi_slopes: None,
+                mask: None,
+                alibi_slopes: None,
             };
             let ws = match workspace.as_mut() {
                 Some(b) => Workspace::Borrowed(b.as_slice_mut()),
@@ -306,7 +322,11 @@ fn bench<T>(
         );
 
         group.throughput(Throughput::Elements(flash_flops(
-            BATCH, NUM_Q_HEADS, SEQ_LEN, SEQ_LEN, HEAD_DIM,
+            BATCH,
+            NUM_Q_HEADS,
+            SEQ_LEN,
+            SEQ_LEN,
+            HEAD_DIM,
         )));
         group.bench_with_input(BenchmarkId::from_parameter(&label), &(), |bb, _| {
             bb.iter_custom(|iters| {
@@ -337,14 +357,14 @@ fn bench<T>(
                             shape: sl,
                             stride: stl,
                         },
-                                            mask: None,
-                                            alibi_slopes: None,
+                        mask: None,
+                        alibi_slopes: None,
                     };
                     let ws = match workspace.as_mut() {
-                Some(b) => Workspace::Borrowed(b.as_slice_mut()),
-                None => Workspace::None,
-            };
-            plan.run(&stream, ws, args).expect("baracuda flash gqa");
+                        Some(b) => Workspace::Borrowed(b.as_slice_mut()),
+                        None => Workspace::None,
+                    };
+                    plan.run(&stream, ws, args).expect("baracuda flash gqa");
                 })
             });
         });

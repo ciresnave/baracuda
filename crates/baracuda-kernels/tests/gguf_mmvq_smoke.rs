@@ -13,10 +13,10 @@
 // the capital `K` in test names.
 #![allow(non_snake_case)]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BlockQ8K, BlockQ8_0, GgufBlockFormat, GgufMmvqArgs, GgufMmvqDescriptor,
-    GgufMmvqPlan, PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    BlockQ8_0, BlockQ8K, GgufBlockFormat, GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
+    PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -44,8 +44,14 @@ fn gguf_mmvq_q8_0_2x32() {
         qs0[i] = i as i8;
         qs1[i] = (i + 1) as i8;
     }
-    let row0 = BlockQ8_0 { d: half::f16::from_f32(d0).to_bits(), qs: qs0 };
-    let row1 = BlockQ8_0 { d: half::f16::from_f32(d1).to_bits(), qs: qs1 };
+    let row0 = BlockQ8_0 {
+        d: half::f16::from_f32(d0).to_bits(),
+        qs: qs0,
+    };
+    let row1 = BlockQ8_0 {
+        d: half::f16::from_f32(d1).to_bits(),
+        qs: qs1,
+    };
 
     let mut packed_bytes: Vec<u8> = Vec::with_capacity(2 * 34);
     let blocks = [row0, row1];
@@ -141,8 +147,16 @@ fn gguf_mmvq_q8_K_2x256() {
         qs1[i] = (((i as i32 * 3 + 5) % 255) - 127) as i8;
     }
     let bsums = [0i16; 16];
-    let row0 = BlockQ8K { d: d0, qs: qs0, bsums };
-    let row1 = BlockQ8K { d: d1, qs: qs1, bsums };
+    let row0 = BlockQ8K {
+        d: d0,
+        qs: qs0,
+        bsums,
+    };
+    let row1 = BlockQ8K {
+        d: d1,
+        qs: qs1,
+        bsums,
+    };
 
     let mut packed_bytes: Vec<u8> = Vec::with_capacity(2 * core::mem::size_of::<BlockQ8K>());
     for blk in [&row0, &row1] {
@@ -158,8 +172,7 @@ fn gguf_mmvq_q8_K_2x256() {
     let host_weight: Vec<U8> = packed_bytes.into_iter().map(U8).collect();
 
     // Activation: y[i] = sin-ish ramp to avoid trivial integer products.
-    let host_activation: Vec<f32> =
-        (0..256).map(|i| (i as f32) * 0.01 - 1.28).collect();
+    let host_activation: Vec<f32> = (0..256).map(|i| (i as f32) * 0.01 - 1.28).collect();
 
     // Reference: out[r] = d_r * Σ_c qs[r,c] * y[c].
     let mut expected = [0.0_f32; 2];

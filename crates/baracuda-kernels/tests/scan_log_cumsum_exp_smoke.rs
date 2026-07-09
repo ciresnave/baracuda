@@ -13,10 +13,10 @@
 //! Run with: `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test scan_log_cumsum_exp_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ScanArgs, ScanDescriptor, ScanKind, ScanPlan,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ScanArgs, ScanDescriptor, ScanKind, ScanPlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -108,8 +108,16 @@ fn lcse_fw_f32_2d_axis_1_reverse() {
     };
     let plan = ScanPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f32, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -178,8 +186,16 @@ fn lcse_fw_f64_2d_axis_0_forward() {
     };
     let plan = ScanPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f64, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -218,8 +234,16 @@ fn lcse_fw_f16_2d_axis_1_forward() {
     };
     let plan = ScanPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -261,8 +285,16 @@ fn lcse_fw_bf16_2d_axis_1_reverse() {
     };
     let plan = ScanPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<bf16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

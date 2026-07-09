@@ -49,9 +49,7 @@ pub use embedding_bag::{
 pub use embedding_bag_backward::{
     EmbeddingBagBackwardArgs, EmbeddingBagBackwardDescriptor, EmbeddingBagBackwardPlan,
 };
-pub use embedding_bag_max::{
-    EmbeddingBagMaxArgs, EmbeddingBagMaxDescriptor, EmbeddingBagMaxPlan,
-};
+pub use embedding_bag_max::{EmbeddingBagMaxArgs, EmbeddingBagMaxDescriptor, EmbeddingBagMaxPlan};
 pub use embedding_bag_max_backward::{
     EmbeddingBagMaxBackwardArgs, EmbeddingBagMaxBackwardDescriptor, EmbeddingBagMaxBackwardPlan,
 };

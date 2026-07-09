@@ -7,11 +7,11 @@
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
 use crate::backend::{
-    lower_dag, lower_dag_all, lower_dag_multi, lower_expr, Backend, GeneratedKernel, Lowering,
-    Variant, VariantFidelity,
+    Backend, GeneratedKernel, Lowering, Variant, VariantFidelity, lower_dag, lower_dag_all,
+    lower_dag_multi, lower_expr,
 };
 use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, UnaryOp};
-use crate::plan::{rr_role, KernelPlan, ReduceAxisClass, RrRole, Schedule};
+use crate::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
 
 /// The CUDA C++ backend. Lowers a [`KernelPlan`] to `.cu` source.
@@ -96,7 +96,9 @@ impl Backend for Cuda {
             panic!("cuda backend: unsupported dtype {:?}", plan.dtype);
         };
         assert!(
-            plan.output_bodies().iter().all(|b| params_used(b).is_empty())
+            plan.output_bodies()
+                .iter()
+                .all(|b| params_used(b).is_empty())
                 || matches!(plan.dtype, ElementKind::F32 | ElementKind::F32Strict),
             "cuda backend v1: scalar params are f32-only for now (dtype {:?})",
             plan.dtype
@@ -447,7 +449,9 @@ fn body_packs(e: &ScalarExpr) -> bool {
         ScalarExpr::Input(_) => true,
         // Coord never packs: the packed dtypes (f16/bf16) are outside its
         // dtype gate anyway, and a Coord body never reaches Vectorized.
-        ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_)
+        ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_)
         | ScalarExpr::Coord(_) => false,
         ScalarExpr::Unary(_, x) => body_packs(x),
         ScalarExpr::Add(a, b)
@@ -725,7 +729,11 @@ fn store_expr(plan: &KernelPlan<'_>, root: String) -> String {
 }
 
 fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
-    let name = format!("baracuda_gen_{}_{}_scalar", plan.op_name, dtype_tag(plan.dtype));
+    let name = format!(
+        "baracuda_gen_{}_{}_scalar",
+        plan.op_name,
+        dtype_tag(plan.dtype)
+    );
     let n = plan.n_inputs;
     let octype = out_ctype(plan, ctype);
     let mut s = header(plan, &name);
@@ -882,14 +890,24 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         // The index operand's own strided offset (a full-shape index varies on
         // every axis; a 1-D index_select/embedding index broadcasts to
         // `c{axis}·stride`). Never viewed (gather ⊥ view) ⇒ identity remap.
-        let ioff = offset_expr(plan.key.operands[idx_op as usize], &format!("s{idx_op}"), rank, None);
+        let ioff = offset_expr(
+            plan.key.operands[idx_op as usize],
+            &format!("s{idx_op}"),
+            rank,
+            None,
+        );
         s.push_str(&format!("        long long gidx_off = {ioff};\n"));
-        s.push_str(&format!("        long long gidx_raw = (long long)in{idx_op}[gidx_off];\n"));
+        s.push_str(&format!(
+            "        long long gidx_raw = (long long)in{idx_op}[gidx_off];\n"
+        ));
         // Clamp the LOAD address into `[0, gext-1]` (memcheck-safe for gext>=1):
         s.push_str(
             "        long long gidx_clamped = gidx_raw < 0 ? 0 : (gidx_raw >= gext ? gext - 1 : gidx_raw);\n",
         );
-        if matches!(oob, crate::ir::OobPolicy::Skip | crate::ir::OobPolicy::ZeroFill) {
+        if matches!(
+            oob,
+            crate::ir::OobPolicy::Skip | crate::ir::OobPolicy::ZeroFill
+        ) {
             s.push_str("        bool goob = (gidx_raw < 0) || (gidx_raw >= gext);\n");
         }
         // The gathered DATA operand's offset substitutes `gidx_clamped·stride[axis]`
@@ -914,9 +932,16 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     if let Some((idx_op, _axis, _combine, _oob, _idt)) = scatter {
         // The index operand's own strided offset (a full-shape scatter index varies
         // on every axis; a 1-D index_add index broadcasts to `c{axis}·stride`).
-        let ioff = offset_expr(plan.key.operands[idx_op as usize], &format!("s{idx_op}"), rank, None);
+        let ioff = offset_expr(
+            plan.key.operands[idx_op as usize],
+            &format!("s{idx_op}"),
+            rank,
+            None,
+        );
         s.push_str(&format!("        long long sidx_off = {ioff};\n"));
-        s.push_str(&format!("        long long sidx_raw = (long long)in{idx_op}[sidx_off];\n"));
+        s.push_str(&format!(
+            "        long long sidx_raw = (long long)in{idx_op}[sidx_off];\n"
+        ));
         s.push_str(
             "        long long sidx_clamped = sidx_raw < 0 ? 0 : (sidx_raw >= sext ? sext - 1 : sidx_raw);\n",
         );
@@ -934,7 +959,12 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             // Item 01: input `k` may be read through a Permute view (a transposed
             // read) — `input_perm` remaps its stride indices. Identity/view-free ⇒
             // `None` ⇒ byte-identical offset.
-            let off = offset_expr(plan.key.operands[k], &format!("s{k}"), rank, input_perm(plan, k));
+            let off = offset_expr(
+                plan.key.operands[k],
+                &format!("s{k}"),
+                rank,
+                input_perm(plan, k),
+            );
             s.push_str(&format!("        long long o{k} = {off};\n"));
         }
     }
@@ -1028,7 +1058,9 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             }
             Some((_, _, _, crate::ir::OobPolicy::ZeroFill, _)) => {
                 let zero = zero_store_literal(octype);
-                s.push_str(&format!("        out[oo] = goob ? ({zero}) : ({stored});\n"));
+                s.push_str(&format!(
+                    "        out[oo] = goob ? ({zero}) : ({stored});\n"
+                ));
             }
             // Clamp or index-free: unconditional store.
             _ => {
@@ -1148,7 +1180,10 @@ fn assert_gather_lowerable(plan: &KernelPlan<'_>) {
         plan.n_inputs
     );
     assert!(
-        matches!(index_dtype, ElementKind::I32 | ElementKind::I64 | ElementKind::U32),
+        matches!(
+            index_dtype,
+            ElementKind::I32 | ElementKind::I64 | ElementKind::U32
+        ),
         "cuda backend: gathered op '{name}' index_dtype must be I32/I64/U32, got \
          {index_dtype:?}"
     );
@@ -1204,7 +1239,10 @@ fn assert_scatter_lowerable(plan: &KernelPlan<'_>) {
         plan.n_inputs
     );
     assert!(
-        matches!(index_dtype, ElementKind::I32 | ElementKind::I64 | ElementKind::U32),
+        matches!(
+            index_dtype,
+            ElementKind::I32 | ElementKind::I64 | ElementKind::U32
+        ),
         "cuda backend: scattered op '{name}' index_dtype must be I32/I64/U32, got \
          {index_dtype:?}"
     );
@@ -1375,7 +1413,9 @@ fn emit_scatter_gathersum(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel
     // The index value at this update coordinate `uc{d}` (full-shape, or 1-D via a
     // broadcast si_ stride that drops the non-axis terms).
     let ioff = offset_expr_coord(plan.key.operands[idx_op], "si", "uc", rank);
-    s.push_str(&format!("            long long sidx = (long long)in{idx_op}[{ioff}];\n"));
+    s.push_str(&format!(
+        "            long long sidx = (long long)in{idx_op}[{ioff}];\n"
+    ));
     // Match: the scattered target coord equals this destination cell. Axis term is
     // `sidx == oc{axis}`; every other axis term is `uc{d} == oc{d}`.
     let mut conds: Vec<String> = Vec::new();
@@ -1513,10 +1553,18 @@ fn assert_views_lowerable(plan: &KernelPlan<'_>) {
 /// emitters: v1 multi-output bodies carry neither leaf (rejected at the plan
 /// gate + emitter backstops), so reaching one is a bug, not an honest miss.
 fn multi_reduced_panic(op_name: &str) -> impl Fn(u8) -> String + '_ {
-    move |i| panic!("cuda backend: Reduced({i}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (no reduction)")
+    move |i| {
+        panic!(
+            "cuda backend: Reduced({i}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (no reduction)"
+        )
+    }
 }
 fn multi_coord_panic(op_name: &str) -> impl Fn(u8) -> String + '_ {
-    move |d| panic!("cuda backend: Coord({d}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (Coord bodies are deferred)")
+    move |d| {
+        panic!(
+            "cuda backend: Coord({d}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (Coord bodies are deferred)"
+        )
+    }
 }
 
 /// Emit a **multi-output scalar** elementwise kernel (increment 1): one linear
@@ -1634,7 +1682,12 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             // A viewed input on a multi-output op is rejected at the plan gate
             // (deferred composition), so `input_perm` is `None` here in v1 — but
             // threading it keeps the two strided emitters in lockstep.
-            let off = offset_expr(plan.key.operands[k], &format!("s{k}"), rank, input_perm(plan, k));
+            let off = offset_expr(
+                plan.key.operands[k],
+                &format!("s{k}"),
+                rank,
+                input_perm(plan, k),
+            );
             s.push_str(&format!("        long long o{k} = {off};\n"));
         }
     }
@@ -1918,10 +1971,22 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     } else {
         "float"
     };
-    let zero = if int_acc { "0" } else if dbl { "0.0" } else { "0.0f" };
+    let zero = if int_acc {
+        "0"
+    } else if dbl {
+        "0.0"
+    } else {
+        "0.0f"
+    };
     // Prod identity (increment 0e): `acc = 1; acc *= elem` (matches the bespoke
     // `ProdReduce::init() = T(1)`). Additive combines keep the `0` identity.
-    let one = if int_acc { "1" } else if dbl { "1.0" } else { "1.0f" };
+    let one = if int_acc {
+        "1"
+    } else if dbl {
+        "1.0"
+    } else {
+        "1.0f"
+    };
     let load = |i: u8| match plan.dtype {
         ElementKind::F16 => format!("__half2float(in{i}[idx])"),
         ElementKind::Bf16 => format!("__bfloat162float(in{i}[idx])"),
@@ -1939,7 +2004,13 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                      Elementwise-only (a coordinate along a folded axis is ambiguous)"
                 )
             },
-            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            unary: &|op, x| {
+                if dbl {
+                    unary_f64(op, x)
+                } else {
+                    unary_f32(op, x)
+                }
+            },
             binary: &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
@@ -1993,12 +2064,29 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                     )
                 },
                 reduced: &|s| {
-                    assert_eq!(s, 0, "reduction post references Reduced({s}); only 0 exists");
+                    assert_eq!(
+                        s, 0,
+                        "reduction post references Reduced({s}); only 0 exists"
+                    );
                     "red0".to_string()
                 },
-                coord: &|d| panic!("cuda backend: reduction post-expr Coord({d}) is Elementwise-only"),
-                unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
-                binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+                coord: &|d| {
+                    panic!("cuda backend: reduction post-expr Coord({d}) is Elementwise-only")
+                },
+                unary: &|op, x| {
+                    if dbl {
+                        unary_f64(op, x)
+                    } else {
+                        unary_f32(op, x)
+                    }
+                },
+                binary: &|op, a, b| {
+                    if dbl {
+                        binary_f64(op, a, b)
+                    } else {
+                        binary_f32(op, a, b)
+                    }
+                },
             },
         );
         (Some(format!("{acc} red0 = {finalized};")), store(posted))
@@ -2075,8 +2163,16 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                 s.push_str(&format!("        {acc} r = block_prod_{stem}(acc);\n"));
             }
             ReduceOp::Max | ReduceOp::Min => {
-                let cmp = if matches!(rop, ReduceOp::Max) { ">" } else { "<" };
-                let suf = if matches!(rop, ReduceOp::Max) { "max" } else { "min" };
+                let cmp = if matches!(rop, ReduceOp::Max) {
+                    ">"
+                } else {
+                    "<"
+                };
+                let suf = if matches!(rop, ReduceOp::Max) {
+                    "max"
+                } else {
+                    "min"
+                };
                 // `has` carries "this lane saw an element" so idle lanes inject nothing
                 // (no ±inf seed, headerless); a NaN sticks via `e != e`.
                 s.push_str(&format!("        {acc} acc = {zero}; int has = 0;\n"));
@@ -2087,14 +2183,18 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                     "            if (!has || e != e || e {cmp} acc) {{ acc = e; has = 1; }}\n"
                 ));
                 s.push_str("        }\n");
-                s.push_str(&format!("        {acc} r = block_{suf}_{stem}(acc, has);\n"));
+                s.push_str(&format!(
+                    "        {acc} r = block_{suf}_{stem}(acc, has);\n"
+                ));
             }
         }
         // The block_* helpers broadcast the result to all threads; thread 0 applies
         // the 0e post-expr (identity ⇒ byte-identical) and writes.
         let (decl, rhs) = post_apply("r".to_string());
         match decl {
-            None => s.push_str(&format!("        if (threadIdx.x == 0) out[row] = {rhs};\n")),
+            None => s.push_str(&format!(
+                "        if (threadIdx.x == 0) out[row] = {rhs};\n"
+            )),
             Some(d) => {
                 s.push_str("        if (threadIdx.x == 0) {\n");
                 s.push_str(&format!("            {d}\n"));
@@ -2229,7 +2329,11 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                 s.push_str(&format!(
                     "        for (long long cr{r} = 0; cr{r} < shape{r}; ++cr{r}) {{\n"
                 ));
-                s.push_str(&format!("            long long roff{} = roff{};\n", i + 1, i));
+                s.push_str(&format!(
+                    "            long long roff{} = roff{};\n",
+                    i + 1,
+                    i
+                ));
             }
         }
         let inner = reduced.len() - 1;
@@ -2275,7 +2379,11 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
             emit_reduced_nest(&mut s, &[format!("            acc *= {elem};\n")]);
         }
         ReduceOp::Max | ReduceOp::Min => {
-            let cmp = if matches!(rop, ReduceOp::Max) { ">" } else { "<" };
+            let cmp = if matches!(rop, ReduceOp::Max) {
+                ">"
+            } else {
+                "<"
+            };
             // `has` seeds the first reduced element (all cr=0) without a ±∞ literal;
             // an empty reduced extent leaves `acc = 0` (matching the fast path).
             s.push_str(&format!("        {acc} acc = {zero};\n"));
@@ -2435,7 +2543,13 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
                      Coord is Elementwise-only"
                 )
             },
-            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            unary: &|op, x| {
+                if dbl {
+                    unary_f64(op, x)
+                } else {
+                    unary_f32(op, x)
+                }
+            },
             binary: &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
@@ -2457,7 +2571,11 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         "baracuda_gen_{}_{}_reduce_{}_ax{:x}{}",
         plan.op_name,
         dtype_tag(plan.dtype),
-        if matches!(rop, ReduceOp::Mean) { "mean" } else { "sum" },
+        if matches!(rop, ReduceOp::Mean) {
+            "mean"
+        } else {
+            "sum"
+        },
         axes.0,
         if keepdim { "_kd" } else { "" },
     );
@@ -2507,8 +2625,14 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     Some(Variant {
         tag: "splitk",
         kernels: vec![
-            GeneratedKernel { name: pname.clone(), source: p },
-            GeneratedKernel { name: cname.clone(), source: k },
+            GeneratedKernel {
+                name: pname.clone(),
+                source: p,
+            },
+            GeneratedKernel {
+                name: cname.clone(),
+                source: k,
+            },
         ],
         fidelity: VariantFidelity::ReassociatedDeterministic,
         launch_note: format!(
@@ -2600,7 +2724,13 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
                      Coord is Elementwise-only"
                 )
             },
-            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            unary: &|op, x| {
+                if dbl {
+                    unary_f64(op, x)
+                } else {
+                    unary_f32(op, x)
+                }
+            },
             binary: &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
@@ -2718,7 +2848,9 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     p.push_str("    long long k1 = k0 + chunk_k; if (k1 > k) k1 = k;\n");
     p.push_str(&format!("    {acc} accs[8];\n"));
     p.push_str("    #pragma unroll\n");
-    p.push_str(&format!("    for (int mm = 0; mm < 8; ++mm) accs[mm] = {zero};\n"));
+    p.push_str(&format!(
+        "    for (int mm = 0; mm < 8; ++mm) accs[mm] = {zero};\n"
+    ));
     p.push_str("    for (long long kk = k0; kk < k1; ++kk) {\n");
     p.push_str(&format!(
         "        {acc} w = {};\n",
@@ -2733,9 +2865,7 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     p.push_str("        }\n    }\n");
     p.push_str("    #pragma unroll\n");
     p.push_str("    for (int mm = 0; mm < 8; ++mm) {\n");
-    p.push_str(
-        "        if (mm < m) ws[((long long)blockIdx.y * m + mm) * n + col] = accs[mm];\n",
-    );
+    p.push_str("        if (mm < m) ws[((long long)blockIdx.y * m + mm) * n + col] = accs[mm];\n");
     p.push_str("    }\n}\n");
 
     // ---- Kernel 2: fold the chunk partials; epilogue + store narrowing. ----
@@ -2754,7 +2884,13 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
                      Coord is Elementwise-only"
                 )
             },
-            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            unary: &|op, x| {
+                if dbl {
+                    unary_f64(op, x)
+                } else {
+                    unary_f32(op, x)
+                }
+            },
             binary: &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
@@ -2781,7 +2917,9 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     kk.push_str("        if (mm < m) {\n");
     // Seed from chunk 0 (n_chunks >= 1 by the launch contract): keeps the
     // degenerate single-chunk case bit-identical to the base kernel.
-    kk.push_str(&format!("            {acc} r0 = ws[(long long)mm * n + col];\n"));
+    kk.push_str(&format!(
+        "            {acc} r0 = ws[(long long)mm * n + col];\n"
+    ));
     kk.push_str(
         "            for (long long ch = 1; ch < n_chunks; ++ch) r0 += ws[(ch * m + mm) * n + col];\n",
     );
@@ -2791,8 +2929,14 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     Some(Variant {
         tag: "splitk",
         kernels: vec![
-            GeneratedKernel { name: pname.clone(), source: p },
-            GeneratedKernel { name: cname.clone(), source: kk },
+            GeneratedKernel {
+                name: pname.clone(),
+                source: p,
+            },
+            GeneratedKernel {
+                name: cname.clone(),
+                source: kk,
+            },
         ],
         fidelity: VariantFidelity::ReassociatedDeterministic,
         launch_note: format!(
@@ -3052,7 +3196,13 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                          is Elementwise-only"
                     )
                 },
-                unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+                unary: &|op, x| {
+                    if dbl {
+                        unary_f64(op, x)
+                    } else {
+                        unary_f32(op, x)
+                    }
+                },
                 binary: &|op, a, b| {
                     if dbl {
                         binary_f64(op, a, b)
@@ -3103,7 +3253,9 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
             "    extern __shared__ {acc} baracuda_row_smem[];\n"
         ));
     }
-    s.push_str("    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n");
+    s.push_str(
+        "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
+    );
     s.push_str("        long long base = row * k;\n");
     // Hoist per-row scalar operands (saved stats: μ, rstd, lse) once per row: they
     // are constant along the feature axis, so `in{i}[row]` is loaded here (outside
@@ -3158,8 +3310,16 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                 s.push_str(&format!("        {acc} r{i} = {fin};\n"));
             }
             ReduceOp::Max | ReduceOp::Min => {
-                let cmp = if matches!(st.op, ReduceOp::Max) { ">" } else { "<" };
-                let suf = if matches!(st.op, ReduceOp::Max) { "max" } else { "min" };
+                let cmp = if matches!(st.op, ReduceOp::Max) {
+                    ">"
+                } else {
+                    "<"
+                };
+                let suf = if matches!(st.op, ReduceOp::Max) {
+                    "max"
+                } else {
+                    "min"
+                };
                 // Carry a `has` flag so idle / short-row lanes inject nothing and no
                 // ±inf seed is needed (headerless); NaN sticks via `e != e`.
                 s.push_str(&format!("        {acc} acc{i} = {zero}; int has{i} = 0;\n"));
@@ -3173,7 +3333,9 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                     "            if (!has{i} || e != e || e {cmp} acc{i}) {{ acc{i} = e; has{i} = 1; }}\n"
                 ));
                 s.push_str("        }\n");
-                s.push_str(&format!("        {acc} r{i} = block_{suf}_{stem}(acc{i}, has{i});\n"));
+                s.push_str(&format!(
+                    "        {acc} r{i} = block_{suf}_{stem}(acc{i}, has{i});\n"
+                ));
             }
         }
     }
@@ -3250,7 +3412,10 @@ fn emit_block_reducers(
              }}\n"
         ));
     }
-    if ops.iter().any(|o| matches!(o, ReduceOp::Sum | ReduceOp::Mean)) {
+    if ops
+        .iter()
+        .any(|o| matches!(o, ReduceOp::Sum | ReduceOp::Mean))
+    {
         s.push_str(&format!(
             "__device__ __forceinline__ {acc} warp_sum_{stem}({acc} v) {{\n\
              \x20   for (int off = warpSize / 2; off > 0; off >>= 1)\n\
@@ -3325,8 +3490,22 @@ fn scan_identity(sop: ReduceOp, dt: ElementKind) -> String {
     let int_acc = crate::plan::is_int_dtype(dt);
     let dbl = matches!(dt, ElementKind::F64 | ElementKind::F32Strict);
     match sop {
-        ReduceOp::Sum => if int_acc { "0" } else if dbl { "0.0" } else { "0.0f" }.to_string(),
-        ReduceOp::Prod => if int_acc { "1" } else if dbl { "1.0" } else { "1.0f" }.to_string(),
+        ReduceOp::Sum => if int_acc {
+            "0"
+        } else if dbl {
+            "0.0"
+        } else {
+            "0.0f"
+        }
+        .to_string(),
+        ReduceOp::Prod => if int_acc {
+            "1"
+        } else if dbl {
+            "1.0"
+        } else {
+            "1.0f"
+        }
+        .to_string(),
         // Max's identity is the type minimum; Min's is the type maximum.
         ReduceOp::Max => type_extreme_lit(dt, true),
         ReduceOp::Min => type_extreme_lit(dt, false),
@@ -3356,15 +3535,30 @@ fn type_extreme_lit(dt: ElementKind, most_negative: bool) -> String {
             "__int_as_float(0x7f800000u)"
         }
         .to_string(),
-        ElementKind::I32 => if most_negative { "(-2147483647 - 1)" } else { "2147483647" }.to_string(),
-        ElementKind::I64 => {
-            if most_negative { "(-9223372036854775807LL - 1)" } else { "9223372036854775807LL" }
-                .to_string()
+        ElementKind::I32 => if most_negative {
+            "(-2147483647 - 1)"
+        } else {
+            "2147483647"
         }
-        ElementKind::S8 => if most_negative { "((signed char)-128)" } else { "((signed char)127)" }
-            .to_string(),
-        ElementKind::U8 => if most_negative { "((unsigned char)0)" } else { "((unsigned char)255)" }
-            .to_string(),
+        .to_string(),
+        ElementKind::I64 => if most_negative {
+            "(-9223372036854775807LL - 1)"
+        } else {
+            "9223372036854775807LL"
+        }
+        .to_string(),
+        ElementKind::S8 => if most_negative {
+            "((signed char)-128)"
+        } else {
+            "((signed char)127)"
+        }
+        .to_string(),
+        ElementKind::U8 => if most_negative {
+            "((unsigned char)0)"
+        } else {
+            "((unsigned char)255)"
+        }
+        .to_string(),
         other => unreachable!("scan type_extreme_lit on unsupported dtype {other:?}"),
     }
 }
@@ -3427,7 +3621,10 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     // validates the same, the 0a lesson: gate every layer). cuda-prefixed messages
     // distinct from the plan gate's. ----
     let rank = plan.key.rank;
-    assert!(rank >= 1, "cuda backend: Scan needs a scanned axis (rank >= 1)");
+    assert!(
+        rank >= 1,
+        "cuda backend: Scan needs a scanned axis (rank >= 1)"
+    );
     let last = rank - 1;
     assert!(
         axis == last,
@@ -3526,10 +3723,26 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
         pre,
         &Lowering {
             leaf: &load,
-            reduced: &|s| panic!("cuda backend: Scan pre-map read Reduced({s}) — no running prefix in the pre-map"),
+            reduced: &|s| {
+                panic!(
+                    "cuda backend: Scan pre-map read Reduced({s}) — no running prefix in the pre-map"
+                )
+            },
             coord: &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
-            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
-            binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+            unary: &|op, x| {
+                if dbl {
+                    unary_f64(op, x)
+                } else {
+                    unary_f32(op, x)
+                }
+            },
+            binary: &|op, a, b| {
+                if dbl {
+                    binary_f64(op, a, b)
+                } else {
+                    binary_f32(op, a, b)
+                }
+            },
         },
     );
     // `post` (the per-element epilogue) lowers over the running-prefix register,
@@ -3540,12 +3753,27 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
         &Lowering {
             leaf: &load,
             reduced: &|s| {
-                assert_eq!(s, 0, "Scan post references Reduced({s}); only 0 (the running prefix) exists");
+                assert_eq!(
+                    s, 0,
+                    "Scan post references Reduced({s}); only 0 (the running prefix) exists"
+                );
                 "prefix".to_string()
             },
             coord: &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
-            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
-            binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+            unary: &|op, x| {
+                if dbl {
+                    unary_f64(op, x)
+                } else {
+                    unary_f32(op, x)
+                }
+            },
+            binary: &|op, a, b| {
+                if dbl {
+                    binary_f64(op, a, b)
+                } else {
+                    binary_f32(op, a, b)
+                }
+            },
         },
     );
     let store = |v: &str| -> String {
@@ -3582,7 +3810,9 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     s.push_str("    if (k == 0) return;\n");
 
     // Per-row grid-stride loop (uniform — never a divergent early return).
-    s.push_str("    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n");
+    s.push_str(
+        "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
+    );
     s.push_str("        long long base = row * k;\n");
     // Hoist per-row scalar operands once per row (emits nothing for single-input).
     for i in 0..plan.n_inputs {
@@ -3608,7 +3838,11 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
         };
         match sop {
             ReduceOp::Sum | ReduceOp::Prod => {
-                let opc = if matches!(sop, ReduceOp::Sum) { "+" } else { "*" };
+                let opc = if matches!(sop, ReduceOp::Sum) {
+                    "+"
+                } else {
+                    "*"
+                };
                 s.push_str(&format!("            {acc} acc = {ident};\n"));
                 s.push_str(for_hdr);
                 s.push_str("                long long idx = base + j;\n");
@@ -3626,7 +3860,11 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
                 s.push_str("            }\n");
             }
             ReduceOp::Max | ReduceOp::Min => {
-                let cmp = if matches!(sop, ReduceOp::Max) { ">" } else { "<" };
+                let cmp = if matches!(sop, ReduceOp::Max) {
+                    ">"
+                } else {
+                    "<"
+                };
                 // Seed acc with a dummy (guarded by `have`); the exclusive first
                 // position emits the monoid identity. NaN propagates via `v != v`.
                 s.push_str(&format!("            {acc} acc = {ident}; int have = 0;\n"));
@@ -3634,7 +3872,9 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
                 s.push_str("                long long idx = base + j;\n");
                 s.push_str(&format!("                {acc} v = {pre_str};\n"));
                 if exclusive {
-                    s.push_str(&format!("                {acc} prefix = have ? acc : ({ident});\n"));
+                    s.push_str(&format!(
+                        "                {acc} prefix = have ? acc : ({ident});\n"
+                    ));
                     s.push_str(&format!("                out[idx] = {stored};\n"));
                     s.push_str(&format!(
                         "                if (!have || v != v || v {cmp} acc) {{ acc = v; have = 1; }}\n"
@@ -3662,7 +3902,11 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
                 _ => unreachable!(),
             }
         };
-        let tag = if matches!(sop, ReduceOp::Sum) { "sum" } else { "prod" };
+        let tag = if matches!(sop, ReduceOp::Sum) {
+            "sum"
+        } else {
+            "prod"
+        };
         s.push_str(&format!("        __shared__ {acc} warp_buf[32];\n"));
         s.push_str(&format!("        __shared__ {acc} warp_off[32];\n"));
         s.push_str(&format!("        __shared__ {acc} chunk_tot;\n"));
@@ -3684,7 +3928,9 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
         s.push_str(&format!(
             "            {acc} v = (p < k) ? ({pre_str}) : ({ident});\n"
         ));
-        s.push_str(&format!("            {acc} winc = warpscan_{tag}_{stem}(v);\n"));
+        s.push_str(&format!(
+            "            {acc} winc = warpscan_{tag}_{stem}(v);\n"
+        ));
         // `wexc` (the warp-exclusive value) is only consumed on the exclusive path
         // (`chunk_excl`); emitting it for an inclusive scan is a dead warp shuffle.
         if exclusive {
@@ -3702,7 +3948,10 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
         s.push_str(&format!("                {acc} run = {ident};\n"));
         s.push_str("                for (int w = 0; w < nwarps; ++w) {\n");
         s.push_str("                    warp_off[w] = run;\n");
-        s.push_str(&format!("                    run = {};\n", comb("run", "warp_buf[w]")));
+        s.push_str(&format!(
+            "                    run = {};\n",
+            comb("run", "warp_buf[w]")
+        ));
         s.push_str("                }\n");
         s.push_str("                chunk_tot = run;\n");
         s.push_str("            }\n");
@@ -3721,7 +3970,10 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
             ));
         }
         s.push_str(&format!("            if (p < k) out[idx] = {stored};\n"));
-        s.push_str(&format!("            carry = {};\n", comb("carry", "chunk_tot")));
+        s.push_str(&format!(
+            "            carry = {};\n",
+            comb("carry", "chunk_tot")
+        ));
         s.push_str("            __syncthreads();\n");
         s.push_str("        }\n");
     }
@@ -3869,7 +4121,16 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             pad_lo,
             pad_hi,
             count_include_pad,
-        } => (op, axis, size, stride, dilation, pad_lo, pad_hi, count_include_pad),
+        } => (
+            op,
+            axis,
+            size,
+            stride,
+            dilation,
+            pad_lo,
+            pad_hi,
+            count_include_pad,
+        ),
         _ => unreachable!("emit_window on a non-Window schedule"),
     };
 
@@ -3877,7 +4138,10 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // validates the same — the 0a lesson: gate every layer). cuda-prefixed
     // messages distinct from the plan gate's. ----
     let rank = plan.key.rank;
-    assert!(rank >= 1, "cuda backend: Window needs a pooled axis (rank >= 1)");
+    assert!(
+        rank >= 1,
+        "cuda backend: Window needs a pooled axis (rank >= 1)"
+    );
     let last = rank - 1;
     assert!(
         axis == last,
@@ -3938,7 +4202,11 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let dtag = dtype_tag(plan.dtype);
     // count_include_pad only affects Mean; suffix it there so the two avg_pool
     // divisor policies never collide on the entry-point symbol.
-    let cip_suf = if is_mean && count_include_pad { "_cip" } else { "" };
+    let cip_suf = if is_mean && count_include_pad {
+        "_cip"
+    } else {
+        ""
+    };
     let name = format!(
         "baracuda_gen_{}_{dtag}_window_{combine_tag}{cip_suf}",
         plan.op_name
@@ -3970,10 +4238,26 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         pre,
         &Lowering {
             leaf: &load,
-            reduced: &|s| panic!("cuda backend: Window pre-map read Reduced({s}) — no window result in the pre-map"),
+            reduced: &|s| {
+                panic!(
+                    "cuda backend: Window pre-map read Reduced({s}) — no window result in the pre-map"
+                )
+            },
             coord: &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
-            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
-            binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+            unary: &|op, x| {
+                if dbl {
+                    unary_f64(op, x)
+                } else {
+                    unary_f32(op, x)
+                }
+            },
+            binary: &|op, a, b| {
+                if dbl {
+                    binary_f64(op, a, b)
+                } else {
+                    binary_f32(op, a, b)
+                }
+            },
         },
     );
     // `post` (per-output epilogue) lowers over the finalized window result, bound to
@@ -3983,12 +4267,27 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         &Lowering {
             leaf: &load,
             reduced: &|s| {
-                assert_eq!(s, 0, "Window post references Reduced({s}); only 0 (the window result) exists");
+                assert_eq!(
+                    s, 0,
+                    "Window post references Reduced({s}); only 0 (the window result) exists"
+                );
                 "prefix".to_string()
             },
             coord: &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
-            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
-            binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+            unary: &|op, x| {
+                if dbl {
+                    unary_f64(op, x)
+                } else {
+                    unary_f32(op, x)
+                }
+            },
+            binary: &|op, a, b| {
+                if dbl {
+                    binary_f64(op, a, b)
+                } else {
+                    binary_f32(op, a, b)
+                }
+            },
         },
     );
     let store = |v: &str| -> String {
@@ -4086,7 +4385,11 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             s.push_str(&format!("        out[t] = {stored};\n"));
         }
         ReduceOp::Max | ReduceOp::Min => {
-            let cmp = if matches!(wop, ReduceOp::Max) { ">" } else { "<" };
+            let cmp = if matches!(wop, ReduceOp::Max) {
+                ">"
+            } else {
+                "<"
+            };
             let ident = scan_identity(wop, plan.dtype); // type min (Max) / max (Min)
             s.push_str(&format!("        {acc} best = {ident}; int have = 0;\n"));
             s.push_str(&format!("        for (int kk = 0; kk < {sz}; ++kk) {{\n"));
@@ -4103,7 +4406,9 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             s.push_str("            }\n");
             s.push_str("        }\n");
             // An all-pad window (no valid tap) emits the monoid identity.
-            s.push_str(&format!("        {acc} prefix = have ? best : ({ident});\n"));
+            s.push_str(&format!(
+                "        {acc} prefix = have ? best : ({ident});\n"
+            ));
             s.push_str(&format!("        out[t] = {stored};\n"));
         }
         ReduceOp::Prod => unreachable!("Window rejects Prod"),
@@ -4178,7 +4483,10 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
     // validates the same — the 0a lesson: gate every layer). cuda-prefixed
     // messages distinct from the plan gate's. ----
     let rank = plan.key.rank;
-    assert!(rank >= 1, "cuda backend: RowSort needs a sorted axis (rank >= 1)");
+    assert!(
+        rank >= 1,
+        "cuda backend: RowSort needs a sorted axis (rank >= 1)"
+    );
     let last = rank - 1;
     {
         let o0 = plan.key.operands[0];
@@ -4213,14 +4521,22 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
     let (acc, acc_sz) = if dbl {
         ("double", 8usize)
     } else if int_acc {
-        (ctype, if matches!(plan.dtype, ElementKind::I64) { 8 } else { 4 })
+        (
+            ctype,
+            if matches!(plan.dtype, ElementKind::I64) {
+                8
+            } else {
+                4
+            },
+        )
     } else {
         ("float", 4usize)
     };
     // The output element ctype: `int` for argsort (I32 index), the input ctype
     // otherwise (plan.out_dtype is the resolved out dtype).
-    let octype = scalar_ctype(plan.out_dtype)
-        .expect("RowSort out dtype must have a scalar ctype (I32 for argsort, else the input dtype)");
+    let octype = scalar_ctype(plan.out_dtype).expect(
+        "RowSort out dtype must have a scalar ctype (I32 for argsort, else the input dtype)",
+    );
 
     let dtag = dtype_tag(plan.dtype);
     let ord = match order {
@@ -4293,7 +4609,11 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
     // writes the original index instead — narrowed to the I32 output dtype, so
     // k <= 2^31 - 1 is an INHERENT argsort precondition (the index cannot be
     // represented past it; the values-sort has no such cap).
-    let write_base = if argsort { "(int)i".to_string() } else { "in0[base + i]".to_string() };
+    let write_base = if argsort {
+        "(int)i".to_string()
+    } else {
+        "in0[base + i]".to_string()
+    };
 
     s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
     s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
@@ -4318,7 +4638,10 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         s.push_str(&format!("        {acc} ki = {};\n", load_at("base + i")));
         s.push_str("        long long r = 0;\n");
         s.push_str("        for (long long j = 0; j < k; ++j) {\n");
-        s.push_str(&format!("            {acc} kj = {};\n", load_at("base + j")));
+        s.push_str(&format!(
+            "            {acc} kj = {};\n",
+            load_at("base + j")
+        ));
         s.push_str(&format!(
             "            if ({stem}_pair_lt(kj, j, ki, i)) r++;\n"
         ));
@@ -4341,7 +4664,9 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         s.push_str(&format!(
             "    int* sidx = (int*)(baracuda_sort_smem + (size_t)pow2 * sizeof({acc}));\n"
         ));
-        s.push_str("    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n");
+        s.push_str(
+            "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
+        );
         s.push_str("        long long base = row * k;\n");
         // Stage + pad (all threads reach every barrier — the p-loop is uniform).
         s.push_str("        for (long long p = threadIdx.x; p < pow2; p += blockDim.x) {\n");
@@ -4359,7 +4684,9 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         // a disjoint pair, so the strided p-loop is race-free within a phase.
         s.push_str("        for (long long kk = 2; kk <= pow2; kk <<= 1) {\n");
         s.push_str("            for (long long j = kk >> 1; j > 0; j >>= 1) {\n");
-        s.push_str("                for (long long p = threadIdx.x; p < pow2; p += blockDim.x) {\n");
+        s.push_str(
+            "                for (long long p = threadIdx.x; p < pow2; p += blockDim.x) {\n",
+        );
         s.push_str("                    long long q = p ^ j;\n");
         s.push_str("                    if (q > p) {\n");
         s.push_str("                        bool up = ((p & kk) == 0);\n");
@@ -4370,7 +4697,9 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         s.push_str(&format!(
             "                            {acc} tk = skey[p]; skey[p] = skey[q]; skey[q] = tk;\n"
         ));
-        s.push_str("                            int ti = sidx[p]; sidx[p] = sidx[q]; sidx[q] = ti;\n");
+        s.push_str(
+            "                            int ti = sidx[p]; sidx[p] = sidx[q]; sidx[q] = ti;\n",
+        );
         s.push_str("                        }\n");
         s.push_str("                    }\n");
         s.push_str("                }\n");
@@ -4688,7 +5017,10 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
         ElementKind::F32 | ElementKind::F32Strict => unary_f32(op, x),
         ElementKind::F64 => unary_f64(op, x),
         ElementKind::F16 => {
-            format!("__float2half({})", unary_f32(op, format!("__half2float({x})")))
+            format!(
+                "__float2half({})",
+                unary_f32(op, format!("__half2float({x})"))
+            )
         }
         ElementKind::Bf16 => {
             format!(
@@ -4711,8 +5043,12 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
 /// temp-binding pass, cf. relu/sigmoid, removes the recompute on compound inners.)
 fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
     match op {
-        BinaryOp::Max => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))"),
-        BinaryOp::Min => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))"),
+        BinaryOp::Max => {
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))")
+        }
+        BinaryOp::Min => {
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))")
+        }
         BinaryOp::Pow => format!("powf({a}, {b})"),
         // Floored remainder (torch.remainder, sign-of-divisor — Fuel's Op::Rem),
         // not C fmodf (sign-of-dividend). Operands appear twice (temp-binding TODO).
@@ -4768,8 +5104,12 @@ fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
 /// Same as [`binary_f32`] but with f64 math-function names.
 fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
     match op {
-        BinaryOp::Max => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))"),
-        BinaryOp::Min => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))"),
+        BinaryOp::Max => {
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))")
+        }
+        BinaryOp::Min => {
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))")
+        }
         BinaryOp::Pow => format!("pow({a}, {b})"),
         BinaryOp::Rem => format!("({a} - floor({a} / {b}) * {b})"),
         BinaryOp::Atan2 => format!("atan2({a}, {b})"),
@@ -4890,9 +5230,7 @@ fn binary_int(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String 
 /// identically to a native half compare, and demoting the exact 1.0f/0.0f
 /// result is exact — no lattice is stepped, unlike Nextafter.
 fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
-    if matches!(dtype, ElementKind::F16 | ElementKind::Bf16)
-        && matches!(op, BinaryOp::Nextafter)
-    {
+    if matches!(dtype, ElementKind::F16 | ElementKind::Bf16) && matches!(op, BinaryOp::Nextafter) {
         panic!(
             "cuda backend: Nextafter has no half-precision lowering — the \
              promote-to-f32 path would step the f32 lattice, not the {dtype:?} \
@@ -4904,7 +5242,11 @@ fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String
         ElementKind::F64 => binary_f64(op, a, b),
         ElementKind::F16 => format!(
             "__float2half({})",
-            binary_f32(op, format!("__half2float({a})"), format!("__half2float({b})"))
+            binary_f32(
+                op,
+                format!("__half2float({a})"),
+                format!("__half2float({b})")
+            )
         ),
         ElementKind::Bf16 => format!(
             "__float2bfloat16({})",
@@ -5070,9 +5412,9 @@ fn param_args_multi(exprs: &[&ScalarExpr]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::ir::{input, param, OpDef};
-    use crate::{generate, Cuda};
-    use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+    use crate::ir::{OpDef, input, param};
+    use crate::{Cuda, generate};
+    use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn add_op(dtypes: &[ElementKind]) -> OpDef {
         OpDef::elementwise("add", 2, dtypes, input(0) + input(1))
@@ -5094,7 +5436,11 @@ mod tests {
         let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
         let out = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
-        structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89)
+        structure_key(
+            OpCategory::BinaryElementwise,
+            &[data, idx, out],
+            ArchSku::Sm89,
+        )
     }
 
     // ---- increment 4: GATHER emission goldens ----
@@ -5103,7 +5449,13 @@ mod tests {
     fn gather_skip_substitutes_the_index_value_for_the_gathered_axis() {
         use crate::ir::OobPolicy;
         // torch-gather along axis 0: out[c] = data[idx[c], c1], skip OOB.
-        let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        );
         let k = generate(&op, &gather_2d_key(), &Cuda);
         // The index dtype rides the ENTRY_POINT symbol.
         assert_eq!(k.name, "baracuda_gen_gather_f32_i32_strided_r2");
@@ -5114,15 +5466,22 @@ mod tests {
         assert!(k.source.contains("long long gext,"));
         // Index load + clamp + oob predicate.
         assert!(k.source.contains("long long gidx_off = c0*s1_0 + c1*s1_1;"));
-        assert!(k.source.contains("long long gidx_raw = (long long)in1[gidx_off];"));
+        assert!(
+            k.source
+                .contains("long long gidx_raw = (long long)in1[gidx_off];")
+        );
         assert!(k.source.contains(
             "long long gidx_clamped = gidx_raw < 0 ? 0 : (gidx_raw >= gext ? gext - 1 : gidx_raw);"
         ));
-        assert!(k.source.contains("bool goob = (gidx_raw < 0) || (gidx_raw >= gext);"));
+        assert!(
+            k.source
+                .contains("bool goob = (gidx_raw < 0) || (gidx_raw >= gext);")
+        );
         // THE increment: the gathered-axis term is idx·stride[axis], NOT c0·stride.
         // (Matches bespoke `src_off = idx_val*stride_src[0] + coord[1]*stride_src[1]`.)
         assert!(
-            k.source.contains("long long o0 = (gidx_clamped)*s0_0 + c1*s0_1;"),
+            k.source
+                .contains("long long o0 = (gidx_clamped)*s0_0 + c1*s0_1;"),
             "gathered-axis term must use the index value, got:\n{}",
             k.source
         );
@@ -5149,19 +5508,35 @@ mod tests {
         // The ZeroFill literal must be the fp16 constructor, not a bare `0`.
         let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F16, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[data, idx, data], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[data, idx, data],
+            ArchSku::Sm89,
+        );
         let op = OpDef::embedding("emb", &[ElementKind::F16], ElementKind::I32);
         let k = generate(&op, &key, &Cuda);
-        assert!(k.source.contains("out[oo] = goob ? (__float2half(0.0f)) : (in0[o0]);"));
+        assert!(
+            k.source
+                .contains("out[oo] = goob ? (__float2half(0.0f)) : (in0[o0]);")
+        );
     }
 
     #[test]
     fn gather_clamp_has_no_store_predicate() {
         use crate::ir::OobPolicy;
         // Clamp: gidx_clamped IS the effective index; always store, no goob.
-        let op = OpDef::gather("gclamp", &[ElementKind::F32], 0, OobPolicy::Clamp, ElementKind::I32);
+        let op = OpDef::gather(
+            "gclamp",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Clamp,
+            ElementKind::I32,
+        );
         let k = generate(&op, &gather_2d_key(), &Cuda);
-        assert!(k.source.contains("long long o0 = (gidx_clamped)*s0_0 + c1*s0_1;"));
+        assert!(
+            k.source
+                .contains("long long o0 = (gidx_clamped)*s0_0 + c1*s0_1;")
+        );
         // No OOB predicate at all (Clamp always stores the clamped-index value).
         assert!(!k.source.contains("goob"));
         assert!(k.source.contains("out[oo] = in0[o0];"));
@@ -5177,26 +5552,43 @@ mod tests {
         let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[1, 0], ElementKind::I32, 256); // bcast axis 1
         let out = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89);
-        let op = OpDef::index_select("isel", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[data, idx, out],
+            ArchSku::Sm89,
+        );
+        let op = OpDef::index_select(
+            "isel",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        );
         let k = generate(&op, &key, &Cuda);
         assert!(
             k.source.contains("long long gidx_off = c0*s1_0;"),
             "1-D index offset must drop the broadcast axis, got:\n{}",
             k.source
         );
-        assert!(k.source.contains("long long o0 = (gidx_clamped)*s0_0 + c1*s0_1;"));
+        assert!(
+            k.source
+                .contains("long long o0 = (gidx_clamped)*s0_0 + c1*s0_1;")
+        );
     }
 
     #[test]
     fn gather_forces_strided_off_the_vectorized_path() {
         use crate::ir::OobPolicy;
-        use crate::plan::{build_plan, Schedule};
+        use crate::plan::{Schedule, build_plan};
         // A fully-contiguous cell that a non-gather copy would VECTORIZE.
         let data = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
         let idx = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::I32, 256);
         let out = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[data, idx, out],
+            ArchSku::Sm89,
+        );
         // Baseline: a view-free/index-free copy vectorizes on this contiguous cell.
         let copy = OpDef::elementwise("copy", 1, &[ElementKind::F32], input(0));
         let copy_key = {
@@ -5208,7 +5600,13 @@ mod tests {
             Schedule::Vectorized { .. }
         ));
         // The gather forces Strided (a data-dependent address cannot coalesce).
-        let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        );
         assert_eq!(build_plan(&op, &key).schedule, Schedule::Strided);
     }
 
@@ -5238,7 +5636,11 @@ mod tests {
         let upd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
         let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
-        structure_key(OpCategory::BinaryElementwise, &[upd, idx, dst], ArchSku::Sm89)
+        structure_key(
+            OpCategory::BinaryElementwise,
+            &[upd, idx, dst],
+            ArchSku::Sm89,
+        )
     }
 
     #[test]
@@ -5253,14 +5655,21 @@ mod tests {
         assert!(k.source.contains("long long sext,"));
         // Index load + clamp + skip predicate (write-side mirror of gather).
         assert!(k.source.contains("long long sidx_off = c0*s1_0 + c1*s1_1;"));
-        assert!(k.source.contains("long long sidx_raw = (long long)in1[sidx_off];"));
+        assert!(
+            k.source
+                .contains("long long sidx_raw = (long long)in1[sidx_off];")
+        );
         assert!(k.source.contains(
             "long long sidx_clamped = sidx_raw < 0 ? 0 : (sidx_raw >= sext ? sext - 1 : sidx_raw);"
         ));
-        assert!(k.source.contains("bool soob = (sidx_raw < 0) || (sidx_raw >= sext);"));
+        assert!(
+            k.source
+                .contains("bool soob = (sidx_raw < 0) || (sidx_raw >= sext);")
+        );
         // THE increment: the OUTPUT-axis term is idx·stride_out[axis], not c0·so.
         assert!(
-            k.source.contains("long long oo = (sidx_clamped)*so_0 + c1*so_1;"),
+            k.source
+                .contains("long long oo = (sidx_clamped)*so_0 + c1*so_1;"),
             "scattered-axis term must use the index value, got:\n{}",
             k.source
         );
@@ -5278,13 +5687,24 @@ mod tests {
         let iupd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
         let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[iupd, idx, dst], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[iupd, idx, dst],
+            ArchSku::Sm89,
+        );
         let k = generate(&op, &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_scatter_add_i32_i32_strided_r2");
-        assert!(k.source.contains("if (!soob) atomicAdd(&out[oo], (int)(in0[o0]));"));
+        assert!(
+            k.source
+                .contains("if (!soob) atomicAdd(&out[oo], (int)(in0[o0]));")
+        );
         // Deterministic combine ⇒ no variant offered.
         let vs = crate::generate_variants(&op, &key, &Cuda);
-        assert_eq!(vs.len(), 1, "integer scatter_add ships one unconditional base");
+        assert_eq!(
+            vs.len(),
+            1,
+            "integer scatter_add ships one unconditional base"
+        );
         assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
     }
 
@@ -5294,7 +5714,11 @@ mod tests {
         let iupd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I64, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I64, 256);
         let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I64, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[iupd, idx, dst], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[iupd, idx, dst],
+            ArchSku::Sm89,
+        );
         let k = generate(&op, &key, &Cuda);
         assert!(k.source.contains(
             "if (!soob) atomicAdd((unsigned long long*)&out[oo], (unsigned long long)(in0[o0]));"
@@ -5314,7 +5738,10 @@ mod tests {
         assert!(k.source.contains("const long long* __restrict__ in0,"));
         assert!(k.source.contains("int* __restrict__ out,"));
         // Value is the constant 1 narrowed to the i32 count cell.
-        assert!(k.source.contains("if (!soob) atomicAdd(&out[oo], (int)(1.0));"));
+        assert!(
+            k.source
+                .contains("if (!soob) atomicAdd(&out[oo], (int)(1.0));")
+        );
         // Deterministic integer counts ⇒ ships unconditionally (no variant).
         assert_eq!(crate::generate_variants(&op, &key, &Cuda).len(), 1);
     }
@@ -5326,9 +5753,15 @@ mod tests {
         // update domain, sum matching values, NO atomics.
         let op = OpDef::scatter_add("scatter_add", &[ElementKind::F32], 0, ElementKind::I32);
         let k = generate(&op, &scatter_2d_key(ElementKind::I32), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_scatter_add_f32_i32_scatter_gathersum_r2");
+        assert_eq!(
+            k.name,
+            "baracuda_gen_scatter_add_f32_i32_scatter_gathersum_r2"
+        );
         // No atomics in the deterministic base.
-        assert!(!k.source.contains("atomicAdd"), "gather-sum base must be atomic-free");
+        assert!(
+            !k.source.contains("atomicAdd"),
+            "gather-sum base must be atomic-free"
+        );
         // The match condition: scattered target == this destination cell.
         assert!(k.source.contains("if (sidx == oc0 && uc1 == oc1) {"));
         // Deterministic accumulate into the existing destination (one owner, exact).
@@ -5349,7 +5782,11 @@ mod tests {
         let atomic = &vs[1];
         assert_eq!(atomic.tag, "atomic");
         assert_eq!(atomic.fidelity, crate::VariantFidelity::Nondeterministic);
-        assert!(atomic.kernels[0].source.contains("if (!soob) atomicAdd(&out[oo], (float)(in0[o0]));"));
+        assert!(
+            atomic.kernels[0]
+                .source
+                .contains("if (!soob) atomicAdd(&out[oo], (float)(in0[o0]));")
+        );
         assert!(atomic.launch_note.contains("determinism: nondeterministic"));
         assert!(atomic.launch_note.contains("NON-DETERMINISTIC"));
     }
@@ -5362,7 +5799,11 @@ mod tests {
         let upd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[1, 0], ElementKind::I32, 256); // bcast axis 1
         let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[upd, idx, dst], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[upd, idx, dst],
+            ArchSku::Sm89,
+        );
         let op = OpDef::index_add("index_add", &[ElementKind::I32], 0, ElementKind::I32);
         let k = generate(&op, &key, &Cuda);
         assert!(
@@ -5370,17 +5811,24 @@ mod tests {
             "1-D index offset must drop the broadcast axis, got:\n{}",
             k.source
         );
-        assert!(k.source.contains("long long oo = (sidx_clamped)*so_0 + c1*so_1;"));
+        assert!(
+            k.source
+                .contains("long long oo = (sidx_clamped)*so_0 + c1*so_1;")
+        );
     }
 
     #[test]
     fn scatter_forces_strided_off_the_vectorized_path() {
-        use crate::plan::{build_plan, Schedule};
+        use crate::plan::{Schedule, build_plan};
         // A fully-contiguous 1-D cell a non-scatter copy would VECTORIZE.
         let upd = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
         let idx = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::I32, 256);
         let dst = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[upd, idx, dst], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[upd, idx, dst],
+            ArchSku::Sm89,
+        );
         let op = OpDef::scatter("scatter", &[ElementKind::F32], 0, ElementKind::I32);
         assert_eq!(build_plan(&op, &key).schedule, Schedule::Strided);
     }
@@ -5394,7 +5842,10 @@ mod tests {
             .with_scatter(crate::ir::WriteIndex::Direct);
         let k = generate(&with, &key, &Cuda);
         assert_eq!(free.name, k.name);
-        assert_eq!(free.source, k.source, "write-Direct must emit byte-identical source");
+        assert_eq!(
+            free.source, k.source,
+            "write-Direct must emit byte-identical source"
+        );
     }
 
     #[test]
@@ -5471,7 +5922,11 @@ mod tests {
 
     #[test]
     fn f32_contiguous_vectorizes_to_float4() {
-        let k = generate(&add_op(&[ElementKind::F32]), &binary_key(ElementKind::F32), &Cuda);
+        let k = generate(
+            &add_op(&[ElementKind::F32]),
+            &binary_key(ElementKind::F32),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_add_f32_co_v4");
         assert!(k.source.contains("float4 v0 = in0[i];"));
         assert!(k.source.contains("vo.x = (v0.x + v1.x);"));
@@ -5497,7 +5952,11 @@ mod tests {
 
     #[test]
     fn f64_contiguous_vectorizes_to_double2() {
-        let k = generate(&add_op(&[ElementKind::F64]), &binary_key(ElementKind::F64), &Cuda);
+        let k = generate(
+            &add_op(&[ElementKind::F64]),
+            &binary_key(ElementKind::F64),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_add_f64_co_v2");
         assert!(k.source.contains("double2 v0 = in0[i];"));
         assert!(k.source.contains("vo.x = (v0.x + v1.x);"));
@@ -5511,22 +5970,36 @@ mod tests {
         // lowers through the __half2 operator overload — the native packed op,
         // bit-identical per lane to the scalar __half operator+ the scalar
         // kernel uses.
-        let k = generate(&add_op(&[ElementKind::F16]), &binary_key(ElementKind::F16), &Cuda);
+        let k = generate(
+            &add_op(&[ElementKind::F16]),
+            &binary_key(ElementKind::F16),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_add_f16_co_v8");
         assert!(k.source.contains("#include <cuda_fp16.h>"));
         assert!(k.source.contains(
             "struct __align__(16) baracuda_gen_add_f16_co_v8_vec { __half2 a, b, c, d; };"
         ));
-        assert!(k.source.contains("const baracuda_gen_add_f16_co_v8_vec* __restrict__ in0"));
+        assert!(
+            k.source
+                .contains("const baracuda_gen_add_f16_co_v8_vec* __restrict__ in0")
+        );
         for f in ["a", "b", "c", "d"] {
-            assert!(k.source.contains(&format!("__half2 tmp0 = (v0.{f} + v1.{f});")));
+            assert!(
+                k.source
+                    .contains(&format!("__half2 tmp0 = (v0.{f} + v1.{f});"))
+            );
             assert!(k.source.contains(&format!("vo.{f} = tmp0;")));
         }
     }
 
     #[test]
     fn bf16_v8_packs_with_bfloat162() {
-        let k = generate(&add_op(&[ElementKind::Bf16]), &binary_key(ElementKind::Bf16), &Cuda);
+        let k = generate(
+            &add_op(&[ElementKind::Bf16]),
+            &binary_key(ElementKind::Bf16),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_add_bf16_co_v8");
         assert!(k.source.contains("#include <cuda_bf16.h>"));
         assert!(k.source.contains("__nv_bfloat162 a, b, c, d;"));
@@ -5555,16 +6028,17 @@ mod tests {
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         let k = generate(&add_op(&[ElementKind::F16]), &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_add_f16_co_v2");
-        assert!(k
-            .source
-            .contains("struct __align__(4) baracuda_gen_add_f16_co_v2_vec { __half2 a; };"));
+        assert!(
+            k.source
+                .contains("struct __align__(4) baracuda_gen_add_f16_co_v2_vec { __half2 a; };")
+        );
         assert!(!k.source.contains("vo.b"));
     }
 
     #[test]
     fn splitk_variant_offered_for_outer_sum() {
         use crate::ir::ReduceOp;
-        use crate::{generate_variants, VariantFidelity};
+        use crate::{VariantFidelity, generate_variants};
         use baracuda_kernels_types::AxisMask;
         let op = OpDef::reduction_axes(
             "sum",
@@ -5591,8 +6065,14 @@ mod tests {
         let p = &sk.kernels[0];
         assert!(p.name.ends_with("_splitk_partial"));
         assert!(p.source.contains("long long idx = r * cols + c;"));
-        assert!(p.source.contains("long long r1 = r0 + chunk_rows; if (r1 > rows) r1 = rows;"));
-        assert!(p.source.contains("ws[(long long)blockIdx.y * cols + c] = acc;"));
+        assert!(
+            p.source
+                .contains("long long r1 = r0 + chunk_rows; if (r1 > rows) r1 = rows;")
+        );
+        assert!(
+            p.source
+                .contains("ws[(long long)blockIdx.y * cols + c] = acc;")
+        );
         assert!(!p.source.contains("atomic"));
         // Combine: fixed chunk-order fold, no Mean divisor for Sum.
         let c = &sk.kernels[1];
@@ -5600,15 +6080,18 @@ mod tests {
         // Seeded from the first partial (not 0): keeps a -0.0 column total's
         // sign and makes the degenerate n_chunks=1 case bit-identical.
         assert!(c.source.contains("float acc = ws[c];"));
-        assert!(c.source.contains("for (long long k = 1; k < n_chunks; ++k) acc += ws[k * cols + c];"));
+        assert!(
+            c.source
+                .contains("for (long long k = 1; k < n_chunks; ++k) acc += ws[k * cols + c];")
+        );
         assert!(!c.source.contains("/ (float)rows"));
         assert!(sk.launch_note.contains("chunk_rows = ceil(rows/n_chunks)"));
     }
 
     #[test]
     fn splitk_mean_divides_in_combine_only() {
-        use crate::ir::ReduceOp;
         use crate::generate_variants;
+        use crate::ir::ReduceOp;
         use baracuda_kernels_types::AxisMask;
         let op = OpDef::reduction_axes(
             "mean",
@@ -5625,13 +6108,16 @@ mod tests {
         let vs = generate_variants(&op, &key, &Cuda);
         assert_eq!(vs.len(), 2);
         let sk = &vs[1];
-        assert!(!sk.kernels[0].source.contains("acc /"), "partial never divides");
+        assert!(
+            !sk.kernels[0].source.contains("acc /"),
+            "partial never divides"
+        );
         assert!(sk.kernels[1].source.contains("out[c] = acc / (float)rows;"));
     }
 
     #[test]
     fn contraction_emits_skinny_simt_kernel() {
-        use crate::ir::{reduced, ContractionAxes, UnaryOp};
+        use crate::ir::{ContractionAxes, UnaryOp, reduced};
         // The decode / flat-GEMM cell: [8,4096]·[4096,4096] → [8,4096], f32.
         let mm = OpDef::contraction(
             "matmul",
@@ -5649,7 +6135,10 @@ mod tests {
         assert!(k.source.contains("float w = in1[kk * n + col];"));
         // …predicated register accumulators at the Tiny ceiling…
         assert!(k.source.contains("float accs[8];"));
-        assert!(k.source.contains("if (mm < m) accs[mm] += in0[mm * k + kk] * w;"));
+        assert!(
+            k.source
+                .contains("if (mm < m) accs[mm] += in0[mm * k + kk] * w;")
+        );
         // …identity epilogue stores the K-sum.
         assert!(k.source.contains("out[mm * n + col] = r0;"));
         assert!(!k.source.contains("atomic"));
@@ -5679,14 +6168,17 @@ mod tests {
             &structure_key(OpCategory::Gemm, &[lh, rh, oh], ArchSku::Sm89),
             &Cuda,
         );
-        assert!(kh.source.contains("float w = __half2float(in1[kk * n + col]);"));
+        assert!(
+            kh.source
+                .contains("float w = __half2float(in1[kk * n + col]);")
+        );
         assert!(kh.source.contains("out[mm * n + col] = __float2half(r0);"));
     }
 
     #[test]
     fn contraction_splitk_variant_offered_for_tiny_m_cell() {
-        use crate::ir::{reduced, ContractionAxes};
-        use crate::{generate_variants, VariantFidelity};
+        use crate::ir::{ContractionAxes, reduced};
+        use crate::{VariantFidelity, generate_variants};
         let mm = OpDef::contraction(
             "matmul",
             &[ElementKind::F32],
@@ -5705,26 +6197,30 @@ mod tests {
         assert_eq!(sk.kernels.len(), 2);
         let p = &sk.kernels[0];
         assert!(p.name.ends_with("_contract_tll_splitk_partial"));
-        assert!(p.source.contains("long long k1 = k0 + chunk_k; if (k1 > k) k1 = k;"));
-        assert!(p
-            .source
-            .contains("if (mm < m) ws[((long long)blockIdx.y * m + mm) * n + col] = accs[mm];"));
+        assert!(
+            p.source
+                .contains("long long k1 = k0 + chunk_k; if (k1 > k) k1 = k;")
+        );
+        assert!(
+            p.source
+                .contains("if (mm < m) ws[((long long)blockIdx.y * m + mm) * n + col] = accs[mm];")
+        );
         assert!(!p.source.contains("atomic"));
         let c = &sk.kernels[1];
         assert!(c.name.ends_with("_contract_tll_splitk_combine"));
         // Seeded from chunk 0 → degenerate n_chunks=1 is bit-identical to base.
         assert!(c.source.contains("float r0 = ws[(long long)mm * n + col];"));
-        assert!(c
-            .source
-            .contains("for (long long ch = 1; ch < n_chunks; ++ch) r0 += ws[(ch * m + mm) * n + col];"));
+        assert!(c.source.contains(
+            "for (long long ch = 1; ch < n_chunks; ++ch) r0 += ws[(ch * m + mm) * n + col];"
+        ));
         assert!(c.source.contains("out[mm * n + col] = r0;"));
         assert!(sk.launch_note.contains("chunk_k = ceil(k/n_chunks)"));
     }
 
     #[test]
     fn smemrow_variant_materializes_softmax_shared_exp() {
-        use crate::ir::{reduced, ReduceOp, ReduceStage};
-        use crate::{generate_variants, VariantFidelity};
+        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        use crate::{VariantFidelity, generate_variants};
         // Softmax: stage-2 pre = exp(x - r0) is recomputed verbatim in the
         // epilogue — the cross-pass shared value the variant caches.
         let softmax = OpDef::row_reduce(
@@ -5732,8 +6228,14 @@ mod tests {
             1,
             &[ElementKind::F32],
             vec![
-                ReduceStage { pre: input(0).0, op: ReduceOp::Max },
-                ReduceStage { pre: (input(0) - reduced(0)).exp().0, op: ReduceOp::Sum },
+                ReduceStage {
+                    pre: input(0).0,
+                    op: ReduceOp::Max,
+                },
+                ReduceStage {
+                    pre: (input(0) - reduced(0)).exp().0,
+                    op: ReduceOp::Sum,
+                },
             ],
             (input(0) - reduced(0)).exp() / reduced(1),
         );
@@ -5753,7 +6255,11 @@ mod tests {
         // expf remains (the stage fold's), vs two in the base kernel.
         assert!(src.contains("out[idx] = (baracuda_row_smem[j] / r1);"));
         assert_eq!(src.matches("expf").count(), 1, "epilogue exp eliminated");
-        assert_eq!(vs[0].kernels[0].source.matches("expf").count(), 2, "base has both");
+        assert_eq!(
+            vs[0].kernels[0].source.matches("expf").count(),
+            2,
+            "base has both"
+        );
         // Helper symbols must not collide when base + variant share a TU.
         assert!(src.contains("block_sum_softmax_f32_sm"));
         assert!(vs[0].kernels[0].source.contains("block_sum_softmax_f32("));
@@ -5763,29 +6269,42 @@ mod tests {
 
     #[test]
     fn smemrow_not_offered_when_epilogue_does_not_recompute() {
-        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
         use crate::generate_variants;
+        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
         // RmsNorm: stage pre = x², epilogue = x·rsqrt(r0+eps) — the epilogue
         // never recomputes x², so there is nothing to materialize.
         let rmsnorm = OpDef::row_reduce(
             "rmsnorm",
             1,
             &[ElementKind::F32],
-            vec![ReduceStage { pre: input(0).unary(UnaryOp::Sqr).0, op: ReduceOp::Mean }],
+            vec![ReduceStage {
+                pre: input(0).unary(UnaryOp::Sqr).0,
+                op: ReduceOp::Mean,
+            }],
             input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt),
         );
         let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Normalization, &[x, x], ArchSku::Sm89);
-        assert_eq!(generate_variants(&rmsnorm, &key, &Cuda).len(), 1, "base only");
+        assert_eq!(
+            generate_variants(&rmsnorm, &key, &Cuda).len(),
+            1,
+            "base only"
+        );
     }
 
     #[test]
     fn splitk_gate_refuses_flipped_param_and_malformed_cells() {
         use crate::ir::ReduceOp;
-        use crate::{generate_variants, Backend};
+        use crate::{Backend, generate_variants};
         use baracuda_kernels_types::AxisMask;
         let op = OpDef::reduction_axes(
-            "sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum, AxisMask(0b1), false,
+            "sum",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            AxisMask(0b1),
+            false,
         );
         let o = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
         // Row-reversed dense view: keys Contig + flipped — the baseline serves
@@ -5793,29 +6312,44 @@ mod tests {
         // out of bounds. The gate must refuse.
         let rev = OperandDesc::new(2, &[4096, 1024], &[-1024, 1], ElementKind::F32, 256);
         let k_rev = structure_key(OpCategory::Reduction, &[rev, o], ArchSku::Sm89);
-        assert_eq!(generate_variants(&op, &k_rev, &Cuda).len(), 1, "flipped input: base only");
+        assert_eq!(
+            generate_variants(&op, &k_rev, &Cuda).len(),
+            1,
+            "flipped input: base only"
+        );
         // Param body: the fixed splitk signature has no p{i} slot — refused
         // (the emitted source would reference an undefined identifier).
         let wsum = OpDef::reduction_axes(
-            "wsum", 1, &[ElementKind::F32],
+            "wsum",
+            1,
+            &[ElementKind::F32],
             input(0) * crate::ir::param(0),
-            ReduceOp::Sum, AxisMask(0b1), false,
+            ReduceOp::Sum,
+            AxisMask(0b1),
+            false,
         );
         let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let k_ok = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
-        assert_eq!(generate_variants(&wsum, &k_ok, &Cuda).len(), 1, "param body: base only");
+        assert_eq!(
+            generate_variants(&wsum, &k_ok, &Cuda).len(),
+            1,
+            "param body: base only"
+        );
         // Malformed 1-operand key: out_key would alias the input — refused.
         // (Exercised via lower_variants directly; generate() itself would also
         // reject such a key downstream.)
         let k_one = structure_key(OpCategory::Reduction, &[a], ArchSku::Sm89);
         let plan = crate::build_plan(&op, &k_one);
-        assert!(Cuda.lower_variants(&plan).is_empty(), "1-operand key: no variant");
+        assert!(
+            Cuda.lower_variants(&plan).is_empty(),
+            "1-operand key: no variant"
+        );
     }
 
     #[test]
     fn splitk_not_offered_for_lastaxis_max_or_int() {
-        use crate::ir::ReduceOp;
         use crate::generate_variants;
+        use crate::ir::ReduceOp;
         use baracuda_kernels_types::AxisMask;
         // Last-axis (InnerContig): already block-parallel — no split-K.
         let last = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
@@ -5825,7 +6359,13 @@ mod tests {
         assert_eq!(generate_variants(&last, &k, &Cuda).len(), 1, "base only");
         // Outer Max: the has-flag NaN fold needs its own variant treatment.
         let mx = OpDef::reduction_axes(
-            "amax", 1, &[ElementKind::F32], input(0), ReduceOp::Max, AxisMask(0b1), false,
+            "amax",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Max,
+            AxisMask(0b1),
+            false,
         );
         let ao = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let oo = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
@@ -5833,7 +6373,13 @@ mod tests {
         assert_eq!(generate_variants(&mx, &km, &Cuda).len(), 1, "base only");
         // Outer i32 Sum: int workspace is a follow-up.
         let is = OpDef::reduction_axes(
-            "sum", 1, &[ElementKind::I32], input(0), ReduceOp::Sum, AxisMask(0b1), false,
+            "sum",
+            1,
+            &[ElementKind::I32],
+            input(0),
+            ReduceOp::Sum,
+            AxisMask(0b1),
+            false,
         );
         let ai = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::I32, 256);
         let oi = OperandDesc::new(1, &[1024], &[1], ElementKind::I32, 256);
@@ -5848,7 +6394,10 @@ mod tests {
         let key = structure_key(OpCategory::BinaryElementwise, &[t, t, t], ArchSku::Sm89);
         let k = generate(&add_op(&[ElementKind::F32]), &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_add_f32_strided_r2");
-        assert!(k.source.contains("long long c1 = lin % shape1; lin /= shape1;"));
+        assert!(
+            k.source
+                .contains("long long c1 = lin % shape1; lin /= shape1;")
+        );
         assert!(k.source.contains("long long o0 = c0*s0_0 + c1*s0_1;"));
         assert!(k.source.contains("out[oo] = (in0[o0] + in1[o1]);"));
     }
@@ -5915,19 +6464,30 @@ mod tests {
         // perm[d]: d0->s_2, d1->s_0, d2->s_1.
         let a = OperandDesc::new(3, &[4, 8, 16], &[128, 16, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
-        let op = OpDef::elementwise("relu_p", 1, &[ElementKind::F32], input(0).relu())
-            .with_views(vec![View::Permute { perm: vec![2, 0, 1] }]);
+        let op =
+            OpDef::elementwise("relu_p", 1, &[ElementKind::F32], input(0).relu()).with_views(vec![
+                View::Permute {
+                    perm: vec![2, 0, 1],
+                },
+            ]);
         let k = generate(&op, &key, &Cuda);
         // DIRECT remap (mathematically correct: producer stride at perm[d]).
         assert!(
-            k.source.contains("long long o0 = c0*s0_2 + c1*s0_0 + c2*s0_1;"),
+            k.source
+                .contains("long long o0 = c0*s0_2 + c1*s0_0 + c2*s0_1;"),
             "rank-3 perm [2,0,1] must use the DIRECT remap; got:\n{}",
             k.source
         );
         // The INVERSE remap (the mutation this test exists to catch) must NOT appear.
-        assert!(!k.source.contains("long long o0 = c0*s0_1 + c1*s0_2 + c2*s0_0;"));
+        assert!(
+            !k.source
+                .contains("long long o0 = c0*s0_1 + c1*s0_2 + c2*s0_0;")
+        );
         // Identity output offset, unaffected by the input view.
-        assert!(k.source.contains("long long oo = c0*so_0 + c1*so_1 + c2*so_2;"));
+        assert!(
+            k.source
+                .contains("long long oo = c0*so_0 + c1*so_1 + c2*so_2;")
+        );
     }
 
     #[test]
@@ -5984,7 +6544,12 @@ mod tests {
         // named tmp and referenced twice — not re-rendered (the recompute + source
         // blow-up the DAG rewrite exists to kill).
         let g = input(0) * input(1);
-        let op = OpDef::elementwise("diamond", 2, &[ElementKind::F32], g.clone() / (g + konst(1.0)));
+        let op = OpDef::elementwise(
+            "diamond",
+            2,
+            &[ElementKind::F32],
+            g.clone() / (g + konst(1.0)),
+        );
         // A transposed (strided) key routes through emit_strided (plain float infix).
         let t = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256);
         let key = structure_key(OpCategory::BinaryElementwise, &[t, t, t], ArchSku::Sm89);
@@ -5994,7 +6559,10 @@ mod tests {
             1,
             "the shared product is emitted exactly once"
         );
-        assert!(k.source.contains("float tmp0 = (in0[o0] * in1[o1]);"), "hoisted to a tmp");
+        assert!(
+            k.source.contains("float tmp0 = (in0[o0] * in1[o1]);"),
+            "hoisted to a tmp"
+        );
         assert!(
             k.source.contains("out[oo] = (tmp0 / (tmp0 + 1.0));"),
             "and referenced twice, not recomputed"
@@ -6005,8 +6573,15 @@ mod tests {
     fn single_use_body_emits_no_tmp() {
         // Transparency guard: a body with no shared interior must produce zero
         // `tmp` declarations (byte-identical to the pre-DAG emitter).
-        let k = generate(&add_op(&[ElementKind::F32]), &binary_key(ElementKind::F32), &Cuda);
-        assert!(!k.source.contains("tmp"), "no hoisting for a single-use tree");
+        let k = generate(
+            &add_op(&[ElementKind::F32]),
+            &binary_key(ElementKind::F32),
+            &Cuda,
+        );
+        assert!(
+            !k.source.contains("tmp"),
+            "no hoisting for a single-use tree"
+        );
     }
 
     #[test]
@@ -6049,9 +6624,10 @@ mod tests {
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         let k = generate(&op, &key, &Cuda);
         // NaN-propagating relu (select, not fmaxf).
-        assert!(k
-            .source
-            .contains("vo.x = ((v0.x + v1.x) < 0.0f ? 0.0f : (v0.x + v1.x));"));
+        assert!(
+            k.source
+                .contains("vo.x = ((v0.x + v1.x) < 0.0f ? 0.0f : (v0.x + v1.x));")
+        );
     }
 
     #[test]
@@ -6117,10 +6693,19 @@ mod tests {
         assert!(k.source.contains("long long n_out,"));
         assert!(k.source.contains("    long long k)")); // runtime reduced extent
         // Block-per-row cooperative reduce: coalesced loop + block_sum + thread-0 store.
-        assert!(k.source.contains("for (long long row = blockIdx.x; row < n_out;"));
-        assert!(k.source.contains("for (long long j = threadIdx.x; j < k; j += blockDim.x)"));
+        assert!(
+            k.source
+                .contains("for (long long row = blockIdx.x; row < n_out;")
+        );
+        assert!(
+            k.source
+                .contains("for (long long j = threadIdx.x; j < k; j += blockDim.x)")
+        );
         assert!(k.source.contains("acc += (in0[idx]*in0[idx]);"));
-        assert!(k.source.contains("float r = block_sum_ms_f32(acc) / (float)k;"));
+        assert!(
+            k.source
+                .contains("float r = block_sum_ms_f32(acc) / (float)k;")
+        );
         assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;"));
         assert!(!k.source.contains("base = o * k")); // not the old uncoalesced sequential
     }
@@ -6133,9 +6718,15 @@ mod tests {
         assert_eq!(k.name, "baracuda_gen_amax_f32_reduce_max");
         assert!(!k.source.contains("INFINITY")); // has-flag seeding, no ±inf literal
         assert!(k.source.contains("float acc = 0.0f; int has = 0;"));
-        assert!(k.source.contains("for (long long j = threadIdx.x; j < k; j += blockDim.x)"));
+        assert!(
+            k.source
+                .contains("for (long long j = threadIdx.x; j < k; j += blockDim.x)")
+        );
         // NaN-propagating select (e != e forces the swap), torch.amax semantics.
-        assert!(k.source.contains("if (!has || e != e || e > acc) { acc = e; has = 1; }"));
+        assert!(
+            k.source
+                .contains("if (!has || e != e || e > acc) { acc = e; has = 1; }")
+        );
         assert!(k.source.contains("float r = block_max_amax_f32(acc, has);"));
         assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;"));
     }
@@ -6151,7 +6742,10 @@ mod tests {
         assert!(k.source.contains("float acc = 0.0f;")); // float acc, not __half
         assert!(k.source.contains("acc += __half2float(in0[idx]);"));
         assert!(k.source.contains("float r = block_sum_s_f16(acc);"));
-        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = __float2half(r);"));
+        assert!(
+            k.source
+                .contains("if (threadIdx.x == 0) out[row] = __float2half(r);")
+        );
     }
 
     #[test]
@@ -6214,17 +6808,25 @@ mod tests {
         assert_eq!(k.name, "baracuda_gen_s_f32_reduce_sum_ax1");
         assert!(!k.source.contains("long long base = o * k;"));
         // Kept-axis unravel, strided base, strided reduced fold, collapse output.
-        assert!(k.source.contains("long long ck1 = lin % shape1; lin /= shape1;"));
+        assert!(
+            k.source
+                .contains("long long ck1 = lin % shape1; lin /= shape1;")
+        );
         assert!(k.source.contains("long long base = ck1*s0_1;"));
         // Innermost reduced walk: int32 counter when the extent fits, with a
         // long long fallback nest; strength-reduced offsets (extraction #2 + #3).
         assert!(k.source.contains("if (shape0 <= 2147483647LL)"));
         assert!(k.source.contains("int ext0 = (int)shape0;"));
         assert!(k.source.contains("for (int cr0 = 0; cr0 < ext0; ++cr0)"));
-        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)")); // fallback
-        assert!(k.source.contains("long long roff0 = base;")
-            && k.source.contains("long long idx = roff0;")
-            && k.source.contains("roff0 += s0_0;"));
+        assert!(
+            k.source
+                .contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)")
+        ); // fallback
+        assert!(
+            k.source.contains("long long roff0 = base;")
+                && k.source.contains("long long idx = roff0;")
+                && k.source.contains("roff0 += s0_0;")
+        );
         assert!(k.source.contains("long long oo = ck1*so_0;"));
         assert!(k.source.contains("acc += in0[idx];"));
         assert!(k.source.contains("out[oo] ="));
@@ -6250,12 +6852,17 @@ mod tests {
         let k = generate(&op, &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_m_f32_reduce_mean_ax3");
         // Nested reduced loops + the extent-product divisor (not just the last axis).
-        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)")); // outer stays ll
+        assert!(
+            k.source
+                .contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)")
+        ); // outer stays ll
         assert!(k.source.contains("for (int cr1 = 0; cr1 < ext1; ++cr1)")); // innermost int32
         assert!(k.source.contains("if (shape1 <= 2147483647LL)"));
-        assert!(k.source.contains("long long roff1 = roff0;")
-            && k.source.contains("long long idx = roff1;")
-            && k.source.contains("roff1 += s0_1;"));
+        assert!(
+            k.source.contains("long long roff1 = roff0;")
+                && k.source.contains("long long idx = roff1;")
+                && k.source.contains("roff1 += s0_1;")
+        );
         assert!(k.source.contains("acc / (float)(shape0 * shape1)"));
         assert!(k.source.contains("long long base = ck2*s0_2;")); // kept axis 2
     }
@@ -6305,9 +6912,10 @@ mod tests {
         assert_eq!(k.name, "baracuda_gen_mx_f32_reduce_max_ax1");
         assert!(!k.source.contains("INFINITY"));
         assert!(k.source.contains("int has = 0;"));
-        assert!(k
-            .source
-            .contains("acc = has ? ((e != e || e > acc) ? e : acc) : e; has = 1;"));
+        assert!(
+            k.source
+                .contains("acc = has ? ((e != e || e > acc) ? e : acc) : e; has = 1;")
+        );
     }
 
     #[test]
@@ -6372,7 +6980,10 @@ mod tests {
         assert_eq!(k.name, "baracuda_gen_p_f32_reduce_prod");
         // block_prod cooperative reducer, NOT block_sum.
         assert!(k.source.contains("float warp_prod_p_f32(float v)"));
-        assert!(k.source.contains("v *= __shfl_down_sync(0xffffffffu, v, off);"));
+        assert!(
+            k.source
+                .contains("v *= __shfl_down_sync(0xffffffffu, v, off);")
+        );
         assert!(k.source.contains("float block_prod_p_f32(float v)"));
         assert!(!k.source.contains("block_sum"));
         // identity 1, multiplicative fold, thread-0 store, no Mean divisor.
@@ -6426,7 +7037,7 @@ mod tests {
 
     #[test]
     fn reduction_post_norm2_applies_sqrt_after_the_sum() {
-        use crate::ir::{reduced, ReduceOp, UnaryOp};
+        use crate::ir::{ReduceOp, UnaryOp, reduced};
         // norm2 = Sqrt(Sum(Sqr(x))): the pre-body squares (already worked), the
         // 0e post applies Sqrt to the fold result via a hoisted `red0` register.
         let op = OpDef::reduction_post(
@@ -6449,7 +7060,7 @@ mod tests {
 
     #[test]
     fn reduction_post_sees_the_post_mean_value() {
-        use crate::ir::{reduced, ReduceOp, UnaryOp};
+        use crate::ir::{ReduceOp, UnaryOp, reduced};
         // Ordering pin (documented): Mean divides FIRST, then the post applies to
         // the mean. So `red0` binds the ALREADY-divided block_sum/k, and Sqrt sees
         // sqrt(mean), not mean(sqrt).
@@ -6462,14 +7073,17 @@ mod tests {
             reduced(0).sqrt(),
         );
         let k = generate(&op, &reduce_key(ElementKind::F32), &Cuda);
-        assert!(k.source.contains("float r = block_sum_rms_f32(acc) / (float)k;"));
+        assert!(
+            k.source
+                .contains("float r = block_sum_rms_f32(acc) / (float)k;")
+        );
         assert!(k.source.contains("float red0 = r;")); // post sees the mean
         assert!(k.source.contains("out[row] = sqrtf(red0);"));
     }
 
     #[test]
     fn reduction_post_identity_is_byte_identical_to_plain() {
-        use crate::ir::{reduced, ReduceOp};
+        use crate::ir::{ReduceOp, reduced};
         // The default post (`Reduced(0)`) must emit exactly like OpDef::reduction —
         // no red0 binding, no extra braces — the 0e no-regression guarantee.
         let plain = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
@@ -6496,7 +7110,7 @@ mod tests {
 
     #[test]
     fn reduction_hetero_out_u8_any() {
-        use crate::ir::{konst, reduced, BinaryOp, ReduceOp};
+        use crate::ir::{BinaryOp, ReduceOp, konst, reduced};
         // any = Sum(x != 0) with a Cmp* post `Reduced(0) > 0` → exactly 0/1,
         // stored to a u8 mask. Input dtype stays f32 (the key dtype); the output
         // pointer + store convert to u8 (the 0b hetero pattern, on a reduction).
@@ -6514,12 +7128,15 @@ mod tests {
         assert!(k.source.contains("float acc = 0.0f;")); // fold still in float
         assert!(k.source.contains("float red0 = r;"));
         // Post is a Cmp (0/1); the store casts the exact predicate to u8.
-        assert!(k.source.contains("out[row] = (unsigned char)(((float)red0 > (float)0.0 ? 1.0f : 0.0f));"));
+        assert!(
+            k.source
+                .contains("out[row] = (unsigned char)(((float)red0 > (float)0.0 ? 1.0f : 0.0f));")
+        );
     }
 
     #[test]
     fn reduction_hetero_out_i64_count() {
-        use crate::ir::{konst, BinaryOp, ReduceOp};
+        use crate::ir::{BinaryOp, ReduceOp, konst};
         // count = Sum(x != 0) with the identity post, stored to i64. The float
         // accumulator converts to a long long store (exact while count ≤ 2^24).
         let mut op = OpDef::reduction(
@@ -6535,7 +7152,10 @@ mod tests {
         assert!(k.source.contains("float acc = 0.0f;"));
         // Identity post ⇒ no red0 binding; the store casts float acc → i64.
         assert!(!k.source.contains("red0"));
-        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = (long long)(r);"));
+        assert!(
+            k.source
+                .contains("if (threadIdx.x == 0) out[row] = (long long)(r);")
+        );
     }
 
     // ---- 0e gate-rejection tests (call build_plan DIRECTLY: the emitter would
@@ -6545,7 +7165,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "must not read Input")]
     fn reduction_post_reading_input_is_rejected_at_the_plan_gate() {
-        use crate::ir::{reduced, ReduceOp};
+        use crate::ir::{ReduceOp, reduced};
         // The reduced axis is gone; an Input at the output coordinate is a
         // different, ambiguous tensor — rejected (mirrors the contraction epilogue).
         let op = OpDef::reduction_post(
@@ -6562,7 +7182,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "requires the POST-expr ROOT to be a comparison")]
     fn reduction_u8_out_non_cmp_post_is_rejected_at_the_plan_gate() {
-        use crate::ir::{reduced, ReduceOp};
+        use crate::ir::{ReduceOp, reduced};
         // U8 out with a non-cmp (identity) post stores the raw accumulator — a
         // silent truncation. The gate demands a Cmp* post (exact 0/1).
         let mut op = OpDef::reduction_post(
@@ -6591,14 +7211,17 @@ mod tests {
     #[test]
     #[should_panic(expected = "Prod combiner is not supported in the fused")]
     fn rowreduce_prod_stage_is_rejected_at_the_plan_gate() {
-        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        use crate::ir::{ReduceOp, ReduceStage, reduced};
         // Prod is a 0e Access::Reduction combiner only; the fused row path has no
         // block_prod, so a Prod stage misses honestly at the gate.
         let op = OpDef::row_reduce(
             "gp",
             1,
             &[ElementKind::F32],
-            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Prod }],
+            vec![ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Prod,
+            }],
             reduced(0),
         );
         let _ = crate::build_plan(&op, &rr_key(ElementKind::F32, OpCategory::Softmax));
@@ -6611,7 +7234,7 @@ mod tests {
     }
 
     fn rmsnorm_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
+        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
         // x * rsqrt(mean(x^2) + eps), eps baked as a finite Const.
         OpDef::row_reduce(
             "rmsnorm",
@@ -6626,14 +7249,17 @@ mod tests {
     }
 
     fn softmax_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        use crate::ir::{ReduceOp, ReduceStage, reduced};
         // exp(x - rowmax) / sum(exp(x - rowmax)) — numerically stable.
         OpDef::row_reduce(
             "softmax",
             1,
             &[dt],
             vec![
-                ReduceStage { pre: input(0).0, op: ReduceOp::Max },
+                ReduceStage {
+                    pre: input(0).0,
+                    op: ReduceOp::Max,
+                },
                 ReduceStage {
                     pre: (input(0) - reduced(0)).exp().0,
                     op: ReduceOp::Sum,
@@ -6655,16 +7281,20 @@ mod tests {
         assert!(k.source.contains("__shfl_down_sync(0xffffffffu, v, off)"));
         assert!(k.source.contains("float block_sum_rmsnorm_f32(float v)"));
         // one block per row, grid-stride over rows; grid-stride fold within the row.
-        assert!(k
-            .source
-            .contains("for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x)"));
-        assert!(k
-            .source
-            .contains("for (long long j = threadIdx.x; j < k; j += blockDim.x)"));
+        assert!(k.source.contains(
+            "for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x)"
+        ));
+        assert!(
+            k.source
+                .contains("for (long long j = threadIdx.x; j < k; j += blockDim.x)")
+        );
         // mean of squares -> rsqrt; full-width output; uniform empty-axis guard.
         assert!(k.source.contains("acc0 += (in0[idx]*in0[idx]);"));
         assert!(k.source.contains("block_sum_rmsnorm_f32(acc0) / (float)k"));
-        assert!(k.source.contains("out[idx] = (in0[idx] * rsqrtf((r0 + 1e-5)));"));
+        assert!(
+            k.source
+                .contains("out[idx] = (in0[idx] * rsqrtf((r0 + 1e-5)));")
+        );
         assert!(k.source.contains("if (k == 0) return;"));
     }
 
@@ -6697,7 +7327,10 @@ mod tests {
         // stage 1 reads the rowmax register r0; numerically-stable exp(x - max).
         assert!(k.source.contains("acc1 += expf((in0[idx] - r0));"));
         // epilogue divides by the denom register r1.
-        assert!(k.source.contains("out[idx] = (expf((in0[idx] - r0)) / r1);"));
+        assert!(
+            k.source
+                .contains("out[idx] = (expf((in0[idx] - r0)) / r1);")
+        );
     }
 
     #[test]
@@ -6710,28 +7343,38 @@ mod tests {
         assert!(k.source.contains("#include <cuda_fp16.h>"));
         assert!(k.source.contains("const __half* __restrict__ in0"));
         assert!(k.source.contains("float block_sum_rmsnorm_f16(float v)")); // float acc
-        assert!(k
-            .source
-            .contains("acc0 += (__half2float(in0[idx])*__half2float(in0[idx]));"));
-        assert!(k.source.contains(
-            "out[idx] = __float2half((__half2float(in0[idx]) * rsqrtf((r0 + 1e-5))));"
-        ));
+        assert!(
+            k.source
+                .contains("acc0 += (__half2float(in0[idx])*__half2float(in0[idx]));")
+        );
+        assert!(
+            k.source.contains(
+                "out[idx] = __float2half((__half2float(in0[idx]) * rsqrtf((r0 + 1e-5))));"
+            )
+        );
     }
 
     #[test]
     #[should_panic(expected = "references a stage not yet produced")]
     fn rowreduce_forward_reduced_ref_panics() {
-        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        use crate::ir::{ReduceOp, ReduceStage, reduced};
         // A stage 0 `pre` referencing Reduced(0) (its own not-yet-produced result)
         // is a mis-authored op — validate_row_reduce must reject it at build_plan.
         let bad = OpDef::row_reduce(
             "bad",
             1,
             &[ElementKind::F32],
-            vec![ReduceStage { pre: reduced(0).0, op: ReduceOp::Sum }],
+            vec![ReduceStage {
+                pre: reduced(0).0,
+                op: ReduceOp::Sum,
+            }],
             input(0) * reduced(0),
         );
-        let _ = generate(&bad, &rr_key(ElementKind::F32, OpCategory::Normalization), &Cuda);
+        let _ = generate(
+            &bad,
+            &rr_key(ElementKind::F32, OpCategory::Normalization),
+            &Cuda,
+        );
     }
 
     // --- multi-input RowReduce: weighted-RmsNorm + LayerNorm ---
@@ -6749,7 +7392,7 @@ mod tests {
     }
 
     fn wrmsnorm_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
+        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
         // x * rsqrt(mean(x^2) + eps) * weight; in0=x (row), in1=weight [k] (column).
         OpDef::row_reduce(
             "wrmsnorm",
@@ -6764,14 +7407,17 @@ mod tests {
     }
 
     fn layernorm_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
+        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
         // (x-mean)*rsqrt(var+eps)*weight + bias; in0=x, in1=weight[k], in2=bias[k].
         OpDef::row_reduce(
             "layernorm",
             3,
             &[dt],
             vec![
-                ReduceStage { pre: input(0).0, op: ReduceOp::Mean },
+                ReduceStage {
+                    pre: input(0).0,
+                    op: ReduceOp::Mean,
+                },
                 ReduceStage {
                     pre: (input(0) - reduced(0)).unary(UnaryOp::Sqr).0,
                     op: ReduceOp::Mean,
@@ -6784,27 +7430,43 @@ mod tests {
 
     #[test]
     fn rowreduce_weighted_rmsnorm_column_index() {
-        let k = generate(&wrmsnorm_op(ElementKind::F32), &mi_key(ElementKind::F32, 1), &Cuda);
+        let k = generate(
+            &wrmsnorm_op(ElementKind::F32),
+            &mi_key(ElementKind::F32, 1),
+            &Cuda,
+        );
         assert!(k.source.contains("const float* __restrict__ in1,")); // weight operand
         // stage reduces only the row-streamed x (in0[idx]); column weight only in
         // the epilogue, indexed in1[j] (per-column) not in1[idx] (per-element).
         assert!(k.source.contains("acc0 += (in0[idx]*in0[idx]);"));
-        assert!(k.source.contains("out[idx] = ((in0[idx] * rsqrtf((r0 + 1e-5))) * in1[j]);"));
+        assert!(
+            k.source
+                .contains("out[idx] = ((in0[idx] * rsqrtf((r0 + 1e-5))) * in1[j]);")
+        );
         assert!(!k.source.contains("in1[idx]"));
     }
 
     #[test]
     fn rowreduce_layernorm_stable_two_pass_with_weight_bias() {
-        let k = generate(&layernorm_op(ElementKind::F32), &mi_key(ElementKind::F32, 2), &Cuda);
+        let k = generate(
+            &layernorm_op(ElementKind::F32),
+            &mi_key(ElementKind::F32, 2),
+            &Cuda,
+        );
         assert!(k.source.contains("const float* __restrict__ in2,")); // bias operand
         // stage 0 mean; stage 1 = mean of squared DEVIATIONS (the stable two-pass
         // var, not the cancellation-prone mean(x^2)-mean(x)^2).
         assert!(k.source.contains("acc0 += in0[idx];"));
-        assert!(k.source.contains("acc1 += ((in0[idx] - r0)*(in0[idx] - r0));"));
+        assert!(
+            k.source
+                .contains("acc1 += ((in0[idx] - r0)*(in0[idx] - r0));")
+        );
         // epilogue: (x-mean)*rsqrt(var+eps)*weight[j] + bias[j].
-        assert!(k.source.contains(
-            "out[idx] = ((((in0[idx] - r0) * rsqrtf((r1 + 1e-5))) * in1[j]) + in2[j]);"
-        ));
+        assert!(
+            k.source.contains(
+                "out[idx] = ((((in0[idx] - r0) * rsqrtf((r1 + 1e-5))) * in1[j]) + in2[j]);"
+            )
+        );
         assert!(!k.source.contains("in1[idx]") && !k.source.contains("in2[idx]"));
     }
 
@@ -6824,8 +7486,14 @@ mod tests {
         let out = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Normalization, &[x, bare_w, out], ArchSku::Sm89);
         let k = generate(&wrmsnorm_op(ElementKind::F32), &key, &Cuda);
-        assert!(k.source.contains("in1[idx]"), "second empty-bcast input is row-streamed");
-        assert!(!k.source.contains("in1[j]"), "not classified as a column weight");
+        assert!(
+            k.source.contains("in1[idx]"),
+            "second empty-bcast input is row-streamed"
+        );
+        assert!(
+            !k.source.contains("in1[j]"),
+            "not classified as a column weight"
+        );
     }
 
     #[test]
@@ -6858,13 +7526,16 @@ mod tests {
     }
 
     fn softmax_bw_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        use crate::ir::{ReduceOp, ReduceStage, reduced};
         // in0=y, in1=dy (both row-streamed). dx = y*(dy - Σ_j y[j]·dy[j]).
         OpDef::row_reduce(
             "softmax_bw",
             2,
             &[dt],
-            vec![ReduceStage { pre: (input(0) * input(1)).0, op: ReduceOp::Sum }],
+            vec![ReduceStage {
+                pre: (input(0) * input(1)).0,
+                op: ReduceOp::Sum,
+            }],
             input(0) * (input(1) - reduced(0)),
         )
     }
@@ -6882,7 +7553,7 @@ mod tests {
     }
 
     fn layer_norm_bw_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        use crate::ir::{ReduceOp, ReduceStage, reduced};
         // in0=x, in1=dy (row-streamed); in2=mean, in3=rstd (per-row scalars).
         // x_hat=(x-mean)*rstd; dx = rstd*(dy - mean(dy) - x_hat*mean(dy*x_hat)).
         let x_hat = (input(0) - input(2)) * input(3);
@@ -6891,8 +7562,14 @@ mod tests {
             4,
             &[dt],
             vec![
-                ReduceStage { pre: input(1).0, op: ReduceOp::Mean },
-                ReduceStage { pre: (input(1) * x_hat.clone()).0, op: ReduceOp::Mean },
+                ReduceStage {
+                    pre: input(1).0,
+                    op: ReduceOp::Mean,
+                },
+                ReduceStage {
+                    pre: (input(1) * x_hat.clone()).0,
+                    op: ReduceOp::Mean,
+                },
             ],
             input(3) * (input(1) - reduced(0) - x_hat * reduced(1)),
         )
@@ -6900,17 +7577,29 @@ mod tests {
 
     #[test]
     fn rowreduce_softmax_bw_two_row_streamed_inputs() {
-        let k = generate(&softmax_bw_op(ElementKind::F32), &softmax_bw_key(ElementKind::F32), &Cuda);
+        let k = generate(
+            &softmax_bw_op(ElementKind::F32),
+            &softmax_bw_key(ElementKind::F32),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_softmax_bw_f32_rowreduce");
         // signature carries the SECOND row-streamed input in1.
         assert!(k.source.contains("const float* __restrict__ in1,"));
         // the Sum stage folds y·dy — BOTH inputs indexed row-streamed (in_i[idx]).
         assert!(k.source.contains("acc0 += (in0[idx] * in1[idx]);"));
-        assert!(k.source.contains("float r0 = block_sum_softmax_bw_f32(acc0);"));
+        assert!(
+            k.source
+                .contains("float r0 = block_sum_softmax_bw_f32(acc0);")
+        );
         // epilogue: dx = y·(dy - rowdot), full-width, both inputs row-streamed.
-        assert!(k.source.contains("out[idx] = (in0[idx] * (in1[idx] - r0));"));
+        assert!(
+            k.source
+                .contains("out[idx] = (in0[idx] * (in1[idx] - r0));")
+        );
         // no per-column (j) or per-row-scalar (row/rs) index appears — pure streamed.
-        assert!(!k.source.contains("in1[j]") && !k.source.contains("rs0") && !k.source.contains("rs1"));
+        assert!(
+            !k.source.contains("in1[j]") && !k.source.contains("rs0") && !k.source.contains("rs1")
+        );
     }
 
     #[test]
@@ -6928,14 +7617,25 @@ mod tests {
         assert!(k.source.contains("float rs3 = in3[row];"));
         // stage 0: mean(dy) — the streamed dy folded, Mean divides by k.
         assert!(k.source.contains("acc0 += in1[idx];"));
-        assert!(k.source.contains("float r0 = block_sum_layer_norm_bw_f32(acc0) / (float)k;"));
+        assert!(
+            k.source
+                .contains("float r0 = block_sum_layer_norm_bw_f32(acc0) / (float)k;")
+        );
         // stage 1: mean(dy·x_hat), x_hat=(x-mean)*rstd reads the hoisted rs2/rs3.
-        assert!(k.source.contains("acc1 += (in1[idx] * ((in0[idx] - rs2) * rs3));"));
-        assert!(k.source.contains("float r1 = block_sum_layer_norm_bw_f32(acc1) / (float)k;"));
+        assert!(
+            k.source
+                .contains("acc1 += (in1[idx] * ((in0[idx] - rs2) * rs3));")
+        );
+        assert!(
+            k.source
+                .contains("float r1 = block_sum_layer_norm_bw_f32(acc1) / (float)k;")
+        );
         // epilogue: dx = rstd·(dy - r0 - x_hat·r1) — rstd/mean via rs3/rs2, NOT per-elem.
-        assert!(k.source.contains(
-            "out[idx] = (rs3 * ((in1[idx] - r0) - (((in0[idx] - rs2) * rs3) * r1)));"
-        ));
+        assert!(
+            k.source.contains(
+                "out[idx] = (rs3 * ((in1[idx] - r0) - (((in0[idx] - rs2) * rs3) * r1)));"
+            )
+        );
         // the per-row scalars are NEVER read per-element (in2[idx]/in3[idx]).
         assert!(!k.source.contains("in2[idx]") && !k.source.contains("in3[idx]"));
         // ...nor per-column (in2[j]/in3[j]).
@@ -6954,7 +7654,10 @@ mod tests {
         assert!(k.source.contains("float rs2 = __half2float(in2[row]);"));
         assert!(k.source.contains("float rs3 = __half2float(in3[row]);"));
         // block reducer accumulates in float even for f16.
-        assert!(k.source.contains("float block_sum_layer_norm_bw_f16(float v)"));
+        assert!(
+            k.source
+                .contains("float block_sum_layer_norm_bw_f16(float v)")
+        );
     }
 
     // =======================================================================
@@ -7001,26 +7704,37 @@ mod tests {
             (UnaryOp::Lgamma, "lgammaf", "lgamma"),
         ];
         for &(uop, f32_fn, f64_fn) in cases {
-            let op = |dt: ElementKind| {
-                OpDef::elementwise("v", 1, &[dt], input(0).unary(uop))
-            };
-            let kf = generate(&op(ElementKind::F32), &unary_scalar_key(ElementKind::F32, 4), &Cuda);
+            let op = |dt: ElementKind| OpDef::elementwise("v", 1, &[dt], input(0).unary(uop));
+            let kf = generate(
+                &op(ElementKind::F32),
+                &unary_scalar_key(ElementKind::F32, 4),
+                &Cuda,
+            );
             assert!(
                 kf.source.contains(&format!("out[i] = {f32_fn}(in0[i]);")),
                 "{uop:?} f32 golden missing in:\n{}",
                 kf.source
             );
-            let kd = generate(&op(ElementKind::F64), &unary_scalar_key(ElementKind::F64, 8), &Cuda);
+            let kd = generate(
+                &op(ElementKind::F64),
+                &unary_scalar_key(ElementKind::F64, 8),
+                &Cuda,
+            );
             assert!(
                 kd.source.contains(&format!("out[i] = {f64_fn}(in0[i]);")),
                 "{uop:?} f64 golden missing in:\n{}",
                 kd.source
             );
             // f16 scalar: the existing promote-to-f32 transcendental path.
-            let kh = generate(&op(ElementKind::F16), &unary_scalar_key(ElementKind::F16, 2), &Cuda);
+            let kh = generate(
+                &op(ElementKind::F16),
+                &unary_scalar_key(ElementKind::F16, 2),
+                &Cuda,
+            );
             assert!(
-                kh.source
-                    .contains(&format!("out[i] = __float2half({f32_fn}(__half2float(in0[i])));")),
+                kh.source.contains(&format!(
+                    "out[i] = __float2half({f32_fn}(__half2float(in0[i])));"
+                )),
                 "{uop:?} f16 promote golden missing in:\n{}",
                 kh.source
             );
@@ -7041,24 +7755,36 @@ mod tests {
             (BinaryOp::RemTrunc, "fmodf", "fmod", true),
         ];
         for &(bop, f32_fn, f64_fn, half_ok) in cases {
-            let op = |dt: ElementKind| {
-                OpDef::elementwise("v", 2, &[dt], input(0).binary(bop, input(1)))
-            };
-            let kf = generate(&op(ElementKind::F32), &binary_scalar_key(ElementKind::F32, 4), &Cuda);
+            let op =
+                |dt: ElementKind| OpDef::elementwise("v", 2, &[dt], input(0).binary(bop, input(1)));
+            let kf = generate(
+                &op(ElementKind::F32),
+                &binary_scalar_key(ElementKind::F32, 4),
+                &Cuda,
+            );
             assert!(
-                kf.source.contains(&format!("out[i] = {f32_fn}(in0[i], in1[i]);")),
+                kf.source
+                    .contains(&format!("out[i] = {f32_fn}(in0[i], in1[i]);")),
                 "{bop:?} f32 golden missing in:\n{}",
                 kf.source
             );
-            let kd = generate(&op(ElementKind::F64), &binary_scalar_key(ElementKind::F64, 8), &Cuda);
+            let kd = generate(
+                &op(ElementKind::F64),
+                &binary_scalar_key(ElementKind::F64, 8),
+                &Cuda,
+            );
             assert!(
-                kd.source.contains(&format!("out[i] = {f64_fn}(in0[i], in1[i]);")),
+                kd.source
+                    .contains(&format!("out[i] = {f64_fn}(in0[i], in1[i]);")),
                 "{bop:?} f64 golden missing in:\n{}",
                 kd.source
             );
             if half_ok {
-                let kh =
-                    generate(&op(ElementKind::F16), &binary_scalar_key(ElementKind::F16, 2), &Cuda);
+                let kh = generate(
+                    &op(ElementKind::F16),
+                    &binary_scalar_key(ElementKind::F16, 2),
+                    &Cuda,
+                );
                 assert!(
                     kh.source.contains(&format!(
                         "out[i] = __float2half({f32_fn}(__half2float(in0[i]), __half2float(in1[i])));"
@@ -7087,8 +7813,14 @@ mod tests {
         assert!(!ki.source.contains("!="), "no NaN-select in the IEEE op");
         let max = OpDef::elementwise("m", 2, &[ElementKind::F32], input(0).max(input(1)));
         let km = generate(&max, &key, &Cuda);
-        assert!(!km.source.contains("fmaxf"), "Maximum must NOT become fmaxf");
-        assert!(km.source.contains("!="), "Maximum keeps the NaN-propagating select");
+        assert!(
+            !km.source.contains("fmaxf"),
+            "Maximum must NOT become fmaxf"
+        );
+        assert!(
+            km.source.contains("!="),
+            "Maximum keeps the NaN-propagating select"
+        );
         // Min side — BOTH directions (mutation-caught gap: Min silently
         // becoming fminf passed the suite when only FminIeee was pinned).
         let ieee_min = OpDef::elementwise(
@@ -7097,11 +7829,21 @@ mod tests {
             &[ElementKind::F32],
             input(0).binary(BinaryOp::FminIeee, input(1)),
         );
-        assert!(generate(&ieee_min, &key, &Cuda).source.contains("fminf(in0[i], in1[i])"));
+        assert!(
+            generate(&ieee_min, &key, &Cuda)
+                .source
+                .contains("fminf(in0[i], in1[i])")
+        );
         let min = OpDef::elementwise("mn", 2, &[ElementKind::F32], input(0).min(input(1)));
         let kn = generate(&min, &key, &Cuda);
-        assert!(!kn.source.contains("fminf"), "Minimum must NOT become fminf");
-        assert!(kn.source.contains("!="), "Minimum keeps the NaN-propagating select");
+        assert!(
+            !kn.source.contains("fminf"),
+            "Minimum must NOT become fminf"
+        );
+        assert!(
+            kn.source.contains("!="),
+            "Minimum keeps the NaN-propagating select"
+        );
     }
 
     #[test]
@@ -7118,7 +7860,10 @@ mod tests {
         );
         let kt = generate(&rt, &key, &Cuda);
         assert!(kt.source.contains("fmodf(in0[i], in1[i])"));
-        assert!(!kt.source.contains("floorf"), "RemTrunc must not take the floored form");
+        assert!(
+            !kt.source.contains("floorf"),
+            "RemTrunc must not take the floored form"
+        );
         let rem = OpDef::elementwise(
             "rem",
             2,
@@ -7126,7 +7871,10 @@ mod tests {
             input(0).binary(BinaryOp::Rem, input(1)),
         );
         let kr = generate(&rem, &key, &Cuda);
-        assert!(kr.source.contains("(in0[i] - floorf(in0[i] / in1[i]) * in1[i])"));
+        assert!(
+            kr.source
+                .contains("(in0[i] - floorf(in0[i] / in1[i]) * in1[i])")
+        );
         assert!(!kr.source.contains("fmodf"), "Rem must not become fmodf");
         // f64 spellings pinned too — in binary_f64 the fmod/floor and
         // fmax/fmin arms sit one edit apart, an easy silent swap.
@@ -7139,7 +7887,10 @@ mod tests {
         );
         let kt64 = generate(&rt64, &key64, &Cuda);
         assert!(kt64.source.contains("fmod(in0[i], in1[i])"));
-        assert!(!kt64.source.contains("floor("), "f64 RemTrunc must not take the floored form");
+        assert!(
+            !kt64.source.contains("floor("),
+            "f64 RemTrunc must not take the floored form"
+        );
         let rem64 = OpDef::elementwise(
             "rem64",
             2,
@@ -7147,15 +7898,30 @@ mod tests {
             input(0).binary(BinaryOp::Rem, input(1)),
         );
         let kr64 = generate(&rem64, &key64, &Cuda);
-        assert!(kr64.source.contains("(in0[i] - floor(in0[i] / in1[i]) * in1[i])"));
-        assert!(!kr64.source.contains("fmod("), "f64 Rem must not become fmod");
+        assert!(
+            kr64.source
+                .contains("(in0[i] - floor(in0[i] / in1[i]) * in1[i])")
+        );
+        assert!(
+            !kr64.source.contains("fmod("),
+            "f64 Rem must not become fmod"
+        );
         let max64 = OpDef::elementwise("mx64", 2, &[ElementKind::F64], input(0).max(input(1)));
         let km64 = generate(&max64, &key64, &Cuda);
-        assert!(!km64.source.contains("fmax("), "f64 Maximum must NOT become fmax");
-        assert!(km64.source.contains("!="), "f64 Maximum keeps the NaN-propagating select");
+        assert!(
+            !km64.source.contains("fmax("),
+            "f64 Maximum must NOT become fmax"
+        );
+        assert!(
+            km64.source.contains("!="),
+            "f64 Maximum keeps the NaN-propagating select"
+        );
         let min64 = OpDef::elementwise("mn64", 2, &[ElementKind::F64], input(0).min(input(1)));
         let kn64 = generate(&min64, &key64, &Cuda);
-        assert!(!kn64.source.contains("fmin("), "f64 Minimum must NOT become fmin");
+        assert!(
+            !kn64.source.contains("fmin("),
+            "f64 Minimum must NOT become fmin"
+        );
     }
 
     #[test]
@@ -7196,7 +7962,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "must miss honestly")]
     fn nextafter_f16_is_refused_in_a_reduction_body() {
-        use crate::ir::{konst, BinaryOp, ReduceOp};
+        use crate::ir::{BinaryOp, ReduceOp, konst};
         let op = OpDef::reduction(
             "na_sum",
             1,
@@ -7210,12 +7976,15 @@ mod tests {
     #[test]
     #[should_panic(expected = "must miss honestly")]
     fn nextafter_f16_is_refused_in_a_row_reduce_epilogue() {
-        use crate::ir::{reduced, BinaryOp, ReduceOp, ReduceStage};
+        use crate::ir::{BinaryOp, ReduceOp, ReduceStage, reduced};
         let op = OpDef::row_reduce(
             "na_rr",
             1,
             &[ElementKind::F16],
-            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Max }],
+            vec![ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Max,
+            }],
             input(0).binary(BinaryOp::Nextafter, reduced(0)),
         );
         let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F16, 256);
@@ -7226,7 +7995,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "must miss honestly")]
     fn nextafter_f16_is_refused_in_a_contraction_epilogue() {
-        use crate::ir::{konst, reduced, BinaryOp, ContractionAxes};
+        use crate::ir::{BinaryOp, ContractionAxes, konst, reduced};
         let op = OpDef::contraction(
             "na_mm",
             &[ElementKind::F16],
@@ -7247,7 +8016,12 @@ mod tests {
         // but the fn itself is Tier B: pair-split through the same scalar f32
         // spelling (bit-identical to the scalar sibling), never a fake packed
         // intrinsic.
-        let op = OpDef::elementwise("erfx", 1, &[ElementKind::F16], input(0).unary(UnaryOp::Erfc));
+        let op = OpDef::elementwise(
+            "erfx",
+            1,
+            &[ElementKind::F16],
+            input(0).unary(UnaryOp::Erfc),
+        );
         let k = generate(&op, &unary_scalar_key(ElementKind::F16, 256), &Cuda);
         assert_eq!(k.name, "baracuda_gen_erfx_f16_co_v8");
         assert!(k.source.contains("__halves2half2("));
@@ -7260,7 +8034,7 @@ mod tests {
     // Increment-0b comparison predicates + u8 mask output
     // =======================================================================
 
-    use crate::ir::{konst, BinaryOp};
+    use crate::ir::{BinaryOp, konst};
 
     /// Fully-aligned binary cell with a **U8 output** operand (inputs `dt`):
     /// the caller-side key shape of an `elementwise_pred` op. Note the aligned
@@ -7281,32 +8055,77 @@ mod tests {
         // One golden per cmp op at f32: the exact C-operator ternary (the NaN
         // semantics carrier), the u8 output signature, and the exact store cast.
         let cases: &[(BinaryOp, &str, &str)] = &[
-            (BinaryOp::CmpEq, "cmp_eq", "((float)in0[i] == (float)in1[i] ? 1.0f : 0.0f)"),
-            (BinaryOp::CmpNe, "cmp_ne", "((float)in0[i] != (float)in1[i] ? 1.0f : 0.0f)"),
-            (BinaryOp::CmpLt, "cmp_lt", "((float)in0[i] < (float)in1[i] ? 1.0f : 0.0f)"),
-            (BinaryOp::CmpLe, "cmp_le", "((float)in0[i] <= (float)in1[i] ? 1.0f : 0.0f)"),
-            (BinaryOp::CmpGt, "cmp_gt", "((float)in0[i] > (float)in1[i] ? 1.0f : 0.0f)"),
-            (BinaryOp::CmpGe, "cmp_ge", "((float)in0[i] >= (float)in1[i] ? 1.0f : 0.0f)"),
+            (
+                BinaryOp::CmpEq,
+                "cmp_eq",
+                "((float)in0[i] == (float)in1[i] ? 1.0f : 0.0f)",
+            ),
+            (
+                BinaryOp::CmpNe,
+                "cmp_ne",
+                "((float)in0[i] != (float)in1[i] ? 1.0f : 0.0f)",
+            ),
+            (
+                BinaryOp::CmpLt,
+                "cmp_lt",
+                "((float)in0[i] < (float)in1[i] ? 1.0f : 0.0f)",
+            ),
+            (
+                BinaryOp::CmpLe,
+                "cmp_le",
+                "((float)in0[i] <= (float)in1[i] ? 1.0f : 0.0f)",
+            ),
+            (
+                BinaryOp::CmpGt,
+                "cmp_gt",
+                "((float)in0[i] > (float)in1[i] ? 1.0f : 0.0f)",
+            ),
+            (
+                BinaryOp::CmpGe,
+                "cmp_ge",
+                "((float)in0[i] >= (float)in1[i] ? 1.0f : 0.0f)",
+            ),
         ];
         for (op, name, ternary) in cases {
-            let k = generate(&pred_op(name, *op, ElementKind::F32), &pred_key(ElementKind::F32), &Cuda);
+            let k = generate(
+                &pred_op(name, *op, ElementKind::F32),
+                &pred_key(ElementKind::F32),
+                &Cuda,
+            );
             // The op name flows into the entry point (identity is (token, entry_point)).
             assert_eq!(k.name, format!("baracuda_gen_{name}_f32_scalar"));
             // Inputs stay the key dtype; ONLY the output is u8.
             assert!(k.source.contains("const float* __restrict__ in0"), "{name}");
-            assert!(k.source.contains("unsigned char* __restrict__ out"), "{name}");
+            assert!(
+                k.source.contains("unsigned char* __restrict__ out"),
+                "{name}"
+            );
             // Exact predicate + exact store conversion (0.0f/1.0f -> 0/1).
             let store = format!("out[i] = (unsigned char){ternary};");
-            assert!(k.source.contains(&store), "{name}: missing `{store}` in:\n{}", k.source);
+            assert!(
+                k.source.contains(&store),
+                "{name}: missing `{store}` in:\n{}",
+                k.source
+            );
         }
     }
 
     #[test]
     fn cmp_f64_golden_uses_double_literals() {
-        let k = generate(&pred_op("cmp_lt", BinaryOp::CmpLt, ElementKind::F64), &pred_key(ElementKind::F64), &Cuda);
+        let k = generate(
+            &pred_op("cmp_lt", BinaryOp::CmpLt, ElementKind::F64),
+            &pred_key(ElementKind::F64),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_cmp_lt_f64_scalar");
-        assert!(k.source.contains("out[i] = (unsigned char)(in0[i] < in1[i] ? 1.0 : 0.0);"));
-        assert!(!k.source.contains("1.0f"), "f64 predicate must not use float literals");
+        assert!(
+            k.source
+                .contains("out[i] = (unsigned char)(in0[i] < in1[i] ? 1.0 : 0.0);")
+        );
+        assert!(
+            !k.source.contains("1.0f"),
+            "f64 predicate must not use float literals"
+        );
     }
 
     #[test]
@@ -7315,11 +8134,22 @@ mod tests {
         // order-preserving embedding, so the f32 compare decides identically to
         // a native half compare), and the store re-promotes the demoted 1.0/0.0
         // before the integer cast (exact round trip; see store_expr).
-        let k = generate(&pred_op("cmp_lt", BinaryOp::CmpLt, ElementKind::F16), &pred_key(ElementKind::F16), &Cuda);
+        let k = generate(
+            &pred_op("cmp_lt", BinaryOp::CmpLt, ElementKind::F16),
+            &pred_key(ElementKind::F16),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_cmp_lt_f16_scalar");
         assert!(k.source.contains("#include <cuda_fp16.h>"));
-        assert!(k.source.contains("((float)__half2float(in0[i]) < (float)__half2float(in1[i]) ? 1.0f : 0.0f)"));
-        assert!(k.source.contains("out[i] = (unsigned char)__half2float(__float2half("));
+        assert!(
+            k.source.contains(
+                "((float)__half2float(in0[i]) < (float)__half2float(in1[i]) ? 1.0f : 0.0f)"
+            )
+        );
+        assert!(
+            k.source
+                .contains("out[i] = (unsigned char)__half2float(__float2half(")
+        );
         assert!(k.source.contains("unsigned char* __restrict__ out"));
     }
 
@@ -7330,14 +8160,26 @@ mod tests {
         // packed half2 struct, no invented packed u8 store. (The aligned
         // contiguous u8 output operand itself keys V8, so without the plan
         // gate the min-width rule alone would still say "vectorize".)
-        let kf = generate(&pred_op("cmp_ge", BinaryOp::CmpGe, ElementKind::F32), &pred_key(ElementKind::F32), &Cuda);
+        let kf = generate(
+            &pred_op("cmp_ge", BinaryOp::CmpGe, ElementKind::F32),
+            &pred_key(ElementKind::F32),
+            &Cuda,
+        );
         assert!(kf.name.ends_with("_scalar"), "got {}", kf.name);
         assert!(!kf.source.contains("float4"));
-        let kh = generate(&pred_op("cmp_eq", BinaryOp::CmpEq, ElementKind::F16), &pred_key(ElementKind::F16), &Cuda);
+        let kh = generate(
+            &pred_op("cmp_eq", BinaryOp::CmpEq, ElementKind::F16),
+            &pred_key(ElementKind::F16),
+            &Cuda,
+        );
         assert!(kh.name.ends_with("_scalar"), "got {}", kh.name);
         // `__half2 ` (the pair TYPE, trailing space) must not appear — the
         // scalar promote fn `__half2float` legitimately does.
-        assert!(!kh.source.contains("__half2 "), "no packed pair type: {}", kh.name);
+        assert!(
+            !kh.source.contains("__half2 "),
+            "no packed pair type: {}",
+            kh.name
+        );
         assert!(!kh.source.contains("__halves2half2"), "no pair re-join");
         assert!(!kh.source.contains("_vec"), "no packed vector struct");
     }
@@ -7379,10 +8221,15 @@ mod tests {
         // dependent C++ overload (a headerless-nvrtc hazard) — the store must
         // bridge through __bfloat162float. (Review-caught gap: the Bf16 arm of
         // store_expr had zero coverage; only the F16 form was pinned.)
-        let k = generate(&pred_op("cmp_lt", BinaryOp::CmpLt, ElementKind::Bf16), &pred_key(ElementKind::Bf16), &Cuda);
+        let k = generate(
+            &pred_op("cmp_lt", BinaryOp::CmpLt, ElementKind::Bf16),
+            &pred_key(ElementKind::Bf16),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_cmp_lt_bf16_scalar");
         assert!(
-            k.source.contains("out[i] = (unsigned char)__bfloat162float("),
+            k.source
+                .contains("out[i] = (unsigned char)__bfloat162float("),
             "bf16 u8 store must bridge through __bfloat162float:\n{}",
             k.source
         );
@@ -7408,8 +8255,16 @@ mod tests {
         // supports_dtype says yes — and the per-OP legality lives in
         // dtype_compatible / the plan gate, NOT here (a uniform-U8 Div region
         // still declines; pinned in jit.rs). Both directions:
-        for dt in [ElementKind::U8, ElementKind::S8, ElementKind::I32, ElementKind::I64] {
-            assert!(Cuda.supports_dtype(dt), "{dt:?} is an audited compute dtype");
+        for dt in [
+            ElementKind::U8,
+            ElementKind::S8,
+            ElementKind::I32,
+            ElementKind::I64,
+        ] {
+            assert!(
+                Cuda.supports_dtype(dt),
+                "{dt:?} is an audited compute dtype"
+            );
         }
         for dt in [
             ElementKind::Bool, // FKC has no Bool — masks ride as U8
@@ -7424,7 +8279,11 @@ mod tests {
             assert!(!Cuda.supports_dtype(dt), "{dt:?} must keep declining");
         }
         // The u8-OUT predicate path is unchanged by the flip.
-        let k = generate(&pred_op("cmp_gt", BinaryOp::CmpGt, ElementKind::F32), &pred_key(ElementKind::F32), &Cuda);
+        let k = generate(
+            &pred_op("cmp_gt", BinaryOp::CmpGt, ElementKind::F32),
+            &pred_key(ElementKind::F32),
+            &Cuda,
+        );
         assert!(k.source.contains("unsigned char* __restrict__ out"));
     }
 
@@ -7436,10 +8295,16 @@ mod tests {
         let b = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::U8, 256);
         let key = structure_key(OpCategory::BinaryElementwise, &[a, b, o], ArchSku::Sm89);
-        let k = generate(&pred_op("cmp_ne", BinaryOp::CmpNe, ElementKind::F32), &key, &Cuda);
+        let k = generate(
+            &pred_op("cmp_ne", BinaryOp::CmpNe, ElementKind::F32),
+            &key,
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_cmp_ne_f32_strided_r2");
         assert!(k.source.contains("unsigned char* __restrict__ out"));
-        assert!(k.source.contains("out[oo] = (unsigned char)((float)in0[o0] != (float)in1[o1] ? 1.0f : 0.0f);"));
+        assert!(k.source.contains(
+            "out[oo] = (unsigned char)((float)in0[o0] != (float)in1[o1] ? 1.0f : 0.0f);"
+        ));
     }
 
     #[test]
@@ -7456,14 +8321,20 @@ mod tests {
         assert_eq!(op.out_dtype, None);
         let k = generate(&op, &binary_scalar_key(ElementKind::F32, 4), &Cuda);
         assert_eq!(k.name, "baracuda_gen_relu_bw_f32_scalar");
-        assert!(k.source.contains("out[i] = (in0[i] * ((float)in1[i] > (float)0.0 ? 1.0f : 0.0f));"));
+        assert!(
+            k.source
+                .contains("out[i] = (in0[i] * ((float)in1[i] > (float)0.0 ? 1.0f : 0.0f));")
+        );
         assert!(k.source.contains("float* __restrict__ out"));
         assert!(!k.source.contains("unsigned char"));
         // …and at a fully-aligned cell the SAME body vectorizes normally
         // (out_dtype None leaves the schedule untouched).
         let kv = generate(&op, &binary_scalar_key(ElementKind::F32, 256), &Cuda);
         assert_eq!(kv.name, "baracuda_gen_relu_bw_f32_co_v4");
-        assert!(kv.source.contains("((float)v1.x > (float)0.0 ? 1.0f : 0.0f)"));
+        assert!(
+            kv.source
+                .contains("((float)v1.x > (float)0.0 ? 1.0f : 0.0f)")
+        );
     }
 
     #[test]
@@ -7477,7 +8348,10 @@ mod tests {
             input(0).binary(BinaryOp::CmpGt, input(1)),
         );
         let k = generate(&op, &binary_scalar_key(ElementKind::F32, 4), &Cuda);
-        assert!(k.source.contains("out[i] = ((float)in0[i] > (float)in1[i] ? 1.0f : 0.0f);"));
+        assert!(
+            k.source
+                .contains("out[i] = ((float)in0[i] > (float)in1[i] ? 1.0f : 0.0f);")
+        );
         assert!(!k.source.contains("unsigned char"));
     }
 
@@ -7527,7 +8401,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "stores its accumulator")]
     fn u8_out_under_contraction_is_rejected() {
-        use crate::ir::{reduced, ContractionAxes};
+        use crate::ir::{ContractionAxes, reduced};
         let mut op = OpDef::contraction(
             "mm",
             &[ElementKind::F32],
@@ -7586,17 +8460,27 @@ mod tests {
             assert_eq!(ki.name, format!("baracuda_gen_{name}_i32_scalar"));
             assert!(ki.source.contains("const int* __restrict__ in0"), "{bop:?}");
             let store = format!("out[i] = (in0[i] {c} in1[i]);");
-            assert!(ki.source.contains(&store), "{bop:?} i32: missing `{store}` in:\n{}", ki.source);
+            assert!(
+                ki.source.contains(&store),
+                "{bop:?} i32: missing `{store}` in:\n{}",
+                ki.source
+            );
             let kl = generate(
                 &int_op(name, bop, ElementKind::I64),
                 &binary_scalar_key(ElementKind::I64, 8),
                 &Cuda,
             );
             assert_eq!(kl.name, format!("baracuda_gen_{name}_i64_scalar"));
-            assert!(kl.source.contains("const long long* __restrict__ in0"), "{bop:?}");
+            assert!(
+                kl.source.contains("const long long* __restrict__ in0"),
+                "{bop:?}"
+            );
             assert!(kl.source.contains(&store), "{bop:?} i64: missing `{store}`");
             // Header-light: int kernels need no includes (nvrtc headerless).
-            assert!(!ki.source.contains("#include"), "{bop:?} i32 must be headerless");
+            assert!(
+                !ki.source.contains("#include"),
+                "{bop:?} i32 must be headerless"
+            );
         }
     }
 
@@ -7624,8 +8508,15 @@ mod tests {
         assert_eq!(ku.name, "baracuda_gen_shl_u8_scalar");
         assert!(ku.source.contains("const unsigned char* __restrict__ in0"));
         assert!(ku.source.contains("unsigned char* __restrict__ out"));
-        assert!(ku.source.contains("out[i] = (in0[i] << in1[i]);"), "{}", ku.source);
-        assert!(!ku.source.contains("(int)"), "no defeating casts — promotion is the contract");
+        assert!(
+            ku.source.contains("out[i] = (in0[i] << in1[i]);"),
+            "{}",
+            ku.source
+        );
+        assert!(
+            !ku.source.contains("(int)"),
+            "no defeating casts — promotion is the contract"
+        );
         let ks = generate(
             &int_op("shr", BinaryOp::Shr, ElementKind::S8),
             &binary_scalar_key(ElementKind::S8, 1),
@@ -7633,7 +8524,11 @@ mod tests {
         );
         assert_eq!(ks.name, "baracuda_gen_shr_i8_scalar");
         assert!(ks.source.contains("const signed char* __restrict__ in0"));
-        assert!(ks.source.contains("out[i] = (in0[i] >> in1[i]);"), "{}", ks.source);
+        assert!(
+            ks.source.contains("out[i] = (in0[i] >> in1[i]);"),
+            "{}",
+            ks.source
+        );
         let ka = generate(
             &int_op("band", BinaryOp::BitAnd, ElementKind::U8),
             &binary_scalar_key(ElementKind::U8, 1),
@@ -7672,10 +8567,21 @@ mod tests {
             ),
         ];
         for &(bop, name, store) in cases {
-            let k = generate(&int_op(name, bop, ElementKind::U8), &binary_scalar_key(ElementKind::U8, 1), &Cuda);
+            let k = generate(
+                &int_op(name, bop, ElementKind::U8),
+                &binary_scalar_key(ElementKind::U8, 1),
+                &Cuda,
+            );
             assert_eq!(k.name, format!("baracuda_gen_{name}_u8_scalar"));
-            assert!(k.source.contains("const unsigned char* __restrict__ in0"), "{bop:?}");
-            assert!(k.source.contains(store), "{bop:?}: missing `{store}` in:\n{}", k.source);
+            assert!(
+                k.source.contains("const unsigned char* __restrict__ in0"),
+                "{bop:?}"
+            );
+            assert!(
+                k.source.contains(store),
+                "{bop:?}: missing `{store}` in:\n{}",
+                k.source
+            );
         }
     }
 
@@ -7689,7 +8595,10 @@ mod tests {
         let ku = generate(&addu, &binary_scalar_key(ElementKind::U8, 1), &Cuda);
         assert_eq!(ku.name, "baracuda_gen_add_u8_scalar");
         assert!(ku.source.contains("out[i] = (in0[i] + in1[i]);"));
-        assert!(!ku.source.contains("float"), "no float detour in a u8 kernel");
+        assert!(
+            !ku.source.contains("float"),
+            "no float detour in a u8 kernel"
+        );
         let muls = OpDef::elementwise("mul", 2, &[ElementKind::S8], input(0) * input(1));
         let ks = generate(&muls, &binary_scalar_key(ElementKind::S8, 1), &Cuda);
         assert_eq!(ks.name, "baracuda_gen_mul_i8_scalar");
@@ -7712,11 +8621,17 @@ mod tests {
             &binary_scalar_key(ElementKind::I32, 256),
             &Cuda,
         );
-        assert_eq!(ki.name, "baracuda_gen_band_i32_scalar", "aligned i32 stays scalar");
+        assert_eq!(
+            ki.name, "baracuda_gen_band_i32_scalar",
+            "aligned i32 stays scalar"
+        );
         assert!(!ki.source.contains("int4"), "no invented int vectorization");
         let addu = OpDef::elementwise("add", 2, &[ElementKind::U8], input(0) + input(1));
         let ku = generate(&addu, &binary_scalar_key(ElementKind::U8, 256), &Cuda);
-        assert_eq!(ku.name, "baracuda_gen_add_u8_scalar", "aligned u8 stays scalar");
+        assert_eq!(
+            ku.name, "baracuda_gen_add_u8_scalar",
+            "aligned u8 stays scalar"
+        );
         assert!(!ku.source.contains("_vec"), "no packed vector struct");
     }
 
@@ -7727,7 +8642,11 @@ mod tests {
         let t = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::I32, 256);
         let d = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::I32, 256);
         let key = structure_key(OpCategory::BinaryElementwise, &[t, d, d], ArchSku::Sm89);
-        let k = generate(&int_op("bxor", BinaryOp::BitXor, ElementKind::I32), &key, &Cuda);
+        let k = generate(
+            &int_op("bxor", BinaryOp::BitXor, ElementKind::I32),
+            &key,
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_bxor_i32_strided_r2");
         assert!(k.source.contains("out[oo] = (in0[o0] ^ in1[o1]);"));
     }
@@ -8095,11 +9014,21 @@ mod tests {
         // though the single input is contiguous (the output offset needs the
         // same c{d}s), and Coord spells the exact `(float)c{d}` cast into the
         // compute-dtype compare.
-        let k = generate(&triu_mask_op("triu_mask", ElementKind::F32, 0.0), &coord_key_2d(ElementKind::F32, 2), &Cuda);
+        let k = generate(
+            &triu_mask_op("triu_mask", ElementKind::F32, 0.0),
+            &coord_key_2d(ElementKind::F32, 2),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_triu_mask_f32_strided_r2");
         // Unravel present despite all-contiguous operands (last axis fastest).
-        assert!(k.source.contains("long long c1 = lin % shape1; lin /= shape1;"));
-        assert!(k.source.contains("long long c0 = lin % shape0; lin /= shape0;"));
+        assert!(
+            k.source
+                .contains("long long c1 = lin % shape1; lin /= shape1;")
+        );
+        assert!(
+            k.source
+                .contains("long long c0 = lin % shape0; lin /= shape0;")
+        );
         // The compare is decided in the compute dtype: both Coord casts and
         // the 0b compute-dtype cmp casts compose.
         assert!(
@@ -8123,38 +9052,59 @@ mod tests {
         let key = structure_key(OpCategory::UnaryElementwise, &[a], ArchSku::Sm89);
         let k = generate(&op, &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_iota1_f32_strided_r2");
-        assert!(k.source.contains("long long c1 = lin % shape1; lin /= shape1;"));
+        assert!(
+            k.source
+                .contains("long long c1 = lin % shape1; lin /= shape1;")
+        );
         assert!(k.source.contains("long long oo = c0*so_0 + c1*so_1;"));
         assert!(k.source.contains("out[oo] = (float)c1;"), "{}", k.source);
-        assert!(!k.source.contains("in0"), "a 0-input op has no input pointers");
+        assert!(
+            !k.source.contains("in0"),
+            "a 0-input op has no input pointers"
+        );
     }
 
     #[test]
     fn coord_f64_golden_uses_double_cast_and_literals() {
-        let k = generate(&triu_mask_op("triu_mask", ElementKind::F64, 0.0), &coord_key_2d(ElementKind::F64, 2), &Cuda);
+        let k = generate(
+            &triu_mask_op("triu_mask", ElementKind::F64, 0.0),
+            &coord_key_2d(ElementKind::F64, 2),
+            &Cuda,
+        );
         assert_eq!(k.name, "baracuda_gen_triu_mask_f64_strided_r2");
         assert!(
-            k.source.contains(
-                "out[oo] = (in0[o0] * ((double)c1 >= ((double)c0 + 0.0) ? 1.0 : 0.0));"
-            ),
+            k.source
+                .contains("out[oo] = (in0[o0] * ((double)c1 >= ((double)c0 + 0.0) ? 1.0 : 0.0));"),
             "f64 triu-mask store golden missing in:\n{}",
             k.source
         );
-        assert!(!k.source.contains("(float)"), "no float casts in the f64 kernel");
+        assert!(
+            !k.source.contains("(float)"),
+            "no float casts in the f64 kernel"
+        );
     }
 
     #[test]
     fn coord_alibi_body_with_launch_param_golden() {
         // (coord(1) - coord(0)) * param(0) — the alibi relative-position shape
         // with a runtime slope: zero tensor inputs, one f32 launch param.
-        let op = OpDef::elementwise("alibi", 0, &[ElementKind::F32], (coord(1) - coord(0)) * param(0));
+        let op = OpDef::elementwise(
+            "alibi",
+            0,
+            &[ElementKind::F32],
+            (coord(1) - coord(0)) * param(0),
+        );
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a], ArchSku::Sm89);
         let k = generate(&op, &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_alibi_f32_strided_r2");
-        assert!(k.source.contains("long long n, float p0)"), "p0 rides the launch signature");
         assert!(
-            k.source.contains("out[oo] = (((float)c1 - (float)c0) * p0);"),
+            k.source.contains("long long n, float p0)"),
+            "p0 rides the launch signature"
+        );
+        assert!(
+            k.source
+                .contains("out[oo] = (((float)c1 - (float)c0) * p0);"),
             "alibi store golden missing in:\n{}",
             k.source
         );
@@ -8228,14 +9178,17 @@ mod tests {
     #[test]
     #[should_panic(expected = "Elementwise-only in 0d")]
     fn coord_in_a_row_reduce_epilogue_is_rejected_at_the_plan_gate() {
-        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        use crate::ir::{ReduceOp, ReduceStage, reduced};
         // The RowReduce epilogue iterates the (row, j) space, not the
         // elementwise output coordinate space.
         let op = OpDef::row_reduce(
             "rr_coord",
             1,
             &[ElementKind::F32],
-            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Sum }],
+            vec![ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Sum,
+            }],
             reduced(0) + coord(0),
         );
         let key = rr_key(ElementKind::F32, OpCategory::Normalization);
@@ -8245,7 +9198,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Elementwise-only in 0d")]
     fn coord_in_a_contraction_epilogue_is_rejected_at_the_plan_gate() {
-        use crate::ir::{reduced, ContractionAxes};
+        use crate::ir::{ContractionAxes, reduced};
         // The contraction epilogue iterates (m, n), not an elementwise cell.
         let op = OpDef::contraction(
             "mm_coord",
@@ -8422,10 +9375,10 @@ mod multi_output_tests {
     //! / an interior product emitted ONCE). Single-output emission stays
     //! byte-identical (extra_out_bodies empty) — pinned by
     //! `single_body_multi_matches_elementwise`.
-    use crate::ir::{input, konst, BinaryOp, OpDef, UnaryOp};
-    use crate::{generate, Cuda};
+    use crate::ir::{BinaryOp, OpDef, UnaryOp, input, konst};
+    use crate::{Cuda, generate};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     /// N contiguous 1D operands. `even` picks the vectorizable extent (V4 f32 /
@@ -8458,8 +9411,16 @@ mod multi_output_tests {
     fn mul_backward_scalar_shares_the_dy_load_once() {
         // da = dy*b, db = dy*a. dy = in0 is loaded by both outputs; the shared
         // load hoists to ONE `tmp0 = in0[i]` referenced by both stores.
-        let k = generate(&mul_backward(ElementKind::F32), &contig_key(ElementKind::F32, 5, false), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_mul_backward_f32_mo2_scalar", "{}", k.source);
+        let k = generate(
+            &mul_backward(ElementKind::F32),
+            &contig_key(ElementKind::F32, 5, false),
+            &Cuda,
+        );
+        assert_eq!(
+            k.name, "baracuda_gen_mul_backward_f32_mo2_scalar",
+            "{}",
+            k.source
+        );
         assert_eq!(
             k.source.matches("in0[i]").count(),
             1,
@@ -8467,8 +9428,16 @@ mod multi_output_tests {
             k.source
         );
         assert!(k.source.contains("float tmp0 = in0[i];"), "{}", k.source);
-        assert!(k.source.contains("out0[i] = (tmp0 * in2[i]);"), "{}", k.source);
-        assert!(k.source.contains("out1[i] = (tmp0 * in1[i]);"), "{}", k.source);
+        assert!(
+            k.source.contains("out0[i] = (tmp0 * in2[i]);"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out1[i] = (tmp0 * in1[i]);"),
+            "{}",
+            k.source
+        );
         assert!(k.source.contains("float* __restrict__ out0,"));
         assert!(k.source.contains("float* __restrict__ out1,"));
     }
@@ -8482,14 +9451,45 @@ mod multi_output_tests {
         let db = (dyb.clone() * input(1) / input(2)).unary(UnaryOp::Neg);
         let op = OpDef::elementwise_multi("div_backward", 3, &[ElementKind::F32], vec![dyb, db]);
         let k = generate(&op, &contig_key(ElementKind::F32, 5, false), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_div_backward_f32_mo2_scalar", "{}", k.source);
-        assert_eq!(k.source.matches("in0[i]").count(), 1, "dy loaded once:\n{}", k.source);
-        assert_eq!(k.source.matches("in2[i]").count(), 1, "b loaded once:\n{}", k.source);
+        assert_eq!(
+            k.name, "baracuda_gen_div_backward_f32_mo2_scalar",
+            "{}",
+            k.source
+        );
+        assert_eq!(
+            k.source.matches("in0[i]").count(),
+            1,
+            "dy loaded once:\n{}",
+            k.source
+        );
+        assert_eq!(
+            k.source.matches("in2[i]").count(),
+            1,
+            "b loaded once:\n{}",
+            k.source
+        );
         assert!(k.source.contains("float tmp0 = in2[i];"), "{}", k.source);
-        assert!(k.source.contains("float tmp1 = (in0[i] / tmp0);"), "the dy/b interior:\n{}", k.source);
-        assert!(k.source.contains("out0[i] = tmp1;"), "da IS the shared interior:\n{}", k.source);
-        assert!(k.source.contains("out1[i] = (-((tmp1 * in1[i]) / tmp0));"), "{}", k.source);
-        assert_eq!(k.source.matches("tmp1").count(), 3, "interior reused by both stores:\n{}", k.source);
+        assert!(
+            k.source.contains("float tmp1 = (in0[i] / tmp0);"),
+            "the dy/b interior:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out0[i] = tmp1;"),
+            "da IS the shared interior:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out1[i] = (-((tmp1 * in1[i]) / tmp0));"),
+            "{}",
+            k.source
+        );
+        assert_eq!(
+            k.source.matches("tmp1").count(),
+            3,
+            "interior reused by both stores:\n{}",
+            k.source
+        );
     }
 
     #[test]
@@ -8503,12 +9503,33 @@ mod multi_output_tests {
             vec![input(0) * input(2), input(0) * input(1), input(0)],
         );
         let k = generate(&op, &contig_key(ElementKind::F32, 6, false), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_fma_backward_f32_mo3_scalar", "{}", k.source);
-        assert_eq!(k.source.matches("in0[i]").count(), 1, "dy loaded once:\n{}", k.source);
+        assert_eq!(
+            k.name, "baracuda_gen_fma_backward_f32_mo3_scalar",
+            "{}",
+            k.source
+        );
+        assert_eq!(
+            k.source.matches("in0[i]").count(),
+            1,
+            "dy loaded once:\n{}",
+            k.source
+        );
         assert!(k.source.contains("float tmp0 = in0[i];"), "{}", k.source);
-        assert!(k.source.contains("out0[i] = (tmp0 * in2[i]);"), "{}", k.source);
-        assert!(k.source.contains("out1[i] = (tmp0 * in1[i]);"), "{}", k.source);
-        assert!(k.source.contains("out2[i] = tmp0;"), "dc is the shared dy copy:\n{}", k.source);
+        assert!(
+            k.source.contains("out0[i] = (tmp0 * in2[i]);"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out1[i] = (tmp0 * in1[i]);"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out2[i] = tmp0;"),
+            "dc is the shared dy copy:\n{}",
+            k.source
+        );
     }
 
     #[test]
@@ -8516,13 +9537,37 @@ mod multi_output_tests {
         // Transposed operands → the strided emitter: each output has its own
         // per-axis stride array (so0_*, so1_*) and unraveled offset (oo0, oo1);
         // dy still loaded once.
-        let k = generate(&mul_backward(ElementKind::F32), &strided_key(ElementKind::F32, 5), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_mul_backward_f32_mo2_strided_r2", "{}", k.source);
-        assert!(k.source.contains("long long oo0 = c0*so0_0 + c1*so0_1;"), "{}", k.source);
-        assert!(k.source.contains("long long oo1 = c0*so1_0 + c1*so1_1;"), "{}", k.source);
+        let k = generate(
+            &mul_backward(ElementKind::F32),
+            &strided_key(ElementKind::F32, 5),
+            &Cuda,
+        );
+        assert_eq!(
+            k.name, "baracuda_gen_mul_backward_f32_mo2_strided_r2",
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("long long oo0 = c0*so0_0 + c1*so0_1;"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("long long oo1 = c0*so1_0 + c1*so1_1;"),
+            "{}",
+            k.source
+        );
         assert!(k.source.contains("float tmp0 = in0[o0];"), "{}", k.source);
-        assert!(k.source.contains("out0[oo0] = (tmp0 * in2[o2]);"), "{}", k.source);
-        assert!(k.source.contains("out1[oo1] = (tmp0 * in1[o1]);"), "{}", k.source);
+        assert!(
+            k.source.contains("out0[oo0] = (tmp0 * in2[o2]);"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out1[oo1] = (tmp0 * in1[o1]);"),
+            "{}",
+            k.source
+        );
         assert_eq!(k.source.matches("in0[o0]").count(), 1, "{}", k.source);
     }
 
@@ -8530,8 +9575,16 @@ mod multi_output_tests {
     fn mul_backward_vectorized_float4_multi_store() {
         // Contiguous V4 f32 → the native float4 path with two output vectors;
         // each input vector loaded once, both output vectors stored.
-        let k = generate(&mul_backward(ElementKind::F32), &contig_key(ElementKind::F32, 5, true), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_mul_backward_f32_mo2_co_v4", "{}", k.source);
+        let k = generate(
+            &mul_backward(ElementKind::F32),
+            &contig_key(ElementKind::F32, 5, true),
+            &Cuda,
+        );
+        assert_eq!(
+            k.name, "baracuda_gen_mul_backward_f32_mo2_co_v4",
+            "{}",
+            k.source
+        );
         assert!(k.source.contains("float4 v0 = in0[i];"), "{}", k.source);
         assert!(k.source.contains("vo0.x = (tmp0 * v2.x);"), "{}", k.source);
         assert!(k.source.contains("vo1.x = (tmp0 * v1.x);"), "{}", k.source);
@@ -8543,8 +9596,16 @@ mod multi_output_tests {
     fn mul_backward_packed_f16_both_bodies_pack() {
         // f16 V8 contiguous, all-Input-leaf bodies → the packed __half2 path with
         // two output vectors (4 pairs each).
-        let k = generate(&mul_backward(ElementKind::F16), &contig_key(ElementKind::F16, 5, true), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_mul_backward_f16_mo2_co_v8", "{}", k.source);
+        let k = generate(
+            &mul_backward(ElementKind::F16),
+            &contig_key(ElementKind::F16, 5, true),
+            &Cuda,
+        );
+        assert_eq!(
+            k.name, "baracuda_gen_mul_backward_f16_mo2_co_v8",
+            "{}",
+            k.source
+        );
         assert!(
             k.source.contains(
                 "struct __align__(16) baracuda_gen_mul_backward_f16_mo2_co_v8_vec { __half2 a, b, c, d; };"
@@ -8552,7 +9613,12 @@ mod multi_output_tests {
             "{}",
             k.source
         );
-        assert!(k.source.contains("baracuda_gen_mul_backward_f16_mo2_co_v8_vec v0 = in0[i];"), "{}", k.source);
+        assert!(
+            k.source
+                .contains("baracuda_gen_mul_backward_f16_mo2_co_v8_vec v0 = in0[i];"),
+            "{}",
+            k.source
+        );
         assert!(k.source.contains("vo0.a = "), "{}", k.source);
         assert!(k.source.contains("vo1.a = "), "{}", k.source);
         assert!(k.source.contains("out0[i] = vo0;"), "{}", k.source);
@@ -8570,10 +9636,22 @@ mod multi_output_tests {
             vec![input(0) * input(1), input(0) * konst(0.5)],
         );
         let k = generate(&op, &contig_key(ElementKind::F16, 4, true), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_scaled_bw_f16_mo2_scalar", "{}", k.source);
-        assert!(!k.source.contains("__half2"), "no packed pairs on the fallback:\n{}", k.source);
+        assert_eq!(
+            k.name, "baracuda_gen_scaled_bw_f16_mo2_scalar",
+            "{}",
+            k.source
+        );
+        assert!(
+            !k.source.contains("__half2"),
+            "no packed pairs on the fallback:\n{}",
+            k.source
+        );
         assert!(k.source.contains("__half tmp0 = in0[i];"), "{}", k.source);
-        assert!(k.source.contains("out0[i] = (tmp0 * in1[i]);"), "{}", k.source);
+        assert!(
+            k.source.contains("out0[i] = (tmp0 * in1[i]);"),
+            "{}",
+            k.source
+        );
         assert!(k.source.contains("out1[i] = (tmp0 * 0.5);"), "{}", k.source);
     }
 
@@ -8594,7 +9672,10 @@ mod multi_output_tests {
             &Cuda,
         );
         assert_eq!(single.name, via_multi.name);
-        assert_eq!(single.source, via_multi.source, "single-output byte-identical");
+        assert_eq!(
+            single.source, via_multi.source,
+            "single-output byte-identical"
+        );
     }
 
     #[test]
@@ -8612,10 +9693,19 @@ mod multi_output_tests {
             ],
         );
         let k = generate(&op, &contig_key(ElementKind::F32, 4, false), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_relu_like_bw_f32_mo2_scalar", "{}", k.source);
-        assert!(k.source.contains("out1[i] = tmp0;"), "the dy copy:\n{}", k.source);
+        assert_eq!(
+            k.name, "baracuda_gen_relu_like_bw_f32_mo2_scalar",
+            "{}",
+            k.source
+        );
         assert!(
-            k.source.contains("out0[i] = (tmp0 * ((float)in1[i] > (float)0.0 ? 1.0f : 0.0f));"),
+            k.source.contains("out1[i] = tmp0;"),
+            "the dy copy:\n{}",
+            k.source
+        );
+        assert!(
+            k.source
+                .contains("out0[i] = (tmp0 * ((float)in1[i] > (float)0.0 ? 1.0f : 0.0f));"),
             "{}",
             k.source
         );
@@ -8650,9 +9740,9 @@ mod scan_tests {
     //! is `ondevice/scan_validate.cu`; these are source-shape + variant-wiring pins.
     use crate::ir::{Access, OpDef, ReduceOp};
     use crate::plan::Schedule;
-    use crate::{build_plan, generate, generate_variants, Cuda};
+    use crate::{Cuda, build_plan, generate, generate_variants};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     fn scan_key(dt: ElementKind) -> StructureKey {
@@ -8664,7 +9754,14 @@ mod scan_tests {
     #[test]
     fn base_emits_full_width_serial_fold() {
         // Inclusive forward cumsum: thread 0 walks the axis, writes out[idx] every j.
-        let sc = OpDef::scan_simple("cumsum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let sc = OpDef::scan_simple(
+            "cumsum",
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+        );
         let k = generate(&sc, &scan_key(ElementKind::F32), &Cuda);
         assert_eq!(k.name, "baracuda_gen_cumsum_f32_scan_sum");
         assert!(k.source.contains("if (threadIdx.x == 0)"));
@@ -8696,7 +9793,10 @@ mod scan_tests {
         // exclusive[0] = the Max monoid identity (-inf), emitted HEADER-LIGHT via the
         // bit-cast intrinsic (NOT the <cmath> INFINITY macro the headerless-nvrtc
         // discipline forbids — the reduce/row-reduce Max/Min path follows the same).
-        assert!(k.source.contains("have ? acc : (__int_as_float(0xff800000u))"));
+        assert!(
+            k.source
+                .contains("have ? acc : (__int_as_float(0xff800000u))")
+        );
         assert!(
             !k.source.contains("INFINITY"),
             "scan Max/Min must not emit the headerless-forbidden INFINITY macro:\n{}",
@@ -8707,7 +9807,14 @@ mod scan_tests {
     #[test]
     fn base_is_bit_identical_variant_index_0() {
         // generate_variants seeds base at index 0, BitIdentical.
-        let sc = OpDef::scan_simple("cumsum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let sc = OpDef::scan_simple(
+            "cumsum",
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+        );
         let vs = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda);
         assert_eq!(vs[0].tag, "base");
         assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
@@ -8718,7 +9825,10 @@ mod scan_tests {
         for op in [ReduceOp::Sum, ReduceOp::Prod] {
             let sc = OpDef::scan_simple("cum", &[ElementKind::F32], op, 1, false, false);
             let vs = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda);
-            let bs = vs.iter().find(|v| v.tag == "blockscan").expect("blockscan variant");
+            let bs = vs
+                .iter()
+                .find(|v| v.tag == "blockscan")
+                .expect("blockscan variant");
             assert_eq!(
                 bs.fidelity,
                 crate::VariantFidelity::ReassociatedDeterministic,
@@ -8797,9 +9907,14 @@ mod scan_tests {
     #[ignore = "manual regeneration tool for ondevice/relu_propagating_validate.cu"]
     fn dump_relu_sources() {
         use crate::ir::input;
-        use baracuda_kernels_types::{structure_key, ArchSku, OpCategory, OperandDesc};
+        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("RELU_OUT").unwrap_or_else(|_| ".".to_string());
-        for dt in [ElementKind::F32, ElementKind::F64, ElementKind::F16, ElementKind::Bf16] {
+        for dt in [
+            ElementKind::F32,
+            ElementKind::F64,
+            ElementKind::F16,
+            ElementKind::Bf16,
+        ] {
             let relu = OpDef::elementwise("relu", 1, &[dt], input(0).relu());
             let esz = match dt {
                 ElementKind::F16 | ElementKind::Bf16 => 2,
@@ -8840,7 +9955,8 @@ mod scan_tests {
         ] {
             for reverse in [false, true] {
                 for exclusive in [false, true] {
-                    let sc = OpDef::scan_simple(tag, &[ElementKind::F32], op, 1, reverse, exclusive);
+                    let sc =
+                        OpDef::scan_simple(tag, &[ElementKind::F32], op, 1, reverse, exclusive);
                     write(generate(&sc, &scan_key(ElementKind::F32), &Cuda));
                 }
             }
@@ -8857,7 +9973,14 @@ mod scan_tests {
             }
         }
         // f64 serial base (Sum) for the double-precision bit-exact case.
-        let scd = OpDef::scan_simple("cumsum", &[ElementKind::F64], ReduceOp::Sum, 1, false, false);
+        let scd = OpDef::scan_simple(
+            "cumsum",
+            &[ElementKind::F64],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+        );
         write(generate(&scd, &scan_key(ElementKind::F64), &Cuda));
     }
 }
@@ -8869,9 +9992,9 @@ mod window_tests {
     //! `ondevice/window_validate.cu`; these are source-shape + geometry pins.
     use crate::ir::{Access, OpDef, ReduceOp};
     use crate::plan::Schedule;
-    use crate::{build_plan, generate, Cuda};
+    use crate::{Cuda, build_plan, generate};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     // input [8, k_in] contiguous, output [8, k_out] contiguous (downsampled).
@@ -8883,7 +10006,18 @@ mod window_tests {
 
     #[test]
     fn schedule_and_access_are_window() {
-        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Max, 1, 3, 2, 1, 1, 1, false);
+        let p = OpDef::window_simple(
+            "pool",
+            &[ElementKind::F32],
+            ReduceOp::Max,
+            1,
+            3,
+            2,
+            1,
+            1,
+            1,
+            false,
+        );
         let key = window_key(ElementKind::F32, 128, 64);
         let plan = build_plan(&p, &key);
         assert!(matches!(plan.schedule, Schedule::Window { .. }));
@@ -8892,17 +10026,45 @@ mod window_tests {
 
     #[test]
     fn max_pool_emits_grid_stride_have_flag_and_nan_probe() {
-        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Max, 1, 3, 2, 1, 1, 1, false);
+        let p = OpDef::window_simple(
+            "pool",
+            &[ElementKind::F32],
+            ReduceOp::Max,
+            1,
+            3,
+            2,
+            1,
+            1,
+            1,
+            false,
+        );
         let k = generate(&p, &window_key(ElementKind::F32, 128, 64), &Cuda);
         assert_eq!(k.name, "baracuda_gen_pool_f32_window_max");
         // one thread per OUTPUT element, grid-stride over n_out*k_out.
-        assert!(k.source.contains("long long total = n_out * k_out;"), "{}", k.source);
-        assert!(k.source.contains("long long o = t - row * k_out;"), "{}", k.source);
+        assert!(
+            k.source.contains("long long total = n_out * k_out;"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("long long o = t - row * k_out;"),
+            "{}",
+            k.source
+        );
         // tap position with stride/pad/dilation baked as literals (size 3, stride 2, pad 1, dil 1).
-        assert!(k.source.contains("long long p = o * 2 - 1 + (long long)kk * 1;"), "{}", k.source);
+        assert!(
+            k.source
+                .contains("long long p = o * 2 - 1 + (long long)kk * 1;"),
+            "{}",
+            k.source
+        );
         assert!(k.source.contains("if (p >= 0 && p < k_in)"), "{}", k.source);
         // have-flag + NaN-propagate probe.
-        assert!(k.source.contains("if (!have || v != v || v > best)"), "{}", k.source);
+        assert!(
+            k.source.contains("if (!have || v != v || v > best)"),
+            "{}",
+            k.source
+        );
     }
 
     #[test]
@@ -8917,13 +10079,28 @@ mod window_tests {
             let p = OpDef::window_simple("pool", &[ElementKind::F32], op, 1, 2, 2, 1, 0, 0, false);
             let k = generate(&p, &window_key(ElementKind::F32, 128, 64), &Cuda);
             assert!(k.source.contains(ident), "{}", k.source);
-            assert!(!k.source.contains("INFINITY"), "no INFINITY macro:\n{}", k.source);
+            assert!(
+                !k.source.contains("INFINITY"),
+                "no INFINITY macro:\n{}",
+                k.source
+            );
         }
     }
 
     #[test]
     fn min_pool_uses_less_than_compare() {
-        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Min, 1, 2, 2, 1, 0, 0, false);
+        let p = OpDef::window_simple(
+            "pool",
+            &[ElementKind::F32],
+            ReduceOp::Min,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            false,
+        );
         let k = generate(&p, &window_key(ElementKind::F32, 128, 64), &Cuda);
         assert_eq!(k.name, "baracuda_gen_pool_f32_window_min");
         assert!(k.source.contains("v != v || v < best"), "{}", k.source);
@@ -8932,13 +10109,25 @@ mod window_tests {
     #[test]
     fn avg_pool_exclude_pad_divides_by_valid_count() {
         // count_include_pad=false ⇒ divide by the valid-tap count, guarded on cnt>0.
-        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Mean, 1, 3, 1, 1, 1, 1, false);
+        let p = OpDef::window_simple(
+            "pool",
+            &[ElementKind::F32],
+            ReduceOp::Mean,
+            1,
+            3,
+            1,
+            1,
+            1,
+            1,
+            false,
+        );
         let k = generate(&p, &window_key(ElementKind::F32, 128, 128), &Cuda);
         assert_eq!(k.name, "baracuda_gen_pool_f32_window_mean");
         assert!(k.source.contains("acc = acc + v;"), "{}", k.source);
         assert!(k.source.contains("cnt += 1;"), "{}", k.source);
         assert!(
-            k.source.contains("(cnt > 0) ? (acc / (float)cnt) : (float)0;"),
+            k.source
+                .contains("(cnt > 0) ? (acc / (float)cnt) : (float)0;"),
             "{}",
             k.source
         );
@@ -8948,39 +10137,107 @@ mod window_tests {
     fn avg_pool_include_pad_divides_by_size_literal() {
         // count_include_pad=true ⇒ divide by the window size literal; the entry
         // point is suffixed `_cip` so the two divisor policies never collide.
-        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Mean, 1, 4, 1, 1, 1, 1, true);
+        let p = OpDef::window_simple(
+            "pool",
+            &[ElementKind::F32],
+            ReduceOp::Mean,
+            1,
+            4,
+            1,
+            1,
+            1,
+            1,
+            true,
+        );
         let k = generate(&p, &window_key(ElementKind::F32, 128, 128), &Cuda);
         assert_eq!(k.name, "baracuda_gen_pool_f32_window_mean_cip");
-        assert!(k.source.contains("float prefix = acc / (float)4;"), "{}", k.source);
+        assert!(
+            k.source.contains("float prefix = acc / (float)4;"),
+            "{}",
+            k.source
+        );
     }
 
     #[test]
     fn sum_pool_has_no_divide() {
-        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Sum, 1, 3, 1, 1, 0, 0, false);
+        let p = OpDef::window_simple(
+            "pool",
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            3,
+            1,
+            1,
+            0,
+            0,
+            false,
+        );
         let k = generate(&p, &window_key(ElementKind::F32, 128, 126), &Cuda);
         assert_eq!(k.name, "baracuda_gen_pool_f32_window_sum");
         assert!(k.source.contains("float prefix = acc;"), "{}", k.source);
-        assert!(!k.source.contains("/ (float)"), "sum-pool never divides:\n{}", k.source);
+        assert!(
+            !k.source.contains("/ (float)"),
+            "sum-pool never divides:\n{}",
+            k.source
+        );
     }
 
     #[test]
     fn f16_pool_upconverts_and_stores_half() {
-        let p = OpDef::window_simple("pool", &[ElementKind::F16], ReduceOp::Mean, 1, 2, 2, 1, 0, 0, false);
+        let p = OpDef::window_simple(
+            "pool",
+            &[ElementKind::F16],
+            ReduceOp::Mean,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            false,
+        );
         let k = generate(&p, &window_key(ElementKind::F16, 128, 64), &Cuda);
         assert!(k.source.contains("#include <cuda_fp16.h>"), "{}", k.source);
-        assert!(k.source.contains("float v = __half2float(in0[idx]);"), "{}", k.source);
-        assert!(k.source.contains("out[t] = __float2half(prefix);"), "{}", k.source);
+        assert!(
+            k.source.contains("float v = __half2float(in0[idx]);"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out[t] = __float2half(prefix);"),
+            "{}",
+            k.source
+        );
     }
 
     #[test]
     fn integer_max_pool_uses_native_accumulator_no_infinity() {
         // I32 max-pool selects in the native ctype; the identity is the exact int
         // minimum literal (never a float INFINITY).
-        let p = OpDef::window_simple("pool", &[ElementKind::I32], ReduceOp::Max, 1, 2, 2, 1, 0, 0, false);
+        let p = OpDef::window_simple(
+            "pool",
+            &[ElementKind::I32],
+            ReduceOp::Max,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            false,
+        );
         let k = generate(&p, &window_key(ElementKind::I32, 128, 64), &Cuda);
-        assert!(k.source.contains("int best = (-2147483647 - 1);"), "{}", k.source);
+        assert!(
+            k.source.contains("int best = (-2147483647 - 1);"),
+            "{}",
+            k.source
+        );
         assert!(!k.source.contains("INFINITY"), "{}", k.source);
-        assert!(!k.source.contains("float"), "no float accumulator for int pool:\n{}", k.source);
+        assert!(
+            !k.source.contains("float"),
+            "no float accumulator for int pool:\n{}",
+            k.source
+        );
     }
 
     /// Manual dump tool (not a wired assertion): regenerate the window `.cu`
@@ -9001,17 +10258,117 @@ mod window_tests {
         //   (op_name, dtype, combine, size, stride, dilation, pad_lo, pad_hi, cip)
         let cases: &[(&str, ElementKind, ReduceOp, u8, u8, u8, u8, u8, bool)] = &[
             // f32 — stride>1 no pad; stride1 + pad (NaN); dilated + pad both ends.
-            ("mx_a", ElementKind::F32, ReduceOp::Max, 2, 2, 1, 0, 0, false),
-            ("mx_b", ElementKind::F32, ReduceOp::Max, 3, 1, 1, 1, 1, false),
-            ("mx_c", ElementKind::F32, ReduceOp::Max, 3, 2, 2, 2, 2, false),
-            ("mn_b", ElementKind::F32, ReduceOp::Min, 3, 1, 1, 1, 1, false),
-            ("sm_d", ElementKind::F32, ReduceOp::Sum, 3, 2, 1, 0, 0, false),
-            ("av_b", ElementKind::F32, ReduceOp::Mean, 3, 1, 1, 1, 1, false),
-            ("ai_b", ElementKind::F32, ReduceOp::Mean, 3, 1, 1, 1, 1, true),
-            ("av_c", ElementKind::F32, ReduceOp::Mean, 3, 2, 2, 2, 2, false),
+            (
+                "mx_a",
+                ElementKind::F32,
+                ReduceOp::Max,
+                2,
+                2,
+                1,
+                0,
+                0,
+                false,
+            ),
+            (
+                "mx_b",
+                ElementKind::F32,
+                ReduceOp::Max,
+                3,
+                1,
+                1,
+                1,
+                1,
+                false,
+            ),
+            (
+                "mx_c",
+                ElementKind::F32,
+                ReduceOp::Max,
+                3,
+                2,
+                2,
+                2,
+                2,
+                false,
+            ),
+            (
+                "mn_b",
+                ElementKind::F32,
+                ReduceOp::Min,
+                3,
+                1,
+                1,
+                1,
+                1,
+                false,
+            ),
+            (
+                "sm_d",
+                ElementKind::F32,
+                ReduceOp::Sum,
+                3,
+                2,
+                1,
+                0,
+                0,
+                false,
+            ),
+            (
+                "av_b",
+                ElementKind::F32,
+                ReduceOp::Mean,
+                3,
+                1,
+                1,
+                1,
+                1,
+                false,
+            ),
+            (
+                "ai_b",
+                ElementKind::F32,
+                ReduceOp::Mean,
+                3,
+                1,
+                1,
+                1,
+                1,
+                true,
+            ),
+            (
+                "av_c",
+                ElementKind::F32,
+                ReduceOp::Mean,
+                3,
+                2,
+                2,
+                2,
+                2,
+                false,
+            ),
             // f64 oracle-exact avg + max (dilated + padded).
-            ("av_c64", ElementKind::F64, ReduceOp::Mean, 3, 2, 2, 2, 2, false),
-            ("mx_c64", ElementKind::F64, ReduceOp::Max, 3, 2, 2, 2, 2, false),
+            (
+                "av_c64",
+                ElementKind::F64,
+                ReduceOp::Mean,
+                3,
+                2,
+                2,
+                2,
+                2,
+                false,
+            ),
+            (
+                "mx_c64",
+                ElementKind::F64,
+                ReduceOp::Max,
+                3,
+                2,
+                2,
+                2,
+                2,
+                false,
+            ),
         ];
         for &(name, dt, op, size, stride, dil, plo, phi, cip) in cases {
             let p = OpDef::window_simple(name, &[dt], op, 1, size, stride, dil, plo, phi, cip);
@@ -9027,9 +10384,9 @@ mod sort_tests {
     //! correct CUDA. On-device numeric proof is `ondevice/sort_validate.cu`; these
     //! are source-shape + variant-wiring + no-INFINITY pins.
     use crate::ir::{OpDef, SortOrder};
-    use crate::{generate, generate_variants, Cuda};
+    use crate::{Cuda, generate, generate_variants};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     fn sort_key(dt: ElementKind) -> StructureKey {
@@ -9049,26 +10406,65 @@ mod sort_tests {
         let k = generate(&sc, &sort_key(ElementKind::F32), &Cuda);
         assert_eq!(k.name, "baracuda_gen_sort_f32_rowsort_asc_stable");
         // Signature: single input, values output (float), n_out + k launch args.
-        assert!(k.source.contains("const float* __restrict__ in0,"), "{}", k.source);
-        assert!(k.source.contains("float* __restrict__ out,"), "{}", k.source);
+        assert!(
+            k.source.contains("const float* __restrict__ in0,"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("float* __restrict__ out,"),
+            "{}",
+            k.source
+        );
         assert!(k.source.contains("long long n_out,"), "{}", k.source);
         assert!(k.source.contains("long long k)"), "{}", k.source);
         // Rank sort: one thread per output element, scans its row, writes the raw value.
-        assert!(k.source.contains("long long total = n_out * k;"), "{}", k.source);
-        assert!(k.source.contains("if (sort_f32_asc_pair_lt(kj, j, ki, i)) r++;"), "{}", k.source);
-        assert!(k.source.contains("out[base + r] = in0[base + i];"), "{}", k.source);
+        assert!(
+            k.source.contains("long long total = n_out * k;"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source
+                .contains("if (sort_f32_asc_pair_lt(kj, j, ki, i)) r++;"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out[base + r] = in0[base + i];"),
+            "{}",
+            k.source
+        );
         // Review-caught: the tie index (also the LOAD address) must be `long long`,
         // never `int` — an int index OOB-reads past 2^31 on the any-k base.
         assert!(k.source.contains("long long i = t - base;"), "{}", k.source);
-        assert!(k.source.contains("pair_lt(float ka, long long ia, float kb, long long ib)"), "{}", k.source);
-        assert!(!k.source.contains("int i = (int)(t - base);"), "{}", k.source);
+        assert!(
+            k.source
+                .contains("pair_lt(float ka, long long ia, float kb, long long ib)"),
+            "{}",
+            k.source
+        );
+        assert!(
+            !k.source.contains("int i = (int)(t - base);"),
+            "{}",
+            k.source
+        );
         // Base has no cooperative primitive.
         assert!(!k.source.contains("__syncthreads"), "{}", k.source);
         assert!(!k.source.contains("__shared__"), "{}", k.source);
         // asc comparator argument order (ka,kb first).
-        assert!(k.source.contains("if (sort_f32_asc_key_lt(ka, kb)) return true;"), "{}", k.source);
+        assert!(
+            k.source
+                .contains("if (sort_f32_asc_key_lt(ka, kb)) return true;"),
+            "{}",
+            k.source
+        );
         // FP dtype: the NaN-greatest branch is present.
-        assert!(k.source.contains("if (a != a) return false;"), "{}", k.source);
+        assert!(
+            k.source.contains("if (a != a) return false;"),
+            "{}",
+            k.source
+        );
     }
 
     #[test]
@@ -9083,7 +10479,12 @@ mod sort_tests {
         // output (k <= 2^31-1 is an inherent argsort precondition).
         assert!(k.source.contains("out[base + r] = (int)i;"), "{}", k.source);
         // desc comparator: key_lt(kb, ka) first (reversed key order).
-        assert!(k.source.contains("if (argsort_f32_desc_idx_key_lt(kb, ka)) return true;"), "{}", k.source);
+        assert!(
+            k.source
+                .contains("if (argsort_f32_desc_idx_key_lt(kb, ka)) return true;"),
+            "{}",
+            k.source
+        );
     }
 
     #[test]
@@ -9091,22 +10492,49 @@ mod sort_tests {
         // i32: the comparator is a bare `a < b` (no NaN branch), key type = int.
         let sc = OpDef::row_sort("sort", ElementKind::I32, SortOrder::Asc);
         let k = generate(&sc, &sort_key(ElementKind::I32), &Cuda);
-        assert!(k.source.contains("bool sort_i32_asc_key_lt(int a, int b)"), "{}", k.source);
-        assert!(!k.source.contains("if (a != a)"), "int sort has no NaN branch:\n{}", k.source);
+        assert!(
+            k.source.contains("bool sort_i32_asc_key_lt(int a, int b)"),
+            "{}",
+            k.source
+        );
+        assert!(
+            !k.source.contains("if (a != a)"),
+            "int sort has no NaN branch:\n{}",
+            k.source
+        );
     }
 
     #[test]
     fn bitonic_asc_smem_pad_and_barriers() {
         let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
         let vs = generate_variants(&sc, &sort_key(ElementKind::F32), &Cuda);
-        let bt = vs.iter().find(|v| v.tag == "bitonic").expect("bitonic variant");
+        let bt = vs
+            .iter()
+            .find(|v| v.tag == "bitonic")
+            .expect("bitonic variant");
         let src = &bt.kernels[0].source;
-        assert!(bt.kernels[0].name.ends_with("_bitonic"), "{}", bt.kernels[0].name);
+        assert!(
+            bt.kernels[0].name.ends_with("_bitonic"),
+            "{}",
+            bt.kernels[0].name
+        );
         // dynamic smem as (key, index) pairs, staged uchar-typed.
-        assert!(src.contains("extern __shared__ unsigned char baracuda_sort_smem[];"), "{}", src);
-        assert!(src.contains("long long pow2 = 1; while (pow2 < k) pow2 <<= 1;"), "{}", src);
+        assert!(
+            src.contains("extern __shared__ unsigned char baracuda_sort_smem[];"),
+            "{}",
+            src
+        );
+        assert!(
+            src.contains("long long pow2 = 1; while (pow2 < k) pow2 <<= 1;"),
+            "{}",
+            src
+        );
         // asc-FP pad sentinel = qNaN (NOT +inf, NOT the INFINITY macro).
-        assert!(src.contains("skey[p] = __int_as_float(0x7fc00000u);"), "{}", src);
+        assert!(
+            src.contains("skey[p] = __int_as_float(0x7fc00000u);"),
+            "{}",
+            src
+        );
         // bitonic network with the standard swap predicate.
         assert!(src.contains("bool up = ((p & kk) == 0);"), "{}", src);
         assert!(src.contains("if (up == q_lt_p) {"), "{}", src);
@@ -9114,7 +10542,11 @@ mod sort_tests {
         assert!(src.matches("__syncthreads();").count() >= 3, "{}", src);
         // launch-note contract: k <= 1024 + the smem byte formula.
         assert!(bt.launch_note.contains("k <= 1024"), "{}", bt.launch_note);
-        assert!(bt.launch_note.contains("next_pow2(k) * 8 bytes"), "{}", bt.launch_note); // float(4)+int(4)
+        assert!(
+            bt.launch_note.contains("next_pow2(k) * 8 bytes"),
+            "{}",
+            bt.launch_note
+        ); // float(4)+int(4)
         assert_eq!(bt.fidelity, crate::VariantFidelity::BitIdentical);
     }
 
@@ -9125,17 +10557,27 @@ mod sort_tests {
         let vd = generate_variants(&scd, &sort_key(ElementKind::F64), &Cuda);
         let btd = vd.iter().find(|v| v.tag == "bitonic").unwrap();
         assert!(
-            btd.kernels[0].source.contains("skey[p] = __longlong_as_double(0xfff0000000000000ULL);"),
-            "{}", btd.kernels[0].source
+            btd.kernels[0]
+                .source
+                .contains("skey[p] = __longlong_as_double(0xfff0000000000000ULL);"),
+            "{}",
+            btd.kernels[0].source
         );
-        assert!(btd.launch_note.contains("next_pow2(k) * 12 bytes"), "{}", btd.launch_note); // double(8)+int(4)
+        assert!(
+            btd.launch_note.contains("next_pow2(k) * 12 bytes"),
+            "{}",
+            btd.launch_note
+        ); // double(8)+int(4)
 
         let sci = OpDef::row_sort("sort", ElementKind::I64, SortOrder::Asc);
         let vi = generate_variants(&sci, &sort_key(ElementKind::I64), &Cuda);
         let bti = vi.iter().find(|v| v.tag == "bitonic").unwrap();
         assert!(
-            bti.kernels[0].source.contains("skey[p] = 9223372036854775807LL;"),
-            "{}", bti.kernels[0].source
+            bti.kernels[0]
+                .source
+                .contains("skey[p] = 9223372036854775807LL;"),
+            "{}",
+            bti.kernels[0].source
         );
     }
 
@@ -9144,21 +10586,31 @@ mod sort_tests {
         // The headerless-nvrtc discipline forbids the <cmath> INFINITY macro; every
         // sort cell (base + bitonic, every dtype/order/argsort) must be header-light.
         for dt in [
-            ElementKind::F32, ElementKind::F64, ElementKind::F16, ElementKind::Bf16,
-            ElementKind::F32Strict, ElementKind::I32, ElementKind::I64,
+            ElementKind::F32,
+            ElementKind::F64,
+            ElementKind::F16,
+            ElementKind::Bf16,
+            ElementKind::F32Strict,
+            ElementKind::I32,
+            ElementKind::I64,
         ] {
             for order in [SortOrder::Asc, SortOrder::Desc] {
                 for sc in [
                     OpDef::row_sort("sort", dt, order),
                     OpDef::row_argsort("argsort", dt, order),
                 ] {
-                    let key = if sc.out_dtype.is_some() { argsort_key(dt) } else { sort_key(dt) };
+                    let key = if sc.out_dtype.is_some() {
+                        argsort_key(dt)
+                    } else {
+                        sort_key(dt)
+                    };
                     for v in generate_variants(&sc, &key, &Cuda) {
                         for kern in &v.kernels {
                             assert!(
                                 !kern.source.contains("INFINITY"),
                                 "sort cell {} must not emit INFINITY:\n{}",
-                                kern.name, kern.source
+                                kern.name,
+                                kern.source
                             );
                         }
                     }
@@ -9179,9 +10631,19 @@ mod sort_tests {
     #[test]
     fn bitonic_filter_declines_non_rowsort() {
         // A scan plan must not surface the sort bitonic variant.
-        let sc = OpDef::scan_simple("cum", &[ElementKind::F32], crate::ir::ReduceOp::Sum, 1, false, false);
+        let sc = OpDef::scan_simple(
+            "cum",
+            &[ElementKind::F32],
+            crate::ir::ReduceOp::Sum,
+            1,
+            false,
+            false,
+        );
         let vs = generate_variants(&sc, &sort_key(ElementKind::F32), &Cuda);
-        assert!(vs.iter().all(|v| v.tag != "bitonic"), "scan must not offer the sort bitonic variant");
+        assert!(
+            vs.iter().all(|v| v.tag != "bitonic"),
+            "scan must not offer the sort bitonic variant"
+        );
     }
 
     /// Manual dump tool (not a wired assertion): regenerate the sort `.cu` sources

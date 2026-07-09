@@ -22,18 +22,18 @@ fn main() {
 #[cfg(feature = "cudnn")]
 mod cudnn_impl {
     use baracuda_cudnn::{
-        convolution_forward, convolution_forward_workspace_size, ConvMode, ConvolutionDescriptor,
-        CudnnDataType, DType, FilterDescriptor, FwdAlgo, Handle as CudnnHandle, TensorDescriptor,
-        TensorFormat,
+        ConvMode, ConvolutionDescriptor, CudnnDataType, DType, FilterDescriptor, FwdAlgo,
+        Handle as CudnnHandle, TensorDescriptor, TensorFormat, convolution_forward,
+        convolution_forward_workspace_size,
     };
     use baracuda_driver::DeviceBuffer;
     use baracuda_kernels::{
-        contiguous_stride, Conv2dArgs, Conv2dDescriptor, Conv2dPlan, ElementKind, PlanPreference,
-        TensorMut, TensorRef, Workspace,
+        Conv2dArgs, Conv2dDescriptor, Conv2dPlan, ElementKind, PlanPreference, TensorMut,
+        TensorRef, Workspace, contiguous_stride,
     };
     use baracuda_kernels_bench::{
-        append_csv_row, conv2d_flops, measure_median_ns, setup_device, time_with_events, warmup,
-        Conv2dShape, PhaseTwentyNineRow, PytorchBaseline, CONV2D_SWEEP,
+        CONV2D_SWEEP, Conv2dShape, PhaseTwentyNineRow, PytorchBaseline, append_csv_row,
+        conv2d_flops, measure_median_ns, setup_device, time_with_events, warmup,
     };
     use criterion::{BenchmarkId, Criterion, Throughput};
     use half::f16;
@@ -126,7 +126,8 @@ mod cudnn_impl {
                         stride: sty,
                     },
                 };
-                plan.run_fw(&stream, workspace, args).expect("baracuda conv2d");
+                plan.run_fw(&stream, workspace, args)
+                    .expect("baracuda conv2d");
             };
             warmup(&stream, &mut run);
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 20, &mut run);

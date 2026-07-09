@@ -21,11 +21,11 @@ fn main() {
 mod cudnn_impl {
     use baracuda_driver::DeviceBuffer;
     use baracuda_kernels::{
-        contiguous_stride, Conv2dArgs, Conv2dDescriptor, Conv2dPlan, ElementKind, PlanPreference,
-        TensorMut, TensorRef, Workspace,
+        Conv2dArgs, Conv2dDescriptor, Conv2dPlan, ElementKind, PlanPreference, TensorMut,
+        TensorRef, Workspace, contiguous_stride,
     };
     use baracuda_kernels_bench::{
-        conv2d_flops, setup_device, time_with_events, warmup, Conv2dShape, CONV2D_SWEEP,
+        CONV2D_SWEEP, Conv2dShape, conv2d_flops, setup_device, time_with_events, warmup,
     };
     use criterion::{BenchmarkId, Criterion, Throughput};
     use half::f16;
@@ -121,7 +121,8 @@ mod cudnn_impl {
                             stride: sty,
                         },
                     };
-                    plan.run_fw(&stream, workspace, args).expect("conv2d warmup");
+                    plan.run_fw(&stream, workspace, args)
+                        .expect("conv2d warmup");
                 });
 
                 bb.iter_custom(|iters| {

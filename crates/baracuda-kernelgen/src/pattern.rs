@@ -299,11 +299,7 @@ fn canonicalize(e: &ScalarExpr) -> ScalarExpr {
 
 /// Order two already-canonicalized operands ascending by [`sig`].
 fn order2(a: ScalarExpr, b: ScalarExpr) -> (ScalarExpr, ScalarExpr) {
-    if sig(&a) <= sig(&b) {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if sig(&a) <= sig(&b) { (a, b) } else { (b, a) }
 }
 
 /// Deterministic structural sort key for internal ordering only (need not equal
@@ -357,13 +353,17 @@ fn walk(
         // MaxScalar/etc.), so a `Param` operand is rejected (plain_binop).
         ScalarExpr::Binary(op, a, b) => {
             let Some(name) = binary_name(*op) else {
-                return Err(PatternError::NoFkcName { op: format!("{op:?}") });
+                return Err(PatternError::NoFkcName {
+                    op: format!("{op:?}"),
+                });
             };
             plain_binop(name, a, b, path, consumers, extracts)
         }
         ScalarExpr::Unary(op, x) => {
             let Some(name) = unary_name(*op) else {
-                return Err(PatternError::NoFkcName { op: format!("{op:?}") });
+                return Err(PatternError::NoFkcName {
+                    op: format!("{op:?}"),
+                });
             };
             Ok(op_node(
                 name,
@@ -611,7 +611,7 @@ fn node_lines(node: &PatternNode) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{input, konst, param, OpDef};
+    use crate::ir::{OpDef, input, konst, param};
     use baracuda_kernels_types::ElementKind;
 
     #[test]
@@ -666,7 +666,10 @@ pattern:
     #[test]
     fn scalar_constant_is_rejected_for_now() {
         let op = OpDef::elementwise("addk", 1, &[ElementKind::F32], input(0) + konst(0.5));
-        assert_eq!(derive_pattern(&op), Err(PatternError::ScalarParamUnsupported));
+        assert_eq!(
+            derive_pattern(&op),
+            Err(PatternError::ScalarParamUnsupported)
+        );
     }
 
     #[test]
@@ -722,7 +725,10 @@ pattern:
     fn binary_fn_with_param_operand_is_rejected() {
         // max(x, p0) has no §4.1 scalar form (no MaxScalar) — rejected, not faked.
         let op = OpDef::elementwise("mp", 1, &[ElementKind::F32], input(0).max(param(0)));
-        assert_eq!(derive_pattern(&op), Err(PatternError::ScalarParamUnsupported));
+        assert_eq!(
+            derive_pattern(&op),
+            Err(PatternError::ScalarParamUnsupported)
+        );
     }
 
     #[test]
@@ -747,18 +753,8 @@ pattern:
         // ization emits one identical pattern for both (reproducible output).
         // Matching itself doesn't require this — §3a.2a has Fuel canonicalize the
         // imported pattern too — but byte-identical emission keeps diffs clean.
-        let ab_c = OpDef::elementwise(
-            "f",
-            3,
-            &[ElementKind::F32],
-            input(0) * input(1) + input(2),
-        );
-        let c_ab = OpDef::elementwise(
-            "f",
-            3,
-            &[ElementKind::F32],
-            input(2) + input(0) * input(1),
-        );
+        let ab_c = OpDef::elementwise("f", 3, &[ElementKind::F32], input(0) * input(1) + input(2));
+        let c_ab = OpDef::elementwise("f", 3, &[ElementKind::F32], input(2) + input(0) * input(1));
         assert_eq!(
             to_fkc(&derive_pattern(&ab_c).unwrap()),
             to_fkc(&derive_pattern(&c_ab).unwrap())
@@ -791,7 +787,9 @@ pattern:
         let erfc = OpDef::elementwise("e", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Erfc));
         assert_eq!(
             derive_pattern(&erfc),
-            Err(PatternError::NoFkcName { op: "Erfc".to_string() })
+            Err(PatternError::NoFkcName {
+                op: "Erfc".to_string()
+            })
         );
         let fmax = OpDef::elementwise(
             "f",
@@ -801,7 +799,9 @@ pattern:
         );
         assert_eq!(
             derive_pattern(&fmax),
-            Err(PatternError::NoFkcName { op: "FmaxIeee".to_string() })
+            Err(PatternError::NoFkcName {
+                op: "FmaxIeee".to_string()
+            })
         );
         // …even buried under ops that DO have names.
         let nested = OpDef::elementwise(
@@ -812,7 +812,9 @@ pattern:
         );
         assert_eq!(
             derive_pattern(&nested),
-            Err(PatternError::NoFkcName { op: "Lgamma".to_string() })
+            Err(PatternError::NoFkcName {
+                op: "Lgamma".to_string()
+            })
         );
         // The pre-existing vocabulary is untouched: Erf still emits `op: Erf`.
         let erf = OpDef::elementwise("g", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Erf));
@@ -836,15 +838,12 @@ pattern:
             BinaryOp::LogicalOr,
             BinaryOp::LogicalXor,
         ] {
-            let o = OpDef::elementwise(
-                "b",
-                2,
-                &[ElementKind::I32],
-                input(0).binary(op, input(1)),
-            );
+            let o = OpDef::elementwise("b", 2, &[ElementKind::I32], input(0).binary(op, input(1)));
             assert_eq!(
                 derive_pattern(&o),
-                Err(PatternError::NoFkcName { op: format!("{op:?}") }),
+                Err(PatternError::NoFkcName {
+                    op: format!("{op:?}")
+                }),
                 "{op:?} must be an honest pattern miss"
             );
         }
@@ -870,21 +869,36 @@ pattern:
         // is exactly {Add, Mul, Maximum, Minimum} — Fuel matches comparisons
         // strictly positionally, so even the symmetric Equal must emit operands
         // as authored (a swap would desync the pattern from the user graph).
-        let ab = OpDef::elementwise("e", 2, &[ElementKind::F32], input(0).binary(BinaryOp::CmpEq, input(1)));
-        let ba = OpDef::elementwise("e", 2, &[ElementKind::F32], input(1).binary(BinaryOp::CmpEq, input(0)));
+        let ab = OpDef::elementwise(
+            "e",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpEq, input(1)),
+        );
+        let ba = OpDef::elementwise(
+            "e",
+            2,
+            &[ElementKind::F32],
+            input(1).binary(BinaryOp::CmpEq, input(0)),
+        );
         assert_ne!(
             to_fkc(&derive_pattern(&ab).unwrap()),
             to_fkc(&derive_pattern(&ba).unwrap()),
             "Equal operands must stay positional (not in the §3a.2a commutative set)"
         );
-        let lt = OpDef::elementwise("l", 2, &[ElementKind::F32], input(0).binary(BinaryOp::CmpLt, input(1)));
+        let lt = OpDef::elementwise(
+            "l",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpLt, input(1)),
+        );
         let fkc = to_fkc(&derive_pattern(&lt).unwrap());
         assert!(fkc.find("bind: 0").unwrap() < fkc.find("bind: 1").unwrap());
     }
 
     #[test]
     fn coord_bodies_are_rejected_typed_not_bridged_to_iota() {
-        use crate::ir::{coord, BinaryOp};
+        use crate::ir::{BinaryOp, coord};
         // OpTag::Iota EXISTS in fuel-kernel-seam-types 0.10.2 ("value source")
         // — but Baracuda's pattern grammar has no attrs channel for the axis
         // and the Iota↔Coord correspondence is unreconciled, so a Coord body
@@ -924,8 +938,16 @@ pattern:
     fn cmp_with_param_operand_is_rejected() {
         use crate::ir::BinaryOp;
         // x > p0 has no §4.1 scalar form (no GtScalar) — rejected, not faked.
-        let op = OpDef::elementwise("gp", 1, &[ElementKind::F32], input(0).binary(BinaryOp::CmpGt, param(0)));
-        assert_eq!(derive_pattern(&op), Err(PatternError::ScalarParamUnsupported));
+        let op = OpDef::elementwise(
+            "gp",
+            1,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpGt, param(0)),
+        );
+        assert_eq!(
+            derive_pattern(&op),
+            Err(PatternError::ScalarParamUnsupported)
+        );
     }
 
     #[test]

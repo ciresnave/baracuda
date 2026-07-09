@@ -36,7 +36,8 @@ pub struct FakeQuantizeBackwardDescriptor {
 
 impl<'a, TIn: Element> core::fmt::Debug for FakeQuantizeBackwardArgs<'a, TIn> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("FakeQuantizeBackwardArgs").finish_non_exhaustive()
+        f.debug_struct("FakeQuantizeBackwardArgs")
+            .finish_non_exhaustive()
     }
 }
 
@@ -161,9 +162,17 @@ impl<TIn: Element> FakeQuantizeBackwardPlan<TIn> {
             let scale_f64 = args.scale.to_f64();
             unsafe {
                 baracuda_kernels_sys::baracuda_kernels_fake_quantize_backward_f64_run(
-                    numel, scale_f64, zp, qmin, qmax,
-                    x_ptr, dy_ptr, dx_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    scale_f64,
+                    zp,
+                    qmin,
+                    qmax,
+                    x_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             }
         } else {
@@ -171,28 +180,54 @@ impl<TIn: Element> FakeQuantizeBackwardPlan<TIn> {
             match TIn::KIND {
                 ElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fake_quantize_backward_f32_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, dy_ptr, dx_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        dy_ptr,
+                        dx_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fake_quantize_backward_f16_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, dy_ptr, dx_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        dy_ptr,
+                        dx_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fake_quantize_backward_bf16_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, dy_ptr, dx_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        dy_ptr,
+                        dx_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
-                _ => return Err(Error::Unsupported(
-                    "FakeQuantizeBackwardPlan: unsupported TIn at run()",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "FakeQuantizeBackwardPlan: unsupported TIn at run()",
+                    ));
+                }
             }
         };
         map_status(status)

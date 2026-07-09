@@ -30,8 +30,8 @@
 //! lives on the in-memory [`DispatchEntry`] and in the bench CSV — it drives
 //! [`merge`]'s "newer wins" and arch-gate decisions but never churns the diff.
 
-use crate::structure_key::StructureKey;
 use crate::ArchSku;
+use crate::structure_key::StructureKey;
 
 /// The minimum `second_best / winner` ratio at which a freshly observed win is
 /// allowed to **flip** an existing decision to a *different* winner.
@@ -348,9 +348,7 @@ pub fn reported_entry(
     let margin = match chosen_ns {
         Some(cns) => ranked
             .iter()
-            .find(|c| {
-                c.implementor != chosen.implementor || c.entry_point != chosen.entry_point
-            })
+            .find(|c| c.implementor != chosen.implementor || c.entry_point != chosen.entry_point)
             .map_or(1.0, |other| other.median_ns / cns),
         None => 1.0,
     };
@@ -377,9 +375,9 @@ pub fn reported_entry(
 /// everything non-GEMM is left `None` (bench it, or generate it).
 #[must_use]
 pub fn seed_winner(key: &StructureKey) -> Option<(Implementor, &'static str)> {
+    use crate::ElementKind;
     use crate::sku::OpCategory;
     use crate::structure_key::{Contiguity, VecWidth, WorkClass};
-    use crate::ElementKind;
 
     if key.op != OpCategory::Gemm {
         return None;
@@ -391,7 +389,10 @@ pub fn seed_winner(key: &StructureKey) -> Option<(Implementor, &'static str)> {
     let aligned = matches!(operand0.contig, Contiguity::Contig)
         && matches!(operand0.vec_width, VecWidth::V4 | VecWidth::V8);
     if large && half && aligned {
-        return Some((Implementor::Cublas, "large aligned half-precision GEMM (§7 seed)"));
+        return Some((
+            Implementor::Cublas,
+            "large aligned half-precision GEMM (§7 seed)",
+        ));
     }
     None
 }
@@ -417,7 +418,9 @@ impl DispatchTable {
     /// An empty table.
     #[must_use]
     pub fn new() -> DispatchTable {
-        DispatchTable { entries: Vec::new() }
+        DispatchTable {
+            entries: Vec::new(),
+        }
     }
 
     /// Build from rows, enforcing the sorted+deduped (last-writer-wins by token)
@@ -437,8 +440,10 @@ impl DispatchTable {
         // their (now reversed) input order, `dedup_by` — which keeps the first
         // of each run — retains the last writer of a duplicated token.
         self.entries.reverse();
-        self.entries.sort_by(|a, b| a.structure_key.cmp(&b.structure_key));
-        self.entries.dedup_by(|a, b| a.structure_key == b.structure_key);
+        self.entries
+            .sort_by(|a, b| a.structure_key.cmp(&b.structure_key));
+        self.entries
+            .dedup_by(|a, b| a.structure_key == b.structure_key);
     }
 
     /// Look up the decision for a live cell, **arch-gated**: the stored row's
@@ -504,9 +509,7 @@ pub fn merge(table: &mut DispatchTable, incoming: &[DispatchEntry]) {
                     continue;
                 }
                 // Among two observed rows, only a newer capture may refresh.
-                if cur.provenance.is_observed()
-                    && inc.captured_unix_s() <= cur.captured_unix_s()
-                {
+                if cur.provenance.is_observed() && inc.captured_unix_s() <= cur.captured_unix_s() {
                     continue;
                 }
                 // A flip to a *different route* must clear the noise floor; a
@@ -539,11 +542,15 @@ pub fn merge(table: &mut DispatchTable, incoming: &[DispatchEntry]) {
 mod tests {
     use super::*;
     use crate::sku::OpCategory;
-    use crate::structure_key::{structure_key, Contiguity, VecWidth};
+    use crate::structure_key::{Contiguity, VecWidth, structure_key};
     use crate::{ArchSku, ElementKind, OperandDesc};
 
     fn cand(imp: Implementor, ns: f64) -> CandidateResult {
-        CandidateResult { implementor: imp, median_ns: ns, entry_point: None }
+        CandidateResult {
+            implementor: imp,
+            median_ns: ns,
+            entry_point: None,
+        }
     }
 
     fn stamp(arch: ArchSku, t: u64) -> HwStamp {
@@ -621,7 +628,10 @@ mod tests {
         let b = OperandDesc::new(2, &[8, 8], &[8, 1], ElementKind::F16, 256);
         let o = OperandDesc::new(2, &[1, 8], &[8, 1], ElementKind::F16, 256);
         let small = structure_key(OpCategory::Gemm, &[a, b, o], ArchSku::Sm89);
-        assert!(seed_winner(&small).is_none(), "tiny GEMM is not vendor-seeded");
+        assert!(
+            seed_winner(&small).is_none(),
+            "tiny GEMM is not vendor-seeded"
+        );
         // And a non-GEMM op is never seeded regardless of size.
         assert!(seed_winner(&ew_key()).is_none());
         // The large f16 case does fire (guards the predicate isn't vacuously None).
@@ -644,7 +654,10 @@ mod tests {
         )]);
         let obs = winner_of(
             k.to_token(),
-            vec![cand(Implementor::Generated, 100.0), cand(Implementor::Cublas, 250.0)],
+            vec![
+                cand(Implementor::Generated, 100.0),
+                cand(Implementor::Cublas, 250.0),
+            ],
             Some(stamp(ArchSku::Sm89, 20)),
         )
         .unwrap();
@@ -659,13 +672,23 @@ mod tests {
         let k = ew_key();
         let obs = winner_of(
             k.to_token(),
-            vec![cand(Implementor::Generated, 100.0), cand(Implementor::Cublas, 250.0)],
+            vec![
+                cand(Implementor::Generated, 100.0),
+                cand(Implementor::Cublas, 250.0),
+            ],
             Some(stamp(ArchSku::Sm89, 20)),
         )
         .unwrap();
         let mut t = DispatchTable::from_entries(vec![obs]);
-        merge(&mut t, &[DispatchEntry::seeded(k.to_token(), Implementor::Cublas)]);
-        assert_eq!(t.lookup(&k).unwrap().winner, Implementor::Generated, "seed can't demote a measurement");
+        merge(
+            &mut t,
+            &[DispatchEntry::seeded(k.to_token(), Implementor::Cublas)],
+        );
+        assert_eq!(
+            t.lookup(&k).unwrap().winner,
+            Implementor::Generated,
+            "seed can't demote a measurement"
+        );
     }
 
     #[test]
@@ -678,13 +701,20 @@ mod tests {
         // Generated is "faster" by 1.01× — inside the noise floor. Must NOT flip.
         let noisy = winner_of(
             k.to_token(),
-            vec![cand(Implementor::Generated, 100.0), cand(Implementor::Cublas, 101.0)],
+            vec![
+                cand(Implementor::Generated, 100.0),
+                cand(Implementor::Cublas, 101.0),
+            ],
             Some(stamp(ArchSku::Sm89, 20)),
         )
         .unwrap();
         assert!(noisy.margin < MIN_FLIP_MARGIN);
         merge(&mut t, &[noisy]);
-        assert_eq!(t.lookup(&k).unwrap().winner, Implementor::Cublas, "1.01x can't overturn a seed");
+        assert_eq!(
+            t.lookup(&k).unwrap().winner,
+            Implementor::Cublas,
+            "1.01x can't overturn a seed"
+        );
     }
 
     #[test]
@@ -697,7 +727,10 @@ mod tests {
         // Same winner (Cublas), tiny margin — a refresh, not a flip: allowed.
         let refresh = winner_of(
             k.to_token(),
-            vec![cand(Implementor::Cublas, 100.0), cand(Implementor::Generated, 101.0)],
+            vec![
+                cand(Implementor::Cublas, 100.0),
+                cand(Implementor::Generated, 101.0),
+            ],
             Some(stamp(ArchSku::Sm89, 20)),
         )
         .unwrap();
@@ -705,7 +738,11 @@ mod tests {
         merge(&mut t, &[refresh]);
         let e = t.lookup(&k).unwrap();
         assert_eq!(e.winner, Implementor::Cublas);
-        assert_eq!(e.provenance, Provenance::Measured, "seed upgraded to measured");
+        assert_eq!(
+            e.provenance,
+            Provenance::Measured,
+            "seed upgraded to measured"
+        );
     }
 
     #[test]
@@ -713,7 +750,10 @@ mod tests {
         let k = ew_key();
         let old = winner_of(
             k.to_token(),
-            vec![cand(Implementor::Generated, 100.0), cand(Implementor::Cublas, 250.0)],
+            vec![
+                cand(Implementor::Generated, 100.0),
+                cand(Implementor::Cublas, 250.0),
+            ],
             Some(stamp(ArchSku::Sm89, 10)),
         )
         .unwrap();
@@ -721,7 +761,10 @@ mod tests {
         // A newer measurement flips to Cublas with a real margin (2.5×).
         let newer = winner_of(
             k.to_token(),
-            vec![cand(Implementor::Cublas, 100.0), cand(Implementor::Generated, 250.0)],
+            vec![
+                cand(Implementor::Cublas, 100.0),
+                cand(Implementor::Generated, 250.0),
+            ],
             Some(stamp(ArchSku::Sm89, 99)),
         )
         .unwrap();
@@ -731,12 +774,19 @@ mod tests {
         // An *older* measurement can't overwrite the newer one.
         let stale = winner_of(
             k.to_token(),
-            vec![cand(Implementor::Generated, 100.0), cand(Implementor::Cublas, 250.0)],
+            vec![
+                cand(Implementor::Generated, 100.0),
+                cand(Implementor::Cublas, 250.0),
+            ],
             Some(stamp(ArchSku::Sm89, 5)),
         )
         .unwrap();
         merge(&mut t, &[stale]);
-        assert_eq!(t.lookup(&k).unwrap().winner, Implementor::Cublas, "stale can't demote newer");
+        assert_eq!(
+            t.lookup(&k).unwrap().winner,
+            Implementor::Cublas,
+            "stale can't demote newer"
+        );
     }
 
     #[test]
@@ -810,7 +860,10 @@ mod tests {
         // and it won the cell. It must not, and the outcome must be order-stable.
         let e1 = winner_of(
             k.clone(),
-            vec![cand(Implementor::Generated, f64::NAN), cand(Implementor::Cublas, 100.0)],
+            vec![
+                cand(Implementor::Generated, f64::NAN),
+                cand(Implementor::Cublas, 100.0),
+            ],
             None,
         )
         .unwrap();
@@ -820,7 +873,10 @@ mod tests {
         // NaN last: same set, same winner (no order dependence).
         let e2 = winner_of(
             k,
-            vec![cand(Implementor::Cublas, 100.0), cand(Implementor::Generated, f64::NAN)],
+            vec![
+                cand(Implementor::Cublas, 100.0),
+                cand(Implementor::Generated, f64::NAN),
+            ],
             None,
         )
         .unwrap();
@@ -833,10 +889,10 @@ mod tests {
         let e = winner_of(
             k.clone(),
             vec![
-                cand(Implementor::Generated, 0.0),         // 0-ns is not a real timing
-                cand(Implementor::Cublas, -5.0),           // negative is nonsense
+                cand(Implementor::Generated, 0.0), // 0-ns is not a real timing
+                cand(Implementor::Cublas, -5.0),   // negative is nonsense
                 cand(Implementor::Bespoke, f64::INFINITY), // broken
-                cand(Implementor::Cudnn, 100.0),           // the only valid one
+                cand(Implementor::Cudnn, 100.0),   // the only valid one
             ],
             None,
         )
@@ -845,12 +901,17 @@ mod tests {
         assert_eq!(e.ranked.len(), 1);
         assert_eq!(e.margin, 1.0, "single survivor = no contest");
         // Every candidate broken ⇒ honest no-route, not a phantom winner.
-        assert!(winner_of(
-            k,
-            vec![cand(Implementor::Generated, 0.0), cand(Implementor::Cublas, f64::NAN)],
-            None,
-        )
-        .is_none());
+        assert!(
+            winner_of(
+                k,
+                vec![
+                    cand(Implementor::Generated, 0.0),
+                    cand(Implementor::Cublas, f64::NAN)
+                ],
+                None,
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -934,20 +995,24 @@ mod tests {
         assert_eq!(e2.margin, 1.0);
 
         // Untrustworthy records are dropped, not guessed: no token / no stamp.
-        assert!(reported_entry(
-            None,
-            rc(Implementor::Generated, Some("kern_a"), Some(100)),
-            vec![],
-            Some(stamp(ArchSku::Sm89, 42)),
-        )
-        .is_none());
-        assert!(reported_entry(
-            Some(k.to_token()),
-            rc(Implementor::Generated, Some("kern_a"), Some(100)),
-            vec![],
-            None,
-        )
-        .is_none());
+        assert!(
+            reported_entry(
+                None,
+                rc(Implementor::Generated, Some("kern_a"), Some(100)),
+                vec![],
+                Some(stamp(ArchSku::Sm89, 42)),
+            )
+            .is_none()
+        );
+        assert!(
+            reported_entry(
+                Some(k.to_token()),
+                rc(Implementor::Generated, Some("kern_a"), Some(100)),
+                vec![],
+                None,
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -989,7 +1054,10 @@ mod tests {
         )
         .unwrap();
         merge(&mut t, &[real_b]);
-        assert_eq!(t.lookup(&k).unwrap().winner_entry.as_deref(), Some("kern_b"));
+        assert_eq!(
+            t.lookup(&k).unwrap().winner_entry.as_deref(),
+            Some("kern_b")
+        );
         // A seed pins no entry: a single-candidate (margin 1.0) measurement
         // REFINES it without needing the flip threshold.
         let mut t2 = DispatchTable::from_entries(vec![DispatchEntry::seeded(
@@ -1029,7 +1097,10 @@ mod tests {
                 measured_on: Some(stamp(ArchSku::Sm89, 10)),
             };
             merge(&mut t, &[poisoned]);
-            assert!(t.lookup(&k).is_none(), "non-finite margin ({bad}) not inserted");
+            assert!(
+                t.lookup(&k).is_none(),
+                "non-finite margin ({bad}) not inserted"
+            );
         }
     }
 
@@ -1044,7 +1115,11 @@ mod tests {
         ] {
             assert_eq!(Implementor::from_code(imp.code()), Some(imp));
         }
-        for p in [Provenance::Measured, Provenance::Seeded, Provenance::Reported] {
+        for p in [
+            Provenance::Measured,
+            Provenance::Seeded,
+            Provenance::Reported,
+        ] {
             assert_eq!(Provenance::from_code(p.code()), Some(p));
         }
         assert!(Implementor::from_code("rocm").is_none());
@@ -1076,6 +1151,9 @@ mod tests {
             VecWidth::V4 | VecWidth::V8
         ));
         // Contiguity of the aligned operand is Contig (not Strided).
-        assert_eq!(gemm_key(ElementKind::F16, 4096, 256).operands[0].contig, Contiguity::Contig);
+        assert_eq!(
+            gemm_key(ElementKind::F16, 4096, 256).operands[0].contig,
+            Contiguity::Contig
+        );
     }
 }

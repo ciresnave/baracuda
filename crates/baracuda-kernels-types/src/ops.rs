@@ -1804,7 +1804,6 @@ impl GgufBlockFormat {
     }
 }
 
-
 /// Mixture-of-Experts (MoE) variant selector — used as the `op`
 /// discriminant for kernel SKUs whose [`crate::OpCategory`] is
 /// [`crate::OpCategory::Moe`]. Phase 8 Milestone 8.5 wires the three

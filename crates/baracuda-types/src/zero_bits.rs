@@ -68,11 +68,26 @@ macro_rules! impl_zero_bits {
 }
 
 impl_zero_bits!(
-    u8, u16, u32, u64, u128, usize,
-    i8, i16, i32, i64, i128, isize,
-    f32, f64,
-    bool, (),
-    Half, BFloat16, Complex32, Complex64,
+    u8,
+    u16,
+    u32,
+    u64,
+    u128,
+    usize,
+    i8,
+    i16,
+    i32,
+    i64,
+    i128,
+    isize,
+    f32,
+    f64,
+    bool,
+    (),
+    Half,
+    BFloat16,
+    Complex32,
+    Complex64,
 );
 
 // ---- Fixed-size arrays --------------------------------------------------

@@ -11,10 +11,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test reduce_sum_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceArgs, ReduceDescriptor, ReduceKind,
-    ReducePlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceArgs, ReduceDescriptor, ReduceKind, ReducePlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -28,11 +28,7 @@ fn setup() -> (Context, Stream) {
 /// CPU reference: sum-along-axis with keepdim convention. Output coord
 /// has [reduce_axis] = 0; for each, sum over the input's reduce-axis
 /// extent in input order.
-fn cpu_reduce_sum_3d(
-    x: &[f32],
-    input_shape: [i32; 3],
-    reduce_axis: usize,
-) -> (Vec<f32>, [i32; 3]) {
+fn cpu_reduce_sum_3d(x: &[f32], input_shape: [i32; 3], reduce_axis: usize) -> (Vec<f32>, [i32; 3]) {
     let mut output_shape = input_shape;
     output_shape[reduce_axis] = 1;
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
@@ -77,9 +73,7 @@ fn run_case(reduce_axis: usize) {
     let in_numel: usize = input_shape.iter().map(|&d| d as usize).product();
 
     // Deterministic input.
-    let host_x: Vec<f32> = (0..in_numel)
-        .map(|i| (i as f32) * 0.0625 - 50.0)
-        .collect();
+    let host_x: Vec<f32> = (0..in_numel).map(|i| (i as f32) * 0.0625 - 50.0).collect();
     let (expected, output_shape) = cpu_reduce_sum_3d(&host_x, input_shape, reduce_axis);
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
 
@@ -93,8 +87,8 @@ fn run_case(reduce_axis: usize) {
         element: ElementKind::F32,
         correction: 1,
     };
-    let plan = ReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<f32, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -162,8 +156,8 @@ fn reduce_sum_1d() {
         element: ElementKind::F32,
         correction: 1,
     };
-    let plan = ReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<f32, 1> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -181,6 +175,11 @@ fn reduce_sum_1d() {
 
     let mut got = vec![0f32; 1];
     dev_y.copy_to_host(&mut got).expect("download");
-    assert_eq!(got[0].to_bits(), expected.to_bits(),
-        "reduce sum 1d mismatch: got {} expected {}", got[0], expected);
+    assert_eq!(
+        got[0].to_bits(),
+        expected.to_bits(),
+        "reduce sum 1d mismatch: got {} expected {}",
+        got[0],
+        expected
+    );
 }

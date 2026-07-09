@@ -7,10 +7,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_minimum_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan,
-    BinaryKind, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan, BinaryKind, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -87,11 +87,31 @@ fn minimum_backward_f32_3d() {
     let plan = BinaryBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        a: Some(TensorRef { data: dev_a.as_slice(), shape, stride }),
-        b: Some(TensorRef { data: dev_b.as_slice(), shape, stride }),
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        a: Some(TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        }),
+        b: Some(TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        }),
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -101,10 +121,22 @@ fn minimum_backward_f32_3d() {
     dev_db.copy_to_host(&mut got_db).expect("download db");
     for i in 0..numel {
         let (exp_da, exp_db) = ref_minimum_backward(host_dy[i], host_a[i], host_b[i]);
-        assert_eq!(got_da[i].to_bits(), exp_da.to_bits(),
-            "minimum bw f32 da @ {i}: a={}, b={}, dy={}", host_a[i], host_b[i], host_dy[i]);
-        assert_eq!(got_db[i].to_bits(), exp_db.to_bits(),
-            "minimum bw f32 db @ {i}: a={}, b={}, dy={}", host_a[i], host_b[i], host_dy[i]);
+        assert_eq!(
+            got_da[i].to_bits(),
+            exp_da.to_bits(),
+            "minimum bw f32 da @ {i}: a={}, b={}, dy={}",
+            host_a[i],
+            host_b[i],
+            host_dy[i]
+        );
+        assert_eq!(
+            got_db[i].to_bits(),
+            exp_db.to_bits(),
+            "minimum bw f32 db @ {i}: a={}, b={}, dy={}",
+            host_a[i],
+            host_b[i],
+            host_dy[i]
+        );
     }
 }
 
@@ -132,11 +164,31 @@ fn minimum_backward_f64_3d() {
     let plan = BinaryBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        a: Some(TensorRef { data: dev_a.as_slice(), shape, stride }),
-        b: Some(TensorRef { data: dev_b.as_slice(), shape, stride }),
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        a: Some(TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        }),
+        b: Some(TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        }),
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -149,8 +201,16 @@ fn minimum_backward_f64_3d() {
             ref_minimum_backward(host_dy_f32[i], host_a_f32[i], host_b_f32[i]);
         let exp_da = exp_da_f32 as f64;
         let exp_db = exp_db_f32 as f64;
-        assert_eq!(got_da[i].to_bits(), exp_da.to_bits(), "minimum bw f64 da @ {i}");
-        assert_eq!(got_db[i].to_bits(), exp_db.to_bits(), "minimum bw f64 db @ {i}");
+        assert_eq!(
+            got_da[i].to_bits(),
+            exp_da.to_bits(),
+            "minimum bw f64 da @ {i}"
+        );
+        assert_eq!(
+            got_db[i].to_bits(),
+            exp_db.to_bits(),
+            "minimum bw f64 db @ {i}"
+        );
     }
 }
 
@@ -161,11 +221,24 @@ fn minimum_backward_f16_3d() {
     let shape = [8i32, 128, 128];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
     let (host_dy_f32, host_a_f32, host_b_f32) = build_inputs_f32(numel);
-    let host_dy: Vec<f16> = host_dy_f32.iter().map(|&x| f16::from_f32(x.clamp(-32.0, 32.0))).collect();
-    let host_a: Vec<f16> = host_a_f32.iter().map(|&x| {
-        if x.is_nan() { f16::from_f32(0.0) } else { f16::from_f32(x.clamp(-32.0, 32.0)) }
-    }).collect();
-    let host_b: Vec<f16> = host_b_f32.iter().map(|&x| f16::from_f32(x.clamp(-32.0, 32.0))).collect();
+    let host_dy: Vec<f16> = host_dy_f32
+        .iter()
+        .map(|&x| f16::from_f32(x.clamp(-32.0, 32.0)))
+        .collect();
+    let host_a: Vec<f16> = host_a_f32
+        .iter()
+        .map(|&x| {
+            if x.is_nan() {
+                f16::from_f32(0.0)
+            } else {
+                f16::from_f32(x.clamp(-32.0, 32.0))
+            }
+        })
+        .collect();
+    let host_b: Vec<f16> = host_b_f32
+        .iter()
+        .map(|&x| f16::from_f32(x.clamp(-32.0, 32.0)))
+        .collect();
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
@@ -180,11 +253,31 @@ fn minimum_backward_f16_3d() {
     let plan = BinaryBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        a: Some(TensorRef { data: dev_a.as_slice(), shape, stride }),
-        b: Some(TensorRef { data: dev_b.as_slice(), shape, stride }),
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        a: Some(TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        }),
+        b: Some(TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        }),
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -199,10 +292,16 @@ fn minimum_backward_f16_3d() {
         let (exp_da, exp_db) = ref_minimum_backward(dy, a, b);
         let gd = got_da[i].to_f32();
         let tol = exp_da.abs().max(1.0) * F16_EPS;
-        assert!((gd - exp_da).abs() <= tol, "minimum bw f16 da @ {i}: got {gd}, exp {exp_da}");
+        assert!(
+            (gd - exp_da).abs() <= tol,
+            "minimum bw f16 da @ {i}: got {gd}, exp {exp_da}"
+        );
         let gdb = got_db[i].to_f32();
         let tol = exp_db.abs().max(1.0) * F16_EPS;
-        assert!((gdb - exp_db).abs() <= tol, "minimum bw f16 db @ {i}: got {gdb}, exp {exp_db}");
+        assert!(
+            (gdb - exp_db).abs() <= tol,
+            "minimum bw f16 db @ {i}: got {gdb}, exp {exp_db}"
+        );
     }
 }
 
@@ -214,9 +313,16 @@ fn minimum_backward_bf16_3d() {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
     let (host_dy_f32, host_a_f32, host_b_f32) = build_inputs_f32(numel);
     let host_dy: Vec<bf16> = host_dy_f32.iter().map(|&x| bf16::from_f32(x)).collect();
-    let host_a: Vec<bf16> = host_a_f32.iter().map(|&x| {
-        if x.is_nan() { bf16::from_f32(0.0) } else { bf16::from_f32(x) }
-    }).collect();
+    let host_a: Vec<bf16> = host_a_f32
+        .iter()
+        .map(|&x| {
+            if x.is_nan() {
+                bf16::from_f32(0.0)
+            } else {
+                bf16::from_f32(x)
+            }
+        })
+        .collect();
     let host_b: Vec<bf16> = host_b_f32.iter().map(|&x| bf16::from_f32(x)).collect();
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
@@ -232,11 +338,31 @@ fn minimum_backward_bf16_3d() {
     let plan = BinaryBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        a: Some(TensorRef { data: dev_a.as_slice(), shape, stride }),
-        b: Some(TensorRef { data: dev_b.as_slice(), shape, stride }),
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        a: Some(TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        }),
+        b: Some(TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        }),
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -251,9 +377,15 @@ fn minimum_backward_bf16_3d() {
         let (exp_da, exp_db) = ref_minimum_backward(dy, a, b);
         let gd = got_da[i].to_f32();
         let tol = exp_da.abs().max(1.0) * BF16_EPS;
-        assert!((gd - exp_da).abs() <= tol, "minimum bw bf16 da @ {i}: got {gd}, exp {exp_da}");
+        assert!(
+            (gd - exp_da).abs() <= tol,
+            "minimum bw bf16 da @ {i}: got {gd}, exp {exp_da}"
+        );
         let gdb = got_db[i].to_f32();
         let tol = exp_db.abs().max(1.0) * BF16_EPS;
-        assert!((gdb - exp_db).abs() <= tol, "minimum bw bf16 db @ {i}: got {gdb}, exp {exp_db}");
+        assert!(
+            (gdb - exp_db).abs() <= tol,
+            "minimum bw bf16 db @ {i}: got {gdb}, exp {exp_db}"
+        );
     }
 }

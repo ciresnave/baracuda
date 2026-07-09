@@ -4,10 +4,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, AlibiArgs, AlibiDescriptor, AlibiPlan, ElementKind, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    AlibiArgs, AlibiDescriptor, AlibiPlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 

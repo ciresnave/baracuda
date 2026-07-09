@@ -42,15 +42,23 @@ fn try_bringup() -> Option<(Context, Stream, Communicator)> {
 #[test]
 #[ignore = "requires NCCL installed (typically Linux multi-GPU hosts)"]
 fn new_single_gpu_reports_rank0_worldsize1() {
-    let Some((_ctx, _stream, comm)) = try_bringup() else { return };
+    let Some((_ctx, _stream, comm)) = try_bringup() else {
+        return;
+    };
     assert_eq!(comm.rank(), 0, "single-GPU communicator must be rank 0");
-    assert_eq!(comm.world_size(), 1, "single-GPU communicator must have world_size 1");
+    assert_eq!(
+        comm.world_size(),
+        1,
+        "single-GPU communicator must have world_size 1"
+    );
 }
 
 #[test]
 #[ignore = "requires NCCL installed"]
 fn all_reduce_single_gpu_passes_through() {
-    let Some((ctx, stream, comm)) = try_bringup() else { return };
+    let Some((ctx, stream, comm)) = try_bringup() else {
+        return;
+    };
 
     let host_in: Vec<f32> = (0..32).map(|i| i as f32).collect();
     let send = DeviceBuffer::from_slice(&ctx, &host_in).unwrap();
@@ -68,14 +76,23 @@ fn all_reduce_single_gpu_passes_through() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn reduce_single_gpu_passes_through() {
-    let Some((ctx, stream, comm)) = try_bringup() else { return };
+    let Some((ctx, stream, comm)) = try_bringup() else {
+        return;
+    };
 
     let host_in: Vec<f32> = (0..16).map(|i| i as f32 + 1.0).collect();
     let send = DeviceBuffer::from_slice(&ctx, &host_in).unwrap();
     let mut recv: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, host_in.len()).unwrap();
 
-    comm.reduce(&send, &mut recv, host_in.len(), NcclReduceOp::Sum, 0, &stream)
-        .expect("reduce on single-GPU communicator must succeed");
+    comm.reduce(
+        &send,
+        &mut recv,
+        host_in.len(),
+        NcclReduceOp::Sum,
+        0,
+        &stream,
+    )
+    .expect("reduce on single-GPU communicator must succeed");
     stream.synchronize().unwrap();
 
     let mut host_out = vec![0f32; host_in.len()];
@@ -86,7 +103,9 @@ fn reduce_single_gpu_passes_through() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn broadcast_single_gpu_passes_through() {
-    let Some((ctx, stream, comm)) = try_bringup() else { return };
+    let Some((ctx, stream, comm)) = try_bringup() else {
+        return;
+    };
 
     let host_in: Vec<i32> = (0..24).collect();
     let mut buf = DeviceBuffer::from_slice(&ctx, &host_in).unwrap();
@@ -97,13 +116,18 @@ fn broadcast_single_gpu_passes_through() {
 
     let mut host_out = vec![0i32; host_in.len()];
     buf.copy_to_host(&mut host_out).unwrap();
-    assert_eq!(host_out, host_in, "world_size=1 Broadcast(root=0) is identity");
+    assert_eq!(
+        host_out, host_in,
+        "world_size=1 Broadcast(root=0) is identity"
+    );
 }
 
 #[test]
 #[ignore = "requires NCCL installed"]
 fn all_gather_single_gpu_passes_through() {
-    let Some((ctx, stream, comm)) = try_bringup() else { return };
+    let Some((ctx, stream, comm)) = try_bringup() else {
+        return;
+    };
 
     // sendcount = N, world_size = 1 → recv buffer matches send buffer.
     let host_in: Vec<f32> = (0..20).map(|i| i as f32 * 0.5).collect();
@@ -122,7 +146,9 @@ fn all_gather_single_gpu_passes_through() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn reduce_scatter_single_gpu_passes_through() {
-    let Some((ctx, stream, comm)) = try_bringup() else { return };
+    let Some((ctx, stream, comm)) = try_bringup() else {
+        return;
+    };
 
     // recvcount × world_size = sendlen → with world_size=1 they match.
     let host_in: Vec<f32> = (0..28).map(|i| i as f32).collect();
@@ -135,7 +161,10 @@ fn reduce_scatter_single_gpu_passes_through() {
 
     let mut host_out = vec![0f32; host_in.len()];
     recv.copy_to_host(&mut host_out).unwrap();
-    assert_eq!(host_out, host_in, "world_size=1 ReduceScatter(Sum) is identity");
+    assert_eq!(
+        host_out, host_in,
+        "world_size=1 ReduceScatter(Sum) is identity"
+    );
 }
 
 #[test]
@@ -143,7 +172,9 @@ fn reduce_scatter_single_gpu_passes_through() {
 fn send_recv_self_loop_in_group() {
     // P2P self-loop: rank 0 sends to rank 0. NCCL requires `send` and
     // `recv` paired inside a group bracket on the same communicator.
-    let Some((ctx, stream, comm)) = try_bringup() else { return };
+    let Some((ctx, stream, comm)) = try_bringup() else {
+        return;
+    };
 
     let host_in: Vec<f32> = (0..12).map(|i| i as f32 + 100.0).collect();
     let send = DeviceBuffer::from_slice(&ctx, &host_in).unwrap();
@@ -159,5 +190,8 @@ fn send_recv_self_loop_in_group() {
 
     let mut host_out = vec![0f32; host_in.len()];
     recv.copy_to_host(&mut host_out).unwrap();
-    assert_eq!(host_out, host_in, "self-loop send/recv must produce identity");
+    assert_eq!(
+        host_out, host_in,
+        "self-loop send/recv must produce identity"
+    );
 }

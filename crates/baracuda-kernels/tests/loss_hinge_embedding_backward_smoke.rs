@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `HingeEmbeddingLossBackwardPlan`. BW × 4 dtypes.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, HingeEmbeddingLossBackwardArgs,
-    HingeEmbeddingLossBackwardDescriptor, HingeEmbeddingLossBackwardPlan, LossReduction,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, HingeEmbeddingLossBackwardArgs, HingeEmbeddingLossBackwardDescriptor,
+    HingeEmbeddingLossBackwardPlan, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -63,19 +63,28 @@ fn loss_hinge_embedding_backward_f32_mean() {
         margin,
         element: ElementKind::F32,
     };
-    let plan = HingeEmbeddingLossBackwardPlan::<f32, 2>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        HingeEmbeddingLossBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         HingeEmbeddingLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_dx.as_slice_mut(),
                 shape,
@@ -116,19 +125,28 @@ fn loss_hinge_embedding_backward_f64_mean() {
         margin,
         element: ElementKind::F64,
     };
-    let plan = HingeEmbeddingLossBackwardPlan::<f64, 2>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        HingeEmbeddingLossBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         HingeEmbeddingLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_dx.as_slice_mut(),
                 shape,
@@ -171,19 +189,28 @@ fn loss_hinge_embedding_backward_f16_mean() {
         margin,
         element: ElementKind::F16,
     };
-    let plan = HingeEmbeddingLossBackwardPlan::<f16, 2>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        HingeEmbeddingLossBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         HingeEmbeddingLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_dx.as_slice_mut(),
                 shape,
@@ -199,7 +226,12 @@ fn loss_hinge_embedding_backward_f16_mean() {
         let want = expected_f64[i] as f32;
         let g = got[i].to_f32();
         let tol = want.abs().max(1.0) * 16.0 * 9.77e-4_f32 + 5e-3;
-        assert!((g - want).abs() <= tol, "f16 HE BW @{i}: got={} want={}", g, want);
+        assert!(
+            (g - want).abs() <= tol,
+            "f16 HE BW @{i}: got={} want={}",
+            g,
+            want
+        );
     }
 }
 
@@ -238,9 +270,21 @@ fn loss_hinge_embedding_backward_bf16_mean() {
         &stream,
         Workspace::None,
         HingeEmbeddingLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_dx.as_slice_mut(),
                 shape,
@@ -256,6 +300,11 @@ fn loss_hinge_embedding_backward_bf16_mean() {
         let want = expected_f64[i] as f32;
         let g = got[i].to_f32();
         let tol = want.abs().max(1.0) * 16.0 * 7.81e-3_f32 + 2e-2;
-        assert!((g - want).abs() <= tol, "bf16 HE BW @{i}: got={} want={}", g, want);
+        assert!(
+            (g - want).abs() <= tol,
+            "bf16 HE BW @{i}: got={} want={}",
+            g,
+            want
+        );
     }
 }

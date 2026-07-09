@@ -165,8 +165,12 @@ impl<T: Element> AdaptiveAvgPool2dPlan<T> {
             y_ptr,
             nc,
             2, // spatial_rank
-            1, self.desc.h_in, self.desc.w_in,
-            1, self.desc.h_out, self.desc.w_out,
+            1,
+            self.desc.h_in,
+            self.desc.w_in,
+            1,
+            self.desc.h_out,
+            self.desc.w_out,
             stream_ptr,
         );
         map_status(status)
@@ -189,8 +193,12 @@ impl<T: Element> AdaptiveAvgPool2dPlan<T> {
             dx_ptr,
             nc,
             2,
-            1, self.desc.h_in, self.desc.w_in,
-            1, self.desc.h_out, self.desc.w_out,
+            1,
+            self.desc.h_in,
+            self.desc.w_in,
+            1,
+            self.desc.h_out,
+            self.desc.w_out,
             stream_ptr,
         );
         map_status(status)
@@ -201,9 +209,7 @@ impl<T: Element> AdaptiveAvgPool2dPlan<T> {
 // Shared adaptive-2d helpers (used by sibling adaptive_max_pool2d)
 // =============================================================================
 
-pub(crate) fn validate_descriptor<T: Element>(
-    desc: &AdaptivePool2dDescriptor,
-) -> Result<()> {
+pub(crate) fn validate_descriptor<T: Element>(desc: &AdaptivePool2dDescriptor) -> Result<()> {
     validate_dtype::<T>()?;
     if desc.element != T::KIND {
         return Err(Error::Unsupported(

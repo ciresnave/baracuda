@@ -37,25 +37,23 @@ pub mod sparse24;
 // gated. `gptq_to_marlin` is a pure-Rust host-side repack utility
 // (no GPU dependency) and compiles unconditionally under the
 // `marlin` feature.
-pub mod int4_marlin;
-pub mod int4_awq;
 pub mod gptq_to_marlin;
+pub mod int4_awq;
+pub mod int4_marlin;
 
 pub use bin_gemm::{BinGemmArgs, BinGemmDescriptor, BinGemmPlan};
 pub use dense_gemm::{DenseGemmArgs, DenseGemmDescriptor, DenseGemmLayout, DenseGemmPlan};
 pub use fp8_gemm::{Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan};
-pub use int4_gemm::{Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan};
 pub use int_gemm::{IntGemmArgs, IntGemmDescriptor, IntGemmPlan};
+pub use int4_gemm::{Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan};
 pub use sparse24::{GemmSparse24Args, GemmSparse24Descriptor, GemmSparse24Plan};
 
 // Phase 48 re-exports.
+pub use gptq_to_marlin::{
+    GptqWeights, MARLIN_PERM_LEN, MARLIN_SCALE_PERM_LEN, MarlinWeights,
+    repack as gptq_to_marlin_repack,
+};
+pub use int4_awq::{AwqActivation, Int4AwqGemmArgs, Int4AwqGemmDescriptor, Int4AwqGemmPlan};
 pub use int4_marlin::{
     Int4MarlinGemmArgs, Int4MarlinGemmDescriptor, Int4MarlinGemmPlan, MarlinActivation,
-};
-pub use int4_awq::{
-    AwqActivation, Int4AwqGemmArgs, Int4AwqGemmDescriptor, Int4AwqGemmPlan,
-};
-pub use gptq_to_marlin::{
-    repack as gptq_to_marlin_repack, GptqWeights, MarlinWeights, MARLIN_PERM_LEN,
-    MARLIN_SCALE_PERM_LEN,
 };

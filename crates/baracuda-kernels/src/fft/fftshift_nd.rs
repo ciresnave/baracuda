@@ -42,12 +42,12 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    baracuda_kernels_fftshift_nd_16_run, baracuda_kernels_fftshift_nd_4_run,
-    baracuda_kernels_fftshift_nd_8_run,
+    baracuda_kernels_fftshift_nd_4_run, baracuda_kernels_fftshift_nd_8_run,
+    baracuda_kernels_fftshift_nd_16_run,
 };
 use baracuda_kernels_types::{
-    contiguous_stride, ArchSku, BackendKind, Element, ElementKind, FftKind, KernelSku,
-    MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, BackendKind, Element, ElementKind, FftKind, KernelSku, MathPrecision, OpCategory,
+    PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 use super::fft::map_status;

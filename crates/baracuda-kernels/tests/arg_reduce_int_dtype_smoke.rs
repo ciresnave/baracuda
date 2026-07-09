@@ -9,7 +9,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -22,13 +22,30 @@ fn setup() -> (Context, Stream) {
 const ROWS: i32 = 3;
 const COLS: i32 = 4;
 
-fn out_shape() -> [i32; 2] { [ROWS, 1] }
-fn in_stride() -> [i64; 2] { [COLS as i64, 1] }
-fn out_stride() -> [i64; 2] { [1, 1] }
+fn out_shape() -> [i32; 2] {
+    [ROWS, 1]
+}
+fn in_stride() -> [i64; 2] {
+    [COLS as i64, 1]
+}
+fn out_stride() -> [i64; 2] {
+    [1, 1]
+}
 
 type ArgReduceFn = unsafe extern "C" fn(
-    i64, i32, *const i32, *const i64, *const i64, i32, i32, i64,
-    *const c_void, *mut c_void, *mut c_void, usize, *mut c_void,
+    i64,
+    i32,
+    *const i32,
+    *const i64,
+    *const i64,
+    i32,
+    i32,
+    i64,
+    *const c_void,
+    *mut c_void,
+    *mut c_void,
+    usize,
+    *mut c_void,
 ) -> i32;
 
 unsafe fn run_arg_reduce(
@@ -47,9 +64,9 @@ unsafe fn run_arg_reduce(
             out_sh.as_ptr(),
             in_st.as_ptr(),
             out_st.as_ptr(),
-            1,        // reduce_axis
-            COLS,     // reduce_extent
-            1,        // reduce_stride_x
+            1,    // reduce_axis
+            COLS, // reduce_extent
+            1,    // reduce_stride_x
             src_ptr,
             dst_ptr,
             core::ptr::null_mut(),
@@ -69,9 +86,9 @@ unsafe fn run_arg_reduce(
 fn ffi_argmax_u8_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<u8> = vec![
-        1, 2, 3, 4,        // argmax=3
-        10, 200, 30, 40,   // argmax=1
-        255, 1, 255, 255,  // argmax=0 (first-occurrence tie)
+        1, 2, 3, 4, // argmax=3
+        10, 200, 30, 40, // argmax=1
+        255, 1, 255, 255, // argmax=0 (first-occurrence tie)
     ];
     let expected: Vec<i32> = vec![3, 1, 0];
 
@@ -97,9 +114,9 @@ fn ffi_argmax_u8_i32() {
 fn ffi_argmin_i8_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<i8> = vec![
-        1, -1, 3, 4,       // argmin=1
+        1, -1, 3, 4, // argmin=1
         -10, -20, -30, 40, // argmin=2
-        5, 5, 5, 5,        // argmin=0 (first-occurrence tie)
+        5, 5, 5, 5, // argmin=0 (first-occurrence tie)
     ];
     let expected: Vec<i32> = vec![1, 2, 0];
 
@@ -124,11 +141,7 @@ fn ffi_argmin_i8_i32() {
 #[ignore]
 fn ffi_argmax_u32_i32() {
     let (ctx, stream) = setup();
-    let host_src: Vec<u32> = vec![
-        1, 2, 3, 4,
-        10, 200, 30, 40,
-        u32::MAX, 1, u32::MAX, u32::MAX,
-    ];
+    let host_src: Vec<u32> = vec![1, 2, 3, 4, 10, 200, 30, 40, u32::MAX, 1, u32::MAX, u32::MAX];
     let expected: Vec<i32> = vec![3, 1, 0];
 
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("upload");
@@ -153,9 +166,18 @@ fn ffi_argmax_u32_i32() {
 fn ffi_argmin_i16_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<i16> = vec![
-        1000, -1, 3000, 4000,
-        -10, -20, -30, 4000,
-        i16::MIN, 5, i16::MIN, i16::MIN,
+        1000,
+        -1,
+        3000,
+        4000,
+        -10,
+        -20,
+        -30,
+        4000,
+        i16::MIN,
+        5,
+        i16::MIN,
+        i16::MIN,
     ];
     let expected: Vec<i32> = vec![1, 2, 0];
 
@@ -180,11 +202,7 @@ fn ffi_argmin_i16_i32() {
 #[ignore]
 fn ffi_argmax_i32_i32() {
     let (ctx, stream) = setup();
-    let host_src: Vec<i32> = vec![
-        1, 2, 3, 4,
-        10, 200, 30, 40,
-        i32::MAX, 1, i32::MAX, i32::MAX,
-    ];
+    let host_src: Vec<i32> = vec![1, 2, 3, 4, 10, 200, 30, 40, i32::MAX, 1, i32::MAX, i32::MAX];
     let expected: Vec<i32> = vec![3, 1, 0];
 
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("upload");
@@ -209,9 +227,18 @@ fn ffi_argmax_i32_i32() {
 fn ffi_argmin_i64_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<i64> = vec![
-        1_000_000_000_000, -1, 3, 4,
-        -10, -20, -30, 4,
-        i64::MIN, 5, i64::MIN, i64::MIN,
+        1_000_000_000_000,
+        -1,
+        3,
+        4,
+        -10,
+        -20,
+        -30,
+        4,
+        i64::MIN,
+        5,
+        i64::MIN,
+        i64::MIN,
     ];
     let expected: Vec<i32> = vec![1, 2, 0];
 
@@ -241,11 +268,7 @@ fn ffi_argmin_i64_i32() {
 #[ignore]
 fn ffi_argmax_i32_i64() {
     let (ctx, stream) = setup();
-    let host_src: Vec<i32> = vec![
-        1, 2, 3, 4,
-        10, 200, 30, 40,
-        i32::MAX, 1, i32::MAX, i32::MAX,
-    ];
+    let host_src: Vec<i32> = vec![1, 2, 3, 4, 10, 200, 30, 40, i32::MAX, 1, i32::MAX, i32::MAX];
     let expected: Vec<i64> = vec![3, 1, 0];
 
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("upload");
@@ -270,9 +293,9 @@ fn ffi_argmax_i32_i64() {
 fn ffi_argmin_u8_i64() {
     let (ctx, stream) = setup();
     let host_src: Vec<u8> = vec![
-        1, 2, 3, 4,        // argmin=0
-        10, 5, 100, 200,   // argmin=1
-        5, 5, 5, 5,        // argmin=0 (tie)
+        1, 2, 3, 4, // argmin=0
+        10, 5, 100, 200, // argmin=1
+        5, 5, 5, 5, // argmin=0 (tie)
     ];
     let expected: Vec<i64> = vec![0, 1, 0];
 

@@ -251,127 +251,271 @@ impl<T: Element, const N: usize> BinaryCmpPlan<T, N> {
             // --- Eq -----------------------------------------------------
             (BinaryCmpKind::Eq, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_eq_f32_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Eq, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_eq_f16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Eq, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_eq_bf16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Eq, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_eq_f64_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Ne -----------------------------------------------------
             (BinaryCmpKind::Ne, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ne_f32_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ne, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ne_f16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ne, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ne_bf16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ne, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ne_f64_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Gt -----------------------------------------------------
             (BinaryCmpKind::Gt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_gt_f32_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Gt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_gt_f16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Gt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_gt_bf16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Gt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_gt_f64_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Ge -----------------------------------------------------
             (BinaryCmpKind::Ge, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ge_f32_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ge, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ge_f16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ge, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ge_bf16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ge, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ge_f64_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Lt -----------------------------------------------------
             (BinaryCmpKind::Lt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_lt_f32_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Lt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_lt_f16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Lt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_lt_bf16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Lt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_lt_f64_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Le -----------------------------------------------------
             (BinaryCmpKind::Le, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_le_f32_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Le, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_le_f16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Le, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_le_bf16_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Le, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_le_f64_run(
-                    numel, a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {
@@ -404,175 +548,391 @@ impl<T: Element, const N: usize> BinaryCmpPlan<T, N> {
             // --- Eq -----------------------------------------------------
             (BinaryCmpKind::Eq, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_eq_f32_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Eq, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_eq_f16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Eq, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_eq_bf16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Eq, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_eq_f64_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Ne -----------------------------------------------------
             (BinaryCmpKind::Ne, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ne_f32_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ne, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ne_f16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ne, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ne_bf16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ne, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ne_f64_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Gt -----------------------------------------------------
             (BinaryCmpKind::Gt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_gt_f32_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Gt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_gt_f16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Gt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_gt_bf16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Gt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_gt_f64_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Ge -----------------------------------------------------
             (BinaryCmpKind::Ge, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ge_f32_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ge, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ge_f16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ge, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ge_bf16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Ge, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_ge_f64_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Lt -----------------------------------------------------
             (BinaryCmpKind::Lt, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_lt_f32_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Lt, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_lt_f16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Lt, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_lt_bf16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Lt, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_lt_f64_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // --- Le -----------------------------------------------------
             (BinaryCmpKind::Le, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_le_f32_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Le, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_le_f16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Le, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_le_bf16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryCmpKind::Le, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_cmp_le_f64_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_a.as_ptr(), stride_b.as_ptr(), stride_y.as_ptr(),
-                    a_ptr, b_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_a.as_ptr(),
+                    stride_b.as_ptr(),
+                    stride_y.as_ptr(),
+                    a_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

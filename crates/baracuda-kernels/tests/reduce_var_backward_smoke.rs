@@ -18,10 +18,10 @@
 //! Run with: `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test reduce_var_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceBackwardArgs,
-    ReduceBackwardDescriptor, ReduceBackwardPlan, ReduceKind, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceBackwardArgs, ReduceBackwardDescriptor, ReduceBackwardPlan,
+    ReduceKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -120,14 +120,12 @@ fn run_case(axis: usize, correction: i32) {
         })
         .collect();
     let host_dy: Vec<f32> = (0..dy_numel).map(|i| 0.5 + 0.25 * (i as f32)).collect();
-    let (host_y, expected_dx) =
-        host_var_bw_f32(input_shape, axis, correction, &host_x, &host_dy);
+    let (host_y, expected_dx) = host_var_bw_f32(input_shape, axis, correction, &host_x, &host_dy);
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("up y");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
-    let mut dev_dx: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
+    let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
 
     let desc = ReduceBackwardDescriptor {
         kind: ReduceKind::Var,
@@ -241,8 +239,7 @@ fn run_case_f16(axis: usize, correction: i32) {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("up y");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
-    let mut dev_dx: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
+    let mut dev_dx: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
 
     let desc = ReduceBackwardDescriptor {
         kind: ReduceKind::Var,
@@ -254,10 +251,26 @@ fn run_case_f16(axis: usize, correction: i32) {
     let plan = ReduceBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -304,8 +317,7 @@ fn run_case_bf16(axis: usize, correction: i32) {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("up y");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
-    let mut dev_dx: DeviceBuffer<bf16> =
-        DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
+    let mut dev_dx: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
 
     let desc = ReduceBackwardDescriptor {
         kind: ReduceKind::Var,
@@ -317,10 +329,26 @@ fn run_case_bf16(axis: usize, correction: i32) {
     let plan = ReduceBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -394,14 +422,12 @@ fn run_case_f64(axis: usize, correction: i32) {
         .map(|i| 0.25 + 0.05 * (i as f64) + 0.1 * ((i as f64) * 0.37).sin())
         .collect();
     let host_dy: Vec<f64> = (0..dy_numel).map(|i| 0.25 + 0.1 * (i as f64)).collect();
-    let (host_y, expected_dx) =
-        host_var_bw_f64(input_shape, axis, correction, &host_x, &host_dy);
+    let (host_y, expected_dx) = host_var_bw_f64(input_shape, axis, correction, &host_x, &host_dy);
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("up y");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
-    let mut dev_dx: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
+    let mut dev_dx: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
 
     let desc = ReduceBackwardDescriptor {
         kind: ReduceKind::Var,
@@ -413,10 +439,26 @@ fn run_case_f64(axis: usize, correction: i32) {
     let plan = ReduceBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

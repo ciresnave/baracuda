@@ -5,7 +5,7 @@
 //! cargo run --example matmul_cublas --features "cublas curand"
 //! ```
 
-use baracuda::cublas::{gemm, Handle, Op};
+use baracuda::cublas::{Handle, Op, gemm};
 use baracuda::curand::{Generator, RngKind};
 use baracuda::driver::{Context, Device, DeviceBuffer};
 

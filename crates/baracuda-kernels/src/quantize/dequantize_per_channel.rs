@@ -163,55 +163,121 @@ impl<TIn: Element, TOut: IntElement> DequantizePerChannelPlan<TIn, TOut> {
         let status = match (TIn::KIND, TOut::KIND) {
             (ElementKind::F32, ElementKind::S8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_channel_f32_s8_run(
-                    numel, shape4, axis, q_ptr, sc_ptr, zp_ptr, x_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    shape4,
+                    axis,
+                    q_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    x_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, ElementKind::U8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_channel_f32_u8_run(
-                    numel, shape4, axis, q_ptr, sc_ptr, zp_ptr, x_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    shape4,
+                    axis,
+                    q_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    x_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F16, ElementKind::S8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_channel_f16_s8_run(
-                    numel, shape4, axis, q_ptr, sc_ptr, zp_ptr, x_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    shape4,
+                    axis,
+                    q_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    x_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F16, ElementKind::U8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_channel_f16_u8_run(
-                    numel, shape4, axis, q_ptr, sc_ptr, zp_ptr, x_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    shape4,
+                    axis,
+                    q_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    x_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bf16, ElementKind::S8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_channel_bf16_s8_run(
-                    numel, shape4, axis, q_ptr, sc_ptr, zp_ptr, x_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    shape4,
+                    axis,
+                    q_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    x_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bf16, ElementKind::U8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_channel_bf16_u8_run(
-                    numel, shape4, axis, q_ptr, sc_ptr, zp_ptr, x_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    shape4,
+                    axis,
+                    q_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    x_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, ElementKind::S8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_channel_f64_s8_run(
-                    numel, shape4, axis, q_ptr, sc_ptr, zp_ptr, x_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    shape4,
+                    axis,
+                    q_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    x_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, ElementKind::U8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_channel_f64_u8_run(
-                    numel, shape4, axis, q_ptr, sc_ptr, zp_ptr, x_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    shape4,
+                    axis,
+                    q_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    x_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
-            _ => return Err(Error::Unsupported(
-                "DequantizePerChannelPlan: unsupported (TIn, TOut) at run()",
-            )),
+            _ => {
+                return Err(Error::Unsupported(
+                    "DequantizePerChannelPlan: unsupported (TIn, TOut) at run()",
+                ));
+            }
         };
         map_status(status)
     }

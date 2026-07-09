@@ -82,7 +82,10 @@ fn decode_one(bytes: &[u8], label: &str) {
         .decode(&stream, &image, &DecodeParams::default())
         .expect("decode");
     future.wait().expect("future wait");
-    assert!(future.all_succeeded().expect("status"), "{label} decode failed");
+    assert!(
+        future.all_succeeded().expect("status"),
+        "{label} decode failed"
+    );
 
     // `image` borrows `buf` mutably for its whole scope (compile-time
     // use-after-free guard); drop it before reading the decoded pixels back.

@@ -48,7 +48,8 @@ pub struct QuantizePerTensorDescriptor {
 
 impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug for QuantizePerTensorArgs<'a, TIn, TOut> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("QuantizePerTensorArgs").finish_non_exhaustive()
+        f.debug_struct("QuantizePerTensorArgs")
+            .finish_non_exhaustive()
     }
 }
 
@@ -197,21 +198,37 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
             match TOut::KIND {
                 ElementKind::S8 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_f64_s8_run(
-                        numel, scale_f64, zp, qmin, qmax,
-                        x_ptr, q_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f64,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        q_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::U8 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_f64_u8_run(
-                        numel, scale_f64, zp, qmin, qmax,
-                        x_ptr, q_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f64,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        q_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
-                _ => return Err(Error::Unsupported(
-                    "QuantizePerTensorPlan: unsupported TOut at run() (select should have caught)",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "QuantizePerTensorPlan: unsupported TOut at run() (select should have caught)",
+                    ));
+                }
             }
         } else {
             // f32 / f16 / bf16 input — f32 scale flavor.
@@ -219,49 +236,93 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
             match (TIn::KIND, TOut::KIND) {
                 (ElementKind::F32, ElementKind::S8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_f32_s8_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, q_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        q_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::F32, ElementKind::U8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_f32_u8_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, q_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        q_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::F16, ElementKind::S8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_f16_s8_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, q_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        q_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::F16, ElementKind::U8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_f16_u8_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, q_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        q_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::Bf16, ElementKind::S8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_bf16_s8_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, q_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        q_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::Bf16, ElementKind::U8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_bf16_u8_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, q_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        q_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
-                _ => return Err(Error::Unsupported(
-                    "QuantizePerTensorPlan: unsupported (TIn, TOut) at run()",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "QuantizePerTensorPlan: unsupported (TIn, TOut) at run()",
+                    ));
+                }
             }
         };
         map_status(status)

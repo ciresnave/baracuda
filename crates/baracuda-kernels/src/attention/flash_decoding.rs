@@ -102,7 +102,13 @@ impl FlashDecodingDescriptor {
     /// Convenience constructor for pure MHA (`num_kv_heads == num_heads`)
     /// with the standard `1/sqrt(D)` scale.
     #[inline]
-    pub fn new(batch_size: i32, num_heads: i32, k_len: i32, head_dim: i32, element: ElementKind) -> Self {
+    pub fn new(
+        batch_size: i32,
+        num_heads: i32,
+        k_len: i32,
+        head_dim: i32,
+        element: ElementKind,
+    ) -> Self {
         let scale = 1.0_f32 / (head_dim as f32).sqrt();
         Self {
             batch_size,
@@ -339,10 +345,7 @@ impl<T: Element> FlashDecodingPlan<T> {
         let (ws_ptr, ws_bytes) = match workspace {
             Workspace::None => {
                 if needed > 0 {
-                    return Err(Error::WorkspaceTooSmall {
-                        needed,
-                        got: 0,
-                    });
+                    return Err(Error::WorkspaceTooSmall { needed, got: 0 });
                 }
                 (core::ptr::null_mut::<c_void>(), 0_usize)
             }
@@ -390,31 +393,33 @@ impl<T: Element> FlashDecodingPlan<T> {
                     self.desc.scale,
                     stream_ptr,
                 ),
-                ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_flash_decoding_bf16_run(
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    y_ptr,
-                    ws_ptr,
-                    ws_bytes,
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.num_kv_heads,
-                    self.desc.k_len,
-                    self.desc.head_dim,
-                    args.q.stride[0],
-                    args.q.stride[1],
-                    args.k.stride[0],
-                    args.k.stride[1],
-                    args.k.stride[2],
-                    args.v.stride[0],
-                    args.v.stride[1],
-                    args.v.stride[2],
-                    args.y.stride[0],
-                    args.y.stride[1],
-                    self.desc.scale,
-                    stream_ptr,
-                ),
+                ElementKind::Bf16 => {
+                    baracuda_kernels_sys::baracuda_kernels_flash_decoding_bf16_run(
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        y_ptr,
+                        ws_ptr,
+                        ws_bytes,
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.num_kv_heads,
+                        self.desc.k_len,
+                        self.desc.head_dim,
+                        args.q.stride[0],
+                        args.q.stride[1],
+                        args.k.stride[0],
+                        args.k.stride[1],
+                        args.k.stride[2],
+                        args.v.stride[0],
+                        args.v.stride[1],
+                        args.v.stride[2],
+                        args.y.stride[0],
+                        args.y.stride[1],
+                        self.desc.scale,
+                        stream_ptr,
+                    )
+                }
                 _ => {
                     return Err(Error::Unsupported(
                         "baracuda-kernels::FlashDecodingPlan: only f16 / bf16 wired",

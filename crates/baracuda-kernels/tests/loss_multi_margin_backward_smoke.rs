@@ -1,10 +1,9 @@
 //! Real-GPU smoke test for `MultiMarginLossBackwardPlan`. BW × 4 dtypes.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    ElementKind, LossReduction, MultiMarginLossBackwardArgs,
-    MultiMarginLossBackwardDescriptor, MultiMarginLossBackwardPlan, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, LossReduction, MultiMarginLossBackwardArgs, MultiMarginLossBackwardDescriptor,
+    MultiMarginLossBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
 };
 use half::{bf16, f16};
 
@@ -17,7 +16,13 @@ fn setup() -> (Context, Stream) {
 }
 
 fn host_mm_bw_f64(
-    input: &[f64], t: &[i64], n: usize, c: usize, margin: f64, pn: f64, dy: f64,
+    input: &[f64],
+    t: &[i64],
+    n: usize,
+    c: usize,
+    margin: f64,
+    pn: f64,
+    dy: f64,
 ) -> Vec<f64> {
     let scale = dy / (n as f64);
     let mut din = vec![0.0; n * c];
@@ -27,10 +32,16 @@ fn host_mm_bw_f64(
         let coef = scale / (c as f64);
         let mut acc_t = 0.0;
         for j in 0..c {
-            if j == ti { continue; }
+            if j == ti {
+                continue;
+            }
             let h = margin - xt + input[r * c + j];
             if h > 0.0 {
-                let grad_h = if pn == 1.0 { 1.0 } else { pn * h.powf(pn - 1.0) };
+                let grad_h = if pn == 1.0 {
+                    1.0
+                } else {
+                    pn * h.powf(pn - 1.0)
+                };
                 din[r * c + j] = grad_h * coef;
                 acc_t += grad_h;
             }
@@ -53,7 +64,12 @@ fn loss_multi_margin_backward_f32_mean() {
     let dy_host = [1.0f32];
     let expected: Vec<f32> = host_mm_bw_f64(
         &h_in.iter().map(|&v| v as f64).collect::<Vec<_>>(),
-        &h_t, n, c, margin as f64, p_norm as f64, 1.0,
+        &h_t,
+        n,
+        c,
+        margin as f64,
+        p_norm as f64,
+        1.0,
     )
     .into_iter()
     .map(|v| v as f32)
@@ -70,20 +86,33 @@ fn loss_multi_margin_backward_f32_mean() {
         p_norm,
         element: ElementKind::F32,
     };
-    let plan = MultiMarginLossBackwardPlan::<f32>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MultiMarginLossBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         MultiMarginLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, 1], stride: [1, 1] },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dinput: TensorMut { data: dev_dx.as_slice_mut(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, 1],
+                stride: [1, 1],
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dinput: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
         },
     )
     .unwrap();
@@ -92,7 +121,12 @@ fn loss_multi_margin_backward_f32_mean() {
     dev_dx.copy_to_host(&mut got).unwrap();
     for i in 0..(n * c) {
         let tol = expected[i].abs().max(1.0) * 16.0 * f32::EPSILON + 1e-6;
-        assert!((got[i] - expected[i]).abs() <= tol, "f32 MM BW @{i}: got={} want={}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 MM BW @{i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -120,20 +154,33 @@ fn loss_multi_margin_backward_f64_mean() {
         p_norm,
         element: ElementKind::F64,
     };
-    let plan = MultiMarginLossBackwardPlan::<f64>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MultiMarginLossBackwardPlan::<f64>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         MultiMarginLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, 1], stride: [1, 1] },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dinput: TensorMut { data: dev_dx.as_slice_mut(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, 1],
+                stride: [1, 1],
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dinput: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
         },
     )
     .unwrap();
@@ -172,20 +219,33 @@ fn loss_multi_margin_backward_f16_mean() {
         p_norm,
         element: ElementKind::F16,
     };
-    let plan = MultiMarginLossBackwardPlan::<f16>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MultiMarginLossBackwardPlan::<f16>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         MultiMarginLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, 1], stride: [1, 1] },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dinput: TensorMut { data: dev_dx.as_slice_mut(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, 1],
+                stride: [1, 1],
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dinput: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
         },
     )
     .unwrap();
@@ -196,7 +256,12 @@ fn loss_multi_margin_backward_f16_mean() {
         let want = expected[i] as f32;
         let g = got[i].to_f32();
         let tol = want.abs().max(1.0) * 16.0 * 9.77e-4_f32 + 5e-3;
-        assert!((g - want).abs() <= tol, "f16 MM BW @{i}: got={} want={}", g, want);
+        assert!(
+            (g - want).abs() <= tol,
+            "f16 MM BW @{i}: got={} want={}",
+            g,
+            want
+        );
     }
 }
 
@@ -226,20 +291,33 @@ fn loss_multi_margin_backward_bf16_mean() {
         p_norm,
         element: ElementKind::Bf16,
     };
-    let plan = MultiMarginLossBackwardPlan::<bf16>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MultiMarginLossBackwardPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         MultiMarginLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, 1], stride: [1, 1] },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dinput: TensorMut { data: dev_dx.as_slice_mut(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, 1],
+                stride: [1, 1],
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dinput: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
         },
     )
     .unwrap();
@@ -250,6 +328,11 @@ fn loss_multi_margin_backward_bf16_mean() {
         let want = expected[i] as f32;
         let g = got[i].to_f32();
         let tol = want.abs().max(1.0) * 16.0 * 7.81e-3_f32 + 2e-2;
-        assert!((g - want).abs() <= tol, "bf16 MM BW @{i}: got={} want={}", g, want);
+        assert!(
+            (g - want).abs() <= tol,
+            "bf16 MM BW @{i}: got={} want={}",
+            g,
+            want
+        );
     }
 }

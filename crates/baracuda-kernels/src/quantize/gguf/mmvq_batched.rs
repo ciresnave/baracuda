@@ -52,9 +52,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Element, ElementKind, GgufBlockFormat, KernelSku,
-    MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut,
-    TensorRef, Workspace, U8,
+    ArchSku, BackendKind, Element, ElementKind, GgufBlockFormat, KernelSku, MathPrecision,
+    OpCategory, PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, U8,
+    Workspace,
 };
 use baracuda_types::DeviceRepr;
 use half::{bf16, f16};
@@ -385,7 +385,10 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
         let need = self.workspace_size();
         let (ws_ptr, ws_bytes) = match workspace {
             Workspace::None => {
-                return Err(Error::WorkspaceTooSmall { needed: need, got: 0 });
+                return Err(Error::WorkspaceTooSmall {
+                    needed: need,
+                    got: 0,
+                });
             }
             Workspace::Borrowed(slice) => {
                 let got = slice.len();
@@ -449,32 +452,77 @@ unsafe fn dispatch_ffi<T: GgufMmvqBatchedActivation>(
 ) -> i32 {
     match (format, T::KIND) {
         // ---- Pure FP ----
-        (GgufMmvqBatchedFormat::Fp, ElementKind::F32) => {
-            unsafe { baracuda_kernels_sys::baracuda_kernels_mmvq_batched_f32_run(
-                n_experts, n_rows_per_expert, n_cols, weights, activations,
-                sorted_token_ids, expert_offsets, topk_weights, output, top_k,
-                workspace, workspace_bytes, stream) }
-        }
-        (GgufMmvqBatchedFormat::Fp, ElementKind::F16) => {
-            unsafe { baracuda_kernels_sys::baracuda_kernels_mmvq_batched_f16_run(
-                n_experts, n_rows_per_expert, n_cols, weights, activations,
-                sorted_token_ids, expert_offsets, topk_weights, output, top_k,
-                workspace, workspace_bytes, stream) }
-        }
-        (GgufMmvqBatchedFormat::Fp, ElementKind::Bf16) => {
-            unsafe { baracuda_kernels_sys::baracuda_kernels_mmvq_batched_bf16_run(
-                n_experts, n_rows_per_expert, n_cols, weights, activations,
-                sorted_token_ids, expert_offsets, topk_weights, output, top_k,
-                workspace, workspace_bytes, stream) }
-        }
+        (GgufMmvqBatchedFormat::Fp, ElementKind::F32) => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_mmvq_batched_f32_run(
+                n_experts,
+                n_rows_per_expert,
+                n_cols,
+                weights,
+                activations,
+                sorted_token_ids,
+                expert_offsets,
+                topk_weights,
+                output,
+                top_k,
+                workspace,
+                workspace_bytes,
+                stream,
+            )
+        },
+        (GgufMmvqBatchedFormat::Fp, ElementKind::F16) => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_mmvq_batched_f16_run(
+                n_experts,
+                n_rows_per_expert,
+                n_cols,
+                weights,
+                activations,
+                sorted_token_ids,
+                expert_offsets,
+                topk_weights,
+                output,
+                top_k,
+                workspace,
+                workspace_bytes,
+                stream,
+            )
+        },
+        (GgufMmvqBatchedFormat::Fp, ElementKind::Bf16) => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_mmvq_batched_bf16_run(
+                n_experts,
+                n_rows_per_expert,
+                n_cols,
+                weights,
+                activations,
+                sorted_token_ids,
+                expert_offsets,
+                topk_weights,
+                output,
+                top_k,
+                workspace,
+                workspace_bytes,
+                stream,
+            )
+        },
         // ---- Quantized ----
-        (GgufMmvqBatchedFormat::Quantized(fmt), kind) => {
-            unsafe { dispatch_quant_ffi(
-                *fmt, kind, n_experts, n_rows_per_expert, n_cols, weights, activations,
-                sorted_token_ids, expert_offsets, topk_weights, output, top_k,
-                workspace, workspace_bytes, stream,
-            ) }
-        }
+        (GgufMmvqBatchedFormat::Quantized(fmt), kind) => unsafe {
+            dispatch_quant_ffi(
+                *fmt,
+                kind,
+                n_experts,
+                n_rows_per_expert,
+                n_cols,
+                weights,
+                activations,
+                sorted_token_ids,
+                expert_offsets,
+                topk_weights,
+                output,
+                top_k,
+                workspace,
+                workspace_bytes,
+                stream,
+            )
+        },
         _ => -1,
     }
 }
@@ -499,46 +547,103 @@ unsafe fn dispatch_quant_ffi(
 ) -> i32 {
     macro_rules! call {
         ($sym:ident) => {
-            unsafe { baracuda_kernels_sys::$sym(
-                n_experts, n_rows_per_expert, n_cols, weights, activations,
-                sorted_token_ids, expert_offsets, topk_weights, output, top_k,
-                workspace, workspace_bytes, stream) }
+            unsafe {
+                baracuda_kernels_sys::$sym(
+                    n_experts,
+                    n_rows_per_expert,
+                    n_cols,
+                    weights,
+                    activations,
+                    sorted_token_ids,
+                    expert_offsets,
+                    topk_weights,
+                    output,
+                    top_k,
+                    workspace,
+                    workspace_bytes,
+                    stream,
+                )
+            }
         };
     }
     match (fmt, kind) {
-        (GgufBlockFormat::Q4_0, ElementKind::F32)  => call!(baracuda_kernels_mmvq_q4_0_batched_run),
-        (GgufBlockFormat::Q4_0, ElementKind::F16)  => call!(baracuda_kernels_mmvq_q4_0_batched_f16_run),
-        (GgufBlockFormat::Q4_0, ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q4_0_batched_bf16_run),
-        (GgufBlockFormat::Q4_1, ElementKind::F32)  => call!(baracuda_kernels_mmvq_q4_1_batched_run),
-        (GgufBlockFormat::Q4_1, ElementKind::F16)  => call!(baracuda_kernels_mmvq_q4_1_batched_f16_run),
-        (GgufBlockFormat::Q4_1, ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q4_1_batched_bf16_run),
-        (GgufBlockFormat::Q5_0, ElementKind::F32)  => call!(baracuda_kernels_mmvq_q5_0_batched_run),
-        (GgufBlockFormat::Q5_0, ElementKind::F16)  => call!(baracuda_kernels_mmvq_q5_0_batched_f16_run),
-        (GgufBlockFormat::Q5_0, ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q5_0_batched_bf16_run),
-        (GgufBlockFormat::Q5_1, ElementKind::F32)  => call!(baracuda_kernels_mmvq_q5_1_batched_run),
-        (GgufBlockFormat::Q5_1, ElementKind::F16)  => call!(baracuda_kernels_mmvq_q5_1_batched_f16_run),
-        (GgufBlockFormat::Q5_1, ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q5_1_batched_bf16_run),
-        (GgufBlockFormat::Q8_0, ElementKind::F32)  => call!(baracuda_kernels_mmvq_q8_0_batched_run),
-        (GgufBlockFormat::Q8_0, ElementKind::F16)  => call!(baracuda_kernels_mmvq_q8_0_batched_f16_run),
-        (GgufBlockFormat::Q8_0, ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q8_0_batched_bf16_run),
-        (GgufBlockFormat::Q2K,  ElementKind::F32)  => call!(baracuda_kernels_mmvq_q2_K_batched_run),
-        (GgufBlockFormat::Q2K,  ElementKind::F16)  => call!(baracuda_kernels_mmvq_q2_K_batched_f16_run),
-        (GgufBlockFormat::Q2K,  ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q2_K_batched_bf16_run),
-        (GgufBlockFormat::Q3K,  ElementKind::F32)  => call!(baracuda_kernels_mmvq_q3_K_batched_run),
-        (GgufBlockFormat::Q3K,  ElementKind::F16)  => call!(baracuda_kernels_mmvq_q3_K_batched_f16_run),
-        (GgufBlockFormat::Q3K,  ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q3_K_batched_bf16_run),
-        (GgufBlockFormat::Q4K,  ElementKind::F32)  => call!(baracuda_kernels_mmvq_q4_K_batched_run),
-        (GgufBlockFormat::Q4K,  ElementKind::F16)  => call!(baracuda_kernels_mmvq_q4_K_batched_f16_run),
-        (GgufBlockFormat::Q4K,  ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q4_K_batched_bf16_run),
-        (GgufBlockFormat::Q5K,  ElementKind::F32)  => call!(baracuda_kernels_mmvq_q5_K_batched_run),
-        (GgufBlockFormat::Q5K,  ElementKind::F16)  => call!(baracuda_kernels_mmvq_q5_K_batched_f16_run),
-        (GgufBlockFormat::Q5K,  ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q5_K_batched_bf16_run),
-        (GgufBlockFormat::Q6K,  ElementKind::F32)  => call!(baracuda_kernels_mmvq_q6_K_batched_run),
-        (GgufBlockFormat::Q6K,  ElementKind::F16)  => call!(baracuda_kernels_mmvq_q6_K_batched_f16_run),
-        (GgufBlockFormat::Q6K,  ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q6_K_batched_bf16_run),
-        (GgufBlockFormat::Q8K,  ElementKind::F32)  => call!(baracuda_kernels_mmvq_q8_K_batched_run),
-        (GgufBlockFormat::Q8K,  ElementKind::F16)  => call!(baracuda_kernels_mmvq_q8_K_batched_f16_run),
-        (GgufBlockFormat::Q8K,  ElementKind::Bf16) => call!(baracuda_kernels_mmvq_q8_K_batched_bf16_run),
+        (GgufBlockFormat::Q4_0, ElementKind::F32) => call!(baracuda_kernels_mmvq_q4_0_batched_run),
+        (GgufBlockFormat::Q4_0, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q4_0_batched_f16_run)
+        }
+        (GgufBlockFormat::Q4_0, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q4_0_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q4_1, ElementKind::F32) => call!(baracuda_kernels_mmvq_q4_1_batched_run),
+        (GgufBlockFormat::Q4_1, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q4_1_batched_f16_run)
+        }
+        (GgufBlockFormat::Q4_1, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q4_1_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q5_0, ElementKind::F32) => call!(baracuda_kernels_mmvq_q5_0_batched_run),
+        (GgufBlockFormat::Q5_0, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q5_0_batched_f16_run)
+        }
+        (GgufBlockFormat::Q5_0, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q5_0_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q5_1, ElementKind::F32) => call!(baracuda_kernels_mmvq_q5_1_batched_run),
+        (GgufBlockFormat::Q5_1, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q5_1_batched_f16_run)
+        }
+        (GgufBlockFormat::Q5_1, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q5_1_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q8_0, ElementKind::F32) => call!(baracuda_kernels_mmvq_q8_0_batched_run),
+        (GgufBlockFormat::Q8_0, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q8_0_batched_f16_run)
+        }
+        (GgufBlockFormat::Q8_0, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q8_0_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q2K, ElementKind::F32) => call!(baracuda_kernels_mmvq_q2_K_batched_run),
+        (GgufBlockFormat::Q2K, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q2_K_batched_f16_run)
+        }
+        (GgufBlockFormat::Q2K, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q2_K_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q3K, ElementKind::F32) => call!(baracuda_kernels_mmvq_q3_K_batched_run),
+        (GgufBlockFormat::Q3K, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q3_K_batched_f16_run)
+        }
+        (GgufBlockFormat::Q3K, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q3_K_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q4K, ElementKind::F32) => call!(baracuda_kernels_mmvq_q4_K_batched_run),
+        (GgufBlockFormat::Q4K, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q4_K_batched_f16_run)
+        }
+        (GgufBlockFormat::Q4K, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q4_K_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q5K, ElementKind::F32) => call!(baracuda_kernels_mmvq_q5_K_batched_run),
+        (GgufBlockFormat::Q5K, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q5_K_batched_f16_run)
+        }
+        (GgufBlockFormat::Q5K, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q5_K_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q6K, ElementKind::F32) => call!(baracuda_kernels_mmvq_q6_K_batched_run),
+        (GgufBlockFormat::Q6K, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q6_K_batched_f16_run)
+        }
+        (GgufBlockFormat::Q6K, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q6_K_batched_bf16_run)
+        }
+        (GgufBlockFormat::Q8K, ElementKind::F32) => call!(baracuda_kernels_mmvq_q8_K_batched_run),
+        (GgufBlockFormat::Q8K, ElementKind::F16) => {
+            call!(baracuda_kernels_mmvq_q8_K_batched_f16_run)
+        }
+        (GgufBlockFormat::Q8K, ElementKind::Bf16) => {
+            call!(baracuda_kernels_mmvq_q8_K_batched_bf16_run)
+        }
         _ => -1,
     }
 }

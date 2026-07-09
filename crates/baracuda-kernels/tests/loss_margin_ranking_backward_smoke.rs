@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `MarginRankingLossBackwardPlan`. BW × 4 dtypes × Mean.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, LossReduction, MarginRankingLossBackwardArgs,
-    MarginRankingLossBackwardDescriptor, MarginRankingLossBackwardPlan, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, LossReduction, MarginRankingLossBackwardArgs, MarginRankingLossBackwardDescriptor,
+    MarginRankingLossBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -63,22 +63,43 @@ fn loss_margin_ranking_backward_f32_mean() {
         margin,
         element: ElementKind::F32,
     };
-    let plan = MarginRankingLossBackwardPlan::<f32, 2>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MarginRankingLossBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         MarginRankingLossBackwardArgs {
-            x1: TensorRef { data: dev_x1.as_slice(), shape, stride: contiguous_stride(shape) },
-            x2: TensorRef { data: dev_x2.as_slice(), shape, stride: contiguous_stride(shape) },
-            t: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dx1: TensorMut { data: dev_dx1.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dx2: TensorMut { data: dev_dx2.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x1: TensorRef {
+                data: dev_x1.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x2: TensorRef {
+                data: dev_x2.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            t: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dx1: TensorMut {
+                data: dev_dx1.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dx2: TensorMut {
+                data: dev_dx2.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -91,8 +112,18 @@ fn loss_margin_ranking_backward_f32_mean() {
         let want1 = e1[i] as f32;
         let want2 = e2[i] as f32;
         let tol = want1.abs().max(want2.abs()) * 8.0 * f32::EPSILON + 1e-6;
-        assert!((got1[i] - want1).abs() <= tol, "f32 MR BW dx1 @{i}: got={} want={}", got1[i], want1);
-        assert!((got2[i] - want2).abs() <= tol, "f32 MR BW dx2 @{i}: got={} want={}", got2[i], want2);
+        assert!(
+            (got1[i] - want1).abs() <= tol,
+            "f32 MR BW dx1 @{i}: got={} want={}",
+            got1[i],
+            want1
+        );
+        assert!(
+            (got2[i] - want2).abs() <= tol,
+            "f32 MR BW dx2 @{i}: got={} want={}",
+            got2[i],
+            want2
+        );
     }
 }
 
@@ -122,22 +153,43 @@ fn loss_margin_ranking_backward_f64_mean() {
         margin,
         element: ElementKind::F64,
     };
-    let plan = MarginRankingLossBackwardPlan::<f64, 2>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MarginRankingLossBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         MarginRankingLossBackwardArgs {
-            x1: TensorRef { data: dev_x1.as_slice(), shape, stride: contiguous_stride(shape) },
-            x2: TensorRef { data: dev_x2.as_slice(), shape, stride: contiguous_stride(shape) },
-            t: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dx1: TensorMut { data: dev_dx1.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dx2: TensorMut { data: dev_dx2.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x1: TensorRef {
+                data: dev_x1.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x2: TensorRef {
+                data: dev_x2.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            t: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dx1: TensorMut {
+                data: dev_dx1.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dx2: TensorMut {
+                data: dev_dx2.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -185,22 +237,43 @@ fn loss_margin_ranking_backward_f16_mean() {
         margin,
         element: ElementKind::F16,
     };
-    let plan = MarginRankingLossBackwardPlan::<f16, 2>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MarginRankingLossBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         MarginRankingLossBackwardArgs {
-            x1: TensorRef { data: dev_x1.as_slice(), shape, stride: contiguous_stride(shape) },
-            x2: TensorRef { data: dev_x2.as_slice(), shape, stride: contiguous_stride(shape) },
-            t: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dx1: TensorMut { data: dev_dx1.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dx2: TensorMut { data: dev_dx2.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x1: TensorRef {
+                data: dev_x1.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x2: TensorRef {
+                data: dev_x2.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            t: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dx1: TensorMut {
+                data: dev_dx1.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dx2: TensorMut {
+                data: dev_dx2.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -215,8 +288,18 @@ fn loss_margin_ranking_backward_f16_mean() {
         let g1 = got1[i].to_f32();
         let g2 = got2[i].to_f32();
         let tol = want1.abs().max(want2.abs()).max(1.0) * 16.0 * 9.77e-4_f32 + 5e-3;
-        assert!((g1 - want1).abs() <= tol, "f16 MR BW dx1 @{i}: got={} want={}", g1, want1);
-        assert!((g2 - want2).abs() <= tol, "f16 MR BW dx2 @{i}: got={} want={}", g2, want2);
+        assert!(
+            (g1 - want1).abs() <= tol,
+            "f16 MR BW dx1 @{i}: got={} want={}",
+            g1,
+            want1
+        );
+        assert!(
+            (g2 - want2).abs() <= tol,
+            "f16 MR BW dx2 @{i}: got={} want={}",
+            g2,
+            want2
+        );
     }
 }
 
@@ -252,22 +335,43 @@ fn loss_margin_ranking_backward_bf16_mean() {
         margin,
         element: ElementKind::Bf16,
     };
-    let plan = MarginRankingLossBackwardPlan::<bf16, 2>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MarginRankingLossBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         MarginRankingLossBackwardArgs {
-            x1: TensorRef { data: dev_x1.as_slice(), shape, stride: contiguous_stride(shape) },
-            x2: TensorRef { data: dev_x2.as_slice(), shape, stride: contiguous_stride(shape) },
-            t: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dx1: TensorMut { data: dev_dx1.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dx2: TensorMut { data: dev_dx2.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x1: TensorRef {
+                data: dev_x1.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x2: TensorRef {
+                data: dev_x2.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            t: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dx1: TensorMut {
+                data: dev_dx1.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dx2: TensorMut {
+                data: dev_dx2.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .unwrap();
@@ -282,7 +386,17 @@ fn loss_margin_ranking_backward_bf16_mean() {
         let g1 = got1[i].to_f32();
         let g2 = got2[i].to_f32();
         let tol = want1.abs().max(want2.abs()).max(1.0) * 16.0 * 7.81e-3_f32 + 2e-2;
-        assert!((g1 - want1).abs() <= tol, "bf16 MR BW dx1 @{i}: got={} want={}", g1, want1);
-        assert!((g2 - want2).abs() <= tol, "bf16 MR BW dx2 @{i}: got={} want={}", g2, want2);
+        assert!(
+            (g1 - want1).abs() <= tol,
+            "bf16 MR BW dx1 @{i}: got={} want={}",
+            g1,
+            want1
+        );
+        assert!(
+            (g2 - want2).abs() <= tol,
+            "bf16 MR BW dx2 @{i}: got={} want={}",
+            g2,
+            want2
+        );
     }
 }

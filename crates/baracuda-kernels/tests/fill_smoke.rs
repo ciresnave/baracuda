@@ -5,10 +5,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test fill_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FillArgs, FillDescriptor, FillPlan, PlanPreference,
-    TensorMut, Workspace,
+    ElementKind, FillArgs, FillDescriptor, FillPlan, PlanPreference, TensorMut, Workspace,
+    contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -34,8 +34,8 @@ where
         value,
         element: kind,
     };
-    let plan = FillPlan::<T>::select(&stream, &desc, PlanPreference::default())
-        .expect("select FillPlan");
+    let plan =
+        FillPlan::<T>::select(&stream, &desc, PlanPreference::default()).expect("select FillPlan");
     let args = FillArgs::<T> {
         output: TensorMut {
             data: dev_y.as_slice_mut(),
@@ -116,7 +116,11 @@ fn fill_f16() {
 #[test]
 #[ignore]
 fn fill_bf16() {
-    run_case::<bf16>(bf16::from_f32(-7.0f32), ElementKind::Bf16, bf16::from_f32(0.0));
+    run_case::<bf16>(
+        bf16::from_f32(-7.0f32),
+        ElementKind::Bf16,
+        bf16::from_f32(0.0),
+    );
 }
 
 #[test]

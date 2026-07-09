@@ -19,10 +19,10 @@
 
 #![cfg(feature = "mhc")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, HyperConnectionArgs, HyperConnectionDescriptor,
-    HyperConnectionPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, HyperConnectionArgs, HyperConnectionDescriptor, HyperConnectionPlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::bf16;
 

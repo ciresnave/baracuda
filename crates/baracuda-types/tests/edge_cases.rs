@@ -3,7 +3,7 @@
 //! and Complex-number algebra.
 
 use baracuda_types::{
-    supports, BFloat16, Complex32, Complex64, CudaVersion, DeviceRepr, Feature, Half,
+    BFloat16, Complex32, Complex64, CudaVersion, DeviceRepr, Feature, Half, supports,
 };
 
 // ---- Numeric conversions ------------------------------------------------
@@ -13,7 +13,11 @@ fn half_round_trips_exact_values() {
     let values = [0.0f32, 1.0, -1.0, 0.5, -0.5, 2.0, -2.0];
     for &v in &values {
         let h = Half::from_f32(v);
-        assert_eq!(h.to_f32(), v, "exact-representable round-trip failed for {v}");
+        assert_eq!(
+            h.to_f32(),
+            v,
+            "exact-representable round-trip failed for {v}"
+        );
     }
 }
 
@@ -35,7 +39,10 @@ fn half_saturates_on_overflow() {
     let big = Half::from_f32(1e10); // outside half's ±65504 range
     // Implementation-defined: either infinity or the max representable.
     let f = big.to_f32();
-    assert!(f.is_infinite() || f >= 60000.0, "unexpected overflow handling: {f}");
+    assert!(
+        f.is_infinite() || f >= 60000.0,
+        "unexpected overflow handling: {f}"
+    );
 }
 
 #[test]
@@ -55,7 +62,10 @@ fn bfloat16_round_trips_top_byte() {
         } else {
             ((back - v) / v).abs()
         };
-        assert!(rel < 1e-2, "bf16 round-trip relative error too large: {rel} for {v}");
+        assert!(
+            rel < 1e-2,
+            "bf16 round-trip relative error too large: {rel} for {v}"
+        );
     }
 }
 
@@ -85,8 +95,14 @@ fn complex_layout_matches_cucomplex() {
     // to NVIDIA's cuComplex / cuDoubleComplex without casts.
     assert_eq!(core::mem::size_of::<Complex32>(), 8);
     assert_eq!(core::mem::size_of::<Complex64>(), 16);
-    assert_eq!(core::mem::align_of::<Complex32>(), core::mem::align_of::<f32>());
-    assert_eq!(core::mem::align_of::<Complex64>(), core::mem::align_of::<f64>());
+    assert_eq!(
+        core::mem::align_of::<Complex32>(),
+        core::mem::align_of::<f32>()
+    );
+    assert_eq!(
+        core::mem::align_of::<Complex64>(),
+        core::mem::align_of::<f64>()
+    );
 }
 
 // ---- Version parsing boundaries ----------------------------------------

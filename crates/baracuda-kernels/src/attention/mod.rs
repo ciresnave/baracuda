@@ -73,11 +73,11 @@ pub mod flash_sdpa_backward;
 // Gated on the `fa2` cargo feature at runtime (descriptor compiles
 // unconditionally for API discoverability; the run path errors with
 // Unsupported when the feature is off).
-pub mod flash_sdpa_varlen;
 #[cfg(feature = "sm89")]
 pub mod flash_sdpa_sm89;
-pub mod kv_cache;
+pub mod flash_sdpa_varlen;
 pub mod hyper_connection;
+pub mod kv_cache;
 pub mod rope;
 pub mod rope_backward;
 // Phase 45 — long-context position-interpolation helpers (host-side
@@ -89,22 +89,20 @@ pub mod sdpa_backward;
 pub use alibi::{AlibiArgs, AlibiDescriptor, AlibiPlan};
 pub use alibi_backward::{AlibiBackwardArgs, AlibiBackwardDescriptor, AlibiBackwardPlan};
 pub use flash_decoding::{
-    FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan, FLASH_DECODING_MAX_D,
+    FLASH_DECODING_MAX_D, FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan,
 };
-pub use flash_sdpa::{FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, FLASH_SDPA_MAX_D};
+pub use flash_sdpa::{FLASH_SDPA_MAX_D, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan};
 pub use flash_sdpa_backward::{
     FlashSdpaBackwardArgs, FlashSdpaBackwardDescriptor, FlashSdpaBackwardPlan,
 };
 // Phase 59b — varlen FW + BW.
+#[cfg(feature = "sm89")]
+pub use flash_sdpa_sm89::{FlashSdpaSm89Args, FlashSdpaSm89Descriptor, FlashSdpaSm89Plan};
 pub use flash_sdpa_varlen::{
     FlashSdpaVarlenArgs, FlashSdpaVarlenBackwardArgs, FlashSdpaVarlenBackwardPlan,
     FlashSdpaVarlenDescriptor, FlashSdpaVarlenPlan,
 };
-#[cfg(feature = "sm89")]
-pub use flash_sdpa_sm89::{FlashSdpaSm89Args, FlashSdpaSm89Descriptor, FlashSdpaSm89Plan};
-pub use hyper_connection::{
-    HyperConnectionArgs, HyperConnectionDescriptor, HyperConnectionPlan,
-};
+pub use hyper_connection::{HyperConnectionArgs, HyperConnectionDescriptor, HyperConnectionPlan};
 pub use kv_cache::{KvCacheAppendArgs, KvCacheAppendDescriptor, KvCacheAppendPlan};
 pub use rope::{RopeArgs, RopeDescriptor, RopePlan};
 pub use rope_backward::{RopeBackwardArgs, RopeBackwardDescriptor, RopeBackwardPlan};
@@ -191,30 +189,27 @@ pub mod selective_scan;
 pub mod ring_attention;
 
 pub use batch_paged_decode::{
-    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
-    PagedKvCacheDescriptor,
-};
-pub use batch_paged_prefill::{
-    BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
+    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan, PagedKvCacheDescriptor,
 };
 pub use batch_paged_decode_fp8::{
     BatchPagedDecodeFp8Args, BatchPagedDecodeFp8Descriptor, BatchPagedDecodeFp8Plan, Fp8KvDtype,
+};
+pub use batch_paged_prefill::{
+    BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
 };
 pub use batch_ragged_prefill::{
     BatchRaggedPrefillArgs, BatchRaggedPrefillDescriptor, BatchRaggedPrefillPlan,
 };
 pub use cascade_attn::{
-    CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
-    CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
+    CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan, CascadeMergeStatesArgs,
+    CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
 };
-pub use paged_kv_append::{
-    PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan,
-};
+pub use paged_kv_append::{PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan};
 
 // Phase 54 — xFormers BlockSparseAttention.
 pub use sdpa_block_sparse::{
-    SdpaBlockSparseArgs, SdpaBlockSparseDescriptor, SdpaBlockSparsePlan,
-    SDPA_BLOCK_SPARSE_MAX_BLOCK, SDPA_BLOCK_SPARSE_MAX_D,
+    SDPA_BLOCK_SPARSE_MAX_BLOCK, SDPA_BLOCK_SPARSE_MAX_D, SdpaBlockSparseArgs,
+    SdpaBlockSparseDescriptor, SdpaBlockSparsePlan,
 };
 
 // Phase 50 — Mamba-2 SSD chunk-scan re-exports.
@@ -233,5 +228,5 @@ pub use selective_scan::{
 
 // Phase 56 — Ring Attention re-exports.
 pub use ring_attention::{
-    RingAttentionArgs, RingAttentionDescriptor, RingAttentionPlan, RING_ATTENTION_HEAD_DIM,
+    RING_ATTENTION_HEAD_DIM, RingAttentionArgs, RingAttentionDescriptor, RingAttentionPlan,
 };

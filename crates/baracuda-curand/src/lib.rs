@@ -315,12 +315,7 @@ impl Generator {
     }
 
     /// Log-normal samples (`exp(N(mean, stddev²))`) in `f32`.
-    pub fn log_normal(
-        &self,
-        buf: &mut DeviceBuffer<f32>,
-        mean: f32,
-        stddev: f32,
-    ) -> Result<()> {
+    pub fn log_normal(&self, buf: &mut DeviceBuffer<f32>, mean: f32, stddev: f32) -> Result<()> {
         let c = curand()?;
         let cu = c.curand_generate_log_normal()?;
         check(unsafe {
@@ -358,17 +353,19 @@ impl Generator {
     pub fn poisson(&self, buf: &mut DeviceBuffer<u32>, lambda: f64) -> Result<()> {
         let c = curand()?;
         let cu = c.curand_generate_poisson()?;
-        check(unsafe { cu(self.inner.handle, buf.as_raw().0 as *mut u32, buf.len(), lambda) })
+        check(unsafe {
+            cu(
+                self.inner.handle,
+                buf.as_raw().0 as *mut u32,
+                buf.len(),
+                lambda,
+            )
+        })
     }
 
     /// Binomial-distributed `u32` samples (`trials` trials, success
     /// probability `prob`).
-    pub fn binomial(
-        &self,
-        buf: &mut DeviceBuffer<u32>,
-        trials: u32,
-        prob: f64,
-    ) -> Result<()> {
+    pub fn binomial(&self, buf: &mut DeviceBuffer<u32>, trials: u32, prob: f64) -> Result<()> {
         let c = curand()?;
         let cu = c.curand_generate_binomial()?;
         check(unsafe {

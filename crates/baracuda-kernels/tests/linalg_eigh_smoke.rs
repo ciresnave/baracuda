@@ -14,10 +14,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, EighArgs, EighDescriptor, EighPlan, ElementKind, FillMode, PlanPreference,
-    TensorMut, Workspace,
+    EighArgs, EighDescriptor, EighPlan, ElementKind, FillMode, PlanPreference, TensorMut,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

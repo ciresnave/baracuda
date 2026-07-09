@@ -159,7 +159,11 @@ impl<T: Element, const N: usize> PReluPlan<T, N> {
                 "baracuda-kernels::PReluPlan: x / y shape mismatch",
             ));
         }
-        let expected_weight = if self.scalar_weight { 1 } else { self.channel_extent };
+        let expected_weight = if self.scalar_weight {
+            1
+        } else {
+            self.channel_extent
+        };
         if args.weight.shape[0] != expected_weight {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PReluPlan: weight shape mismatch",

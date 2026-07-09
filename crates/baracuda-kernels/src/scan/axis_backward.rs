@@ -307,8 +307,12 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
                 map_status(status)
             }
             ScanKind::Cumprod => {
-                let x_ref = args.x.expect("Cumprod BW requires saved x — validated above");
-                let y_ref = args.y.expect("Cumprod BW requires saved y — validated above");
+                let x_ref = args
+                    .x
+                    .expect("Cumprod BW requires saved x — validated above");
+                let y_ref = args
+                    .y
+                    .expect("Cumprod BW requires saved y — validated above");
                 let stride_x = x_ref.stride;
                 let stride_y = y_ref.stride;
                 let x_ptr = x_ref.data.as_raw().0 as *const c_void;

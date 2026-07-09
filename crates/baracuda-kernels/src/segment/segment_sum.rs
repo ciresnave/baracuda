@@ -303,62 +303,132 @@ pub(crate) fn run_sorted_fw<T: Element>(
     let status = match (T::KIND, op) {
         (ElementKind::F32, SortedFwOp::Sum) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_sum_f32_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         (ElementKind::F64, SortedFwOp::Sum) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_sum_f64_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         (ElementKind::F32, SortedFwOp::Mean) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_mean_f32_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         (ElementKind::F64, SortedFwOp::Mean) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_mean_f64_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         (ElementKind::F32, SortedFwOp::Max) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_max_f32_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         (ElementKind::F64, SortedFwOp::Max) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_max_f64_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         (ElementKind::F32, SortedFwOp::Min) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_min_f32_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         (ElementKind::F64, SortedFwOp::Min) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_min_f64_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         (ElementKind::F32, SortedFwOp::Prod) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_prod_f32_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         (ElementKind::F64, SortedFwOp::Prod) => unsafe {
             baracuda_kernels_sys::baracuda_kernels_segment_prod_f64_run(
-                n, d, num_segments, in_ptr, id_ptr, out_ptr,
-                core::ptr::null_mut(), 0, stream_ptr,
+                n,
+                d,
+                num_segments,
+                in_ptr,
+                id_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_ptr,
             )
         },
         _ => {

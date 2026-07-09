@@ -7,7 +7,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -49,13 +49,16 @@ fn check_sorted_descending<T: PartialOrd + Copy + core::fmt::Debug>(input: &[T],
 fn argsort_big_can_implement_rejects_small_rows() {
     // `row_len <= 1024` should return status 3 — callers should route
     // to the bitonic kernel.
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_can_implement(1, 1024) };
+    let s =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_can_implement(1, 1024) };
     assert_eq!(s, 3, "row_len == 1024 should be rejected by big path");
     let s = unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_can_implement(1, 100) };
     assert_eq!(s, 3, "row_len == 100 should be rejected by big path");
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_can_implement(1, 2048) };
+    let s =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_can_implement(1, 2048) };
     assert_eq!(s, 0, "row_len > 1024 should be accepted");
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_can_implement(-1, 2048) };
+    let s =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_can_implement(-1, 2048) };
     assert_eq!(s, 2, "negative batch should be rejected");
 }
 
@@ -63,10 +66,13 @@ fn argsort_big_can_implement_rejects_small_rows() {
 fn argsort_big_workspace_size_grows_with_inputs() {
     // Sanity check the workspace_size query: bigger inputs → bigger
     // workspace, zero for degenerate.
-    let zero = unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_workspace_size(0, 100) };
+    let zero =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_workspace_size(0, 100) };
     assert_eq!(zero, 0);
-    let small = unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_workspace_size(1, 2000) };
-    let big = unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_workspace_size(1, 32000) };
+    let small =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_workspace_size(1, 2000) };
+    let big =
+        unsafe { baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_workspace_size(1, 32000) };
     assert!(small > 0, "non-degenerate input should report > 0 bytes");
     assert!(big > small, "bigger row_len should need more workspace");
 }

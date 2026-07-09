@@ -297,51 +297,91 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
             // -------- Add (no saves) --------
             (BinaryKind::Add, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_add_backward_f32_run(
-                    numel, dy_ptr, da_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryKind::Add, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_add_backward_f16_run(
-                    numel, dy_ptr, da_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryKind::Add, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_add_backward_bf16_run(
-                    numel, dy_ptr, da_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryKind::Add, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_add_backward_f64_run(
-                    numel, dy_ptr, da_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // -------- Sub (no saves) --------
             (BinaryKind::Sub, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_sub_backward_f32_run(
-                    numel, dy_ptr, da_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryKind::Sub, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_sub_backward_f16_run(
-                    numel, dy_ptr, da_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryKind::Sub, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_sub_backward_bf16_run(
-                    numel, dy_ptr, da_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryKind::Sub, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_sub_backward_f64_run(
-                    numel, dy_ptr, da_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // -------- Mul (saves) --------
@@ -349,8 +389,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_mul_backward_f32_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -358,8 +405,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_mul_backward_f16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -367,8 +421,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_mul_backward_bf16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -376,8 +437,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_mul_backward_f64_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -386,8 +454,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_div_backward_f32_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -395,8 +470,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_div_backward_f16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -404,8 +486,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_div_backward_bf16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -413,8 +502,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_div_backward_f64_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -423,8 +519,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_maximum_backward_f32_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -432,8 +535,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_maximum_backward_f16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -441,8 +551,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_maximum_backward_bf16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -450,8 +567,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_maximum_backward_f64_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -460,8 +584,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_minimum_backward_f32_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -469,8 +600,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_minimum_backward_f16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -478,8 +616,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_minimum_backward_bf16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -487,8 +632,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_minimum_backward_f64_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -497,8 +649,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_pow_backward_f32_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -506,8 +665,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_pow_backward_f16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -515,8 +681,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_pow_backward_bf16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -524,8 +697,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_pow_backward_f64_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -534,8 +714,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_atan2_backward_f32_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -543,8 +730,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_atan2_backward_f16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -552,8 +746,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_atan2_backward_bf16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -561,8 +762,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_atan2_backward_f64_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -571,8 +779,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_hypot_backward_f32_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -580,8 +795,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_hypot_backward_f16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -589,8 +811,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_hypot_backward_bf16_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }
@@ -598,8 +827,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
                 let (a_ptr, b_ptr) = saved_ptrs(&args);
                 unsafe {
                     baracuda_kernels_sys::baracuda_kernels_binary_hypot_backward_f64_run(
-                        numel, dy_ptr, a_ptr, b_ptr, da_ptr, db_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        dy_ptr,
+                        a_ptr,
+                        b_ptr,
+                        da_ptr,
+                        db_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
             }

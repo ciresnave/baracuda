@@ -54,6 +54,9 @@ use core::ffi::c_void;
 use core::ptr;
 
 use crate::cudnn_ffi::{
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16,
+    CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT, CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
     cudnnConvolutionBackwardData, cudnnConvolutionBackwardFilter, cudnnConvolutionDescriptor_t,
     cudnnConvolutionForward, cudnnCreate, cudnnCreateConvolutionDescriptor,
     cudnnCreateFilterDescriptor, cudnnCreateTensorDescriptor, cudnnDestroy,
@@ -63,10 +66,7 @@ use crate::cudnn_ffi::{
     cudnnHandle_t, cudnnSetConvolution2dDescriptor, cudnnSetConvolutionGroupCount,
     cudnnSetConvolutionNdDescriptor, cudnnSetFilter4dDescriptor, cudnnSetFilterNdDescriptor,
     cudnnSetStream, cudnnSetTensor4dDescriptor, cudnnSetTensorNdDescriptor,
-    cudnnTensorDescriptor_t, CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
-    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT,
-    CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
+    cudnnTensorDescriptor_t,
 };
 
 // CUDA runtime — `cudaMalloc` / `cudaFree` for the workspace fallback.
@@ -374,11 +374,7 @@ fn query_conv_ws(g: &ConvDescGuard, dir: Dir) -> (i32, usize) {
             )
         },
     };
-    if s != 0 {
-        (INTERNAL, 0)
-    } else {
-        (OK, bytes)
-    }
+    if s != 0 { (INTERNAL, 0) } else { (OK, bytes) }
 }
 
 /// Workspace fallback — if caller passed null + 0 bytes and cuDNN
@@ -421,7 +417,13 @@ impl WsHolder {
                 INTERNAL,
             );
         }
-        (WsHolder { ptr: p, owned: true }, OK)
+        (
+            WsHolder {
+                ptr: p,
+                owned: true,
+            },
+            OK,
+        )
     }
 }
 
@@ -706,12 +708,21 @@ fn run_conv2d_bw_filter(
 /// CUDA stream (or null for the default stream).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn baracuda_kernels_conv_2d_fw_f32_run(
-    batch: i32, c_in: i32, c_out: i32,
-    h_in: i32, w_in: i32, _h_out: i32, _w_out: i32,
-    kh: i32, kw: i32,
-    stride_h: i32, stride_w: i32,
-    pad_h: i32, pad_w: i32,
-    dilation_h: i32, dilation_w: i32,
+    batch: i32,
+    c_in: i32,
+    c_out: i32,
+    h_in: i32,
+    w_in: i32,
+    _h_out: i32,
+    _w_out: i32,
+    kh: i32,
+    kw: i32,
+    stride_h: i32,
+    stride_w: i32,
+    pad_h: i32,
+    pad_w: i32,
+    dilation_h: i32,
+    dilation_w: i32,
     groups: i32,
     input: *const c_void,
     filter: *const c_void,
@@ -721,12 +732,31 @@ pub unsafe extern "C" fn baracuda_kernels_conv_2d_fw_f32_run(
     stream: *mut c_void,
 ) -> i32 {
     let p = Conv2dParams {
-        batch, c_in, c_out, h_in, w_in,
-        h_filt: kh, w_filt: kw,
-        pad_h, pad_w, stride_h, stride_w,
-        dilation_h, dilation_w, groups,
+        batch,
+        c_in,
+        c_out,
+        h_in,
+        w_in,
+        h_filt: kh,
+        w_filt: kw,
+        pad_h,
+        pad_w,
+        stride_h,
+        stride_w,
+        dilation_h,
+        dilation_w,
+        groups,
     };
-    run_conv2d_fw(&p, DtypeTag::F32, input, filter, output, workspace, workspace_bytes, stream)
+    run_conv2d_fw(
+        &p,
+        DtypeTag::F32,
+        input,
+        filter,
+        output,
+        workspace,
+        workspace_bytes,
+        stream,
+    )
 }
 
 // Macro factory for the remaining Conv2d FW dtype variants.
@@ -738,12 +768,21 @@ macro_rules! conv2d_fw_impl {
         #[doc = "As [`baracuda_kernels_conv_2d_fw_f32_run`]."]
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            h_in: i32, w_in: i32, _h_out: i32, _w_out: i32,
-            kh: i32, kw: i32,
-            stride_h: i32, stride_w: i32,
-            pad_h: i32, pad_w: i32,
-            dilation_h: i32, dilation_w: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            h_in: i32,
+            w_in: i32,
+            _h_out: i32,
+            _w_out: i32,
+            kh: i32,
+            kw: i32,
+            stride_h: i32,
+            stride_w: i32,
+            pad_h: i32,
+            pad_w: i32,
+            dilation_h: i32,
+            dilation_w: i32,
             groups: i32,
             input: *const c_void,
             filter: *const c_void,
@@ -753,12 +792,31 @@ macro_rules! conv2d_fw_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = Conv2dParams {
-                batch, c_in, c_out, h_in, w_in,
-                h_filt: kh, w_filt: kw,
-                pad_h, pad_w, stride_h, stride_w,
-                dilation_h, dilation_w, groups,
+                batch,
+                c_in,
+                c_out,
+                h_in,
+                w_in,
+                h_filt: kh,
+                w_filt: kw,
+                pad_h,
+                pad_w,
+                stride_h,
+                stride_w,
+                dilation_h,
+                dilation_w,
+                groups,
             };
-            run_conv2d_fw(&p, $dt, input, filter, output, workspace, workspace_bytes, stream)
+            run_conv2d_fw(
+                &p,
+                $dt,
+                input,
+                filter,
+                output,
+                workspace,
+                workspace_bytes,
+                stream,
+            )
         }
     };
 }
@@ -776,12 +834,21 @@ macro_rules! conv2d_bw_data_impl {
         /// As [`baracuda_kernels_conv_2d_fw_f32_run`].
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            h_in: i32, w_in: i32, _h_out: i32, _w_out: i32,
-            kh: i32, kw: i32,
-            stride_h: i32, stride_w: i32,
-            pad_h: i32, pad_w: i32,
-            dilation_h: i32, dilation_w: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            h_in: i32,
+            w_in: i32,
+            _h_out: i32,
+            _w_out: i32,
+            kh: i32,
+            kw: i32,
+            stride_h: i32,
+            stride_w: i32,
+            pad_h: i32,
+            pad_w: i32,
+            dilation_h: i32,
+            dilation_w: i32,
             groups: i32,
             filter: *const c_void,
             grad_output: *const c_void,
@@ -791,12 +858,31 @@ macro_rules! conv2d_bw_data_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = Conv2dParams {
-                batch, c_in, c_out, h_in, w_in,
-                h_filt: kh, w_filt: kw,
-                pad_h, pad_w, stride_h, stride_w,
-                dilation_h, dilation_w, groups,
+                batch,
+                c_in,
+                c_out,
+                h_in,
+                w_in,
+                h_filt: kh,
+                w_filt: kw,
+                pad_h,
+                pad_w,
+                stride_h,
+                stride_w,
+                dilation_h,
+                dilation_w,
+                groups,
             };
-            run_conv2d_bw_data(&p, $dt, filter, grad_output, grad_input, workspace, workspace_bytes, stream)
+            run_conv2d_bw_data(
+                &p,
+                $dt,
+                filter,
+                grad_output,
+                grad_input,
+                workspace,
+                workspace_bytes,
+                stream,
+            )
         }
     };
 }
@@ -815,12 +901,21 @@ macro_rules! conv2d_bw_filter_impl {
         /// As [`baracuda_kernels_conv_2d_fw_f32_run`].
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            h_in: i32, w_in: i32, _h_out: i32, _w_out: i32,
-            kh: i32, kw: i32,
-            stride_h: i32, stride_w: i32,
-            pad_h: i32, pad_w: i32,
-            dilation_h: i32, dilation_w: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            h_in: i32,
+            w_in: i32,
+            _h_out: i32,
+            _w_out: i32,
+            kh: i32,
+            kw: i32,
+            stride_h: i32,
+            stride_w: i32,
+            pad_h: i32,
+            pad_w: i32,
+            dilation_h: i32,
+            dilation_w: i32,
             groups: i32,
             input: *const c_void,
             grad_output: *const c_void,
@@ -830,12 +925,31 @@ macro_rules! conv2d_bw_filter_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = Conv2dParams {
-                batch, c_in, c_out, h_in, w_in,
-                h_filt: kh, w_filt: kw,
-                pad_h, pad_w, stride_h, stride_w,
-                dilation_h, dilation_w, groups,
+                batch,
+                c_in,
+                c_out,
+                h_in,
+                w_in,
+                h_filt: kh,
+                w_filt: kw,
+                pad_h,
+                pad_w,
+                stride_h,
+                stride_w,
+                dilation_h,
+                dilation_w,
+                groups,
             };
-            run_conv2d_bw_filter(&p, $dt, input, grad_output, grad_filter, workspace, workspace_bytes, stream)
+            run_conv2d_bw_filter(
+                &p,
+                $dt,
+                input,
+                grad_output,
+                grad_filter,
+                workspace,
+                workspace_bytes,
+                stream,
+            )
         }
     };
 }
@@ -1016,20 +1130,53 @@ fn run_conv1d_dispatch(
         match dir {
             Dir::Fw => unsafe {
                 cudnnConvolutionForward(
-                    g.handle, ap, g.x_desc, a, g.w_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed, bp, g.y_desc, c,
+                    g.handle,
+                    ap,
+                    g.x_desc,
+                    a,
+                    g.w_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.y_desc,
+                    c,
                 )
             },
             Dir::BwData => unsafe {
                 cudnnConvolutionBackwardData(
-                    g.handle, ap, g.w_desc, a, g.y_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed, bp, g.x_desc, c,
+                    g.handle,
+                    ap,
+                    g.w_desc,
+                    a,
+                    g.y_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.x_desc,
+                    c,
                 )
             },
             Dir::BwFilter => unsafe {
                 cudnnConvolutionBackwardFilter(
-                    g.handle, ap, g.x_desc, a, g.y_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed, bp, g.w_desc, c,
+                    g.handle,
+                    ap,
+                    g.x_desc,
+                    a,
+                    g.y_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.w_desc,
+                    c,
                 )
             },
         }
@@ -1041,20 +1188,53 @@ fn run_conv1d_dispatch(
         match dir {
             Dir::Fw => unsafe {
                 cudnnConvolutionForward(
-                    g.handle, ap, g.x_desc, a, g.w_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed, bp, g.y_desc, c,
+                    g.handle,
+                    ap,
+                    g.x_desc,
+                    a,
+                    g.w_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.y_desc,
+                    c,
                 )
             },
             Dir::BwData => unsafe {
                 cudnnConvolutionBackwardData(
-                    g.handle, ap, g.w_desc, a, g.y_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed, bp, g.x_desc, c,
+                    g.handle,
+                    ap,
+                    g.w_desc,
+                    a,
+                    g.y_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.x_desc,
+                    c,
                 )
             },
             Dir::BwFilter => unsafe {
                 cudnnConvolutionBackwardFilter(
-                    g.handle, ap, g.x_desc, a, g.y_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed, bp, g.w_desc, c,
+                    g.handle,
+                    ap,
+                    g.x_desc,
+                    a,
+                    g.y_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.w_desc,
+                    c,
                 )
             },
         }
@@ -1075,10 +1255,15 @@ macro_rules! conv1d_fw_impl {
         /// All pointers must be live device memory; `stream` valid.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            l_in: i32, _l_out: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            l_in: i32,
+            _l_out: i32,
             l_filt: i32,
-            stride_l: i32, pad_l: i32, dilation_l: i32,
+            stride_l: i32,
+            pad_l: i32,
+            dilation_l: i32,
             groups: i32,
             input: *const c_void,
             filter: *const c_void,
@@ -1088,13 +1273,26 @@ macro_rules! conv1d_fw_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = Conv1dParams {
-                batch, c_in, c_out, l_in, l_filt,
-                pad_l, stride_l, dilation_l, groups,
+                batch,
+                c_in,
+                c_out,
+                l_in,
+                l_filt,
+                pad_l,
+                stride_l,
+                dilation_l,
+                groups,
             };
             run_conv1d_dispatch(
-                &p, $dt, Dir::Fw,
-                input, filter, output,
-                workspace, workspace_bytes, stream,
+                &p,
+                $dt,
+                Dir::Fw,
+                input,
+                filter,
+                output,
+                workspace,
+                workspace_bytes,
+                stream,
             )
         }
     };
@@ -1107,10 +1305,15 @@ macro_rules! conv1d_bw_data_impl {
         /// # Safety: as the Conv1d FW.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            l_in: i32, _l_out: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            l_in: i32,
+            _l_out: i32,
             l_filt: i32,
-            stride_l: i32, pad_l: i32, dilation_l: i32,
+            stride_l: i32,
+            pad_l: i32,
+            dilation_l: i32,
             groups: i32,
             filter: *const c_void,
             grad_output: *const c_void,
@@ -1120,13 +1323,26 @@ macro_rules! conv1d_bw_data_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = Conv1dParams {
-                batch, c_in, c_out, l_in, l_filt,
-                pad_l, stride_l, dilation_l, groups,
+                batch,
+                c_in,
+                c_out,
+                l_in,
+                l_filt,
+                pad_l,
+                stride_l,
+                dilation_l,
+                groups,
             };
             run_conv1d_dispatch(
-                &p, $dt, Dir::BwData,
-                filter, grad_output, grad_input,
-                workspace, workspace_bytes, stream,
+                &p,
+                $dt,
+                Dir::BwData,
+                filter,
+                grad_output,
+                grad_input,
+                workspace,
+                workspace_bytes,
+                stream,
             )
         }
     };
@@ -1139,10 +1355,15 @@ macro_rules! conv1d_bw_filter_impl {
         /// # Safety: as the Conv1d FW.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            l_in: i32, _l_out: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            l_in: i32,
+            _l_out: i32,
             l_filt: i32,
-            stride_l: i32, pad_l: i32, dilation_l: i32,
+            stride_l: i32,
+            pad_l: i32,
+            dilation_l: i32,
             groups: i32,
             input: *const c_void,
             grad_output: *const c_void,
@@ -1152,13 +1373,26 @@ macro_rules! conv1d_bw_filter_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = Conv1dParams {
-                batch, c_in, c_out, l_in, l_filt,
-                pad_l, stride_l, dilation_l, groups,
+                batch,
+                c_in,
+                c_out,
+                l_in,
+                l_filt,
+                pad_l,
+                stride_l,
+                dilation_l,
+                groups,
             };
             run_conv1d_dispatch(
-                &p, $dt, Dir::BwFilter,
-                input, grad_output, grad_filter,
-                workspace, workspace_bytes, stream,
+                &p,
+                $dt,
+                Dir::BwFilter,
+                input,
+                grad_output,
+                grad_filter,
+                workspace,
+                workspace_bytes,
+                stream,
             )
         }
     };
@@ -1187,11 +1421,21 @@ struct Conv3dParams {
     batch: i32,
     c_in: i32,
     c_out: i32,
-    d_in: i32, h_in: i32, w_in: i32,
-    d_filt: i32, h_filt: i32, w_filt: i32,
-    pad_d: i32, pad_h: i32, pad_w: i32,
-    stride_d: i32, stride_h: i32, stride_w: i32,
-    dilation_d: i32, dilation_h: i32, dilation_w: i32,
+    d_in: i32,
+    h_in: i32,
+    w_in: i32,
+    d_filt: i32,
+    h_filt: i32,
+    w_filt: i32,
+    pad_d: i32,
+    pad_h: i32,
+    pad_w: i32,
+    stride_d: i32,
+    stride_h: i32,
+    stride_w: i32,
+    dilation_d: i32,
+    dilation_h: i32,
+    dilation_w: i32,
     groups: i32,
 }
 
@@ -1367,20 +1611,53 @@ fn run_conv3d_dispatch(
         match dir {
             Dir::Fw => unsafe {
                 cudnnConvolutionForward(
-                    g.handle, ap, g.x_desc, a, g.w_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed, bp, g.y_desc, c,
+                    g.handle,
+                    ap,
+                    g.x_desc,
+                    a,
+                    g.w_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.y_desc,
+                    c,
                 )
             },
             Dir::BwData => unsafe {
                 cudnnConvolutionBackwardData(
-                    g.handle, ap, g.w_desc, a, g.y_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed, bp, g.x_desc, c,
+                    g.handle,
+                    ap,
+                    g.w_desc,
+                    a,
+                    g.y_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.x_desc,
+                    c,
                 )
             },
             Dir::BwFilter => unsafe {
                 cudnnConvolutionBackwardFilter(
-                    g.handle, ap, g.x_desc, a, g.y_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed, bp, g.w_desc, c,
+                    g.handle,
+                    ap,
+                    g.x_desc,
+                    a,
+                    g.y_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.w_desc,
+                    c,
                 )
             },
         }
@@ -1392,20 +1669,53 @@ fn run_conv3d_dispatch(
         match dir {
             Dir::Fw => unsafe {
                 cudnnConvolutionForward(
-                    g.handle, ap, g.x_desc, a, g.w_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed, bp, g.y_desc, c,
+                    g.handle,
+                    ap,
+                    g.x_desc,
+                    a,
+                    g.w_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.y_desc,
+                    c,
                 )
             },
             Dir::BwData => unsafe {
                 cudnnConvolutionBackwardData(
-                    g.handle, ap, g.w_desc, a, g.y_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed, bp, g.x_desc, c,
+                    g.handle,
+                    ap,
+                    g.w_desc,
+                    a,
+                    g.y_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.x_desc,
+                    c,
                 )
             },
             Dir::BwFilter => unsafe {
                 cudnnConvolutionBackwardFilter(
-                    g.handle, ap, g.x_desc, a, g.y_desc, b, g.conv_desc,
-                    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed, bp, g.w_desc, c,
+                    g.handle,
+                    ap,
+                    g.x_desc,
+                    a,
+                    g.y_desc,
+                    b,
+                    g.conv_desc,
+                    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                    ws.ptr,
+                    needed,
+                    bp,
+                    g.w_desc,
+                    c,
                 )
             },
         }
@@ -1424,13 +1734,27 @@ macro_rules! conv3d_dir_impl {
         #[unsafe(no_mangle)]
         #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            d_in: i32, h_in: i32, w_in: i32,
-            _d_out: i32, _h_out: i32, _w_out: i32,
-            kd: i32, kh: i32, kw: i32,
-            stride_d: i32, stride_h: i32, stride_w: i32,
-            pad_d: i32, pad_h: i32, pad_w: i32,
-            dilation_d: i32, dilation_h: i32, dilation_w: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            d_in: i32,
+            h_in: i32,
+            w_in: i32,
+            _d_out: i32,
+            _h_out: i32,
+            _w_out: i32,
+            kd: i32,
+            kh: i32,
+            kw: i32,
+            stride_d: i32,
+            stride_h: i32,
+            stride_w: i32,
+            pad_d: i32,
+            pad_h: i32,
+            pad_w: i32,
+            dilation_d: i32,
+            dilation_h: i32,
+            dilation_w: i32,
             groups: i32,
             $a: *const c_void,
             $b: *const c_void,
@@ -1440,35 +1764,137 @@ macro_rules! conv3d_dir_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = Conv3dParams {
-                batch, c_in, c_out,
-                d_in, h_in, w_in,
-                d_filt: kd, h_filt: kh, w_filt: kw,
-                pad_d, pad_h, pad_w,
-                stride_d, stride_h, stride_w,
-                dilation_d, dilation_h, dilation_w,
+                batch,
+                c_in,
+                c_out,
+                d_in,
+                h_in,
+                w_in,
+                d_filt: kd,
+                h_filt: kh,
+                w_filt: kw,
+                pad_d,
+                pad_h,
+                pad_w,
+                stride_d,
+                stride_h,
+                stride_w,
+                dilation_d,
+                dilation_h,
+                dilation_w,
                 groups,
             };
             run_conv3d_dispatch(
-                &p, $dt, $dir,
-                $a, $b, $c,
-                workspace, workspace_bytes, stream,
+                &p,
+                $dt,
+                $dir,
+                $a,
+                $b,
+                $c,
+                workspace,
+                workspace_bytes,
+                stream,
             )
         }
     };
 }
 
-conv3d_dir_impl!(baracuda_kernels_conv_3d_fw_f32_run, DtypeTag::F32, Dir::Fw, input, filter, output);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_fw_f64_run, DtypeTag::F64, Dir::Fw, input, filter, output);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_fw_f16_run, DtypeTag::F16, Dir::Fw, input, filter, output);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_fw_bf16_run, DtypeTag::Bf16, Dir::Fw, input, filter, output);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_bw_data_f32_run, DtypeTag::F32, Dir::BwData, filter, grad_output, grad_input);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_bw_data_f64_run, DtypeTag::F64, Dir::BwData, filter, grad_output, grad_input);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_bw_data_f16_run, DtypeTag::F16, Dir::BwData, filter, grad_output, grad_input);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_bw_data_bf16_run, DtypeTag::Bf16, Dir::BwData, filter, grad_output, grad_input);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_bw_filter_f32_run, DtypeTag::F32, Dir::BwFilter, input, grad_output, grad_filter);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_bw_filter_f64_run, DtypeTag::F64, Dir::BwFilter, input, grad_output, grad_filter);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_bw_filter_f16_run, DtypeTag::F16, Dir::BwFilter, input, grad_output, grad_filter);
-conv3d_dir_impl!(baracuda_kernels_conv_3d_bw_filter_bf16_run, DtypeTag::Bf16, Dir::BwFilter, input, grad_output, grad_filter);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_fw_f32_run,
+    DtypeTag::F32,
+    Dir::Fw,
+    input,
+    filter,
+    output
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_fw_f64_run,
+    DtypeTag::F64,
+    Dir::Fw,
+    input,
+    filter,
+    output
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_fw_f16_run,
+    DtypeTag::F16,
+    Dir::Fw,
+    input,
+    filter,
+    output
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_fw_bf16_run,
+    DtypeTag::Bf16,
+    Dir::Fw,
+    input,
+    filter,
+    output
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_bw_data_f32_run,
+    DtypeTag::F32,
+    Dir::BwData,
+    filter,
+    grad_output,
+    grad_input
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_bw_data_f64_run,
+    DtypeTag::F64,
+    Dir::BwData,
+    filter,
+    grad_output,
+    grad_input
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_bw_data_f16_run,
+    DtypeTag::F16,
+    Dir::BwData,
+    filter,
+    grad_output,
+    grad_input
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_bw_data_bf16_run,
+    DtypeTag::Bf16,
+    Dir::BwData,
+    filter,
+    grad_output,
+    grad_input
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_bw_filter_f32_run,
+    DtypeTag::F32,
+    Dir::BwFilter,
+    input,
+    grad_output,
+    grad_filter
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_bw_filter_f64_run,
+    DtypeTag::F64,
+    Dir::BwFilter,
+    input,
+    grad_output,
+    grad_filter
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_bw_filter_f16_run,
+    DtypeTag::F16,
+    Dir::BwFilter,
+    input,
+    grad_output,
+    grad_filter
+);
+conv3d_dir_impl!(
+    baracuda_kernels_conv_3d_bw_filter_bf16_run,
+    DtypeTag::Bf16,
+    Dir::BwFilter,
+    input,
+    grad_output,
+    grad_filter
+);
 
 // =============================================================================
 // ConvTranspose family. cuDNN has no direct "transpose forward" entry
@@ -1486,11 +1912,16 @@ struct ConvT2dParams {
     batch: i32,
     c_in: i32,
     c_out: i32,
-    h_in: i32, w_in: i32,
-    h_filt: i32, w_filt: i32,
-    pad_h: i32, pad_w: i32,
-    stride_h: i32, stride_w: i32,
-    dilation_h: i32, dilation_w: i32,
+    h_in: i32,
+    w_in: i32,
+    h_filt: i32,
+    w_filt: i32,
+    pad_h: i32,
+    pad_w: i32,
+    stride_h: i32,
+    stride_w: i32,
+    dilation_h: i32,
+    dilation_w: i32,
     output_pad_h: i32,
     output_pad_w: i32,
     groups: i32,
@@ -1558,7 +1989,15 @@ fn build_convt2d_descs(g: &mut ConvDescGuard, p: &ConvT2dParams, dt: DtypeTag) -
         return INTERNAL;
     }
     let s = unsafe {
-        cudnnSetTensor4dDescriptor(g.x_desc, CUDNN_TENSOR_NCHW, cudnn_dt, p.batch, p.c_out, h_out, w_out)
+        cudnnSetTensor4dDescriptor(
+            g.x_desc,
+            CUDNN_TENSOR_NCHW,
+            cudnn_dt,
+            p.batch,
+            p.c_out,
+            h_out,
+            w_out,
+        )
     };
     if s != 0 {
         return INTERNAL;
@@ -1571,8 +2010,13 @@ fn build_convt2d_descs(g: &mut ConvDescGuard, p: &ConvT2dParams, dt: DtypeTag) -
     }
     let s = unsafe {
         cudnnSetTensor4dDescriptor(
-            g.y_desc, CUDNN_TENSOR_NCHW, cudnn_dt,
-            p.batch, p.c_in, p.h_in, p.w_in,
+            g.y_desc,
+            CUDNN_TENSOR_NCHW,
+            cudnn_dt,
+            p.batch,
+            p.c_in,
+            p.h_in,
+            p.w_in,
         )
     };
     if s != 0 {
@@ -1586,8 +2030,13 @@ fn build_convt2d_descs(g: &mut ConvDescGuard, p: &ConvT2dParams, dt: DtypeTag) -
     }
     let s = unsafe {
         cudnnSetFilter4dDescriptor(
-            g.w_desc, cudnn_dt, CUDNN_TENSOR_NCHW,
-            p.c_in, c_out_per_group, p.h_filt, p.w_filt,
+            g.w_desc,
+            cudnn_dt,
+            CUDNN_TENSOR_NCHW,
+            p.c_in,
+            c_out_per_group,
+            p.h_filt,
+            p.w_filt,
         )
     };
     if s != 0 {
@@ -1601,8 +2050,15 @@ fn build_convt2d_descs(g: &mut ConvDescGuard, p: &ConvT2dParams, dt: DtypeTag) -
     }
     let s = unsafe {
         cudnnSetConvolution2dDescriptor(
-            g.conv_desc, p.pad_h, p.pad_w, p.stride_h, p.stride_w,
-            p.dilation_h, p.dilation_w, CUDNN_CROSS_CORRELATION, compute_dt,
+            g.conv_desc,
+            p.pad_h,
+            p.pad_w,
+            p.stride_h,
+            p.stride_w,
+            p.dilation_h,
+            p.dilation_w,
+            CUDNN_CROSS_CORRELATION,
+            compute_dt,
         )
     };
     if s != 0 {
@@ -1620,9 +2076,14 @@ fn build_convt2d_descs(g: &mut ConvDescGuard, p: &ConvT2dParams, dt: DtypeTag) -
 /// BackwardData), `x` as synth_y, and `w` as synth_w.
 #[allow(clippy::too_many_arguments)]
 fn run_convt2d_fw(
-    p: &ConvT2dParams, dt: DtypeTag,
-    x: *const c_void, w: *const c_void, y: *mut c_void,
-    ws_ptr: *mut c_void, ws_bytes: usize, stream: *mut c_void,
+    p: &ConvT2dParams,
+    dt: DtypeTag,
+    x: *const c_void,
+    w: *const c_void,
+    y: *mut c_void,
+    ws_ptr: *mut c_void,
+    ws_bytes: usize,
+    stream: *mut c_void,
 ) -> i32 {
     if x.is_null() || w.is_null() || y.is_null() {
         return INVALID;
@@ -1633,96 +2094,173 @@ fn run_convt2d_fw(
     }
     let mut g = ConvDescGuard::new();
     let s = setup_handle(&mut g, stream);
-    if s != OK { return s; }
+    if s != OK {
+        return s;
+    }
     let s = build_convt2d_descs(&mut g, p, dt);
-    if s != OK { return s; }
+    if s != OK {
+        return s;
+    }
     // FW workspace = BackwardData workspace of the synthetic conv.
     let mut needed: usize = 0;
     let s = unsafe {
         cudnnGetConvolutionBackwardDataWorkspaceSize(
-            g.handle, g.w_desc, g.y_desc, g.conv_desc, g.x_desc,
-            CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, &mut needed as *mut usize,
+            g.handle,
+            g.w_desc,
+            g.y_desc,
+            g.conv_desc,
+            g.x_desc,
+            CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+            &mut needed as *mut usize,
         )
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed);
-    if s != OK { return s; }
+    if s != OK {
+        return s;
+    }
 
     let status = if dt.is_double_compute() {
-        let alpha: f64 = 1.0; let beta: f64 = 0.0;
+        let alpha: f64 = 1.0;
+        let beta: f64 = 0.0;
         unsafe {
             cudnnConvolutionBackwardData(
-                g.handle, &alpha as *const f64 as *const c_void,
-                g.w_desc, w, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed,
-                &beta as *const f64 as *const c_void, g.x_desc, y,
+                g.handle,
+                &alpha as *const f64 as *const c_void,
+                g.w_desc,
+                w,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f64 as *const c_void,
+                g.x_desc,
+                y,
             )
         }
     } else {
-        let alpha: f32 = 1.0; let beta: f32 = 0.0;
+        let alpha: f32 = 1.0;
+        let beta: f32 = 0.0;
         unsafe {
             cudnnConvolutionBackwardData(
-                g.handle, &alpha as *const f32 as *const c_void,
-                g.w_desc, w, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed,
-                &beta as *const f32 as *const c_void, g.x_desc, y,
+                g.handle,
+                &alpha as *const f32 as *const c_void,
+                g.w_desc,
+                w,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f32 as *const c_void,
+                g.x_desc,
+                y,
             )
         }
     };
-    if status != 0 { return INTERNAL; }
+    if status != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
 /// ConvTranspose2d BW-data = synthetic Forward. Args: w, dy → dx.
 #[allow(clippy::too_many_arguments)]
 fn run_convt2d_bw_data(
-    p: &ConvT2dParams, dt: DtypeTag,
-    w: *const c_void, dy: *const c_void, dx: *mut c_void,
-    ws_ptr: *mut c_void, ws_bytes: usize, stream: *mut c_void,
+    p: &ConvT2dParams,
+    dt: DtypeTag,
+    w: *const c_void,
+    dy: *const c_void,
+    dx: *mut c_void,
+    ws_ptr: *mut c_void,
+    ws_bytes: usize,
+    stream: *mut c_void,
 ) -> i32 {
     if w.is_null() || dy.is_null() || dx.is_null() {
         return INVALID;
     }
     let v = validate_convt2d_params(p);
-    if v != OK { return v; }
+    if v != OK {
+        return v;
+    }
     let mut g = ConvDescGuard::new();
     let s = setup_handle(&mut g, stream);
-    if s != OK { return s; }
+    if s != OK {
+        return s;
+    }
     let s = build_convt2d_descs(&mut g, p, dt);
-    if s != OK { return s; }
+    if s != OK {
+        return s;
+    }
     let mut needed: usize = 0;
     let s = unsafe {
         cudnnGetConvolutionForwardWorkspaceSize(
-            g.handle, g.x_desc, g.w_desc, g.conv_desc, g.y_desc,
-            CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, &mut needed as *mut usize,
+            g.handle,
+            g.x_desc,
+            g.w_desc,
+            g.conv_desc,
+            g.y_desc,
+            CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+            &mut needed as *mut usize,
         )
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed);
-    if s != OK { return s; }
+    if s != OK {
+        return s;
+    }
 
     let status = if dt.is_double_compute() {
-        let alpha: f64 = 1.0; let beta: f64 = 0.0;
+        let alpha: f64 = 1.0;
+        let beta: f64 = 0.0;
         unsafe {
             cudnnConvolutionForward(
-                g.handle, &alpha as *const f64 as *const c_void,
-                g.x_desc, dy, g.w_desc, w, g.conv_desc,
-                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed,
-                &beta as *const f64 as *const c_void, g.y_desc, dx,
+                g.handle,
+                &alpha as *const f64 as *const c_void,
+                g.x_desc,
+                dy,
+                g.w_desc,
+                w,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                ws.ptr,
+                needed,
+                &beta as *const f64 as *const c_void,
+                g.y_desc,
+                dx,
             )
         }
     } else {
-        let alpha: f32 = 1.0; let beta: f32 = 0.0;
+        let alpha: f32 = 1.0;
+        let beta: f32 = 0.0;
         unsafe {
             cudnnConvolutionForward(
-                g.handle, &alpha as *const f32 as *const c_void,
-                g.x_desc, dy, g.w_desc, w, g.conv_desc,
-                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed,
-                &beta as *const f32 as *const c_void, g.y_desc, dx,
+                g.handle,
+                &alpha as *const f32 as *const c_void,
+                g.x_desc,
+                dy,
+                g.w_desc,
+                w,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                ws.ptr,
+                needed,
+                &beta as *const f32 as *const c_void,
+                g.y_desc,
+                dx,
             )
         }
     };
-    if status != 0 { return INTERNAL; }
+    if status != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
@@ -1731,53 +2269,95 @@ fn run_convt2d_bw_data(
 /// synth_y = x (matches the Rust plan's `run_dw`).
 #[allow(clippy::too_many_arguments)]
 fn run_convt2d_bw_filter(
-    p: &ConvT2dParams, dt: DtypeTag,
-    x: *const c_void, dy: *const c_void, dw: *mut c_void,
-    ws_ptr: *mut c_void, ws_bytes: usize, stream: *mut c_void,
+    p: &ConvT2dParams,
+    dt: DtypeTag,
+    x: *const c_void,
+    dy: *const c_void,
+    dw: *mut c_void,
+    ws_ptr: *mut c_void,
+    ws_bytes: usize,
+    stream: *mut c_void,
 ) -> i32 {
     if x.is_null() || dy.is_null() || dw.is_null() {
         return INVALID;
     }
     let v = validate_convt2d_params(p);
-    if v != OK { return v; }
+    if v != OK {
+        return v;
+    }
     let mut g = ConvDescGuard::new();
     let s = setup_handle(&mut g, stream);
-    if s != OK { return s; }
+    if s != OK {
+        return s;
+    }
     let s = build_convt2d_descs(&mut g, p, dt);
-    if s != OK { return s; }
+    if s != OK {
+        return s;
+    }
     let mut needed: usize = 0;
     let s = unsafe {
         cudnnGetConvolutionBackwardFilterWorkspaceSize(
-            g.handle, g.x_desc, g.y_desc, g.conv_desc, g.w_desc,
-            CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, &mut needed as *mut usize,
+            g.handle,
+            g.x_desc,
+            g.y_desc,
+            g.conv_desc,
+            g.w_desc,
+            CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+            &mut needed as *mut usize,
         )
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed);
-    if s != OK { return s; }
+    if s != OK {
+        return s;
+    }
 
     let status = if dt.is_double_compute() {
-        let alpha: f64 = 1.0; let beta: f64 = 0.0;
+        let alpha: f64 = 1.0;
+        let beta: f64 = 0.0;
         unsafe {
             cudnnConvolutionBackwardFilter(
-                g.handle, &alpha as *const f64 as *const c_void,
-                g.x_desc, dy, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed,
-                &beta as *const f64 as *const c_void, g.w_desc, dw,
+                g.handle,
+                &alpha as *const f64 as *const c_void,
+                g.x_desc,
+                dy,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f64 as *const c_void,
+                g.w_desc,
+                dw,
             )
         }
     } else {
-        let alpha: f32 = 1.0; let beta: f32 = 0.0;
+        let alpha: f32 = 1.0;
+        let beta: f32 = 0.0;
         unsafe {
             cudnnConvolutionBackwardFilter(
-                g.handle, &alpha as *const f32 as *const c_void,
-                g.x_desc, dy, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed,
-                &beta as *const f32 as *const c_void, g.w_desc, dw,
+                g.handle,
+                &alpha as *const f32 as *const c_void,
+                g.x_desc,
+                dy,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f32 as *const c_void,
+                g.w_desc,
+                dw,
             )
         }
     };
-    if status != 0 { return INTERNAL; }
+    if status != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
@@ -1789,13 +2369,23 @@ macro_rules! convt2d_dir_impl {
         #[unsafe(no_mangle)]
         #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            h_in: i32, w_in: i32, _h_out: i32, _w_out: i32,
-            kh: i32, kw: i32,
-            stride_h: i32, stride_w: i32,
-            pad_h: i32, pad_w: i32,
-            dilation_h: i32, dilation_w: i32,
-            output_pad_h: i32, output_pad_w: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            h_in: i32,
+            w_in: i32,
+            _h_out: i32,
+            _w_out: i32,
+            kh: i32,
+            kw: i32,
+            stride_h: i32,
+            stride_w: i32,
+            pad_h: i32,
+            pad_w: i32,
+            dilation_h: i32,
+            dilation_w: i32,
+            output_pad_h: i32,
+            output_pad_w: i32,
             groups: i32,
             $a: *const c_void,
             $b: *const c_void,
@@ -1805,12 +2395,21 @@ macro_rules! convt2d_dir_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = ConvT2dParams {
-                batch, c_in, c_out,
-                h_in, w_in,
-                h_filt: kh, w_filt: kw,
-                pad_h, pad_w, stride_h, stride_w,
-                dilation_h, dilation_w,
-                output_pad_h, output_pad_w,
+                batch,
+                c_in,
+                c_out,
+                h_in,
+                w_in,
+                h_filt: kh,
+                w_filt: kw,
+                pad_h,
+                pad_w,
+                stride_h,
+                stride_w,
+                dilation_h,
+                dilation_w,
+                output_pad_h,
+                output_pad_w,
                 groups,
             };
             $runner(&p, $dt, $a, $b, $c, workspace, workspace_bytes, stream)
@@ -1818,18 +2417,102 @@ macro_rules! convt2d_dir_impl {
     };
 }
 
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_fw_f32_run, DtypeTag::F32, run_convt2d_fw, input, filter, output);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_fw_f64_run, DtypeTag::F64, run_convt2d_fw, input, filter, output);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_fw_f16_run, DtypeTag::F16, run_convt2d_fw, input, filter, output);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_fw_bf16_run, DtypeTag::Bf16, run_convt2d_fw, input, filter, output);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_bw_data_f32_run, DtypeTag::F32, run_convt2d_bw_data, filter, grad_output, grad_input);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_bw_data_f64_run, DtypeTag::F64, run_convt2d_bw_data, filter, grad_output, grad_input);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_bw_data_f16_run, DtypeTag::F16, run_convt2d_bw_data, filter, grad_output, grad_input);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_bw_data_bf16_run, DtypeTag::Bf16, run_convt2d_bw_data, filter, grad_output, grad_input);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_bw_filter_f32_run, DtypeTag::F32, run_convt2d_bw_filter, input, grad_output, grad_filter);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_bw_filter_f64_run, DtypeTag::F64, run_convt2d_bw_filter, input, grad_output, grad_filter);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_bw_filter_f16_run, DtypeTag::F16, run_convt2d_bw_filter, input, grad_output, grad_filter);
-convt2d_dir_impl!(baracuda_kernels_conv_transpose_2d_bw_filter_bf16_run, DtypeTag::Bf16, run_convt2d_bw_filter, input, grad_output, grad_filter);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_fw_f32_run,
+    DtypeTag::F32,
+    run_convt2d_fw,
+    input,
+    filter,
+    output
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_fw_f64_run,
+    DtypeTag::F64,
+    run_convt2d_fw,
+    input,
+    filter,
+    output
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_fw_f16_run,
+    DtypeTag::F16,
+    run_convt2d_fw,
+    input,
+    filter,
+    output
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_fw_bf16_run,
+    DtypeTag::Bf16,
+    run_convt2d_fw,
+    input,
+    filter,
+    output
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_bw_data_f32_run,
+    DtypeTag::F32,
+    run_convt2d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_bw_data_f64_run,
+    DtypeTag::F64,
+    run_convt2d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_bw_data_f16_run,
+    DtypeTag::F16,
+    run_convt2d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_bw_data_bf16_run,
+    DtypeTag::Bf16,
+    run_convt2d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_bw_filter_f32_run,
+    DtypeTag::F32,
+    run_convt2d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_bw_filter_f64_run,
+    DtypeTag::F64,
+    run_convt2d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_bw_filter_f16_run,
+    DtypeTag::F16,
+    run_convt2d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
+convt2d_dir_impl!(
+    baracuda_kernels_conv_transpose_2d_bw_filter_bf16_run,
+    DtypeTag::Bf16,
+    run_convt2d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
 
 // =============================================================================
 // ConvTranspose1d — rank-3 NCL with W=1 padding (same as Conv1d).
@@ -1851,15 +2534,16 @@ struct ConvT1dParams {
 
 #[inline]
 fn compute_convt1d_out(p: &ConvT1dParams) -> i32 {
-    (p.l_in - 1) * p.stride_l - 2 * p.pad_l
-        + p.dilation_l * (p.l_filt - 1)
-        + p.output_pad_l
-        + 1
+    (p.l_in - 1) * p.stride_l - 2 * p.pad_l + p.dilation_l * (p.l_filt - 1) + p.output_pad_l + 1
 }
 
 fn validate_convt1d_params(p: &ConvT1dParams) -> i32 {
-    if p.batch <= 0 || p.c_in <= 0 || p.l_in <= 0 { return INVALID; }
-    if p.c_out <= 0 || p.l_filt <= 0 { return INVALID; }
+    if p.batch <= 0 || p.c_in <= 0 || p.l_in <= 0 {
+        return INVALID;
+    }
+    if p.c_out <= 0 || p.l_filt <= 0 {
+        return INVALID;
+    }
     if p.stride_l <= 0 || p.dilation_l <= 0 || p.pad_l < 0 || p.output_pad_l < 0 {
         return INVALID;
     }
@@ -1869,7 +2553,9 @@ fn validate_convt1d_params(p: &ConvT1dParams) -> i32 {
     if p.output_pad_l >= p.stride_l.max(p.dilation_l) {
         return INVALID;
     }
-    if compute_convt1d_out(p) <= 0 { return INVALID; }
+    if compute_convt1d_out(p) <= 0 {
+        return INVALID;
+    }
     OK
 }
 
@@ -1885,184 +2571,350 @@ fn build_convt1d_descs(g: &mut ConvDescGuard, p: &ConvT1dParams, dt: DtypeTag) -
 
     // synth_x = [N, C_out, L_out, 1].
     let s = unsafe { cudnnCreateTensorDescriptor(&mut g.x_desc as *mut _) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let x_dims = [p.batch, p.c_out, l_out, 1];
     let x_strides = [p.c_out * l_out, l_out, 1, 1];
     let s = unsafe {
         cudnnSetTensorNdDescriptor(g.x_desc, cudnn_dt, 4, x_dims.as_ptr(), x_strides.as_ptr())
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
 
     // synth_y = [N, C_in, L_in, 1].
     let s = unsafe { cudnnCreateTensorDescriptor(&mut g.y_desc as *mut _) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let y_dims = [p.batch, p.c_in, p.l_in, 1];
     let y_strides = [p.c_in * p.l_in, p.l_in, 1, 1];
     let s = unsafe {
         cudnnSetTensorNdDescriptor(g.y_desc, cudnn_dt, 4, y_dims.as_ptr(), y_strides.as_ptr())
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
 
     // synth_w = [C_in, C_out/groups, L_filt, 1].
     let s = unsafe { cudnnCreateFilterDescriptor(&mut g.w_desc as *mut _) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let w_dims = [p.c_in, c_out_per_group, p.l_filt, 1];
     let s = unsafe {
         cudnnSetFilterNdDescriptor(g.w_desc, cudnn_dt, CUDNN_TENSOR_NCHW, 4, w_dims.as_ptr())
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
 
     // conv — array_length = 2 (W axis is dummy).
     let s = unsafe { cudnnCreateConvolutionDescriptor(&mut g.conv_desc as *mut _) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let pad_a = [p.pad_l, 0];
     let stride_a = [p.stride_l, 1];
     let dil_a = [p.dilation_l, 1];
     let s = unsafe {
         cudnnSetConvolutionNdDescriptor(
-            g.conv_desc, 2,
-            pad_a.as_ptr(), stride_a.as_ptr(), dil_a.as_ptr(),
-            CUDNN_CROSS_CORRELATION, compute_dt,
+            g.conv_desc,
+            2,
+            pad_a.as_ptr(),
+            stride_a.as_ptr(),
+            dil_a.as_ptr(),
+            CUDNN_CROSS_CORRELATION,
+            compute_dt,
         )
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let s = unsafe { cudnnSetConvolutionGroupCount(g.conv_desc, p.groups) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_convt1d_fw(
-    p: &ConvT1dParams, dt: DtypeTag,
-    x: *const c_void, w: *const c_void, y: *mut c_void,
-    ws_ptr: *mut c_void, ws_bytes: usize, stream: *mut c_void,
+    p: &ConvT1dParams,
+    dt: DtypeTag,
+    x: *const c_void,
+    w: *const c_void,
+    y: *mut c_void,
+    ws_ptr: *mut c_void,
+    ws_bytes: usize,
+    stream: *mut c_void,
 ) -> i32 {
-    if x.is_null() || w.is_null() || y.is_null() { return INVALID; }
-    let v = validate_convt1d_params(p); if v != OK { return v; }
+    if x.is_null() || w.is_null() || y.is_null() {
+        return INVALID;
+    }
+    let v = validate_convt1d_params(p);
+    if v != OK {
+        return v;
+    }
     let mut g = ConvDescGuard::new();
-    let s = setup_handle(&mut g, stream); if s != OK { return s; }
-    let s = build_convt1d_descs(&mut g, p, dt); if s != OK { return s; }
+    let s = setup_handle(&mut g, stream);
+    if s != OK {
+        return s;
+    }
+    let s = build_convt1d_descs(&mut g, p, dt);
+    if s != OK {
+        return s;
+    }
     let mut needed: usize = 0;
     let s = unsafe {
         cudnnGetConvolutionBackwardDataWorkspaceSize(
-            g.handle, g.w_desc, g.y_desc, g.conv_desc, g.x_desc,
-            CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, &mut needed as *mut usize,
+            g.handle,
+            g.w_desc,
+            g.y_desc,
+            g.conv_desc,
+            g.x_desc,
+            CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+            &mut needed as *mut usize,
         )
     };
-    if s != 0 { return INTERNAL; }
-    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed); if s != OK { return s; }
+    if s != 0 {
+        return INTERNAL;
+    }
+    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed);
+    if s != OK {
+        return s;
+    }
     let status = if dt.is_double_compute() {
-        let alpha: f64 = 1.0; let beta: f64 = 0.0;
+        let alpha: f64 = 1.0;
+        let beta: f64 = 0.0;
         unsafe {
             cudnnConvolutionBackwardData(
-                g.handle, &alpha as *const f64 as *const c_void,
-                g.w_desc, w, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed,
-                &beta as *const f64 as *const c_void, g.x_desc, y,
+                g.handle,
+                &alpha as *const f64 as *const c_void,
+                g.w_desc,
+                w,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f64 as *const c_void,
+                g.x_desc,
+                y,
             )
         }
     } else {
-        let alpha: f32 = 1.0; let beta: f32 = 0.0;
+        let alpha: f32 = 1.0;
+        let beta: f32 = 0.0;
         unsafe {
             cudnnConvolutionBackwardData(
-                g.handle, &alpha as *const f32 as *const c_void,
-                g.w_desc, w, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed,
-                &beta as *const f32 as *const c_void, g.x_desc, y,
+                g.handle,
+                &alpha as *const f32 as *const c_void,
+                g.w_desc,
+                w,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f32 as *const c_void,
+                g.x_desc,
+                y,
             )
         }
     };
-    if status != 0 { return INTERNAL; }
+    if status != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_convt1d_bw_data(
-    p: &ConvT1dParams, dt: DtypeTag,
-    w: *const c_void, dy: *const c_void, dx: *mut c_void,
-    ws_ptr: *mut c_void, ws_bytes: usize, stream: *mut c_void,
+    p: &ConvT1dParams,
+    dt: DtypeTag,
+    w: *const c_void,
+    dy: *const c_void,
+    dx: *mut c_void,
+    ws_ptr: *mut c_void,
+    ws_bytes: usize,
+    stream: *mut c_void,
 ) -> i32 {
-    if w.is_null() || dy.is_null() || dx.is_null() { return INVALID; }
-    let v = validate_convt1d_params(p); if v != OK { return v; }
+    if w.is_null() || dy.is_null() || dx.is_null() {
+        return INVALID;
+    }
+    let v = validate_convt1d_params(p);
+    if v != OK {
+        return v;
+    }
     let mut g = ConvDescGuard::new();
-    let s = setup_handle(&mut g, stream); if s != OK { return s; }
-    let s = build_convt1d_descs(&mut g, p, dt); if s != OK { return s; }
+    let s = setup_handle(&mut g, stream);
+    if s != OK {
+        return s;
+    }
+    let s = build_convt1d_descs(&mut g, p, dt);
+    if s != OK {
+        return s;
+    }
     let mut needed: usize = 0;
     let s = unsafe {
         cudnnGetConvolutionForwardWorkspaceSize(
-            g.handle, g.x_desc, g.w_desc, g.conv_desc, g.y_desc,
-            CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, &mut needed as *mut usize,
+            g.handle,
+            g.x_desc,
+            g.w_desc,
+            g.conv_desc,
+            g.y_desc,
+            CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+            &mut needed as *mut usize,
         )
     };
-    if s != 0 { return INTERNAL; }
-    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed); if s != OK { return s; }
+    if s != 0 {
+        return INTERNAL;
+    }
+    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed);
+    if s != OK {
+        return s;
+    }
     let status = if dt.is_double_compute() {
-        let alpha: f64 = 1.0; let beta: f64 = 0.0;
+        let alpha: f64 = 1.0;
+        let beta: f64 = 0.0;
         unsafe {
             cudnnConvolutionForward(
-                g.handle, &alpha as *const f64 as *const c_void,
-                g.x_desc, dy, g.w_desc, w, g.conv_desc,
-                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed,
-                &beta as *const f64 as *const c_void, g.y_desc, dx,
+                g.handle,
+                &alpha as *const f64 as *const c_void,
+                g.x_desc,
+                dy,
+                g.w_desc,
+                w,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                ws.ptr,
+                needed,
+                &beta as *const f64 as *const c_void,
+                g.y_desc,
+                dx,
             )
         }
     } else {
-        let alpha: f32 = 1.0; let beta: f32 = 0.0;
+        let alpha: f32 = 1.0;
+        let beta: f32 = 0.0;
         unsafe {
             cudnnConvolutionForward(
-                g.handle, &alpha as *const f32 as *const c_void,
-                g.x_desc, dy, g.w_desc, w, g.conv_desc,
-                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed,
-                &beta as *const f32 as *const c_void, g.y_desc, dx,
+                g.handle,
+                &alpha as *const f32 as *const c_void,
+                g.x_desc,
+                dy,
+                g.w_desc,
+                w,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                ws.ptr,
+                needed,
+                &beta as *const f32 as *const c_void,
+                g.y_desc,
+                dx,
             )
         }
     };
-    if status != 0 { return INTERNAL; }
+    if status != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_convt1d_bw_filter(
-    p: &ConvT1dParams, dt: DtypeTag,
-    x: *const c_void, dy: *const c_void, dw: *mut c_void,
-    ws_ptr: *mut c_void, ws_bytes: usize, stream: *mut c_void,
+    p: &ConvT1dParams,
+    dt: DtypeTag,
+    x: *const c_void,
+    dy: *const c_void,
+    dw: *mut c_void,
+    ws_ptr: *mut c_void,
+    ws_bytes: usize,
+    stream: *mut c_void,
 ) -> i32 {
-    if x.is_null() || dy.is_null() || dw.is_null() { return INVALID; }
-    let v = validate_convt1d_params(p); if v != OK { return v; }
+    if x.is_null() || dy.is_null() || dw.is_null() {
+        return INVALID;
+    }
+    let v = validate_convt1d_params(p);
+    if v != OK {
+        return v;
+    }
     let mut g = ConvDescGuard::new();
-    let s = setup_handle(&mut g, stream); if s != OK { return s; }
-    let s = build_convt1d_descs(&mut g, p, dt); if s != OK { return s; }
+    let s = setup_handle(&mut g, stream);
+    if s != OK {
+        return s;
+    }
+    let s = build_convt1d_descs(&mut g, p, dt);
+    if s != OK {
+        return s;
+    }
     let mut needed: usize = 0;
     let s = unsafe {
         cudnnGetConvolutionBackwardFilterWorkspaceSize(
-            g.handle, g.x_desc, g.y_desc, g.conv_desc, g.w_desc,
-            CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, &mut needed as *mut usize,
+            g.handle,
+            g.x_desc,
+            g.y_desc,
+            g.conv_desc,
+            g.w_desc,
+            CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+            &mut needed as *mut usize,
         )
     };
-    if s != 0 { return INTERNAL; }
-    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed); if s != OK { return s; }
+    if s != 0 {
+        return INTERNAL;
+    }
+    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed);
+    if s != OK {
+        return s;
+    }
     let status = if dt.is_double_compute() {
-        let alpha: f64 = 1.0; let beta: f64 = 0.0;
+        let alpha: f64 = 1.0;
+        let beta: f64 = 0.0;
         unsafe {
             cudnnConvolutionBackwardFilter(
-                g.handle, &alpha as *const f64 as *const c_void,
-                g.x_desc, dy, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed,
-                &beta as *const f64 as *const c_void, g.w_desc, dw,
+                g.handle,
+                &alpha as *const f64 as *const c_void,
+                g.x_desc,
+                dy,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f64 as *const c_void,
+                g.w_desc,
+                dw,
             )
         }
     } else {
-        let alpha: f32 = 1.0; let beta: f32 = 0.0;
+        let alpha: f32 = 1.0;
+        let beta: f32 = 0.0;
         unsafe {
             cudnnConvolutionBackwardFilter(
-                g.handle, &alpha as *const f32 as *const c_void,
-                g.x_desc, dy, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed,
-                &beta as *const f32 as *const c_void, g.w_desc, dw,
+                g.handle,
+                &alpha as *const f32 as *const c_void,
+                g.x_desc,
+                dy,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f32 as *const c_void,
+                g.w_desc,
+                dw,
             )
         }
     };
-    if status != 0 { return INTERNAL; }
+    if status != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
@@ -2074,10 +2926,15 @@ macro_rules! convt1d_dir_impl {
         #[unsafe(no_mangle)]
         #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            l_in: i32, _l_out: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            l_in: i32,
+            _l_out: i32,
             l_filt: i32,
-            stride_l: i32, pad_l: i32, dilation_l: i32,
+            stride_l: i32,
+            pad_l: i32,
+            dilation_l: i32,
             output_pad_l: i32,
             groups: i32,
             $a: *const c_void,
@@ -2088,26 +2945,118 @@ macro_rules! convt1d_dir_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = ConvT1dParams {
-                batch, c_in, c_out, l_in, l_filt,
-                pad_l, stride_l, dilation_l, output_pad_l, groups,
+                batch,
+                c_in,
+                c_out,
+                l_in,
+                l_filt,
+                pad_l,
+                stride_l,
+                dilation_l,
+                output_pad_l,
+                groups,
             };
             $runner(&p, $dt, $a, $b, $c, workspace, workspace_bytes, stream)
         }
     };
 }
 
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_fw_f32_run, DtypeTag::F32, run_convt1d_fw, input, filter, output);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_fw_f64_run, DtypeTag::F64, run_convt1d_fw, input, filter, output);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_fw_f16_run, DtypeTag::F16, run_convt1d_fw, input, filter, output);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_fw_bf16_run, DtypeTag::Bf16, run_convt1d_fw, input, filter, output);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_bw_data_f32_run, DtypeTag::F32, run_convt1d_bw_data, filter, grad_output, grad_input);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_bw_data_f64_run, DtypeTag::F64, run_convt1d_bw_data, filter, grad_output, grad_input);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_bw_data_f16_run, DtypeTag::F16, run_convt1d_bw_data, filter, grad_output, grad_input);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_bw_data_bf16_run, DtypeTag::Bf16, run_convt1d_bw_data, filter, grad_output, grad_input);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_bw_filter_f32_run, DtypeTag::F32, run_convt1d_bw_filter, input, grad_output, grad_filter);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_bw_filter_f64_run, DtypeTag::F64, run_convt1d_bw_filter, input, grad_output, grad_filter);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_bw_filter_f16_run, DtypeTag::F16, run_convt1d_bw_filter, input, grad_output, grad_filter);
-convt1d_dir_impl!(baracuda_kernels_conv_transpose_1d_bw_filter_bf16_run, DtypeTag::Bf16, run_convt1d_bw_filter, input, grad_output, grad_filter);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_fw_f32_run,
+    DtypeTag::F32,
+    run_convt1d_fw,
+    input,
+    filter,
+    output
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_fw_f64_run,
+    DtypeTag::F64,
+    run_convt1d_fw,
+    input,
+    filter,
+    output
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_fw_f16_run,
+    DtypeTag::F16,
+    run_convt1d_fw,
+    input,
+    filter,
+    output
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_fw_bf16_run,
+    DtypeTag::Bf16,
+    run_convt1d_fw,
+    input,
+    filter,
+    output
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_bw_data_f32_run,
+    DtypeTag::F32,
+    run_convt1d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_bw_data_f64_run,
+    DtypeTag::F64,
+    run_convt1d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_bw_data_f16_run,
+    DtypeTag::F16,
+    run_convt1d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_bw_data_bf16_run,
+    DtypeTag::Bf16,
+    run_convt1d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_bw_filter_f32_run,
+    DtypeTag::F32,
+    run_convt1d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_bw_filter_f64_run,
+    DtypeTag::F64,
+    run_convt1d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_bw_filter_f16_run,
+    DtypeTag::F16,
+    run_convt1d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
+convt1d_dir_impl!(
+    baracuda_kernels_conv_transpose_1d_bw_filter_bf16_run,
+    DtypeTag::Bf16,
+    run_convt1d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
 
 // =============================================================================
 // ConvTranspose3d — rank-5 NCDHW; cuDNN handles 3D natively.
@@ -2118,34 +3067,66 @@ struct ConvT3dParams {
     batch: i32,
     c_in: i32,
     c_out: i32,
-    d_in: i32, h_in: i32, w_in: i32,
-    d_filt: i32, h_filt: i32, w_filt: i32,
-    pad_d: i32, pad_h: i32, pad_w: i32,
-    stride_d: i32, stride_h: i32, stride_w: i32,
-    dilation_d: i32, dilation_h: i32, dilation_w: i32,
-    output_pad_d: i32, output_pad_h: i32, output_pad_w: i32,
+    d_in: i32,
+    h_in: i32,
+    w_in: i32,
+    d_filt: i32,
+    h_filt: i32,
+    w_filt: i32,
+    pad_d: i32,
+    pad_h: i32,
+    pad_w: i32,
+    stride_d: i32,
+    stride_h: i32,
+    stride_w: i32,
+    dilation_d: i32,
+    dilation_h: i32,
+    dilation_w: i32,
+    output_pad_d: i32,
+    output_pad_h: i32,
+    output_pad_w: i32,
     groups: i32,
 }
 
 #[inline]
 fn compute_convt3d_out(p: &ConvT3dParams) -> (i32, i32, i32) {
     let d_out = (p.d_in - 1) * p.stride_d - 2 * p.pad_d
-        + p.dilation_d * (p.d_filt - 1) + p.output_pad_d + 1;
+        + p.dilation_d * (p.d_filt - 1)
+        + p.output_pad_d
+        + 1;
     let h_out = (p.h_in - 1) * p.stride_h - 2 * p.pad_h
-        + p.dilation_h * (p.h_filt - 1) + p.output_pad_h + 1;
+        + p.dilation_h * (p.h_filt - 1)
+        + p.output_pad_h
+        + 1;
     let w_out = (p.w_in - 1) * p.stride_w - 2 * p.pad_w
-        + p.dilation_w * (p.w_filt - 1) + p.output_pad_w + 1;
+        + p.dilation_w * (p.w_filt - 1)
+        + p.output_pad_w
+        + 1;
     (d_out, h_out, w_out)
 }
 
 fn validate_convt3d_params(p: &ConvT3dParams) -> i32 {
-    if p.batch <= 0 || p.c_in <= 0 || p.d_in <= 0 || p.h_in <= 0 || p.w_in <= 0 { return INVALID; }
-    if p.c_out <= 0 || p.d_filt <= 0 || p.h_filt <= 0 || p.w_filt <= 0 { return INVALID; }
-    if p.stride_d <= 0 || p.stride_h <= 0 || p.stride_w <= 0 { return INVALID; }
-    if p.dilation_d <= 0 || p.dilation_h <= 0 || p.dilation_w <= 0 { return INVALID; }
-    if p.pad_d < 0 || p.pad_h < 0 || p.pad_w < 0 { return INVALID; }
-    if p.output_pad_d < 0 || p.output_pad_h < 0 || p.output_pad_w < 0 { return INVALID; }
-    if p.groups <= 0 || p.c_in % p.groups != 0 || p.c_out % p.groups != 0 { return INVALID; }
+    if p.batch <= 0 || p.c_in <= 0 || p.d_in <= 0 || p.h_in <= 0 || p.w_in <= 0 {
+        return INVALID;
+    }
+    if p.c_out <= 0 || p.d_filt <= 0 || p.h_filt <= 0 || p.w_filt <= 0 {
+        return INVALID;
+    }
+    if p.stride_d <= 0 || p.stride_h <= 0 || p.stride_w <= 0 {
+        return INVALID;
+    }
+    if p.dilation_d <= 0 || p.dilation_h <= 0 || p.dilation_w <= 0 {
+        return INVALID;
+    }
+    if p.pad_d < 0 || p.pad_h < 0 || p.pad_w < 0 {
+        return INVALID;
+    }
+    if p.output_pad_d < 0 || p.output_pad_h < 0 || p.output_pad_w < 0 {
+        return INVALID;
+    }
+    if p.groups <= 0 || p.c_in % p.groups != 0 || p.c_out % p.groups != 0 {
+        return INVALID;
+    }
     if p.output_pad_d >= p.stride_d.max(p.dilation_d)
         || p.output_pad_h >= p.stride_h.max(p.dilation_h)
         || p.output_pad_w >= p.stride_w.max(p.dilation_w)
@@ -2153,19 +3134,27 @@ fn validate_convt3d_params(p: &ConvT3dParams) -> i32 {
         return INVALID;
     }
     let (d_out, h_out, w_out) = compute_convt3d_out(p);
-    if d_out <= 0 || h_out <= 0 || w_out <= 0 { return INVALID; }
+    if d_out <= 0 || h_out <= 0 || w_out <= 0 {
+        return INVALID;
+    }
     OK
 }
 
 fn build_convt3d_descs(g: &mut ConvDescGuard, p: &ConvT3dParams, dt: DtypeTag) -> i32 {
     let cudnn_dt = dt.cudnn_dtype();
-    let compute_dt = if dt.is_double_compute() { CUDNN_DATA_DOUBLE } else { CUDNN_DATA_FLOAT };
+    let compute_dt = if dt.is_double_compute() {
+        CUDNN_DATA_DOUBLE
+    } else {
+        CUDNN_DATA_FLOAT
+    };
     let (d_out, h_out, w_out) = compute_convt3d_out(p);
     let c_out_per_group = p.c_out / p.groups;
 
     // synth_x = [N, C_out, D_out, H_out, W_out] (ConvTranspose output role).
     let s = unsafe { cudnnCreateTensorDescriptor(&mut g.x_desc as *mut _) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let x_dims = [p.batch, p.c_out, d_out, h_out, w_out];
     let s_w = 1;
     let s_h = w_out;
@@ -2176,11 +3165,15 @@ fn build_convt3d_descs(g: &mut ConvDescGuard, p: &ConvT3dParams, dt: DtypeTag) -
     let s = unsafe {
         cudnnSetTensorNdDescriptor(g.x_desc, cudnn_dt, 5, x_dims.as_ptr(), x_strides.as_ptr())
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
 
     // synth_y = [N, C_in, D_in, H_in, W_in] (ConvTranspose input role).
     let s = unsafe { cudnnCreateTensorDescriptor(&mut g.y_desc as *mut _) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let y_dims = [p.batch, p.c_in, p.d_in, p.h_in, p.w_in];
     let y_s_w = 1;
     let y_s_h = p.w_in;
@@ -2191,168 +3184,328 @@ fn build_convt3d_descs(g: &mut ConvDescGuard, p: &ConvT3dParams, dt: DtypeTag) -
     let s = unsafe {
         cudnnSetTensorNdDescriptor(g.y_desc, cudnn_dt, 5, y_dims.as_ptr(), y_strides.as_ptr())
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
 
     // synth_w = [C_in, C_out/groups, D_filt, H_filt, W_filt] (PyTorch).
     let s = unsafe { cudnnCreateFilterDescriptor(&mut g.w_desc as *mut _) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let w_dims = [p.c_in, c_out_per_group, p.d_filt, p.h_filt, p.w_filt];
     let s = unsafe {
         cudnnSetFilterNdDescriptor(g.w_desc, cudnn_dt, CUDNN_TENSOR_NCHW, 5, w_dims.as_ptr())
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
 
     // conv — array_length = 3.
     let s = unsafe { cudnnCreateConvolutionDescriptor(&mut g.conv_desc as *mut _) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let pad_a = [p.pad_d, p.pad_h, p.pad_w];
     let stride_a = [p.stride_d, p.stride_h, p.stride_w];
     let dil_a = [p.dilation_d, p.dilation_h, p.dilation_w];
     let s = unsafe {
         cudnnSetConvolutionNdDescriptor(
-            g.conv_desc, 3,
-            pad_a.as_ptr(), stride_a.as_ptr(), dil_a.as_ptr(),
-            CUDNN_CROSS_CORRELATION, compute_dt,
+            g.conv_desc,
+            3,
+            pad_a.as_ptr(),
+            stride_a.as_ptr(),
+            dil_a.as_ptr(),
+            CUDNN_CROSS_CORRELATION,
+            compute_dt,
         )
     };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     let s = unsafe { cudnnSetConvolutionGroupCount(g.conv_desc, p.groups) };
-    if s != 0 { return INTERNAL; }
+    if s != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_convt3d_fw(
-    p: &ConvT3dParams, dt: DtypeTag,
-    x: *const c_void, w: *const c_void, y: *mut c_void,
-    ws_ptr: *mut c_void, ws_bytes: usize, stream: *mut c_void,
+    p: &ConvT3dParams,
+    dt: DtypeTag,
+    x: *const c_void,
+    w: *const c_void,
+    y: *mut c_void,
+    ws_ptr: *mut c_void,
+    ws_bytes: usize,
+    stream: *mut c_void,
 ) -> i32 {
-    if x.is_null() || w.is_null() || y.is_null() { return INVALID; }
-    let v = validate_convt3d_params(p); if v != OK { return v; }
+    if x.is_null() || w.is_null() || y.is_null() {
+        return INVALID;
+    }
+    let v = validate_convt3d_params(p);
+    if v != OK {
+        return v;
+    }
     let mut g = ConvDescGuard::new();
-    let s = setup_handle(&mut g, stream); if s != OK { return s; }
-    let s = build_convt3d_descs(&mut g, p, dt); if s != OK { return s; }
+    let s = setup_handle(&mut g, stream);
+    if s != OK {
+        return s;
+    }
+    let s = build_convt3d_descs(&mut g, p, dt);
+    if s != OK {
+        return s;
+    }
     let mut needed: usize = 0;
     let s = unsafe {
         cudnnGetConvolutionBackwardDataWorkspaceSize(
-            g.handle, g.w_desc, g.y_desc, g.conv_desc, g.x_desc,
-            CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, &mut needed as *mut usize,
+            g.handle,
+            g.w_desc,
+            g.y_desc,
+            g.conv_desc,
+            g.x_desc,
+            CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+            &mut needed as *mut usize,
         )
     };
-    if s != 0 { return INTERNAL; }
-    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed); if s != OK { return s; }
+    if s != 0 {
+        return INTERNAL;
+    }
+    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed);
+    if s != OK {
+        return s;
+    }
     let status = if dt.is_double_compute() {
-        let alpha: f64 = 1.0; let beta: f64 = 0.0;
+        let alpha: f64 = 1.0;
+        let beta: f64 = 0.0;
         unsafe {
             cudnnConvolutionBackwardData(
-                g.handle, &alpha as *const f64 as *const c_void,
-                g.w_desc, w, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed,
-                &beta as *const f64 as *const c_void, g.x_desc, y,
+                g.handle,
+                &alpha as *const f64 as *const c_void,
+                g.w_desc,
+                w,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f64 as *const c_void,
+                g.x_desc,
+                y,
             )
         }
     } else {
-        let alpha: f32 = 1.0; let beta: f32 = 0.0;
+        let alpha: f32 = 1.0;
+        let beta: f32 = 0.0;
         unsafe {
             cudnnConvolutionBackwardData(
-                g.handle, &alpha as *const f32 as *const c_void,
-                g.w_desc, w, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, ws.ptr, needed,
-                &beta as *const f32 as *const c_void, g.x_desc, y,
+                g.handle,
+                &alpha as *const f32 as *const c_void,
+                g.w_desc,
+                w,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f32 as *const c_void,
+                g.x_desc,
+                y,
             )
         }
     };
-    if status != 0 { return INTERNAL; }
+    if status != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_convt3d_bw_data(
-    p: &ConvT3dParams, dt: DtypeTag,
-    w: *const c_void, dy: *const c_void, dx: *mut c_void,
-    ws_ptr: *mut c_void, ws_bytes: usize, stream: *mut c_void,
+    p: &ConvT3dParams,
+    dt: DtypeTag,
+    w: *const c_void,
+    dy: *const c_void,
+    dx: *mut c_void,
+    ws_ptr: *mut c_void,
+    ws_bytes: usize,
+    stream: *mut c_void,
 ) -> i32 {
-    if w.is_null() || dy.is_null() || dx.is_null() { return INVALID; }
-    let v = validate_convt3d_params(p); if v != OK { return v; }
+    if w.is_null() || dy.is_null() || dx.is_null() {
+        return INVALID;
+    }
+    let v = validate_convt3d_params(p);
+    if v != OK {
+        return v;
+    }
     let mut g = ConvDescGuard::new();
-    let s = setup_handle(&mut g, stream); if s != OK { return s; }
-    let s = build_convt3d_descs(&mut g, p, dt); if s != OK { return s; }
+    let s = setup_handle(&mut g, stream);
+    if s != OK {
+        return s;
+    }
+    let s = build_convt3d_descs(&mut g, p, dt);
+    if s != OK {
+        return s;
+    }
     let mut needed: usize = 0;
     let s = unsafe {
         cudnnGetConvolutionForwardWorkspaceSize(
-            g.handle, g.x_desc, g.w_desc, g.conv_desc, g.y_desc,
-            CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, &mut needed as *mut usize,
+            g.handle,
+            g.x_desc,
+            g.w_desc,
+            g.conv_desc,
+            g.y_desc,
+            CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+            &mut needed as *mut usize,
         )
     };
-    if s != 0 { return INTERNAL; }
-    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed); if s != OK { return s; }
+    if s != 0 {
+        return INTERNAL;
+    }
+    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed);
+    if s != OK {
+        return s;
+    }
     let status = if dt.is_double_compute() {
-        let alpha: f64 = 1.0; let beta: f64 = 0.0;
+        let alpha: f64 = 1.0;
+        let beta: f64 = 0.0;
         unsafe {
             cudnnConvolutionForward(
-                g.handle, &alpha as *const f64 as *const c_void,
-                g.x_desc, dy, g.w_desc, w, g.conv_desc,
-                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed,
-                &beta as *const f64 as *const c_void, g.y_desc, dx,
+                g.handle,
+                &alpha as *const f64 as *const c_void,
+                g.x_desc,
+                dy,
+                g.w_desc,
+                w,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                ws.ptr,
+                needed,
+                &beta as *const f64 as *const c_void,
+                g.y_desc,
+                dx,
             )
         }
     } else {
-        let alpha: f32 = 1.0; let beta: f32 = 0.0;
+        let alpha: f32 = 1.0;
+        let beta: f32 = 0.0;
         unsafe {
             cudnnConvolutionForward(
-                g.handle, &alpha as *const f32 as *const c_void,
-                g.x_desc, dy, g.w_desc, w, g.conv_desc,
-                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ws.ptr, needed,
-                &beta as *const f32 as *const c_void, g.y_desc, dx,
+                g.handle,
+                &alpha as *const f32 as *const c_void,
+                g.x_desc,
+                dy,
+                g.w_desc,
+                w,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                ws.ptr,
+                needed,
+                &beta as *const f32 as *const c_void,
+                g.y_desc,
+                dx,
             )
         }
     };
-    if status != 0 { return INTERNAL; }
+    if status != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_convt3d_bw_filter(
-    p: &ConvT3dParams, dt: DtypeTag,
-    x: *const c_void, dy: *const c_void, dw: *mut c_void,
-    ws_ptr: *mut c_void, ws_bytes: usize, stream: *mut c_void,
+    p: &ConvT3dParams,
+    dt: DtypeTag,
+    x: *const c_void,
+    dy: *const c_void,
+    dw: *mut c_void,
+    ws_ptr: *mut c_void,
+    ws_bytes: usize,
+    stream: *mut c_void,
 ) -> i32 {
-    if x.is_null() || dy.is_null() || dw.is_null() { return INVALID; }
-    let v = validate_convt3d_params(p); if v != OK { return v; }
+    if x.is_null() || dy.is_null() || dw.is_null() {
+        return INVALID;
+    }
+    let v = validate_convt3d_params(p);
+    if v != OK {
+        return v;
+    }
     let mut g = ConvDescGuard::new();
-    let s = setup_handle(&mut g, stream); if s != OK { return s; }
-    let s = build_convt3d_descs(&mut g, p, dt); if s != OK { return s; }
+    let s = setup_handle(&mut g, stream);
+    if s != OK {
+        return s;
+    }
+    let s = build_convt3d_descs(&mut g, p, dt);
+    if s != OK {
+        return s;
+    }
     let mut needed: usize = 0;
     let s = unsafe {
         cudnnGetConvolutionBackwardFilterWorkspaceSize(
-            g.handle, g.x_desc, g.y_desc, g.conv_desc, g.w_desc,
-            CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, &mut needed as *mut usize,
+            g.handle,
+            g.x_desc,
+            g.y_desc,
+            g.conv_desc,
+            g.w_desc,
+            CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+            &mut needed as *mut usize,
         )
     };
-    if s != 0 { return INTERNAL; }
-    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed); if s != OK { return s; }
+    if s != 0 {
+        return INTERNAL;
+    }
+    let (ws, s) = WsHolder::ensure(ws_ptr, ws_bytes, needed);
+    if s != OK {
+        return s;
+    }
     let status = if dt.is_double_compute() {
-        let alpha: f64 = 1.0; let beta: f64 = 0.0;
+        let alpha: f64 = 1.0;
+        let beta: f64 = 0.0;
         unsafe {
             cudnnConvolutionBackwardFilter(
-                g.handle, &alpha as *const f64 as *const c_void,
-                g.x_desc, dy, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed,
-                &beta as *const f64 as *const c_void, g.w_desc, dw,
+                g.handle,
+                &alpha as *const f64 as *const c_void,
+                g.x_desc,
+                dy,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f64 as *const c_void,
+                g.w_desc,
+                dw,
             )
         }
     } else {
-        let alpha: f32 = 1.0; let beta: f32 = 0.0;
+        let alpha: f32 = 1.0;
+        let beta: f32 = 0.0;
         unsafe {
             cudnnConvolutionBackwardFilter(
-                g.handle, &alpha as *const f32 as *const c_void,
-                g.x_desc, dy, g.y_desc, x, g.conv_desc,
-                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, ws.ptr, needed,
-                &beta as *const f32 as *const c_void, g.w_desc, dw,
+                g.handle,
+                &alpha as *const f32 as *const c_void,
+                g.x_desc,
+                dy,
+                g.y_desc,
+                x,
+                g.conv_desc,
+                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+                ws.ptr,
+                needed,
+                &beta as *const f32 as *const c_void,
+                g.w_desc,
+                dw,
             )
         }
     };
-    if status != 0 { return INTERNAL; }
+    if status != 0 {
+        return INTERNAL;
+    }
     OK
 }
 
@@ -2364,14 +3517,30 @@ macro_rules! convt3d_dir_impl {
         #[unsafe(no_mangle)]
         #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $name(
-            batch: i32, c_in: i32, c_out: i32,
-            d_in: i32, h_in: i32, w_in: i32,
-            _d_out: i32, _h_out: i32, _w_out: i32,
-            kd: i32, kh: i32, kw: i32,
-            stride_d: i32, stride_h: i32, stride_w: i32,
-            pad_d: i32, pad_h: i32, pad_w: i32,
-            dilation_d: i32, dilation_h: i32, dilation_w: i32,
-            output_pad_d: i32, output_pad_h: i32, output_pad_w: i32,
+            batch: i32,
+            c_in: i32,
+            c_out: i32,
+            d_in: i32,
+            h_in: i32,
+            w_in: i32,
+            _d_out: i32,
+            _h_out: i32,
+            _w_out: i32,
+            kd: i32,
+            kh: i32,
+            kw: i32,
+            stride_d: i32,
+            stride_h: i32,
+            stride_w: i32,
+            pad_d: i32,
+            pad_h: i32,
+            pad_w: i32,
+            dilation_d: i32,
+            dilation_h: i32,
+            dilation_w: i32,
+            output_pad_d: i32,
+            output_pad_h: i32,
+            output_pad_w: i32,
             groups: i32,
             $a: *const c_void,
             $b: *const c_void,
@@ -2381,13 +3550,27 @@ macro_rules! convt3d_dir_impl {
             stream: *mut c_void,
         ) -> i32 {
             let p = ConvT3dParams {
-                batch, c_in, c_out,
-                d_in, h_in, w_in,
-                d_filt: kd, h_filt: kh, w_filt: kw,
-                pad_d, pad_h, pad_w,
-                stride_d, stride_h, stride_w,
-                dilation_d, dilation_h, dilation_w,
-                output_pad_d, output_pad_h, output_pad_w,
+                batch,
+                c_in,
+                c_out,
+                d_in,
+                h_in,
+                w_in,
+                d_filt: kd,
+                h_filt: kh,
+                w_filt: kw,
+                pad_d,
+                pad_h,
+                pad_w,
+                stride_d,
+                stride_h,
+                stride_w,
+                dilation_d,
+                dilation_h,
+                dilation_w,
+                output_pad_d,
+                output_pad_h,
+                output_pad_w,
                 groups,
             };
             $runner(&p, $dt, $a, $b, $c, workspace, workspace_bytes, stream)
@@ -2395,15 +3578,99 @@ macro_rules! convt3d_dir_impl {
     };
 }
 
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_fw_f32_run, DtypeTag::F32, run_convt3d_fw, input, filter, output);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_fw_f64_run, DtypeTag::F64, run_convt3d_fw, input, filter, output);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_fw_f16_run, DtypeTag::F16, run_convt3d_fw, input, filter, output);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_fw_bf16_run, DtypeTag::Bf16, run_convt3d_fw, input, filter, output);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_bw_data_f32_run, DtypeTag::F32, run_convt3d_bw_data, filter, grad_output, grad_input);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_bw_data_f64_run, DtypeTag::F64, run_convt3d_bw_data, filter, grad_output, grad_input);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_bw_data_f16_run, DtypeTag::F16, run_convt3d_bw_data, filter, grad_output, grad_input);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_bw_data_bf16_run, DtypeTag::Bf16, run_convt3d_bw_data, filter, grad_output, grad_input);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_bw_filter_f32_run, DtypeTag::F32, run_convt3d_bw_filter, input, grad_output, grad_filter);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_bw_filter_f64_run, DtypeTag::F64, run_convt3d_bw_filter, input, grad_output, grad_filter);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_bw_filter_f16_run, DtypeTag::F16, run_convt3d_bw_filter, input, grad_output, grad_filter);
-convt3d_dir_impl!(baracuda_kernels_conv_transpose_3d_bw_filter_bf16_run, DtypeTag::Bf16, run_convt3d_bw_filter, input, grad_output, grad_filter);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_fw_f32_run,
+    DtypeTag::F32,
+    run_convt3d_fw,
+    input,
+    filter,
+    output
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_fw_f64_run,
+    DtypeTag::F64,
+    run_convt3d_fw,
+    input,
+    filter,
+    output
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_fw_f16_run,
+    DtypeTag::F16,
+    run_convt3d_fw,
+    input,
+    filter,
+    output
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_fw_bf16_run,
+    DtypeTag::Bf16,
+    run_convt3d_fw,
+    input,
+    filter,
+    output
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_bw_data_f32_run,
+    DtypeTag::F32,
+    run_convt3d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_bw_data_f64_run,
+    DtypeTag::F64,
+    run_convt3d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_bw_data_f16_run,
+    DtypeTag::F16,
+    run_convt3d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_bw_data_bf16_run,
+    DtypeTag::Bf16,
+    run_convt3d_bw_data,
+    filter,
+    grad_output,
+    grad_input
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_bw_filter_f32_run,
+    DtypeTag::F32,
+    run_convt3d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_bw_filter_f64_run,
+    DtypeTag::F64,
+    run_convt3d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_bw_filter_f16_run,
+    DtypeTag::F16,
+    run_convt3d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);
+convt3d_dir_impl!(
+    baracuda_kernels_conv_transpose_3d_bw_filter_bf16_run,
+    DtypeTag::Bf16,
+    run_convt3d_bw_filter,
+    input,
+    grad_output,
+    grad_filter
+);

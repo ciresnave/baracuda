@@ -5,10 +5,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, EmbeddingBagArgs, EmbeddingBagDescriptor, EmbeddingBagMode,
-    EmbeddingBagPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, EmbeddingBagArgs, EmbeddingBagDescriptor, EmbeddingBagMode, EmbeddingBagPlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -109,8 +109,8 @@ fn embedding_bag_f32_sum_basic() {
         padding_idx: None,
         element: ElementKind::F32,
     };
-    let plan = EmbeddingBagPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        EmbeddingBagPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = EmbeddingBagArgs::<f32> {
         weight: TensorRef {
             data: dev_w.as_slice(),
@@ -186,8 +186,8 @@ fn embedding_bag_f32_mean_basic() {
         padding_idx: None,
         element: ElementKind::F32,
     };
-    let plan = EmbeddingBagPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        EmbeddingBagPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = EmbeddingBagArgs::<f32> {
         weight: TensorRef {
             data: dev_w.as_slice(),
@@ -266,8 +266,8 @@ fn embedding_bag_f32_padding_idx_and_empty_bag() {
         padding_idx: Some(padding),
         element: ElementKind::F32,
     };
-    let plan = EmbeddingBagPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        EmbeddingBagPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = EmbeddingBagArgs::<f32> {
         weight: TensorRef {
             data: dev_w.as_slice(),
@@ -355,8 +355,8 @@ fn embedding_bag_f64_sum() {
         padding_idx: None,
         element: ElementKind::F64,
     };
-    let plan = EmbeddingBagPlan::<f64>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        EmbeddingBagPlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = EmbeddingBagArgs::<f64> {
         weight: TensorRef {
             data: dev_w.as_slice(),

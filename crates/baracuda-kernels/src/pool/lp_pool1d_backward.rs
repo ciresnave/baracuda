@@ -25,7 +25,7 @@ use baracuda_kernels_types::{
     TensorRef, Workspace,
 };
 
-use super::lp_pool1d::{build_lp1d_sku, compute_l_out, validate_lp1d, LpPool1dDescriptor};
+use super::lp_pool1d::{LpPool1dDescriptor, build_lp1d_sku, compute_l_out, validate_lp1d};
 
 /// Args bundle for an `LpPool1d` backward launch.
 ///
@@ -105,34 +105,70 @@ impl<T: Element> LpPool1dBackwardPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_1d_f32_backward_run(
-                    x_ptr, y_ptr, dy_ptr, dx_ptr,
-                    self.desc.batch, self.desc.channels, self.desc.l_in,
-                    self.desc.window, self.desc.stride, self.l_out,
-                    self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.l_in,
+                    self.desc.window,
+                    self.desc.stride,
+                    self.l_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_1d_f64_backward_run(
-                    x_ptr, y_ptr, dy_ptr, dx_ptr,
-                    self.desc.batch, self.desc.channels, self.desc.l_in,
-                    self.desc.window, self.desc.stride, self.l_out,
-                    self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.l_in,
+                    self.desc.window,
+                    self.desc.stride,
+                    self.l_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_1d_f16_backward_run(
-                    x_ptr, y_ptr, dy_ptr, dx_ptr,
-                    self.desc.batch, self.desc.channels, self.desc.l_in,
-                    self.desc.window, self.desc.stride, self.l_out,
-                    self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.l_in,
+                    self.desc.window,
+                    self.desc.stride,
+                    self.l_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_1d_bf16_backward_run(
-                    x_ptr, y_ptr, dy_ptr, dx_ptr,
-                    self.desc.batch, self.desc.channels, self.desc.l_in,
-                    self.desc.window, self.desc.stride, self.l_out,
-                    self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.l_in,
+                    self.desc.window,
+                    self.desc.stride,
+                    self.l_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             _ => {

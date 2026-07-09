@@ -107,7 +107,7 @@ use std::ffi::CString;
 
 use baracuda_cutensor_sys::{
     cutensor, cutensorAlgo, cutensorDataType, cutensorHandle_t, cutensorJitMode,
-    cutensorOperationDescriptor_t, cutensorOperator, cutensorPlanPreference_t, cutensorPlan_t,
+    cutensorOperationDescriptor_t, cutensorOperator, cutensorPlan_t, cutensorPlanPreference_t,
     cutensorStatus_t, cutensorTensorDescriptor_t, cutensorWorksizePreference,
 };
 
@@ -428,17 +428,19 @@ impl<'h> ComputeDescriptor<'h> {
         attr: i32,
         value: *const c_void,
         size_bytes: usize,
-    ) -> Result<()> { unsafe {
-        let c = cutensor()?;
-        let cu = c.cutensor_compute_descriptor_set_attribute()?;
-        check(cu(
-            self._handle.as_raw(),
-            self.desc,
-            attr,
-            value,
-            size_bytes,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cutensor()?;
+            let cu = c.cutensor_compute_descriptor_set_attribute()?;
+            check(cu(
+                self._handle.as_raw(),
+                self.desc,
+                attr,
+                value,
+                size_bytes,
+            ))
+        }
+    }
 
     /// # Safety
     ///
@@ -448,17 +450,19 @@ impl<'h> ComputeDescriptor<'h> {
         attr: i32,
         value: *mut c_void,
         size_bytes: usize,
-    ) -> Result<()> { unsafe {
-        let c = cutensor()?;
-        let cu = c.cutensor_compute_descriptor_get_attribute()?;
-        check(cu(
-            self._handle.as_raw(),
-            self.desc,
-            attr,
-            value,
-            size_bytes,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cutensor()?;
+            let cu = c.cutensor_compute_descriptor_get_attribute()?;
+            check(cu(
+                self._handle.as_raw(),
+                self.desc,
+                attr,
+                value,
+                size_bytes,
+            ))
+        }
+    }
 }
 
 impl Drop for ComputeDescriptor<'_> {
@@ -564,32 +568,34 @@ impl BlockSparseContraction {
         d: &TensorDescriptor<'h>,
         modes_d: &[i32],
         compute_desc: *const c_void,
-    ) -> Result<OperationDescriptor<'h>> { unsafe {
-        let lib = cutensor()?;
-        let cu = lib.cutensor_create_block_sparse_contraction()?;
-        let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
-        check(cu(
-            handle.as_raw(),
-            &mut desc,
-            a.as_raw(),
-            modes_a.as_ptr(),
-            cutensorOperator::IDENTITY,
-            b.as_raw(),
-            modes_b.as_ptr(),
-            cutensorOperator::IDENTITY,
-            c.as_raw(),
-            modes_c.as_ptr(),
-            cutensorOperator::IDENTITY,
-            d.as_raw(),
-            modes_d.as_ptr(),
-            compute_desc,
-        ))?;
-        Ok(OperationDescriptor {
-            desc,
-            handle,
-            kind: OpKind::BlockSparseContraction,
-        })
-    }}
+    ) -> Result<OperationDescriptor<'h>> {
+        unsafe {
+            let lib = cutensor()?;
+            let cu = lib.cutensor_create_block_sparse_contraction()?;
+            let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
+            check(cu(
+                handle.as_raw(),
+                &mut desc,
+                a.as_raw(),
+                modes_a.as_ptr(),
+                cutensorOperator::IDENTITY,
+                b.as_raw(),
+                modes_b.as_ptr(),
+                cutensorOperator::IDENTITY,
+                c.as_raw(),
+                modes_c.as_ptr(),
+                cutensorOperator::IDENTITY,
+                d.as_raw(),
+                modes_d.as_ptr(),
+                compute_desc,
+            ))?;
+            Ok(OperationDescriptor {
+                desc,
+                handle,
+                kind: OpKind::BlockSparseContraction,
+            })
+        }
+    }
 }
 
 /// A ternary contraction op: `E[mE] = α·op_a(A)·op_b(B)·op_c(C) + β·op_d(D)`.
@@ -614,35 +620,37 @@ impl TrinaryContraction {
         e: &TensorDescriptor<'h>,
         modes_e: &[i32],
         compute_desc: *const c_void,
-    ) -> Result<OperationDescriptor<'h>> { unsafe {
-        let lib = cutensor()?;
-        let cu = lib.cutensor_create_contraction_trinary()?;
-        let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
-        check(cu(
-            handle.as_raw(),
-            &mut desc,
-            a.as_raw(),
-            modes_a.as_ptr(),
-            cutensorOperator::IDENTITY,
-            b.as_raw(),
-            modes_b.as_ptr(),
-            cutensorOperator::IDENTITY,
-            c.as_raw(),
-            modes_c.as_ptr(),
-            cutensorOperator::IDENTITY,
-            d.as_raw(),
-            modes_d.as_ptr(),
-            cutensorOperator::IDENTITY,
-            e.as_raw(),
-            modes_e.as_ptr(),
-            compute_desc,
-        ))?;
-        Ok(OperationDescriptor {
-            desc,
-            handle,
-            kind: OpKind::TrinaryContraction,
-        })
-    }}
+    ) -> Result<OperationDescriptor<'h>> {
+        unsafe {
+            let lib = cutensor()?;
+            let cu = lib.cutensor_create_contraction_trinary()?;
+            let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
+            check(cu(
+                handle.as_raw(),
+                &mut desc,
+                a.as_raw(),
+                modes_a.as_ptr(),
+                cutensorOperator::IDENTITY,
+                b.as_raw(),
+                modes_b.as_ptr(),
+                cutensorOperator::IDENTITY,
+                c.as_raw(),
+                modes_c.as_ptr(),
+                cutensorOperator::IDENTITY,
+                d.as_raw(),
+                modes_d.as_ptr(),
+                cutensorOperator::IDENTITY,
+                e.as_raw(),
+                modes_e.as_ptr(),
+                compute_desc,
+            ))?;
+            Ok(OperationDescriptor {
+                desc,
+                handle,
+                kind: OpKind::TrinaryContraction,
+            })
+        }
+    }
 }
 
 impl Drop for Handle {
@@ -712,11 +720,13 @@ impl<'h> TensorDescriptor<'h> {
         attr: i32,
         buf: *const c_void,
         size_bytes: usize,
-    ) -> Result<()> { unsafe {
-        let c = cutensor()?;
-        let cu = c.cutensor_tensor_descriptor_set_attribute()?;
-        check(cu(self._handle.as_raw(), self.desc, attr, buf, size_bytes))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cutensor()?;
+            let cu = c.cutensor_tensor_descriptor_set_attribute()?;
+            check(cu(self._handle.as_raw(), self.desc, attr, buf, size_bytes))
+        }
+    }
 }
 
 impl Drop for TensorDescriptor<'_> {
@@ -818,11 +828,13 @@ impl<'h> OperationDescriptor<'h> {
         attr: i32,
         buf: *mut c_void,
         size_bytes: usize,
-    ) -> Result<()> { unsafe {
-        let c = cutensor()?;
-        let cu = c.cutensor_operation_descriptor_get_attribute()?;
-        check(cu(self.handle.as_raw(), self.desc, attr, buf, size_bytes))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cutensor()?;
+            let cu = c.cutensor_operation_descriptor_get_attribute()?;
+            check(cu(self.handle.as_raw(), self.desc, attr, buf, size_bytes))
+        }
+    }
 
     /// Low-level attribute setter.
     ///
@@ -834,11 +846,13 @@ impl<'h> OperationDescriptor<'h> {
         attr: i32,
         buf: *const c_void,
         size_bytes: usize,
-    ) -> Result<()> { unsafe {
-        let c = cutensor()?;
-        let cu = c.cutensor_operation_descriptor_set_attribute()?;
-        check(cu(self.handle.as_raw(), self.desc, attr, buf, size_bytes))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cutensor()?;
+            let cu = c.cutensor_operation_descriptor_set_attribute()?;
+            check(cu(self.handle.as_raw(), self.desc, attr, buf, size_bytes))
+        }
+    }
 }
 
 impl Drop for OperationDescriptor<'_> {
@@ -876,32 +890,34 @@ impl Contraction {
         d: &TensorDescriptor<'h>,
         modes_d: &[i32],
         compute_desc: *const c_void,
-    ) -> Result<OperationDescriptor<'h>> { unsafe {
-        let cu_lib = cutensor()?;
-        let cu = cu_lib.cutensor_create_contraction()?;
-        let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
-        check(cu(
-            handle.as_raw(),
-            &mut desc,
-            a.as_raw(),
-            modes_a.as_ptr(),
-            cutensorOperator::IDENTITY,
-            b.as_raw(),
-            modes_b.as_ptr(),
-            cutensorOperator::IDENTITY,
-            c.as_raw(),
-            modes_c.as_ptr(),
-            cutensorOperator::IDENTITY,
-            d.as_raw(),
-            modes_d.as_ptr(),
-            compute_desc,
-        ))?;
-        Ok(OperationDescriptor {
-            desc,
-            handle,
-            kind: OpKind::Contraction,
-        })
-    }}
+    ) -> Result<OperationDescriptor<'h>> {
+        unsafe {
+            let cu_lib = cutensor()?;
+            let cu = cu_lib.cutensor_create_contraction()?;
+            let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
+            check(cu(
+                handle.as_raw(),
+                &mut desc,
+                a.as_raw(),
+                modes_a.as_ptr(),
+                cutensorOperator::IDENTITY,
+                b.as_raw(),
+                modes_b.as_ptr(),
+                cutensorOperator::IDENTITY,
+                c.as_raw(),
+                modes_c.as_ptr(),
+                cutensorOperator::IDENTITY,
+                d.as_raw(),
+                modes_d.as_ptr(),
+                compute_desc,
+            ))?;
+            Ok(OperationDescriptor {
+                desc,
+                handle,
+                kind: OpKind::Contraction,
+            })
+        }
+    }
 }
 
 /// A reduction op: `D[mD] = reduce(A[mA])` with user-chosen reduce op.
@@ -927,30 +943,32 @@ impl Reduction {
         modes_d: &[i32],
         op_reduce: BinaryOp,
         compute_desc: *const c_void,
-    ) -> Result<OperationDescriptor<'h>> { unsafe {
-        let lib = cutensor()?;
-        let cu = lib.cutensor_create_reduction()?;
-        let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
-        check(cu(
-            handle.as_raw(),
-            &mut desc,
-            a.as_raw(),
-            modes_a.as_ptr(),
-            cutensorOperator::IDENTITY,
-            c.as_raw(),
-            modes_c.as_ptr(),
-            cutensorOperator::IDENTITY,
-            d.as_raw(),
-            modes_d.as_ptr(),
-            op_reduce.raw(),
-            compute_desc,
-        ))?;
-        Ok(OperationDescriptor {
-            desc,
-            handle,
-            kind: OpKind::Reduction,
-        })
-    }}
+    ) -> Result<OperationDescriptor<'h>> {
+        unsafe {
+            let lib = cutensor()?;
+            let cu = lib.cutensor_create_reduction()?;
+            let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
+            check(cu(
+                handle.as_raw(),
+                &mut desc,
+                a.as_raw(),
+                modes_a.as_ptr(),
+                cutensorOperator::IDENTITY,
+                c.as_raw(),
+                modes_c.as_ptr(),
+                cutensorOperator::IDENTITY,
+                d.as_raw(),
+                modes_d.as_ptr(),
+                op_reduce.raw(),
+                compute_desc,
+            ))?;
+            Ok(OperationDescriptor {
+                desc,
+                handle,
+                kind: OpKind::Reduction,
+            })
+        }
+    }
 }
 
 /// Elementwise binary op: `D[mD] = (α * op_a(A[mA])) op_ac (γ * op_c(C[mC]))`.
@@ -974,30 +992,32 @@ impl ElementwiseBinary {
         modes_d: &[i32],
         op_ac: BinaryOp,
         compute_desc: *const c_void,
-    ) -> Result<OperationDescriptor<'h>> { unsafe {
-        let lib = cutensor()?;
-        let cu = lib.cutensor_create_elementwise_binary()?;
-        let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
-        check(cu(
-            handle.as_raw(),
-            &mut desc,
-            a.as_raw(),
-            modes_a.as_ptr(),
-            op_a.raw(),
-            c.as_raw(),
-            modes_c.as_ptr(),
-            op_c.raw(),
-            d.as_raw(),
-            modes_d.as_ptr(),
-            op_ac.raw(),
-            compute_desc,
-        ))?;
-        Ok(OperationDescriptor {
-            desc,
-            handle,
-            kind: OpKind::ElementwiseBinary,
-        })
-    }}
+    ) -> Result<OperationDescriptor<'h>> {
+        unsafe {
+            let lib = cutensor()?;
+            let cu = lib.cutensor_create_elementwise_binary()?;
+            let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
+            check(cu(
+                handle.as_raw(),
+                &mut desc,
+                a.as_raw(),
+                modes_a.as_ptr(),
+                op_a.raw(),
+                c.as_raw(),
+                modes_c.as_ptr(),
+                op_c.raw(),
+                d.as_raw(),
+                modes_d.as_ptr(),
+                op_ac.raw(),
+                compute_desc,
+            ))?;
+            Ok(OperationDescriptor {
+                desc,
+                handle,
+                kind: OpKind::ElementwiseBinary,
+            })
+        }
+    }
 }
 
 /// Elementwise trinary op:
@@ -1026,34 +1046,36 @@ impl ElementwiseTrinary {
         op_ab: BinaryOp,
         op_abc: BinaryOp,
         compute_desc: *const c_void,
-    ) -> Result<OperationDescriptor<'h>> { unsafe {
-        let lib = cutensor()?;
-        let cu = lib.cutensor_create_elementwise_trinary()?;
-        let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
-        check(cu(
-            handle.as_raw(),
-            &mut desc,
-            a.as_raw(),
-            modes_a.as_ptr(),
-            op_a.raw(),
-            b.as_raw(),
-            modes_b.as_ptr(),
-            op_b.raw(),
-            c.as_raw(),
-            modes_c.as_ptr(),
-            op_c.raw(),
-            d.as_raw(),
-            modes_d.as_ptr(),
-            op_ab.raw(),
-            op_abc.raw(),
-            compute_desc,
-        ))?;
-        Ok(OperationDescriptor {
-            desc,
-            handle,
-            kind: OpKind::ElementwiseTrinary,
-        })
-    }}
+    ) -> Result<OperationDescriptor<'h>> {
+        unsafe {
+            let lib = cutensor()?;
+            let cu = lib.cutensor_create_elementwise_trinary()?;
+            let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
+            check(cu(
+                handle.as_raw(),
+                &mut desc,
+                a.as_raw(),
+                modes_a.as_ptr(),
+                op_a.raw(),
+                b.as_raw(),
+                modes_b.as_ptr(),
+                op_b.raw(),
+                c.as_raw(),
+                modes_c.as_ptr(),
+                op_c.raw(),
+                d.as_raw(),
+                modes_d.as_ptr(),
+                op_ab.raw(),
+                op_abc.raw(),
+                compute_desc,
+            ))?;
+            Ok(OperationDescriptor {
+                desc,
+                handle,
+                kind: OpKind::ElementwiseTrinary,
+            })
+        }
+    }
 }
 
 /// Tensor permutation (axis shuffle + optional unary op):
@@ -1074,26 +1096,28 @@ impl Permutation {
         b: &TensorDescriptor<'h>,
         modes_b: &[i32],
         compute_desc: *const c_void,
-    ) -> Result<OperationDescriptor<'h>> { unsafe {
-        let lib = cutensor()?;
-        let cu = lib.cutensor_create_permutation()?;
-        let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
-        check(cu(
-            handle.as_raw(),
-            &mut desc,
-            a.as_raw(),
-            modes_a.as_ptr(),
-            op_a.raw(),
-            b.as_raw(),
-            modes_b.as_ptr(),
-            compute_desc,
-        ))?;
-        Ok(OperationDescriptor {
-            desc,
-            handle,
-            kind: OpKind::Permutation,
-        })
-    }}
+    ) -> Result<OperationDescriptor<'h>> {
+        unsafe {
+            let lib = cutensor()?;
+            let cu = lib.cutensor_create_permutation()?;
+            let mut desc: cutensorOperationDescriptor_t = core::ptr::null_mut();
+            check(cu(
+                handle.as_raw(),
+                &mut desc,
+                a.as_raw(),
+                modes_a.as_ptr(),
+                op_a.raw(),
+                b.as_raw(),
+                modes_b.as_ptr(),
+                compute_desc,
+            ))?;
+            Ok(OperationDescriptor {
+                desc,
+                handle,
+                kind: OpKind::Permutation,
+            })
+        }
+    }
 }
 
 /// Plan preferences — algorithm selection + JIT mode.
@@ -1140,17 +1164,19 @@ impl<'h> PlanPreference<'h> {
         attr: i32,
         value: *const c_void,
         size_bytes: usize,
-    ) -> Result<()> { unsafe {
-        let c = cutensor()?;
-        let cu = c.cutensor_plan_preference_set_attribute()?;
-        check(cu(
-            self._handle.as_raw(),
-            self.pref,
-            attr,
-            value,
-            size_bytes,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cutensor()?;
+            let cu = c.cutensor_plan_preference_set_attribute()?;
+            check(cu(
+                self._handle.as_raw(),
+                self.pref,
+                attr,
+                value,
+                size_bytes,
+            ))
+        }
+    }
 
     /// Read a plan-preference attribute.
     ///
@@ -1162,17 +1188,19 @@ impl<'h> PlanPreference<'h> {
         attr: i32,
         value: *mut c_void,
         size_bytes: usize,
-    ) -> Result<()> { unsafe {
-        let c = cutensor()?;
-        let cu = c.cutensor_plan_preference_get_attribute()?;
-        check(cu(
-            self._handle.as_raw(),
-            self.pref,
-            attr,
-            value,
-            size_bytes,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cutensor()?;
+            let cu = c.cutensor_plan_preference_get_attribute()?;
+            check(cu(
+                self._handle.as_raw(),
+                self.pref,
+                attr,
+                value,
+                size_bytes,
+            ))
+        }
+    }
 }
 
 impl Drop for PlanPreference<'_> {
@@ -1268,24 +1296,26 @@ impl<'h> Plan<'h> {
         workspace: *mut c_void,
         workspace_bytes: u64,
         stream: *mut c_void,
-    ) -> Result<()> { unsafe {
-        assert_eq!(self.kind, OpKind::Contraction, "plan is not a contraction");
-        let lib = cutensor()?;
-        let cu = lib.cutensor_contract()?;
-        check(cu(
-            self.handle.as_raw(),
-            self.plan,
-            alpha,
-            a,
-            b,
-            beta,
-            c,
-            d,
-            workspace,
-            workspace_bytes,
-            stream,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            assert_eq!(self.kind, OpKind::Contraction, "plan is not a contraction");
+            let lib = cutensor()?;
+            let cu = lib.cutensor_contract()?;
+            check(cu(
+                self.handle.as_raw(),
+                self.plan,
+                alpha,
+                a,
+                b,
+                beta,
+                c,
+                d,
+                workspace,
+                workspace_bytes,
+                stream,
+            ))
+        }
+    }
 
     /// Execute a reduction plan.
     ///
@@ -1303,23 +1333,25 @@ impl<'h> Plan<'h> {
         workspace: *mut c_void,
         workspace_bytes: u64,
         stream: *mut c_void,
-    ) -> Result<()> { unsafe {
-        assert_eq!(self.kind, OpKind::Reduction, "plan is not a reduction");
-        let lib = cutensor()?;
-        let cu = lib.cutensor_reduce()?;
-        check(cu(
-            self.handle.as_raw(),
-            self.plan,
-            alpha,
-            a,
-            beta,
-            c,
-            d,
-            workspace,
-            workspace_bytes,
-            stream,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            assert_eq!(self.kind, OpKind::Reduction, "plan is not a reduction");
+            let lib = cutensor()?;
+            let cu = lib.cutensor_reduce()?;
+            check(cu(
+                self.handle.as_raw(),
+                self.plan,
+                alpha,
+                a,
+                beta,
+                c,
+                d,
+                workspace,
+                workspace_bytes,
+                stream,
+            ))
+        }
+    }
 
     /// Execute an elementwise-binary plan.
     ///
@@ -1335,25 +1367,27 @@ impl<'h> Plan<'h> {
         c: *const c_void,
         d: *mut c_void,
         stream: *mut c_void,
-    ) -> Result<()> { unsafe {
-        assert_eq!(
-            self.kind,
-            OpKind::ElementwiseBinary,
-            "plan is not an elementwise-binary"
-        );
-        let lib = cutensor()?;
-        let cu = lib.cutensor_elementwise_binary_execute()?;
-        check(cu(
-            self.handle.as_raw(),
-            self.plan,
-            alpha,
-            a,
-            gamma,
-            c,
-            d,
-            stream,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            assert_eq!(
+                self.kind,
+                OpKind::ElementwiseBinary,
+                "plan is not an elementwise-binary"
+            );
+            let lib = cutensor()?;
+            let cu = lib.cutensor_elementwise_binary_execute()?;
+            check(cu(
+                self.handle.as_raw(),
+                self.plan,
+                alpha,
+                a,
+                gamma,
+                c,
+                d,
+                stream,
+            ))
+        }
+    }
 
     /// Execute an elementwise-trinary plan.
     ///
@@ -1371,27 +1405,29 @@ impl<'h> Plan<'h> {
         c: *const c_void,
         d: *mut c_void,
         stream: *mut c_void,
-    ) -> Result<()> { unsafe {
-        assert_eq!(
-            self.kind,
-            OpKind::ElementwiseTrinary,
-            "plan is not an elementwise-trinary"
-        );
-        let lib = cutensor()?;
-        let cu = lib.cutensor_elementwise_trinary_execute()?;
-        check(cu(
-            self.handle.as_raw(),
-            self.plan,
-            alpha,
-            a,
-            beta,
-            b,
-            gamma,
-            c,
-            d,
-            stream,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            assert_eq!(
+                self.kind,
+                OpKind::ElementwiseTrinary,
+                "plan is not an elementwise-trinary"
+            );
+            let lib = cutensor()?;
+            let cu = lib.cutensor_elementwise_trinary_execute()?;
+            check(cu(
+                self.handle.as_raw(),
+                self.plan,
+                alpha,
+                a,
+                beta,
+                b,
+                gamma,
+                c,
+                d,
+                stream,
+            ))
+        }
+    }
 
     /// Execute a permutation plan.
     ///
@@ -1404,12 +1440,14 @@ impl<'h> Plan<'h> {
         a: *const c_void,
         b: *mut c_void,
         stream: *mut c_void,
-    ) -> Result<()> { unsafe {
-        assert_eq!(self.kind, OpKind::Permutation, "plan is not a permutation");
-        let lib = cutensor()?;
-        let cu = lib.cutensor_permute()?;
-        check(cu(self.handle.as_raw(), self.plan, alpha, a, b, stream))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            assert_eq!(self.kind, OpKind::Permutation, "plan is not a permutation");
+            let lib = cutensor()?;
+            let cu = lib.cutensor_permute()?;
+            check(cu(self.handle.as_raw(), self.plan, alpha, a, b, stream))
+        }
+    }
 
     /// Execute a block-sparse contraction plan.
     ///
@@ -1430,28 +1468,30 @@ impl<'h> Plan<'h> {
         workspace: *mut c_void,
         workspace_bytes: u64,
         stream: *mut c_void,
-    ) -> Result<()> { unsafe {
-        assert_eq!(
-            self.kind,
-            OpKind::BlockSparseContraction,
-            "plan is not a block-sparse contraction"
-        );
-        let lib = cutensor()?;
-        let cu = lib.cutensor_block_sparse_contract()?;
-        check(cu(
-            self.handle.as_raw(),
-            self.plan,
-            alpha,
-            a,
-            b,
-            beta,
-            c,
-            d,
-            workspace,
-            workspace_bytes,
-            stream,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            assert_eq!(
+                self.kind,
+                OpKind::BlockSparseContraction,
+                "plan is not a block-sparse contraction"
+            );
+            let lib = cutensor()?;
+            let cu = lib.cutensor_block_sparse_contract()?;
+            check(cu(
+                self.handle.as_raw(),
+                self.plan,
+                alpha,
+                a,
+                b,
+                beta,
+                c,
+                d,
+                workspace,
+                workspace_bytes,
+                stream,
+            ))
+        }
+    }
 
     /// Execute a trinary-contraction plan:
     /// `E = α·op_a(A)·op_b(B)·op_c(C) + β·op_d(D)`.
@@ -1472,29 +1512,31 @@ impl<'h> Plan<'h> {
         workspace: *mut c_void,
         workspace_bytes: u64,
         stream: *mut c_void,
-    ) -> Result<()> { unsafe {
-        assert_eq!(
-            self.kind,
-            OpKind::TrinaryContraction,
-            "plan is not a trinary-contraction"
-        );
-        let lib = cutensor()?;
-        let cu = lib.cutensor_contract_trinary()?;
-        check(cu(
-            self.handle.as_raw(),
-            self.plan,
-            alpha,
-            a,
-            b,
-            c,
-            beta,
-            d,
-            e,
-            workspace,
-            workspace_bytes,
-            stream,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            assert_eq!(
+                self.kind,
+                OpKind::TrinaryContraction,
+                "plan is not a trinary-contraction"
+            );
+            let lib = cutensor()?;
+            let cu = lib.cutensor_contract_trinary()?;
+            check(cu(
+                self.handle.as_raw(),
+                self.plan,
+                alpha,
+                a,
+                b,
+                c,
+                beta,
+                d,
+                e,
+                workspace,
+                workspace_bytes,
+                stream,
+            ))
+        }
+    }
 }
 
 impl Drop for Plan<'_> {

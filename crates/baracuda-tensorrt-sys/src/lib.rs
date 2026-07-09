@@ -16,7 +16,7 @@
 use core::ffi::{c_char, c_int, c_void};
 use std::sync::OnceLock;
 
-use baracuda_core::{platform, Library, LoaderError};
+use baracuda_core::{Library, LoaderError, platform};
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_types::CudaStatus;
 
@@ -233,19 +233,14 @@ extern "C" {
         name: *const c_char,
     ) -> trtDataType_t;
     /// TensorRT shim: Cuda Engine Get Tensor Shape.
-    pub fn trtCudaEngineGetTensorShape(
-        engine: trtICudaEngine_t,
-        name: *const c_char,
-    ) -> trtDims_t;
+    pub fn trtCudaEngineGetTensorShape(engine: trtICudaEngine_t, name: *const c_char) -> trtDims_t;
     /// TensorRT shim: Cuda Engine Get Tensor Bytes Per Component.
     pub fn trtCudaEngineGetTensorBytesPerComponent(
         engine: trtICudaEngine_t,
         name: *const c_char,
     ) -> i32;
     /// TensorRT shim: Cuda Engine Create Execution Context.
-    pub fn trtCudaEngineCreateExecutionContext(
-        engine: trtICudaEngine_t,
-    ) -> trtIExecutionContext_t;
+    pub fn trtCudaEngineCreateExecutionContext(engine: trtICudaEngine_t) -> trtIExecutionContext_t;
     /// TensorRT shim: Cuda Engine Create Execution Context With Strategy.
     pub fn trtCudaEngineCreateExecutionContextWithStrategy(
         engine: trtICudaEngine_t,

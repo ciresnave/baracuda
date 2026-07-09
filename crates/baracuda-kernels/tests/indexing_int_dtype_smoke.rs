@@ -11,7 +11,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -85,7 +85,10 @@ fn scatter_i16_basic() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_scatter_i16_run(
-            3, 1, 0, 4,
+            3,
+            1,
+            0,
+            4,
             upd_shape.as_ptr(),
             stride_upd.as_ptr(),
             stride_index.as_ptr(),
@@ -125,7 +128,10 @@ fn scatter_i64_basic() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_scatter_i64_run(
-            2, 1, 0, 5,
+            2,
+            1,
+            0,
+            5,
             upd_shape.as_ptr(),
             stride_upd.as_ptr(),
             stride_index.as_ptr(),
@@ -142,10 +148,7 @@ fn scatter_i64_basic() {
     stream.synchronize().expect("sync");
 
     dev_out.copy_to_host(&mut out).expect("dl");
-    assert_eq!(
-        out,
-        vec![0, -2_000_000_000_000, 0, 1_000_000_000_000, 0]
-    );
+    assert_eq!(out, vec![0, -2_000_000_000_000, 0, 1_000_000_000_000, 0]);
 }
 
 #[test]
@@ -168,7 +171,10 @@ fn index_add_i32_basic() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_index_add_i32_run(
-            3, 1, 0, 5,
+            3,
+            1,
+            0,
+            5,
             src_shape.as_ptr(),
             stride_src.as_ptr(),
             stride_dst.as_ptr(),
@@ -206,7 +212,10 @@ fn index_add_u32_basic() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_index_add_u32_run(
-            3, 1, 0, 4,
+            3,
+            1,
+            0,
+            4,
             src_shape.as_ptr(),
             stride_src.as_ptr(),
             stride_dst.as_ptr(),
@@ -244,7 +253,10 @@ fn index_add_i64_basic() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_index_add_i64_run(
-            2, 1, 0, 4,
+            2,
+            1,
+            0,
+            4,
             src_shape.as_ptr(),
             stride_src.as_ptr(),
             stride_dst.as_ptr(),
@@ -283,7 +295,10 @@ fn index_select_u32_basic() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_index_select_u32_run(
-            3, 1, 0, 5,
+            3,
+            1,
+            0,
+            5,
             out_shape.as_ptr(),
             stride_src.as_ptr(),
             stride_out.as_ptr(),
@@ -322,7 +337,10 @@ fn gather_u8_basic() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_gather_u8_run(
-            3, 1, 0, 5,
+            3,
+            1,
+            0,
+            5,
             out_shape.as_ptr(),
             stride_src.as_ptr(),
             stride_index.as_ptr(),

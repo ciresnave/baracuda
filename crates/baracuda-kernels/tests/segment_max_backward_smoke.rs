@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `SegmentMaxBackwardPlan<T>` (Phase 25).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SegmentMaxBackwardArgs,
-    SegmentMaxBackwardDescriptor, SegmentMaxBackwardPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SegmentMaxBackwardArgs, SegmentMaxBackwardDescriptor,
+    SegmentMaxBackwardPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -65,17 +65,16 @@ fn segment_max_backward_f32_basic() {
     let ns: i32 = 3;
     let seg: Vec<i32> = vec![0, 0, 0, 1, 1, 2, 2];
     let input: Vec<f32> = vec![
-        0.0, 5.0, 3.0, -1.0, 1.0, 4.0,    // seg 0
-        7.0, 2.0, 6.0, 8.0,                // seg 1
-        -2.0, 9.0, 0.5, 0.0,                // seg 2
+        0.0, 5.0, 3.0, -1.0, 1.0, 4.0, // seg 0
+        7.0, 2.0, 6.0, 8.0, // seg 1
+        -2.0, 9.0, 0.5, 0.0, // seg 2
     ];
     let d_out: Vec<f32> = (0..(ns * d) as usize)
         .map(|i| (i as f32) * 0.5 + 1.0)
         .collect();
 
-    let expected = cpu_segment_max_backward_f32(
-        n as usize, d as usize, ns as usize, &d_out, &input, &seg,
-    );
+    let expected =
+        cpu_segment_max_backward_f32(n as usize, d as usize, ns as usize, &d_out, &input, &seg);
 
     let dev_dout = DeviceBuffer::from_slice(&ctx, &d_out).expect("up dout");
     let dev_in = DeviceBuffer::from_slice(&ctx, &input).expect("up in");
@@ -119,7 +118,10 @@ fn segment_max_backward_f32_basic() {
     let mut got = vec![0f32; (n * d) as usize];
     dev_din.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g, e, "segment_max_backward f32 mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g, e,
+            "segment_max_backward f32 mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -135,9 +137,12 @@ fn segment_max_backward_f64_basic() {
     let input: Vec<f64> = input_f32.iter().map(|&x| x as f64).collect();
     let d_out: Vec<f64> = vec![0.5, 1.0, 2.0, -3.0];
     let expected_f32 = cpu_segment_max_backward_f32(
-        n as usize, d as usize, ns as usize,
+        n as usize,
+        d as usize,
+        ns as usize,
         &d_out.iter().map(|&x| x as f32).collect::<Vec<_>>(),
-        &input_f32, &seg,
+        &input_f32,
+        &seg,
     );
     let expected: Vec<f64> = expected_f32.iter().map(|&x| x as f64).collect();
 
@@ -183,6 +188,9 @@ fn segment_max_backward_f64_basic() {
     let mut got = vec![0f64; (n * d) as usize];
     dev_din.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g, e, "segment_max_backward f64 mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g, e,
+            "segment_max_backward f64 mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }

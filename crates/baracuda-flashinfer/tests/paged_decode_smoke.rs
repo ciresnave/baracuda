@@ -16,13 +16,13 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
-    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan, PagedKvAppendDescriptor,
-    PagedKvAppendPlan, PagedKvCacheDescriptor,
+    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
+    PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
 };
 use baracuda_flashinfer::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -53,7 +53,10 @@ fn paged_decode_plan_select_validates() {
     };
     let plan = BatchPagedDecodePlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("valid descriptor should select");
-    assert!(plan.workspace_size() > 0, "paged decode needs index workspace");
+    assert!(
+        plan.workspace_size() > 0,
+        "paged decode needs index workspace"
+    );
 
     // Bad head_dim → Unsupported.
     let mut bad = desc;
@@ -131,14 +134,46 @@ fn paged_decode_single_token_equals_v() {
         &stream,
         Workspace::Borrowed(ws_dev.as_slice_mut()),
         BatchPagedDecodeArgs {
-            q: TensorRef { data: q_dev.as_slice(), shape: q_shape, stride: contiguous_stride(q_shape) },
-            k_data: TensorRef { data: k_dev.as_slice(), shape: cache_shape, stride: contiguous_stride(cache_shape) },
-            v_data: TensorRef { data: v_dev.as_slice(), shape: cache_shape, stride: contiguous_stride(cache_shape) },
-            indices: TensorRef { data: indices_dev.as_slice(), shape: [1], stride: [1] },
-            indptr: TensorRef { data: indptr_dev.as_slice(), shape: [2], stride: [1] },
-            last_page_len: TensorRef { data: last_page_len_dev.as_slice(), shape: [1], stride: [1] },
-            o: TensorMut { data: o_dev.as_slice_mut(), shape: q_shape, stride: contiguous_stride(q_shape) },
-            lse: TensorMut { data: lse_dev.as_slice_mut(), shape: [1, 1], stride: contiguous_stride([1, 1]) },
+            q: TensorRef {
+                data: q_dev.as_slice(),
+                shape: q_shape,
+                stride: contiguous_stride(q_shape),
+            },
+            k_data: TensorRef {
+                data: k_dev.as_slice(),
+                shape: cache_shape,
+                stride: contiguous_stride(cache_shape),
+            },
+            v_data: TensorRef {
+                data: v_dev.as_slice(),
+                shape: cache_shape,
+                stride: contiguous_stride(cache_shape),
+            },
+            indices: TensorRef {
+                data: indices_dev.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            indptr: TensorRef {
+                data: indptr_dev.as_slice(),
+                shape: [2],
+                stride: [1],
+            },
+            last_page_len: TensorRef {
+                data: last_page_len_dev.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            o: TensorMut {
+                data: o_dev.as_slice_mut(),
+                shape: q_shape,
+                stride: contiguous_stride(q_shape),
+            },
+            lse: TensorMut {
+                data: lse_dev.as_slice_mut(),
+                shape: [1, 1],
+                stride: contiguous_stride([1, 1]),
+            },
         },
     )
     .expect("paged decode run");

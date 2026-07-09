@@ -44,23 +44,17 @@
 //!   work per row as the softmax kernel for RMSNorm / LayerNorm; the
 //!   BN/GN three-stage scheme amortizes the per-group reduction.
 
-pub mod rms_norm;
-pub mod rms_norm_backward;
-pub mod layer_norm;
-pub mod layer_norm_backward;
 pub mod batch_norm;
 pub mod batch_norm_backward;
 pub mod group_norm;
 pub mod group_norm_backward;
 pub mod instance_norm;
 pub mod instance_norm_backward;
+pub mod layer_norm;
+pub mod layer_norm_backward;
+pub mod rms_norm;
+pub mod rms_norm_backward;
 
-pub use rms_norm::{RMSNormArgs, RMSNormDescriptor, RMSNormPlan};
-pub use rms_norm_backward::{RMSNormBackwardArgs, RMSNormBackwardDescriptor, RMSNormBackwardPlan};
-pub use layer_norm::{LayerNormArgs, LayerNormDescriptor, LayerNormPlan};
-pub use layer_norm_backward::{
-    LayerNormBackwardArgs, LayerNormBackwardDescriptor, LayerNormBackwardPlan,
-};
 pub use batch_norm::{BatchNormArgs, BatchNormDescriptor, BatchNormPlan};
 pub use batch_norm_backward::{
     BatchNormBackwardArgs, BatchNormBackwardDescriptor, BatchNormBackwardPlan,
@@ -73,3 +67,9 @@ pub use instance_norm::{InstanceNormArgs, InstanceNormDescriptor, InstanceNormPl
 pub use instance_norm_backward::{
     InstanceNormBackwardArgs, InstanceNormBackwardDescriptor, InstanceNormBackwardPlan,
 };
+pub use layer_norm::{LayerNormArgs, LayerNormDescriptor, LayerNormPlan};
+pub use layer_norm_backward::{
+    LayerNormBackwardArgs, LayerNormBackwardDescriptor, LayerNormBackwardPlan,
+};
+pub use rms_norm::{RMSNormArgs, RMSNormDescriptor, RMSNormPlan};
+pub use rms_norm_backward::{RMSNormBackwardArgs, RMSNormBackwardDescriptor, RMSNormBackwardPlan};

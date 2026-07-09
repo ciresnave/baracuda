@@ -4,14 +4,14 @@
 //! event record-with-flags, primary-context state.
 
 use std::sync::{
-    atomic::{AtomicU32, Ordering},
     Arc,
+    atomic::{AtomicU32, Ordering},
 };
 
 use baracuda_cuda_sys::types::{CUfunc_cache, CUlimit, CUstream_flags};
 use baracuda_driver::{
-    mem_get_info, occupancy, pointer, Context, Device, DeviceBuffer, ManagedAttach, ManagedBuffer,
-    MemAdvise, Module, Stream,
+    Context, Device, DeviceBuffer, ManagedAttach, ManagedBuffer, MemAdvise, Module, Stream,
+    mem_get_info, occupancy, pointer,
 };
 
 const PTX: &str = include_str!("kernels/vector_add.ptx");

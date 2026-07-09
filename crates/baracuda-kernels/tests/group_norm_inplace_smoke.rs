@@ -17,7 +17,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 fn setup() -> (Context, Stream) {
@@ -51,19 +51,25 @@ fn group_norm_f32_inplace_matches_non_aliased() {
     let group_count = (N * NUM_GROUPS_GN) as usize;
 
     let dev_x_ref = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
-    let mut dev_y_ref: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc");
+    let mut dev_y_ref: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc");
     let mut dev_mean_ref: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, group_count).expect("mean");
     let mut dev_rstd_ref: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, group_count).expect("rstd");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_group_norm_f32_run(
-            N, C, S, NUM_GROUPS_GN, GROUP_KIND_GN, eps,
+            N,
+            C,
+            S,
+            NUM_GROUPS_GN,
+            GROUP_KIND_GN,
+            eps,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_mean_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rstd_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -78,13 +84,20 @@ fn group_norm_f32_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_group_norm_f32_run(
-            N, C, S, NUM_GROUPS_GN, GROUP_KIND_GN, eps,
+            N,
+            C,
+            S,
+            NUM_GROUPS_GN,
+            GROUP_KIND_GN,
+            eps,
             p as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             p as *mut c_void,
             dev_mean_ip.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rstd_ip.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -94,9 +107,13 @@ fn group_norm_f32_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..host_x.len() {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
             "f32 in-place GN @ {i}: aliased={} non-aliased={}",
-            aliased_out[i], ref_out[i]);
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }
 
@@ -109,19 +126,25 @@ fn group_norm_f16_inplace_matches_non_aliased() {
     let group_count = (N * NUM_GROUPS_GN) as usize;
 
     let dev_x_ref = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
-    let mut dev_y_ref: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc");
+    let mut dev_y_ref: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc");
     let mut dev_mean_ref: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, group_count).expect("mean");
     let mut dev_rstd_ref: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, group_count).expect("rstd");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_group_norm_f16_run(
-            N, C, S, NUM_GROUPS_GN, GROUP_KIND_GN, eps,
+            N,
+            C,
+            S,
+            NUM_GROUPS_GN,
+            GROUP_KIND_GN,
+            eps,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_mean_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rstd_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -136,13 +159,20 @@ fn group_norm_f16_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_group_norm_f16_run(
-            N, C, S, NUM_GROUPS_GN, GROUP_KIND_GN, eps,
+            N,
+            C,
+            S,
+            NUM_GROUPS_GN,
+            GROUP_KIND_GN,
+            eps,
             p as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             p as *mut c_void,
             dev_mean_ip.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rstd_ip.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -152,8 +182,11 @@ fn group_norm_f16_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..host_x.len() {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
-            "f16 in-place GN @ {i}");
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
+            "f16 in-place GN @ {i}"
+        );
     }
 }
 
@@ -166,19 +199,27 @@ fn group_norm_bf16_inplace_matches_non_aliased() {
     let group_count = (N * NUM_GROUPS_GN) as usize;
 
     let dev_x_ref = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
-    let mut dev_y_ref: DeviceBuffer<bf16> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc");
-    let mut dev_mean_ref: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, group_count).expect("mean");
-    let mut dev_rstd_ref: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, group_count).expect("rstd");
+    let mut dev_y_ref: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc");
+    let mut dev_mean_ref: DeviceBuffer<bf16> =
+        DeviceBuffer::zeros(&ctx, group_count).expect("mean");
+    let mut dev_rstd_ref: DeviceBuffer<bf16> =
+        DeviceBuffer::zeros(&ctx, group_count).expect("rstd");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_group_norm_bf16_run(
-            N, C, S, NUM_GROUPS_GN, GROUP_KIND_GN, eps,
+            N,
+            C,
+            S,
+            NUM_GROUPS_GN,
+            GROUP_KIND_GN,
+            eps,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_mean_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rstd_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -193,13 +234,20 @@ fn group_norm_bf16_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_group_norm_bf16_run(
-            N, C, S, NUM_GROUPS_GN, GROUP_KIND_GN, eps,
+            N,
+            C,
+            S,
+            NUM_GROUPS_GN,
+            GROUP_KIND_GN,
+            eps,
             p as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             p as *mut c_void,
             dev_mean_ip.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rstd_ip.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -209,8 +257,11 @@ fn group_norm_bf16_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..host_x.len() {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
-            "bf16 in-place GN @ {i}");
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
+            "bf16 in-place GN @ {i}"
+        );
     }
 }
 
@@ -223,19 +274,25 @@ fn group_norm_f64_inplace_matches_non_aliased() {
     let group_count = (N * NUM_GROUPS_GN) as usize;
 
     let dev_x_ref = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
-    let mut dev_y_ref: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc");
+    let mut dev_y_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc");
     let mut dev_mean_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, group_count).expect("mean");
     let mut dev_rstd_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, group_count).expect("rstd");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_group_norm_f64_run(
-            N, C, S, NUM_GROUPS_GN, GROUP_KIND_GN, eps,
+            N,
+            C,
+            S,
+            NUM_GROUPS_GN,
+            GROUP_KIND_GN,
+            eps,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_mean_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rstd_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -250,13 +307,20 @@ fn group_norm_f64_inplace_matches_non_aliased() {
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_group_norm_f64_run(
-            N, C, S, NUM_GROUPS_GN, GROUP_KIND_GN, eps,
+            N,
+            C,
+            S,
+            NUM_GROUPS_GN,
+            GROUP_KIND_GN,
+            eps,
             p as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             p as *mut c_void,
             dev_mean_ip.as_slice_mut().as_raw().0 as *mut c_void,
             dev_rstd_ip.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -266,8 +330,12 @@ fn group_norm_f64_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..host_x.len() {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
             "f64 in-place GN @ {i}: aliased={} non-aliased={}",
-            aliased_out[i], ref_out[i]);
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }

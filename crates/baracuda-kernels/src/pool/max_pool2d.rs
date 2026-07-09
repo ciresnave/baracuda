@@ -16,13 +16,14 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cudnnCreate, cudnnCreatePoolingDescriptor, cudnnCreateTensorDescriptor, cudnnDestroy,
+    CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT, CUDNN_DATA_HALF,
+    CUDNN_NOT_PROPAGATE_NAN, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING,
+    CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_MAX, CUDNN_TENSOR_NCHW, cudnnCreate,
+    cudnnCreatePoolingDescriptor, cudnnCreateTensorDescriptor, cudnnDestroy,
     cudnnDestroyPoolingDescriptor, cudnnDestroyTensorDescriptor, cudnnHandle_t,
     cudnnPoolingBackward, cudnnPoolingDescriptor_t, cudnnPoolingForward,
     cudnnSetPooling2dDescriptor, cudnnSetStream, cudnnSetTensor4dDescriptor,
-    cudnnTensorDescriptor_t, CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT,
-    CUDNN_DATA_HALF, CUDNN_NOT_PROPAGATE_NAN, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING,
-    CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_MAX, CUDNN_TENSOR_NCHW,
+    cudnnTensorDescriptor_t,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, MathPrecision, OpCategory,
@@ -336,12 +337,7 @@ impl<T: Element> MaxPool2dPlan<T> {
     }
 
     fn ensure_descriptors(&self) -> Result<()> {
-        ensure_pool_descriptors::<T>(
-            &self.desc,
-            &self.x_desc,
-            &self.y_desc,
-            &self.pool_desc,
-        )
+        ensure_pool_descriptors::<T>(&self.desc, &self.x_desc, &self.y_desc, &self.pool_desc)
     }
 }
 

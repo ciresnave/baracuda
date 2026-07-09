@@ -14,7 +14,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 const ROPE_DEFAULT_BASE: f32 = 10000.0;
@@ -226,10 +226,8 @@ fn rope_apply_interleaved_backward_f32_matches_canonical() {
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
     let dev_cos = DeviceBuffer::from_slice(&ctx, &cos_t).expect("up cos");
     let dev_sin = DeviceBuffer::from_slice(&ctx, &sin_t).expect("up sin");
-    let mut dev_dx_inter: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc");
-    let mut dev_dx_canon: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc");
+    let mut dev_dx_inter: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc");
+    let mut dev_dx_canon: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc");
 
     let status_canon = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rope_apply_backward_f32_run(

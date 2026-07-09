@@ -1,7 +1,7 @@
 //! GPU-gated integration test for Wave-4 Driver-API additions:
 //! `cuMemAllocPitch` + `cuMemcpy2D` round-trip.
 
-use baracuda_driver::{memcpy2d, Context, Device};
+use baracuda_driver::{Context, Device, memcpy2d};
 
 #[test]
 #[ignore = "requires an NVIDIA GPU"]

@@ -22,10 +22,10 @@
 //!
 //! Marked `#[ignore]` per project convention.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BlockQ8_0, ElementKind, GgufBlockFormat, MoeArgs, MoeDescriptor, MoePlan,
-    MoeVariant, PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    BlockQ8_0, ElementKind, GgufBlockFormat, MoeArgs, MoeDescriptor, MoePlan, MoeVariant,
+    PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -128,10 +128,14 @@ fn moe_scalar_gguf_q8_0_small_fixture() {
     // Upload device buffers.
     let acts_dev: DeviceBuffer<f32> = DeviceBuffer::from_slice(&ctx, &acts_host).expect("up acts");
     let weights_dev: DeviceBuffer<U8> = DeviceBuffer::from_slice(&ctx, &weights_u8).expect("up w");
-    let sorted_dev: DeviceBuffer<i32> = DeviceBuffer::from_slice(&ctx, &sorted_token_ids).expect("up s");
-    let eids_dev: DeviceBuffer<i32> = DeviceBuffer::from_slice(&ctx, &flat_expert_ids).expect("up eids");
-    let tk_dev: DeviceBuffer<f32> = DeviceBuffer::from_slice(&ctx, &topk_weight_flat).expect("up tk");
-    let mut out_dev: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (T * DE) as usize).expect("alloc out");
+    let sorted_dev: DeviceBuffer<i32> =
+        DeviceBuffer::from_slice(&ctx, &sorted_token_ids).expect("up s");
+    let eids_dev: DeviceBuffer<i32> =
+        DeviceBuffer::from_slice(&ctx, &flat_expert_ids).expect("up eids");
+    let tk_dev: DeviceBuffer<f32> =
+        DeviceBuffer::from_slice(&ctx, &topk_weight_flat).expect("up tk");
+    let mut out_dev: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (T * DE) as usize).expect("alloc out");
 
     let desc = MoeDescriptor {
         num_tokens: T,

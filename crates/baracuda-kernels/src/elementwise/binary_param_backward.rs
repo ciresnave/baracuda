@@ -186,26 +186,50 @@ impl<T: Element, const N: usize> BinaryParamBackwardPlan<T, N> {
         let status = match (self.desc.kind, T::KIND) {
             (BinaryKind::Lerp, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_lerp_backward_f32_run(
-                    numel, dy_ptr, da_ptr, db_ptr, p,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    p,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryKind::Lerp, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_lerp_backward_f16_run(
-                    numel, dy_ptr, da_ptr, db_ptr, p,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    p,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryKind::Lerp, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_lerp_backward_bf16_run(
-                    numel, dy_ptr, da_ptr, db_ptr, p,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    p,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (BinaryKind::Lerp, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_binary_lerp_backward_f64_run(
-                    numel, dy_ptr, da_ptr, db_ptr, p,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    da_ptr,
+                    db_ptr,
+                    p,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

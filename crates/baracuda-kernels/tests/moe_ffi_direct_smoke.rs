@@ -40,7 +40,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::U8;
 use half::f16;
 
@@ -74,8 +74,7 @@ fn moe_wmma_f16_via_ffi_direct() {
     let mut acts_host = vec![f16::ZERO; (T * DM) as usize];
     for i in 0..T {
         for j in 0..DM {
-            acts_host[(i * DM + j) as usize] =
-                f16::from_f32(0.1 * (i as f32) + 0.01 * (j as f32));
+            acts_host[(i * DM + j) as usize] = f16::from_f32(0.1 * (i as f32) + 0.01 * (j as f32));
         }
     }
     let mut weights_host = vec![f16::ZERO; (NE * DE * DM) as usize];
@@ -115,10 +114,13 @@ fn moe_wmma_f16_via_ffi_direct() {
     }
 
     // Upload buffers.
-    let dev_acts: DeviceBuffer<f16> =
-        DeviceBuffer::from_slice(&ctx, &acts_host).expect("up acts");
+    let dev_acts: DeviceBuffer<f16> = DeviceBuffer::from_slice(&ctx, &acts_host).expect("up acts");
     let weights_u16: Vec<u16> = weights_host.iter().map(|f| f.to_bits()).collect();
-    let weights_bytes: Vec<U8> = weights_u16.iter().flat_map(|w| w.to_le_bytes()).map(U8).collect();
+    let weights_bytes: Vec<U8> = weights_u16
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .map(U8)
+        .collect();
     let dev_weights: DeviceBuffer<U8> =
         DeviceBuffer::from_slice(&ctx, &weights_bytes).expect("up weights");
     let dev_sorted: DeviceBuffer<i32> =
@@ -127,8 +129,7 @@ fn moe_wmma_f16_via_ffi_direct() {
         DeviceBuffer::from_slice(&ctx, &flat_expert_ids).expect("up eids");
     let dev_topk: DeviceBuffer<f32> =
         DeviceBuffer::from_slice(&ctx, &topk_weight_per_m).expect("up tk");
-    let mut dev_ec: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, NE as usize).expect("alloc ec");
+    let mut dev_ec: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, NE as usize).expect("alloc ec");
     let mut dev_eo: DeviceBuffer<i32> =
         DeviceBuffer::zeros(&ctx, (NE + 1) as usize).expect("alloc eo");
     let mut dev_out: DeviceBuffer<f16> =
@@ -145,9 +146,14 @@ fn moe_wmma_f16_via_ffi_direct() {
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
             dev_ec.as_slice_mut().as_raw().0 as *mut i32,
             dev_eo.as_slice_mut().as_raw().0 as *mut i32,
-            NE, K, m_total, DE, DM,
+            NE,
+            K,
+            m_total,
+            DE,
+            DM,
             /* is_prefill */ 1,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -215,7 +221,10 @@ fn moe_scalar_gguf_q8_0_via_ffi_direct() {
                 qs[k] = q;
                 weights_dequant[(e * DE as usize + n) * DM as usize + k] = (q as f32) * d;
             }
-            blocks_host.push(BlockQ8_0 { d: f16::from_f32(d).to_bits(), qs });
+            blocks_host.push(BlockQ8_0 {
+                d: f16::from_f32(d).to_bits(),
+                qs,
+            });
         }
     }
 
@@ -248,12 +257,15 @@ fn moe_scalar_gguf_q8_0_via_ffi_direct() {
     }
 
     // Upload.
-    let dev_acts: DeviceBuffer<f32> =
-        DeviceBuffer::from_slice(&ctx, &acts_host).expect("up acts");
+    let dev_acts: DeviceBuffer<f32> = DeviceBuffer::from_slice(&ctx, &acts_host).expect("up acts");
     let weight_bytes: Vec<U8> = unsafe {
         let len = blocks_host.len() * core::mem::size_of::<BlockQ8_0>();
         let ptr = blocks_host.as_ptr() as *const u8;
-        core::slice::from_raw_parts(ptr, len).iter().copied().map(U8).collect()
+        core::slice::from_raw_parts(ptr, len)
+            .iter()
+            .copied()
+            .map(U8)
+            .collect()
     };
     let dev_weights: DeviceBuffer<U8> =
         DeviceBuffer::from_slice(&ctx, &weight_bytes).expect("up weights");
@@ -275,9 +287,14 @@ fn moe_scalar_gguf_q8_0_via_ffi_direct() {
             dev_eids.as_slice().as_raw().0 as *const i32,
             dev_topk.as_slice().as_raw().0 as *const f32,
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
-            NE, K, m_total, DE, DM,
+            NE,
+            K,
+            m_total,
+            DE,
+            DM,
             /* gguf_dtype */ 0,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };

@@ -3,7 +3,7 @@
 //! The GPU-gated test targets the device's compute capability via the
 //! driver-reported version and expects a non-empty cubin blob.
 
-use baracuda_nvjitlink::{version, InputType, Linker};
+use baracuda_nvjitlink::{InputType, Linker, version};
 
 const VECTOR_ADD_PTX: &str = include_str!("../../baracuda-driver/tests/kernels/vector_add.ptx");
 

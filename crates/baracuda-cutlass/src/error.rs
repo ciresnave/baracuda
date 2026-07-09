@@ -49,7 +49,9 @@ pub enum Error {
     },
 
     /// A device buffer is too small for the declared matrix shape and stride.
-    #[error("baracuda-cutlass: buffer too small for declared shape (need {needed} elements, got {got})")]
+    #[error(
+        "baracuda-cutlass: buffer too small for declared shape (need {needed} elements, got {got})"
+    )]
     BufferTooSmall {
         /// Minimum elements required for `(rows, cols, ld)`.
         needed: usize,
@@ -83,7 +85,9 @@ pub(crate) fn status_to_result(code: i32) -> Result<()> {
         0 => Ok(()),
         1 => Err(Error::MisalignedOperand),
         2 => Err(Error::InvalidProblem("CUTLASS reported invalid problem")),
-        3 => Err(Error::Unsupported("CUTLASS reported unsupported configuration")),
+        3 => Err(Error::Unsupported(
+            "CUTLASS reported unsupported configuration",
+        )),
         n => Err(Error::CutlassInternal(n)),
     }
 }

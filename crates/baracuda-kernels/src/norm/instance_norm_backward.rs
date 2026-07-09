@@ -58,7 +58,11 @@ impl<T: Element, const N: usize> InstanceNormBackwardPlan<T, N> {
         desc: &InstanceNormBackwardDescriptor<N>,
         pref: PlanPreference,
     ) -> Result<Self> {
-        let c = if N >= 2 { desc.input_shape[desc.channel_axis as usize] } else { 1 };
+        let c = if N >= 2 {
+            desc.input_shape[desc.channel_axis as usize]
+        } else {
+            1
+        };
         let inner_desc = GroupNormBackwardDescriptor::<N> {
             input_shape: desc.input_shape,
             channel_axis: desc.channel_axis,
@@ -72,13 +76,19 @@ impl<T: Element, const N: usize> InstanceNormBackwardPlan<T, N> {
 
     /// Workspace bytes.
     #[inline]
-    pub fn workspace_size(&self) -> usize { self.inner.workspace_size() }
+    pub fn workspace_size(&self) -> usize {
+        self.inner.workspace_size()
+    }
     /// Kernel SKU identity.
     #[inline]
-    pub fn sku(&self) -> KernelSku { self.inner.sku() }
+    pub fn sku(&self) -> KernelSku {
+        self.inner.sku()
+    }
     /// Numerical guarantees.
     #[inline]
-    pub fn precision_guarantee(&self) -> PrecisionGuarantee { self.inner.precision_guarantee() }
+    pub fn precision_guarantee(&self) -> PrecisionGuarantee {
+        self.inner.precision_guarantee()
+    }
 
     /// Launch.
     pub fn run(

@@ -2,10 +2,11 @@
 //!
 //! `dinput = (exp(input) - target) · dy / N` (log_input=true).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, LossReduction, PlanPreference, PoissonNllLossBackwardArgs,
+    ElementKind, LossReduction, PlanPreference, PoissonNllLossBackwardArgs,
     PoissonNllLossBackwardDescriptor, PoissonNllLossBackwardPlan, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -38,7 +39,8 @@ fn loss_poisson_nll_backward_f32_mean() {
     let expected: Vec<f32> = host_poisson_bw_f64(
         &host_x.iter().map(|&v| v as f64).collect::<Vec<_>>(),
         &host_t.iter().map(|&v| v as f64).collect::<Vec<_>>(),
-        1.0, numel,
+        1.0,
+        numel,
     )
     .into_iter()
     .map(|v| v as f32)
@@ -55,16 +57,28 @@ fn loss_poisson_nll_backward_f32_mean() {
         log_input: true,
         element: ElementKind::F32,
     };
-    let plan = PoissonNllLossBackwardPlan::<f32, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        PoissonNllLossBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         PoissonNllLossBackwardArgs {
-            input: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape,
@@ -78,8 +92,12 @@ fn loss_poisson_nll_backward_f32_mean() {
     dev_di.copy_to_host(&mut got).unwrap();
     for i in 0..numel {
         let tol = expected[i].abs() * 8.0 * f32::EPSILON + 1e-6;
-        assert!((got[i] - expected[i]).abs() <= tol, "f32 Poisson BW @{i}: got={} want={}",
-            got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 Poisson BW @{i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -105,16 +123,28 @@ fn loss_poisson_nll_backward_f64_mean() {
         log_input: true,
         element: ElementKind::F64,
     };
-    let plan = PoissonNllLossBackwardPlan::<f64, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        PoissonNllLossBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         PoissonNllLossBackwardArgs {
-            input: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape,
@@ -158,16 +188,28 @@ fn loss_poisson_nll_backward_f16_mean() {
         log_input: true,
         element: ElementKind::F16,
     };
-    let plan = PoissonNllLossBackwardPlan::<f16, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        PoissonNllLossBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         PoissonNllLossBackwardArgs {
-            input: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape,
@@ -183,7 +225,12 @@ fn loss_poisson_nll_backward_f16_mean() {
         let got_f32 = got[i].to_f32();
         let want = expected_f64[i] as f32;
         let tol = want.abs() * 8.0 * 9.77e-4_f32 + 5e-3;
-        assert!((got_f32 - want).abs() <= tol, "f16 Poisson BW @{i}: got={} want={}", got_f32, want);
+        assert!(
+            (got_f32 - want).abs() <= tol,
+            "f16 Poisson BW @{i}: got={} want={}",
+            got_f32,
+            want
+        );
     }
 }
 
@@ -213,16 +260,28 @@ fn loss_poisson_nll_backward_bf16_mean() {
         log_input: true,
         element: ElementKind::Bf16,
     };
-    let plan = PoissonNllLossBackwardPlan::<bf16, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        PoissonNllLossBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         PoissonNllLossBackwardArgs {
-            input: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape,
@@ -238,6 +297,11 @@ fn loss_poisson_nll_backward_bf16_mean() {
         let got_f32 = got[i].to_f32();
         let want = expected_f64[i] as f32;
         let tol = want.abs() * 8.0 * 7.81e-3_f32 + 2e-2;
-        assert!((got_f32 - want).abs() <= tol, "bf16 Poisson BW @{i}: got={} want={}", got_f32, want);
+        assert!(
+            (got_f32 - want).abs() <= tol,
+            "bf16 Poisson BW @{i}: got={} want={}",
+            got_f32,
+            want
+        );
     }
 }

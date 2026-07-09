@@ -17,7 +17,7 @@
 
 #![cfg(feature = "sm89")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     ActivationKind, BiasElement, EpilogueKind, Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan,
     IntElement, LayoutSku, MatrixMut, MatrixRef, PlanPreference, S4, U4, VectorRef, Workspace,
@@ -274,9 +274,13 @@ fn run_int4_bias_smoke<T, BT>(
 
     let mut expected_bytes = vec![0u8; mu * n_bytes];
     cpu_int4_gemm_bias(
-        mu, nu, ku,
-        &host_a_bytes, k_bytes,
-        &host_b_bytes, ldb_bytes_host,
+        mu,
+        nu,
+        ku,
+        &host_a_bytes,
+        k_bytes,
+        &host_b_bytes,
+        ldb_bytes_host,
         layout,
         &host_bias_f32,
         alpha,
@@ -291,15 +295,25 @@ fn run_int4_bias_smoke<T, BT>(
     let dev_a = dev_a_bytes.view_as::<T>();
     let dev_b = dev_b_bytes.view_as::<T>();
     let dev_bias = DeviceBuffer::from_slice(&ctx, &host_bias).expect("upload bias");
-    let mut dev_d: DeviceBuffer<T> =
-        DeviceBuffer::zeros(&ctx, mu * n_bytes).expect("alloc D");
+    let mut dev_d: DeviceBuffer<T> = DeviceBuffer::zeros(&ctx, mu * n_bytes).expect("alloc D");
 
-    let desc = Int4GemmDescriptor { m, n, k, layout, epilogue };
+    let desc = Int4GemmDescriptor {
+        m,
+        n,
+        k,
+        layout,
+        epilogue,
+    };
     let plan = Int4GemmPlan::<T, BT>::select(&stream, &desc, PlanPreference::default())
         .expect("select int4 bias plan");
 
     let args = Int4GemmArgs::<T, BT> {
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k_bytes as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k_bytes as i64,
+        },
         b: MatrixRef {
             data: dev_b,
             rows: k,
@@ -307,7 +321,12 @@ fn run_int4_bias_smoke<T, BT>(
             ld: ldb_bytes_host as i64,
         },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n_bytes as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n_bytes as i64,
+        },
         bias: Some(VectorRef {
             data: dev_bias.as_slice(),
             len: n,
@@ -325,9 +344,8 @@ fn run_int4_bias_smoke<T, BT>(
         let mut tmp_t: Vec<T> = vec![T::default(); mu * n_bytes];
         dev_d.copy_to_host(&mut tmp_t).expect("download D");
         // SAFETY: S4 and U4 are `#[repr(transparent)]` wrappers around u8.
-        let src: &[u8] = unsafe {
-            core::slice::from_raw_parts(tmp_t.as_ptr() as *const u8, tmp_t.len())
-        };
+        let src: &[u8] =
+            unsafe { core::slice::from_raw_parts(tmp_t.as_ptr() as *const u8, tmp_t.len()) };
         host_d_bytes.copy_from_slice(src);
     }
 
@@ -396,13 +414,17 @@ fn mk_bias_f32(n: usize) -> Vec<f32> {
     // within int4 sat-cast range.
     (0..n).map(|j| ((j as f32 % 5.0) - 2.0) * 0.5).collect()
 }
-fn bias_to_f32_f32(b: f32) -> f32 { b }
+fn bias_to_f32_f32(b: f32) -> f32 {
+    b
+}
 
 fn mk_bias_i32(n: usize) -> Vec<i32> {
     // Small ints in [-2, +2].
     (0..n).map(|j| (j as i32 % 5) - 2).collect()
 }
-fn bias_to_f32_i32(b: i32) -> f32 { b as f32 }
+fn bias_to_f32_i32(b: i32) -> f32 {
+    b as f32
+}
 
 // ============================================================================
 // Shape — one tile-aligned 128 × 128 × 128 shape per SKU (32 tests).
@@ -426,178 +448,626 @@ const U4_OUT_MAX: f32 = 12.0;
 // S4 × RCR × {Bias, BiasRelu, BiasGelu, BiasSilu} × {f32, i32}
 // ----------------------------------------------------------------------------
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_bias_f32() {
-    run_int4_bias_smoke::<S4, f32>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias, true,
-        mk_a_s4, mk_b_s4, mk_bias_f32, bias_to_f32_f32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::Bias,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_bias_relu_f32() {
-    run_int4_bias_smoke::<S4, f32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu, true,
-        mk_a_s4, mk_b_s4, mk_bias_f32, bias_to_f32_f32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasRelu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_bias_gelu_f32() {
-    run_int4_bias_smoke::<S4, f32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu, true,
-        mk_a_s4, mk_b_s4, mk_bias_f32, bias_to_f32_f32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasGelu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_bias_silu_f32() {
-    run_int4_bias_smoke::<S4, f32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu, true,
-        mk_a_s4, mk_b_s4, mk_bias_f32, bias_to_f32_f32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasSilu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_bias_i32() {
-    run_int4_bias_smoke::<S4, i32>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias, true,
-        mk_a_s4, mk_b_s4, mk_bias_i32, bias_to_f32_i32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::Bias,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_bias_relu_i32() {
-    run_int4_bias_smoke::<S4, i32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu, true,
-        mk_a_s4, mk_b_s4, mk_bias_i32, bias_to_f32_i32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasRelu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_bias_gelu_i32() {
-    run_int4_bias_smoke::<S4, i32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu, true,
-        mk_a_s4, mk_b_s4, mk_bias_i32, bias_to_f32_i32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasGelu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_bias_silu_i32() {
-    run_int4_bias_smoke::<S4, i32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu, true,
-        mk_a_s4, mk_b_s4, mk_bias_i32, bias_to_f32_i32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasSilu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
 
 // ----------------------------------------------------------------------------
 // U4 × RCR × {Bias, BiasRelu, BiasGelu, BiasSilu} × {f32, i32}
 // ----------------------------------------------------------------------------
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_bias_f32() {
-    run_int4_bias_smoke::<U4, f32>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias, false,
-        mk_a_u4, mk_b_u4, mk_bias_f32, bias_to_f32_f32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::Bias,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_bias_relu_f32() {
-    run_int4_bias_smoke::<U4, f32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu, false,
-        mk_a_u4, mk_b_u4, mk_bias_f32, bias_to_f32_f32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasRelu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_bias_gelu_f32() {
-    run_int4_bias_smoke::<U4, f32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu, false,
-        mk_a_u4, mk_b_u4, mk_bias_f32, bias_to_f32_f32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasGelu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_bias_silu_f32() {
-    run_int4_bias_smoke::<U4, f32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu, false,
-        mk_a_u4, mk_b_u4, mk_bias_f32, bias_to_f32_f32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasSilu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_bias_i32() {
-    run_int4_bias_smoke::<U4, i32>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias, false,
-        mk_a_u4, mk_b_u4, mk_bias_i32, bias_to_f32_i32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::Bias,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_bias_relu_i32() {
-    run_int4_bias_smoke::<U4, i32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu, false,
-        mk_a_u4, mk_b_u4, mk_bias_i32, bias_to_f32_i32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasRelu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_bias_gelu_i32() {
-    run_int4_bias_smoke::<U4, i32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu, false,
-        mk_a_u4, mk_b_u4, mk_bias_i32, bias_to_f32_i32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasGelu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rcr_bias_silu_i32() {
-    run_int4_bias_smoke::<U4, i32>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu, false,
-        mk_a_u4, mk_b_u4, mk_bias_i32, bias_to_f32_i32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rcr,
+        EpilogueKind::BiasSilu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
 
 // ----------------------------------------------------------------------------
 // S4 × RRR × {Bias, BiasRelu, BiasGelu, BiasSilu} × {f32, i32}
 // ----------------------------------------------------------------------------
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_bias_f32() {
-    run_int4_bias_smoke::<S4, f32>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias, true,
-        mk_a_s4, mk_b_s4, mk_bias_f32, bias_to_f32_f32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::Bias,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_bias_relu_f32() {
-    run_int4_bias_smoke::<S4, f32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu, true,
-        mk_a_s4, mk_b_s4, mk_bias_f32, bias_to_f32_f32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasRelu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_bias_gelu_f32() {
-    run_int4_bias_smoke::<S4, f32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu, true,
-        mk_a_s4, mk_b_s4, mk_bias_f32, bias_to_f32_f32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasGelu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_bias_silu_f32() {
-    run_int4_bias_smoke::<S4, f32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu, true,
-        mk_a_s4, mk_b_s4, mk_bias_f32, bias_to_f32_f32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasSilu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_bias_i32() {
-    run_int4_bias_smoke::<S4, i32>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias, true,
-        mk_a_s4, mk_b_s4, mk_bias_i32, bias_to_f32_i32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::Bias,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_bias_relu_i32() {
-    run_int4_bias_smoke::<S4, i32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu, true,
-        mk_a_s4, mk_b_s4, mk_bias_i32, bias_to_f32_i32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasRelu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_bias_gelu_i32() {
-    run_int4_bias_smoke::<S4, i32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu, true,
-        mk_a_s4, mk_b_s4, mk_bias_i32, bias_to_f32_i32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasGelu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_bias_silu_i32() {
-    run_int4_bias_smoke::<S4, i32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu, true,
-        mk_a_s4, mk_b_s4, mk_bias_i32, bias_to_f32_i32, 2, 2, S4_OUT_MAX);
+    run_int4_bias_smoke::<S4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasSilu,
+        true,
+        mk_a_s4,
+        mk_b_s4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        2,
+        2,
+        S4_OUT_MAX,
+    );
 }
 
 // ----------------------------------------------------------------------------
 // U4 × RRR × {Bias, BiasRelu, BiasGelu, BiasSilu} × {f32, i32}
 // ----------------------------------------------------------------------------
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_bias_f32() {
-    run_int4_bias_smoke::<U4, f32>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias, false,
-        mk_a_u4, mk_b_u4, mk_bias_f32, bias_to_f32_f32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::Bias,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_bias_relu_f32() {
-    run_int4_bias_smoke::<U4, f32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu, false,
-        mk_a_u4, mk_b_u4, mk_bias_f32, bias_to_f32_f32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasRelu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_bias_gelu_f32() {
-    run_int4_bias_smoke::<U4, f32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu, false,
-        mk_a_u4, mk_b_u4, mk_bias_f32, bias_to_f32_f32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasGelu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_bias_silu_f32() {
-    run_int4_bias_smoke::<U4, f32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu, false,
-        mk_a_u4, mk_b_u4, mk_bias_f32, bias_to_f32_f32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, f32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasSilu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_f32,
+        bias_to_f32_f32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_bias_i32() {
-    run_int4_bias_smoke::<U4, i32>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias, false,
-        mk_a_u4, mk_b_u4, mk_bias_i32, bias_to_f32_i32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::Bias,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_bias_relu_i32() {
-    run_int4_bias_smoke::<U4, i32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu, false,
-        mk_a_u4, mk_b_u4, mk_bias_i32, bias_to_f32_i32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasRelu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_bias_gelu_i32() {
-    run_int4_bias_smoke::<U4, i32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu, false,
-        mk_a_u4, mk_b_u4, mk_bias_i32, bias_to_f32_i32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasGelu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_bias_silu_i32() {
-    run_int4_bias_smoke::<U4, i32>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu, false,
-        mk_a_u4, mk_b_u4, mk_bias_i32, bias_to_f32_i32, 4, 4, U4_OUT_MAX);
+    run_int4_bias_smoke::<U4, i32>(
+        M,
+        N,
+        K,
+        LayoutSku::Rrr,
+        EpilogueKind::BiasSilu,
+        false,
+        mk_a_u4,
+        mk_b_u4,
+        mk_bias_i32,
+        bias_to_f32_i32,
+        4,
+        4,
+        U4_OUT_MAX,
+    );
 }

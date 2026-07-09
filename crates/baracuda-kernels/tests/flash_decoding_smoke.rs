@@ -8,10 +8,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -28,8 +28,15 @@ fn setup() -> (Context, Stream) {
 /// Q: [B, H_q, D], K/V: [B, H_kv, K_len, D]. For pure MHA pass
 /// `h_kv == h_q`. For GQA: Q-head `q` reads K/V-head `q / group_size`.
 fn sdpa_decode_cpu(
-    q: &[f32], k: &[f32], v: &[f32],
-    b: usize, h_q: usize, h_kv: usize, k_len: usize, d: usize, scale: f32,
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    b: usize,
+    h_q: usize,
+    h_kv: usize,
+    k_len: usize,
+    d: usize,
+    scale: f32,
 ) -> Vec<f32> {
     assert!(h_q % h_kv == 0);
     let group_size = h_q / h_kv;
@@ -51,7 +58,9 @@ fn sdpa_decode_cpu(
             // Softmax across k.
             let mut max_s = f32::NEG_INFINITY;
             for &s in &scores {
-                if s > max_s { max_s = s; }
+                if s > max_s {
+                    max_s = s;
+                }
             }
             let mut sum = 0.0_f32;
             for s in &mut scores {
@@ -90,9 +99,7 @@ fn assert_close_f16(actual: &[f16], expected: &[f32], tol: f32, label: &str) {
     assert_close_f16_floor(actual, expected, tol, 1e-3, label);
 }
 
-fn assert_close_f16_floor(
-    actual: &[f16], expected: &[f32], tol: f32, abs_floor: f32, label: &str,
-) {
+fn assert_close_f16_floor(actual: &[f16], expected: &[f32], tol: f32, abs_floor: f32, label: &str) {
     assert_eq!(actual.len(), expected.len(), "len mismatch in {label}");
     for (i, (&a, &e)) in actual.iter().zip(expected.iter()).enumerate() {
         let a_f = a.to_f32();
@@ -131,8 +138,15 @@ fn run_case_f16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let v_f32 = deterministic_f32((b * h * k_len * d) as usize, 0.011, -0.1);
 
     let expected = sdpa_decode_cpu(
-        &q_f32, &k_f32, &v_f32,
-        b as usize, h as usize, h as usize, k_len as usize, d as usize, scale,
+        &q_f32,
+        &k_f32,
+        &v_f32,
+        b as usize,
+        h as usize,
+        h as usize,
+        k_len as usize,
+        d as usize,
+        scale,
     );
 
     let q_h: Vec<f16> = q_f32.iter().map(|&x| f16::from_f32(x)).collect();
@@ -148,8 +162,8 @@ fn run_case_f16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let desc = FlashDecodingDescriptor::new(b, h, k_len, d, ElementKind::F16);
     let plan = FlashDecodingPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
-    let mut ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, plan.workspace_size())
-        .expect("alloc workspace");
+    let mut ws: DeviceBuffer<u8> =
+        DeviceBuffer::zeros(&ctx, plan.workspace_size()).expect("alloc workspace");
 
     let sq = [b, h, d];
     let sk = [b, h, k_len, d];
@@ -157,10 +171,26 @@ fn run_case_f16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let sy = [b, h, d];
 
     let args = FlashDecodingArgs::<f16> {
-        q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-        k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-        v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-        y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+        q: TensorRef {
+            data: dq.as_slice(),
+            shape: sq,
+            stride: contiguous_stride(sq),
+        },
+        k: TensorRef {
+            data: dk.as_slice(),
+            shape: sk,
+            stride: contiguous_stride(sk),
+        },
+        v: TensorRef {
+            data: dv.as_slice(),
+            shape: sv,
+            stride: contiguous_stride(sv),
+        },
+        y: TensorMut {
+            data: dy.as_slice_mut(),
+            shape: sy,
+            stride: contiguous_stride(sy),
+        },
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
         .expect("run");
@@ -181,8 +211,15 @@ fn run_case_bf16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let v_f32 = deterministic_f32((b * h * k_len * d) as usize, 0.011, -0.1);
 
     let expected = sdpa_decode_cpu(
-        &q_f32, &k_f32, &v_f32,
-        b as usize, h as usize, h as usize, k_len as usize, d as usize, scale,
+        &q_f32,
+        &k_f32,
+        &v_f32,
+        b as usize,
+        h as usize,
+        h as usize,
+        k_len as usize,
+        d as usize,
+        scale,
     );
 
     let q_h: Vec<bf16> = q_f32.iter().map(|&x| bf16::from_f32(x)).collect();
@@ -198,8 +235,8 @@ fn run_case_bf16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let desc = FlashDecodingDescriptor::new(b, h, k_len, d, ElementKind::Bf16);
     let plan = FlashDecodingPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
-    let mut ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, plan.workspace_size())
-        .expect("alloc workspace");
+    let mut ws: DeviceBuffer<u8> =
+        DeviceBuffer::zeros(&ctx, plan.workspace_size()).expect("alloc workspace");
 
     let sq = [b, h, d];
     let sk = [b, h, k_len, d];
@@ -207,10 +244,26 @@ fn run_case_bf16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let sy = [b, h, d];
 
     let args = FlashDecodingArgs::<bf16> {
-        q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-        k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-        v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-        y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+        q: TensorRef {
+            data: dq.as_slice(),
+            shape: sq,
+            stride: contiguous_stride(sq),
+        },
+        k: TensorRef {
+            data: dk.as_slice(),
+            shape: sk,
+            stride: contiguous_stride(sk),
+        },
+        v: TensorRef {
+            data: dv.as_slice(),
+            shape: sv,
+            stride: contiguous_stride(sv),
+        },
+        y: TensorMut {
+            data: dy.as_slice_mut(),
+            shape: sy,
+            stride: contiguous_stride(sy),
+        },
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
         .expect("run");
@@ -271,10 +324,7 @@ fn flash_decoding_bf16_llm_decode() {
 //   - MQA: H_q=32, H_kv=2, group=16 (caps at WMMA M-tile = 16)
 // ----------------------------------------------------------------------------
 
-fn run_gqa_case_f16(
-    b: i32, h_q: i32, h_kv: i32, k_len: i32, d: i32,
-    tol: f32, label: &str,
-) {
+fn run_gqa_case_f16(b: i32, h_q: i32, h_kv: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let (ctx, stream) = setup();
     let scale = 1.0_f32 / (d as f32).sqrt();
 
@@ -283,9 +333,15 @@ fn run_gqa_case_f16(
     let v_f32 = deterministic_f32((b * h_kv * k_len * d) as usize, 0.011, -0.1);
 
     let expected = sdpa_decode_cpu(
-        &q_f32, &k_f32, &v_f32,
-        b as usize, h_q as usize, h_kv as usize,
-        k_len as usize, d as usize, scale,
+        &q_f32,
+        &k_f32,
+        &v_f32,
+        b as usize,
+        h_q as usize,
+        h_kv as usize,
+        k_len as usize,
+        d as usize,
+        scale,
     );
 
     let q_h: Vec<f16> = q_f32.iter().map(|&x| f16::from_f32(x)).collect();
@@ -301,8 +357,8 @@ fn run_gqa_case_f16(
     let desc = FlashDecodingDescriptor::new_gqa(b, h_q, h_kv, k_len, d, ElementKind::F16);
     let plan = FlashDecodingPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
-    let mut ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, plan.workspace_size())
-        .expect("alloc workspace");
+    let mut ws: DeviceBuffer<u8> =
+        DeviceBuffer::zeros(&ctx, plan.workspace_size()).expect("alloc workspace");
 
     let sq = [b, h_q, d];
     let sk = [b, h_kv, k_len, d];
@@ -310,10 +366,26 @@ fn run_gqa_case_f16(
     let sy = [b, h_q, d];
 
     let args = FlashDecodingArgs::<f16> {
-        q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-        k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-        v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-        y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+        q: TensorRef {
+            data: dq.as_slice(),
+            shape: sq,
+            stride: contiguous_stride(sq),
+        },
+        k: TensorRef {
+            data: dk.as_slice(),
+            shape: sk,
+            stride: contiguous_stride(sk),
+        },
+        v: TensorRef {
+            data: dv.as_slice(),
+            shape: sv,
+            stride: contiguous_stride(sv),
+        },
+        y: TensorMut {
+            data: dy.as_slice_mut(),
+            shape: sy,
+            stride: contiguous_stride(sy),
+        },
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
         .expect("run");
@@ -342,14 +414,30 @@ const GQA_TC_TOL: f32 = 1.5e-1;
 #[test]
 fn flash_decoding_gqa_llama3_8b() {
     // Llama 3 8B class — H_q=32, H_kv=8, group=4.
-    run_gqa_case_f16(1, 32, 8, 2048, 128, GQA_TC_TOL, "f16/gqa-group4 (Llama-3-8B)");
+    run_gqa_case_f16(
+        1,
+        32,
+        8,
+        2048,
+        128,
+        GQA_TC_TOL,
+        "f16/gqa-group4 (Llama-3-8B)",
+    );
 }
 
 #[ignore]
 #[test]
 fn flash_decoding_gqa_llama3_70b() {
     // Llama 3 70B class — H_q=64, H_kv=8, group=8.
-    run_gqa_case_f16(1, 64, 8, 2048, 128, GQA_TC_TOL, "f16/gqa-group8 (Llama-3-70B)");
+    run_gqa_case_f16(
+        1,
+        64,
+        8,
+        2048,
+        128,
+        GQA_TC_TOL,
+        "f16/gqa-group8 (Llama-3-70B)",
+    );
 }
 
 #[ignore]

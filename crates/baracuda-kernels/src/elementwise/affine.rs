@@ -177,8 +177,7 @@ impl<T: Element> AffinePlan<T> {
         let stream_ptr = stream.as_raw();
 
         // Contig fast path: rank-1, input.stride == [1], output.stride == [1].
-        let contig =
-            is_canonical_contig(&args.input.shape, &args.input.stride)
+        let contig = is_canonical_contig(&args.input.shape, &args.input.stride)
             && is_canonical_contig(&args.output.shape, &args.output.stride);
 
         // SAFETY: each match arm only fires when `T::KIND` equals the
@@ -193,44 +192,84 @@ impl<T: Element> AffinePlan<T> {
                         let a: f32 = core::mem::transmute_copy(&self.desc.a);
                         let b: f32 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_f32_run(
-                            numel, x_ptr, y_ptr, a, b, core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            x_ptr,
+                            y_ptr,
+                            a,
+                            b,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::F64 => {
                         let a: f64 = core::mem::transmute_copy(&self.desc.a);
                         let b: f64 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_f64_run(
-                            numel, x_ptr, y_ptr, a, b, core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            x_ptr,
+                            y_ptr,
+                            a,
+                            b,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::I32 => {
                         let a: i32 = core::mem::transmute_copy(&self.desc.a);
                         let b: i32 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_i32_run(
-                            numel, x_ptr, y_ptr, a, b, core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            x_ptr,
+                            y_ptr,
+                            a,
+                            b,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::I64 => {
                         let a: i64 = core::mem::transmute_copy(&self.desc.a);
                         let b: i64 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_i64_run(
-                            numel, x_ptr, y_ptr, a, b, core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            x_ptr,
+                            y_ptr,
+                            a,
+                            b,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::F16 => {
                         let a: f16 = core::mem::transmute_copy(&self.desc.a);
                         let b: f16 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_f16_run(
-                            numel, x_ptr, y_ptr, a.to_f32(), b.to_f32(),
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            x_ptr,
+                            y_ptr,
+                            a.to_f32(),
+                            b.to_f32(),
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::Bf16 => {
                         let a: bf16 = core::mem::transmute_copy(&self.desc.a);
                         let b: bf16 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_bf16_run(
-                            numel, x_ptr, y_ptr, a.to_f32(), b.to_f32(),
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            x_ptr,
+                            y_ptr,
+                            a.to_f32(),
+                            b.to_f32(),
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     _ => {
@@ -252,50 +291,108 @@ impl<T: Element> AffinePlan<T> {
                         let a: f32 = core::mem::transmute_copy(&self.desc.a);
                         let b: f32 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_f32_strided_run(
-                            numel, rank, shape_ptr, stride_x_ptr, stride_y_ptr,
-                            x_ptr, y_ptr, a, b, core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape_ptr,
+                            stride_x_ptr,
+                            stride_y_ptr,
+                            x_ptr,
+                            y_ptr,
+                            a,
+                            b,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::F64 => {
                         let a: f64 = core::mem::transmute_copy(&self.desc.a);
                         let b: f64 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_f64_strided_run(
-                            numel, rank, shape_ptr, stride_x_ptr, stride_y_ptr,
-                            x_ptr, y_ptr, a, b, core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape_ptr,
+                            stride_x_ptr,
+                            stride_y_ptr,
+                            x_ptr,
+                            y_ptr,
+                            a,
+                            b,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::I32 => {
                         let a: i32 = core::mem::transmute_copy(&self.desc.a);
                         let b: i32 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_i32_strided_run(
-                            numel, rank, shape_ptr, stride_x_ptr, stride_y_ptr,
-                            x_ptr, y_ptr, a, b, core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape_ptr,
+                            stride_x_ptr,
+                            stride_y_ptr,
+                            x_ptr,
+                            y_ptr,
+                            a,
+                            b,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::I64 => {
                         let a: i64 = core::mem::transmute_copy(&self.desc.a);
                         let b: i64 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_i64_strided_run(
-                            numel, rank, shape_ptr, stride_x_ptr, stride_y_ptr,
-                            x_ptr, y_ptr, a, b, core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape_ptr,
+                            stride_x_ptr,
+                            stride_y_ptr,
+                            x_ptr,
+                            y_ptr,
+                            a,
+                            b,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::F16 => {
                         let a: f16 = core::mem::transmute_copy(&self.desc.a);
                         let b: f16 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_f16_strided_run(
-                            numel, rank, shape_ptr, stride_x_ptr, stride_y_ptr,
-                            x_ptr, y_ptr, a.to_f32(), b.to_f32(),
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape_ptr,
+                            stride_x_ptr,
+                            stride_y_ptr,
+                            x_ptr,
+                            y_ptr,
+                            a.to_f32(),
+                            b.to_f32(),
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     ElementKind::Bf16 => {
                         let a: bf16 = core::mem::transmute_copy(&self.desc.a);
                         let b: bf16 = core::mem::transmute_copy(&self.desc.b);
                         baracuda_kernels_sys::baracuda_kernels_affine_bf16_strided_run(
-                            numel, rank, shape_ptr, stride_x_ptr, stride_y_ptr,
-                            x_ptr, y_ptr, a.to_f32(), b.to_f32(),
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape_ptr,
+                            stride_x_ptr,
+                            stride_y_ptr,
+                            x_ptr,
+                            y_ptr,
+                            a.to_f32(),
+                            b.to_f32(),
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     }
                     _ => {

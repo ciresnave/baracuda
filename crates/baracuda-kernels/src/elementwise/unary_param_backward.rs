@@ -201,58 +201,112 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
         let all_contig =
             args.dy.is_contiguous() && args.x.is_contiguous() && args.dx.is_contiguous();
         if !all_contig && matches!(self.desc.kind, UnaryKind::PowI) {
-            return self.run_strided(
-                stream_ptr, dy_ptr, x_ptr, dx_ptr, numel, &args, p0, p1,
-            );
+            return self.run_strided(stream_ptr, dy_ptr, x_ptr, dx_ptr, numel, &args, p0, p1);
         }
 
         let status = match (self.desc.kind, T::KIND) {
             (UnaryKind::Threshold, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_backward_f32_run(
-                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    x_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Threshold, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_backward_f16_run(
-                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    x_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Threshold, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_backward_bf16_run(
-                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    x_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::Threshold, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_backward_f64_run(
-                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    x_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f32_run(
-                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    x_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f16_run(
-                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    x_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_bf16_run(
-                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    x_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f64_run(
-                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    dy_ptr,
+                    x_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {
@@ -289,34 +343,74 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
         let status = match (self.desc.kind, T::KIND) {
             (UnaryKind::PowI, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f32_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_x.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                    x_ptr, dy_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_dy.as_ptr(),
+                    stride_dx.as_ptr(),
+                    x_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_x.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                    x_ptr, dy_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_dy.as_ptr(),
+                    stride_dx.as_ptr(),
+                    x_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_bf16_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_x.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                    x_ptr, dy_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_dy.as_ptr(),
+                    stride_dx.as_ptr(),
+                    x_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (UnaryKind::PowI, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f64_strided_run(
-                    numel, rank, shape.as_ptr(),
-                    stride_x.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                    x_ptr, dy_ptr, dx_ptr, p0, p1,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    stride_dy.as_ptr(),
+                    stride_dx.as_ptr(),
+                    x_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    p0,
+                    p1,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

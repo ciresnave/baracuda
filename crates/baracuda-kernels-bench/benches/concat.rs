@@ -18,14 +18,14 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, ConcatArgs, ConcatDescriptor, ConcatPlan, ElementKind, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ConcatArgs, ConcatDescriptor, ConcatPlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline,
+    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns, setup_device,
+    time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::f16;
 
 const BENCH_NAME: &str = "concat";
@@ -34,7 +34,7 @@ const BENCH_NAME: &str = "concat";
 /// + two mid-sequence joins.
 const CONCAT_SWEEP: &[(i32, i32, i32, i32)] = &[
     // KV-cache append-1: append one new token to a 2047-long cache.
-    (32, 2047, 1, 128),  // Llama-7B per-head layout.
+    (32, 2047, 1, 128), // Llama-7B per-head layout.
     // Mid-sequence joins.
     (32, 1024, 1024, 128),
     (32, 512, 512, 128),
@@ -91,11 +91,10 @@ fn bench<T>(
             concat_dim: 1,
             element: kind,
         };
-        let plan =
-            match ConcatPlan::<T, 3>::select(&stream, &desc, PlanPreference::default()) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
+        let plan = match ConcatPlan::<T, 3>::select(&stream, &desc, PlanPreference::default()) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
 
         warmup(&stream, || {
             let args = ConcatArgs::<T, 3> {
@@ -115,7 +114,8 @@ fn bench<T>(
                     stride: sty,
                 },
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda concat");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda concat");
         });
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = ConcatArgs::<T, 3> {
@@ -135,7 +135,8 @@ fn bench<T>(
                     stride: sty,
                 },
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda concat");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda concat");
         });
         append_csv_row(
             BENCH_NAME,
@@ -169,7 +170,8 @@ fn bench<T>(
                             stride: sty,
                         },
                     };
-                    plan.run(&stream, Workspace::None, args).expect("baracuda concat");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("baracuda concat");
                 })
             });
         });

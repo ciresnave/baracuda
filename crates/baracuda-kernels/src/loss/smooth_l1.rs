@@ -308,26 +308,62 @@ impl<T: Element, const N: usize> SmoothL1LossBackwardPlan<T, N> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_smooth_l1_backward_f32_run(
-                    numel, mode, inv_n_or_one, beta, pred_ptr, target_ptr, dy_ptr, dpred_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    beta,
+                    pred_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dpred_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_smooth_l1_backward_f16_run(
-                    numel, mode, inv_n_or_one, beta, pred_ptr, target_ptr, dy_ptr, dpred_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    beta,
+                    pred_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dpred_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_smooth_l1_backward_bf16_run(
-                    numel, mode, inv_n_or_one, beta, pred_ptr, target_ptr, dy_ptr, dpred_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    beta,
+                    pred_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dpred_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_smooth_l1_backward_f64_run(
-                    numel, mode, inv_n_or_one, beta, pred_ptr, target_ptr, dy_ptr, dpred_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    beta,
+                    pred_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dpred_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

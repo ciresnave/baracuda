@@ -9,7 +9,7 @@ use baracuda_cutlass::{
     ActivationKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut,
     MatrixRef, PlanPreference, VectorRef, Workspace,
 };
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 // ---- CPU references (same as bias_act_smoke.rs but row-major B) ----
@@ -88,19 +88,22 @@ fn run_f16(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
     let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
     let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     // Bias straddles 0 so ReLU's clamp is exercised on some columns.
-    let host_bias_f32: Vec<f32> = (0..n)
-        .map(|j| -0.5 + 0.1 * (j as f32 % 7.0))
-        .collect();
+    let host_bias_f32: Vec<f32> = (0..n).map(|j| -0.5 + 0.1 * (j as f32 % 7.0)).collect();
 
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_bias_act_gemm_rrr(
-        m as usize, n as usize, k as usize,
-        &host_a_f32, k as usize,   // lda = K  (row-major [M,K])
-        &host_b_f32, n as usize,   // ldb = N  (row-major [K,N])
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a_f32,
+        k as usize, // lda = K  (row-major [M,K])
+        &host_b_f32,
+        n as usize, // ldb = N  (row-major [K,N])
         &host_bias_f32,
         1.0,
         epilogue.activation(),
-        &mut host_d_ref, n as usize,
+        &mut host_d_ref,
+        n as usize,
     );
 
     let host_a: Vec<f16> = host_a_f32.iter().map(|&x| f16::from_f32(x)).collect();
@@ -114,7 +117,9 @@ fn run_f16(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rrr,
         epilogue,
     };
@@ -124,12 +129,32 @@ fn run_f16(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
     assert_eq!(plan.sku().epilogue, epilogue);
 
     let args = GemmArgs::<f16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: n as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: n as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
-        bias: Some(VectorRef { data: dev_bias.as_slice(), len: n, stride: 1 }),
-        alpha: 1.0, beta: 0.0,
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
+        bias: Some(VectorRef {
+            data: dev_bias.as_slice(),
+            len: n,
+            stride: 1,
+        }),
+        alpha: 1.0,
+        beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -164,19 +189,22 @@ fn run_bf16(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
 
     let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
     let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
-    let host_bias_f32: Vec<f32> = (0..n)
-        .map(|j| -0.5 + 0.1 * (j as f32 % 7.0))
-        .collect();
+    let host_bias_f32: Vec<f32> = (0..n).map(|j| -0.5 + 0.1 * (j as f32 % 7.0)).collect();
 
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_bias_act_gemm_rrr(
-        m as usize, n as usize, k as usize,
-        &host_a_f32, k as usize,
-        &host_b_f32, n as usize,
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a_f32,
+        k as usize,
+        &host_b_f32,
+        n as usize,
         &host_bias_f32,
         1.0,
         epilogue.activation(),
-        &mut host_d_ref, n as usize,
+        &mut host_d_ref,
+        n as usize,
     );
 
     let host_a: Vec<bf16> = host_a_f32.iter().map(|&x| bf16::from_f32(x)).collect();
@@ -190,19 +218,41 @@ fn run_bf16(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rrr,
         epilogue,
     };
     let plan =
         GemmPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("plan select");
     let args = GemmArgs::<bf16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: n as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: n as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
-        bias: Some(VectorRef { data: dev_bias.as_slice(), len: n, stride: 1 }),
-        alpha: 1.0, beta: 0.0,
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
+        bias: Some(VectorRef {
+            data: dev_bias.as_slice(),
+            len: n,
+            stride: 1,
+        }),
+        alpha: 1.0,
+        beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
     plan.run(&stream, Workspace::None, args).expect("run");

@@ -120,7 +120,10 @@ fn zero_reuses_existing_buffer() {
     buf.zero().expect("zero");
     let mut got = vec![f32::NAN; host.len()];
     buf.copy_to_host(&mut got).expect("D2H");
-    assert!(got.iter().all(|&x| x == 0.0), "sync zero left non-zero bytes");
+    assert!(
+        got.iter().all(|&x| x == 0.0),
+        "sync zero left non-zero bytes"
+    );
 
     // Refill, then async zero.
     buf.copy_from_host(&host).expect("H2D refill");
@@ -128,7 +131,10 @@ fn zero_reuses_existing_buffer() {
     stream.synchronize().expect("sync");
     let mut got2 = vec![f32::NAN; host.len()];
     buf.copy_to_host(&mut got2).expect("D2H");
-    assert!(got2.iter().all(|&x| x == 0.0), "async zero left non-zero bytes");
+    assert!(
+        got2.iter().all(|&x| x == 0.0),
+        "async zero left non-zero bytes"
+    );
 
     // Zero-length buffer is a no-op (no FFI call) and must not error.
     let empty: DeviceBuffer<f32> = DeviceBuffer::new(&ctx, 0).expect("empty");

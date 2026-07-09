@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use baracuda_runtime::ipc;
 use baracuda_runtime::user_object::UserObject;
-use baracuda_runtime::{get_device_flags, memory, Device, DeviceBuffer, Event, Graph, Stream};
+use baracuda_runtime::{Device, DeviceBuffer, Event, Graph, Stream, get_device_flags, memory};
 
 static DESTRUCTOR_RAN: AtomicU32 = AtomicU32::new(0);
 

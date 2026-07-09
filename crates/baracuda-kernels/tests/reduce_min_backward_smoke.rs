@@ -7,10 +7,10 @@
 //! differs (min vs max). Tests fill x with strictly-increasing values
 //! so the min is always at the first position along the reduced axis.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceBackwardArgs,
-    ReduceBackwardDescriptor, ReduceBackwardPlan, ReduceKind, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceBackwardArgs, ReduceBackwardDescriptor, ReduceBackwardPlan,
+    ReduceKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -79,10 +79,26 @@ fn min_backward_f32_3d_axis1() {
     let plan = ReduceBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -90,9 +106,16 @@ fn min_backward_f32_3d_axis1() {
     dev_dx.copy_to_host(&mut got).expect("download");
     for_each_coord::<3, _>(input_shape, |coord, dx_linear| {
         let dy_lin = dy_index(coord, axis, dy_shape) as usize;
-        let exp = if host_x[dx_linear as usize] == host_y[dy_lin] { host_dy[dy_lin] } else { 0.0 };
-        assert_eq!(got[dx_linear as usize].to_bits(), exp.to_bits(),
-                   "min bw f32 @ {dx_linear}");
+        let exp = if host_x[dx_linear as usize] == host_y[dy_lin] {
+            host_dy[dy_lin]
+        } else {
+            0.0
+        };
+        assert_eq!(
+            got[dx_linear as usize].to_bits(),
+            exp.to_bits(),
+            "min bw f32 @ {dx_linear}"
+        );
     });
 }
 
@@ -129,10 +152,26 @@ fn min_backward_f64_3d_axis0() {
     let plan = ReduceBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -140,9 +179,16 @@ fn min_backward_f64_3d_axis0() {
     dev_dx.copy_to_host(&mut got).expect("download");
     for_each_coord::<3, _>(input_shape, |coord, dx_linear| {
         let dy_lin = dy_index(coord, axis, dy_shape) as usize;
-        let exp = if host_x[dx_linear as usize] == host_y[dy_lin] { host_dy[dy_lin] } else { 0.0 };
-        assert_eq!(got[dx_linear as usize].to_bits(), exp.to_bits(),
-                   "min bw f64 @ {dx_linear}");
+        let exp = if host_x[dx_linear as usize] == host_y[dy_lin] {
+            host_dy[dy_lin]
+        } else {
+            0.0
+        };
+        assert_eq!(
+            got[dx_linear as usize].to_bits(),
+            exp.to_bits(),
+            "min bw f64 @ {dx_linear}"
+        );
     });
 }
 
@@ -156,7 +202,9 @@ fn min_backward_f16_3d_axis2() {
     let mut dy_shape = input_shape;
     dy_shape[axis] = 1;
     let dy_numel: usize = dy_shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<f16> = (0..dx_numel).map(|i| f16::from_f32(i as f32 * 0.0625)).collect();
+    let host_x: Vec<f16> = (0..dx_numel)
+        .map(|i| f16::from_f32(i as f32 * 0.0625))
+        .collect();
     let mut host_y = vec![f16::from_f32(f32::INFINITY); dy_numel];
     for_each_coord::<3, _>(input_shape, |coord, x_linear| {
         let dy_lin = dy_index(coord, axis, dy_shape) as usize;
@@ -164,7 +212,9 @@ fn min_backward_f16_3d_axis2() {
             host_y[dy_lin] = host_x[x_linear as usize];
         }
     });
-    let host_dy: Vec<f16> = (0..dy_numel).map(|i| f16::from_f32((i as f32) * 0.125 + 0.5)).collect();
+    let host_dy: Vec<f16> = (0..dy_numel)
+        .map(|i| f16::from_f32((i as f32) * 0.125 + 0.5))
+        .collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("upload y");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
@@ -179,10 +229,26 @@ fn min_backward_f16_3d_axis2() {
     let plan = ReduceBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -195,8 +261,11 @@ fn min_backward_f16_3d_axis2() {
         } else {
             f16::from_f32(0.0)
         };
-        assert_eq!(got[dx_linear as usize].to_bits(), exp.to_bits(),
-                   "min bw f16 @ {dx_linear}");
+        assert_eq!(
+            got[dx_linear as usize].to_bits(),
+            exp.to_bits(),
+            "min bw f16 @ {dx_linear}"
+        );
     });
 }
 
@@ -210,7 +279,9 @@ fn min_backward_bf16_3d_axis1() {
     let mut dy_shape = input_shape;
     dy_shape[axis] = 1;
     let dy_numel: usize = dy_shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<bf16> = (0..dx_numel).map(|i| bf16::from_f32(i as f32 * 0.0625)).collect();
+    let host_x: Vec<bf16> = (0..dx_numel)
+        .map(|i| bf16::from_f32(i as f32 * 0.0625))
+        .collect();
     let mut host_y = vec![bf16::from_f32(f32::INFINITY); dy_numel];
     for_each_coord::<3, _>(input_shape, |coord, x_linear| {
         let dy_lin = dy_index(coord, axis, dy_shape) as usize;
@@ -218,7 +289,9 @@ fn min_backward_bf16_3d_axis1() {
             host_y[dy_lin] = host_x[x_linear as usize];
         }
     });
-    let host_dy: Vec<bf16> = (0..dy_numel).map(|i| bf16::from_f32((i as f32) * 0.125 + 0.5)).collect();
+    let host_dy: Vec<bf16> = (0..dy_numel)
+        .map(|i| bf16::from_f32((i as f32) * 0.125 + 0.5))
+        .collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("upload y");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
@@ -233,10 +306,26 @@ fn min_backward_bf16_3d_axis1() {
     let plan = ReduceBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -249,7 +338,10 @@ fn min_backward_bf16_3d_axis1() {
         } else {
             bf16::from_f32(0.0)
         };
-        assert_eq!(got[dx_linear as usize].to_bits(), exp.to_bits(),
-                   "min bw bf16 @ {dx_linear}");
+        assert_eq!(
+            got[dx_linear as usize].to_bits(),
+            exp.to_bits(),
+            "min bw bf16 @ {dx_linear}"
+        );
     });
 }

@@ -47,17 +47,16 @@
 
 use baracuda_cudnn_sys::{
     cudnn, cudnnActivationDescriptor_t, cudnnActivationMode_t, cudnnAttnDescriptor_t,
-    cudnnBackendAttributeName_t, cudnnBackendAttributeType_t, cudnnBackendDescriptorType_t,
-    cudnnBackendDescriptor_t, cudnnBatchNormMode_t, cudnnBatchNormOps_t,
-    cudnnConvolutionBwdDataAlgo_t, cudnnConvolutionBwdFilterAlgo_t,
-    cudnnConvolutionDescriptor_t, cudnnConvolutionFwdAlgo_t, cudnnConvolutionMode_t,
-    cudnnDataType_t, cudnnDropoutDescriptor_t, cudnnFilterDescriptor_t,
-    cudnnHandle_t, cudnnIndicesType_t, cudnnLRNDescriptor_t, cudnnMathType_t, cudnnNanPropagation_t,
-    cudnnNormAlgo_t, cudnnNormMode_t, cudnnNormOps_t, cudnnOpTensorDescriptor_t, cudnnOpTensorOp_t,
-    cudnnPoolingDescriptor_t, cudnnPoolingMode_t, cudnnReduceTensorDescriptor_t,
-    cudnnReduceTensorIndices_t, cudnnReduceTensorOp_t, cudnnReorderType_t,
-    cudnnSeqDataDescriptor_t, cudnnSoftmaxAlgorithm_t, cudnnSoftmaxMode_t, cudnnStatus_t,
-    cudnnTensorDescriptor_t, cudnnTensorFormat_t,
+    cudnnBackendAttributeName_t, cudnnBackendAttributeType_t, cudnnBackendDescriptor_t,
+    cudnnBackendDescriptorType_t, cudnnBatchNormMode_t, cudnnBatchNormOps_t,
+    cudnnConvolutionBwdDataAlgo_t, cudnnConvolutionBwdFilterAlgo_t, cudnnConvolutionDescriptor_t,
+    cudnnConvolutionFwdAlgo_t, cudnnConvolutionMode_t, cudnnDataType_t, cudnnDropoutDescriptor_t,
+    cudnnFilterDescriptor_t, cudnnHandle_t, cudnnIndicesType_t, cudnnLRNDescriptor_t,
+    cudnnMathType_t, cudnnNanPropagation_t, cudnnNormAlgo_t, cudnnNormMode_t, cudnnNormOps_t,
+    cudnnOpTensorDescriptor_t, cudnnOpTensorOp_t, cudnnPoolingDescriptor_t, cudnnPoolingMode_t,
+    cudnnReduceTensorDescriptor_t, cudnnReduceTensorIndices_t, cudnnReduceTensorOp_t,
+    cudnnReorderType_t, cudnnSeqDataDescriptor_t, cudnnSoftmaxAlgorithm_t, cudnnSoftmaxMode_t,
+    cudnnStatus_t, cudnnTensorDescriptor_t, cudnnTensorFormat_t,
 };
 use baracuda_driver::{DeviceBuffer, Stream};
 use baracuda_types::DeviceRepr;
@@ -2102,11 +2101,13 @@ impl BackendDescriptor {
         ty: cudnnBackendAttributeType_t,
         element_count: i64,
         array_of_elements: *const core::ffi::c_void,
-    ) -> Result<()> { unsafe {
-        let cu = cudnn()?;
-        let f = cu.cudnn_backend_set_attribute()?;
-        check(f(self.desc, name, ty, element_count, array_of_elements))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let cu = cudnn()?;
+            let f = cu.cudnn_backend_set_attribute()?;
+            check(f(self.desc, name, ty, element_count, array_of_elements))
+        }
+    }
 
     /// Lock in the descriptor's attributes. Idempotent — repeated calls
     /// are no-ops.
@@ -2149,8 +2150,7 @@ impl Drop for BackendDescriptor {
 /// Re-export the backend attribute enums so callers don't have to reach
 /// into the sys crate.
 pub use baracuda_cudnn_sys::{
-    cudnnBackendAttributeName_t as BackendAttrName,
-    cudnnBackendAttributeType_t as BackendAttrType,
+    cudnnBackendAttributeName_t as BackendAttrName, cudnnBackendAttributeType_t as BackendAttrType,
     cudnnBackendDescriptorType_t as BackendDescType,
 };
 
@@ -2455,15 +2455,22 @@ pub unsafe fn reorder_filter_and_bias(
     reorder_bias: bool,
     bias_data: *const core::ffi::c_void,
     reordered_bias: *mut core::ffi::c_void,
-) -> Result<()> { unsafe {
-    let c = cudnn()?;
-    let f = c.cudnn_reorder_filter_and_bias()?;
-    check(f(
-        handle.handle, filter_desc.desc, reorder.raw(),
-        filter_data, reordered_filter,
-        reorder_bias as core::ffi::c_int, bias_data, reordered_bias,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cudnn()?;
+        let f = c.cudnn_reorder_filter_and_bias()?;
+        check(f(
+            handle.handle,
+            filter_desc.desc,
+            reorder.raw(),
+            filter_data,
+            reordered_filter,
+            reorder_bias as core::ffi::c_int,
+            bias_data,
+            reordered_bias,
+        ))
+    }
+}
 
 /// Fused convolution + bias + activation forward:
 /// `Y = activation(alpha1 * conv(X, W) + alpha2 * Z + bias)`.
@@ -2472,16 +2479,21 @@ pub unsafe fn reorder_filter_and_bias(
 pub fn convolution_bias_activation_forward<T: DeviceRepr>(
     handle: &Handle,
     alpha1: f32,
-    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
-    w_desc: &FilterDescriptor, w: &DeviceBuffer<T>,
+    x_desc: &TensorDescriptor,
+    x: &DeviceBuffer<T>,
+    w_desc: &FilterDescriptor,
+    w: &DeviceBuffer<T>,
     conv: &ConvolutionDescriptor,
     algo: FwdAlgo,
     workspace: &mut DeviceBuffer<u8>,
     alpha2: f32,
-    z_desc: &TensorDescriptor, z: &DeviceBuffer<T>,
-    bias_desc: &TensorDescriptor, bias: &DeviceBuffer<T>,
+    z_desc: &TensorDescriptor,
+    z: &DeviceBuffer<T>,
+    bias_desc: &TensorDescriptor,
+    bias: &DeviceBuffer<T>,
     activation: &ActivationDescriptor,
-    y_desc: &TensorDescriptor, y: &mut DeviceBuffer<T>,
+    y_desc: &TensorDescriptor,
+    y: &mut DeviceBuffer<T>,
 ) -> Result<()> {
     let c = cudnn()?;
     let cu = c.cudnn_convolution_bias_activation_forward()?;
@@ -2489,15 +2501,22 @@ pub fn convolution_bias_activation_forward<T: DeviceRepr>(
         cu(
             handle.handle,
             &alpha1 as *const f32 as *const core::ffi::c_void,
-            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
-            w_desc.desc, w.as_raw().0 as *const core::ffi::c_void,
-            conv.desc, algo.raw(),
-            workspace.as_raw().0 as *mut core::ffi::c_void, workspace.byte_size(),
+            x_desc.desc,
+            x.as_raw().0 as *const core::ffi::c_void,
+            w_desc.desc,
+            w.as_raw().0 as *const core::ffi::c_void,
+            conv.desc,
+            algo.raw(),
+            workspace.as_raw().0 as *mut core::ffi::c_void,
+            workspace.byte_size(),
             &alpha2 as *const f32 as *const core::ffi::c_void,
-            z_desc.desc, z.as_raw().0 as *const core::ffi::c_void,
-            bias_desc.desc, bias.as_raw().0 as *const core::ffi::c_void,
+            z_desc.desc,
+            z.as_raw().0 as *const core::ffi::c_void,
+            bias_desc.desc,
+            bias.as_raw().0 as *const core::ffi::c_void,
             activation.desc,
-            y_desc.desc, y.as_raw().0 as *mut core::ffi::c_void,
+            y_desc.desc,
+            y.as_raw().0 as *mut core::ffi::c_void,
         )
     })
 }
@@ -2508,23 +2527,32 @@ pub fn activation_backward<T: DeviceRepr>(
     handle: &Handle,
     activation: &ActivationDescriptor,
     alpha: f32,
-    y_desc: &TensorDescriptor, y: &DeviceBuffer<T>,
-    dy_desc: &TensorDescriptor, dy: &DeviceBuffer<T>,
-    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
+    y_desc: &TensorDescriptor,
+    y: &DeviceBuffer<T>,
+    dy_desc: &TensorDescriptor,
+    dy: &DeviceBuffer<T>,
+    x_desc: &TensorDescriptor,
+    x: &DeviceBuffer<T>,
     beta: f32,
-    dx_desc: &TensorDescriptor, dx: &mut DeviceBuffer<T>,
+    dx_desc: &TensorDescriptor,
+    dx: &mut DeviceBuffer<T>,
 ) -> Result<()> {
     let c = cudnn()?;
     let cu = c.cudnn_activation_backward()?;
     check(unsafe {
         cu(
-            handle.handle, activation.desc,
+            handle.handle,
+            activation.desc,
             &alpha as *const f32 as *const core::ffi::c_void,
-            y_desc.desc, y.as_raw().0 as *const core::ffi::c_void,
-            dy_desc.desc, dy.as_raw().0 as *const core::ffi::c_void,
-            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
+            y_desc.desc,
+            y.as_raw().0 as *const core::ffi::c_void,
+            dy_desc.desc,
+            dy.as_raw().0 as *const core::ffi::c_void,
+            x_desc.desc,
+            x.as_raw().0 as *const core::ffi::c_void,
             &beta as *const f32 as *const core::ffi::c_void,
-            dx_desc.desc, dx.as_raw().0 as *mut core::ffi::c_void,
+            dx_desc.desc,
+            dx.as_raw().0 as *mut core::ffi::c_void,
         )
     })
 }
@@ -2532,25 +2560,37 @@ pub fn activation_backward<T: DeviceRepr>(
 /// Cross-channel LRN backward.
 #[allow(clippy::too_many_arguments)]
 pub fn lrn_cross_channel_backward<T: DeviceRepr>(
-    handle: &Handle, lrn: &LrnDescriptor, mode: i32,
+    handle: &Handle,
+    lrn: &LrnDescriptor,
+    mode: i32,
     alpha: f32,
-    y_desc: &TensorDescriptor, y: &DeviceBuffer<T>,
-    dy_desc: &TensorDescriptor, dy: &DeviceBuffer<T>,
-    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
+    y_desc: &TensorDescriptor,
+    y: &DeviceBuffer<T>,
+    dy_desc: &TensorDescriptor,
+    dy: &DeviceBuffer<T>,
+    x_desc: &TensorDescriptor,
+    x: &DeviceBuffer<T>,
     beta: f32,
-    dx_desc: &TensorDescriptor, dx: &mut DeviceBuffer<T>,
+    dx_desc: &TensorDescriptor,
+    dx: &mut DeviceBuffer<T>,
 ) -> Result<()> {
     let c = cudnn()?;
     let cu = c.cudnn_lrn_cross_channel_backward()?;
     check(unsafe {
         cu(
-            handle.handle, lrn.desc, mode,
+            handle.handle,
+            lrn.desc,
+            mode,
             &alpha as *const f32 as *const core::ffi::c_void,
-            y_desc.desc, y.as_raw().0 as *const core::ffi::c_void,
-            dy_desc.desc, dy.as_raw().0 as *const core::ffi::c_void,
-            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
+            y_desc.desc,
+            y.as_raw().0 as *const core::ffi::c_void,
+            dy_desc.desc,
+            dy.as_raw().0 as *const core::ffi::c_void,
+            x_desc.desc,
+            x.as_raw().0 as *const core::ffi::c_void,
             &beta as *const f32 as *const core::ffi::c_void,
-            dx_desc.desc, dx.as_raw().0 as *mut core::ffi::c_void,
+            dx_desc.desc,
+            dx.as_raw().0 as *mut core::ffi::c_void,
         )
     })
 }
@@ -2590,18 +2630,20 @@ impl ActivationDescriptor {
 // Tier 2 — Algorithm finders / pickers
 // ============================================================================
 
-/// Per-algorithm performance record returned by the forward-convolution finders.
-pub use baracuda_cudnn_sys::cudnnConvolutionFwdAlgoPerf_t as FwdAlgoPerf;
 /// Per-algorithm performance record returned by the backward-data convolution finders.
 pub use baracuda_cudnn_sys::cudnnConvolutionBwdDataAlgoPerf_t as BwdDataAlgoPerf;
 /// Per-algorithm performance record returned by the backward-filter convolution finders.
 pub use baracuda_cudnn_sys::cudnnConvolutionBwdFilterAlgoPerf_t as BwdFilterAlgoPerf;
+/// Per-algorithm performance record returned by the forward-convolution finders.
+pub use baracuda_cudnn_sys::cudnnConvolutionFwdAlgoPerf_t as FwdAlgoPerf;
 
 /// Heuristic-pick the top-N forward-convolution algorithms (cheap; doesn't run them).
 pub fn get_convolution_forward_algorithm(
     handle: &Handle,
-    src: &TensorDescriptor, filter: &FilterDescriptor,
-    conv: &ConvolutionDescriptor, dst: &TensorDescriptor,
+    src: &TensorDescriptor,
+    filter: &FilterDescriptor,
+    conv: &ConvolutionDescriptor,
+    dst: &TensorDescriptor,
     requested: i32,
 ) -> Result<Vec<FwdAlgoPerf>> {
     let cu = cudnn()?;
@@ -2609,19 +2651,31 @@ pub fn get_convolution_forward_algorithm(
     let mut returned: core::ffi::c_int = 0;
     let mut buf: Vec<FwdAlgoPerf> = Vec::with_capacity(requested as usize);
     let raw = unsafe {
-        f(handle.handle, src.desc, filter.desc, conv.desc, dst.desc,
-          requested, &mut returned, buf.as_mut_ptr())
+        f(
+            handle.handle,
+            src.desc,
+            filter.desc,
+            conv.desc,
+            dst.desc,
+            requested,
+            &mut returned,
+            buf.as_mut_ptr(),
+        )
     };
     check(raw)?;
-    unsafe { buf.set_len(returned as usize); }
+    unsafe {
+        buf.set_len(returned as usize);
+    }
     Ok(buf)
 }
 
 /// Run all candidate forward-convolution algorithms and return measured runtimes.
 pub fn find_convolution_forward_algorithm(
     handle: &Handle,
-    src: &TensorDescriptor, filter: &FilterDescriptor,
-    conv: &ConvolutionDescriptor, dst: &TensorDescriptor,
+    src: &TensorDescriptor,
+    filter: &FilterDescriptor,
+    conv: &ConvolutionDescriptor,
+    dst: &TensorDescriptor,
     requested: i32,
 ) -> Result<Vec<FwdAlgoPerf>> {
     let cu = cudnn()?;
@@ -2629,19 +2683,31 @@ pub fn find_convolution_forward_algorithm(
     let mut returned: core::ffi::c_int = 0;
     let mut buf: Vec<FwdAlgoPerf> = Vec::with_capacity(requested as usize);
     let raw = unsafe {
-        f(handle.handle, src.desc, filter.desc, conv.desc, dst.desc,
-          requested, &mut returned, buf.as_mut_ptr())
+        f(
+            handle.handle,
+            src.desc,
+            filter.desc,
+            conv.desc,
+            dst.desc,
+            requested,
+            &mut returned,
+            buf.as_mut_ptr(),
+        )
     };
     check(raw)?;
-    unsafe { buf.set_len(returned as usize); }
+    unsafe {
+        buf.set_len(returned as usize);
+    }
     Ok(buf)
 }
 
 /// Heuristic-pick backward-data convolution algorithms.
 pub fn get_convolution_backward_data_algorithm(
     handle: &Handle,
-    filter: &FilterDescriptor, diff: &TensorDescriptor,
-    conv: &ConvolutionDescriptor, grad: &TensorDescriptor,
+    filter: &FilterDescriptor,
+    diff: &TensorDescriptor,
+    conv: &ConvolutionDescriptor,
+    grad: &TensorDescriptor,
     requested: i32,
 ) -> Result<Vec<BwdDataAlgoPerf>> {
     let cu = cudnn()?;
@@ -2649,19 +2715,31 @@ pub fn get_convolution_backward_data_algorithm(
     let mut returned: core::ffi::c_int = 0;
     let mut buf: Vec<BwdDataAlgoPerf> = Vec::with_capacity(requested as usize);
     let raw = unsafe {
-        f(handle.handle, filter.desc, diff.desc, conv.desc, grad.desc,
-          requested, &mut returned, buf.as_mut_ptr())
+        f(
+            handle.handle,
+            filter.desc,
+            diff.desc,
+            conv.desc,
+            grad.desc,
+            requested,
+            &mut returned,
+            buf.as_mut_ptr(),
+        )
     };
     check(raw)?;
-    unsafe { buf.set_len(returned as usize); }
+    unsafe {
+        buf.set_len(returned as usize);
+    }
     Ok(buf)
 }
 
 /// Heuristic-pick backward-filter convolution algorithms.
 pub fn get_convolution_backward_filter_algorithm(
     handle: &Handle,
-    src: &TensorDescriptor, diff: &TensorDescriptor,
-    conv: &ConvolutionDescriptor, grad: &FilterDescriptor,
+    src: &TensorDescriptor,
+    diff: &TensorDescriptor,
+    conv: &ConvolutionDescriptor,
+    grad: &FilterDescriptor,
     requested: i32,
 ) -> Result<Vec<BwdFilterAlgoPerf>> {
     let cu = cudnn()?;
@@ -2669,11 +2747,21 @@ pub fn get_convolution_backward_filter_algorithm(
     let mut returned: core::ffi::c_int = 0;
     let mut buf: Vec<BwdFilterAlgoPerf> = Vec::with_capacity(requested as usize);
     let raw = unsafe {
-        f(handle.handle, src.desc, diff.desc, conv.desc, grad.desc,
-          requested, &mut returned, buf.as_mut_ptr())
+        f(
+            handle.handle,
+            src.desc,
+            diff.desc,
+            conv.desc,
+            grad.desc,
+            requested,
+            &mut returned,
+            buf.as_mut_ptr(),
+        )
     };
     check(raw)?;
-    unsafe { buf.set_len(returned as usize); }
+    unsafe {
+        buf.set_len(returned as usize);
+    }
     Ok(buf)
 }
 
@@ -2763,16 +2851,29 @@ impl BnOp {
 #[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_forward_training_ex_workspace_size(
     handle: &Handle,
-    mode: BatchNormMode, bn_ops: BnOp,
-    x: &TensorDescriptor, z: &TensorDescriptor, y: &TensorDescriptor,
-    bn_smbv: &TensorDescriptor, activation: &ActivationDescriptor,
+    mode: BatchNormMode,
+    bn_ops: BnOp,
+    x: &TensorDescriptor,
+    z: &TensorDescriptor,
+    y: &TensorDescriptor,
+    bn_smbv: &TensorDescriptor,
+    activation: &ActivationDescriptor,
 ) -> Result<usize> {
     let cu = cudnn()?;
     let f = cu.cudnn_get_batch_normalization_forward_training_ex_workspace_size()?;
     let mut size = 0usize;
     check(unsafe {
-        f(handle.handle, mode.raw(), bn_ops.raw(),
-          x.desc, z.desc, y.desc, bn_smbv.desc, activation.desc, &mut size)
+        f(
+            handle.handle,
+            mode.raw(),
+            bn_ops.raw(),
+            x.desc,
+            z.desc,
+            y.desc,
+            bn_smbv.desc,
+            activation.desc,
+            &mut size,
+        )
     })?;
     Ok(size)
 }
@@ -2781,18 +2882,33 @@ pub fn batch_normalization_forward_training_ex_workspace_size(
 #[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_backward_ex_workspace_size(
     handle: &Handle,
-    mode: BatchNormMode, bn_ops: BnOp,
-    x: &TensorDescriptor, y: &TensorDescriptor, dy: &TensorDescriptor,
-    dz: &TensorDescriptor, dx: &TensorDescriptor,
-    d_bn_scale_bias: &TensorDescriptor, activation: &ActivationDescriptor,
+    mode: BatchNormMode,
+    bn_ops: BnOp,
+    x: &TensorDescriptor,
+    y: &TensorDescriptor,
+    dy: &TensorDescriptor,
+    dz: &TensorDescriptor,
+    dx: &TensorDescriptor,
+    d_bn_scale_bias: &TensorDescriptor,
+    activation: &ActivationDescriptor,
 ) -> Result<usize> {
     let cu = cudnn()?;
     let f = cu.cudnn_get_batch_normalization_backward_ex_workspace_size()?;
     let mut size = 0usize;
     check(unsafe {
-        f(handle.handle, mode.raw(), bn_ops.raw(),
-          x.desc, y.desc, dy.desc, dz.desc, dx.desc,
-          d_bn_scale_bias.desc, activation.desc, &mut size)
+        f(
+            handle.handle,
+            mode.raw(),
+            bn_ops.raw(),
+            x.desc,
+            y.desc,
+            dy.desc,
+            dz.desc,
+            dx.desc,
+            d_bn_scale_bias.desc,
+            activation.desc,
+            &mut size,
+        )
     })?;
     Ok(size)
 }
@@ -2800,14 +2916,23 @@ pub fn batch_normalization_backward_ex_workspace_size(
 /// Reserve-space bytes for the `*Ex` BatchNorm pair.
 pub fn batch_normalization_training_ex_reserve_space_size(
     handle: &Handle,
-    mode: BatchNormMode, bn_ops: BnOp,
-    activation: &ActivationDescriptor, x: &TensorDescriptor,
+    mode: BatchNormMode,
+    bn_ops: BnOp,
+    activation: &ActivationDescriptor,
+    x: &TensorDescriptor,
 ) -> Result<usize> {
     let cu = cudnn()?;
     let f = cu.cudnn_get_batch_normalization_training_ex_reserve_space_size()?;
     let mut size = 0usize;
     check(unsafe {
-        f(handle.handle, mode.raw(), bn_ops.raw(), activation.desc, x.desc, &mut size)
+        f(
+            handle.handle,
+            mode.raw(),
+            bn_ops.raw(),
+            activation.desc,
+            x.desc,
+            &mut size,
+        )
     })?;
     Ok(size)
 }
@@ -2823,7 +2948,9 @@ pub struct RnnDescriptor {
 unsafe impl Send for RnnDescriptor {}
 impl core::fmt::Debug for RnnDescriptor {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("RnnDescriptor").field("desc", &self.desc).finish_non_exhaustive()
+        f.debug_struct("RnnDescriptor")
+            .field("desc", &self.desc)
+            .finish_non_exhaustive()
     }
 }
 impl RnnDescriptor {
@@ -2842,13 +2969,24 @@ impl RnnDescriptor {
     #[allow(clippy::too_many_arguments)]
     pub fn set_v8(
         &self,
-        algo: i32, cell_mode: i32, bias_mode: i32,
-        dir_mode: i32, input_mode: i32,
-        data_type: DType, math_prec: DType, math_type: MathType,
-        input_size: i32, hidden_size: i32, proj_size: i32, num_layers: i32,
-        dropout: &DropoutDescriptor, aux_flags: u32,
+        algo: i32,
+        cell_mode: i32,
+        bias_mode: i32,
+        dir_mode: i32,
+        input_mode: i32,
+        data_type: DType,
+        math_prec: DType,
+        math_type: MathType,
+        input_size: i32,
+        hidden_size: i32,
+        proj_size: i32,
+        num_layers: i32,
+        dropout: &DropoutDescriptor,
+        aux_flags: u32,
     ) -> Result<()> {
-        use baracuda_cudnn_sys::{cudnnDirectionMode_t, cudnnRNNAlgo_t, cudnnRNNInputMode_t, cudnnRNNMode_t};
+        use baracuda_cudnn_sys::{
+            cudnnDirectionMode_t, cudnnRNNAlgo_t, cudnnRNNInputMode_t, cudnnRNNMode_t,
+        };
         let c = cudnn()?;
         let f = c.cudnn_set_rnn_descriptor_v8()?;
         let algo = match algo {
@@ -2863,19 +3001,42 @@ impl RnnDescriptor {
             2 => cudnnRNNMode_t::Lstm,
             _ => cudnnRNNMode_t::Gru,
         };
-        let dir = if dir_mode == 1 { cudnnDirectionMode_t::Bidirectional } else { cudnnDirectionMode_t::Unidirectional };
-        let im = if input_mode == 1 { cudnnRNNInputMode_t::SkipInput } else { cudnnRNNInputMode_t::LinearInput };
+        let dir = if dir_mode == 1 {
+            cudnnDirectionMode_t::Bidirectional
+        } else {
+            cudnnDirectionMode_t::Unidirectional
+        };
+        let im = if input_mode == 1 {
+            cudnnRNNInputMode_t::SkipInput
+        } else {
+            cudnnRNNInputMode_t::LinearInput
+        };
         check(unsafe {
-            f(self.desc, algo, cell, bias_mode, dir, im,
-              data_type.raw(), math_prec.raw(), math_type.raw(),
-              input_size, hidden_size, proj_size, num_layers,
-              dropout.desc, aux_flags)
+            f(
+                self.desc,
+                algo,
+                cell,
+                bias_mode,
+                dir,
+                im,
+                data_type.raw(),
+                math_prec.raw(),
+                math_type.raw(),
+                input_size,
+                hidden_size,
+                proj_size,
+                num_layers,
+                dropout.desc,
+                aux_flags,
+            )
         })
     }
 
     /// Raw descriptor.
     #[inline]
-    pub fn as_raw(&self) -> baracuda_cudnn_sys::cudnnRNNDescriptor_t { self.desc }
+    pub fn as_raw(&self) -> baracuda_cudnn_sys::cudnnRNNDescriptor_t {
+        self.desc
+    }
 }
 impl Drop for RnnDescriptor {
     fn drop(&mut self) {
@@ -2894,7 +3055,9 @@ pub struct RnnDataDescriptor {
 unsafe impl Send for RnnDataDescriptor {}
 impl core::fmt::Debug for RnnDataDescriptor {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("RnnDataDescriptor").field("desc", &self.desc).finish_non_exhaustive()
+        f.debug_struct("RnnDataDescriptor")
+            .field("desc", &self.desc)
+            .finish_non_exhaustive()
     }
 }
 impl RnnDataDescriptor {
@@ -2909,7 +3072,9 @@ impl RnnDataDescriptor {
     }
     /// Raw descriptor.
     #[inline]
-    pub fn as_raw(&self) -> baracuda_cudnn_sys::cudnnRNNDataDescriptor_t { self.desc }
+    pub fn as_raw(&self) -> baracuda_cudnn_sys::cudnnRNNDataDescriptor_t {
+        self.desc
+    }
 }
 impl Drop for RnnDataDescriptor {
     fn drop(&mut self) {
@@ -2931,7 +3096,10 @@ pub fn build_rnn_dynamic(handle: &Handle, rnn: &RnnDescriptor, mini_batch: i32) 
 /// Returns `(work_space_size, reserve_space_size)`.
 /// `fwd_mode = 0` for inference, `1` for training.
 pub fn rnn_temp_space_sizes(
-    handle: &Handle, rnn: &RnnDescriptor, fwd_mode: i32, x: &RnnDataDescriptor,
+    handle: &Handle,
+    rnn: &RnnDescriptor,
+    fwd_mode: i32,
+    x: &RnnDataDescriptor,
 ) -> Result<(usize, usize)> {
     let c = cudnn()?;
     let f = c.cudnn_get_rnn_temp_space_sizes()?;
@@ -2960,7 +3128,9 @@ pub struct AttnDescriptor {
 unsafe impl Send for AttnDescriptor {}
 impl core::fmt::Debug for AttnDescriptor {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("AttnDescriptor").field("desc", &self.desc).finish_non_exhaustive()
+        f.debug_struct("AttnDescriptor")
+            .field("desc", &self.desc)
+            .finish_non_exhaustive()
     }
 }
 impl AttnDescriptor {
@@ -2980,30 +3150,59 @@ impl AttnDescriptor {
     #[allow(clippy::too_many_arguments)]
     pub fn set(
         &self,
-        attn_mode: u32, n_heads: i32, sm_scaler: f64,
-        data_type: DType, compute_prec: DType, math_type: MathType,
-        attn_dropout: &DropoutDescriptor, post_dropout: &DropoutDescriptor,
-        q_size: i32, k_size: i32, v_size: i32,
-        q_proj_size: i32, k_proj_size: i32, v_proj_size: i32, o_proj_size: i32,
-        qo_max_seq_length: i32, kv_max_seq_length: i32,
-        max_batch_size: i32, max_beam_size: i32,
+        attn_mode: u32,
+        n_heads: i32,
+        sm_scaler: f64,
+        data_type: DType,
+        compute_prec: DType,
+        math_type: MathType,
+        attn_dropout: &DropoutDescriptor,
+        post_dropout: &DropoutDescriptor,
+        q_size: i32,
+        k_size: i32,
+        v_size: i32,
+        q_proj_size: i32,
+        k_proj_size: i32,
+        v_proj_size: i32,
+        o_proj_size: i32,
+        qo_max_seq_length: i32,
+        kv_max_seq_length: i32,
+        max_batch_size: i32,
+        max_beam_size: i32,
     ) -> Result<()> {
         let c = cudnn()?;
         let f = c.cudnn_set_attn_descriptor()?;
         check(unsafe {
-            f(self.desc, attn_mode, n_heads, sm_scaler,
-              data_type.raw(), compute_prec.raw(), math_type.raw(),
-              attn_dropout.desc, post_dropout.desc,
-              q_size, k_size, v_size,
-              q_proj_size, k_proj_size, v_proj_size, o_proj_size,
-              qo_max_seq_length, kv_max_seq_length,
-              max_batch_size, max_beam_size)
+            f(
+                self.desc,
+                attn_mode,
+                n_heads,
+                sm_scaler,
+                data_type.raw(),
+                compute_prec.raw(),
+                math_type.raw(),
+                attn_dropout.desc,
+                post_dropout.desc,
+                q_size,
+                k_size,
+                v_size,
+                q_proj_size,
+                k_proj_size,
+                v_proj_size,
+                o_proj_size,
+                qo_max_seq_length,
+                kv_max_seq_length,
+                max_batch_size,
+                max_beam_size,
+            )
         })
     }
 
     /// Raw descriptor.
     #[inline]
-    pub fn as_raw(&self) -> cudnnAttnDescriptor_t { self.desc }
+    pub fn as_raw(&self) -> cudnnAttnDescriptor_t {
+        self.desc
+    }
 }
 impl Drop for AttnDescriptor {
     fn drop(&mut self) {
@@ -3017,7 +3216,8 @@ impl Drop for AttnDescriptor {
 
 /// Buffer requirements `(weights, work_space, reserve_space)`.
 pub fn multi_head_attn_buffers(
-    handle: &Handle, attn: &AttnDescriptor,
+    handle: &Handle,
+    attn: &AttnDescriptor,
 ) -> Result<(usize, usize, usize)> {
     let c = cudnn()?;
     let f = c.cudnn_get_multi_head_attn_buffers()?;
@@ -3033,7 +3233,9 @@ pub struct SeqDataDescriptor {
 unsafe impl Send for SeqDataDescriptor {}
 impl core::fmt::Debug for SeqDataDescriptor {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("SeqDataDescriptor").field("desc", &self.desc).finish_non_exhaustive()
+        f.debug_struct("SeqDataDescriptor")
+            .field("desc", &self.desc)
+            .finish_non_exhaustive()
     }
 }
 impl SeqDataDescriptor {
@@ -3053,23 +3255,32 @@ impl SeqDataDescriptor {
     pub unsafe fn set(
         &self,
         data_type: DType,
-        dim_a: &[i32], axes: &[i32], seq_length_array: &[i32],
+        dim_a: &[i32],
+        axes: &[i32],
+        seq_length_array: &[i32],
         padding_fill: *const core::ffi::c_void,
-    ) -> Result<()> { unsafe {
-        let c = cudnn()?;
-        let f = c.cudnn_set_seq_data_descriptor()?;
-        check(f(
-            self.desc, data_type.raw(),
-            dim_a.len() as core::ffi::c_int,
-            dim_a.as_ptr(), axes.as_ptr(),
-            seq_length_array.len(), seq_length_array.as_ptr(),
-            padding_fill,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cudnn()?;
+            let f = c.cudnn_set_seq_data_descriptor()?;
+            check(f(
+                self.desc,
+                data_type.raw(),
+                dim_a.len() as core::ffi::c_int,
+                dim_a.as_ptr(),
+                axes.as_ptr(),
+                seq_length_array.len(),
+                seq_length_array.as_ptr(),
+                padding_fill,
+            ))
+        }
+    }
 
     /// Raw descriptor.
     #[inline]
-    pub fn as_raw(&self) -> cudnnSeqDataDescriptor_t { self.desc }
+    pub fn as_raw(&self) -> cudnnSeqDataDescriptor_t {
+        self.desc
+    }
 }
 impl Drop for SeqDataDescriptor {
     fn drop(&mut self) {
@@ -3082,7 +3293,9 @@ impl Drop for SeqDataDescriptor {
 }
 
 /// Re-exports for callers that want raw type access.
-pub use baracuda_cudnn_sys::{cudnnMathType_t as RawMathType, cudnnReorderType_t as RawReorderType};
+pub use baracuda_cudnn_sys::{
+    cudnnMathType_t as RawMathType, cudnnReorderType_t as RawReorderType,
+};
 
 // ============================================================================
 // Tier 1 leftovers — 4-D descriptor readback + DropoutDescriptor get/restore
@@ -3094,8 +3307,14 @@ impl TensorDescriptor {
     #[allow(clippy::too_many_arguments)]
     pub fn new_4d_ex(
         dtype: DType,
-        n: i32, c: i32, h: i32, w: i32,
-        n_stride: i32, c_stride: i32, h_stride: i32, w_stride: i32,
+        n: i32,
+        c: i32,
+        h: i32,
+        w: i32,
+        n_stride: i32,
+        c_stride: i32,
+        h_stride: i32,
+        w_stride: i32,
     ) -> Result<Self> {
         let cu = cudnn()?;
         let create = cu.cudnn_create_tensor_descriptor()?;
@@ -3104,8 +3323,18 @@ impl TensorDescriptor {
         check(unsafe { create(&mut desc) })?;
         let this = Self { desc };
         check(unsafe {
-            set(this.desc, dtype.raw(), n, c, h, w,
-                n_stride, c_stride, h_stride, w_stride)
+            set(
+                this.desc,
+                dtype.raw(),
+                n,
+                c,
+                h,
+                w,
+                n_stride,
+                c_stride,
+                h_stride,
+                w_stride,
+            )
         })?;
         Ok(this)
     }
@@ -3120,8 +3349,10 @@ impl TensorDescriptor {
         let (mut n, mut c, mut h, mut w) = (0i32, 0i32, 0i32, 0i32);
         let (mut ns, mut cs, mut hs, mut ws) = (0i32, 0i32, 0i32, 0i32);
         check(unsafe {
-            f(self.desc, &mut dt, &mut n, &mut c, &mut h, &mut w,
-              &mut ns, &mut cs, &mut hs, &mut ws)
+            f(
+                self.desc, &mut dt, &mut n, &mut c, &mut h, &mut w, &mut ns, &mut cs, &mut hs,
+                &mut ws,
+            )
         })?;
         let dtype = match dt {
             cudnnDataType_t::Float => DType::F32,
@@ -3144,9 +3375,7 @@ impl FilterDescriptor {
         let mut dt = cudnnDataType_t::Float;
         let mut fmt = cudnnTensorFormat_t::Nchw;
         let (mut k, mut c, mut h, mut w) = (0i32, 0i32, 0i32, 0i32);
-        check(unsafe {
-            f(self.desc, &mut dt, &mut fmt, &mut k, &mut c, &mut h, &mut w)
-        })?;
+        check(unsafe { f(self.desc, &mut dt, &mut fmt, &mut k, &mut c, &mut h, &mut w) })?;
         let dtype = match dt {
             cudnnDataType_t::Float => DType::F32,
             cudnnDataType_t::Double => DType::F64,
@@ -3174,7 +3403,15 @@ impl DropoutDescriptor {
         let mut dropout: f32 = 0.0;
         let mut states: *mut core::ffi::c_void = core::ptr::null_mut();
         let mut seed: u64 = 0;
-        check(unsafe { f(self.desc, handle.handle, &mut dropout, &mut states, &mut seed) })?;
+        check(unsafe {
+            f(
+                self.desc,
+                handle.handle,
+                &mut dropout,
+                &mut states,
+                &mut seed,
+            )
+        })?;
         Ok((dropout, states, seed))
     }
 
@@ -3185,13 +3422,26 @@ impl DropoutDescriptor {
     /// `states` must be a buffer of at least [`dropout_states_size`] bytes
     /// from the same `handle`, valid for the descriptor's lifetime.
     pub unsafe fn restore(
-        &self, handle: &Handle, dropout: f32,
-        states: *mut core::ffi::c_void, state_size: usize, seed: u64,
-    ) -> Result<()> { unsafe {
-        let cu = cudnn()?;
-        let f = cu.cudnn_restore_dropout_descriptor()?;
-        check(f(self.desc, handle.handle, dropout, states, state_size, seed))
-    }}
+        &self,
+        handle: &Handle,
+        dropout: f32,
+        states: *mut core::ffi::c_void,
+        state_size: usize,
+        seed: u64,
+    ) -> Result<()> {
+        unsafe {
+            let cu = cudnn()?;
+            let f = cu.cudnn_restore_dropout_descriptor()?;
+            check(f(
+                self.desc,
+                handle.handle,
+                dropout,
+                states,
+                state_size,
+                seed,
+            ))
+        }
+    }
 }
 
 // ============================================================================
@@ -3203,30 +3453,44 @@ impl DropoutDescriptor {
 #[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_forward_training_ex<T: DeviceRepr>(
     handle: &Handle,
-    mode: BatchNormMode, bn_ops: BnOp,
-    alpha: f32, beta: f32,
-    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
-    z_desc: &TensorDescriptor, z: &DeviceBuffer<T>,
-    y_desc: &TensorDescriptor, y: &mut DeviceBuffer<T>,
+    mode: BatchNormMode,
+    bn_ops: BnOp,
+    alpha: f32,
+    beta: f32,
+    x_desc: &TensorDescriptor,
+    x: &DeviceBuffer<T>,
+    z_desc: &TensorDescriptor,
+    z: &DeviceBuffer<T>,
+    y_desc: &TensorDescriptor,
+    y: &mut DeviceBuffer<T>,
     bn_smbv_desc: &TensorDescriptor,
-    bn_scale: &DeviceBuffer<T>, bn_bias: &DeviceBuffer<T>,
+    bn_scale: &DeviceBuffer<T>,
+    bn_bias: &DeviceBuffer<T>,
     exponential_avg_factor: f64,
-    running_mean: &mut DeviceBuffer<T>, running_var: &mut DeviceBuffer<T>,
+    running_mean: &mut DeviceBuffer<T>,
+    running_var: &mut DeviceBuffer<T>,
     epsilon: f64,
-    saved_mean: &mut DeviceBuffer<T>, saved_inv_var: &mut DeviceBuffer<T>,
+    saved_mean: &mut DeviceBuffer<T>,
+    saved_inv_var: &mut DeviceBuffer<T>,
     activation: &ActivationDescriptor,
-    workspace: &mut DeviceBuffer<u8>, reserve: &mut DeviceBuffer<u8>,
+    workspace: &mut DeviceBuffer<u8>,
+    reserve: &mut DeviceBuffer<u8>,
 ) -> Result<()> {
     let c = cudnn()?;
     let cu = c.cudnn_batch_normalization_forward_training_ex()?;
     check(unsafe {
         cu(
-            handle.handle, mode.raw(), bn_ops.raw(),
+            handle.handle,
+            mode.raw(),
+            bn_ops.raw(),
             &alpha as *const f32 as *const core::ffi::c_void,
             &beta as *const f32 as *const core::ffi::c_void,
-            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
-            z_desc.desc, z.as_raw().0 as *const core::ffi::c_void,
-            y_desc.desc, y.as_raw().0 as *mut core::ffi::c_void,
+            x_desc.desc,
+            x.as_raw().0 as *const core::ffi::c_void,
+            z_desc.desc,
+            z.as_raw().0 as *const core::ffi::c_void,
+            y_desc.desc,
+            y.as_raw().0 as *mut core::ffi::c_void,
             bn_smbv_desc.desc,
             bn_scale.as_raw().0 as *const core::ffi::c_void,
             bn_bias.as_raw().0 as *const core::ffi::c_void,
@@ -3237,8 +3501,10 @@ pub fn batch_normalization_forward_training_ex<T: DeviceRepr>(
             saved_mean.as_raw().0 as *mut core::ffi::c_void,
             saved_inv_var.as_raw().0 as *mut core::ffi::c_void,
             activation.desc,
-            workspace.as_raw().0 as *mut core::ffi::c_void, workspace.byte_size(),
-            reserve.as_raw().0 as *mut core::ffi::c_void, reserve.byte_size(),
+            workspace.as_raw().0 as *mut core::ffi::c_void,
+            workspace.byte_size(),
+            reserve.as_raw().0 as *mut core::ffi::c_void,
+            reserve.byte_size(),
         )
     })
 }
@@ -3247,36 +3513,55 @@ pub fn batch_normalization_forward_training_ex<T: DeviceRepr>(
 #[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_backward_ex<T: DeviceRepr>(
     handle: &Handle,
-    mode: BatchNormMode, bn_ops: BnOp,
-    alpha_data: f32, beta_data: f32,
-    alpha_param: f32, beta_param: f32,
-    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
-    y_desc: &TensorDescriptor, y: &DeviceBuffer<T>,
-    dy_desc: &TensorDescriptor, dy: &DeviceBuffer<T>,
-    dz_desc: &TensorDescriptor, dz: &mut DeviceBuffer<T>,
-    dx_desc: &TensorDescriptor, dx: &mut DeviceBuffer<T>,
+    mode: BatchNormMode,
+    bn_ops: BnOp,
+    alpha_data: f32,
+    beta_data: f32,
+    alpha_param: f32,
+    beta_param: f32,
+    x_desc: &TensorDescriptor,
+    x: &DeviceBuffer<T>,
+    y_desc: &TensorDescriptor,
+    y: &DeviceBuffer<T>,
+    dy_desc: &TensorDescriptor,
+    dy: &DeviceBuffer<T>,
+    dz_desc: &TensorDescriptor,
+    dz: &mut DeviceBuffer<T>,
+    dx_desc: &TensorDescriptor,
+    dx: &mut DeviceBuffer<T>,
     d_bn_scale_bias_desc: &TensorDescriptor,
-    bn_scale: &DeviceBuffer<T>, bn_bias: &DeviceBuffer<T>,
-    d_bn_scale: &mut DeviceBuffer<T>, d_bn_bias: &mut DeviceBuffer<T>,
+    bn_scale: &DeviceBuffer<T>,
+    bn_bias: &DeviceBuffer<T>,
+    d_bn_scale: &mut DeviceBuffer<T>,
+    d_bn_bias: &mut DeviceBuffer<T>,
     epsilon: f64,
-    saved_mean: &DeviceBuffer<T>, saved_inv_var: &DeviceBuffer<T>,
+    saved_mean: &DeviceBuffer<T>,
+    saved_inv_var: &DeviceBuffer<T>,
     activation: &ActivationDescriptor,
-    workspace: &mut DeviceBuffer<u8>, reserve: &mut DeviceBuffer<u8>,
+    workspace: &mut DeviceBuffer<u8>,
+    reserve: &mut DeviceBuffer<u8>,
 ) -> Result<()> {
     let c = cudnn()?;
     let cu = c.cudnn_batch_normalization_backward_ex()?;
     check(unsafe {
         cu(
-            handle.handle, mode.raw(), bn_ops.raw(),
+            handle.handle,
+            mode.raw(),
+            bn_ops.raw(),
             &alpha_data as *const f32 as *const core::ffi::c_void,
             &beta_data as *const f32 as *const core::ffi::c_void,
             &alpha_param as *const f32 as *const core::ffi::c_void,
             &beta_param as *const f32 as *const core::ffi::c_void,
-            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
-            y_desc.desc, y.as_raw().0 as *const core::ffi::c_void,
-            dy_desc.desc, dy.as_raw().0 as *const core::ffi::c_void,
-            dz_desc.desc, dz.as_raw().0 as *mut core::ffi::c_void,
-            dx_desc.desc, dx.as_raw().0 as *mut core::ffi::c_void,
+            x_desc.desc,
+            x.as_raw().0 as *const core::ffi::c_void,
+            y_desc.desc,
+            y.as_raw().0 as *const core::ffi::c_void,
+            dy_desc.desc,
+            dy.as_raw().0 as *const core::ffi::c_void,
+            dz_desc.desc,
+            dz.as_raw().0 as *mut core::ffi::c_void,
+            dx_desc.desc,
+            dx.as_raw().0 as *mut core::ffi::c_void,
             d_bn_scale_bias_desc.desc,
             bn_scale.as_raw().0 as *const core::ffi::c_void,
             bn_bias.as_raw().0 as *const core::ffi::c_void,
@@ -3286,8 +3571,10 @@ pub fn batch_normalization_backward_ex<T: DeviceRepr>(
             saved_mean.as_raw().0 as *const core::ffi::c_void,
             saved_inv_var.as_raw().0 as *const core::ffi::c_void,
             activation.desc,
-            workspace.as_raw().0 as *mut core::ffi::c_void, workspace.byte_size(),
-            reserve.as_raw().0 as *mut core::ffi::c_void, reserve.byte_size(),
+            workspace.as_raw().0 as *mut core::ffi::c_void,
+            workspace.byte_size(),
+            reserve.as_raw().0 as *mut core::ffi::c_void,
+            reserve.byte_size(),
         )
     })
 }
@@ -3300,36 +3587,52 @@ pub fn batch_normalization_backward_ex<T: DeviceRepr>(
 #[allow(clippy::too_many_arguments)]
 pub fn normalization_forward_inference<T: DeviceRepr>(
     handle: &Handle,
-    mode: NormMode, ops: NormOp, algo: NormAlgo,
-    alpha: f32, beta: f32,
-    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
+    mode: NormMode,
+    ops: NormOp,
+    algo: NormAlgo,
+    alpha: f32,
+    beta: f32,
+    x_desc: &TensorDescriptor,
+    x: &DeviceBuffer<T>,
     norm_scale_bias_desc: &TensorDescriptor,
-    norm_scale: &DeviceBuffer<T>, norm_bias: &DeviceBuffer<T>,
+    norm_scale: &DeviceBuffer<T>,
+    norm_bias: &DeviceBuffer<T>,
     norm_mean_var_desc: &TensorDescriptor,
-    estimated_mean: &DeviceBuffer<T>, estimated_var: &DeviceBuffer<T>,
-    z_desc: &TensorDescriptor, z: &DeviceBuffer<T>,
+    estimated_mean: &DeviceBuffer<T>,
+    estimated_var: &DeviceBuffer<T>,
+    z_desc: &TensorDescriptor,
+    z: &DeviceBuffer<T>,
     activation: &ActivationDescriptor,
-    y_desc: &TensorDescriptor, y: &mut DeviceBuffer<T>,
-    epsilon: f64, group_count: i32,
+    y_desc: &TensorDescriptor,
+    y: &mut DeviceBuffer<T>,
+    epsilon: f64,
+    group_count: i32,
 ) -> Result<()> {
     let c = cudnn()?;
     let cu = c.cudnn_normalization_forward_inference()?;
     check(unsafe {
         cu(
-            handle.handle, mode.raw(), ops.raw(), algo.raw(),
+            handle.handle,
+            mode.raw(),
+            ops.raw(),
+            algo.raw(),
             &alpha as *const f32 as *const core::ffi::c_void,
             &beta as *const f32 as *const core::ffi::c_void,
-            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
+            x_desc.desc,
+            x.as_raw().0 as *const core::ffi::c_void,
             norm_scale_bias_desc.desc,
             norm_scale.as_raw().0 as *const core::ffi::c_void,
             norm_bias.as_raw().0 as *const core::ffi::c_void,
             norm_mean_var_desc.desc,
             estimated_mean.as_raw().0 as *const core::ffi::c_void,
             estimated_var.as_raw().0 as *const core::ffi::c_void,
-            z_desc.desc, z.as_raw().0 as *const core::ffi::c_void,
+            z_desc.desc,
+            z.as_raw().0 as *const core::ffi::c_void,
             activation.desc,
-            y_desc.desc, y.as_raw().0 as *mut core::ffi::c_void,
-            epsilon, group_count,
+            y_desc.desc,
+            y.as_raw().0 as *mut core::ffi::c_void,
+            epsilon,
+            group_count,
         )
     })
 }
@@ -3338,19 +3641,35 @@ pub fn normalization_forward_inference<T: DeviceRepr>(
 #[allow(clippy::too_many_arguments)]
 pub fn normalization_forward_training_workspace_size(
     handle: &Handle,
-    mode: NormMode, ops: NormOp, algo: NormAlgo,
-    x_desc: &TensorDescriptor, z_desc: &TensorDescriptor,
-    y_desc: &TensorDescriptor, norm_scale_bias_desc: &TensorDescriptor,
-    activation: &ActivationDescriptor, norm_mean_var_desc: &TensorDescriptor,
+    mode: NormMode,
+    ops: NormOp,
+    algo: NormAlgo,
+    x_desc: &TensorDescriptor,
+    z_desc: &TensorDescriptor,
+    y_desc: &TensorDescriptor,
+    norm_scale_bias_desc: &TensorDescriptor,
+    activation: &ActivationDescriptor,
+    norm_mean_var_desc: &TensorDescriptor,
     group_count: i32,
 ) -> Result<usize> {
     let c = cudnn()?;
     let f = c.cudnn_get_normalization_forward_training_workspace_size()?;
     let mut size = 0usize;
     check(unsafe {
-        f(handle.handle, mode.raw(), ops.raw(), algo.raw(),
-          x_desc.desc, z_desc.desc, y_desc.desc, norm_scale_bias_desc.desc,
-          activation.desc, norm_mean_var_desc.desc, &mut size, group_count)
+        f(
+            handle.handle,
+            mode.raw(),
+            ops.raw(),
+            algo.raw(),
+            x_desc.desc,
+            z_desc.desc,
+            y_desc.desc,
+            norm_scale_bias_desc.desc,
+            activation.desc,
+            norm_mean_var_desc.desc,
+            &mut size,
+            group_count,
+        )
     })?;
     Ok(size)
 }
@@ -3359,21 +3678,39 @@ pub fn normalization_forward_training_workspace_size(
 #[allow(clippy::too_many_arguments)]
 pub fn normalization_backward_workspace_size(
     handle: &Handle,
-    mode: NormMode, ops: NormOp, algo: NormAlgo,
-    x_desc: &TensorDescriptor, y_desc: &TensorDescriptor,
-    dy_desc: &TensorDescriptor, dz_desc: &TensorDescriptor,
-    dx_desc: &TensorDescriptor, d_norm_scale_bias_desc: &TensorDescriptor,
-    activation: &ActivationDescriptor, norm_mean_var_desc: &TensorDescriptor,
+    mode: NormMode,
+    ops: NormOp,
+    algo: NormAlgo,
+    x_desc: &TensorDescriptor,
+    y_desc: &TensorDescriptor,
+    dy_desc: &TensorDescriptor,
+    dz_desc: &TensorDescriptor,
+    dx_desc: &TensorDescriptor,
+    d_norm_scale_bias_desc: &TensorDescriptor,
+    activation: &ActivationDescriptor,
+    norm_mean_var_desc: &TensorDescriptor,
     group_count: i32,
 ) -> Result<usize> {
     let c = cudnn()?;
     let f = c.cudnn_get_normalization_backward_workspace_size()?;
     let mut size = 0usize;
     check(unsafe {
-        f(handle.handle, mode.raw(), ops.raw(), algo.raw(),
-          x_desc.desc, y_desc.desc, dy_desc.desc, dz_desc.desc,
-          dx_desc.desc, d_norm_scale_bias_desc.desc,
-          activation.desc, norm_mean_var_desc.desc, &mut size, group_count)
+        f(
+            handle.handle,
+            mode.raw(),
+            ops.raw(),
+            algo.raw(),
+            x_desc.desc,
+            y_desc.desc,
+            dy_desc.desc,
+            dz_desc.desc,
+            dx_desc.desc,
+            d_norm_scale_bias_desc.desc,
+            activation.desc,
+            norm_mean_var_desc.desc,
+            &mut size,
+            group_count,
+        )
     })?;
     Ok(size)
 }
@@ -3381,16 +3718,27 @@ pub fn normalization_backward_workspace_size(
 /// Reserve-space bytes for the training fwd/bwd pair.
 pub fn normalization_training_reserve_space_size(
     handle: &Handle,
-    mode: NormMode, ops: NormOp, algo: NormAlgo,
-    activation: &ActivationDescriptor, x_desc: &TensorDescriptor,
+    mode: NormMode,
+    ops: NormOp,
+    algo: NormAlgo,
+    activation: &ActivationDescriptor,
+    x_desc: &TensorDescriptor,
     group_count: i32,
 ) -> Result<usize> {
     let c = cudnn()?;
     let f = c.cudnn_get_normalization_training_reserve_space_size()?;
     let mut size = 0usize;
     check(unsafe {
-        f(handle.handle, mode.raw(), ops.raw(), algo.raw(),
-          activation.desc, x_desc.desc, &mut size, group_count)
+        f(
+            handle.handle,
+            mode.raw(),
+            ops.raw(),
+            algo.raw(),
+            activation.desc,
+            x_desc.desc,
+            &mut size,
+            group_count,
+        )
     })?;
     Ok(size)
 }
@@ -3399,30 +3747,44 @@ pub fn normalization_training_reserve_space_size(
 #[allow(clippy::too_many_arguments)]
 pub fn normalization_forward_training<T: DeviceRepr>(
     handle: &Handle,
-    mode: NormMode, ops: NormOp, algo: NormAlgo,
-    alpha: f32, beta: f32,
-    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
+    mode: NormMode,
+    ops: NormOp,
+    algo: NormAlgo,
+    alpha: f32,
+    beta: f32,
+    x_desc: &TensorDescriptor,
+    x: &DeviceBuffer<T>,
     norm_scale_bias_desc: &TensorDescriptor,
-    norm_scale: &DeviceBuffer<T>, norm_bias: &DeviceBuffer<T>,
+    norm_scale: &DeviceBuffer<T>,
+    norm_bias: &DeviceBuffer<T>,
     exponential_avg_factor: f64,
     norm_mean_var_desc: &TensorDescriptor,
-    running_mean: &mut DeviceBuffer<T>, running_var: &mut DeviceBuffer<T>,
+    running_mean: &mut DeviceBuffer<T>,
+    running_var: &mut DeviceBuffer<T>,
     epsilon: f64,
-    saved_mean: &mut DeviceBuffer<T>, saved_inv_var: &mut DeviceBuffer<T>,
+    saved_mean: &mut DeviceBuffer<T>,
+    saved_inv_var: &mut DeviceBuffer<T>,
     activation: &ActivationDescriptor,
-    z_desc: &TensorDescriptor, z: &DeviceBuffer<T>,
-    y_desc: &TensorDescriptor, y: &mut DeviceBuffer<T>,
-    workspace: &mut DeviceBuffer<u8>, reserve: &mut DeviceBuffer<u8>,
+    z_desc: &TensorDescriptor,
+    z: &DeviceBuffer<T>,
+    y_desc: &TensorDescriptor,
+    y: &mut DeviceBuffer<T>,
+    workspace: &mut DeviceBuffer<u8>,
+    reserve: &mut DeviceBuffer<u8>,
     group_count: i32,
 ) -> Result<()> {
     let c = cudnn()?;
     let cu = c.cudnn_normalization_forward_training()?;
     check(unsafe {
         cu(
-            handle.handle, mode.raw(), ops.raw(), algo.raw(),
+            handle.handle,
+            mode.raw(),
+            ops.raw(),
+            algo.raw(),
             &alpha as *const f32 as *const core::ffi::c_void,
             &beta as *const f32 as *const core::ffi::c_void,
-            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
+            x_desc.desc,
+            x.as_raw().0 as *const core::ffi::c_void,
             norm_scale_bias_desc.desc,
             norm_scale.as_raw().0 as *const core::ffi::c_void,
             norm_bias.as_raw().0 as *const core::ffi::c_void,
@@ -3434,10 +3796,14 @@ pub fn normalization_forward_training<T: DeviceRepr>(
             saved_mean.as_raw().0 as *mut core::ffi::c_void,
             saved_inv_var.as_raw().0 as *mut core::ffi::c_void,
             activation.desc,
-            z_desc.desc, z.as_raw().0 as *const core::ffi::c_void,
-            y_desc.desc, y.as_raw().0 as *mut core::ffi::c_void,
-            workspace.as_raw().0 as *mut core::ffi::c_void, workspace.byte_size(),
-            reserve.as_raw().0 as *mut core::ffi::c_void, reserve.byte_size(),
+            z_desc.desc,
+            z.as_raw().0 as *const core::ffi::c_void,
+            y_desc.desc,
+            y.as_raw().0 as *mut core::ffi::c_void,
+            workspace.as_raw().0 as *mut core::ffi::c_void,
+            workspace.byte_size(),
+            reserve.as_raw().0 as *mut core::ffi::c_void,
+            reserve.byte_size(),
             group_count,
         )
     })
@@ -3447,38 +3813,59 @@ pub fn normalization_forward_training<T: DeviceRepr>(
 #[allow(clippy::too_many_arguments)]
 pub fn normalization_backward<T: DeviceRepr>(
     handle: &Handle,
-    mode: NormMode, ops: NormOp, algo: NormAlgo,
-    alpha_data: f32, beta_data: f32,
-    alpha_param: f32, beta_param: f32,
-    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
-    y_desc: &TensorDescriptor, y: &DeviceBuffer<T>,
-    dy_desc: &TensorDescriptor, dy: &DeviceBuffer<T>,
-    dz_desc: &TensorDescriptor, dz: &mut DeviceBuffer<T>,
-    dx_desc: &TensorDescriptor, dx: &mut DeviceBuffer<T>,
+    mode: NormMode,
+    ops: NormOp,
+    algo: NormAlgo,
+    alpha_data: f32,
+    beta_data: f32,
+    alpha_param: f32,
+    beta_param: f32,
+    x_desc: &TensorDescriptor,
+    x: &DeviceBuffer<T>,
+    y_desc: &TensorDescriptor,
+    y: &DeviceBuffer<T>,
+    dy_desc: &TensorDescriptor,
+    dy: &DeviceBuffer<T>,
+    dz_desc: &TensorDescriptor,
+    dz: &mut DeviceBuffer<T>,
+    dx_desc: &TensorDescriptor,
+    dx: &mut DeviceBuffer<T>,
     d_norm_scale_bias_desc: &TensorDescriptor,
-    norm_scale: &DeviceBuffer<T>, norm_bias: &DeviceBuffer<T>,
-    d_norm_scale: &mut DeviceBuffer<T>, d_norm_bias: &mut DeviceBuffer<T>,
+    norm_scale: &DeviceBuffer<T>,
+    norm_bias: &DeviceBuffer<T>,
+    d_norm_scale: &mut DeviceBuffer<T>,
+    d_norm_bias: &mut DeviceBuffer<T>,
     epsilon: f64,
     norm_mean_var_desc: &TensorDescriptor,
-    saved_mean: &DeviceBuffer<T>, saved_inv_var: &DeviceBuffer<T>,
+    saved_mean: &DeviceBuffer<T>,
+    saved_inv_var: &DeviceBuffer<T>,
     activation: &ActivationDescriptor,
-    workspace: &mut DeviceBuffer<u8>, reserve: &mut DeviceBuffer<u8>,
+    workspace: &mut DeviceBuffer<u8>,
+    reserve: &mut DeviceBuffer<u8>,
     group_count: i32,
 ) -> Result<()> {
     let c = cudnn()?;
     let cu = c.cudnn_normalization_backward()?;
     check(unsafe {
         cu(
-            handle.handle, mode.raw(), ops.raw(), algo.raw(),
+            handle.handle,
+            mode.raw(),
+            ops.raw(),
+            algo.raw(),
             &alpha_data as *const f32 as *const core::ffi::c_void,
             &beta_data as *const f32 as *const core::ffi::c_void,
             &alpha_param as *const f32 as *const core::ffi::c_void,
             &beta_param as *const f32 as *const core::ffi::c_void,
-            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
-            y_desc.desc, y.as_raw().0 as *const core::ffi::c_void,
-            dy_desc.desc, dy.as_raw().0 as *const core::ffi::c_void,
-            dz_desc.desc, dz.as_raw().0 as *mut core::ffi::c_void,
-            dx_desc.desc, dx.as_raw().0 as *mut core::ffi::c_void,
+            x_desc.desc,
+            x.as_raw().0 as *const core::ffi::c_void,
+            y_desc.desc,
+            y.as_raw().0 as *const core::ffi::c_void,
+            dy_desc.desc,
+            dy.as_raw().0 as *const core::ffi::c_void,
+            dz_desc.desc,
+            dz.as_raw().0 as *mut core::ffi::c_void,
+            dx_desc.desc,
+            dx.as_raw().0 as *mut core::ffi::c_void,
             d_norm_scale_bias_desc.desc,
             norm_scale.as_raw().0 as *const core::ffi::c_void,
             norm_bias.as_raw().0 as *const core::ffi::c_void,
@@ -3489,8 +3876,10 @@ pub fn normalization_backward<T: DeviceRepr>(
             saved_mean.as_raw().0 as *const core::ffi::c_void,
             saved_inv_var.as_raw().0 as *const core::ffi::c_void,
             activation.desc,
-            workspace.as_raw().0 as *mut core::ffi::c_void, workspace.byte_size(),
-            reserve.as_raw().0 as *mut core::ffi::c_void, reserve.byte_size(),
+            workspace.as_raw().0 as *mut core::ffi::c_void,
+            workspace.byte_size(),
+            reserve.as_raw().0 as *mut core::ffi::c_void,
+            reserve.byte_size(),
             group_count,
         )
     })
@@ -3518,16 +3907,23 @@ pub unsafe fn get_multi_head_attn_weights(
     weight_size_in_bytes: usize,
     weights: *const core::ffi::c_void,
     w_desc: &TensorDescriptor,
-) -> Result<*mut core::ffi::c_void> { unsafe {
-    let c = cudnn()?;
-    let f = c.cudnn_get_multi_head_attn_weights()?;
-    let mut addr: *mut core::ffi::c_void = core::ptr::null_mut();
-    check(f(
-        handle.handle, attn.desc, w_kind, weight_size_in_bytes, weights,
-        w_desc.desc, &mut addr,
-    ))?;
-    Ok(addr)
-}}
+) -> Result<*mut core::ffi::c_void> {
+    unsafe {
+        let c = cudnn()?;
+        let f = c.cudnn_get_multi_head_attn_weights()?;
+        let mut addr: *mut core::ffi::c_void = core::ptr::null_mut();
+        check(f(
+            handle.handle,
+            attn.desc,
+            w_kind,
+            weight_size_in_bytes,
+            weights,
+            w_desc.desc,
+            &mut addr,
+        ))?;
+        Ok(addr)
+    }
+}
 
 /// Forward multi-head attention. The huge parameter list mirrors cuDNN's
 /// `cudnnMultiHeadAttnForward` exactly; see the cuDNN reference for the
@@ -3546,30 +3942,48 @@ pub unsafe fn multi_head_attn_forward(
     hi_win_idx: &[i32],
     dev_seq_lengths_qo: *const i32,
     dev_seq_lengths_kv: *const i32,
-    q_desc: &SeqDataDescriptor, queries: *const core::ffi::c_void,
+    q_desc: &SeqDataDescriptor,
+    queries: *const core::ffi::c_void,
     residuals: *const core::ffi::c_void,
-    k_desc: &SeqDataDescriptor, keys: *const core::ffi::c_void,
-    v_desc: &SeqDataDescriptor, values: *const core::ffi::c_void,
-    o_desc: &SeqDataDescriptor, out: *mut core::ffi::c_void,
+    k_desc: &SeqDataDescriptor,
+    keys: *const core::ffi::c_void,
+    v_desc: &SeqDataDescriptor,
+    values: *const core::ffi::c_void,
+    o_desc: &SeqDataDescriptor,
+    out: *mut core::ffi::c_void,
     weights: &DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> { unsafe {
-    let c = cudnn()?;
-    let f = c.cudnn_multi_head_attn_forward()?;
-    check(f(
-        handle.handle, attn.desc,
-        curr_idx, lo_win_idx.as_ptr(), hi_win_idx.as_ptr(),
-        dev_seq_lengths_qo, dev_seq_lengths_kv,
-        q_desc.desc, queries, residuals,
-        k_desc.desc, keys,
-        v_desc.desc, values,
-        o_desc.desc, out,
-        weights.byte_size(), weights.as_raw().0 as *const core::ffi::c_void,
-        work_space.byte_size(), work_space.as_raw().0 as *mut core::ffi::c_void,
-        reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cudnn()?;
+        let f = c.cudnn_multi_head_attn_forward()?;
+        check(f(
+            handle.handle,
+            attn.desc,
+            curr_idx,
+            lo_win_idx.as_ptr(),
+            hi_win_idx.as_ptr(),
+            dev_seq_lengths_qo,
+            dev_seq_lengths_kv,
+            q_desc.desc,
+            queries,
+            residuals,
+            k_desc.desc,
+            keys,
+            v_desc.desc,
+            values,
+            o_desc.desc,
+            out,
+            weights.byte_size(),
+            weights.as_raw().0 as *const core::ffi::c_void,
+            work_space.byte_size(),
+            work_space.as_raw().0 as *mut core::ffi::c_void,
+            reserve_space.byte_size(),
+            reserve_space.as_raw().0 as *mut core::ffi::c_void,
+        ))
+    }
+}
 
 /// Multi-head attention backward — data path (gradients w.r.t. Q/K/V).
 ///
@@ -3583,32 +3997,51 @@ pub unsafe fn multi_head_attn_backward_data(
     hi_win_idx: &[i32],
     dev_seq_lengths_dqdo: *const i32,
     dev_seq_lengths_dkdv: *const i32,
-    do_desc: &SeqDataDescriptor, dout: *const core::ffi::c_void,
-    dq_desc: &SeqDataDescriptor, dqueries: *mut core::ffi::c_void,
+    do_desc: &SeqDataDescriptor,
+    dout: *const core::ffi::c_void,
+    dq_desc: &SeqDataDescriptor,
+    dqueries: *mut core::ffi::c_void,
     queries: *const core::ffi::c_void,
-    dk_desc: &SeqDataDescriptor, dkeys: *mut core::ffi::c_void,
+    dk_desc: &SeqDataDescriptor,
+    dkeys: *mut core::ffi::c_void,
     keys: *const core::ffi::c_void,
-    dv_desc: &SeqDataDescriptor, dvalues: *mut core::ffi::c_void,
+    dv_desc: &SeqDataDescriptor,
+    dvalues: *mut core::ffi::c_void,
     values: *const core::ffi::c_void,
     weights: &DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> { unsafe {
-    let c = cudnn()?;
-    let f = c.cudnn_multi_head_attn_backward_data()?;
-    check(f(
-        handle.handle, attn.desc,
-        lo_win_idx.as_ptr(), hi_win_idx.as_ptr(),
-        dev_seq_lengths_dqdo, dev_seq_lengths_dkdv,
-        do_desc.desc, dout,
-        dq_desc.desc, dqueries, queries,
-        dk_desc.desc, dkeys, keys,
-        dv_desc.desc, dvalues, values,
-        weights.byte_size(), weights.as_raw().0 as *const core::ffi::c_void,
-        work_space.byte_size(), work_space.as_raw().0 as *mut core::ffi::c_void,
-        reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cudnn()?;
+        let f = c.cudnn_multi_head_attn_backward_data()?;
+        check(f(
+            handle.handle,
+            attn.desc,
+            lo_win_idx.as_ptr(),
+            hi_win_idx.as_ptr(),
+            dev_seq_lengths_dqdo,
+            dev_seq_lengths_dkdv,
+            do_desc.desc,
+            dout,
+            dq_desc.desc,
+            dqueries,
+            queries,
+            dk_desc.desc,
+            dkeys,
+            keys,
+            dv_desc.desc,
+            dvalues,
+            values,
+            weights.byte_size(),
+            weights.as_raw().0 as *const core::ffi::c_void,
+            work_space.byte_size(),
+            work_space.as_raw().0 as *mut core::ffi::c_void,
+            reserve_space.byte_size(),
+            reserve_space.as_raw().0 as *mut core::ffi::c_void,
+        ))
+    }
+}
 
 /// Multi-head attention backward — weights path (gradient w.r.t. Q/K/V/O
 /// projection weights). Pass `add_grad = true` to accumulate into
@@ -3621,29 +4054,44 @@ pub unsafe fn multi_head_attn_backward_weights(
     handle: &Handle,
     attn: &AttnDescriptor,
     add_grad: bool,
-    q_desc: &SeqDataDescriptor, queries: *const core::ffi::c_void,
-    k_desc: &SeqDataDescriptor, keys: *const core::ffi::c_void,
-    v_desc: &SeqDataDescriptor, values: *const core::ffi::c_void,
-    do_desc: &SeqDataDescriptor, dout: *const core::ffi::c_void,
+    q_desc: &SeqDataDescriptor,
+    queries: *const core::ffi::c_void,
+    k_desc: &SeqDataDescriptor,
+    keys: *const core::ffi::c_void,
+    v_desc: &SeqDataDescriptor,
+    values: *const core::ffi::c_void,
+    do_desc: &SeqDataDescriptor,
+    dout: *const core::ffi::c_void,
     weights: &DeviceBuffer<u8>,
     dweights: &mut DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> { unsafe {
-    let c = cudnn()?;
-    let f = c.cudnn_multi_head_attn_backward_weights()?;
-    check(f(
-        handle.handle, attn.desc, add_grad as core::ffi::c_int,
-        q_desc.desc, queries,
-        k_desc.desc, keys,
-        v_desc.desc, values,
-        do_desc.desc, dout,
-        weights.byte_size(), weights.as_raw().0 as *const core::ffi::c_void,
-        dweights.as_raw().0 as *mut core::ffi::c_void,
-        work_space.byte_size(), work_space.as_raw().0 as *mut core::ffi::c_void,
-        reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cudnn()?;
+        let f = c.cudnn_multi_head_attn_backward_weights()?;
+        check(f(
+            handle.handle,
+            attn.desc,
+            add_grad as core::ffi::c_int,
+            q_desc.desc,
+            queries,
+            k_desc.desc,
+            keys,
+            v_desc.desc,
+            values,
+            do_desc.desc,
+            dout,
+            weights.byte_size(),
+            weights.as_raw().0 as *const core::ffi::c_void,
+            dweights.as_raw().0 as *mut core::ffi::c_void,
+            work_space.byte_size(),
+            work_space.as_raw().0 as *mut core::ffi::c_void,
+            reserve_space.byte_size(),
+            reserve_space.as_raw().0 as *mut core::ffi::c_void,
+        ))
+    }
+}
 
 // ============================================================================
 // Tier 4 (cont.) - RNN v8 forward + backward (data + weights)
@@ -3667,8 +4115,10 @@ pub unsafe fn rnn_forward(
     rnn: &RnnDescriptor,
     fwd_mode: i32,
     dev_seq_lengths: *const i32,
-    x_desc: &RnnDataDescriptor, x: *const core::ffi::c_void,
-    y_desc: &RnnDataDescriptor, y: *mut core::ffi::c_void,
+    x_desc: &RnnDataDescriptor,
+    x: *const core::ffi::c_void,
+    y_desc: &RnnDataDescriptor,
+    y: *mut core::ffi::c_void,
     h_desc: &TensorDescriptor,
     hx: *const core::ffi::c_void,
     hy: *mut core::ffi::c_void,
@@ -3678,20 +4128,34 @@ pub unsafe fn rnn_forward(
     weight_space: &DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> { unsafe {
-    let c = cudnn()?;
-    let f = c.cudnn_rnn_forward()?;
-    check(f(
-        handle.handle, rnn.desc, fwd_mode, dev_seq_lengths,
-        x_desc.desc, x,
-        y_desc.desc, y,
-        h_desc.desc, hx, hy,
-        c_desc.desc, cx, cy,
-        weight_space.byte_size(), weight_space.as_raw().0 as *const core::ffi::c_void,
-        work_space.byte_size(),   work_space.as_raw().0 as *mut core::ffi::c_void,
-        reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cudnn()?;
+        let f = c.cudnn_rnn_forward()?;
+        check(f(
+            handle.handle,
+            rnn.desc,
+            fwd_mode,
+            dev_seq_lengths,
+            x_desc.desc,
+            x,
+            y_desc.desc,
+            y,
+            h_desc.desc,
+            hx,
+            hy,
+            c_desc.desc,
+            cx,
+            cy,
+            weight_space.byte_size(),
+            weight_space.as_raw().0 as *const core::ffi::c_void,
+            work_space.byte_size(),
+            work_space.as_raw().0 as *mut core::ffi::c_void,
+            reserve_space.byte_size(),
+            reserve_space.as_raw().0 as *mut core::ffi::c_void,
+        ))
+    }
+}
 
 /// RNN backward — data path (gradients w.r.t. inputs and initial states).
 ///
@@ -3720,20 +4184,36 @@ pub unsafe fn rnn_backward_data_v8(
     weight_space: &DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> { unsafe {
-    let c = cudnn()?;
-    let f = c.cudnn_rnn_backward_data_v8()?;
-    check(f(
-        handle.handle, rnn.desc, dev_seq_lengths,
-        y_desc.desc, y, dy,
-        x_desc.desc, dx,
-        h_desc.desc, hx, dhy, dhx,
-        c_desc.desc, cx, dcy, dcx,
-        weight_space.byte_size(), weight_space.as_raw().0 as *const core::ffi::c_void,
-        work_space.byte_size(),   work_space.as_raw().0 as *mut core::ffi::c_void,
-        reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cudnn()?;
+        let f = c.cudnn_rnn_backward_data_v8()?;
+        check(f(
+            handle.handle,
+            rnn.desc,
+            dev_seq_lengths,
+            y_desc.desc,
+            y,
+            dy,
+            x_desc.desc,
+            dx,
+            h_desc.desc,
+            hx,
+            dhy,
+            dhx,
+            c_desc.desc,
+            cx,
+            dcy,
+            dcx,
+            weight_space.byte_size(),
+            weight_space.as_raw().0 as *const core::ffi::c_void,
+            work_space.byte_size(),
+            work_space.as_raw().0 as *mut core::ffi::c_void,
+            reserve_space.byte_size(),
+            reserve_space.as_raw().0 as *mut core::ffi::c_void,
+        ))
+    }
+}
 
 /// RNN backward — weights path (gradients w.r.t. the weight space).
 /// `add_grad = true` accumulates into `dweight_space` (typical for
@@ -3747,22 +4227,36 @@ pub unsafe fn rnn_backward_weights_v8(
     rnn: &RnnDescriptor,
     add_grad: bool,
     dev_seq_lengths: *const i32,
-    x_desc: &RnnDataDescriptor, x: *const core::ffi::c_void,
-    h_desc: &TensorDescriptor,  hx: *const core::ffi::c_void,
-    y_desc: &RnnDataDescriptor, y: *const core::ffi::c_void,
+    x_desc: &RnnDataDescriptor,
+    x: *const core::ffi::c_void,
+    h_desc: &TensorDescriptor,
+    hx: *const core::ffi::c_void,
+    y_desc: &RnnDataDescriptor,
+    y: *const core::ffi::c_void,
     dweight_space: &mut DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> { unsafe {
-    let c = cudnn()?;
-    let f = c.cudnn_rnn_backward_weights_v8()?;
-    check(f(
-        handle.handle, rnn.desc, add_grad as core::ffi::c_int, dev_seq_lengths,
-        x_desc.desc, x,
-        h_desc.desc, hx,
-        y_desc.desc, y,
-        dweight_space.byte_size(), dweight_space.as_raw().0 as *mut core::ffi::c_void,
-        work_space.byte_size(),    work_space.as_raw().0 as *mut core::ffi::c_void,
-        reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c = cudnn()?;
+        let f = c.cudnn_rnn_backward_weights_v8()?;
+        check(f(
+            handle.handle,
+            rnn.desc,
+            add_grad as core::ffi::c_int,
+            dev_seq_lengths,
+            x_desc.desc,
+            x,
+            h_desc.desc,
+            hx,
+            y_desc.desc,
+            y,
+            dweight_space.byte_size(),
+            dweight_space.as_raw().0 as *mut core::ffi::c_void,
+            work_space.byte_size(),
+            work_space.as_raw().0 as *mut core::ffi::c_void,
+            reserve_space.byte_size(),
+            reserve_space.as_raw().0 as *mut core::ffi::c_void,
+        ))
+    }
+}

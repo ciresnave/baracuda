@@ -1,11 +1,11 @@
 //! Real-GPU smoke test for `CrossEntropyLossBackwardPlan`. BW × 4 dtypes × Mean.
 //! `dinput[i, c] = (softmax(input)[i, c] - 1{c == t[i]}) · dy / N`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, CrossEntropyLossBackwardArgs, CrossEntropyLossBackwardDescriptor,
-    CrossEntropyLossBackwardPlan, CrossEntropyTargetKind, ElementKind, LossReduction,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    CrossEntropyLossBackwardArgs, CrossEntropyLossBackwardDescriptor, CrossEntropyLossBackwardPlan,
+    CrossEntropyTargetKind, ElementKind, LossReduction, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -83,12 +83,9 @@ fn loss_cross_entropy_backward_f32_mean() {
         target_kind: CrossEntropyTargetKind::ClassIndex,
         element: ElementKind::F32,
     };
-    let plan = CrossEntropyLossBackwardPlan::<f32>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        CrossEntropyLossBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
@@ -104,7 +101,11 @@ fn loss_cross_entropy_backward_f32_mean() {
                 stride: contiguous_stride([n_rows]),
             }),
             soft_target: None,
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape: [n_rows, class_extent],
@@ -118,8 +119,12 @@ fn loss_cross_entropy_backward_f32_mean() {
     dev_di.copy_to_host(&mut got).unwrap();
     for i in 0..got.len() {
         let tol = expected[i].abs() * 32.0 * f32::EPSILON + 1e-5;
-        assert!((got[i] - expected[i]).abs() <= tol, "f32 CE BW @{i}: got={} want={}",
-            got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 CE BW @{i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -155,12 +160,9 @@ fn loss_cross_entropy_backward_f64_mean() {
         target_kind: CrossEntropyTargetKind::ClassIndex,
         element: ElementKind::F64,
     };
-    let plan = CrossEntropyLossBackwardPlan::<f64>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        CrossEntropyLossBackwardPlan::<f64>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
@@ -176,7 +178,11 @@ fn loss_cross_entropy_backward_f64_mean() {
                 stride: contiguous_stride([n_rows]),
             }),
             soft_target: None,
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape: [n_rows, class_extent],
@@ -230,12 +236,9 @@ fn loss_cross_entropy_backward_f16_mean() {
         target_kind: CrossEntropyTargetKind::ClassIndex,
         element: ElementKind::F16,
     };
-    let plan = CrossEntropyLossBackwardPlan::<f16>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        CrossEntropyLossBackwardPlan::<f16>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
@@ -251,7 +254,11 @@ fn loss_cross_entropy_backward_f16_mean() {
                 stride: contiguous_stride([n_rows]),
             }),
             soft_target: None,
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape: [n_rows, class_extent],
@@ -266,8 +273,12 @@ fn loss_cross_entropy_backward_f16_mean() {
     for i in 0..got.len() {
         let tol = expected[i].abs() * 32.0 * 9.77e-4_f32 + 5e-3;
         let g = got[i].to_f32();
-        assert!((g - expected[i]).abs() <= tol, "f16 CE BW @{i}: got={} want={}",
-            g, expected[i]);
+        assert!(
+            (g - expected[i]).abs() <= tol,
+            "f16 CE BW @{i}: got={} want={}",
+            g,
+            expected[i]
+        );
     }
 }
 
@@ -307,12 +318,9 @@ fn loss_cross_entropy_backward_bf16_mean() {
         target_kind: CrossEntropyTargetKind::ClassIndex,
         element: ElementKind::Bf16,
     };
-    let plan = CrossEntropyLossBackwardPlan::<bf16>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        CrossEntropyLossBackwardPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
@@ -328,7 +336,11 @@ fn loss_cross_entropy_backward_bf16_mean() {
                 stride: contiguous_stride([n_rows]),
             }),
             soft_target: None,
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape: [n_rows, class_extent],

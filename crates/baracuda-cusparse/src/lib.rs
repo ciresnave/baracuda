@@ -112,9 +112,8 @@ use baracuda_types::{Complex32, Complex64};
 
 pub use baracuda_cusparse_sys::{
     cusparseCsr2CscAlg_t as Csr2CscAlg, cusparseIndexBase_t as IndexBase,
-    cusparseSDDMMAlg_t as SDDMMAlg, cusparseSpGEMMAlg_t as SpGEMMAlg,
-    cusparseSpMMAlg_t as SpMMAlg, cusparseSpMVAlg_t as SpMVAlg, cusparseSpSMAlg_t as SpSMAlg,
-    cusparseSpSVAlg_t as SpSVAlg,
+    cusparseSDDMMAlg_t as SDDMMAlg, cusparseSpGEMMAlg_t as SpGEMMAlg, cusparseSpMMAlg_t as SpMMAlg,
+    cusparseSpMVAlg_t as SpMVAlg, cusparseSpSMAlg_t as SpSMAlg, cusparseSpSVAlg_t as SpSVAlg,
 };
 
 /// Error type for cuSPARSE operations.
@@ -493,11 +492,13 @@ impl<T> SpMat<'_, T> {
         row_offsets: *mut c_void,
         col_indices: *mut c_void,
         values: *mut c_void,
-    ) -> Result<()> { unsafe {
-        let c = cusparse()?;
-        let cu = c.cusparse_csr_set_pointers()?;
-        check(cu(self.descr, row_offsets, col_indices, values))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cusparse()?;
+            let cu = c.cusparse_csr_set_pointers()?;
+            check(cu(self.descr, row_offsets, col_indices, values))
+        }
+    }
 
     /// Rebind a CSC descriptor's underlying device pointers.
     ///
@@ -509,11 +510,13 @@ impl<T> SpMat<'_, T> {
         col_offsets: *mut c_void,
         row_indices: *mut c_void,
         values: *mut c_void,
-    ) -> Result<()> { unsafe {
-        let c = cusparse()?;
-        let cu = c.cusparse_csc_set_pointers()?;
-        check(cu(self.descr, col_offsets, row_indices, values))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cusparse()?;
+            let cu = c.cusparse_csc_set_pointers()?;
+            check(cu(self.descr, col_offsets, row_indices, values))
+        }
+    }
 
     /// Rebind a COO descriptor's underlying device pointers.
     ///
@@ -525,11 +528,13 @@ impl<T> SpMat<'_, T> {
         row_indices: *mut c_void,
         col_indices: *mut c_void,
         values: *mut c_void,
-    ) -> Result<()> { unsafe {
-        let c = cusparse()?;
-        let cu = c.cusparse_coo_set_pointers()?;
-        check(cu(self.descr, row_indices, col_indices, values))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cusparse()?;
+            let cu = c.cusparse_coo_set_pointers()?;
+            check(cu(self.descr, row_indices, col_indices, values))
+        }
+    }
 
     /// Set the fill-triangle attribute (for triangular solves).
     pub fn set_fill(&self, fill: Fill) -> Result<()> {
@@ -930,25 +935,27 @@ pub unsafe fn spgemm_work_estimation<T: SparseScalar>(
     plan: &SpGEMMPlan,
     size1: &mut usize,
     buffer1: *mut c_void,
-) -> Result<()> { unsafe {
-    let c_api = cusparse()?;
-    let cu = c_api.cusparse_spgemm_work_estimation()?;
-    check(cu(
-        handle.as_raw(),
-        op_a.raw(),
-        op_b.raw(),
-        alpha as *const T as *const c_void,
-        a.descr,
-        b.descr,
-        beta as *const T as *const c_void,
-        c.descr,
-        T::data_type(),
-        alg,
-        plan.raw,
-        size1,
-        buffer1,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c_api = cusparse()?;
+        let cu = c_api.cusparse_spgemm_work_estimation()?;
+        check(cu(
+            handle.as_raw(),
+            op_a.raw(),
+            op_b.raw(),
+            alpha as *const T as *const c_void,
+            a.descr,
+            b.descr,
+            beta as *const T as *const c_void,
+            c.descr,
+            T::data_type(),
+            alg,
+            plan.raw,
+            size1,
+            buffer1,
+        ))
+    }
+}
 
 /// Phase 2: compute. Same two-step pattern for `buffer2`.
 ///
@@ -971,25 +978,27 @@ pub unsafe fn spgemm_compute<T: SparseScalar>(
     plan: &SpGEMMPlan,
     size2: &mut usize,
     buffer2: *mut c_void,
-) -> Result<()> { unsafe {
-    let c_api = cusparse()?;
-    let cu = c_api.cusparse_spgemm_compute()?;
-    check(cu(
-        handle.as_raw(),
-        op_a.raw(),
-        op_b.raw(),
-        alpha as *const T as *const c_void,
-        a.descr,
-        b.descr,
-        beta as *const T as *const c_void,
-        c.descr,
-        T::data_type(),
-        alg,
-        plan.raw,
-        size2,
-        buffer2,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let c_api = cusparse()?;
+        let cu = c_api.cusparse_spgemm_compute()?;
+        check(cu(
+            handle.as_raw(),
+            op_a.raw(),
+            op_b.raw(),
+            alpha as *const T as *const c_void,
+            a.descr,
+            b.descr,
+            beta as *const T as *const c_void,
+            c.descr,
+            T::data_type(),
+            alg,
+            plan.raw,
+            size2,
+            buffer2,
+        ))
+    }
+}
 
 /// Phase 3: write output arrays into the pre-populated output `SpMat`.
 #[allow(clippy::too_many_arguments)]

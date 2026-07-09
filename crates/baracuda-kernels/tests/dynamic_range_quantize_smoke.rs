@@ -14,11 +14,11 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, DynamicRangeMode, DynamicRangeQuantizeArgs,
-    DynamicRangeQuantizeDescriptor, DynamicRangeQuantizePlan, DynamicRangeScope, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace, S8,
+    DynamicRangeMode, DynamicRangeQuantizeArgs, DynamicRangeQuantizeDescriptor,
+    DynamicRangeQuantizePlan, DynamicRangeScope, ElementKind, PlanPreference, S8, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -47,11 +47,7 @@ fn cpu_dynamic_range_quantize_per_token_symmetric(
                 max_abs = v;
             }
         }
-        let s = if max_abs > 0.0 {
-            max_abs / qmaxf
-        } else {
-            1.0
-        };
+        let s = if max_abs > 0.0 { max_abs / qmaxf } else { 1.0 };
         scale[row] = s;
         let inv_s = if s != 0.0 { 1.0 / s } else { 0.0 };
         for col in 0..d {
@@ -72,10 +68,7 @@ fn dynamic_range_quantize_f32_s8_per_token_symmetric_basic() {
     let d: i32 = 4;
     // Row 0: dense around small range; max_abs = 0.30 → scale ≈ 0.30/127.
     // Row 1: includes a large value 12.5 → scale ≈ 12.5/127 ≈ 0.0984.
-    let host_x: Vec<f32> = vec![
-        0.05, 0.15, -0.07, 0.30,
-        12.5, 1.0, -0.25, 4.0,
-    ];
+    let host_x: Vec<f32> = vec![0.05, 0.15, -0.07, 0.30, 12.5, 1.0, -0.25, 4.0];
     let qmin: i32 = -127;
     let qmax: i32 = 127;
     let (expected_scale, expected_q) =
@@ -127,7 +120,11 @@ fn dynamic_range_quantize_f32_s8_per_token_symmetric_basic() {
     for row in 0..(n as usize) {
         let g = got_scale[row];
         let e = expected_scale[row];
-        let rel = if e != 0.0 { (g - e).abs() / e.abs() } else { (g - e).abs() };
+        let rel = if e != 0.0 {
+            (g - e).abs() / e.abs()
+        } else {
+            (g - e).abs()
+        };
         assert!(
             rel < 1e-6,
             "scale row {row} mismatch: got {g} expected {e} (rel {rel})"

@@ -13,10 +13,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test sdpa_strided_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SdpaArgs, SdpaDescriptor, SdpaPlan, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, PlanPreference, SdpaArgs, SdpaDescriptor, SdpaPlan, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::f16;
 

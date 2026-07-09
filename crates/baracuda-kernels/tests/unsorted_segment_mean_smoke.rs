@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `UnsortedSegmentMeanPlan<T>` (Phase 7 7.6).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef,
-    UnsortedSegmentMeanArgs, UnsortedSegmentMeanDescriptor, UnsortedSegmentMeanPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnsortedSegmentMeanArgs,
+    UnsortedSegmentMeanDescriptor, UnsortedSegmentMeanPlan, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -49,8 +49,7 @@ fn unsorted_segment_mean_f32_scrambled() {
     let mut dev_out: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (ns * d) as usize).expect("alloc out");
     let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, (ns as usize) * core::mem::size_of::<i32>())
-            .expect("alloc ws");
+        DeviceBuffer::zeros(&ctx, (ns as usize) * core::mem::size_of::<i32>()).expect("alloc ws");
 
     let desc = UnsortedSegmentMeanDescriptor {
         num_inputs: n,

@@ -30,9 +30,12 @@ pub struct DequantizePerTensorBackwardDescriptor {
     pub output_element: ElementKind,
 }
 
-impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug for DequantizePerTensorBackwardArgs<'a, TIn, TOut> {
+impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug
+    for DequantizePerTensorBackwardArgs<'a, TIn, TOut>
+{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("DequantizePerTensorBackwardArgs").finish_non_exhaustive()
+        f.debug_struct("DequantizePerTensorBackwardArgs")
+            .finish_non_exhaustive()
     }
 }
 
@@ -166,8 +169,13 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorBackwardPlan<TIn, TOut> 
             let scale_f64 = args.scale.to_f64();
             unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_backward_f64_run(
-                    numel, scale_f64, dy_ptr, dq_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    scale_f64,
+                    dy_ptr,
+                    dq_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             }
         } else {
@@ -175,25 +183,42 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorBackwardPlan<TIn, TOut> 
             match TIn::KIND {
                 ElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_backward_f32_run(
-                        numel, scale_f32, dy_ptr, dq_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        dy_ptr,
+                        dq_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_backward_f16_run(
-                        numel, scale_f32, dy_ptr, dq_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        dy_ptr,
+                        dq_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_backward_bf16_run(
-                        numel, scale_f32, dy_ptr, dq_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        dy_ptr,
+                        dq_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
-                _ => return Err(Error::Unsupported(
-                    "DequantizePerTensorBackwardPlan: unsupported TIn at run()",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "DequantizePerTensorBackwardPlan: unsupported TIn at run()",
+                    ));
+                }
             }
         };
         map_status(status)

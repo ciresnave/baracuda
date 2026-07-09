@@ -1,8 +1,8 @@
 //! GPU-gated integration test for Wave-22 Driver-API additions:
 //! user objects attached to graphs.
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use baracuda_driver::user_object::UserObject;
 use baracuda_driver::{Context, Device, Graph};

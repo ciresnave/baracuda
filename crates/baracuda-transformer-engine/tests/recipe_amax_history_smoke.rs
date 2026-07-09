@@ -78,7 +78,11 @@ fn recipe_advances_with_wrap_around() {
     // check that the recipe still has a non-zero scale after stabilizing.
     let scale = recipe.scale_host(&stream).expect("scale");
     let scale_inv = recipe.scale_inv_host(&stream).expect("scale_inv");
-    assert!(scale.is_finite() && scale > 0.0, "scale not finite: {}", scale);
+    assert!(
+        scale.is_finite() && scale > 0.0,
+        "scale not finite: {}",
+        scale
+    );
     assert!(
         scale_inv.is_finite() && scale_inv > 0.0,
         "scale_inv not finite: {}",
@@ -89,7 +93,8 @@ fn recipe_advances_with_wrap_around() {
     let prod = scale * scale_inv;
     assert!(
         (prod - 1.0).abs() < 1e-5,
-        "scale * scale_inv = {} (expected ~1.0)", prod,
+        "scale * scale_inv = {} (expected ~1.0)",
+        prod,
     );
 }
 

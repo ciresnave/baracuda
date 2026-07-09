@@ -13,11 +13,11 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test rope_strided_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RopeArgs, RopeBackwardArgs,
+    ElementKind, PlanPreference, ROPE_DEFAULT_BASE, RopeArgs, RopeBackwardArgs,
     RopeBackwardDescriptor, RopeBackwardPlan, RopeDescriptor, RopePlan, TensorMut, TensorRef,
-    Workspace, ROPE_DEFAULT_BASE,
+    Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -52,9 +52,8 @@ fn host_rope_ref_f32(
         for h in 0..heads {
             for s in 0..seq {
                 let pos = positions.map(|p| p[s]).unwrap_or(s as i64) as f32;
-                let x_outer = (b as i64) * stride_x[0]
-                    + (h as i64) * stride_x[1]
-                    + (s as i64) * stride_x[2];
+                let x_outer =
+                    (b as i64) * stride_x[0] + (h as i64) * stride_x[1] + (s as i64) * stride_x[2];
                 for pair in 0..(head_dim / 2) {
                     let d_even = pair * 2;
                     let d_odd = d_even + 1;
@@ -167,7 +166,7 @@ fn rope_strided_transposed_view_f32() {
     //   stride_s = H*D          (was second from innermost outer dim)
     //   stride_d = 1
     let s_h_d = (heads * head_dim) as i64;
-    let h_d   = head_dim as i64;
+    let h_d = head_dim as i64;
     let s_phys_b: i64 = (seq as i64) * s_h_d;
     let stride_x: [i64; 4] = [s_phys_b, h_d, s_h_d, 1];
     let host_x: Vec<f32> = (0..numel)
@@ -298,7 +297,7 @@ fn rope_strided_transposed_f16() {
     let base = ROPE_DEFAULT_BASE;
     // Physical [B, S, H, D] view as [B, H, S, D]
     let s_h_d = (heads * head_dim) as i64;
-    let h_d   = head_dim as i64;
+    let h_d = head_dim as i64;
     let s_phys_b: i64 = (seq as i64) * s_h_d;
     let stride_x: [i64; 4] = [s_phys_b, h_d, s_h_d, 1];
     let host_x_f32: Vec<f32> = (0..numel)
@@ -376,7 +375,7 @@ fn rope_strided_backward_transposed_f32() {
     let base = ROPE_DEFAULT_BASE;
     // Physical [B, S, H, D] view as [B, H, S, D]
     let s_h_d = (heads * head_dim) as i64;
-    let h_d   = head_dim as i64;
+    let h_d = head_dim as i64;
     let s_phys_b: i64 = (seq as i64) * s_h_d;
     let stride_dy: [i64; 4] = [s_phys_b, h_d, s_h_d, 1];
     // CPU reference: same shape FW with reversed-sign sin (BW)

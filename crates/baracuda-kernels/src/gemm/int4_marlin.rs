@@ -410,9 +410,17 @@ unsafe fn dispatch_marlin<T: MarlinActivation>(
 // signature: call sites use turbofish (`dispatch_marlin::<T>`).
 #[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_marlin<T: MarlinActivation>(
-    _: i32, _: i32, _: i32,
-    _: *const c_void, _: *const c_void, _: *mut c_void, _: *const c_void,
-    _: *mut c_void, _: i32, _: i32, _: *mut c_void,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: *const c_void,
+    _: *const c_void,
+    _: *mut c_void,
+    _: *const c_void,
+    _: *mut c_void,
+    _: i32,
+    _: i32,
+    _: *mut c_void,
 ) -> i32 {
     // marlin cargo feature is off; FFI symbol absent.
     3

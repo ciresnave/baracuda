@@ -12,12 +12,12 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BatchedOrmqrArgs, BatchedOrmqrDescriptor, BatchedOrmqrOp, BatchedOrmqrPlan,
-    BatchedOrmqrSide, BatchedOrmqrWyArgs, BatchedOrmqrWyDescriptor, BatchedOrmqrWyPlan,
-    BatchedQrArgs, BatchedQrDescriptor, BatchedQrPlan, Complex32, Complex64, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BatchedOrmqrArgs, BatchedOrmqrDescriptor, BatchedOrmqrOp, BatchedOrmqrPlan, BatchedOrmqrSide,
+    BatchedOrmqrWyArgs, BatchedOrmqrWyDescriptor, BatchedOrmqrWyPlan, BatchedQrArgs,
+    BatchedQrDescriptor, BatchedQrPlan, Complex32, Complex64, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 #[allow(dead_code)]
@@ -412,11 +412,15 @@ fn ormqr_batched_wy_f32_left_n() {
 
     let op = BatchedOrmqrOp::N;
     let wy = wy_ormqr_f32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
-    let reference =
-        ref_ormqr_f32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
+    let reference = ref_ormqr_f32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
     // WY uses GEMM accumulation — tighter bound than the reflector path.
     let tol = 16.0 * f32::EPSILON;
-    check_f32(&wy, &reference, tol, &format!("f32 wy_ormqr op={}", fmt_op(op)));
+    check_f32(
+        &wy,
+        &reference,
+        tol,
+        &format!("f32 wy_ormqr op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -429,10 +433,14 @@ fn ormqr_batched_wy_f32_left_t() {
 
     let op = BatchedOrmqrOp::T;
     let wy = wy_ormqr_f32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
-    let reference =
-        ref_ormqr_f32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
+    let reference = ref_ormqr_f32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
     let tol = 16.0 * f32::EPSILON;
-    check_f32(&wy, &reference, tol, &format!("f32 wy_ormqr op={}", fmt_op(op)));
+    check_f32(
+        &wy,
+        &reference,
+        tol,
+        &format!("f32 wy_ormqr op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -445,10 +453,14 @@ fn ormqr_batched_wy_f64_left_n() {
 
     let op = BatchedOrmqrOp::N;
     let wy = wy_ormqr_f64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
-    let reference =
-        ref_ormqr_f64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
+    let reference = ref_ormqr_f64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
     let tol = 32.0 * f64::EPSILON;
-    check_f64(&wy, &reference, tol, &format!("f64 wy_ormqr op={}", fmt_op(op)));
+    check_f64(
+        &wy,
+        &reference,
+        tol,
+        &format!("f64 wy_ormqr op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -461,10 +473,14 @@ fn ormqr_batched_wy_f64_left_t() {
 
     let op = BatchedOrmqrOp::T;
     let wy = wy_ormqr_f64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
-    let reference =
-        ref_ormqr_f64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
+    let reference = ref_ormqr_f64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
     let tol = 32.0 * f64::EPSILON;
-    check_f64(&wy, &reference, tol, &format!("f64 wy_ormqr op={}", fmt_op(op)));
+    check_f64(
+        &wy,
+        &reference,
+        tol,
+        &format!("f64 wy_ormqr op={}", fmt_op(op)),
+    );
 }
 
 // =============================================================================
@@ -799,7 +815,10 @@ fn check_complex32(got: &[Complex32], expected: &[Complex32], tol: f32, label: &
             d_re <= t && d_im <= t,
             "{label}: cell {i}: got=({}, {}), expected=({}, {}), \
              d_re={d_re}, d_im={d_im}, tol={t}",
-            g.re, g.im, e.re, e.im,
+            g.re,
+            g.im,
+            e.re,
+            e.im,
         );
     }
 }
@@ -815,7 +834,10 @@ fn check_complex64(got: &[Complex64], expected: &[Complex64], tol: f64, label: &
             d_re <= t && d_im <= t,
             "{label}: cell {i}: got=({}, {}), expected=({}, {}), \
              d_re={d_re}, d_im={d_im}, tol={t}",
-            g.re, g.im, e.re, e.im,
+            g.re,
+            g.im,
+            e.re,
+            e.im,
         );
     }
 }
@@ -830,8 +852,7 @@ fn ormqr_batched_wy_complex32_left_n() {
 
     let op = BatchedOrmqrOp::N;
     let wy = wy_ormqr_complex32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
-    let reference =
-        ref_ormqr_complex32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
+    let reference = ref_ormqr_complex32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
     // Complex GEMM accumulation is slightly noisier than real; pad the
     // tolerance to 32·ε (still tight by GEMM standards).
     let tol = 32.0 * f32::EPSILON;
@@ -853,8 +874,7 @@ fn ormqr_batched_wy_complex32_left_c() {
 
     let op = BatchedOrmqrOp::C;
     let wy = wy_ormqr_complex32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
-    let reference =
-        ref_ormqr_complex32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
+    let reference = ref_ormqr_complex32(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
     let tol = 32.0 * f32::EPSILON;
     check_complex32(
         &wy,
@@ -874,8 +894,7 @@ fn ormqr_batched_wy_complex64_left_n() {
 
     let op = BatchedOrmqrOp::N;
     let wy = wy_ormqr_complex64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
-    let reference =
-        ref_ormqr_complex64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
+    let reference = ref_ormqr_complex64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
     let tol = 64.0 * f64::EPSILON;
     check_complex64(
         &wy,
@@ -895,8 +914,7 @@ fn ormqr_batched_wy_complex64_left_c() {
 
     let op = BatchedOrmqrOp::C;
     let wy = wy_ormqr_complex64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
-    let reference =
-        ref_ormqr_complex64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
+    let reference = ref_ormqr_complex64(&ctx, &stream, &a_packed, &tau, &c_init, B, M, N, K, op);
     let tol = 64.0 * f64::EPSILON;
     check_complex64(
         &wy,

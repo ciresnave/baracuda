@@ -7,7 +7,7 @@ use core::ffi::c_void;
 use baracuda_cuda_sys::runtime::{cudaEvent_t, runtime};
 use baracuda_cuda_sys::types::{CUipcEventHandle, CUipcMemHandle};
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::event::Event;
 
 /// Export a CUDA event for sharing with another process.

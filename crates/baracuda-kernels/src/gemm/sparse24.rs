@@ -160,18 +160,21 @@ impl<T: Element> GemmSparse24Plan<T> {
         {
             let probe = unsafe {
                 match T::KIND {
-                    ElementKind::F32 =>
+                    ElementKind::F32 => {
                         baracuda_kernels_sys::baracuda_kernels_gemm_f32_sparse24_gemm_can_implement(
                             desc.n, desc.m, desc.k,
-                        ),
-                    ElementKind::F16 =>
+                        )
+                    }
+                    ElementKind::F16 => {
                         baracuda_kernels_sys::baracuda_kernels_gemm_f16_sparse24_gemm_can_implement(
                             desc.n, desc.m, desc.k,
-                        ),
-                    ElementKind::Bf16 =>
+                        )
+                    }
+                    ElementKind::Bf16 => {
                         baracuda_kernels_sys::baracuda_kernels_gemm_bf16_sparse24_gemm_can_implement(
                             desc.n, desc.m, desc.k,
-                        ),
+                        )
+                    }
                     _ => 3,
                 }
             };
@@ -241,9 +244,7 @@ impl<T: Element> GemmSparse24Plan<T> {
     /// dense W.
     #[inline]
     pub fn workspace_size(&self) -> usize {
-        (self.desc.m as usize)
-            * (self.desc.k as usize)
-            * core::mem::size_of::<T>()
+        (self.desc.m as usize) * (self.desc.k as usize) * core::mem::size_of::<T>()
     }
 
     /// SKU identity.
@@ -274,18 +275,12 @@ impl<T: Element> GemmSparse24Plan<T> {
             let needed = self.workspace_size();
             let (ws_ptr, ws_bytes) = match workspace {
                 Workspace::None => {
-                    return Err(Error::WorkspaceTooSmall {
-                        needed,
-                        got: 0,
-                    });
+                    return Err(Error::WorkspaceTooSmall { needed, got: 0 });
                 }
                 Workspace::Borrowed(bytes) => {
                     let got = bytes.len();
                     if got < needed {
-                        return Err(Error::WorkspaceTooSmall {
-                            needed,
-                            got,
-                        });
+                        return Err(Error::WorkspaceTooSmall { needed, got });
                     }
                     (bytes.as_raw().0 as *mut c_void, got as u64)
                 }
@@ -297,27 +292,53 @@ impl<T: Element> GemmSparse24Plan<T> {
             let y_ptr = args.y.data.as_raw().0 as *mut c_void;
             let status = unsafe {
                 match T::KIND {
-                    ElementKind::F32 =>
+                    ElementKind::F32 => {
                         baracuda_kernels_sys::baracuda_kernels_gemm_f32_sparse24_gemm_run(
-                            self.desc.n, self.desc.m, self.desc.k,
-                            x_ptr, wc_ptr, wm_ptr, y_ptr,
-                            ws_ptr, ws_bytes, stream_ptr,
-                        ),
-                    ElementKind::F16 =>
+                            self.desc.n,
+                            self.desc.m,
+                            self.desc.k,
+                            x_ptr,
+                            wc_ptr,
+                            wm_ptr,
+                            y_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::F16 => {
                         baracuda_kernels_sys::baracuda_kernels_gemm_f16_sparse24_gemm_run(
-                            self.desc.n, self.desc.m, self.desc.k,
-                            x_ptr, wc_ptr, wm_ptr, y_ptr,
-                            ws_ptr, ws_bytes, stream_ptr,
-                        ),
-                    ElementKind::Bf16 =>
+                            self.desc.n,
+                            self.desc.m,
+                            self.desc.k,
+                            x_ptr,
+                            wc_ptr,
+                            wm_ptr,
+                            y_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::Bf16 => {
                         baracuda_kernels_sys::baracuda_kernels_gemm_bf16_sparse24_gemm_run(
-                            self.desc.n, self.desc.m, self.desc.k,
-                            x_ptr, wc_ptr, wm_ptr, y_ptr,
-                            ws_ptr, ws_bytes, stream_ptr,
-                        ),
-                    _ => return Err(Error::Unsupported(
-                        "baracuda-kernels::GemmSparse24Plan::run reached an unimplemented dtype",
-                    )),
+                            self.desc.n,
+                            self.desc.m,
+                            self.desc.k,
+                            x_ptr,
+                            wc_ptr,
+                            wm_ptr,
+                            y_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
+                        )
+                    }
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::GemmSparse24Plan::run reached an unimplemented dtype",
+                        ));
+                    }
                 }
             };
             super::super::attention::map_status_pub(status)

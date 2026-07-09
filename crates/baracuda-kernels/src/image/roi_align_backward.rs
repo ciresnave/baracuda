@@ -137,7 +137,12 @@ impl<T: Element> RoiAlignBackwardPlan<T> {
     /// Validate args.
     pub fn can_implement(&self, args: &RoiAlignBackwardArgs<'_, T>) -> Result<()> {
         if args.dout.shape
-            != [self.desc.num_rois, self.desc.c, self.desc.pooled_h, self.desc.pooled_w]
+            != [
+                self.desc.num_rois,
+                self.desc.c,
+                self.desc.pooled_h,
+                self.desc.pooled_w,
+            ]
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiAlignBackwardPlan: dout shape mismatch",
@@ -193,20 +198,42 @@ impl<T: Element> RoiAlignBackwardPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_roi_align_backward_f32_run(
-                    self.desc.n, self.desc.c, self.desc.h, self.desc.w,
-                    self.desc.num_rois, self.desc.pooled_h, self.desc.pooled_w,
-                    self.desc.spatial_scale, self.desc.sampling_ratio, aligned,
-                    dout_ptr, rois_ptr, din_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.h,
+                    self.desc.w,
+                    self.desc.num_rois,
+                    self.desc.pooled_h,
+                    self.desc.pooled_w,
+                    self.desc.spatial_scale,
+                    self.desc.sampling_ratio,
+                    aligned,
+                    dout_ptr,
+                    rois_ptr,
+                    din_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_roi_align_backward_f64_run(
-                    self.desc.n, self.desc.c, self.desc.h, self.desc.w,
-                    self.desc.num_rois, self.desc.pooled_h, self.desc.pooled_w,
-                    self.desc.spatial_scale, self.desc.sampling_ratio, aligned,
-                    dout_ptr, rois_ptr, din_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.h,
+                    self.desc.w,
+                    self.desc.num_rois,
+                    self.desc.pooled_h,
+                    self.desc.pooled_w,
+                    self.desc.spatial_scale,
+                    self.desc.sampling_ratio,
+                    aligned,
+                    dout_ptr,
+                    rois_ptr,
+                    din_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

@@ -253,7 +253,7 @@ pub type PFN_cudaFreeAsync =
 
 // ---- Graphs + stream capture ---------------------------------------------
 
-use super::types::{cudaGraphExec_t, cudaGraphNode_t, cudaGraph_t};
+use super::types::{cudaGraph_t, cudaGraphExec_t, cudaGraphNode_t};
 
 /// Function-pointer type for the Runtime API entry-point `cudaGraphCreate`.
 pub type PFN_cudaGraphCreate =
@@ -480,8 +480,8 @@ pub type PFN_cudaWaitExternalSemaphoresAsync = unsafe extern "C" fn(
 
 use super::types::{
     cudaHostFn_t, cudaHostNodeParams, cudaKernelNodeParams, cudaMemAccessDesc,
-    cudaMemAllocNodeParams, cudaMemLocation, cudaMemPoolProps, cudaMemPoolPtrExportData,
-    cudaMemPool_t, cudaMemsetParams,
+    cudaMemAllocNodeParams, cudaMemLocation, cudaMemPool_t, cudaMemPoolProps,
+    cudaMemPoolPtrExportData, cudaMemsetParams,
 };
 
 /// Function-pointer type for the Runtime API entry-point `cudaLaunchHostFunc`.

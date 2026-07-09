@@ -12,7 +12,7 @@
 //! ```
 
 use baracuda_runtime::{
-    device_synchronize, driver_version, query::device_properties, runtime_version, Device,
+    Device, device_synchronize, driver_version, query::device_properties, runtime_version,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

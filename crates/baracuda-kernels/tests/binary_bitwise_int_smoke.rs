@@ -15,10 +15,10 @@
 //! `#[ignore]` by default; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 // =============================================================================
@@ -74,8 +74,7 @@ fn run_case_i32(kind: BinaryKind, shape: [i32; 2]) {
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload B");
-    let mut dev_y: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc Y");
+    let mut dev_y: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc Y");
 
     let stride = contiguous_stride(shape);
     let desc = BinaryDescriptor {
@@ -86,11 +85,24 @@ fn run_case_i32(kind: BinaryKind, shape: [i32; 2]) {
     let plan = BinaryPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<i32, 2>");
     let args = BinaryArgs::<i32, 2> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("binary bitwise i32 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("binary bitwise i32 run");
     stream.synchronize().expect("stream sync");
 
     let mut host_got = vec![0i32; numel];
@@ -163,8 +175,7 @@ fn run_case_i64(kind: BinaryKind, shape: [i32; 2]) {
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload B");
-    let mut dev_y: DeviceBuffer<i64> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc Y");
+    let mut dev_y: DeviceBuffer<i64> = DeviceBuffer::zeros(&ctx, numel).expect("alloc Y");
 
     let stride = contiguous_stride(shape);
     let desc = BinaryDescriptor {
@@ -175,11 +186,24 @@ fn run_case_i64(kind: BinaryKind, shape: [i32; 2]) {
     let plan = BinaryPlan::<i64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<i64, 2>");
     let args = BinaryArgs::<i64, 2> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("binary bitwise i64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("binary bitwise i64 run");
     stream.synchronize().expect("stream sync");
 
     let mut host_got = vec![0i64; numel];

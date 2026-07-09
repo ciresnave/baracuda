@@ -35,7 +35,7 @@ use baracuda_kernels_types::{
 };
 
 use super::im2col::{build_im2col_sku, map_im2col_status};
-use super::im2col1d::{compute_im2col_1d_l_out, validate_im2col_1d, Im2Col1dDescriptor};
+use super::im2col1d::{Im2Col1dDescriptor, compute_im2col_1d_l_out, validate_im2col_1d};
 
 /// Descriptor for `Col2Im1d`. The `kl` / `stride_l` / `pad_l` /
 /// `dilation_l` / `l_in` fields must match the original
@@ -113,12 +113,12 @@ impl<T: Element> Col2Im1dPlan<T> {
             element: desc.element,
         };
         validate_im2col_1d::<T>(&im2col_desc).map_err(|e| match e {
-            Error::Unsupported(_) => Error::Unsupported(
-                "baracuda-kernels::Col2Im1dPlan: dtype/descriptor unsupported",
-            ),
-            Error::InvalidProblem(_) => Error::InvalidProblem(
-                "baracuda-kernels::Col2Im1dPlan: invalid problem dimensions",
-            ),
+            Error::Unsupported(_) => {
+                Error::Unsupported("baracuda-kernels::Col2Im1dPlan: dtype/descriptor unsupported")
+            }
+            Error::InvalidProblem(_) => {
+                Error::InvalidProblem("baracuda-kernels::Col2Im1dPlan: invalid problem dimensions")
+            }
             other => other,
         })?;
         let l_out = compute_im2col_1d_l_out(&im2col_desc).map_err(|_| {
@@ -172,30 +172,62 @@ impl<T: Element> Col2Im1dPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_col2im_1d_f32_run(
-                    d.batch, d.channels, d.l_in, self.l_out,
-                    d.kl, d.stride_l, d.pad_l, d.dilation_l,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.l_in,
+                    self.l_out,
+                    d.kl,
+                    d.stride_l,
+                    d.pad_l,
+                    d.dilation_l,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_col2im_1d_f64_run(
-                    d.batch, d.channels, d.l_in, self.l_out,
-                    d.kl, d.stride_l, d.pad_l, d.dilation_l,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.l_in,
+                    self.l_out,
+                    d.kl,
+                    d.stride_l,
+                    d.pad_l,
+                    d.dilation_l,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_col2im_1d_f16_run(
-                    d.batch, d.channels, d.l_in, self.l_out,
-                    d.kl, d.stride_l, d.pad_l, d.dilation_l,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.l_in,
+                    self.l_out,
+                    d.kl,
+                    d.stride_l,
+                    d.pad_l,
+                    d.dilation_l,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_col2im_1d_bf16_run(
-                    d.batch, d.channels, d.l_in, self.l_out,
-                    d.kl, d.stride_l, d.pad_l, d.dilation_l,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.l_in,
+                    self.l_out,
+                    d.kl,
+                    d.stride_l,
+                    d.pad_l,
+                    d.dilation_l,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             _ => {
@@ -208,7 +240,11 @@ impl<T: Element> Col2Im1dPlan<T> {
     }
 
     fn check_args(&self, args: &Col2Im1dArgs<'_, T>) -> Result<()> {
-        let in_shape = [self.desc.batch, self.desc.channels * self.desc.kl, self.l_out];
+        let in_shape = [
+            self.desc.batch,
+            self.desc.channels * self.desc.kl,
+            self.l_out,
+        ];
         let out_shape = [self.desc.batch, self.desc.channels, self.desc.l_in];
         if args.input.shape != in_shape {
             return Err(Error::InvalidProblem(

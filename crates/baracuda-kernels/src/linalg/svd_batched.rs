@@ -27,10 +27,11 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cusolverDnCreate, cusolverDnCreateGesvdjInfo, cusolverDnDestroy, cusolverDnDestroyGesvdjInfo,
+    CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR, cusolverDnCreate,
+    cusolverDnCreateGesvdjInfo, cusolverDnDestroy, cusolverDnDestroyGesvdjInfo,
     cusolverDnDgesvdjBatched, cusolverDnDgesvdjBatched_bufferSize, cusolverDnHandle_t,
     cusolverDnSetStream, cusolverDnSgesvdjBatched, cusolverDnSgesvdjBatched_bufferSize,
-    gesvdjInfo_t, CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR,
+    gesvdjInfo_t,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,

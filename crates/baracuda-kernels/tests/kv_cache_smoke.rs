@@ -9,10 +9,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, KvCacheAppendArgs, KvCacheAppendDescriptor,
-    KvCacheAppendPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, KvCacheAppendArgs, KvCacheAppendDescriptor, KvCacheAppendPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -51,8 +51,7 @@ fn cpu_kv_cache_append<T: Copy>(
                     continue;
                 }
                 let src_base = ((b * heads + h) * new_len + l) * d;
-                let dst_base =
-                    ((b * heads + h) * max_cache_len + cache_pos as usize) * d;
+                let dst_base = ((b * heads + h) * max_cache_len + cache_pos as usize) * d;
                 for di in 0..d {
                     cache_buf[dst_base + di] = new_buf[src_base + di];
                 }
@@ -100,29 +99,20 @@ fn run_case<T>(
     // Host buffers in target dtype
     let k_new_t: Vec<T> = k_new_f32.iter().map(|&v| to_t(v)).collect();
     let v_new_t: Vec<T> = v_new_f32.iter().map(|&v| to_t(v)).collect();
-    let k_cache_init_t: Vec<T> =
-        k_cache_init_f32.iter().map(|&v| to_t(v)).collect();
-    let v_cache_init_t: Vec<T> =
-        v_cache_init_f32.iter().map(|&v| to_t(v)).collect();
+    let k_cache_init_t: Vec<T> = k_cache_init_f32.iter().map(|&v| to_t(v)).collect();
+    let v_cache_init_t: Vec<T> = v_cache_init_f32.iter().map(|&v| to_t(v)).collect();
 
     // Build expected cache via host reference
     let mut expected_k = k_cache_init_t.clone();
     let mut expected_v = v_cache_init_t.clone();
-    cpu_kv_cache_append(
-        b, h, l_new, l_max, d_k, &k_new_t, &mut expected_k, offsets,
-    );
-    cpu_kv_cache_append(
-        b, h, l_new, l_max, d_v, &v_new_t, &mut expected_v, offsets,
-    );
+    cpu_kv_cache_append(b, h, l_new, l_max, d_k, &k_new_t, &mut expected_k, offsets);
+    cpu_kv_cache_append(b, h, l_new, l_max, d_v, &v_new_t, &mut expected_v, offsets);
 
     let dev_k_new = DeviceBuffer::from_slice(&ctx, &k_new_t).expect("up k_new");
     let dev_v_new = DeviceBuffer::from_slice(&ctx, &v_new_t).expect("up v_new");
-    let dev_offsets =
-        DeviceBuffer::from_slice(&ctx, offsets).expect("up offsets");
-    let mut dev_k_cache =
-        DeviceBuffer::from_slice(&ctx, &k_cache_init_t).expect("up k_cache");
-    let mut dev_v_cache =
-        DeviceBuffer::from_slice(&ctx, &v_cache_init_t).expect("up v_cache");
+    let dev_offsets = DeviceBuffer::from_slice(&ctx, offsets).expect("up offsets");
+    let mut dev_k_cache = DeviceBuffer::from_slice(&ctx, &k_cache_init_t).expect("up k_cache");
+    let mut dev_v_cache = DeviceBuffer::from_slice(&ctx, &v_cache_init_t).expect("up v_cache");
 
     let desc = KvCacheAppendDescriptor {
         batch_size: shape.batch,
@@ -134,14 +124,11 @@ fn run_case<T>(
         element: kind,
     };
     let plan =
-        KvCacheAppendPlan::<T>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+        KvCacheAppendPlan::<T>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let shape_k_new = [shape.batch, shape.heads, shape.new_len, shape.d_k];
     let shape_v_new = [shape.batch, shape.heads, shape.new_len, shape.d_v];
-    let shape_k_cache =
-        [shape.batch, shape.heads, shape.max_cache_len, shape.d_k];
-    let shape_v_cache =
-        [shape.batch, shape.heads, shape.max_cache_len, shape.d_v];
+    let shape_k_cache = [shape.batch, shape.heads, shape.max_cache_len, shape.d_k];
+    let shape_v_cache = [shape.batch, shape.heads, shape.max_cache_len, shape.d_v];
 
     plan.run(
         &stream,
@@ -195,34 +182,22 @@ fn run_case<T>(
 // Per-dtype dispatch and three offset patterns
 // -------------------------------------------------------------------------
 
-fn build_inputs(
-    shape: Shape,
-) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
+fn build_inputs(shape: Shape) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
     let n_new_k = (shape.batch * shape.heads * shape.new_len * shape.d_k) as usize;
     let n_new_v = (shape.batch * shape.heads * shape.new_len * shape.d_v) as usize;
-    let n_cache_k =
-        (shape.batch * shape.heads * shape.max_cache_len * shape.d_k) as usize;
-    let n_cache_v =
-        (shape.batch * shape.heads * shape.max_cache_len * shape.d_v) as usize;
+    let n_cache_k = (shape.batch * shape.heads * shape.max_cache_len * shape.d_k) as usize;
+    let n_cache_v = (shape.batch * shape.heads * shape.max_cache_len * shape.d_v) as usize;
     // Synthetic patterns with distinct ranges so a stale slot is
     // visibly wrong if the kernel writes the wrong destination.
     let k_new: Vec<f32> = (0..n_new_k).map(|i| 1.0 + (i as f32) * 0.0625).collect();
-    let v_new: Vec<f32> = (0..n_new_v)
-        .map(|i| -1.0 - (i as f32) * 0.0625)
-        .collect();
-    let k_init: Vec<f32> = (0..n_cache_k)
-        .map(|i| 100.0 + (i as f32) * 0.5)
-        .collect();
-    let v_init: Vec<f32> = (0..n_cache_v)
-        .map(|i| -100.0 - (i as f32) * 0.5)
-        .collect();
+    let v_new: Vec<f32> = (0..n_new_v).map(|i| -1.0 - (i as f32) * 0.0625).collect();
+    let k_init: Vec<f32> = (0..n_cache_k).map(|i| 100.0 + (i as f32) * 0.5).collect();
+    let v_init: Vec<f32> = (0..n_cache_v).map(|i| -100.0 - (i as f32) * 0.5).collect();
     (k_new, v_new, k_init, v_init)
 }
 
-fn run_three_cases<T>(
-    to_t: impl Fn(f32) -> T + Copy,
-    kind: ElementKind,
-) where
+fn run_three_cases<T>(to_t: impl Fn(f32) -> T + Copy, kind: ElementKind)
+where
     T: baracuda_kernels::Element + Copy + core::fmt::Debug + PartialEq,
 {
     // Common geometry. d_k != d_v on purpose.

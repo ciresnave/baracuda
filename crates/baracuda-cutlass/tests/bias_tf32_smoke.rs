@@ -10,7 +10,7 @@ use baracuda_cutlass::{
     ActivationKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MathPrecision,
     MatrixMut, MatrixRef, PlanPreference, VectorRef, Workspace,
 };
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 // ---- CPU references (f32 throughout — the reference uses full
 //      precision so the test measures how far TF32 deviates) ----
@@ -42,13 +42,18 @@ fn silu(x: f32) -> f32 {
 
 #[allow(clippy::too_many_arguments)]
 fn cpu_bias_act_gemm_rcr(
-    m: usize, n: usize, k: usize,
-    a: &[f32], lda: usize,
-    b: &[f32], ldb: usize,
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    lda: usize,
+    b: &[f32],
+    ldb: usize,
     bias: &[f32],
     alpha: f32,
     activation: Option<ActivationKind>,
-    d: &mut [f32], ldd: usize,
+    d: &mut [f32],
+    ldd: usize,
 ) {
     let act_fn: fn(f32) -> f32 = match activation {
         Some(ActivationKind::Relu) => relu,
@@ -76,19 +81,22 @@ fn run_tf32_bias(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
     let host_a: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
     let host_b: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     // Bias straddles 0 so the ReLU clamp branch is exercised.
-    let host_bias: Vec<f32> = (0..n)
-        .map(|j| -0.5 + 0.1 * (j as f32 % 7.0))
-        .collect();
+    let host_bias: Vec<f32> = (0..n).map(|j| -0.5 + 0.1 * (j as f32 % 7.0)).collect();
 
     let mut expected = vec![0.0f32; (m * n) as usize];
     cpu_bias_act_gemm_rcr(
-        m as usize, n as usize, k as usize,
-        &host_a, k as usize,
-        &host_b, k as usize,
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a,
+        k as usize,
+        &host_b,
+        k as usize,
         &host_bias,
         1.0,
         epilogue.activation(),
-        &mut expected, n as usize,
+        &mut expected,
+        n as usize,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
@@ -98,7 +106,9 @@ fn run_tf32_bias(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue,
     };
@@ -107,16 +117,39 @@ fn run_tf32_bias(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
 
     // Sanity: TF32 path advertises Tf32 math precision regardless of
     // bias / activation choice.
-    assert_eq!(plan.precision_guarantee().math_precision, MathPrecision::Tf32);
+    assert_eq!(
+        plan.precision_guarantee().math_precision,
+        MathPrecision::Tf32
+    );
     assert_eq!(plan.sku().epilogue, epilogue);
 
     let args = GemmArgs::<f32> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
-        bias: Some(VectorRef { data: dev_bias.as_slice(), len: n, stride: 1 }),
-        alpha: 1.0, beta: 0.0,
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
+        bias: Some(VectorRef {
+            data: dev_bias.as_slice(),
+            len: n,
+            stride: 1,
+        }),
+        alpha: 1.0,
+        beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
     plan.run(&stream, Workspace::None, args).expect("run");

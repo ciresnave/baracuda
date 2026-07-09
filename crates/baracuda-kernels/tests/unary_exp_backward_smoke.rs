@@ -15,10 +15,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test unary_exp_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryBackwardArgs,
-    UnaryBackwardDescriptor, UnaryBackwardPlan, UnaryKind, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryBackwardArgs, UnaryBackwardDescriptor,
+    UnaryBackwardPlan, UnaryKind, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -57,10 +57,22 @@ fn run_case<const N: usize>(shape: [i32; N]) {
     let plan = UnaryBackwardPlan::<f32, N>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryBackwardArgs::<f32, N> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         x: None,
-        y: Some(TensorRef { data: dev_y.as_slice(), shape, stride }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape,
+            stride,
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -112,10 +124,18 @@ fn exp_backward_requires_y() {
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("alloc");
     let stride = contiguous_stride([4]);
     let args = UnaryBackwardArgs::<f32, 1> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: [4], stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: [4],
+            stride,
+        },
         x: None,
         y: None,
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: [4], stride },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: [4],
+            stride,
+        },
     };
     let err = plan.can_implement(&args);
     assert!(err.is_err(), "Exp backward must reject missing saved-y");
@@ -150,19 +170,40 @@ fn exp_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
-    let host_y: Vec<f16> = (0..numel).map(|i| f16::from_f32((i % 41) as f32 * 0.125 + 0.5)).collect();
-    let host_dy: Vec<f16> = (0..numel).map(|i| f16::from_f32((i % 37) as f32 * 0.25 - 5.0)).collect();
+    let host_y: Vec<f16> = (0..numel)
+        .map(|i| f16::from_f32((i % 41) as f32 * 0.125 + 0.5))
+        .collect();
+    let host_dy: Vec<f16> = (0..numel)
+        .map(|i| f16::from_f32((i % 37) as f32 * 0.25 - 5.0))
+        .collect();
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("upload y");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let mut dev_dx: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, numel).expect("alloc dx");
     let stride = contiguous_stride(shape);
-    let desc = UnaryBackwardDescriptor { kind: UnaryKind::Exp, shape, element: ElementKind::F16 };
-    let plan = UnaryBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let desc = UnaryBackwardDescriptor {
+        kind: UnaryKind::Exp,
+        shape,
+        element: ElementKind::F16,
+    };
+    let plan = UnaryBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = UnaryBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         x: None,
-        y: Some(TensorRef { data: dev_y.as_slice(), shape, stride }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape,
+            stride,
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -174,7 +215,10 @@ fn exp_backward_f16_3d() {
         let exp = dy * y;
         let g = got[i].to_f32();
         let tol = exp.abs().max(1.0) * 4.0 * F16_EPS;
-        assert!((g - exp).abs() <= tol, "exp bw f16 @ {i}: got {g} exp {exp}");
+        assert!(
+            (g - exp).abs() <= tol,
+            "exp bw f16 @ {i}: got {g} exp {exp}"
+        );
     }
 }
 
@@ -184,19 +228,40 @@ fn exp_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
-    let host_y: Vec<bf16> = (0..numel).map(|i| bf16::from_f32((i % 41) as f32 * 0.125 + 0.5)).collect();
-    let host_dy: Vec<bf16> = (0..numel).map(|i| bf16::from_f32((i % 37) as f32 * 0.25 - 5.0)).collect();
+    let host_y: Vec<bf16> = (0..numel)
+        .map(|i| bf16::from_f32((i % 41) as f32 * 0.125 + 0.5))
+        .collect();
+    let host_dy: Vec<bf16> = (0..numel)
+        .map(|i| bf16::from_f32((i % 37) as f32 * 0.25 - 5.0))
+        .collect();
     let dev_y = DeviceBuffer::from_slice(&ctx, &host_y).expect("upload y");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let mut dev_dx: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, numel).expect("alloc dx");
     let stride = contiguous_stride(shape);
-    let desc = UnaryBackwardDescriptor { kind: UnaryKind::Exp, shape, element: ElementKind::Bf16 };
-    let plan = UnaryBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let desc = UnaryBackwardDescriptor {
+        kind: UnaryKind::Exp,
+        shape,
+        element: ElementKind::Bf16,
+    };
+    let plan = UnaryBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = UnaryBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         x: None,
-        y: Some(TensorRef { data: dev_y.as_slice(), shape, stride }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape,
+            stride,
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -208,7 +273,10 @@ fn exp_backward_bf16_3d() {
         let exp = dy * y;
         let g = got[i].to_f32();
         let tol = exp.abs().max(1.0) * 4.0 * BF16_EPS;
-        assert!((g - exp).abs() <= tol, "exp bw bf16 @ {i}: got {g} exp {exp}");
+        assert!(
+            (g - exp).abs() <= tol,
+            "exp bw bf16 @ {i}: got {g} exp {exp}"
+        );
     }
 }
 
@@ -224,13 +292,30 @@ fn exp_backward_f64_3d() {
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let mut dev_dx: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel).expect("alloc dx");
     let stride = contiguous_stride(shape);
-    let desc = UnaryBackwardDescriptor { kind: UnaryKind::Exp, shape, element: ElementKind::F64 };
-    let plan = UnaryBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let desc = UnaryBackwardDescriptor {
+        kind: UnaryKind::Exp,
+        shape,
+        element: ElementKind::F64,
+    };
+    let plan = UnaryBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = UnaryBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         x: None,
-        y: Some(TensorRef { data: dev_y.as_slice(), shape, stride }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape,
+            stride,
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

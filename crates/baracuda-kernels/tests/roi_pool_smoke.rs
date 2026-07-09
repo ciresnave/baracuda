@@ -1,10 +1,10 @@
 //! Real-GPU smoke for `RoiPoolPlan<T>` (Phase 9 Category T).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RoiPoolArgs, RoiPoolBackwardArgs,
-    RoiPoolBackwardDescriptor, RoiPoolBackwardPlan, RoiPoolDescriptor, RoiPoolPlan, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, PlanPreference, RoiPoolArgs, RoiPoolBackwardArgs, RoiPoolBackwardDescriptor,
+    RoiPoolBackwardPlan, RoiPoolDescriptor, RoiPoolPlan, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -30,33 +30,44 @@ fn roi_pool_full_image_f32_smoke() {
     let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("");
     let mut dev_arg: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 4).expect("");
     let desc = RoiPoolDescriptor {
-        n, c, h, w, num_rois, pooled_h: pooled, pooled_w: pooled,
+        n,
+        c,
+        h,
+        w,
+        num_rois,
+        pooled_h: pooled,
+        pooled_w: pooled,
         spatial_scale: 1.0,
         element: ElementKind::F32,
     };
     let plan = RoiPoolPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("");
-    plan.run(&stream, Workspace::None, RoiPoolArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, c, h, w],
-            stride: contiguous_stride([n, c, h, w]),
+    plan.run(
+        &stream,
+        Workspace::None,
+        RoiPoolArgs {
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n, c, h, w],
+                stride: contiguous_stride([n, c, h, w]),
+            },
+            rois: TensorRef {
+                data: dev_rois.as_slice(),
+                shape: [num_rois, 5],
+                stride: contiguous_stride([num_rois, 5]),
+            },
+            output: TensorMut {
+                data: dev_out.as_slice_mut(),
+                shape: [num_rois, c, pooled, pooled],
+                stride: contiguous_stride([num_rois, c, pooled, pooled]),
+            },
+            argmax: TensorMut {
+                data: dev_arg.as_slice_mut(),
+                shape: [num_rois, c, pooled, pooled],
+                stride: contiguous_stride([num_rois, c, pooled, pooled]),
+            },
         },
-        rois: TensorRef {
-            data: dev_rois.as_slice(),
-            shape: [num_rois, 5],
-            stride: contiguous_stride([num_rois, 5]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [num_rois, c, pooled, pooled],
-            stride: contiguous_stride([num_rois, c, pooled, pooled]),
-        },
-        argmax: TensorMut {
-            data: dev_arg.as_slice_mut(),
-            shape: [num_rois, c, pooled, pooled],
-            stride: contiguous_stride([num_rois, c, pooled, pooled]),
-        },
-    }).expect("");
+    )
+    .expect("");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 4];
     let mut argmax = vec![0i32; 4];
@@ -80,7 +91,7 @@ fn roi_pool_backward_smoke_f32() {
     let num_rois = 1;
     let pooled = 2;
     let host_dout: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0];
-    let host_argmax: Vec<i32> = vec![5, 7, 13, 15];  // Indices of quadrant maxes.
+    let host_argmax: Vec<i32> = vec![5, 7, 13, 15]; // Indices of quadrant maxes.
     let dev_rois = DeviceBuffer::from_slice(&ctx, &host_rois).expect("");
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("");
     let dev_arg = DeviceBuffer::from_slice(&ctx, &host_argmax).expect("");
@@ -89,33 +100,45 @@ fn roi_pool_backward_smoke_f32() {
     let plan = RoiPoolBackwardPlan::<f32>::select(
         &stream,
         &RoiPoolBackwardDescriptor {
-            n, c, h, w, num_rois, pooled_h: pooled, pooled_w: pooled,
+            n,
+            c,
+            h,
+            w,
+            num_rois,
+            pooled_h: pooled,
+            pooled_w: pooled,
             element: ElementKind::F32,
         },
         PlanPreference::default(),
-    ).expect("");
-    plan.run(&stream, Workspace::None, RoiPoolBackwardArgs {
-        dout: TensorRef {
-            data: dev_dout.as_slice(),
-            shape: [num_rois, c, pooled, pooled],
-            stride: contiguous_stride([num_rois, c, pooled, pooled]),
+    )
+    .expect("");
+    plan.run(
+        &stream,
+        Workspace::None,
+        RoiPoolBackwardArgs {
+            dout: TensorRef {
+                data: dev_dout.as_slice(),
+                shape: [num_rois, c, pooled, pooled],
+                stride: contiguous_stride([num_rois, c, pooled, pooled]),
+            },
+            rois: TensorRef {
+                data: dev_rois.as_slice(),
+                shape: [num_rois, 5],
+                stride: contiguous_stride([num_rois, 5]),
+            },
+            argmax: TensorRef {
+                data: dev_arg.as_slice(),
+                shape: [num_rois, c, pooled, pooled],
+                stride: contiguous_stride([num_rois, c, pooled, pooled]),
+            },
+            dinput: TensorMut {
+                data: dev_din.as_slice_mut(),
+                shape: [n, c, h, w],
+                stride: contiguous_stride([n, c, h, w]),
+            },
         },
-        rois: TensorRef {
-            data: dev_rois.as_slice(),
-            shape: [num_rois, 5],
-            stride: contiguous_stride([num_rois, 5]),
-        },
-        argmax: TensorRef {
-            data: dev_arg.as_slice(),
-            shape: [num_rois, c, pooled, pooled],
-            stride: contiguous_stride([num_rois, c, pooled, pooled]),
-        },
-        dinput: TensorMut {
-            data: dev_din.as_slice_mut(),
-            shape: [n, c, h, w],
-            stride: contiguous_stride([n, c, h, w]),
-        },
-    }).expect("");
+    )
+    .expect("");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 16];
     dev_din.copy_to_host(&mut got).expect("");

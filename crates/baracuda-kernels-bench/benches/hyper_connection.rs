@@ -41,15 +41,15 @@ fn main() {
 mod bench_impl_inner {
     use baracuda_driver::DeviceBuffer;
     use baracuda_kernels::{
-        contiguous_stride, ElementKind, HyperConnectionArgs, HyperConnectionDescriptor,
-        HyperConnectionPlan, PlanPreference, RMSNormArgs, RMSNormDescriptor, RMSNormPlan,
-        TensorMut, TensorRef, Workspace,
+        ElementKind, HyperConnectionArgs, HyperConnectionDescriptor, HyperConnectionPlan,
+        PlanPreference, RMSNormArgs, RMSNormDescriptor, RMSNormPlan, TensorMut, TensorRef,
+        Workspace, contiguous_stride,
     };
     use baracuda_kernels_bench::{
-        append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-        PhaseTwentyNineRow,
+        PhaseTwentyNineRow, append_csv_row, measure_median_ns, setup_device, time_with_events,
+        warmup,
     };
-    use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+    use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
     use half::bf16;
 
     const BENCH_NAME: &str = "hyper_connection";
@@ -122,17 +122,15 @@ mod bench_impl_inner {
                 eps: 1e-5,
                 element: ElementKind::F32,
             };
-            let plan = match HyperConnectionPlan::<f32>::select(
-                &stream,
-                &desc,
-                PlanPreference::default(),
-            ) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("hyper_connection {shape}: skip — select failed: {e:?}");
-                    continue;
-                }
-            };
+            let plan =
+                match HyperConnectionPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+                {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("hyper_connection {shape}: skip — select failed: {e:?}");
+                        continue;
+                    }
+                };
 
             let xs = [b, n, hd];
             let stx = contiguous_stride(xs);
@@ -238,11 +236,8 @@ mod bench_impl_inner {
                 has_gamma: false,
                 element: ElementKind::F32,
             };
-            let naive_plan_opt = RMSNormPlan::<f32, 2>::select(
-                &stream,
-                &naive_desc,
-                PlanPreference::default(),
-            );
+            let naive_plan_opt =
+                RMSNormPlan::<f32, 2>::select(&stream, &naive_desc, PlanPreference::default());
             let naive_ns = if let Ok(naive_plan) = naive_plan_opt {
                 let xs2 = [bn, hd];
                 let stx2 = contiguous_stride(xs2);

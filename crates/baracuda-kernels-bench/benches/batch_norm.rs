@@ -18,14 +18,14 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, BatchNormArgs, BatchNormDescriptor, BatchNormPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BatchNormArgs, BatchNormDescriptor, BatchNormPlan, ElementKind, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PoolShape, PytorchBaseline, POOL_SWEEP,
+    POOL_SWEEP, PhaseTwentyNineRow, PoolShape, PytorchBaseline, append_csv_row, measure_median_ns,
+    setup_device, time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::f16;
 
 const BENCH_NAME: &str = "batch_norm";
@@ -98,11 +98,7 @@ fn bench<T>(
             has_affine: true,
             element: kind,
         };
-        let plan = match BatchNormPlan::<T, 4>::select(
-            &stream,
-            &desc,
-            PlanPreference::default(),
-        ) {
+        let plan = match BatchNormPlan::<T, 4>::select(&stream, &desc, PlanPreference::default()) {
             Ok(p) => p,
             Err(_) => continue,
         };
@@ -140,7 +136,8 @@ fn bench<T>(
                     stride: stc,
                 },
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda batch_norm");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda batch_norm");
         });
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = BatchNormArgs::<T, 4> {
@@ -175,7 +172,8 @@ fn bench<T>(
                     stride: stc,
                 },
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda batch_norm");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda batch_norm");
         });
         append_csv_row(
             BENCH_NAME,

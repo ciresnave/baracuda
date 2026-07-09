@@ -186,9 +186,7 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
             ));
         }
         if desc.q_max < desc.q_min {
-            return Err(Error::InvalidProblem(
-                "QuantizedLinearPlan: q_max < q_min",
-            ));
+            return Err(Error::InvalidProblem("QuantizedLinearPlan: q_max < q_min"));
         }
         if desc.m > 65535 {
             return Err(Error::Unsupported(
@@ -268,9 +266,7 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
         args: QuantizedLinearArgs<'_, TIn, TWQ>,
     ) -> Result<()> {
         self.can_implement(&args)?;
-        if (self.desc.m as i64) * (self.desc.c_out as i64) == 0
-            || self.desc.k == 0
-        {
+        if (self.desc.m as i64) * (self.desc.c_out as i64) == 0 || self.desc.k == 0 {
             return Ok(());
         }
 
@@ -306,7 +302,7 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
                 return Err(Error::Unsupported(
                     "QuantizedLinearPlan::run reached unsupported TIn at \
                      activation-quantize pass (select should have caught)",
-                ))
+                ));
             }
         };
         map_status(drq_status)?;
@@ -323,10 +319,14 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
                     self.desc.m,
                     self.desc.c_out,
                     self.desc.k,
-                    weight_ptr, act_q_const,
-                    act_scale_const, w_scale_ptr,
+                    weight_ptr,
+                    act_q_const,
+                    act_scale_const,
+                    w_scale_ptr,
                     out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
@@ -334,17 +334,21 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
                     self.desc.m,
                     self.desc.c_out,
                     self.desc.k,
-                    weight_ptr, act_q_const,
-                    act_scale_const, w_scale_ptr,
+                    weight_ptr,
+                    act_q_const,
+                    act_scale_const,
+                    w_scale_ptr,
                     out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {
                 return Err(Error::Unsupported(
                     "QuantizedLinearPlan::run reached unsupported TIn at \
                      quantized-linear pass (select should have caught)",
-                ))
+                ));
             }
         };
         map_status(ql_status)

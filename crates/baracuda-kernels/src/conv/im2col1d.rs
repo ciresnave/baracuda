@@ -133,30 +133,62 @@ impl<T: Element> Im2Col1dPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_im2col_1d_f32_run(
-                    d.batch, d.channels, d.l_in, self.l_out,
-                    d.kl, d.stride_l, d.pad_l, d.dilation_l,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.l_in,
+                    self.l_out,
+                    d.kl,
+                    d.stride_l,
+                    d.pad_l,
+                    d.dilation_l,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_im2col_1d_f64_run(
-                    d.batch, d.channels, d.l_in, self.l_out,
-                    d.kl, d.stride_l, d.pad_l, d.dilation_l,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.l_in,
+                    self.l_out,
+                    d.kl,
+                    d.stride_l,
+                    d.pad_l,
+                    d.dilation_l,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_im2col_1d_f16_run(
-                    d.batch, d.channels, d.l_in, self.l_out,
-                    d.kl, d.stride_l, d.pad_l, d.dilation_l,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.l_in,
+                    self.l_out,
+                    d.kl,
+                    d.stride_l,
+                    d.pad_l,
+                    d.dilation_l,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_im2col_1d_bf16_run(
-                    d.batch, d.channels, d.l_in, self.l_out,
-                    d.kl, d.stride_l, d.pad_l, d.dilation_l,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.l_in,
+                    self.l_out,
+                    d.kl,
+                    d.stride_l,
+                    d.pad_l,
+                    d.dilation_l,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             _ => {

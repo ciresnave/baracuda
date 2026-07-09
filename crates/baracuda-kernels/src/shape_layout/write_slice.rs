@@ -131,7 +131,10 @@ enum FastPath {
     /// `ranges[i] == (0, dest_shape[i])` for all `i > 0` — the slab is
     /// one contiguous chunk in dest. Offset (in elements) of the
     /// chunk's start is stored.
-    ContiguousChunk { dest_offset_elems: i64, source_numel: i64 },
+    ContiguousChunk {
+        dest_offset_elems: i64,
+        source_numel: i64,
+    },
     /// Neither fast path applies — fall through to the generic kernel.
     Generic,
 }
@@ -269,8 +272,16 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
         // guard, so numel is even too on the nibble path).
         let dest_numel = product_i64(self.desc.dest_shape);
         let source_numel = product_i64(self.desc.source_shape);
-        let dest_storage = if self.is_nibble { (dest_numel + 1) / 2 } else { dest_numel };
-        let source_storage = if self.is_nibble { (source_numel + 1) / 2 } else { source_numel };
+        let dest_storage = if self.is_nibble {
+            (dest_numel + 1) / 2
+        } else {
+            dest_numel
+        };
+        let source_storage = if self.is_nibble {
+            (source_numel + 1) / 2
+        } else {
+            source_numel
+        };
         if (args.dest.data.len() as i64) < dest_storage {
             return Err(Error::BufferTooSmall {
                 needed: dest_storage as usize,
@@ -328,9 +339,10 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
                 //   - dest: starts at `dest_offset_elems` (0 for WholeDest)
                 let (dest_off_elems, copy_elems) = match self.fast_path {
                     FastPath::WholeDest => (0i64, source_numel),
-                    FastPath::ContiguousChunk { dest_offset_elems, source_numel: n } => {
-                        (dest_offset_elems, n)
-                    }
+                    FastPath::ContiguousChunk {
+                        dest_offset_elems,
+                        source_numel: n,
+                    } => (dest_offset_elems, n),
                     FastPath::Generic => unreachable!(),
                 };
                 // Byte counts. Nibble: 2 elements per byte (innermost
@@ -397,29 +409,71 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
                 let rs = range_start.as_ptr();
                 match self.byte_width {
                     1 => baracuda_kernels_sys::baracuda_kernels_write_slice_b1_run(
-                        dest, source, source_numel, rank, ds, ss, rs,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        dest,
+                        source,
+                        source_numel,
+                        rank,
+                        ds,
+                        ss,
+                        rs,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     ),
                     2 => baracuda_kernels_sys::baracuda_kernels_write_slice_b2_run(
-                        dest, source, source_numel, rank, ds, ss, rs,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        dest,
+                        source,
+                        source_numel,
+                        rank,
+                        ds,
+                        ss,
+                        rs,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     ),
                     4 => baracuda_kernels_sys::baracuda_kernels_write_slice_b4_run(
-                        dest, source, source_numel, rank, ds, ss, rs,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        dest,
+                        source,
+                        source_numel,
+                        rank,
+                        ds,
+                        ss,
+                        rs,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     ),
                     8 => baracuda_kernels_sys::baracuda_kernels_write_slice_b8_run(
-                        dest, source, source_numel, rank, ds, ss, rs,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        dest,
+                        source,
+                        source_numel,
+                        rank,
+                        ds,
+                        ss,
+                        rs,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     ),
                     16 => baracuda_kernels_sys::baracuda_kernels_write_slice_b16_run(
-                        dest, source, source_numel, rank, ds, ss, rs,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        dest,
+                        source,
+                        source_numel,
+                        rank,
+                        ds,
+                        ss,
+                        rs,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     ),
-                    _ => return Err(Error::Unsupported(
-                        "baracuda-kernels::WriteSlicePlan::run: unsupported byte width \
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::WriteSlicePlan::run: unsupported byte width \
                          (select() should have caught this)",
-                    )),
+                        ));
+                    }
                 }
             }
         };
@@ -514,12 +568,7 @@ fn product_i64<const N: usize>(shape: [i32; N]) -> i64 {
 /// Device-to-device async copy on `stream`. Thin wrapper around
 /// `cuMemcpyDtoDAsync_v2` — matches the same pattern used by the
 /// `kthvalue` plan's H2D / D2H helpers.
-fn copy_d2d_async(
-    dst_dev: u64,
-    src_dev: u64,
-    bytes: usize,
-    stream: *mut c_void,
-) -> Result<()> {
+fn copy_d2d_async(dst_dev: u64, src_dev: u64, bytes: usize, stream: *mut c_void) -> Result<()> {
     if bytes == 0 {
         return Ok(());
     }

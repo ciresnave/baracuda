@@ -17,8 +17,8 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, EmbeddingKind, IndexElement, IndexElementKind,
-    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut,
-    TensorRef, Workspace,
+    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef,
+    Workspace,
 };
 
 use crate::indexing::gather::map_status;
@@ -91,10 +91,7 @@ impl<T: Element> EmbeddingBackwardPlan<T> {
                 "baracuda-kernels::EmbeddingBackwardPlan: descriptor element != type parameter T",
             ));
         }
-        if desc.num_embeddings < 0
-            || desc.embedding_dim < 0
-            || desc.num_indices < 0
-        {
+        if desc.num_embeddings < 0 || desc.embedding_dim < 0 || desc.num_indices < 0 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBackwardPlan: num_embeddings / embedding_dim / \
                  num_indices must be non-negative",
@@ -137,7 +134,10 @@ impl<T: Element> EmbeddingBackwardPlan<T> {
     }
 
     /// Validate args.
-    pub fn can_implement<I: IndexElement>(&self, args: &EmbeddingBackwardArgs<'_, T, I>) -> Result<()> {
+    pub fn can_implement<I: IndexElement>(
+        &self,
+        args: &EmbeddingBackwardArgs<'_, T, I>,
+    ) -> Result<()> {
         if args.dout.shape[0] != self.desc.num_indices
             || args.dout.shape[1] != self.desc.embedding_dim
         {
@@ -228,30 +228,58 @@ impl<T: Element> EmbeddingBackwardPlan<T> {
         let status = match (T::KIND, I::KIND) {
             (ElementKind::F32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_backward_f32_run(
-                    num_indices, self.desc.num_embeddings, self.desc.embedding_dim,
-                    padding_idx, dout_ptr, idx_ptr, dweight_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    num_indices,
+                    self.desc.num_embeddings,
+                    self.desc.embedding_dim,
+                    padding_idx,
+                    dout_ptr,
+                    idx_ptr,
+                    dweight_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_backward_f64_run(
-                    num_indices, self.desc.num_embeddings, self.desc.embedding_dim,
-                    padding_idx, dout_ptr, idx_ptr, dweight_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    num_indices,
+                    self.desc.num_embeddings,
+                    self.desc.embedding_dim,
+                    padding_idx,
+                    dout_ptr,
+                    idx_ptr,
+                    dweight_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, IndexElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_backward_i64idx_f32_run(
-                    num_indices, self.desc.num_embeddings, self.desc.embedding_dim,
-                    padding_idx, dout_ptr, idx_ptr, dweight_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    num_indices,
+                    self.desc.num_embeddings,
+                    self.desc.embedding_dim,
+                    padding_idx,
+                    dout_ptr,
+                    idx_ptr,
+                    dweight_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, IndexElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_backward_i64idx_f64_run(
-                    num_indices, self.desc.num_embeddings, self.desc.embedding_dim,
-                    padding_idx, dout_ptr, idx_ptr, dweight_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    num_indices,
+                    self.desc.num_embeddings,
+                    self.desc.embedding_dim,
+                    padding_idx,
+                    dout_ptr,
+                    idx_ptr,
+                    dweight_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

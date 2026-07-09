@@ -1,6 +1,6 @@
 //! GPU-gated integration test for cuSOLVER dense LU + solve.
 
-use baracuda_cusolver::{sgetrf, sgetrs, DnHandle, Op};
+use baracuda_cusolver::{DnHandle, Op, sgetrf, sgetrs};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]

@@ -156,10 +156,7 @@ unsafe extern "C" {
     /// handle owned by the ozIMMU session is re-bound too.
     ///
     /// `stream` is a raw `cudaStream_t` (an opaque pointer alias).
-    pub fn baracuda_ozimmu_set_cuda_stream(
-        handle: OzimmuHandleT,
-        stream: *mut core::ffi::c_void,
-    );
+    pub fn baracuda_ozimmu_set_cuda_stream(handle: OzimmuHandleT, stream: *mut core::ffi::c_void);
 
     /// Re-allocate the handle's working-memory scratch to at least
     /// `size_in_bytes`. Returns the new total size (in bytes) if the

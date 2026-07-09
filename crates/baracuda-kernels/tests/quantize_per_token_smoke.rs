@@ -6,10 +6,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, QuantizePerTokenArgs,
-    QuantizePerTokenDescriptor, QuantizePerTokenPlan, TensorMut, TensorRef, Workspace, S8,
+    ElementKind, PlanPreference, QuantizePerTokenArgs, QuantizePerTokenDescriptor,
+    QuantizePerTokenPlan, S8, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -56,8 +56,7 @@ fn quantize_per_token_f32_s8_basic() {
     //        for at least one cell.
     let host_x: Vec<f32> = vec![
         // row 0:
-        0.05, 0.15, -0.07, 0.30,
-        // row 1: includes a clipping case.
+        0.05, 0.15, -0.07, 0.30, // row 1: includes a clipping case.
         12.5, 1.0, -0.25, 4.0,
     ];
     let host_scale: Vec<f32> = vec![0.1, 0.5];
@@ -80,8 +79,7 @@ fn quantize_per_token_f32_s8_basic() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_scale = DeviceBuffer::from_slice(&ctx, &host_scale).expect("up s");
     let dev_zp = DeviceBuffer::from_slice(&ctx, &host_zp).expect("up zp");
-    let mut dev_q: DeviceBuffer<S8> =
-        DeviceBuffer::zeros(&ctx, (n * d) as usize).expect("alloc q");
+    let mut dev_q: DeviceBuffer<S8> = DeviceBuffer::zeros(&ctx, (n * d) as usize).expect("alloc q");
 
     let desc = QuantizePerTokenDescriptor {
         n,
@@ -121,6 +119,10 @@ fn quantize_per_token_f32_s8_basic() {
     let mut got = vec![S8(0); (n * d) as usize];
     dev_q.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.0, *e, "quant mismatch at idx {i}: got {} expected {}", g.0, e);
+        assert_eq!(
+            g.0, *e,
+            "quant mismatch at idx {i}: got {} expected {}",
+            g.0, e
+        );
     }
 }

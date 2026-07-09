@@ -6,10 +6,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, IndexSelectBackwardArgs, IndexSelectBackwardDescriptor,
-    IndexSelectBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, IndexSelectBackwardArgs, IndexSelectBackwardDescriptor, IndexSelectBackwardPlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

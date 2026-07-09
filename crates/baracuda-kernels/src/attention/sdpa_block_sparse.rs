@@ -68,7 +68,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-
 /// Maximum supported block size for the Tier-1 block-sparse trailblazer.
 /// Capped at 64 by the dynamic SMEM budget at `d_k = d_v = 128`.
 pub const SDPA_BLOCK_SPARSE_MAX_BLOCK: i32 = 64;
@@ -205,8 +204,9 @@ impl<T: Element> SdpaBlockSparsePlan<T> {
         // Pre-flight C-side guard.
         #[cfg(feature = "xformers_blocksparse")]
         {
-            let probe = unsafe {
-                match T::KIND {
+            let probe =
+                unsafe {
+                    match T::KIND {
                     ElementKind::F32 =>
                         baracuda_kernels_sys::baracuda_kernels_sdpa_f32_block_sparse_can_implement(
                             desc.batch_size, desc.num_heads, desc.query_len, desc.key_len,
@@ -229,7 +229,7 @@ impl<T: Element> SdpaBlockSparsePlan<T> {
                         ),
                     _ => 3,
                 }
-            };
+                };
             map_status(probe)?;
         }
 
@@ -399,49 +399,99 @@ impl<T: Element> SdpaBlockSparsePlan<T> {
 
             let status = unsafe {
                 match T::KIND {
-                    ElementKind::F32 =>
+                    ElementKind::F32 => {
                         baracuda_kernels_sys::baracuda_kernels_sdpa_f32_block_sparse_run(
-                            self.desc.batch_size, self.desc.num_heads,
-                            self.desc.query_len, self.desc.key_len,
-                            self.desc.d_k, self.desc.d_v, self.desc.block_size,
-                            self.desc.scale, is_causal_flag,
-                            q_ptr, k_ptr, v_ptr, bp_ptr,
-                            y_ptr, lse_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
-                        ),
-                    ElementKind::F16 =>
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.query_len,
+                            self.desc.key_len,
+                            self.desc.d_k,
+                            self.desc.d_v,
+                            self.desc.block_size,
+                            self.desc.scale,
+                            is_causal_flag,
+                            q_ptr,
+                            k_ptr,
+                            v_ptr,
+                            bp_ptr,
+                            y_ptr,
+                            lse_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::F16 => {
                         baracuda_kernels_sys::baracuda_kernels_sdpa_f16_block_sparse_run(
-                            self.desc.batch_size, self.desc.num_heads,
-                            self.desc.query_len, self.desc.key_len,
-                            self.desc.d_k, self.desc.d_v, self.desc.block_size,
-                            self.desc.scale, is_causal_flag,
-                            q_ptr, k_ptr, v_ptr, bp_ptr,
-                            y_ptr, lse_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
-                        ),
-                    ElementKind::Bf16 =>
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.query_len,
+                            self.desc.key_len,
+                            self.desc.d_k,
+                            self.desc.d_v,
+                            self.desc.block_size,
+                            self.desc.scale,
+                            is_causal_flag,
+                            q_ptr,
+                            k_ptr,
+                            v_ptr,
+                            bp_ptr,
+                            y_ptr,
+                            lse_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::Bf16 => {
                         baracuda_kernels_sys::baracuda_kernels_sdpa_bf16_block_sparse_run(
-                            self.desc.batch_size, self.desc.num_heads,
-                            self.desc.query_len, self.desc.key_len,
-                            self.desc.d_k, self.desc.d_v, self.desc.block_size,
-                            self.desc.scale, is_causal_flag,
-                            q_ptr, k_ptr, v_ptr, bp_ptr,
-                            y_ptr, lse_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
-                        ),
-                    ElementKind::F64 =>
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.query_len,
+                            self.desc.key_len,
+                            self.desc.d_k,
+                            self.desc.d_v,
+                            self.desc.block_size,
+                            self.desc.scale,
+                            is_causal_flag,
+                            q_ptr,
+                            k_ptr,
+                            v_ptr,
+                            bp_ptr,
+                            y_ptr,
+                            lse_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::F64 => {
                         baracuda_kernels_sys::baracuda_kernels_sdpa_f64_block_sparse_run(
-                            self.desc.batch_size, self.desc.num_heads,
-                            self.desc.query_len, self.desc.key_len,
-                            self.desc.d_k, self.desc.d_v, self.desc.block_size,
-                            self.desc.scale, is_causal_flag,
-                            q_ptr, k_ptr, v_ptr, bp_ptr,
-                            y_ptr, lse_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
-                        ),
-                    _ => return Err(Error::Unsupported(
-                        "baracuda-kernels::SdpaBlockSparsePlan::run reached an unimplemented dtype",
-                    )),
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.query_len,
+                            self.desc.key_len,
+                            self.desc.d_k,
+                            self.desc.d_v,
+                            self.desc.block_size,
+                            self.desc.scale,
+                            is_causal_flag,
+                            q_ptr,
+                            k_ptr,
+                            v_ptr,
+                            bp_ptr,
+                            y_ptr,
+                            lse_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::SdpaBlockSparsePlan::run reached an unimplemented dtype",
+                        ));
+                    }
                 }
             };
             map_status(status)

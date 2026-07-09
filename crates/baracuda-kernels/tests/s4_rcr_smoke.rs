@@ -17,7 +17,7 @@
 
 #![cfg(feature = "sm89")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     EpilogueKind, Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan, LayoutSku, MatrixMut, MatrixRef,
     PlanPreference, S4, Workspace,
@@ -145,12 +145,10 @@ fn run_s4_rcr_identity(m: i32, n: i32, k: i32) {
     // Build A/B as logical i32 vectors in [-2, +2] (well within the
     // s4 range [-8, +7]), then pack pairs along K into bytes. Patterns
     // are deterministic and span both signs.
-    let mk_a = |i: usize, kk: usize| -> i32 {
-        (((i as i32 * 7 + kk as i32 * 3) % 5) - 2).clamp(-7, 7)
-    };
-    let mk_b = |kk: usize, j: usize| -> i32 {
-        (((j as i32 * 11 + kk as i32 * 5) % 5) - 2).clamp(-7, 7)
-    };
+    let mk_a =
+        |i: usize, kk: usize| -> i32 { (((i as i32 * 7 + kk as i32 * 3) % 5) - 2).clamp(-7, 7) };
+    let mk_b =
+        |kk: usize, j: usize| -> i32 { (((j as i32 * 11 + kk as i32 * 5) % 5) - 2).clamp(-7, 7) };
 
     // Pack A row-major: byte at (i, kk_byte) = (A[i, 2*kk_byte], A[i, 2*kk_byte+1]).
     let mut host_a_bytes = vec![0u8; mu * k_bytes];
@@ -181,9 +179,13 @@ fn run_s4_rcr_identity(m: i32, n: i32, k: i32) {
     let mut expected_bytes = vec![0u8; mu * n_bytes];
     let mut expected_i32 = vec![0i32; mu * nu];
     cpu_s4_gemm_rcr_identity(
-        mu, nu, ku,
-        &host_a_bytes, k_bytes,
-        &host_b_bytes, k_bytes,
+        mu,
+        nu,
+        ku,
+        &host_a_bytes,
+        k_bytes,
+        &host_b_bytes,
+        k_bytes,
         alpha,
         &mut expected_bytes,
         &mut expected_i32,
@@ -194,11 +196,12 @@ fn run_s4_rcr_identity(m: i32, n: i32, k: i32) {
     let dev_b_bytes = DeviceBuffer::from_slice(&ctx, &host_b_bytes).expect("upload B");
     let dev_a = dev_a_bytes.view_as::<S4>();
     let dev_b = dev_b_bytes.view_as::<S4>();
-    let mut dev_d: DeviceBuffer<S4> =
-        DeviceBuffer::zeros(&ctx, mu * n_bytes).expect("alloc D");
+    let mut dev_d: DeviceBuffer<S4> = DeviceBuffer::zeros(&ctx, mu * n_bytes).expect("alloc D");
 
     let desc = Int4GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Identity,
     };
@@ -207,12 +210,27 @@ fn run_s4_rcr_identity(m: i32, n: i32, k: i32) {
 
     let args = Int4GemmArgs::<S4> {
         // A: row-major [M, K]; ld in BYTES = K/2.
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k_bytes as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k_bytes as i64,
+        },
         // B: col-major [K, N] (RCR); ld in BYTES = K/2.
-        b: MatrixRef { data: dev_b, rows: k, cols: n, ld: k_bytes as i64 },
+        b: MatrixRef {
+            data: dev_b,
+            rows: k,
+            cols: n,
+            ld: k_bytes as i64,
+        },
         c: None,
         // D: row-major [M, N]; ld in BYTES = N/2.
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n_bytes as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n_bytes as i64,
+        },
         bias: None,
         alpha,
         beta,
@@ -269,25 +287,29 @@ fn run_s4_rcr_identity(m: i32, n: i32, k: i32) {
 // cases (mirrors the FP8 / int8 trailblazer coverage).
 // ============================================================================
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_identity_64_64_64() {
     // Smallest tile-aligned shape: 1 block, 1 K-tile. Pure smoke.
     run_s4_rcr_identity(64, 64, 64);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_identity_128_128_128() {
     // 2x2 grid, 2 K-tiles. Exercises smem reuse across K iters.
     run_s4_rcr_identity(128, 128, 128);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_identity_256_128_64() {
     // 4x2 grid, 1 K-tile. Larger M, asymmetric tile count.
     run_s4_rcr_identity(256, 128, 64);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rcr_identity_100_70_64() {
     // Ragged in M (100 not a multiple of 64) and N (70 not a multiple
     // of 64; still even so packing is well-defined). K = 64 = 1 K-tile.

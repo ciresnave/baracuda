@@ -53,8 +53,8 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, ConvKind, Element, ElementKind, KernelSku, MathPrecision,
-    OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, BackendKind, ConvKind, Element, ElementKind, KernelSku, MathPrecision, OpCategory,
+    PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
 /// Status-code → Result translation, local to this module so it stays
@@ -240,7 +240,9 @@ impl<T: Element> CausalConv1dPlan<T> {
         let stream_ptr = stream.as_raw() as *mut c_void;
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let w_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let b_ptr = args.bias.as_ref()
+        let b_ptr = args
+            .bias
+            .as_ref()
             .map(|b| b.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
@@ -249,39 +251,73 @@ impl<T: Element> CausalConv1dPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_causal_conv1d_f32_run(
-                    self.desc.batch_size, self.desc.channels, self.desc.seq_len,
-                    self.desc.width, use_silu,
-                    x_ptr, w_ptr, b_ptr, y_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.channels,
+                    self.desc.seq_len,
+                    self.desc.width,
+                    use_silu,
+                    x_ptr,
+                    w_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_causal_conv1d_f16_run(
-                    self.desc.batch_size, self.desc.channels, self.desc.seq_len,
-                    self.desc.width, use_silu,
-                    x_ptr, w_ptr, b_ptr, y_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.channels,
+                    self.desc.seq_len,
+                    self.desc.width,
+                    use_silu,
+                    x_ptr,
+                    w_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_causal_conv1d_bf16_run(
-                    self.desc.batch_size, self.desc.channels, self.desc.seq_len,
-                    self.desc.width, use_silu,
-                    x_ptr, w_ptr, b_ptr, y_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.channels,
+                    self.desc.seq_len,
+                    self.desc.width,
+                    use_silu,
+                    x_ptr,
+                    w_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_causal_conv1d_f64_run(
-                    self.desc.batch_size, self.desc.channels, self.desc.seq_len,
-                    self.desc.width, use_silu,
-                    x_ptr, w_ptr, b_ptr, y_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.channels,
+                    self.desc.seq_len,
+                    self.desc.width,
+                    use_silu,
+                    x_ptr,
+                    w_ptr,
+                    b_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
-            _ => return Err(Error::Unsupported(
-                "baracuda-kernels::CausalConv1dPlan: dtype not wired",
-            )),
+            _ => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::CausalConv1dPlan: dtype not wired",
+                ));
+            }
         };
         map_status(status)
     }
@@ -428,13 +464,17 @@ impl<T: Element> CausalConv1dBackwardPlan<T> {
         let stream_ptr = stream.as_raw() as *mut c_void;
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let w_ptr = args.weight.data.as_raw().0 as *const c_void;
-        let b_ptr = args.bias.as_ref()
+        let b_ptr = args
+            .bias
+            .as_ref()
             .map(|b| b.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
         let dw_ptr = args.dw.data.as_raw().0 as *mut c_void;
-        let db_ptr = args.db.as_ref()
+        let db_ptr = args
+            .db
+            .as_ref()
             .map(|b| b.data.as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let use_silu = if self.desc.use_silu { 1 } else { 0 };
@@ -442,43 +482,85 @@ impl<T: Element> CausalConv1dBackwardPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_causal_conv1d_f32_backward_run(
-                    self.desc.batch_size, self.desc.channels, self.desc.seq_len,
-                    self.desc.width, use_silu,
-                    x_ptr, w_ptr, b_ptr, dy_ptr,
-                    dx_ptr, dw_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.channels,
+                    self.desc.seq_len,
+                    self.desc.width,
+                    use_silu,
+                    x_ptr,
+                    w_ptr,
+                    b_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    dw_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_causal_conv1d_f16_backward_run(
-                    self.desc.batch_size, self.desc.channels, self.desc.seq_len,
-                    self.desc.width, use_silu,
-                    x_ptr, w_ptr, b_ptr, dy_ptr,
-                    dx_ptr, dw_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.channels,
+                    self.desc.seq_len,
+                    self.desc.width,
+                    use_silu,
+                    x_ptr,
+                    w_ptr,
+                    b_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    dw_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_causal_conv1d_bf16_backward_run(
-                    self.desc.batch_size, self.desc.channels, self.desc.seq_len,
-                    self.desc.width, use_silu,
-                    x_ptr, w_ptr, b_ptr, dy_ptr,
-                    dx_ptr, dw_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.channels,
+                    self.desc.seq_len,
+                    self.desc.width,
+                    use_silu,
+                    x_ptr,
+                    w_ptr,
+                    b_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    dw_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_causal_conv1d_f64_backward_run(
-                    self.desc.batch_size, self.desc.channels, self.desc.seq_len,
-                    self.desc.width, use_silu,
-                    x_ptr, w_ptr, b_ptr, dy_ptr,
-                    dx_ptr, dw_ptr, db_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.channels,
+                    self.desc.seq_len,
+                    self.desc.width,
+                    use_silu,
+                    x_ptr,
+                    w_ptr,
+                    b_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    dw_ptr,
+                    db_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
-            _ => return Err(Error::Unsupported(
-                "baracuda-kernels::CausalConv1dBackwardPlan: dtype not wired",
-            )),
+            _ => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::CausalConv1dBackwardPlan: dtype not wired",
+                ));
+            }
         };
         map_status(status)
     }

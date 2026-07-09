@@ -288,10 +288,7 @@ impl<T: Element> KvCacheAppendPlan<T> {
     ) -> Result<()> {
         self.can_implement(&args)?;
         // Empty problem — nothing to do.
-        if self.desc.batch_size == 0
-            || self.desc.num_heads == 0
-            || self.desc.new_len == 0
-        {
+        if self.desc.batch_size == 0 || self.desc.num_heads == 0 || self.desc.new_len == 0 {
             return Ok(());
         }
         let stream_ptr = stream.as_raw();

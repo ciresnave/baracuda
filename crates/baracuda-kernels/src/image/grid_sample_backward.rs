@@ -182,20 +182,38 @@ impl<T: Element> GridSampleBackwardPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_grid_sample_2d_backward_f32_run(
-                    self.desc.n, self.desc.c, self.desc.ih, self.desc.iw,
-                    self.desc.oh, self.desc.ow,
-                    dout_ptr, input_ptr, grid_ptr,
-                    din_ptr, dgrid_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.ih,
+                    self.desc.iw,
+                    self.desc.oh,
+                    self.desc.ow,
+                    dout_ptr,
+                    input_ptr,
+                    grid_ptr,
+                    din_ptr,
+                    dgrid_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_grid_sample_2d_backward_f64_run(
-                    self.desc.n, self.desc.c, self.desc.ih, self.desc.iw,
-                    self.desc.oh, self.desc.ow,
-                    dout_ptr, input_ptr, grid_ptr,
-                    din_ptr, dgrid_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.ih,
+                    self.desc.iw,
+                    self.desc.oh,
+                    self.desc.ow,
+                    dout_ptr,
+                    input_ptr,
+                    grid_ptr,
+                    din_ptr,
+                    dgrid_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

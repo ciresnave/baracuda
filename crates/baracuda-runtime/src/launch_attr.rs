@@ -25,7 +25,7 @@ use baracuda_cuda_sys::runtime::types::{
     cudaLaunchAttribute, cudaLaunchAttributeID, cudaLaunchAttributeValue, cudaLaunchConfig_t, dim3,
 };
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::launch::Dim3;
 use crate::module::Kernel;
 use crate::stream::Stream;
@@ -108,21 +108,23 @@ impl<'s> LaunchExBuilder<'s> {
     ///
     /// `args` must match `kernel`'s C signature in count / order / types
     /// exactly (the marshaling is bytewise).
-    pub unsafe fn launch(mut self, kernel: &Kernel, args: &mut [*mut c_void]) -> Result<()> { unsafe {
-        if !self.attrs.is_empty() {
-            self.config.attrs = self.attrs.as_mut_ptr();
-            self.config.num_attrs = self.attrs.len() as core::ffi::c_uint;
+    pub unsafe fn launch(mut self, kernel: &Kernel, args: &mut [*mut c_void]) -> Result<()> {
+        unsafe {
+            if !self.attrs.is_empty() {
+                self.config.attrs = self.attrs.as_mut_ptr();
+                self.config.num_attrs = self.attrs.len() as core::ffi::c_uint;
+            }
+            let r = runtime()?;
+            let cu = r.cuda_launch_kernel_ex()?;
+            check(cu(
+                &self.config,
+                kernel.as_launch_ptr(),
+                if args.is_empty() {
+                    core::ptr::null_mut()
+                } else {
+                    args.as_mut_ptr()
+                },
+            ))
         }
-        let r = runtime()?;
-        let cu = r.cuda_launch_kernel_ex()?;
-        check(cu(
-            &self.config,
-            kernel.as_launch_ptr(),
-            if args.is_empty() {
-                core::ptr::null_mut()
-            } else {
-                args.as_mut_ptr()
-            },
-        ))
-    }}
+    }
 }

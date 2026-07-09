@@ -34,11 +34,10 @@
 //!
 //! Requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace, WriteSliceArgs, WriteSliceDescriptor,
-    WriteSlicePlan,
+    ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, WriteSliceArgs, WriteSliceDescriptor, WriteSlicePlan, contiguous_stride,
 };
 
 /// Five-node draft tree (the canonical EAGLE pattern):
@@ -131,9 +130,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // In a real spec-decoder this is the draft model's forward pass.
     // -------------------------------------------------------------------
     let n_qkv = (BATCH * HEADS * Q_LEN * HEAD_DIM) as usize;
-    let q_draft: Vec<f32> = (0..n_qkv).map(|i| ((i as f32) * 0.017 + 1.1).sin() * 0.5).collect();
-    let k_draft: Vec<f32> = (0..n_qkv).map(|i| ((i as f32) * 0.019 + 0.7).cos() * 0.5).collect();
-    let v_draft: Vec<f32> = (0..n_qkv).map(|i| ((i as f32) * 0.023 + 0.2).sin() * 0.5).collect();
+    let q_draft: Vec<f32> = (0..n_qkv)
+        .map(|i| ((i as f32) * 0.017 + 1.1).sin() * 0.5)
+        .collect();
+    let k_draft: Vec<f32> = (0..n_qkv)
+        .map(|i| ((i as f32) * 0.019 + 0.7).cos() * 0.5)
+        .collect();
+    let v_draft: Vec<f32> = (0..n_qkv)
+        .map(|i| ((i as f32) * 0.023 + 0.2).sin() * 0.5)
+        .collect();
 
     let d_q = DeviceBuffer::from_slice(&ctx, &q_draft)?;
     let d_k = DeviceBuffer::from_slice(&ctx, &k_draft)?;
@@ -233,9 +238,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for h in 0..(HEADS as usize) {
             for kk in 0..(k_cur_len as usize) {
                 for d in 0..(HEAD_DIM as usize) {
-                    let src = ((b * HEADS as usize + h) * K_CAP as usize + kk)
-                        * HEAD_DIM as usize
-                        + d;
+                    let src =
+                        ((b * HEADS as usize + h) * K_CAP as usize + kk) * HEAD_DIM as usize + d;
                     let dst = ((b * HEADS as usize + h) * k_cur_len as usize + kk)
                         * HEAD_DIM as usize
                         + d;

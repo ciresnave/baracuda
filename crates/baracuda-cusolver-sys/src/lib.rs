@@ -10,7 +10,7 @@
 use core::ffi::{c_int, c_void};
 use std::sync::OnceLock;
 
-use baracuda_core::{platform, Library, LoaderError};
+use baracuda_core::{Library, LoaderError, platform};
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_types::CudaStatus;
 
@@ -463,73 +463,271 @@ pub type PFN_cusolverGetVersion = unsafe extern "C" fn(version: *mut c_int) -> c
 
 // ---- LU factorization (getrf / getrs) — S/D/C/Z --------------------------
 
-dn_getrf_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgetrf_bufferSize, f32);
-dn_getrf_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgetrf_bufferSize, f64);
-dn_getrf_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgetrf_bufferSize, cuComplex);
-dn_getrf_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgetrf_bufferSize, cuDoubleComplex);
+dn_getrf_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgetrf_bufferSize,
+    f32
+);
+dn_getrf_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgetrf_bufferSize,
+    f64
+);
+dn_getrf_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgetrf_bufferSize,
+    cuComplex
+);
+dn_getrf_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgetrf_bufferSize,
+    cuDoubleComplex
+);
 
-dn_getrf!(#[doc = "cuSOLVER: single-precision LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgetrf, f32);
-dn_getrf!(#[doc = "cuSOLVER: double-precision LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgetrf, f64);
-dn_getrf!(#[doc = "cuSOLVER: single-precision complex LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgetrf, cuComplex);
-dn_getrf!(#[doc = "cuSOLVER: double-precision complex LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgetrf, cuDoubleComplex);
+dn_getrf!(
+    #[doc = "cuSOLVER: single-precision LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgetrf,
+    f32
+);
+dn_getrf!(
+    #[doc = "cuSOLVER: double-precision LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgetrf,
+    f64
+);
+dn_getrf!(
+    #[doc = "cuSOLVER: single-precision complex LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgetrf,
+    cuComplex
+);
+dn_getrf!(
+    #[doc = "cuSOLVER: double-precision complex LU factorization with partial pivoting. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgetrf,
+    cuDoubleComplex
+);
 
-dn_getrs!(#[doc = "cuSOLVER: single-precision solve linear system using LU factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgetrs, f32);
-dn_getrs!(#[doc = "cuSOLVER: double-precision solve linear system using LU factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgetrs, f64);
-dn_getrs!(#[doc = "cuSOLVER: single-precision complex solve linear system using LU factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgetrs, cuComplex);
-dn_getrs!(#[doc = "cuSOLVER: double-precision complex solve linear system using LU factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgetrs, cuDoubleComplex);
+dn_getrs!(
+    #[doc = "cuSOLVER: single-precision solve linear system using LU factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgetrs,
+    f32
+);
+dn_getrs!(
+    #[doc = "cuSOLVER: double-precision solve linear system using LU factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgetrs,
+    f64
+);
+dn_getrs!(
+    #[doc = "cuSOLVER: single-precision complex solve linear system using LU factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgetrs,
+    cuComplex
+);
+dn_getrs!(
+    #[doc = "cuSOLVER: double-precision complex solve linear system using LU factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgetrs,
+    cuDoubleComplex
+);
 
 // ---- QR factorization (geqrf) — S/D/C/Z ----------------------------------
 
-dn_geqrf_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgeqrf_bufferSize, f32);
-dn_geqrf_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgeqrf_bufferSize, f64);
-dn_geqrf_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgeqrf_bufferSize, cuComplex);
-dn_geqrf_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgeqrf_bufferSize, cuDoubleComplex);
+dn_geqrf_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgeqrf_bufferSize,
+    f32
+);
+dn_geqrf_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgeqrf_bufferSize,
+    f64
+);
+dn_geqrf_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgeqrf_bufferSize,
+    cuComplex
+);
+dn_geqrf_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgeqrf_bufferSize,
+    cuDoubleComplex
+);
 
-dn_geqrf!(#[doc = "cuSOLVER: single-precision QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgeqrf, f32);
-dn_geqrf!(#[doc = "cuSOLVER: double-precision QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgeqrf, f64);
-dn_geqrf!(#[doc = "cuSOLVER: single-precision complex QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgeqrf, cuComplex);
-dn_geqrf!(#[doc = "cuSOLVER: double-precision complex QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgeqrf, cuDoubleComplex);
+dn_geqrf!(
+    #[doc = "cuSOLVER: single-precision QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgeqrf,
+    f32
+);
+dn_geqrf!(
+    #[doc = "cuSOLVER: double-precision QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgeqrf,
+    f64
+);
+dn_geqrf!(
+    #[doc = "cuSOLVER: single-precision complex QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgeqrf,
+    cuComplex
+);
+dn_geqrf!(
+    #[doc = "cuSOLVER: double-precision complex QR factorization (Householder). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgeqrf,
+    cuDoubleComplex
+);
 
 // ---- Cholesky (potrf / potrs) — S/D/C/Z ----------------------------------
 
-dn_potrf_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSpotrf_bufferSize, f32);
-dn_potrf_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDpotrf_bufferSize, f64);
-dn_potrf_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCpotrf_bufferSize, cuComplex);
-dn_potrf_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZpotrf_bufferSize, cuDoubleComplex);
+dn_potrf_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSpotrf_bufferSize,
+    f32
+);
+dn_potrf_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDpotrf_bufferSize,
+    f64
+);
+dn_potrf_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCpotrf_bufferSize,
+    cuComplex
+);
+dn_potrf_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZpotrf_bufferSize,
+    cuDoubleComplex
+);
 
-dn_potrf!(#[doc = "cuSOLVER: single-precision Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSpotrf, f32);
-dn_potrf!(#[doc = "cuSOLVER: double-precision Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDpotrf, f64);
-dn_potrf!(#[doc = "cuSOLVER: single-precision complex Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCpotrf, cuComplex);
-dn_potrf!(#[doc = "cuSOLVER: double-precision complex Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZpotrf, cuDoubleComplex);
+dn_potrf!(
+    #[doc = "cuSOLVER: single-precision Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSpotrf,
+    f32
+);
+dn_potrf!(
+    #[doc = "cuSOLVER: double-precision Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDpotrf,
+    f64
+);
+dn_potrf!(
+    #[doc = "cuSOLVER: single-precision complex Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCpotrf,
+    cuComplex
+);
+dn_potrf!(
+    #[doc = "cuSOLVER: double-precision complex Cholesky factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZpotrf,
+    cuDoubleComplex
+);
 
-dn_potrs!(#[doc = "cuSOLVER: single-precision solve linear system using Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSpotrs, f32);
-dn_potrs!(#[doc = "cuSOLVER: double-precision solve linear system using Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDpotrs, f64);
-dn_potrs!(#[doc = "cuSOLVER: single-precision complex solve linear system using Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCpotrs, cuComplex);
-dn_potrs!(#[doc = "cuSOLVER: double-precision complex solve linear system using Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZpotrs, cuDoubleComplex);
+dn_potrs!(
+    #[doc = "cuSOLVER: single-precision solve linear system using Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSpotrs,
+    f32
+);
+dn_potrs!(
+    #[doc = "cuSOLVER: double-precision solve linear system using Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDpotrs,
+    f64
+);
+dn_potrs!(
+    #[doc = "cuSOLVER: single-precision complex solve linear system using Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCpotrs,
+    cuComplex
+);
+dn_potrs!(
+    #[doc = "cuSOLVER: double-precision complex solve linear system using Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZpotrs,
+    cuDoubleComplex
+);
 
 // ---- SVD — S/D/C/Z -------------------------------------------------------
 
-dn_gesvd_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgesvd_bufferSize);
-dn_gesvd_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgesvd_bufferSize);
-dn_gesvd_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgesvd_bufferSize);
-dn_gesvd_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgesvd_bufferSize);
+dn_gesvd_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgesvd_bufferSize
+);
+dn_gesvd_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgesvd_bufferSize
+);
+dn_gesvd_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgesvd_bufferSize
+);
+dn_gesvd_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgesvd_bufferSize
+);
 
-dn_gesvd_real!(#[doc = "cuSOLVER: single-precision singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgesvd, f32);
-dn_gesvd_real!(#[doc = "cuSOLVER: double-precision singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgesvd, f64);
-dn_gesvd_complex!(#[doc = "cuSOLVER: single-precision complex singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgesvd, cuComplex, f32);
-dn_gesvd_complex!(#[doc = "cuSOLVER: double-precision complex singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgesvd, cuDoubleComplex, f64);
+dn_gesvd_real!(
+    #[doc = "cuSOLVER: single-precision singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgesvd,
+    f32
+);
+dn_gesvd_real!(
+    #[doc = "cuSOLVER: double-precision singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgesvd,
+    f64
+);
+dn_gesvd_complex!(
+    #[doc = "cuSOLVER: single-precision complex singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgesvd,
+    cuComplex,
+    f32
+);
+dn_gesvd_complex!(
+    #[doc = "cuSOLVER: double-precision complex singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgesvd,
+    cuDoubleComplex,
+    f64
+);
 
 // ---- Symmetric/Hermitian eigendecomposition (syevd/heevd) --------------
 
-dn_syevd_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for symmetric eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSsyevd_bufferSize, f32, f32);
-dn_syevd_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for symmetric eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDsyevd_bufferSize, f64, f64);
-dn_syevd_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for Hermitian eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCheevd_bufferSize, cuComplex, f32);
-dn_syevd_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for Hermitian eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZheevd_bufferSize, cuDoubleComplex, f64);
+dn_syevd_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for symmetric eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSsyevd_bufferSize,
+    f32,
+    f32
+);
+dn_syevd_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for symmetric eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDsyevd_bufferSize,
+    f64,
+    f64
+);
+dn_syevd_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for Hermitian eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCheevd_bufferSize,
+    cuComplex,
+    f32
+);
+dn_syevd_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for Hermitian eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZheevd_bufferSize,
+    cuDoubleComplex,
+    f64
+);
 
-dn_syevd!(#[doc = "cuSOLVER: single-precision symmetric eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSsyevd, f32, f32);
-dn_syevd!(#[doc = "cuSOLVER: double-precision symmetric eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDsyevd, f64, f64);
-dn_syevd!(#[doc = "cuSOLVER: single-precision complex Hermitian eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCheevd, cuComplex, f32);
-dn_syevd!(#[doc = "cuSOLVER: double-precision complex Hermitian eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZheevd, cuDoubleComplex, f64);
+dn_syevd!(
+    #[doc = "cuSOLVER: single-precision symmetric eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSsyevd,
+    f32,
+    f32
+);
+dn_syevd!(
+    #[doc = "cuSOLVER: double-precision symmetric eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDsyevd,
+    f64,
+    f64
+);
+dn_syevd!(
+    #[doc = "cuSOLVER: single-precision complex Hermitian eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCheevd,
+    cuComplex,
+    f32
+);
+dn_syevd!(
+    #[doc = "cuSOLVER: double-precision complex Hermitian eigendecomposition (divide-and-conquer). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZheevd,
+    cuDoubleComplex,
+    f64
+);
 
 // ---- Generic 64-bit / mixed-precision API (cusolverDnX…) ----------------
 
@@ -741,10 +939,30 @@ macro_rules! dn_syevj_bufsize {
         ) -> cusolverStatus_t;
     };
 }
-dn_syevj_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSsyevj_bufferSize, f32, f32);
-dn_syevj_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDsyevj_bufferSize, f64, f64);
-dn_syevj_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCheevj_bufferSize, cuComplex, f32);
-dn_syevj_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZheevj_bufferSize, cuDoubleComplex, f64);
+dn_syevj_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSsyevj_bufferSize,
+    f32,
+    f32
+);
+dn_syevj_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDsyevj_bufferSize,
+    f64,
+    f64
+);
+dn_syevj_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCheevj_bufferSize,
+    cuComplex,
+    f32
+);
+dn_syevj_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZheevj_bufferSize,
+    cuDoubleComplex,
+    f64
+);
 
 macro_rules! dn_syevj {
     ($(#[$attr:meta])* $name:ident, $t:ty, $real:ty) => {
@@ -764,10 +982,30 @@ macro_rules! dn_syevj {
         ) -> cusolverStatus_t;
     };
 }
-dn_syevj!(#[doc = "cuSOLVER: single-precision symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSsyevj, f32, f32);
-dn_syevj!(#[doc = "cuSOLVER: double-precision symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDsyevj, f64, f64);
-dn_syevj!(#[doc = "cuSOLVER: single-precision complex Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCheevj, cuComplex, f32);
-dn_syevj!(#[doc = "cuSOLVER: double-precision complex Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZheevj, cuDoubleComplex, f64);
+dn_syevj!(
+    #[doc = "cuSOLVER: single-precision symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSsyevj,
+    f32,
+    f32
+);
+dn_syevj!(
+    #[doc = "cuSOLVER: double-precision symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDsyevj,
+    f64,
+    f64
+);
+dn_syevj!(
+    #[doc = "cuSOLVER: single-precision complex Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCheevj,
+    cuComplex,
+    f32
+);
+dn_syevj!(
+    #[doc = "cuSOLVER: double-precision complex Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZheevj,
+    cuDoubleComplex,
+    f64
+);
 
 /// cuSOLVER: create a Jacobi-SVD control object. See <https://docs.nvidia.com/cuda/cusolver/index.html>.
 pub type PFN_cusolverDnCreateGesvdjInfo =
@@ -797,10 +1035,30 @@ macro_rules! dn_gesvdj_bufsize {
         ) -> cusolverStatus_t;
     };
 }
-dn_gesvdj_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgesvdj_bufferSize, f32, f32);
-dn_gesvdj_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgesvdj_bufferSize, f64, f64);
-dn_gesvdj_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgesvdj_bufferSize, cuComplex, f32);
-dn_gesvdj_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgesvdj_bufferSize, cuDoubleComplex, f64);
+dn_gesvdj_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgesvdj_bufferSize,
+    f32,
+    f32
+);
+dn_gesvdj_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgesvdj_bufferSize,
+    f64,
+    f64
+);
+dn_gesvdj_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgesvdj_bufferSize,
+    cuComplex,
+    f32
+);
+dn_gesvdj_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgesvdj_bufferSize,
+    cuDoubleComplex,
+    f64
+);
 
 macro_rules! dn_gesvdj {
     ($(#[$attr:meta])* $name:ident, $t:ty, $real:ty) => {
@@ -825,10 +1083,30 @@ macro_rules! dn_gesvdj {
         ) -> cusolverStatus_t;
     };
 }
-dn_gesvdj!(#[doc = "cuSOLVER: single-precision Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgesvdj, f32, f32);
-dn_gesvdj!(#[doc = "cuSOLVER: double-precision Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgesvdj, f64, f64);
-dn_gesvdj!(#[doc = "cuSOLVER: single-precision complex Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgesvdj, cuComplex, f32);
-dn_gesvdj!(#[doc = "cuSOLVER: double-precision complex Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgesvdj, cuDoubleComplex, f64);
+dn_gesvdj!(
+    #[doc = "cuSOLVER: single-precision Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgesvdj,
+    f32,
+    f32
+);
+dn_gesvdj!(
+    #[doc = "cuSOLVER: double-precision Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgesvdj,
+    f64,
+    f64
+);
+dn_gesvdj!(
+    #[doc = "cuSOLVER: single-precision complex Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgesvdj,
+    cuComplex,
+    f32
+);
+dn_gesvdj!(
+    #[doc = "cuSOLVER: double-precision complex Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgesvdj,
+    cuDoubleComplex,
+    f64
+);
 
 // ==========================================================================
 // Apply Q from QR (orgqr / ormqr)
@@ -849,10 +1127,26 @@ macro_rules! dn_orgqr_bufsize {
         ) -> cusolverStatus_t;
     };
 }
-dn_orgqr_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for generate the explicit Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSorgqr_bufferSize, f32);
-dn_orgqr_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for generate the explicit Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDorgqr_bufferSize, f64);
-dn_orgqr_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for generate the explicit unitary Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCungqr_bufferSize, cuComplex);
-dn_orgqr_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for generate the explicit unitary Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZungqr_bufferSize, cuDoubleComplex);
+dn_orgqr_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for generate the explicit Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSorgqr_bufferSize,
+    f32
+);
+dn_orgqr_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for generate the explicit Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDorgqr_bufferSize,
+    f64
+);
+dn_orgqr_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for generate the explicit unitary Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCungqr_bufferSize,
+    cuComplex
+);
+dn_orgqr_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for generate the explicit unitary Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZungqr_bufferSize,
+    cuDoubleComplex
+);
 
 macro_rules! dn_orgqr {
     ($(#[$attr:meta])* $name:ident, $t:ty) => {
@@ -871,10 +1165,26 @@ macro_rules! dn_orgqr {
         ) -> cusolverStatus_t;
     };
 }
-dn_orgqr!(#[doc = "cuSOLVER: single-precision generate the explicit Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSorgqr, f32);
-dn_orgqr!(#[doc = "cuSOLVER: double-precision generate the explicit Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDorgqr, f64);
-dn_orgqr!(#[doc = "cuSOLVER: single-precision complex generate the explicit unitary Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCungqr, cuComplex);
-dn_orgqr!(#[doc = "cuSOLVER: double-precision complex generate the explicit unitary Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZungqr, cuDoubleComplex);
+dn_orgqr!(
+    #[doc = "cuSOLVER: single-precision generate the explicit Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSorgqr,
+    f32
+);
+dn_orgqr!(
+    #[doc = "cuSOLVER: double-precision generate the explicit Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDorgqr,
+    f64
+);
+dn_orgqr!(
+    #[doc = "cuSOLVER: single-precision complex generate the explicit unitary Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCungqr,
+    cuComplex
+);
+dn_orgqr!(
+    #[doc = "cuSOLVER: double-precision complex generate the explicit unitary Q from a QR factorization. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZungqr,
+    cuDoubleComplex
+);
 
 macro_rules! dn_ormqr_bufsize {
     ($(#[$attr:meta])* $name:ident, $t:ty) => {
@@ -895,10 +1205,26 @@ macro_rules! dn_ormqr_bufsize {
         ) -> cusolverStatus_t;
     };
 }
-dn_ormqr_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for apply Q (or Q^T) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSormqr_bufferSize, f32);
-dn_ormqr_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for apply Q (or Q^T) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDormqr_bufferSize, f64);
-dn_ormqr_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for apply Q (or Q^H) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCunmqr_bufferSize, cuComplex);
-dn_ormqr_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for apply Q (or Q^H) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZunmqr_bufferSize, cuDoubleComplex);
+dn_ormqr_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for apply Q (or Q^T) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSormqr_bufferSize,
+    f32
+);
+dn_ormqr_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for apply Q (or Q^T) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDormqr_bufferSize,
+    f64
+);
+dn_ormqr_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for apply Q (or Q^H) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCunmqr_bufferSize,
+    cuComplex
+);
+dn_ormqr_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for apply Q (or Q^H) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZunmqr_bufferSize,
+    cuDoubleComplex
+);
 
 macro_rules! dn_ormqr {
     ($(#[$attr:meta])* $name:ident, $t:ty) => {
@@ -921,10 +1247,26 @@ macro_rules! dn_ormqr {
         ) -> cusolverStatus_t;
     };
 }
-dn_ormqr!(#[doc = "cuSOLVER: single-precision apply Q (or Q^T) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSormqr, f32);
-dn_ormqr!(#[doc = "cuSOLVER: double-precision apply Q (or Q^T) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDormqr, f64);
-dn_ormqr!(#[doc = "cuSOLVER: single-precision complex apply Q (or Q^H) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCunmqr, cuComplex);
-dn_ormqr!(#[doc = "cuSOLVER: double-precision complex apply Q (or Q^H) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZunmqr, cuDoubleComplex);
+dn_ormqr!(
+    #[doc = "cuSOLVER: single-precision apply Q (or Q^T) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSormqr,
+    f32
+);
+dn_ormqr!(
+    #[doc = "cuSOLVER: double-precision apply Q (or Q^T) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDormqr,
+    f64
+);
+dn_ormqr!(
+    #[doc = "cuSOLVER: single-precision complex apply Q (or Q^H) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCunmqr,
+    cuComplex
+);
+dn_ormqr!(
+    #[doc = "cuSOLVER: double-precision complex apply Q (or Q^H) from a QR factorization to a matrix. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZunmqr,
+    cuDoubleComplex
+);
 
 // ---- Sparse cuSOLVER -----------------------------------------------------
 
@@ -1070,10 +1412,26 @@ macro_rules! dn_gels_bufsize {
         ) -> cusolverStatus_t;
     };
 }
-dn_gels_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSSgels_bufferSize, f32);
-dn_gels_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDDgels_bufferSize, f64);
-dn_gels_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCCgels_bufferSize, cuComplex);
-dn_gels_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZZgels_bufferSize, cuDoubleComplex);
+dn_gels_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSSgels_bufferSize,
+    f32
+);
+dn_gels_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDDgels_bufferSize,
+    f64
+);
+dn_gels_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCCgels_bufferSize,
+    cuComplex
+);
+dn_gels_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZZgels_bufferSize,
+    cuDoubleComplex
+);
 
 macro_rules! dn_gels {
     ($(#[$attr:meta])* $name:ident, $t:ty) => {
@@ -1096,10 +1454,26 @@ macro_rules! dn_gels {
         ) -> cusolverStatus_t;
     };
 }
-dn_gels!(#[doc = "cuSOLVER: single-precision least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSSgels, f32);
-dn_gels!(#[doc = "cuSOLVER: double-precision least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDDgels, f64);
-dn_gels!(#[doc = "cuSOLVER: single-precision complex least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCCgels, cuComplex);
-dn_gels!(#[doc = "cuSOLVER: double-precision complex least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZZgels, cuDoubleComplex);
+dn_gels!(
+    #[doc = "cuSOLVER: single-precision least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSSgels,
+    f32
+);
+dn_gels!(
+    #[doc = "cuSOLVER: double-precision least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDDgels,
+    f64
+);
+dn_gels!(
+    #[doc = "cuSOLVER: single-precision complex least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCCgels,
+    cuComplex
+);
+dn_gels!(
+    #[doc = "cuSOLVER: double-precision complex least-squares solver (A*X = B). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZZgels,
+    cuDoubleComplex
+);
 
 // ==========================================================================
 // Inverse from Cholesky (potri)
@@ -1118,10 +1492,26 @@ macro_rules! dn_potri_bufsize {
         ) -> cusolverStatus_t;
     };
 }
-dn_potri_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSpotri_bufferSize, f32);
-dn_potri_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDpotri_bufferSize, f64);
-dn_potri_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCpotri_bufferSize, cuComplex);
-dn_potri_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZpotri_bufferSize, cuDoubleComplex);
+dn_potri_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSpotri_bufferSize,
+    f32
+);
+dn_potri_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDpotri_bufferSize,
+    f64
+);
+dn_potri_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCpotri_bufferSize,
+    cuComplex
+);
+dn_potri_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZpotri_bufferSize,
+    cuDoubleComplex
+);
 
 macro_rules! dn_potri {
     ($(#[$attr:meta])* $name:ident, $t:ty) => {
@@ -1138,10 +1528,26 @@ macro_rules! dn_potri {
         ) -> cusolverStatus_t;
     };
 }
-dn_potri!(#[doc = "cuSOLVER: single-precision matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSpotri, f32);
-dn_potri!(#[doc = "cuSOLVER: double-precision matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDpotri, f64);
-dn_potri!(#[doc = "cuSOLVER: single-precision complex matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCpotri, cuComplex);
-dn_potri!(#[doc = "cuSOLVER: double-precision complex matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZpotri, cuDoubleComplex);
+dn_potri!(
+    #[doc = "cuSOLVER: single-precision matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSpotri,
+    f32
+);
+dn_potri!(
+    #[doc = "cuSOLVER: double-precision matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDpotri,
+    f64
+);
+dn_potri!(
+    #[doc = "cuSOLVER: single-precision complex matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCpotri,
+    cuComplex
+);
+dn_potri!(
+    #[doc = "cuSOLVER: double-precision complex matrix inverse from Cholesky factors. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZpotri,
+    cuDoubleComplex
+);
 
 // ==========================================================================
 // Batched Jacobi eigen / SVD
@@ -1164,10 +1570,30 @@ macro_rules! dn_syevj_batched_bufsize {
         ) -> cusolverStatus_t;
     };
 }
-dn_syevj_batched_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for batched symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSsyevjBatched_bufferSize, f32, f32);
-dn_syevj_batched_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for batched symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDsyevjBatched_bufferSize, f64, f64);
-dn_syevj_batched_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for batched Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCheevjBatched_bufferSize, cuComplex, f32);
-dn_syevj_batched_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for batched Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZheevjBatched_bufferSize, cuDoubleComplex, f64);
+dn_syevj_batched_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for batched symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSsyevjBatched_bufferSize,
+    f32,
+    f32
+);
+dn_syevj_batched_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for batched symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDsyevjBatched_bufferSize,
+    f64,
+    f64
+);
+dn_syevj_batched_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for batched Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCheevjBatched_bufferSize,
+    cuComplex,
+    f32
+);
+dn_syevj_batched_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for batched Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZheevjBatched_bufferSize,
+    cuDoubleComplex,
+    f64
+);
 
 macro_rules! dn_syevj_batched {
     ($(#[$attr:meta])* $name:ident, $t:ty, $real:ty) => {
@@ -1188,10 +1614,30 @@ macro_rules! dn_syevj_batched {
         ) -> cusolverStatus_t;
     };
 }
-dn_syevj_batched!(#[doc = "cuSOLVER: single-precision batched symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSsyevjBatched, f32, f32);
-dn_syevj_batched!(#[doc = "cuSOLVER: double-precision batched symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDsyevjBatched, f64, f64);
-dn_syevj_batched!(#[doc = "cuSOLVER: single-precision complex batched Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCheevjBatched, cuComplex, f32);
-dn_syevj_batched!(#[doc = "cuSOLVER: double-precision complex batched Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZheevjBatched, cuDoubleComplex, f64);
+dn_syevj_batched!(
+    #[doc = "cuSOLVER: single-precision batched symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSsyevjBatched,
+    f32,
+    f32
+);
+dn_syevj_batched!(
+    #[doc = "cuSOLVER: double-precision batched symmetric eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDsyevjBatched,
+    f64,
+    f64
+);
+dn_syevj_batched!(
+    #[doc = "cuSOLVER: single-precision complex batched Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCheevjBatched,
+    cuComplex,
+    f32
+);
+dn_syevj_batched!(
+    #[doc = "cuSOLVER: double-precision complex batched Hermitian eigendecomposition (Jacobi). See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZheevjBatched,
+    cuDoubleComplex,
+    f64
+);
 
 macro_rules! dn_gesvdj_batched_bufsize {
     ($(#[$attr:meta])* $name:ident, $t:ty, $real:ty) => {
@@ -1214,10 +1660,30 @@ macro_rules! dn_gesvdj_batched_bufsize {
         ) -> cusolverStatus_t;
     };
 }
-dn_gesvdj_batched_bufsize!(#[doc = "cuSOLVER: single-precision workspace-size query for batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgesvdjBatched_bufferSize, f32, f32);
-dn_gesvdj_batched_bufsize!(#[doc = "cuSOLVER: double-precision workspace-size query for batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgesvdjBatched_bufferSize, f64, f64);
-dn_gesvdj_batched_bufsize!(#[doc = "cuSOLVER: single-precision complex workspace-size query for batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgesvdjBatched_bufferSize, cuComplex, f32);
-dn_gesvdj_batched_bufsize!(#[doc = "cuSOLVER: double-precision complex workspace-size query for batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgesvdjBatched_bufferSize, cuDoubleComplex, f64);
+dn_gesvdj_batched_bufsize!(
+    #[doc = "cuSOLVER: single-precision workspace-size query for batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgesvdjBatched_bufferSize,
+    f32,
+    f32
+);
+dn_gesvdj_batched_bufsize!(
+    #[doc = "cuSOLVER: double-precision workspace-size query for batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgesvdjBatched_bufferSize,
+    f64,
+    f64
+);
+dn_gesvdj_batched_bufsize!(
+    #[doc = "cuSOLVER: single-precision complex workspace-size query for batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgesvdjBatched_bufferSize,
+    cuComplex,
+    f32
+);
+dn_gesvdj_batched_bufsize!(
+    #[doc = "cuSOLVER: double-precision complex workspace-size query for batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgesvdjBatched_bufferSize,
+    cuDoubleComplex,
+    f64
+);
 
 macro_rules! dn_gesvdj_batched {
     ($(#[$attr:meta])* $name:ident, $t:ty, $real:ty) => {
@@ -1242,10 +1708,30 @@ macro_rules! dn_gesvdj_batched {
         ) -> cusolverStatus_t;
     };
 }
-dn_gesvdj_batched!(#[doc = "cuSOLVER: single-precision batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnSgesvdjBatched, f32, f32);
-dn_gesvdj_batched!(#[doc = "cuSOLVER: double-precision batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnDgesvdjBatched, f64, f64);
-dn_gesvdj_batched!(#[doc = "cuSOLVER: single-precision complex batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnCgesvdjBatched, cuComplex, f32);
-dn_gesvdj_batched!(#[doc = "cuSOLVER: double-precision complex batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."] PFN_cusolverDnZgesvdjBatched, cuDoubleComplex, f64);
+dn_gesvdj_batched!(
+    #[doc = "cuSOLVER: single-precision batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnSgesvdjBatched,
+    f32,
+    f32
+);
+dn_gesvdj_batched!(
+    #[doc = "cuSOLVER: double-precision batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnDgesvdjBatched,
+    f64,
+    f64
+);
+dn_gesvdj_batched!(
+    #[doc = "cuSOLVER: single-precision complex batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnCgesvdjBatched,
+    cuComplex,
+    f32
+);
+dn_gesvdj_batched!(
+    #[doc = "cuSOLVER: double-precision complex batched Jacobi-method singular value decomposition. See <https://docs.nvidia.com/cuda/cusolver/index.html>."]
+    PFN_cusolverDnZgesvdjBatched,
+    cuDoubleComplex,
+    f64
+);
 
 // ==========================================================================
 // cuSOLVERMg — multi-GPU dense solvers (separate library libcusolverMg)

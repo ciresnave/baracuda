@@ -159,9 +159,7 @@ fn physical_span3(shape: &[i32; 3], stride: &[i64; 3]) -> i64 {
 /// describes a valid batch step). Returns `false` for normal contig
 /// tensors and for any non-standard stride pattern.
 #[inline]
-fn is_full_mqa_broadcast<T: Element>(
-    t: &TensorRef<'_, T, 4>, num_heads: i32,
-) -> bool {
+fn is_full_mqa_broadcast<T: Element>(t: &TensorRef<'_, T, 4>, num_heads: i32) -> bool {
     t.shape[1] == num_heads
         && t.stride[1] == 0
         && t.stride[3] == 1
@@ -626,10 +624,7 @@ impl<T: Element> FlashSdpaPlan<T> {
         // separately by the FA2 backend path.
         let k_is_broadcast = is_full_mqa_broadcast(&args.k, self.desc.num_heads);
         let v_is_broadcast = is_full_mqa_broadcast(&args.v, self.desc.num_heads);
-        if !args.q.is_contiguous()
-            || !args.y.is_contiguous()
-            || !args.lse.is_contiguous()
-        {
+        if !args.q.is_contiguous() || !args.y.is_contiguous() || !args.lse.is_contiguous() {
             return Err(Error::Unsupported(
                 "baracuda-kernels::FlashSdpaPlan: Q / y / LSE must be contiguous",
             ));
@@ -672,7 +667,10 @@ impl<T: Element> FlashSdpaPlan<T> {
             }
             let m_n = mask.numel();
             if (mask.data.len() as i64) < m_n {
-                return Err(Error::BufferTooSmall { needed: m_n as usize, got: 0 });
+                return Err(Error::BufferTooSmall {
+                    needed: m_n as usize,
+                    got: 0,
+                });
             }
         }
         // Phase 59a — validate optional ALiBi slopes.
@@ -785,8 +783,7 @@ impl<T: Element> FlashSdpaPlan<T> {
         // on Ada).
         //
         // Mask + ALiBi aren't plumbed through this routing; bail clearly.
-        let needs_broadcast_route =
-            is_full_mqa_broadcast(&args.k, self.desc.num_heads)
+        let needs_broadcast_route = is_full_mqa_broadcast(&args.k, self.desc.num_heads)
             || is_full_mqa_broadcast(&args.v, self.desc.num_heads);
         if needs_broadcast_route {
             if args.mask.is_some() {
@@ -822,8 +819,16 @@ impl<T: Element> FlashSdpaPlan<T> {
         if let Some(mask) = args.mask.as_ref() {
             let _ = workspace; // arbmask path is workspace-free
             let mask_ptr = mask.data.as_raw().0 as *const c_void;
-            return self.run_arbmask(stream_ptr, q_ptr, k_ptr, v_ptr, mask_ptr,
-                                    y_ptr, lse_ptr, is_causal_flag);
+            return self.run_arbmask(
+                stream_ptr,
+                q_ptr,
+                k_ptr,
+                v_ptr,
+                mask_ptr,
+                y_ptr,
+                lse_ptr,
+                is_causal_flag,
+            );
         }
 
         // Phase 42 — FA2 dispatch path. Capture-mode triggers an
@@ -999,8 +1004,16 @@ impl<T: Element> FlashSdpaPlan<T> {
                 ];
                 let phys_args = FlashSdpaArgs::<T> {
                     q: args.q,
-                    k: TensorRef { data: args.k.data, shape: k_shape, stride: k_stride },
-                    v: TensorRef { data: args.v.data, shape: v_shape, stride: v_stride },
+                    k: TensorRef {
+                        data: args.k.data,
+                        shape: k_shape,
+                        stride: k_stride,
+                    },
+                    v: TensorRef {
+                        data: args.v.data,
+                        shape: v_shape,
+                        stride: v_stride,
+                    },
                     y: args.y,
                     lse: args.lse,
                     mask: None,
@@ -1016,11 +1029,7 @@ impl<T: Element> FlashSdpaPlan<T> {
     }
 
     #[cfg(feature = "sm89")]
-    fn run_broadcast_sm89(
-        &self,
-        stream: &Stream,
-        args: FlashSdpaArgs<'_, T>,
-    ) -> Result<()> {
+    fn run_broadcast_sm89(&self, stream: &Stream, args: FlashSdpaArgs<'_, T>) -> Result<()> {
         if !matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16) {
             return Err(Error::Unsupported(
                 "baracuda-kernels::FlashSdpaPlan: full-MQA-broadcast routing requires f16/bf16",
@@ -1050,7 +1059,9 @@ impl<T: Element> FlashSdpaPlan<T> {
             element: self.desc.element,
         };
         let sibling_plan = super::flash_sdpa_sm89::FlashSdpaSm89Plan::<T>::select(
-            stream, &sibling_desc, PlanPreference::default(),
+            stream,
+            &sibling_desc,
+            PlanPreference::default(),
         )?;
         let sibling_args = super::flash_sdpa_sm89::FlashSdpaSm89Args::<T> {
             q: args.q,
@@ -1063,11 +1074,7 @@ impl<T: Element> FlashSdpaPlan<T> {
     }
 
     #[cfg(not(feature = "sm89"))]
-    fn run_broadcast_sm89(
-        &self,
-        _stream: &Stream,
-        _args: FlashSdpaArgs<'_, T>,
-    ) -> Result<()> {
+    fn run_broadcast_sm89(&self, _stream: &Stream, _args: FlashSdpaArgs<'_, T>) -> Result<()> {
         Err(Error::Unsupported(
             "baracuda-kernels::FlashSdpaPlan: full-MQA-broadcast K/V at this configuration \
              requires either the `fa2` feature (any head_dim) or the `sm89` feature \
@@ -1103,9 +1110,9 @@ impl<T: Element> FlashSdpaPlan<T> {
             Some(slopes) => {
                 let ptr = slopes.data.as_raw().0 as *const c_void;
                 let batch_stride = if slopes.shape[0] == 1 {
-                    0_i32  // broadcast over batch
+                    0_i32 // broadcast over batch
                 } else {
-                    self.desc.num_heads  // per-batch stride is num_heads elements
+                    self.desc.num_heads // per-batch stride is num_heads elements
                 };
                 (ptr, batch_stride)
             }
@@ -1120,7 +1127,10 @@ impl<T: Element> FlashSdpaPlan<T> {
         let (ws_ptr, ws_bytes) = match workspace {
             Workspace::None => {
                 if need > 0 {
-                    return Err(Error::WorkspaceTooSmall { needed: need, got: 0 });
+                    return Err(Error::WorkspaceTooSmall {
+                        needed: need,
+                        got: 0,
+                    });
                 }
                 (core::ptr::null_mut::<c_void>(), 0usize)
             }
@@ -1229,8 +1239,15 @@ impl<T: Element> FlashSdpaPlan<T> {
                     self.desc.d_v,
                     self.desc.scale,
                     is_causal_flag,
-                    q_ptr, k_ptr, v_ptr, mask_ptr, y_ptr, lse_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    q_ptr,
+                    k_ptr,
+                    v_ptr,
+                    mask_ptr,
+                    y_ptr,
+                    lse_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
@@ -1243,8 +1260,15 @@ impl<T: Element> FlashSdpaPlan<T> {
                     self.desc.d_v,
                     self.desc.scale,
                     is_causal_flag,
-                    q_ptr, k_ptr, v_ptr, mask_ptr, y_ptr, lse_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    q_ptr,
+                    k_ptr,
+                    v_ptr,
+                    mask_ptr,
+                    y_ptr,
+                    lse_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
@@ -1257,8 +1281,15 @@ impl<T: Element> FlashSdpaPlan<T> {
                     self.desc.d_v,
                     self.desc.scale,
                     is_causal_flag,
-                    q_ptr, k_ptr, v_ptr, mask_ptr, y_ptr, lse_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    q_ptr,
+                    k_ptr,
+                    v_ptr,
+                    mask_ptr,
+                    y_ptr,
+                    lse_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
@@ -1271,8 +1302,15 @@ impl<T: Element> FlashSdpaPlan<T> {
                     self.desc.d_v,
                     self.desc.scale,
                     is_causal_flag,
-                    q_ptr, k_ptr, v_ptr, mask_ptr, y_ptr, lse_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    q_ptr,
+                    k_ptr,
+                    v_ptr,
+                    mask_ptr,
+                    y_ptr,
+                    lse_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

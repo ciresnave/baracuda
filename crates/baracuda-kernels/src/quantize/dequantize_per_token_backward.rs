@@ -157,32 +157,56 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTokenBackwardPlan<TIn, TOut> {
         let status = match TIn::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_token_backward_f32_run(
-                    self.desc.n, self.desc.d, dy_ptr, sc_ptr, dx_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.d,
+                    dy_ptr,
+                    sc_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_token_backward_f64_run(
-                    self.desc.n, self.desc.d, dy_ptr, sc_ptr, dx_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.d,
+                    dy_ptr,
+                    sc_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_token_backward_f16_run(
-                    self.desc.n, self.desc.d, dy_ptr, sc_ptr, dx_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.d,
+                    dy_ptr,
+                    sc_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dequantize_per_token_backward_bf16_run(
-                    self.desc.n, self.desc.d, dy_ptr, sc_ptr, dx_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.d,
+                    dy_ptr,
+                    sc_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {
                 return Err(Error::Unsupported(
                     "DequantizePerTokenBackwardPlan::run unsupported TIn dtype",
-                ))
+                ));
             }
         };
         map_status(status)

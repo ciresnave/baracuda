@@ -9,7 +9,7 @@ use baracuda_cuda_sys::runtime::runtime;
 use baracuda_cuda_sys::runtime::types::{cudaGreenCtx_t, cudaStream_t};
 use baracuda_types::CudaVersion;
 
-use crate::error::{check, Error, Result};
+use crate::error::{Error, Result, check};
 use crate::event::Event;
 use crate::stream::Stream;
 
@@ -49,14 +49,16 @@ impl GreenContext {
     /// # Safety
     ///
     /// `desc` must be a valid `cudaDevResourceDesc` descriptor.
-    pub unsafe fn from_resource_desc(desc: *const core::ffi::c_void, flags: u32) -> Result<Self> { unsafe {
-        require_green_ctx()?;
-        let r = runtime()?;
-        let cu = r.cuda_device_create_green_ctx()?;
-        let mut h: cudaGreenCtx_t = core::ptr::null_mut();
-        check(cu(&mut h, desc, flags))?;
-        Ok(Self { handle: h })
-    }}
+    pub unsafe fn from_resource_desc(desc: *const core::ffi::c_void, flags: u32) -> Result<Self> {
+        unsafe {
+            require_green_ctx()?;
+            let r = runtime()?;
+            let cu = r.cuda_device_create_green_ctx()?;
+            let mut h: cudaGreenCtx_t = core::ptr::null_mut();
+            check(cu(&mut h, desc, flags))?;
+            Ok(Self { handle: h })
+        }
+    }
 
     /// Wrap an already-created handle.
     ///

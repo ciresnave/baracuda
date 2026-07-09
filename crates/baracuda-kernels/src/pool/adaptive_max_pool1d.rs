@@ -17,8 +17,8 @@ use baracuda_kernels_types::{
 };
 
 use super::adaptive_avg_pool1d::{
-    build_sku, check_bw_args, check_fw_args, dispatch_max_bw, dispatch_max_fw, map_status,
-    validate_descriptor, AdaptivePool1dBwArgs, AdaptivePool1dDescriptor, AdaptivePool1dFwArgs,
+    AdaptivePool1dBwArgs, AdaptivePool1dDescriptor, AdaptivePool1dFwArgs, build_sku, check_bw_args,
+    check_fw_args, dispatch_max_bw, dispatch_max_fw, map_status, validate_descriptor,
 };
 
 /// Adaptive 1-D max-pool plan (bit-exact PyTorch, bespoke kernel).
@@ -90,8 +90,12 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
             y_ptr,
             nc,
             1, // spatial_rank
-            1, 1, self.desc.l_in,
-            1, 1, self.desc.l_out,
+            1,
+            1,
+            self.desc.l_in,
+            1,
+            1,
+            self.desc.l_out,
             stream_ptr,
         );
         map_status(status)
@@ -117,8 +121,12 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
             dx_ptr,
             nc,
             1,
-            1, 1, self.desc.l_in,
-            1, 1, self.desc.l_out,
+            1,
+            1,
+            self.desc.l_in,
+            1,
+            1,
+            self.desc.l_out,
             stream_ptr,
         );
         map_status(status)

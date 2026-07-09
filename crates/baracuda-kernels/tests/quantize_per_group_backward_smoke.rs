@@ -2,11 +2,10 @@
 //!
 //! `#[ignore]`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, QuantizePerGroupBackwardArgs,
-    QuantizePerGroupBackwardDescriptor, QuantizePerGroupBackwardPlan, TensorMut, TensorRef,
-    Workspace,
+    ElementKind, PlanPreference, QuantizePerGroupBackwardArgs, QuantizePerGroupBackwardDescriptor,
+    QuantizePerGroupBackwardPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -29,10 +28,7 @@ fn quantize_per_group_backward_f32_ste() {
     let qmax: i32 = 10;
 
     let host_x: Vec<f32> = vec![
-        0.1, 0.2, 0.3, -0.4,
-        1.0, 2.0, -3.0, 4.0,
-        15.0, 1.0, 0.5, -1.0,
-        0.05, 0.10, 0.15, -0.20,
+        0.1, 0.2, 0.3, -0.4, 1.0, 2.0, -3.0, 4.0, 15.0, 1.0, 0.5, -1.0, 0.05, 0.10, 0.15, -0.20,
     ];
     let host_dy: Vec<f32> = (0..(outer * axis_size) as usize)
         .map(|i| (i as f32) * 0.5 + 1.0)
@@ -72,12 +68,9 @@ fn quantize_per_group_backward_f32_ste() {
         q_max: qmax,
         input_element: ElementKind::F32,
     };
-    let plan = QuantizePerGroupBackwardPlan::<f32>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .expect("select");
+    let plan =
+        QuantizePerGroupBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = QuantizePerGroupBackwardArgs::<f32> {
         d_output: TensorRef {
             data: dev_dy.as_slice(),

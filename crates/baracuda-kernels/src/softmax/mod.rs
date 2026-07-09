@@ -37,7 +37,7 @@ pub use gumbel::{GumbelSoftmaxArgs, GumbelSoftmaxDescriptor, GumbelSoftmaxPlan};
 pub use gumbel_backward::{
     GumbelSoftmaxBackwardArgs, GumbelSoftmaxBackwardDescriptor, GumbelSoftmaxBackwardPlan,
 };
-pub use sparsemax::{SparsemaxArgs, SparsemaxDescriptor, SparsemaxPlan, SPARSEMAX_MAX_EXTENT};
+pub use sparsemax::{SPARSEMAX_MAX_EXTENT, SparsemaxArgs, SparsemaxDescriptor, SparsemaxPlan};
 pub use sparsemax_backward::{
     SparsemaxBackwardArgs, SparsemaxBackwardDescriptor, SparsemaxBackwardPlan,
 };

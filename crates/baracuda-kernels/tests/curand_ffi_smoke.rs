@@ -19,7 +19,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels_sys::{
     baracuda_kernels_curand_normal_f32_run, baracuda_kernels_curand_normal_f32_workspace_size,
     baracuda_kernels_curand_normal_f64_run, baracuda_kernels_curand_normal_f64_workspace_size,
@@ -42,8 +42,7 @@ fn curand_uniform_f32_ffi() {
     let numel: i64 = 1 << 15; // 32768 cells — enough to bound moments tightly.
     let (low, high) = (-1.0f32, 2.0f32);
 
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc y");
 
     let mut ws_bytes: usize = 0;
     let status = unsafe {
@@ -100,8 +99,7 @@ fn curand_uniform_f64_ffi() {
     let (ctx, stream) = setup();
     let numel: i64 = 4096;
 
-    let mut dev_y: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc y");
 
     let mut ws_bytes: usize = 0;
     let status = unsafe {
@@ -139,8 +137,7 @@ fn curand_normal_f32_ffi() {
     let numel: i64 = 1 << 16; // 65536 cells, even (Box-Muller).
     let (mean, stddev) = (1.5f32, 0.25f32);
 
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc y");
 
     let mut ws_bytes: usize = 0;
     let status = unsafe {
@@ -196,8 +193,7 @@ fn curand_normal_f64_ffi() {
     let (ctx, stream) = setup();
     let numel: i64 = 1 << 15;
 
-    let mut dev_y: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc y");
 
     let mut ws_bytes: usize = 0;
     let status = unsafe {

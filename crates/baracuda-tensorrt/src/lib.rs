@@ -143,20 +143,22 @@ impl Runtime {
     /// `logger` must be a valid `nvinfer1::ILogger*` (typically obtained from
     /// C++ or passed through a thin shim). Use [`Runtime::with_null_logger`]
     /// if no logging is desired (TRT allows `nullptr` in recent versions).
-    pub unsafe fn new(logger: sys::trtILogger_t) -> Result<Self> { unsafe {
-        let t = sys::tensorrt()?;
-        // `createInferRuntime_INTERNAL(logger, version)` — the version must
-        // match the loaded library (the C++ inline wrapper passes
-        // NV_TENSORRT_VERSION). Use the runtime's own reported version.
-        let version = (t.get_infer_lib_version()?)();
-        let raw = (t.create_infer_runtime()?)(logger, version);
-        if raw.is_null() {
-            return Err(Error::NullHandle {
-                op: "createInferRuntime",
-            });
+    pub unsafe fn new(logger: sys::trtILogger_t) -> Result<Self> {
+        unsafe {
+            let t = sys::tensorrt()?;
+            // `createInferRuntime_INTERNAL(logger, version)` — the version must
+            // match the loaded library (the C++ inline wrapper passes
+            // NV_TENSORRT_VERSION). Use the runtime's own reported version.
+            let version = (t.get_infer_lib_version()?)();
+            let raw = (t.create_infer_runtime()?)(logger, version);
+            if raw.is_null() {
+                return Err(Error::NullHandle {
+                    op: "createInferRuntime",
+                });
+            }
+            Ok(Self { raw })
         }
-        Ok(Self { raw })
-    }}
+    }
 
     /// Construct without a logger. Supported on recent TensorRT; older
     /// versions may refuse and return null.
@@ -238,7 +240,9 @@ impl Engine<'_> {
                 op: "getIOTensorName",
             });
         }
-        Ok(unsafe { CStr::from_ptr(cstr) }.to_string_lossy().into_owned())
+        Ok(unsafe { CStr::from_ptr(cstr) }
+            .to_string_lossy()
+            .into_owned())
     }
 
     /// Whether a named tensor is an input, output, or unused binding.
@@ -308,7 +312,9 @@ impl Engine<'_> {
     pub fn name(&self) -> Result<String> {
         let cstr = unsafe { sys::trtCudaEngineGetName(self.raw) };
         if cstr.is_null() {
-            return Err(Error::NullHandle { op: "engineGetName" });
+            return Err(Error::NullHandle {
+                op: "engineGetName",
+            });
         }
         Ok(unsafe { CStr::from_ptr(cstr) }
             .to_string_lossy()

@@ -18,15 +18,15 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan,
-    FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference, TensorMut, TensorRef,
-    Workspace,
+    FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan, FlashSdpaArgs,
+    FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline,
+    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns, setup_device,
+    time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::{bf16, f16};
 
 const BENCH_NAME: &str = "flash_decoding";
@@ -40,12 +40,8 @@ fn leak_str(s: &str) -> &'static str {
     Box::leak(s.to_owned().into_boxed_str())
 }
 
-fn bench<T>(
-    c: &mut Criterion,
-    dtype_label: &str,
-    fill: T,
-    _baseline: Option<&PytorchBaseline>,
-) where
+fn bench<T>(c: &mut Criterion, dtype_label: &str, fill: T, _baseline: Option<&PytorchBaseline>)
+where
     T: baracuda_kernels::Element + Copy + 'static,
 {
     let (ctx, stream) = setup_device();
@@ -59,22 +55,37 @@ fn bench<T>(
         let host_q: Vec<T> = vec![fill; q_numel];
         let host_kv: Vec<T> = vec![fill; kv_numel];
 
-        let dq = match DeviceBuffer::from_slice(&ctx, &host_q) { Ok(b) => b, Err(_) => continue };
-        let dk = match DeviceBuffer::from_slice(&ctx, &host_kv) { Ok(b) => b, Err(_) => continue };
-        let dv = match DeviceBuffer::from_slice(&ctx, &host_kv) { Ok(b) => b, Err(_) => continue };
-        let mut dy: DeviceBuffer<T> =
-            match DeviceBuffer::zeros(&ctx, q_numel) { Ok(b) => b, Err(_) => continue };
+        let dq = match DeviceBuffer::from_slice(&ctx, &host_q) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let dk = match DeviceBuffer::from_slice(&ctx, &host_kv) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let dv = match DeviceBuffer::from_slice(&ctx, &host_kv) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let mut dy: DeviceBuffer<T> = match DeviceBuffer::zeros(&ctx, q_numel) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
 
         let fd_desc = FlashDecodingDescriptor::new(BATCH, NUM_HEADS, k_len, HEAD_DIM, T::KIND);
-        let fd_plan = match FlashDecodingPlan::<T>::select(&stream, &fd_desc, PlanPreference::default()) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("flash_decoding: skipping {label}/{dtype_label}: {e:?}");
-                continue;
-            }
+        let fd_plan =
+            match FlashDecodingPlan::<T>::select(&stream, &fd_desc, PlanPreference::default()) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("flash_decoding: skipping {label}/{dtype_label}: {e:?}");
+                    continue;
+                }
+            };
+        let mut fd_ws: DeviceBuffer<u8> = match DeviceBuffer::zeros(&ctx, fd_plan.workspace_size())
+        {
+            Ok(b) => b,
+            Err(_) => continue,
         };
-        let mut fd_ws: DeviceBuffer<u8> =
-            match DeviceBuffer::zeros(&ctx, fd_plan.workspace_size()) { Ok(b) => b, Err(_) => continue };
 
         let sq = [BATCH, NUM_HEADS, HEAD_DIM];
         let sk = [BATCH, NUM_HEADS, k_len, HEAD_DIM];
@@ -83,10 +94,26 @@ fn bench<T>(
 
         warmup(&stream, || {
             let args = FlashDecodingArgs::<T> {
-                q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: contiguous_stride(sq),
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk,
+                    stride: contiguous_stride(sk),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv,
+                    stride: contiguous_stride(sv),
+                },
+                y: TensorMut {
+                    data: dy.as_slice_mut(),
+                    shape: sy,
+                    stride: contiguous_stride(sy),
+                },
             };
             fd_plan
                 .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -94,10 +121,26 @@ fn bench<T>(
         });
         let fd_ns = measure_median_ns(&ctx, &stream, 11, 20, || {
             let args = FlashDecodingArgs::<T> {
-                q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: contiguous_stride(sq),
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk,
+                    stride: contiguous_stride(sk),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv,
+                    stride: contiguous_stride(sv),
+                },
+                y: TensorMut {
+                    data: dy.as_slice_mut(),
+                    shape: sy,
+                    stride: contiguous_stride(sy),
+                },
             };
             fd_plan
                 .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -111,18 +154,33 @@ fn bench<T>(
         let host_q4: Vec<T> = vec![fill; q4_numel];
         let host_lse: Vec<T> = vec![fill; lse_numel];
 
-        let dq4 = match DeviceBuffer::from_slice(&ctx, &host_q4) { Ok(b) => b, Err(_) => continue };
-        let mut dy4: DeviceBuffer<T> =
-            match DeviceBuffer::zeros(&ctx, q4_numel) { Ok(b) => b, Err(_) => continue };
-        let mut dlse: DeviceBuffer<T> =
-            match DeviceBuffer::from_slice(&ctx, &host_lse) { Ok(b) => b, Err(_) => continue };
+        let dq4 = match DeviceBuffer::from_slice(&ctx, &host_q4) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let mut dy4: DeviceBuffer<T> = match DeviceBuffer::zeros(&ctx, q4_numel) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let mut dlse: DeviceBuffer<T> = match DeviceBuffer::from_slice(&ctx, &host_lse) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
 
         let scale = 1.0_f32 / (HEAD_DIM as f32).sqrt();
         let sdpa_desc = FlashSdpaDescriptor::new(
-            BATCH, NUM_HEADS, 1, k_len, HEAD_DIM, HEAD_DIM,
-            scale, false, T::KIND,
+            BATCH,
+            NUM_HEADS,
+            1,
+            k_len,
+            HEAD_DIM,
+            HEAD_DIM,
+            scale,
+            false,
+            T::KIND,
         );
-        let sdpa_plan_opt = FlashSdpaPlan::<T>::select(&stream, &sdpa_desc, PlanPreference::default()).ok();
+        let sdpa_plan_opt =
+            FlashSdpaPlan::<T>::select(&stream, &sdpa_desc, PlanPreference::default()).ok();
         let sdpa_ns: f64 = if let Some(sdpa_plan) = sdpa_plan_opt {
             let mut sdpa_ws: DeviceBuffer<u8> =
                 match DeviceBuffer::zeros(&ctx, sdpa_plan.workspace_size()) {
@@ -135,11 +193,31 @@ fn bench<T>(
             let sy4 = sq4;
             let sl = [BATCH, NUM_HEADS, 1];
             let probe = FlashSdpaArgs::<T> {
-                q: TensorRef { data: dq4.as_slice(), shape: sq4, stride: contiguous_stride(sq4) },
-                k: TensorRef { data: dk.as_slice(), shape: sk4, stride: contiguous_stride(sk4) },
-                v: TensorRef { data: dv.as_slice(), shape: sv4, stride: contiguous_stride(sv4) },
-                y: TensorMut { data: dy4.as_slice_mut(), shape: sy4, stride: contiguous_stride(sy4) },
-                lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                q: TensorRef {
+                    data: dq4.as_slice(),
+                    shape: sq4,
+                    stride: contiguous_stride(sq4),
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk4,
+                    stride: contiguous_stride(sk4),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv4,
+                    stride: contiguous_stride(sv4),
+                },
+                y: TensorMut {
+                    data: dy4.as_slice_mut(),
+                    shape: sy4,
+                    stride: contiguous_stride(sy4),
+                },
+                lse: TensorMut {
+                    data: dlse.as_slice_mut(),
+                    shape: sl,
+                    stride: contiguous_stride(sl),
+                },
                 mask: None,
                 alibi_slopes: None,
             };
@@ -148,11 +226,31 @@ fn bench<T>(
             } else {
                 warmup(&stream, || {
                     let args = FlashSdpaArgs::<T> {
-                        q: TensorRef { data: dq4.as_slice(), shape: sq4, stride: contiguous_stride(sq4) },
-                        k: TensorRef { data: dk.as_slice(), shape: sk4, stride: contiguous_stride(sk4) },
-                        v: TensorRef { data: dv.as_slice(), shape: sv4, stride: contiguous_stride(sv4) },
-                        y: TensorMut { data: dy4.as_slice_mut(), shape: sy4, stride: contiguous_stride(sy4) },
-                        lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                        q: TensorRef {
+                            data: dq4.as_slice(),
+                            shape: sq4,
+                            stride: contiguous_stride(sq4),
+                        },
+                        k: TensorRef {
+                            data: dk.as_slice(),
+                            shape: sk4,
+                            stride: contiguous_stride(sk4),
+                        },
+                        v: TensorRef {
+                            data: dv.as_slice(),
+                            shape: sv4,
+                            stride: contiguous_stride(sv4),
+                        },
+                        y: TensorMut {
+                            data: dy4.as_slice_mut(),
+                            shape: sy4,
+                            stride: contiguous_stride(sy4),
+                        },
+                        lse: TensorMut {
+                            data: dlse.as_slice_mut(),
+                            shape: sl,
+                            stride: contiguous_stride(sl),
+                        },
                         mask: None,
                         alibi_slopes: None,
                     };
@@ -164,11 +262,31 @@ fn bench<T>(
                 });
                 measure_median_ns(&ctx, &stream, 11, 20, || {
                     let args = FlashSdpaArgs::<T> {
-                        q: TensorRef { data: dq4.as_slice(), shape: sq4, stride: contiguous_stride(sq4) },
-                        k: TensorRef { data: dk.as_slice(), shape: sk4, stride: contiguous_stride(sk4) },
-                        v: TensorRef { data: dv.as_slice(), shape: sv4, stride: contiguous_stride(sv4) },
-                        y: TensorMut { data: dy4.as_slice_mut(), shape: sy4, stride: contiguous_stride(sy4) },
-                        lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                        q: TensorRef {
+                            data: dq4.as_slice(),
+                            shape: sq4,
+                            stride: contiguous_stride(sq4),
+                        },
+                        k: TensorRef {
+                            data: dk.as_slice(),
+                            shape: sk4,
+                            stride: contiguous_stride(sk4),
+                        },
+                        v: TensorRef {
+                            data: dv.as_slice(),
+                            shape: sv4,
+                            stride: contiguous_stride(sv4),
+                        },
+                        y: TensorMut {
+                            data: dy4.as_slice_mut(),
+                            shape: sy4,
+                            stride: contiguous_stride(sy4),
+                        },
+                        lse: TensorMut {
+                            data: dlse.as_slice_mut(),
+                            shape: sl,
+                            stride: contiguous_stride(sl),
+                        },
                         mask: None,
                         alibi_slopes: None,
                     };
@@ -190,7 +308,11 @@ fn bench<T>(
                 shape: label.clone(),
                 dtype: leak_str(dtype_label),
                 baracuda_ns: fd_ns,
-                reference_ns: if sdpa_ns.is_nan() { None } else { Some(sdpa_ns) },
+                reference_ns: if sdpa_ns.is_nan() {
+                    None
+                } else {
+                    Some(sdpa_ns)
+                },
                 reference: "FlashSdpaPlan",
                 pytorch_ns: None,
             },
@@ -202,10 +324,26 @@ fn bench<T>(
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = FlashDecodingArgs::<T> {
-                        q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                        k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                        v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                        y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+                        q: TensorRef {
+                            data: dq.as_slice(),
+                            shape: sq,
+                            stride: contiguous_stride(sq),
+                        },
+                        k: TensorRef {
+                            data: dk.as_slice(),
+                            shape: sk,
+                            stride: contiguous_stride(sk),
+                        },
+                        v: TensorRef {
+                            data: dv.as_slice(),
+                            shape: sv,
+                            stride: contiguous_stride(sv),
+                        },
+                        y: TensorMut {
+                            data: dy.as_slice_mut(),
+                            shape: sy,
+                            stride: contiguous_stride(sy),
+                        },
                     };
                     fd_plan
                         .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -223,42 +361,53 @@ fn bench<T>(
 /// SIMT-only baseline that the launcher would have picked at
 /// `group_size == 1` (no FlashSdpaPlan reference here — that kernel
 /// can't express partial GQA and would be apples-to-oranges).
-fn bench_gqa<T>(
-    c: &mut Criterion,
-    dtype_label: &str,
-    fill: T,
-) where
+fn bench_gqa<T>(c: &mut Criterion, dtype_label: &str, fill: T)
+where
     T: baracuda_kernels::Element + Copy + 'static,
 {
     let (ctx, stream) = setup_device();
     const GQA_SWEEP: &[(i32, i32, &str)] = &[
         // (H_q, H_kv, model-class label) — group = H_q / H_kv
-        (32, 8, "llama3-8b"),       // group=4
-        (64, 8, "llama3-70b"),      // group=8
-        (32, 4, "qwen2-14b"),       // group=8
-        (32, 2, "mqa-group16"),     // group=16
+        (32, 8, "llama3-8b"),   // group=4
+        (64, 8, "llama3-70b"),  // group=8
+        (32, 4, "qwen2-14b"),   // group=8
+        (32, 2, "mqa-group16"), // group=16
     ];
     let k_sweep: &[i32] = &[1024, 2048, 4096, 8192];
 
     for &(h_q, h_kv, model_label) in GQA_SWEEP {
         for &k_len in k_sweep {
-            let label = format!(
-                "{model_label}_Hq{h_q}_Hkv{h_kv}_K{k_len}_D{HEAD_DIM}"
-            );
+            let label = format!("{model_label}_Hq{h_q}_Hkv{h_kv}_K{k_len}_D{HEAD_DIM}");
 
             let q_numel = (BATCH * h_q * HEAD_DIM) as usize;
             let kv_numel = (BATCH * h_kv * k_len * HEAD_DIM) as usize;
             let host_q: Vec<T> = vec![fill; q_numel];
             let host_kv: Vec<T> = vec![fill; kv_numel];
 
-            let dq = match DeviceBuffer::from_slice(&ctx, &host_q) { Ok(b) => b, Err(_) => continue };
-            let dk = match DeviceBuffer::from_slice(&ctx, &host_kv) { Ok(b) => b, Err(_) => continue };
-            let dv = match DeviceBuffer::from_slice(&ctx, &host_kv) { Ok(b) => b, Err(_) => continue };
-            let mut dy: DeviceBuffer<T> =
-                match DeviceBuffer::zeros(&ctx, q_numel) { Ok(b) => b, Err(_) => continue };
+            let dq = match DeviceBuffer::from_slice(&ctx, &host_q) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+            let dk = match DeviceBuffer::from_slice(&ctx, &host_kv) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+            let dv = match DeviceBuffer::from_slice(&ctx, &host_kv) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+            let mut dy: DeviceBuffer<T> = match DeviceBuffer::zeros(&ctx, q_numel) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
 
-            let fd_desc = FlashDecodingDescriptor::new_gqa(BATCH, h_q, h_kv, k_len, HEAD_DIM, T::KIND);
-            let fd_plan = match FlashDecodingPlan::<T>::select(&stream, &fd_desc, PlanPreference::default()) {
+            let fd_desc =
+                FlashDecodingDescriptor::new_gqa(BATCH, h_q, h_kv, k_len, HEAD_DIM, T::KIND);
+            let fd_plan = match FlashDecodingPlan::<T>::select(
+                &stream,
+                &fd_desc,
+                PlanPreference::default(),
+            ) {
                 Ok(p) => p,
                 Err(e) => {
                     eprintln!("flash_decoding gqa: skipping {label}/{dtype_label}: {e:?}");
@@ -266,7 +415,10 @@ fn bench_gqa<T>(
                 }
             };
             let mut fd_ws: DeviceBuffer<u8> =
-                match DeviceBuffer::zeros(&ctx, fd_plan.workspace_size()) { Ok(b) => b, Err(_) => continue };
+                match DeviceBuffer::zeros(&ctx, fd_plan.workspace_size()) {
+                    Ok(b) => b,
+                    Err(_) => continue,
+                };
 
             let sq = [BATCH, h_q, HEAD_DIM];
             let sk = [BATCH, h_kv, k_len, HEAD_DIM];
@@ -275,10 +427,26 @@ fn bench_gqa<T>(
 
             warmup(&stream, || {
                 let args = FlashDecodingArgs::<T> {
-                    q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                    k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                    v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                    y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+                    q: TensorRef {
+                        data: dq.as_slice(),
+                        shape: sq,
+                        stride: contiguous_stride(sq),
+                    },
+                    k: TensorRef {
+                        data: dk.as_slice(),
+                        shape: sk,
+                        stride: contiguous_stride(sk),
+                    },
+                    v: TensorRef {
+                        data: dv.as_slice(),
+                        shape: sv,
+                        stride: contiguous_stride(sv),
+                    },
+                    y: TensorMut {
+                        data: dy.as_slice_mut(),
+                        shape: sy,
+                        stride: contiguous_stride(sy),
+                    },
                 };
                 fd_plan
                     .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -286,10 +454,26 @@ fn bench_gqa<T>(
             });
             let fd_ns = measure_median_ns(&ctx, &stream, 11, 20, || {
                 let args = FlashDecodingArgs::<T> {
-                    q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                    k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                    v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                    y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+                    q: TensorRef {
+                        data: dq.as_slice(),
+                        shape: sq,
+                        stride: contiguous_stride(sq),
+                    },
+                    k: TensorRef {
+                        data: dk.as_slice(),
+                        shape: sk,
+                        stride: contiguous_stride(sk),
+                    },
+                    v: TensorRef {
+                        data: dv.as_slice(),
+                        shape: sv,
+                        stride: contiguous_stride(sv),
+                    },
+                    y: TensorMut {
+                        data: dy.as_slice_mut(),
+                        shape: sy,
+                        stride: contiguous_stride(sy),
+                    },
                 };
                 fd_plan
                     .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
@@ -314,10 +498,26 @@ fn bench_gqa<T>(
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = FlashDecodingArgs::<T> {
-                            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+                            q: TensorRef {
+                                data: dq.as_slice(),
+                                shape: sq,
+                                stride: contiguous_stride(sq),
+                            },
+                            k: TensorRef {
+                                data: dk.as_slice(),
+                                shape: sk,
+                                stride: contiguous_stride(sk),
+                            },
+                            v: TensorRef {
+                                data: dv.as_slice(),
+                                shape: sv,
+                                stride: contiguous_stride(sv),
+                            },
+                            y: TensorMut {
+                                data: dy.as_slice_mut(),
+                                shape: sy,
+                                stride: contiguous_stride(sy),
+                            },
                         };
                         fd_plan
                             .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)

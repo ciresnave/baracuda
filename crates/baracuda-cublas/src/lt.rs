@@ -38,14 +38,14 @@ use core::ffi::c_void;
 use baracuda_cublas_sys::functions::{
     cublasComputeType_t, cublasLtHandle_t, cublasLtMatmulAlgo_t, cublasLtMatmulDesc_t,
     cublasLtMatmulDescAttributes_t, cublasLtMatmulHeuristicResult_t, cublasLtMatmulPreference_t,
-    cublasLtMatmulPreferenceAttributes_t, cublasLtMatrixLayout_t,
-    cublasLtMatrixLayoutAttribute_t, cudaDataType_t,
+    cublasLtMatmulPreferenceAttributes_t, cublasLtMatrixLayout_t, cublasLtMatrixLayoutAttribute_t,
+    cudaDataType_t,
 };
-use baracuda_cublas_sys::{cublasOperation_t, cublasStatus_t};
 use baracuda_cublas_sys::loader::cublas_lt;
+use baracuda_cublas_sys::{cublasOperation_t, cublasStatus_t};
 use baracuda_driver::Stream;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// cuBLASLt epilogue selector — the fused post-op applied to the matmul
 /// output, tagged by the integer values NVIDIA's `cublasLtEpilogue_t` uses.
@@ -404,9 +404,7 @@ pub fn heuristics_search(
     let heur = lt.cublas_lt_matmul_algo_get_heuristic()?;
     let mut out: Vec<cublasLtMatmulHeuristicResult_t> = vec![
         cublasLtMatmulHeuristicResult_t {
-            algo: cublasLtMatmulAlgo_t {
-                data: [0u64; 8],
-            },
+            algo: cublasLtMatmulAlgo_t { data: [0u64; 8] },
             workspace_size: 0,
             state: cublasStatus_t::SUCCESS,
             waves_count: 0.0,
@@ -468,29 +466,31 @@ pub unsafe fn matmul(
     workspace: *mut c_void,
     workspace_size: usize,
     stream: Option<&Stream>,
-) -> Result<()> { unsafe {
-    let lt = cublas_lt()?;
-    let f = lt.cublas_lt_matmul()?;
-    let stream_raw = stream.map(|s| s.as_raw() as _).unwrap_or(core::ptr::null_mut());
-    let algo_ptr = algo
-        .map(|a| a as *const _)
-        .unwrap_or(core::ptr::null());
-    check(f(
-        handle.as_raw(),
-        desc.as_raw(),
-        alpha,
-        a,
-        a_layout.as_raw(),
-        b,
-        b_layout.as_raw(),
-        beta,
-        c,
-        c_layout.as_raw(),
-        d,
-        d_layout.as_raw(),
-        algo_ptr,
-        workspace,
-        workspace_size,
-        stream_raw,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        let lt = cublas_lt()?;
+        let f = lt.cublas_lt_matmul()?;
+        let stream_raw = stream
+            .map(|s| s.as_raw() as _)
+            .unwrap_or(core::ptr::null_mut());
+        let algo_ptr = algo.map(|a| a as *const _).unwrap_or(core::ptr::null());
+        check(f(
+            handle.as_raw(),
+            desc.as_raw(),
+            alpha,
+            a,
+            a_layout.as_raw(),
+            b,
+            b_layout.as_raw(),
+            beta,
+            c,
+            c_layout.as_raw(),
+            d,
+            d_layout.as_raw(),
+            algo_ptr,
+            workspace,
+            workspace_size,
+            stream_raw,
+        ))
+    }
+}

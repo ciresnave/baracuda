@@ -144,9 +144,9 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 use super::{
-    cublasCreate_v2, cublasDestroy_v2, cublasGemmEx, cublasGemmStridedBatchedEx, cublasHandle_t,
-    cublasSetStream_v2, CUBLAS_COMPUTE_32F, CUBLAS_COMPUTE_64F, CUBLAS_GEMM_DEFAULT, CUBLAS_OP_N,
-    CUBLAS_OP_T, CUDA_R_16BF, CUDA_R_16F, CUDA_R_32F, CUDA_R_64F,
+    CUBLAS_COMPUTE_32F, CUBLAS_COMPUTE_64F, CUBLAS_GEMM_DEFAULT, CUBLAS_OP_N, CUBLAS_OP_T,
+    CUDA_R_16BF, CUDA_R_16F, CUDA_R_32F, CUDA_R_64F, cublasCreate_v2, cublasDestroy_v2,
+    cublasGemmEx, cublasGemmStridedBatchedEx, cublasHandle_t, cublasSetStream_v2,
 };
 
 unsafe extern "C" {
@@ -412,7 +412,11 @@ unsafe fn gemm_dense_run_impl(
     // entry, but cuBLAS's runtime init inside `cublasCreate` binds the
     // primary context — re-query so the handle pools under its real
     // context key instead of the sentinel (see `put_handle`).
-    let key = if key == usize::MAX { current_ctx_key() } else { key };
+    let key = if key == usize::MAX {
+        current_ctx_key()
+    } else {
+        key
+    };
     let st = unsafe { cublasSetStream_v2(handle, stream) };
     if st != 0 {
         // Don't pool a handle whose state we couldn't establish.
@@ -477,11 +481,7 @@ unsafe fn gemm_dense_run_impl(
         }
     };
     unsafe { put_handle(key, handle) };
-    if status != 0 {
-        INTERNAL
-    } else {
-        OK
-    }
+    if status != 0 { INTERNAL } else { OK }
 }
 
 // =============================================================================
@@ -500,14 +500,14 @@ macro_rules! gemm_dense_family {
         $acc_doc:literal
     ) => {
         #[doc = concat!(
-            "Dense ", $dtype_doc, " GEMM (cuBLAS-backed): ",
-            "`D[g] = α · A[g] · B[g] + β · D[g]` for `g ∈ [0, batch)`, ",
-            "accumulating in ", $acc_doc, ". Row-major problem; see the ",
-            "module docs for the `layout` tag (0 = RRR, 1 = RCR, ",
-            "2 = CRR), leading-dim minimums, and the batch-stride ",
-            "contract (element strides; `stride_a`/`stride_b` may be 0 ",
-            "to broadcast; strides ignored at `batch == 1`).",
-        )]
+                                    "Dense ", $dtype_doc, " GEMM (cuBLAS-backed): ",
+                                    "`D[g] = α · A[g] · B[g] + β · D[g]` for `g ∈ [0, batch)`, ",
+                                    "accumulating in ", $acc_doc, ". Row-major problem; see the ",
+                                    "module docs for the `layout` tag (0 = RRR, 1 = RCR, ",
+                                    "2 = CRR), leading-dim minimums, and the batch-stride ",
+                                    "contract (element strides; `stride_a`/`stride_b` may be 0 ",
+                                    "to broadcast; strides ignored at `batch == 1`).",
+                                )]
         ///
         /// `workspace` / `workspace_bytes` are reserved and ignored
         /// (cuBLAS manages its own per-handle workspace).
@@ -568,12 +568,12 @@ macro_rules! gemm_dense_family {
         }
 
         #[doc = concat!(
-            "Host-side validity check for [`", stringify!($run), "`]. ",
-            "Validates extents, the `layout` tag, leading-dim minimums, ",
-            "i32-fit of leading dims, and `stride_d != 0` at ",
-            "`batch > 1`. `stride_a` / `stride_b` are accepted ",
-            "unconditionally (any value, including 0-broadcast).",
-        )]
+                                    "Host-side validity check for [`", stringify!($run), "`]. ",
+                                    "Validates extents, the `layout` tag, leading-dim minimums, ",
+                                    "i32-fit of leading dims, and `stride_d != 0` at ",
+                                    "`batch > 1`. `stride_a` / `stride_b` are accepted ",
+                                    "unconditionally (any value, including 0-broadcast).",
+                                )]
         #[unsafe(no_mangle)]
         pub extern "C" fn $can(
             m: i32,
@@ -592,9 +592,9 @@ macro_rules! gemm_dense_family {
         }
 
         #[doc = concat!(
-            "Workspace query for [`", stringify!($run), "`]. Always ",
-            "`0` — cuBLAS allocates its workspace internally per handle.",
-        )]
+                                    "Workspace query for [`", stringify!($run), "`]. Always ",
+                                    "`0` — cuBLAS allocates its workspace internally per handle.",
+                                )]
         #[unsafe(no_mangle)]
         pub extern "C" fn $ws(_m: i32, _n: i32, _k: i32, _batch: i32, _layout: i32) -> usize {
             0

@@ -11,10 +11,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_cmp_eq_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpKind, BinaryCmpPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpKind, BinaryCmpPlan, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -60,12 +60,24 @@ fn cmp_eq_f16_3d() {
         shape,
         element: ElementKind::F16,
     };
-    let plan = BinaryCmpPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryCmpPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -116,9 +128,21 @@ fn cmp_eq_bf16_3d() {
     let plan = BinaryCmpPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryCmpArgs::<bf16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -139,9 +163,7 @@ fn cmp_eq_f64_3d() {
     let shape = [8i32, 128, 128];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
-    let host_a: Vec<f64> = (0..numel)
-        .map(|i| ((i % 41) as f64) * 0.5 - 10.0)
-        .collect();
+    let host_a: Vec<f64> = (0..numel).map(|i| ((i % 41) as f64) * 0.5 - 10.0).collect();
     let host_b: Vec<f64> = (0..numel)
         .map(|i| {
             if i % 3 == 0 {
@@ -166,12 +188,24 @@ fn cmp_eq_f64_3d() {
         shape,
         element: ElementKind::F64,
     };
-    let plan = BinaryCmpPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryCmpPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f64, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

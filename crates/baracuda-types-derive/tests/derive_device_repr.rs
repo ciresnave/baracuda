@@ -149,7 +149,10 @@ fn derived_types_compose_with_kernelarg_blanket_impl() {
     let n = Newtype(42);
     assert_kernel_arg(&n);
 
-    let g: GenericPayload<f64> = GenericPayload { payload: 1.5, tag: 7 };
+    let g: GenericPayload<f64> = GenericPayload {
+        payload: 1.5,
+        tag: 7,
+    };
     assert_kernel_arg(&g);
 }
 
@@ -158,7 +161,11 @@ fn derive_does_not_consume_copy_clone() {
     // Sanity: the macro must NOT take ownership of or shadow the
     // user-derived Copy/Clone. If the derive macro had a bug that ate
     // the other derives, this would fail to compile.
-    let a = SimpleNamed { a: 9, b: 1.0, c: -1 };
+    let a = SimpleNamed {
+        a: 9,
+        b: 1.0,
+        c: -1,
+    };
     let b = a; // Copy
     let _c = a.clone(); // Clone
     let _ = b;

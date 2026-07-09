@@ -8,10 +8,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RMSNormArgs, RMSNormDescriptor, RMSNormPlan,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, RMSNormArgs, RMSNormDescriptor, RMSNormPlan, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -31,7 +31,11 @@ fn setup() -> (Context, Stream) {
 /// Returns `(y, rms_per_row)`. `rms_per_row` shape == input with
 /// `norm_axis` collapsed to 1.
 fn host_rms_norm_f32(
-    shape: &[i32], norm_axis: usize, x: &[f32], gamma: Option<&[f32]>, eps: f32,
+    shape: &[i32],
+    norm_axis: usize,
+    x: &[f32],
+    gamma: Option<&[f32]>,
+    eps: f32,
 ) -> (Vec<f32>, Vec<f32>) {
     let n = shape.len();
     // row-major strides
@@ -74,7 +78,9 @@ fn host_rms_norm_f32(
         for j in 0..extent {
             coord[norm_axis] = j as i32;
             let mut idx = 0i64;
-            for d in 0..n { idx += coord[d] as i64 * stride[d]; }
+            for d in 0..n {
+                idx += coord[d] as i64 * stride[d];
+            }
             let v = x[idx as usize] as f64;
             sum_sq += v * v;
         }
@@ -85,7 +91,9 @@ fn host_rms_norm_f32(
         for j in 0..extent {
             coord[norm_axis] = j as i32;
             let mut idx = 0i64;
-            for d in 0..n { idx += coord[d] as i64 * stride[d]; }
+            for d in 0..n {
+                idx += coord[d] as i64 * stride[d];
+            }
             let g = gamma.map(|g| g[j]).unwrap_or(1.0);
             y[idx as usize] = (x[idx as usize] / rms) * g;
         }
@@ -100,17 +108,18 @@ fn rms_norm_f32_with_gamma() {
     let shape = [3i32, 4, 8];
     let numel = 96usize;
     let extent = 8usize;
-    let host_x: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.13 - 1.7).sin() * 1.5).collect();
+    let host_x: Vec<f32> = (0..numel)
+        .map(|i| ((i as f32) * 0.13 - 1.7).sin() * 1.5)
+        .collect();
     let host_gamma: Vec<f32> = (0..extent).map(|i| 0.5 + 0.1 * i as f32).collect();
     let eps = 1e-5f32;
-    let (expected_y, expected_rms) =
-        host_rms_norm_f32(&shape, 2, &host_x, Some(&host_gamma), eps);
+    let (expected_y, expected_rms) = host_rms_norm_f32(&shape, 2, &host_x, Some(&host_gamma), eps);
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_gamma = DeviceBuffer::from_slice(&ctx, &host_gamma).expect("up gamma");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
-    let mut dev_rms: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, expected_rms.len())
-        .expect("alloc rms");
+    let mut dev_rms: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, expected_rms.len()).expect("alloc rms");
 
     let desc = RMSNormDescriptor {
         input_shape: shape,
@@ -119,19 +128,36 @@ fn rms_norm_f32_with_gamma() {
         has_gamma: true,
         element: ElementKind::F32,
     };
-    let plan = RMSNormPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        RMSNormPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let rms_shape = desc.rms_shape();
-    plan.run(&stream, Workspace::None, RMSNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef {
-            data: dev_gamma.as_slice(), shape: [extent as i32], stride: [1],
-        }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        rms: TensorMut {
-            data: dev_rms.as_slice_mut(), shape: rms_shape, stride: contiguous_stride(rms_shape),
+    plan.run(
+        &stream,
+        Workspace::None,
+        RMSNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_gamma.as_slice(),
+                shape: [extent as i32],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            rms: TensorMut {
+                data: dev_rms.as_slice_mut(),
+                shape: rms_shape,
+                stride: contiguous_stride(rms_shape),
+            },
         },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![0f32; numel];
@@ -143,13 +169,21 @@ fn rms_norm_f32_with_gamma() {
     let eps_tol = 16.0 * f32::EPSILON;
     for i in 0..numel {
         let tol = (expected_y[i].abs() * eps_tol).max(eps_tol);
-        assert!((got_y[i] - expected_y[i]).abs() <= tol,
-            "f32 rms_norm y @ {i}: got={} want={}", got_y[i], expected_y[i]);
+        assert!(
+            (got_y[i] - expected_y[i]).abs() <= tol,
+            "f32 rms_norm y @ {i}: got={} want={}",
+            got_y[i],
+            expected_y[i]
+        );
     }
     for i in 0..expected_rms.len() {
         let tol = (expected_rms[i].abs() * eps_tol).max(eps_tol);
-        assert!((got_rms[i] - expected_rms[i]).abs() <= tol,
-            "f32 rms_norm rms @ {i}: got={} want={}", got_rms[i], expected_rms[i]);
+        assert!(
+            (got_rms[i] - expected_rms[i]).abs() <= tol,
+            "f32 rms_norm rms @ {i}: got={} want={}",
+            got_rms[i],
+            expected_rms[i]
+        );
     }
 }
 
@@ -160,7 +194,9 @@ fn rms_norm_f64_no_gamma() {
     let shape = [2i32, 6];
     let numel = 12usize;
     let extent = 6usize;
-    let host_x: Vec<f64> = (0..numel).map(|i| ((i as f64) * 0.21 - 1.1).cos() * 0.8).collect();
+    let host_x: Vec<f64> = (0..numel)
+        .map(|i| ((i as f64) * 0.21 - 1.1).cos() * 0.8)
+        .collect();
     let eps = 1e-6f32;
     // CPU ref in f64
     let mut expected_y = vec![0f64; numel];
@@ -190,17 +226,32 @@ fn rms_norm_f64_no_gamma() {
         has_gamma: false,
         element: ElementKind::F64,
     };
-    let plan = RMSNormPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        RMSNormPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let rms_shape = desc.rms_shape();
-    plan.run(&stream, Workspace::None, RMSNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: None,
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        rms: TensorMut {
-            data: dev_rms.as_slice_mut(), shape: rms_shape, stride: contiguous_stride(rms_shape),
+    plan.run(
+        &stream,
+        Workspace::None,
+        RMSNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: None,
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            rms: TensorMut {
+                data: dev_rms.as_slice_mut(),
+                shape: rms_shape,
+                stride: contiguous_stride(rms_shape),
+            },
         },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![0f64; numel];
@@ -211,12 +262,19 @@ fn rms_norm_f64_no_gamma() {
     let eps_tol = 16.0 * f64::EPSILON;
     for i in 0..numel {
         let tol = (expected_y[i].abs() * eps_tol).max(eps_tol);
-        assert!((got_y[i] - expected_y[i]).abs() <= tol,
-            "f64 rms_norm y @ {i}: got={} want={}", got_y[i], expected_y[i]);
+        assert!(
+            (got_y[i] - expected_y[i]).abs() <= tol,
+            "f64 rms_norm y @ {i}: got={} want={}",
+            got_y[i],
+            expected_y[i]
+        );
     }
     for i in 0..2 {
         let tol = (expected_rms[i].abs() * eps_tol).max(eps_tol);
-        assert!((got_rms[i] - expected_rms[i]).abs() <= tol, "f64 rms_norm rms @ {i}");
+        assert!(
+            (got_rms[i] - expected_rms[i]).abs() <= tol,
+            "f64 rms_norm rms @ {i}"
+        );
     }
 }
 
@@ -227,11 +285,12 @@ fn rms_norm_f16_with_gamma() {
     let shape = [4i32, 8];
     let numel = 32usize;
     let extent = 8usize;
-    let host_x_f32: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.18 - 1.4).sin()).collect();
+    let host_x_f32: Vec<f32> = (0..numel)
+        .map(|i| ((i as f32) * 0.18 - 1.4).sin())
+        .collect();
     let host_gamma_f32: Vec<f32> = (0..extent).map(|i| 1.0 + 0.05 * i as f32).collect();
     let eps = 1e-5f32;
-    let (expected_y_f32, _) =
-        host_rms_norm_f32(&shape, 1, &host_x_f32, Some(&host_gamma_f32), eps);
+    let (expected_y_f32, _) = host_rms_norm_f32(&shape, 1, &host_x_f32, Some(&host_gamma_f32), eps);
 
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let host_gamma: Vec<f16> = host_gamma_f32.iter().map(|&v| f16::from_f32(v)).collect();
@@ -248,19 +307,36 @@ fn rms_norm_f16_with_gamma() {
         has_gamma: true,
         element: ElementKind::F16,
     };
-    let plan = RMSNormPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        RMSNormPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let rms_shape = desc.rms_shape();
-    plan.run(&stream, Workspace::None, RMSNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef {
-            data: dev_gamma.as_slice(), shape: [extent as i32], stride: [1],
-        }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        rms: TensorMut {
-            data: dev_rms.as_slice_mut(), shape: rms_shape, stride: contiguous_stride(rms_shape),
+    plan.run(
+        &stream,
+        Workspace::None,
+        RMSNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_gamma.as_slice(),
+                shape: [extent as i32],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            rms: TensorMut {
+                data: dev_rms.as_slice_mut(),
+                shape: rms_shape,
+                stride: contiguous_stride(rms_shape),
+            },
         },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![f16::ZERO; numel];
@@ -280,7 +356,9 @@ fn rms_norm_bf16_no_gamma() {
     let (ctx, stream) = setup();
     let shape = [3i32, 8];
     let numel = 24usize;
-    let host_x_f32: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.22 - 1.0).cos()).collect();
+    let host_x_f32: Vec<f32> = (0..numel)
+        .map(|i| ((i as f32) * 0.22 - 1.0).cos())
+        .collect();
     let eps = 1e-5f32;
     let (expected_y_f32, _) = host_rms_norm_f32(&shape, 1, &host_x_f32, None, eps);
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
@@ -296,17 +374,32 @@ fn rms_norm_bf16_no_gamma() {
         has_gamma: false,
         element: ElementKind::Bf16,
     };
-    let plan = RMSNormPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        RMSNormPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let rms_shape = desc.rms_shape();
-    plan.run(&stream, Workspace::None, RMSNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: None,
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        rms: TensorMut {
-            data: dev_rms.as_slice_mut(), shape: rms_shape, stride: contiguous_stride(rms_shape),
+    plan.run(
+        &stream,
+        Workspace::None,
+        RMSNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: None,
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            rms: TensorMut {
+                data: dev_rms.as_slice_mut(),
+                shape: rms_shape,
+                stride: contiguous_stride(rms_shape),
+            },
         },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![bf16::ZERO; numel];

@@ -180,7 +180,11 @@ impl<T: Element, const N: usize> BatchNormPlan<T, N> {
                 ));
             }
         }
-        match (args.gamma.is_some(), args.beta.is_some(), self.desc.has_affine) {
+        match (
+            args.gamma.is_some(),
+            args.beta.is_some(),
+            self.desc.has_affine,
+        ) {
             (true, true, true) | (false, false, false) => {}
             _ => {
                 return Err(Error::InvalidProblem(
@@ -230,42 +234,92 @@ impl<T: Element, const N: usize> BatchNormPlan<T, N> {
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let mean_ptr = args.saved_mean.data.as_raw().0 as *mut c_void;
         let rstd_ptr = args.saved_rstd.data.as_raw().0 as *mut c_void;
-        let gamma_ptr = args.gamma.as_ref().map(|g| g.data.as_raw().0 as *const c_void)
+        let gamma_ptr = args
+            .gamma
+            .as_ref()
+            .map(|g| g.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let beta_ptr = args.beta.as_ref().map(|b| b.data.as_raw().0 as *const c_void)
+        let beta_ptr = args
+            .beta
+            .as_ref()
+            .map(|b| b.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_batch_norm_f32_run(
-                    n_extent, c_extent, s_extent,
-                    c_extent, 0, self.desc.eps,
-                    x_ptr, gamma_ptr, beta_ptr, y_ptr, mean_ptr, rstd_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    n_extent,
+                    c_extent,
+                    s_extent,
+                    c_extent,
+                    0,
+                    self.desc.eps,
+                    x_ptr,
+                    gamma_ptr,
+                    beta_ptr,
+                    y_ptr,
+                    mean_ptr,
+                    rstd_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_batch_norm_f16_run(
-                    n_extent, c_extent, s_extent,
-                    c_extent, 0, self.desc.eps,
-                    x_ptr, gamma_ptr, beta_ptr, y_ptr, mean_ptr, rstd_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    n_extent,
+                    c_extent,
+                    s_extent,
+                    c_extent,
+                    0,
+                    self.desc.eps,
+                    x_ptr,
+                    gamma_ptr,
+                    beta_ptr,
+                    y_ptr,
+                    mean_ptr,
+                    rstd_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_batch_norm_bf16_run(
-                    n_extent, c_extent, s_extent,
-                    c_extent, 0, self.desc.eps,
-                    x_ptr, gamma_ptr, beta_ptr, y_ptr, mean_ptr, rstd_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    n_extent,
+                    c_extent,
+                    s_extent,
+                    c_extent,
+                    0,
+                    self.desc.eps,
+                    x_ptr,
+                    gamma_ptr,
+                    beta_ptr,
+                    y_ptr,
+                    mean_ptr,
+                    rstd_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_batch_norm_f64_run(
-                    n_extent, c_extent, s_extent,
-                    c_extent, 0, self.desc.eps,
-                    x_ptr, gamma_ptr, beta_ptr, y_ptr, mean_ptr, rstd_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    n_extent,
+                    c_extent,
+                    s_extent,
+                    c_extent,
+                    0,
+                    self.desc.eps,
+                    x_ptr,
+                    gamma_ptr,
+                    beta_ptr,
+                    y_ptr,
+                    mean_ptr,
+                    rstd_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

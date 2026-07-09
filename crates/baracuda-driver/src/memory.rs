@@ -9,11 +9,11 @@ use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ops::Range;
 
-use baracuda_cuda_sys::{driver, CUdeviceptr};
+use baracuda_cuda_sys::{CUdeviceptr, driver};
 use baracuda_types::{DeviceRepr, KernelArg};
 
 use crate::context::Context;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// Owned, typed allocation of device memory.
@@ -644,18 +644,18 @@ impl<T: DeviceRepr> ManagedBuffer<T> {
     /// 1. No concurrent kernel is writing to this buffer.
     /// 2. On discrete GPUs, a relevant synchronize has been issued since
     ///    the last device-side write.
-    pub unsafe fn as_host_slice(&self) -> &[T] { unsafe {
-        core::slice::from_raw_parts(self.ptr.0 as *const T, self.len)
-    }}
+    pub unsafe fn as_host_slice(&self) -> &[T] {
+        unsafe { core::slice::from_raw_parts(self.ptr.0 as *const T, self.len) }
+    }
 
     /// Mutable host view. Same safety rules as [`as_host_slice`](Self::as_host_slice).
     ///
     /// # Safety
     ///
     /// The caller must ensure no concurrent device or host access.
-    pub unsafe fn as_host_slice_mut(&mut self) -> &mut [T] { unsafe {
-        core::slice::from_raw_parts_mut(self.ptr.0 as *mut T, self.len)
-    }}
+    pub unsafe fn as_host_slice_mut(&mut self) -> &mut [T] {
+        unsafe { core::slice::from_raw_parts_mut(self.ptr.0 as *mut T, self.len) }
+    }
 
     /// Number of elements.
     #[inline]
@@ -839,11 +839,13 @@ pub fn memset_2d_u32(
 ///
 /// Both `dst` and `src` must be CUDA-addressable for at least `bytes`
 /// bytes; ranges must not overlap.
-pub unsafe fn memcpy(dst: CUdeviceptr, src: CUdeviceptr, bytes: usize) -> Result<()> { unsafe {
-    let d = driver()?;
-    let cu = d.cu_memcpy()?;
-    check(cu(dst, src, bytes))
-}}
+pub unsafe fn memcpy(dst: CUdeviceptr, src: CUdeviceptr, bytes: usize) -> Result<()> {
+    unsafe {
+        let d = driver()?;
+        let cu = d.cu_memcpy()?;
+        check(cu(dst, src, bytes))
+    }
+}
 
 /// Async variant of [`memcpy`] ordered on `stream`.
 ///
@@ -856,11 +858,13 @@ pub unsafe fn memcpy_async(
     src: CUdeviceptr,
     bytes: usize,
     stream: &Stream,
-) -> Result<()> { unsafe {
-    let d = driver()?;
-    let cu = d.cu_memcpy_async()?;
-    check(cu(dst, src, bytes, stream.as_raw()))
-}}
+) -> Result<()> {
+    unsafe {
+        let d = driver()?;
+        let cu = d.cu_memcpy_async()?;
+        check(cu(dst, src, bytes, stream.as_raw()))
+    }
+}
 
 // ---- Wave 27: v2 advise/prefetch + VMM reverse lookups ------------------
 
@@ -953,11 +957,13 @@ pub unsafe fn get_handle_for_address_range(
     dptr: CUdeviceptr,
     size: usize,
     handle_type: i32,
-) -> Result<()> { unsafe {
-    let d = driver()?;
-    let cu = d.cu_mem_get_handle_for_address_range()?;
-    check(cu(handle_out, dptr, size, handle_type, 0))
-}}
+) -> Result<()> {
+    unsafe {
+        let d = driver()?;
+        let cu = d.cu_mem_get_handle_for_address_range()?;
+        check(cu(handle_out, dptr, size, handle_type, 0))
+    }
+}
 
 impl<T: DeviceRepr> Drop for DeviceBuffer<T> {
     fn drop(&mut self) {

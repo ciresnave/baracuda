@@ -12,10 +12,10 @@ use baracuda_kernels_types::{
     Element, KernelSku, PlanPreference, PoolKind, PrecisionGuarantee, Workspace,
 };
 
-use super::max_pool2d::{build_sku, PoolMode};
+use super::max_pool2d::{PoolMode, build_sku};
 use super::max_pool3d::{
-    check_bw_args, check_fw_args, compute_output_dims, validate_descriptor, Pool3dBwArgs,
-    Pool3dDescriptor, Pool3dFwArgs,
+    Pool3dBwArgs, Pool3dDescriptor, Pool3dFwArgs, check_bw_args, check_fw_args,
+    compute_output_dims, validate_descriptor,
 };
 use super::pool_nd::{
     bind_stream, drop_descriptors_nd, ensure_descriptors_nd, ensure_handle, run_bw_nd, run_fw_nd,

@@ -1,11 +1,11 @@
 //! Real-GPU smoke test for `UnsortedSegmentProdBackwardPlan<T>` (Phase 25).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef,
-    UnsortedSegmentProdBackwardArgs, UnsortedSegmentProdBackwardDescriptor,
-    UnsortedSegmentProdBackwardPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnsortedSegmentProdBackwardArgs,
+    UnsortedSegmentProdBackwardDescriptor, UnsortedSegmentProdBackwardPlan, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -57,10 +57,9 @@ fn unsorted_segment_prod_backward_f32_basic() {
         num_segments: ns,
         element: ElementKind::F32,
     };
-    let plan = UnsortedSegmentProdBackwardPlan::<f32>::select(
-        &stream, &desc, PlanPreference::default(),
-    )
-    .expect("select");
+    let plan =
+        UnsortedSegmentProdBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = UnsortedSegmentProdBackwardArgs::<f32> {
         d_output: TensorRef {
             data: dev_dout.as_slice(),

@@ -125,7 +125,12 @@ fn parse_row(row: &str) -> Option<DispatchEntry> {
 
     // margin: the number between the entry's close-quote and the comma before
     // the provenance quote.
-    let margin_str = rest[..pq1].trim().trim_start_matches(',').trim().trim_end_matches(',').trim();
+    let margin_str = rest[..pq1]
+        .trim()
+        .trim_start_matches(',')
+        .trim()
+        .trim_end_matches(',')
+        .trim();
     let margin: f64 = margin_str.parse().ok()?;
     // An `@generated` artifact never holds a non-finite margin (`emit` clamps and
     // `merge` rejects one). A `"NaN"`/`"inf"` row is therefore corruption — skip
@@ -149,7 +154,7 @@ fn parse_row(row: &str) -> Option<DispatchEntry> {
 mod tests {
     use super::*;
     use baracuda_kernels_types::{
-        structure_key, ArchSku, CandidateResult, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, CandidateResult, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     fn ew_token(dtype: ElementKind) -> String {
@@ -163,7 +168,11 @@ mod tests {
             winner,
             winner_entry: None,
             margin,
-            ranked: vec![CandidateResult { implementor: winner, median_ns: 1.0, entry_point: None }],
+            ranked: vec![CandidateResult {
+                implementor: winner,
+                median_ns: 1.0,
+                entry_point: None,
+            }],
             provenance: Provenance::Measured,
             measured_on: None,
         }
@@ -193,8 +202,11 @@ mod tests {
             measured(at.clone(), Implementor::Bespoke, 3.0), // dup token → collapses
         ]);
         let src = emit_dispatch_table(&table);
-        assert!(src
-            .contains("pub static BARACUDA_DISPATCH_TABLE: &[(&str, &str, &str, f64, &str)] = &["));
+        assert!(
+            src.contains(
+                "pub static BARACUDA_DISPATCH_TABLE: &[(&str, &str, &str, f64, &str)] = &["
+            )
+        );
         // f16 token sorts before f32 token.
         let a = src.find(&at).unwrap();
         let z = src.find(&zt).unwrap();
@@ -286,7 +298,10 @@ mod tests {
              (\"{tok}\", \"gen\", NaN, \"reported\"),\n    \
              (\"{tok}\", \"cublas\", inf, \"reported\"),\n];\n"
         );
-        assert!(parse_dispatch_table(&src).is_empty(), "NaN/inf margin rows skipped");
+        assert!(
+            parse_dispatch_table(&src).is_empty(),
+            "NaN/inf margin rows skipped"
+        );
     }
 
     #[test]

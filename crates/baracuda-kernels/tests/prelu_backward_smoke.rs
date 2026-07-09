@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `PReluBackwardPlan`. BW × 4 dtypes × {per-channel, scalar}.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PReluBackwardArgs, PReluBackwardDescriptor,
-    PReluBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, PReluBackwardArgs, PReluBackwardDescriptor, PReluBackwardPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -32,7 +32,11 @@ fn prelu_backward_f32_per_channel() {
     let exp_dx: Vec<f32> = (0..n_total)
         .map(|i| {
             let c = (i as usize / c_stride) % c_extent;
-            if h_x[i] > 0.0 { h_dy[i] } else { h_w[c] * h_dy[i] }
+            if h_x[i] > 0.0 {
+                h_dy[i]
+            } else {
+                h_w[c] * h_dy[i]
+            }
         })
         .collect();
     let mut exp_dw = vec![0.0f32; c_extent];
@@ -58,11 +62,31 @@ fn prelu_backward_f32_per_channel() {
         &stream,
         Workspace::None,
         PReluBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [3], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dweight: TensorMut { data: dev_dw.as_slice_mut(), shape: [3], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [3],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dweight: TensorMut {
+                data: dev_dw.as_slice_mut(),
+                shape: [3],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -73,11 +97,21 @@ fn prelu_backward_f32_per_channel() {
     dev_dw.copy_to_host(&mut got_dw).unwrap();
     for i in 0..n_total {
         let tol = exp_dx[i].abs() * 4.0 * f32::EPSILON + 1e-7;
-        assert!((got_dx[i] - exp_dx[i]).abs() <= tol, "PReLU BW dx @{i}: got={} want={}", got_dx[i], exp_dx[i]);
+        assert!(
+            (got_dx[i] - exp_dx[i]).abs() <= tol,
+            "PReLU BW dx @{i}: got={} want={}",
+            got_dx[i],
+            exp_dx[i]
+        );
     }
     for c in 0..c_extent {
         let tol = exp_dw[c].abs() * 16.0 * f32::EPSILON + 1e-5;
-        assert!((got_dw[c] - exp_dw[c]).abs() <= tol, "PReLU BW dweight @{c}: got={} want={}", got_dw[c], exp_dw[c]);
+        assert!(
+            (got_dw[c] - exp_dw[c]).abs() <= tol,
+            "PReLU BW dweight @{c}: got={} want={}",
+            got_dw[c],
+            exp_dw[c]
+        );
     }
 }
 
@@ -91,7 +125,13 @@ fn prelu_backward_f32_scalar() {
     let h_w: Vec<f32> = vec![0.3];
     let h_dy: Vec<f32> = (0..n_total).map(|i| 0.5 + (i as f32) * 0.01).collect();
     let exp_dx: Vec<f32> = (0..n_total)
-        .map(|i| if h_x[i] > 0.0 { h_dy[i] } else { h_w[0] * h_dy[i] })
+        .map(|i| {
+            if h_x[i] > 0.0 {
+                h_dy[i]
+            } else {
+                h_w[0] * h_dy[i]
+            }
+        })
         .collect();
     let mut exp_dw = 0.0f32;
     for i in 0..n_total {
@@ -115,11 +155,31 @@ fn prelu_backward_f32_scalar() {
         &stream,
         Workspace::None,
         PReluBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [1], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dweight: TensorMut { data: dev_dw.as_slice_mut(), shape: [1], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dweight: TensorMut {
+                data: dev_dw.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -150,7 +210,11 @@ fn prelu_backward_f64_per_channel() {
     let exp_dx: Vec<f64> = (0..n_total)
         .map(|i| {
             let c = (i as usize / c_stride) % c_extent;
-            if h_x[i] > 0.0 { h_dy[i] } else { h_w[c] * h_dy[i] }
+            if h_x[i] > 0.0 {
+                h_dy[i]
+            } else {
+                h_w[c] * h_dy[i]
+            }
         })
         .collect();
     let mut exp_dw = vec![0.0f64; c_extent];
@@ -176,11 +240,31 @@ fn prelu_backward_f64_per_channel() {
         &stream,
         Workspace::None,
         PReluBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [3], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dweight: TensorMut { data: dev_dw.as_slice_mut(), shape: [3], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [3],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dweight: TensorMut {
+                data: dev_dw.as_slice_mut(),
+                shape: [3],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -209,7 +293,13 @@ fn prelu_backward_f64_scalar() {
     let h_w: Vec<f64> = vec![0.3];
     let h_dy: Vec<f64> = (0..n_total).map(|i| 0.5 + (i as f64) * 0.01).collect();
     let exp_dx: Vec<f64> = (0..n_total)
-        .map(|i| if h_x[i] > 0.0 { h_dy[i] } else { h_w[0] * h_dy[i] })
+        .map(|i| {
+            if h_x[i] > 0.0 {
+                h_dy[i]
+            } else {
+                h_w[0] * h_dy[i]
+            }
+        })
         .collect();
     let mut exp_dw = 0.0f64;
     for i in 0..n_total {
@@ -233,11 +323,31 @@ fn prelu_backward_f64_scalar() {
         &stream,
         Workspace::None,
         PReluBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [1], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dweight: TensorMut { data: dev_dw.as_slice_mut(), shape: [1], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dweight: TensorMut {
+                data: dev_dw.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -300,11 +410,31 @@ fn prelu_backward_f16_per_channel() {
         &stream,
         Workspace::None,
         PReluBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [3], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dweight: TensorMut { data: dev_dw.as_slice_mut(), shape: [3], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [3],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dweight: TensorMut {
+                data: dev_dw.as_slice_mut(),
+                shape: [3],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -317,13 +447,23 @@ fn prelu_backward_f16_per_channel() {
         let g = got_dx[i].to_f32();
         let e = exp_dx[i];
         let tol = e.abs().max(1.0) * 8.0 * F16_EPS + 1e-3;
-        assert!((g - e).abs() <= tol, "f16 PReLU BW dx @{i}: got={} want={}", g, e);
+        assert!(
+            (g - e).abs() <= tol,
+            "f16 PReLU BW dx @{i}: got={} want={}",
+            g,
+            e
+        );
     }
     for c in 0..c_extent {
         let g = got_dw[c].to_f32();
         let e = exp_dw[c];
         let tol = e.abs().max(1.0) * 16.0 * F16_EPS + 5e-2;
-        assert!((g - e).abs() <= tol, "f16 PReLU BW dw @{c}: got={} want={}", g, e);
+        assert!(
+            (g - e).abs() <= tol,
+            "f16 PReLU BW dw @{c}: got={} want={}",
+            g,
+            e
+        );
     }
 }
 
@@ -368,11 +508,31 @@ fn prelu_backward_f16_scalar() {
         &stream,
         Workspace::None,
         PReluBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [1], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dweight: TensorMut { data: dev_dw.as_slice_mut(), shape: [1], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dweight: TensorMut {
+                data: dev_dw.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -389,7 +549,12 @@ fn prelu_backward_f16_scalar() {
     }
     let g = got_dw[0].to_f32();
     let tol = exp_dw.abs().max(1.0) * 16.0 * F16_EPS + 5e-2;
-    assert!((g - exp_dw).abs() <= tol, "f16 PReLU BW dw scalar: got={} want={}", g, exp_dw);
+    assert!(
+        (g - exp_dw).abs() <= tol,
+        "f16 PReLU BW dw scalar: got={} want={}",
+        g,
+        exp_dw
+    );
 }
 
 #[test]
@@ -438,11 +603,31 @@ fn prelu_backward_bf16_per_channel() {
         &stream,
         Workspace::None,
         PReluBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [3], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dweight: TensorMut { data: dev_dw.as_slice_mut(), shape: [3], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [3],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dweight: TensorMut {
+                data: dev_dw.as_slice_mut(),
+                shape: [3],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -455,13 +640,23 @@ fn prelu_backward_bf16_per_channel() {
         let g = got_dx[i].to_f32();
         let e = exp_dx[i];
         let tol = e.abs().max(1.0) * 8.0 * BF16_EPS + 1e-2;
-        assert!((g - e).abs() <= tol, "bf16 PReLU BW dx @{i}: got={} want={}", g, e);
+        assert!(
+            (g - e).abs() <= tol,
+            "bf16 PReLU BW dx @{i}: got={} want={}",
+            g,
+            e
+        );
     }
     for c in 0..c_extent {
         let g = got_dw[c].to_f32();
         let e = exp_dw[c];
         let tol = e.abs().max(1.0) * 16.0 * BF16_EPS + 1e-1;
-        assert!((g - e).abs() <= tol, "bf16 PReLU BW dw @{c}: got={} want={}", g, e);
+        assert!(
+            (g - e).abs() <= tol,
+            "bf16 PReLU BW dw @{c}: got={} want={}",
+            g,
+            e
+        );
     }
 }
 
@@ -506,11 +701,31 @@ fn prelu_backward_bf16_scalar() {
         &stream,
         Workspace::None,
         PReluBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            weight: TensorRef { data: dev_w.as_slice(), shape: [1], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dweight: TensorMut { data: dev_dw.as_slice_mut(), shape: [1], stride: [1] },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            weight: TensorRef {
+                data: dev_w.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dweight: TensorMut {
+                data: dev_dw.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -527,5 +742,10 @@ fn prelu_backward_bf16_scalar() {
     }
     let g = got_dw[0].to_f32();
     let tol = exp_dw.abs().max(1.0) * 16.0 * BF16_EPS + 1e-1;
-    assert!((g - exp_dw).abs() <= tol, "bf16 PReLU BW dw scalar: got={} want={}", g, exp_dw);
+    assert!(
+        (g - exp_dw).abs() <= tol,
+        "bf16 PReLU BW dw scalar: got={} want={}",
+        g,
+        exp_dw
+    );
 }

@@ -12,7 +12,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -24,9 +24,7 @@ fn setup() -> (Context, Stream) {
 
 /// Host reference for nearest-2D upsample under `align_corners=false`.
 /// Coordinate mapping: `src_idx = min(floor(dst * src/dst), src - 1)`.
-fn cpu_nearest_2d_f32(
-    x: &[f32], n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
-) -> Vec<f32> {
+fn cpu_nearest_2d_f32(x: &[f32], n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32) -> Vec<f32> {
     let mut out = vec![0f32; (n * c * oh * ow) as usize];
     for nn in 0..n {
         for cc in 0..c {
@@ -49,7 +47,13 @@ fn cpu_nearest_2d_f32(
 /// Host reference for the BW: for each output cell, scatter-add its
 /// `dout` value into the same input cell the FW would have sampled.
 fn cpu_nearest_2d_bw_f32(
-    dout: &[f32], n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    dout: &[f32],
+    n: i32,
+    c: i32,
+    ih: i32,
+    iw: i32,
+    oh: i32,
+    ow: i32,
 ) -> Vec<f32> {
     let mut din = vec![0f32; (n * c * ih * iw) as usize];
     for nn in 0..n {
@@ -84,10 +88,16 @@ fn ffi_upsample_nearest_2d_f32_fw_matches_cpu() {
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_upsample_nearest_2d_fw_f32_run(
-            n, c, ih, iw, oh, ow,
+            n,
+            c,
+            ih,
+            iw,
+            oh,
+            ow,
             dev_in.as_slice().as_raw().0 as *const c_void,
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -118,10 +128,16 @@ fn ffi_upsample_nearest_2d_f32_bw_matches_cpu() {
         DeviceBuffer::zeros(&ctx, (n * c * ih * iw) as usize).expect("alloc din");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_upsample_nearest_2d_bw_f32_run(
-            n, c, ih, iw, oh, ow,
+            n,
+            c,
+            ih,
+            iw,
+            oh,
+            ow,
             dev_dout.as_slice().as_raw().0 as *const c_void,
             dev_din.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -175,11 +191,19 @@ fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
     // a: under the original `interpolate_*` symbol.
     let s_a = unsafe {
         baracuda_kernels_sys::baracuda_kernels_interpolate_bilinear_2d_f32_run(
-            n, c, ih, iw, oh, ow,
+            n,
+            c,
+            ih,
+            iw,
+            oh,
+            ow,
             dev_in_a.as_slice().as_raw().0 as *const c_void,
             dev_out_a.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
-            ac, scale_h, scale_w,
+            core::ptr::null_mut(),
+            0,
+            ac,
+            scale_h,
+            scale_w,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -187,11 +211,19 @@ fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
     // b: under the new `upsample_*` alias.
     let s_b = unsafe {
         baracuda_kernels_sys::baracuda_kernels_upsample_bilinear_2d_fw_f32_run(
-            n, c, ih, iw, oh, ow,
+            n,
+            c,
+            ih,
+            iw,
+            oh,
+            ow,
             dev_in_b.as_slice().as_raw().0 as *const c_void,
             dev_out_b.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
-            ac, scale_h, scale_w,
+            core::ptr::null_mut(),
+            0,
+            ac,
+            scale_h,
+            scale_w,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -217,19 +249,29 @@ fn ffi_upsample_bilinear_2d_f16_fw_returns_status_zero() {
     let (n, c, ih, iw) = (1i32, 1i32, 2i32, 2i32);
     let (oh, ow) = (4i32, 4i32);
     let host_in: Vec<f16> = vec![
-        f16::from_f32(1.0), f16::from_f32(2.0),
-        f16::from_f32(3.0), f16::from_f32(4.0),
+        f16::from_f32(1.0),
+        f16::from_f32(2.0),
+        f16::from_f32(3.0),
+        f16::from_f32(4.0),
     ];
     let dev_in = DeviceBuffer::from_slice(&ctx, &host_in).expect("up");
     let mut dev_out: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_upsample_bilinear_2d_fw_f16_run(
-            n, c, ih, iw, oh, ow,
+            n,
+            c,
+            ih,
+            iw,
+            oh,
+            ow,
             dev_in.as_slice().as_raw().0 as *const c_void,
             dev_out.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
-            0, 0.0, 0.0,
+            core::ptr::null_mut(),
+            0,
+            0,
+            0.0,
+            0.0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -260,11 +302,19 @@ fn ffi_upsample_bilinear_2d_bf16_bw_returns_status_zero() {
         DeviceBuffer::zeros(&ctx, (n * c * ih * iw) as usize).expect("alloc");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_upsample_bilinear_2d_bw_bf16_run(
-            n, c, ih, iw, oh, ow,
+            n,
+            c,
+            ih,
+            iw,
+            oh,
+            ow,
             dev_dout.as_slice().as_raw().0 as *const c_void,
             dev_din.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
-            0, 0.0, 0.0,
+            core::ptr::null_mut(),
+            0,
+            0,
+            0.0,
+            0.0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -276,6 +326,10 @@ fn ffi_upsample_bilinear_2d_bf16_bw_returns_status_zero() {
     // this 2x2 → 4x4 upsample (every input is the corner of a unique
     // 2x2 tile in the output).
     for (i, &v) in got.iter().enumerate() {
-        assert!(v.to_f32() > 0.0, "bf16 BW dgrad @ {i} not positive: {}", v.to_f32());
+        assert!(
+            v.to_f32() > 0.0,
+            "bf16 BW dgrad @ {i} not positive: {}",
+            v.to_f32()
+        );
     }
 }

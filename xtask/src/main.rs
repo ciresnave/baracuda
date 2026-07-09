@@ -38,7 +38,9 @@ fn print_usage() {
     println!();
     println!("usage:");
     println!("  xtask regen-all              regenerate every -sys crate's committed bindings");
-    println!("  xtask regen <lib>            regenerate only the named -sys crate (e.g. cuda, nvrtc, cublas)");
+    println!(
+        "  xtask regen <lib>            regenerate only the named -sys crate (e.g. cuda, nvrtc, cublas)"
+    );
     println!("  xtask build-kernels          (planned) recompile shipped .ptx fixtures via nvcc");
 }
 

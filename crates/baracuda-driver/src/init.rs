@@ -9,7 +9,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use baracuda_cuda_sys::driver;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 

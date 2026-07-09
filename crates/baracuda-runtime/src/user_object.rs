@@ -8,7 +8,7 @@ use core::ffi::c_void;
 
 use baracuda_cuda_sys::runtime::{cudaUserObject_t, runtime};
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// A refcounted user object.
 pub struct UserObject {

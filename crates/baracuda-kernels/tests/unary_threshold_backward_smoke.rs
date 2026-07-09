@@ -4,10 +4,10 @@
 //! Saved-x. Like the forward, the BW is a pure compare + select, so the
 //! result is bit-exact against the CPU reference.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryKind,
-    UnaryParamBackwardArgs, UnaryParamBackwardDescriptor, UnaryParamBackwardPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryKind, UnaryParamBackwardArgs,
+    UnaryParamBackwardDescriptor, UnaryParamBackwardPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -43,9 +43,21 @@ fn threshold_backward_f32_3d() {
     let plan = UnaryParamBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -54,9 +66,13 @@ fn threshold_backward_f32_3d() {
     for i in 0..numel {
         let exp = if host_x[i] > T { host_dy[i] } else { 0.0 };
         assert_eq!(
-            got[i].to_bits(), exp.to_bits(),
+            got[i].to_bits(),
+            exp.to_bits(),
             "threshold bw f32 @ {i}: x={}, dy={}, got {}, exp {}",
-            host_x[i], host_dy[i], got[i], exp
+            host_x[i],
+            host_dy[i],
+            got[i],
+            exp
         );
     }
 }
@@ -82,19 +98,38 @@ fn threshold_backward_f64_3d() {
     let plan = UnaryParamBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f64; numel];
     dev_dx.copy_to_host(&mut got).expect("download");
     for i in 0..numel {
-        let exp = if host_x[i] > T as f64 { host_dy[i] } else { 0.0 };
+        let exp = if host_x[i] > T as f64 {
+            host_dy[i]
+        } else {
+            0.0
+        };
         assert_eq!(
-            got[i].to_bits(), exp.to_bits(),
-            "threshold bw f64 @ {i}: got {}, exp {}", got[i], exp
+            got[i].to_bits(),
+            exp.to_bits(),
+            "threshold bw f64 @ {i}: got {}, exp {}",
+            got[i],
+            exp
         );
     }
 }
@@ -125,19 +160,38 @@ fn threshold_backward_f16_3d() {
     let plan = UnaryParamBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![f16::from_f32(0.0); numel];
     dev_dx.copy_to_host(&mut got).expect("download");
     for i in 0..numel {
-        let exp = if host_x[i].to_f32() > T { host_dy[i] } else { zero_h };
+        let exp = if host_x[i].to_f32() > T {
+            host_dy[i]
+        } else {
+            zero_h
+        };
         assert_eq!(
-            got[i].to_bits(), exp.to_bits(),
-            "threshold bw f16 @ {i}: got {} exp {}", got[i].to_f32(), exp.to_f32()
+            got[i].to_bits(),
+            exp.to_bits(),
+            "threshold bw f16 @ {i}: got {} exp {}",
+            got[i].to_f32(),
+            exp.to_f32()
         );
     }
 }
@@ -168,19 +222,38 @@ fn threshold_backward_bf16_3d() {
     let plan = UnaryParamBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![bf16::from_f32(0.0); numel];
     dev_dx.copy_to_host(&mut got).expect("download");
     for i in 0..numel {
-        let exp = if host_x[i].to_f32() > T { host_dy[i] } else { zero_h };
+        let exp = if host_x[i].to_f32() > T {
+            host_dy[i]
+        } else {
+            zero_h
+        };
         assert_eq!(
-            got[i].to_bits(), exp.to_bits(),
-            "threshold bw bf16 @ {i}: got {} exp {}", got[i].to_f32(), exp.to_f32()
+            got[i].to_bits(),
+            exp.to_bits(),
+            "threshold bw bf16 @ {i}: got {} exp {}",
+            got[i].to_f32(),
+            exp.to_f32()
         );
     }
 }

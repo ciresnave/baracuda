@@ -4,10 +4,10 @@
 use std::sync::Arc;
 
 use baracuda_cuda_sys::types::CUevent_flags;
-use baracuda_cuda_sys::{driver, CUevent};
+use baracuda_cuda_sys::{CUevent, driver};
 
 use crate::context::Context;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// A CUDA event.

@@ -41,8 +41,8 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-use super::map_status;
 use super::flash_sdpa::FLASH_SDPA_MAX_D;
+use super::map_status;
 
 /// Descriptor for an sm_89-specialized Flash Attention forward op.
 ///
@@ -400,14 +400,10 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
                 // Strided sibling. Per-tensor outer-dim stride arrays
                 // (length 3, one per outer dim: batch, heads, seq).
                 // The head_dim axis is implicitly stride=1.
-                let stride_q: [i64; 3] =
-                    [args.q.stride[0], args.q.stride[1], args.q.stride[2]];
-                let stride_k: [i64; 3] =
-                    [args.k.stride[0], args.k.stride[1], args.k.stride[2]];
-                let stride_v: [i64; 3] =
-                    [args.v.stride[0], args.v.stride[1], args.v.stride[2]];
-                let stride_y: [i64; 3] =
-                    [args.y.stride[0], args.y.stride[1], args.y.stride[2]];
+                let stride_q: [i64; 3] = [args.q.stride[0], args.q.stride[1], args.q.stride[2]];
+                let stride_k: [i64; 3] = [args.k.stride[0], args.k.stride[1], args.k.stride[2]];
+                let stride_v: [i64; 3] = [args.v.stride[0], args.v.stride[1], args.v.stride[2]];
+                let stride_y: [i64; 3] = [args.y.stride[0], args.y.stride[1], args.y.stride[2]];
                 match T::KIND {
                     ElementKind::F16 => {
                         baracuda_kernels_sys::baracuda_kernels_flash_sdpa_sm89_f16_strided_run(

@@ -540,7 +540,10 @@ impl ExprDag {
     /// If `exprs` is empty (a DAG needs at least one root).
     #[must_use]
     pub fn from_exprs(exprs: &[&ScalarExpr]) -> ExprDag {
-        assert!(!exprs.is_empty(), "ExprDag::from_exprs: needs at least one body");
+        assert!(
+            !exprs.is_empty(),
+            "ExprDag::from_exprs: needs at least one body"
+        );
         let mut b = DagBuilder {
             nodes: Vec::new(),
             consumers: Vec::new(),
@@ -2034,7 +2037,11 @@ impl OpDef {
             n_inputs: 1,
             body: ScalarExpr::Input(0),
             dtypes: vec![dtype],
-            access: Access::RowSort { order, stable: true, argsort: false },
+            access: Access::RowSort {
+                order,
+                stable: true,
+                argsort: false,
+            },
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
@@ -2062,7 +2069,11 @@ impl OpDef {
             n_inputs: 1,
             body: ScalarExpr::Input(0),
             dtypes: vec![dtype],
-            access: Access::RowSort { order, stable: true, argsort: true },
+            access: Access::RowSort {
+                order,
+                stable: true,
+                argsort: true,
+            },
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
@@ -2306,7 +2317,10 @@ mod view_tests {
             "rms",
             1,
             &[ElementKind::F32],
-            vec![ReduceStage { pre: ScalarExpr::Input(0), op: ReduceOp::Mean }],
+            vec![ReduceStage {
+                pre: ScalarExpr::Input(0),
+                op: ReduceOp::Mean,
+            }],
             reduced(0),
         );
         assert_eq!(rr.out_dtype, None);
@@ -2405,10 +2419,20 @@ mod view_tests {
         // is_logical: exactly the three 0/1-normalizing ops (U8-only set) —
         // the bitwise ops must NOT gain the U8-only restriction, and the
         // logical ops must NOT silently widen to I32/I64.
-        for op in [BinaryOp::LogicalAnd, BinaryOp::LogicalOr, BinaryOp::LogicalXor] {
+        for op in [
+            BinaryOp::LogicalAnd,
+            BinaryOp::LogicalOr,
+            BinaryOp::LogicalXor,
+        ] {
             assert!(op.is_logical(), "{op:?}");
         }
-        for op in [BinaryOp::BitAnd, BinaryOp::BitOr, BinaryOp::BitXor, BinaryOp::Shl, BinaryOp::Shr] {
+        for op in [
+            BinaryOp::BitAnd,
+            BinaryOp::BitOr,
+            BinaryOp::BitXor,
+            BinaryOp::Shl,
+            BinaryOp::Shr,
+        ] {
             assert!(!op.is_logical(), "{op:?}");
         }
     }
@@ -2425,12 +2449,22 @@ mod view_tests {
     #[test]
     fn permute_validity() {
         assert!(View::Permute { perm: vec![1, 0] }.is_valid(2));
-        assert!(View::Permute { perm: vec![2, 0, 1] }.is_valid(3));
+        assert!(
+            View::Permute {
+                perm: vec![2, 0, 1]
+            }
+            .is_valid(3)
+        );
         assert!(!View::Permute { perm: vec![0, 1] }.is_valid(3)); // wrong length
         assert!(!View::Permute { perm: vec![0, 0] }.is_valid(2)); // duplicate axis
         assert!(!View::Permute { perm: vec![0, 5] }.is_valid(2)); // out-of-range axis
         assert!(View::Identity.is_valid(4));
-        assert!(View::Broadcast { bcast: AxisMask::EMPTY }.is_valid(4));
+        assert!(
+            View::Broadcast {
+                bcast: AxisMask::EMPTY
+            }
+            .is_valid(4)
+        );
         assert!(View::Reshape { producer_rank: 2 }.is_valid(3));
     }
 
@@ -2438,7 +2472,13 @@ mod view_tests {
 
     #[test]
     fn gather_constructor_builds_the_indexed_read_role() {
-        let op = OpDef::gather("gather", &[ElementKind::F32], 1, OobPolicy::Skip, ElementKind::I64);
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            1,
+            OobPolicy::Skip,
+            ElementKind::I64,
+        );
         assert_eq!(op.n_inputs, 2);
         assert_eq!(op.n_outputs(), 1);
         // Body is the identity copy of the gathered data operand.
@@ -2461,7 +2501,12 @@ mod view_tests {
         // embedding zeros the OOB / negative row (bespoke) — ZeroFill on axis 0.
         let op = OpDef::embedding("emb", &[ElementKind::F32], ElementKind::I32);
         match op.read_index[0] {
-            ReadIndex::Indexed { axis, oob, index_dtype, .. } => {
+            ReadIndex::Indexed {
+                axis,
+                oob,
+                index_dtype,
+                ..
+            } => {
                 assert_eq!(axis, 0);
                 assert_eq!(oob, OobPolicy::ZeroFill);
                 assert_eq!(index_dtype, ElementKind::I32);
@@ -2522,7 +2567,12 @@ mod view_tests {
         // Hetero out: i64 data key, i32 counts.
         assert_eq!(op.out_dtype, Some(ElementKind::I32));
         match op.write_index {
-            WriteIndex::ScatterIndexed { index_operand, combine, index_dtype, .. } => {
+            WriteIndex::ScatterIndexed {
+                index_operand,
+                combine,
+                index_dtype,
+                ..
+            } => {
                 // The lone input indexes itself (a scatter's index selects the dst).
                 assert_eq!(index_operand, 0);
                 assert_eq!(combine, WriteCombine::AtomicAdd);
@@ -2551,7 +2601,12 @@ mod reduction_axes_tests {
         // OpDef::reduction stays the legacy last-axis default: empty mask, no
         // keepdim — byte-identical to before item 03.
         match OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum).access {
-            Access::Reduction { op, axes, keepdim, post } => {
+            Access::Reduction {
+                op,
+                axes,
+                keepdim,
+                post,
+            } => {
                 assert_eq!(op, ReduceOp::Sum);
                 assert!(axes.is_empty());
                 assert!(!keepdim);
@@ -2576,7 +2631,12 @@ mod reduction_axes_tests {
         )
         .access
         {
-            Access::Reduction { op, axes, keepdim, post } => {
+            Access::Reduction {
+                op,
+                axes,
+                keepdim,
+                post,
+            } => {
                 assert_eq!(op, ReduceOp::Mean);
                 assert!(axes.is_set(0));
                 assert!(!axes.is_set(1));
@@ -2601,7 +2661,12 @@ mod reduction_axes_tests {
         )
         .access
         {
-            Access::Reduction { op, axes, keepdim, post } => {
+            Access::Reduction {
+                op,
+                axes,
+                keepdim,
+                post,
+            } => {
                 assert_eq!(op, ReduceOp::Sum);
                 assert!(axes.is_empty());
                 assert!(!keepdim);
@@ -2639,8 +2704,14 @@ mod dag_tests {
 
     /// Find the single node matching `pred`, asserting there is exactly one.
     fn only<F: Fn(&DagNode) -> bool>(dag: &ExprDag, pred: F) -> NodeId {
-        let hits: Vec<NodeId> = (0..dag.len() as NodeId).filter(|&i| pred(dag.node(i))).collect();
-        assert_eq!(hits.len(), 1, "expected exactly one matching node, got {hits:?}");
+        let hits: Vec<NodeId> = (0..dag.len() as NodeId)
+            .filter(|&i| pred(dag.node(i)))
+            .collect();
+        assert_eq!(
+            hits.len(),
+            1,
+            "expected exactly one matching node, got {hits:?}"
+        );
         hits[0]
     }
 
@@ -2652,7 +2723,11 @@ mod dag_tests {
         let dag = ExprDag::from_expr(&add(g.clone(), g));
         assert_eq!(dag.len(), 4, "Input0, Input1, Mul, Add — Mul stored once");
         let m = only(&dag, |n| matches!(n, DagNode::Mul(..)));
-        assert_eq!(dag.consumers(m), 2, "the shared Mul feeds both Add operands");
+        assert_eq!(
+            dag.consumers(m),
+            2,
+            "the shared Mul feeds both Add operands"
+        );
         // Its two operands are the same interior value; the Add references it twice.
         assert!(matches!(dag.node(dag.root()), DagNode::Add(a, b) if a == b));
     }
@@ -2709,7 +2784,11 @@ mod dag_tests {
         assert_eq!(dag.consumers(r), 2);
         assert!(dag.node(r).is_leaf());
         let mixed = ExprDag::from_expr(&add(ScalarExpr::Reduced(0), ScalarExpr::Reduced(1)));
-        assert_eq!(mixed.len(), 3, "Reduced(0) and Reduced(1) are distinct leaves");
+        assert_eq!(
+            mixed.len(),
+            3,
+            "Reduced(0) and Reduced(1) are distinct leaves"
+        );
     }
 
     #[test]
@@ -2730,7 +2809,11 @@ mod dag_tests {
             add(ScalarExpr::Coord(0), ScalarExpr::Input(0)),
             add(ScalarExpr::Reduced(0), ScalarExpr::Param(0)),
         ));
-        assert_eq!(kinds.len(), 7, "same-index leaves of different kinds never merge");
+        assert_eq!(
+            kinds.len(),
+            7,
+            "same-index leaves of different kinds never merge"
+        );
         // Round-trip: interning is a value identity for Coord bodies too.
         let body = mul(ScalarExpr::Coord(1), ipt(0));
         assert_eq!(ExprDag::from_expr(&body).to_expr(), body);
@@ -2746,7 +2829,11 @@ mod dag_tests {
         }
         let dag = ExprDag::from_expr(&e);
         // 2 inputs + 9 distinct Mul levels = 11 nodes (not 2^8-scale).
-        assert_eq!(dag.len(), 11, "one node per level, shared — linear in depth");
+        assert_eq!(
+            dag.len(),
+            11,
+            "one node per level, shared — linear in depth"
+        );
     }
 
     #[test]
@@ -2772,7 +2859,11 @@ mod dag_tests {
         let dy = only(&dag, |n| matches!(n, DagNode::Input(0)));
         assert_eq!(dag.consumers(dy), 2, "dy feeds both output bodies");
         assert_eq!(dag.roots().len(), 2, "two output roots");
-        assert_ne!(dag.roots()[0], dag.roots()[1], "da and db are distinct nodes");
+        assert_ne!(
+            dag.roots()[0],
+            dag.roots()[1],
+            "da and db are distinct nodes"
+        );
     }
 
     #[test]
@@ -2795,7 +2886,10 @@ mod dag_tests {
         // (there are two Div nodes total — dy/b and the outer .../b — so we key
         // off root[0] directly rather than the ambiguous "the Div node").
         let dyb_node = dag.roots()[0];
-        assert!(matches!(dag.node(dyb_node), DagNode::Div(..)), "body 0 root is dy/b");
+        assert!(
+            matches!(dag.node(dyb_node), DagNode::Div(..)),
+            "body 0 root is dy/b"
+        );
         assert!(
             dag.consumers(dyb_node) >= 1,
             "the shared dy/b interior is referenced by body 1"

@@ -31,7 +31,7 @@
 
 use crate::backend::GeneratedKernel;
 use crate::ir::{BinaryOp, ExprDag, NodeId, OobPolicy, OpDef, ScalarExpr, UnaryOp};
-use crate::pattern::{derive_pattern, to_fkc, PatternNode};
+use crate::pattern::{PatternNode, derive_pattern, to_fkc};
 use baracuda_kernels_types::{Contiguity, ElementKind, StructureKey, VecWidth};
 
 /// Canonicalize a caller's backend token to the exact capitalized spelling
@@ -524,7 +524,10 @@ pub fn contract(
     s.push_str(&format!("kernel: {}_{}\n", op.name, cell_suffix(key)));
     s.push_str(&op_line);
     s.push('\n');
-    s.push_str(&format!("blurb: \"{}\"\n", blurb(op, key, dtype, is_fusion)));
+    s.push_str(&format!(
+        "blurb: \"{}\"\n",
+        blurb(op, key, dtype, is_fusion)
+    ));
     // ImplId tuple (FKC §4.11), kept as five separable fields. The backend
     // token is canonicalized to Fuel's capitalized spelling (`cuda` → `Cuda`;
     // see `fkc_backend_token`) so the block imports through `lower_backend`.
@@ -612,7 +615,11 @@ pub fn contract(
     // which is SILENTLY DROPPED (no output slot in the key). `in0` is the item-4
     // name of input 0 (verified 2026-07-08 against Fuel's real importer: the
     // resolved primitive's `dtypes` then carries inputs + the output slot).
-    let dtype_rule = if out_u8 { "fixed(U8)" } else { "passthrough(in0)" };
+    let dtype_rule = if out_u8 {
+        "fixed(U8)"
+    } else {
+        "passthrough(in0)"
+    };
     // shape_rule: `same_as(in0)` — Fuel's §5.2 grammar spells it `same_as(<role>)`
     // (fuel-dispatch `fkc/schema.rs` OutputDesc; the `same_as_input(0)` form is
     // OUTSIDE the grammar — `same_as_input` has zero occurrences in Fuel, and `0`
@@ -668,7 +675,10 @@ pub fn contract(
     // (`deny_unknown_fields` is off), so Baracuda's strategy never reached Fuel.
     // The value strings (`requires_contiguous`/`handles_strided`) are already
     // Fuel-exact — only the key name was wrong.
-    s.push_str(&format!("  awkward_layout_strategy: {}\n", awkward_layout(key)));
+    s.push_str(&format!(
+        "  awkward_layout_strategy: {}\n",
+        awkward_layout(key)
+    ));
     // The unit of the kernel's `n` launch argument: a vectorized/packed cell
     // counts w-element VECTORS (n/width), everything else elements. Pinned on
     // the wire per the 2026-07-03 Fuel exchange (documentation-only for Fuel
@@ -695,7 +705,10 @@ pub fn contract(
     // `compile_cost` (verified 2026-07-08: `"1 * n"` / `"12 * n"` → Expr, imports
     // Ok). `class: elementwise` keeps the block above the §8a placeholder gate.
     s.push_str(&format!("  flops: \"{} * n\"\n", count_flops(&op.body)));
-    s.push_str(&format!("  bytes_moved: \"{} * n\"\n", bytes_per_elem(op, key)));
+    s.push_str(&format!(
+        "  bytes_moved: \"{} * n\"\n",
+        bytes_per_elem(op, key)
+    ));
 
     // Precision → Fuel's `PrecisionBlock` vocabulary ONLY (fuel-dispatch
     // `fkc/schema.rs`: bit_stable_on_same_hardware / max_ulp / max_relative /
@@ -719,7 +732,10 @@ pub fn contract(
         s.push_str(&format!("  max_ulp: {u}\n"));
     }
     s.push_str("  audited: true\n");
-    s.push_str(&format!("  notes: \"{}\"\n", precision_notes(prec_mode, prec_ulp)));
+    s.push_str(&format!(
+        "  notes: \"{}\"\n",
+        precision_notes(prec_mode, prec_ulp)
+    ));
     s.push_str("determinism: bitwise\n");
 
     if let (Some(p), true) = (&pattern, is_fusion) {
@@ -1291,12 +1307,23 @@ fn bytes_per_elem(op: &OpDef, key: &StructureKey) -> u32 {
 /// name (the linkable symbol is `entry_point`).
 fn cell_suffix(key: &StructureKey) -> String {
     let o = &key.operands[0];
-    format!("{}_{}_{}", dtype_short(key.dtype), contig_short(o.contig), vec_short(o.vec_width))
+    format!(
+        "{}_{}_{}",
+        dtype_short(key.dtype),
+        contig_short(o.contig),
+        vec_short(o.vec_width)
+    )
 }
 
 fn blurb(op: &OpDef, key: &StructureKey, dtype: &str, is_fusion: bool) -> String {
     let kind = if is_fusion { "fused" } else { "elementwise" };
-    format!("{} {} ({}, {} layout).", kind, op.name, dtype, layout_token(key, 0))
+    format!(
+        "{} {} ({}, {} layout).",
+        kind,
+        op.name,
+        dtype,
+        layout_token(key, 0)
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1313,7 +1340,7 @@ fn blurb(op: &OpDef, key: &StructureKey, dtype: &str, is_fusion: bool) -> String
 /// token here; `Fp8E5M2` and complex have no §5 slot yet — all return `None`.
 fn fkc_dtype(dt: ElementKind) -> Option<&'static str> {
     use ElementKind::{
-        Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
+        Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
         I64, S4, S8, U4, U8, U32,
     };
     Some(match dt {
@@ -1338,7 +1365,7 @@ fn fkc_dtype(dt: ElementKind) -> Option<&'static str> {
 
 fn dtype_short(dt: ElementKind) -> &'static str {
     use ElementKind::{
-        Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
+        Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
         I64, S4, S8, U4, U8, U32,
     };
     match dt {
@@ -1382,7 +1409,7 @@ fn vec_short(v: VecWidth) -> &'static str {
 
 fn dtype_size(dt: ElementKind) -> u32 {
     use ElementKind::{
-        Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
+        Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
         I64, S4, S8, U4, U8, U32,
     };
     match dt {
@@ -1409,11 +1436,9 @@ pub(crate) fn revision_hash(src: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{input, param, OpDef};
-    use crate::{generate, Cuda};
-    use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc,
-    };
+    use crate::ir::{OpDef, input, param};
+    use crate::{Cuda, generate};
+    use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn key_for(n_operands: usize, op_cat: OpCategory) -> StructureKey {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
@@ -1423,7 +1448,7 @@ mod tests {
 
     #[test]
     fn contraction_is_an_honest_miss_no_contract() {
-        use crate::ir::{reduced, ContractionAxes};
+        use crate::ir::{ContractionAxes, reduced};
         use crate::pattern::PatternError;
         // The generated contraction node must NEVER leak a bindable elementwise
         // contract — the honest-miss wall holds until the Fuel region grammar
@@ -1455,8 +1480,14 @@ mod tests {
         // so a scan emits NO FKC contract (the kernel still generates + runs AOT) —
         // the Reduction/RowReduce/Contraction precedent. `derive_pattern` rejects it
         // as NotElementwise BEFORE any body walk; `contract()` then returns None.
-        let sc =
-            OpDef::scan_simple("cumsum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let sc = OpDef::scan_simple(
+            "cumsum",
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+        );
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
@@ -1482,7 +1513,16 @@ mod tests {
         // Reduction/Scan/Contraction precedent. `derive_pattern` rejects it as
         // NotElementwise BEFORE any body walk; `contract()` then returns None.
         let p = OpDef::window_simple(
-            "maxpool", &[ElementKind::F32], ReduceOp::Max, 1, 2, 2, 1, 0, 0, false,
+            "maxpool",
+            &[ElementKind::F32],
+            ReduceOp::Max,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            false,
         );
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
@@ -1575,7 +1615,13 @@ mod tests {
         // i32/i64 index is unreachable from a Fuel graph node — `gather_advert`
         // returns None and no contract is emitted (AOT-only; kernel still runs).
         // (The u32 variant DOES emit — see `u32_gather_emits_a_keyed_contract…`.)
-        let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        );
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
         assert!(
@@ -1626,7 +1672,11 @@ mod tests {
             OperandDesc::new(2, &[128, 64], &[64, 1], index_dt, 256)
         };
         let out = OperandDesc::new(2, &[128, 64], &[64, 1], ElementKind::F32, 256);
-        structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89)
+        structure_key(
+            OpCategory::BinaryElementwise,
+            &[data, idx, out],
+            ArchSku::Sm89,
+        )
     }
 
     #[test]
@@ -1636,7 +1686,13 @@ mod tests {
         // (Model A): op_kind Gather, the accept block carries the mixed-dtype tuple
         // [F32, U32, F32] (index slot U32, data slot F32) so Fuel assembles the
         // key `[T, U32, T]`, and oob_policy declares the skip semantics.
-        let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::U32);
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::U32,
+        );
         let key = gather_key(ElementKind::U32, false);
         let kernel = generate(&op, &key, &Cuda);
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
@@ -1648,12 +1704,21 @@ mod tests {
         // PLURAL `dtypes: [..]` — the field Fuel's importer actually reads
         // (review-confirmed: singular `dtype:` is silently dropped → BadScalarType).
         // Each operand now carries a `name: in{i}` role (item 4) above its dtypes.
-        assert!(c.contains("    - name: in0\n      dtypes: [F32]\n"), "data slot in0 F32: {c}");
-        assert!(c.contains("    - name: in1\n      dtypes: [U32]\n"), "index slot in1 U32: {c}");
+        assert!(
+            c.contains("    - name: in0\n      dtypes: [F32]\n"),
+            "data slot in0 F32: {c}"
+        );
+        assert!(
+            c.contains("    - name: in1\n      dtypes: [U32]\n"),
+            "index slot in1 U32: {c}"
+        );
         // The ImplId dtype channel stays the DATA (cell) dtype.
         assert!(c.contains("dtypes: [F32]"));
         // entry_point carries the u32 index infix.
-        assert!(c.contains("entry_point: baracuda_gen_gather_f32_u32_strided_r2"), "{c}");
+        assert!(
+            c.contains("entry_point: baracuda_gen_gather_f32_u32_strided_r2"),
+            "{c}"
+        );
         // A gather forces the strided schedule ⇒ elements.
         assert!(c.contains("count_unit: elements"));
     }
@@ -1663,7 +1728,13 @@ mod tests {
         use crate::ir::OobPolicy;
         // A 1-D u32 index ⇒ IndexSelect (structurally, from the index broadcast
         // mask), skip OOB.
-        let op = OpDef::index_select("isel", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::U32);
+        let op = OpDef::index_select(
+            "isel",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::U32,
+        );
         let key = gather_key(ElementKind::U32, true);
         let kernel = generate(&op, &key, &Cuda);
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
@@ -1725,7 +1796,10 @@ mod tests {
         let bk = structure_key(OpCategory::Indexing, &[x, o], ArchSku::Sm89);
         let bc = OpDef::bincount("bincount", ElementKind::U32);
         let bkern = generate(&bc, &bk, &Cuda);
-        assert!(contract(&bc, &bk, &bkern, "cuda").is_none(), "bincount stays a miss");
+        assert!(
+            contract(&bc, &bk, &bkern, "cuda").is_none(),
+            "bincount stays a miss"
+        );
     }
 
     #[test]
@@ -1738,11 +1812,18 @@ mod tests {
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
-        assert!(!c.contains("oob_policy"), "no oob_policy on a uniform op: {c}");
+        assert!(
+            !c.contains("oob_policy"),
+            "no oob_policy on a uniform op: {c}"
+        );
         assert!(!c.contains("U32"), "no U32 slot on a uniform op: {c}");
         // Both inputs are F32 — named plural `dtypes: [F32]` (the Fuel-readable
         // form; 6-space indent under the `- name:` line).
-        assert_eq!(c.matches("      dtypes: [F32]\n").count(), 2, "both inputs F32: {c}");
+        assert_eq!(
+            c.matches("      dtypes: [F32]\n").count(),
+            2,
+            "both inputs F32: {c}"
+        );
     }
 
     #[test]
@@ -1753,13 +1834,25 @@ mod tests {
         // fails import). Gather + IndexSelect are both in that table.
         const FUEL_OK: [&str; 2] = ["Gather", "IndexSelect"];
         for (one_d, _want) in [(false, "Gather"), (true, "IndexSelect")] {
-            let op = OpDef::gather("g", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::U32);
+            let op = OpDef::gather(
+                "g",
+                &[ElementKind::F32],
+                0,
+                OobPolicy::Skip,
+                ElementKind::U32,
+            );
             let key = gather_key(ElementKind::U32, one_d);
             let kernel = generate(&op, &key, &Cuda);
             let c = contract(&op, &key, &kernel, "cuda").unwrap();
-            let line = c.lines().find(|l| l.starts_with("op_kind: ")).expect("op_kind line");
+            let line = c
+                .lines()
+                .find(|l| l.starts_with("op_kind: "))
+                .expect("op_kind line");
             let spelled = line.trim_start_matches("op_kind: ");
-            assert!(FUEL_OK.contains(&spelled), "op_kind '{spelled}' not a Fuel string");
+            assert!(
+                FUEL_OK.contains(&spelled),
+                "op_kind '{spelled}' not a Fuel string"
+            );
         }
     }
 
@@ -1788,7 +1881,11 @@ mod tests {
         let in0 = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
         let in1 = OperandDesc::new(2, &[128, 256], in1_strides, ElementKind::F32, 256);
         let out = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[in0, in1, out], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[in0, in1, out],
+            ArchSku::Sm89,
+        );
         (op, key)
     }
 
@@ -1862,7 +1959,10 @@ mod tests {
         );
         // Fuel Rule-4 coherence: broadcast accepted ⇒ strided accepted (holds).
         // caps.awkward_layout_strategy for a strided operand-0 stays handles_strided.
-        assert!(c.contains("awkward_layout_strategy: handles_strided"), "{c}");
+        assert!(
+            c.contains("awkward_layout_strategy: handles_strided"),
+            "{c}"
+        );
     }
 
     #[test]
@@ -1872,9 +1972,19 @@ mod tests {
         // truthfully as `contiguous: required` (conservative, Fuel `[T,U32,T]`),
         // NEVER the old over-accepting `broadcast_stride0: accepted`.
         use crate::ir::OobPolicy;
-        let op = OpDef::index_select("isel", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::U32);
+        let op = OpDef::index_select(
+            "isel",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::U32,
+        );
         let key = gather_key(ElementKind::U32, true);
-        assert_eq!(key.operands[1].contig, Contiguity::Broadcast, "index keys Broadcast");
+        assert_eq!(
+            key.operands[1].contig,
+            Contiguity::Broadcast,
+            "index keys Broadcast"
+        );
         let kernel = generate(&op, &key, &Cuda);
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
         // The index (in1) slot: U32 dtype, contiguous-required layout.
@@ -1894,7 +2004,7 @@ mod tests {
 
     #[test]
     fn count_unit_matches_the_emitted_abi() {
-        use crate::{generate, Cuda};
+        use crate::{Cuda, generate};
         let c = |op: &OpDef, key: &StructureKey| {
             let k = generate(op, key, &Cuda);
             contract(op, key, &k, "cuda").unwrap()
@@ -1958,12 +2068,15 @@ mod tests {
         );
         let kernel = generate(&op, &key, &Cuda);
         assert!(contract(&op, &key, &kernel, "cuda").is_none());
-        assert!(matches!(derive_pattern(&op), Err(PatternError::NotElementwise)));
+        assert!(matches!(
+            derive_pattern(&op),
+            Err(PatternError::NotElementwise)
+        ));
     }
 
     #[test]
     fn prod_and_hetero_out_reductions_are_honest_misses_no_contract() {
-        use crate::ir::{konst, reduced, BinaryOp, ReduceOp};
+        use crate::ir::{BinaryOp, ReduceOp, konst, reduced};
         use crate::pattern::PatternError;
         // The 0e reductions (Prod combiner; boolean/count hetero-out via a Cmp*
         // post) emit NO contract — reductions are not in the elementwise pattern
@@ -1977,7 +2090,10 @@ mod tests {
         let pk = structure_key(OpCategory::Reduction, &[a, prod_out], ArchSku::Sm89);
         let prod = OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod);
         assert!(contract(&prod, &pk, &generate(&prod, &pk, &Cuda), "cuda").is_none());
-        assert!(matches!(derive_pattern(&prod), Err(PatternError::NotElementwise)));
+        assert!(matches!(
+            derive_pattern(&prod),
+            Err(PatternError::NotElementwise)
+        ));
 
         // (b) hetero-out any (Sum(x!=0) → u8 via a Cmp* post).
         let any_out = OperandDesc::new(1, &[256], &[1], ElementKind::U8, 256);
@@ -1992,7 +2108,10 @@ mod tests {
         );
         any.out_dtype = Some(ElementKind::U8);
         assert!(contract(&any, &ak, &generate(&any, &ak, &Cuda), "cuda").is_none());
-        assert!(matches!(derive_pattern(&any), Err(PatternError::NotElementwise)));
+        assert!(matches!(
+            derive_pattern(&any),
+            Err(PatternError::NotElementwise)
+        ));
     }
 
     #[test]
@@ -2006,7 +2125,10 @@ mod tests {
         // Item-1 casing: the lowercase provider token is canonicalized to Fuel's
         // capitalized wire spelling (`lower_backend` accepts `Cuda`, not `cuda`).
         assert!(fm.contains("backend: Cuda\n"), "{fm}");
-        assert!(!fm.contains("backend: cuda"), "lowercase backend must not leak: {fm}");
+        assert!(
+            !fm.contains("backend: cuda"),
+            "lowercase backend must not leak: {fm}"
+        );
     }
 
     #[test]
@@ -2023,7 +2145,10 @@ mod tests {
         // Front matter first, then a `## <kernel>` heading, then the block.
         assert!(b.starts_with("---\n"), "front matter leads: {b}");
         let kname = format!("add_{}", cell_suffix(&key));
-        assert!(b.contains(&format!("\n## {kname}\n")), "heading names the kernel: {b}");
+        assert!(
+            b.contains(&format!("\n## {kname}\n")),
+            "heading names the kernel: {b}"
+        );
         // The heading precedes the fenced block it frames.
         let h = b.find(&format!("## {kname}")).unwrap();
         let fence = b.find("```fkc").unwrap();
@@ -2041,14 +2166,20 @@ mod tests {
         // spelling is the Fuel-importer DISPATCH name (`AddElementwise`), not
         // the internal pattern root (`Add`) — the reconciled arithmetic spelling.
         assert!(c.contains("op_kind: AddElementwise"), "{c}");
-        assert!(!c.contains("op_kind: Add\n"), "internal spelling must not leak: {c}");
+        assert!(
+            !c.contains("op_kind: Add\n"),
+            "internal spelling must not leak: {c}"
+        );
         assert!(!c.contains("fused_op:"));
         assert!(!c.contains("pattern:"));
         // ImplId five fields all present + separable. The backend is Fuel's
         // capitalized wire spelling (`Cuda`), NOT the lowercase provider token
         // (`cuda` fails `lower_backend` with UnknownBackend) — item-1 casing.
         assert!(c.contains("backend: Cuda"), "{c}");
-        assert!(!c.contains("backend: cuda\n"), "lowercase backend must not leak: {c}");
+        assert!(
+            !c.contains("backend: cuda\n"),
+            "lowercase backend must not leak: {c}"
+        );
         assert!(c.contains("kernel_source: baracuda"));
         assert!(c.contains("dtypes: [F32]"));
         assert!(c.contains("entry_point: "));
@@ -2068,7 +2199,10 @@ mod tests {
             ),
             "input layout is the inline LayoutSpec map: {c}"
         );
-        assert!(!c.contains("layout: contiguous\n"), "bare layout string must not leak: {c}");
+        assert!(
+            !c.contains("layout: contiguous\n"),
+            "bare layout string must not leak: {c}"
+        );
         //  - item 5: passthrough(in0) output dtype rule (Fuel keys the output),
         //    NOT same_as_input(0) (parses to DtypeRule::Other, output dropped).
         assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
@@ -2076,40 +2210,75 @@ mod tests {
         //  - item 9: shape_rule spells the §5.2 grammar `same_as(<role>)`, NOT the
         //    out-of-grammar `same_as_input(0)` (negative pin).
         assert!(c.contains("shape_rule: same_as(in0)"), "{c}");
-        assert!(!c.contains("same_as_input(0)"), "old out-of-grammar shape_rule must not leak: {c}");
+        assert!(
+            !c.contains("same_as_input(0)"),
+            "old out-of-grammar shape_rule must not leak: {c}"
+        );
         //  - item 7: the OUTPUT descriptor carries `layout_guarantee:` (Fuel's
         //    OutputDesc field), never the five-flag `layout:` map (which lives on
         //    accept-inputs only). A contiguous output guarantees contiguous.
         assert!(c.contains("layout_guarantee: contiguous"), "{c}");
         // The `layout:` map appears ONLY under accept.inputs, never in `return:`.
         let ret = &c[c.find("return:").unwrap()..c.find("caps:").unwrap()];
-        assert!(!ret.contains("layout:"), "no five-flag layout: map under return: {ret}");
+        assert!(
+            !ret.contains("layout:"),
+            "no five-flag layout: map under return: {ret}"
+        );
         //  - item 4: in_place is the Fuel-schema boolean `false` for EVERY cell
         //    (out-of-place kernels; `aliasing: none`), never `true` (the §4.6
         //    inversion) nor the pre-reconcile string.
         assert!(c.contains("  in_place: false\n"), "in_place is false: {c}");
-        assert!(!c.contains("in_place: true"), "no in_place: true (§4.6 inversion): {c}");
+        assert!(
+            !c.contains("in_place: true"),
+            "no in_place: true (§4.6 inversion): {c}"
+        );
         assert!(!c.contains("in_place: allowed"), "no string in_place: {c}");
-        assert!(c.contains("awkward_layout_strategy: requires_contiguous"), "{c}");
-        assert!(!c.contains("  awkward_layout: "), "old awkward_layout key must not leak: {c}");
+        assert!(
+            c.contains("awkward_layout_strategy: requires_contiguous"),
+            "{c}"
+        );
+        assert!(
+            !c.contains("  awkward_layout: "),
+            "old awkward_layout key must not leak: {c}"
+        );
         //  - item 6: cost carries Fuel's `flops` / `bytes_moved` EXPRESSION keys,
         //    never the silently-dropped `flops_per_elem` / `bytes_per_elem`.
         assert!(c.contains("  flops: \"1 * n\"\n"), "flops expression: {c}");
-        assert!(c.contains("  bytes_moved: \"12 * n\"\n"), "bytes_moved expression: {c}");
-        assert!(!c.contains("flops_per_elem"), "old scalar cost key must not leak: {c}");
-        assert!(!c.contains("bytes_per_elem"), "old scalar cost key must not leak: {c}");
+        assert!(
+            c.contains("  bytes_moved: \"12 * n\"\n"),
+            "bytes_moved expression: {c}"
+        );
+        assert!(
+            !c.contains("flops_per_elem"),
+            "old scalar cost key must not leak: {c}"
+        );
+        assert!(
+            !c.contains("bytes_per_elem"),
+            "old scalar cost key must not leak: {c}"
+        );
         // required §4.3 blocks.
         for block in [
-            "accept:", "structure_key: \"sk1|", "return:", "caps:", "cost:", "precision:",
+            "accept:",
+            "structure_key: \"sk1|",
+            "return:",
+            "caps:",
+            "cost:",
+            "precision:",
             "determinism: bitwise",
         ] {
             assert!(c.contains(block), "missing block: {block}");
         }
         //  - item 5: precision uses ONLY Fuel PrecisionBlock keys — never `mode:`.
         //    Correctly-rounded arithmetic ⇒ bit-stable + max_ulp 0.
-        assert!(!c.contains("mode:"), "non-schema mode: key must not leak: {c}");
+        assert!(
+            !c.contains("mode:"),
+            "non-schema mode: key must not leak: {c}"
+        );
         assert!(c.contains("  bit_stable_on_same_hardware: true\n"), "{c}");
-        assert!(c.contains("  max_ulp: 0\n"), "correctly-rounded ⇒ max_ulp 0: {c}");
+        assert!(
+            c.contains("  max_ulp: 0\n"),
+            "correctly-rounded ⇒ max_ulp 0: {c}"
+        );
         assert!(c.contains("  audited: true\n"), "{c}");
     }
 
@@ -2138,9 +2307,18 @@ mod tests {
         let ka = key_for(3, OpCategory::BinaryElementwise);
         let ca = contract(&add, &ka, &generate(&add, &ka, &Cuda), "cuda").unwrap();
         let b = bundle("cuda", "rev0", &[ca.clone(), c.clone()]);
-        assert!(b.contains("op_kind: AddElementwise"), "primitive survives: {b}");
-        assert!(!b.contains("fused_op: relu_add"), "fused advert withheld from bundle: {b}");
-        assert!(!b.contains("relu_add_"), "no relu_add section framed in the bundle: {b}");
+        assert!(
+            b.contains("op_kind: AddElementwise"),
+            "primitive survives: {b}"
+        );
+        assert!(
+            !b.contains("fused_op: relu_add"),
+            "fused advert withheld from bundle: {b}"
+        );
+        assert!(
+            !b.contains("relu_add_"),
+            "no relu_add section framed in the bundle: {b}"
+        );
     }
 
     #[test]
@@ -2160,7 +2338,10 @@ mod tests {
         assert!(c.contains("name: param1"));
         // Precision uses Fuel's PrecisionBlock vocabulary (never `mode:`): a
         // transcendental is bit-stable with a finite declared ULP bound.
-        assert!(!c.contains("mode:"), "non-schema mode: key must not leak: {c}");
+        assert!(
+            !c.contains("mode:"),
+            "non-schema mode: key must not leak: {c}"
+        );
         assert!(c.contains("  bit_stable_on_same_hardware: true\n"), "{c}");
         // silu(x*p0 + p1): the silu composite (~3 ulp); arithmetic is exact.
         assert!(c.contains("  max_ulp: 3\n"), "{c}");
@@ -2182,7 +2363,10 @@ mod tests {
     // The dtype-classification tests don't exercise CUDA codegen (which rightly
     // rejects Bool/Complex), only the contract's dtype channel — a stand-in kernel.
     fn stub_kernel() -> GeneratedKernel {
-        GeneratedKernel { name: "k".into(), source: "s".into() }
+        GeneratedKernel {
+            name: "k".into(),
+            source: "s".into(),
+        }
     }
 
     #[test]
@@ -2270,8 +2454,14 @@ mod tests {
         );
         let ki = key_dtype(ElementKind::I32, 3);
         let k = generate(&band, &ki, &Cuda);
-        assert!(k.source.contains("(in0[i] & in1[i])"), "the kernel still lowers");
-        assert!(contract(&band, &ki, &k, "cuda").is_none(), "but no contract");
+        assert!(
+            k.source.contains("(in0[i] & in1[i])"),
+            "the kernel still lowers"
+        );
+        assert!(
+            contract(&band, &ki, &k, "cuda").is_none(),
+            "but no contract"
+        );
         assert!(matches!(
             derive_pattern(&band),
             Err(PatternError::NoFkcName { ref op }) if op == "BitAnd"
@@ -2285,7 +2475,10 @@ mod tests {
         let ku = key_dtype(ElementKind::U8, 3);
         let kl = generate(&land, &ku, &Cuda);
         assert!(kl.source.contains("!= 0 &&"), "the kernel still lowers");
-        assert!(contract(&land, &ku, &kl, "cuda").is_none(), "but no contract");
+        assert!(
+            contract(&land, &ku, &kl, "cuda").is_none(),
+            "but no contract"
+        );
     }
 
     #[test]
@@ -2374,13 +2567,19 @@ mod tests {
         // A 1-byte store can't alias a 4-byte input buffer — in_place is the
         // Fuel-schema boolean `false` (never the pre-reconcile string).
         assert!(c.contains("in_place: false"));
-        assert!(!c.contains("in_place: forbidden"), "in_place must be a bool, not a string: {c}");
+        assert!(
+            !c.contains("in_place: forbidden"),
+            "in_place must be a bool, not a string: {c}"
+        );
         // Scalar path (no packed u8 store) => n counts elements…
         assert!(c.contains("count_unit: elements"));
         // …and the traffic estimate is 2 f32 reads + 1 u8 write = 9 B/elem.
         assert!(c.contains("  bytes_moved: \"9 * n\"\n"), "{c}");
         // The predicate is exact ⇒ bit-stable + max_ulp 0 (Fuel PrecisionBlock).
-        assert!(!c.contains("mode:"), "non-schema mode: key must not leak: {c}");
+        assert!(
+            !c.contains("mode:"),
+            "non-schema mode: key must not leak: {c}"
+        );
         assert!(c.contains("  bit_stable_on_same_hardware: true\n"), "{c}");
         assert!(c.contains("  max_ulp: 0\n"), "{c}");
         assert!(c.contains("determinism: bitwise"));
@@ -2402,9 +2601,18 @@ mod tests {
         );
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
-        assert!(kernel.source.contains("? 1.0f : 0.0f"), "the kernel still lowers");
-        assert!(contract(&op, &key, &kernel, "cuda").is_none(), "but no contract");
-        assert!(derive_pattern(&op).is_ok(), "vocabulary exists; the gate is honesty");
+        assert!(
+            kernel.source.contains("? 1.0f : 0.0f"),
+            "the kernel still lowers"
+        );
+        assert!(
+            contract(&op, &key, &kernel, "cuda").is_none(),
+            "but no contract"
+        );
+        assert!(
+            derive_pattern(&op).is_ok(),
+            "vocabulary exists; the gate is honesty"
+        );
     }
 
     #[test]
@@ -2426,17 +2634,23 @@ mod tests {
         );
         let key = key_for(4, OpCategory::TernaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
-        assert!(kernel.source.contains("? 1.0f : 0.0f"), "the kernel still lowers");
+        assert!(
+            kernel.source.contains("? 1.0f : 0.0f"),
+            "the kernel still lowers"
+        );
         assert!(
             contract(&op, &key, &kernel, "cuda").is_none(),
             "nested-cmp fused contract is withheld (missing-Cast pattern gap)"
         );
-        assert!(derive_pattern(&op).is_ok(), "vocabulary exists; the gate is honesty");
+        assert!(
+            derive_pattern(&op).is_ok(),
+            "vocabulary exists; the gate is honesty"
+        );
     }
 
     #[test]
     fn coord_bodies_have_no_contract_until_the_iota_bridge_lands() {
-        use crate::ir::{coord, BinaryOp};
+        use crate::ir::{BinaryOp, coord};
         use crate::pattern::PatternError;
         // OpTag::Iota exists (0.10.2), but the emitted pattern grammar cannot
         // carry its axis attribute and the Iota↔Coord correspondence is
@@ -2454,7 +2668,10 @@ mod tests {
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89);
         let k = generate(&triu, &key, &Cuda);
         assert!(k.source.contains("(float)c1"), "the kernel still lowers");
-        assert!(contract(&triu, &key, &k, "cuda").is_none(), "but no contract");
+        assert!(
+            contract(&triu, &key, &k, "cuda").is_none(),
+            "but no contract"
+        );
         assert!(matches!(
             derive_pattern(&triu),
             Err(PatternError::CoordUnsupported { .. })
@@ -2468,11 +2685,19 @@ mod tests {
         // Fuel's §4.1/OpTag vocabulary doesn't name the increment-0a fns: no
         // pattern derives (NoFkcName), so no contract is emitted — the honest
         // miss. The kernel itself still generates (lowering is unaffected).
-        let erfc = OpDef::elementwise("erfc", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Erfc));
+        let erfc = OpDef::elementwise(
+            "erfc",
+            1,
+            &[ElementKind::F32],
+            input(0).unary(UnaryOp::Erfc),
+        );
         let ukey = key_for(2, OpCategory::UnaryElementwise);
         let uk = generate(&erfc, &ukey, &Cuda);
         assert!(uk.source.contains("erfcf("), "the kernel still lowers");
-        assert!(contract(&erfc, &ukey, &uk, "cuda").is_none(), "but no contract");
+        assert!(
+            contract(&erfc, &ukey, &uk, "cuda").is_none(),
+            "but no contract"
+        );
         assert!(matches!(
             crate::derive_pattern(&erfc),
             Err(PatternError::NoFkcName { ref op }) if op == "Erfc"
@@ -2504,33 +2729,121 @@ mod tests {
     /// Baracuda root to a non-existent Fuel spelling is caught here rather than
     /// poisoning a real bundle import.
     const FUEL_LOWER_OP_KIND_ACCEPTED: &[&str] = &[
-        "MatMul", "AddElementwise", "SubElementwise", "MulElementwise",
-        "DivElementwise", "ReluElementwise", "NegElementwise", "SqrElementwise",
-        "SqrtElementwise", "RecipElementwise", "AbsElementwise", "TanhElementwise",
-        "ExpElementwise", "LogElementwise", "SinElementwise", "CosElementwise",
-        "SigmoidElementwise", "SiluElementwise", "GeluElementwise", "StepElementwise",
-        "SumReduce", "MaxReduce", "MinReduce", "MeanReduce", "Cast", "Conv2D",
-        "ConvTranspose2D", "ReduceSumTo", "ReduceMaxTo", "FusedLinear", "FlashAttn",
-        "FlashAttnBackwardQ", "FlashAttnBackwardK", "FlashAttnBackwardV", "PagedAttn",
-        "Affine", "ClampElementwise", "PowIElementwise", "PowIElementwiseBackward",
-        "MaximumElementwise", "MinimumElementwise", "EqualElementwise",
-        "NotEqualElementwise", "LessElementwise", "LessEqualElementwise",
-        "GreaterElementwise", "GreaterEqualElementwise", "Where", "FloorElementwise",
-        "CeilElementwise", "RoundElementwise", "SignElementwise", "ErfElementwise",
-        "GeluErfElementwise", "PowElementwise", "RsqrtElementwise", "RemElementwise",
-        "Flip", "Roll", "CumSum", "Pad", "Triu", "Tril", "LogSoftmaxLastDim",
-        "LogSoftmaxLastDimBackward", "MaskedFill", "PadBackward", "Concat",
-        "SoftmaxLastDim", "SoftmaxLastDimBackward", "RmsNormLastDim",
-        "RmsNormLastDimBackward", "LayerNormLastDim", "LayerNormLastDimBackward",
-        "ReduceMaxToBackward", "IndexSelect", "Gather", "Rope", "IndexAdd",
-        "ScatterAdd", "ArgMaxDim", "ArgMinDim", "QMatMul", "WriteSlice",
-        "WriteSliceRotating", "Copy", "ReluInplace", "SiluInplace", "GeluInplace",
-        "TanhInplace", "SigmoidInplace", "NegInplace", "AbsInplace", "SqrInplace",
-        "SqrtInplace", "RsqrtInplace", "RecipInplace", "ExpInplace", "LogInplace",
-        "SinInplace", "CosInplace", "SignInplace", "FloorInplace", "CeilInplace",
-        "RoundInplace", "ErfInplace", "GeluErfInplace", "ClampInplace", "PowIInplace",
-        "InplaceAffine", "FusedSoftmaxCrossEntropy", "CausalConv1d", "SelectiveScan",
-        "SsdChunkScan", "Nf4Matmul",
+        "MatMul",
+        "AddElementwise",
+        "SubElementwise",
+        "MulElementwise",
+        "DivElementwise",
+        "ReluElementwise",
+        "NegElementwise",
+        "SqrElementwise",
+        "SqrtElementwise",
+        "RecipElementwise",
+        "AbsElementwise",
+        "TanhElementwise",
+        "ExpElementwise",
+        "LogElementwise",
+        "SinElementwise",
+        "CosElementwise",
+        "SigmoidElementwise",
+        "SiluElementwise",
+        "GeluElementwise",
+        "StepElementwise",
+        "SumReduce",
+        "MaxReduce",
+        "MinReduce",
+        "MeanReduce",
+        "Cast",
+        "Conv2D",
+        "ConvTranspose2D",
+        "ReduceSumTo",
+        "ReduceMaxTo",
+        "FusedLinear",
+        "FlashAttn",
+        "FlashAttnBackwardQ",
+        "FlashAttnBackwardK",
+        "FlashAttnBackwardV",
+        "PagedAttn",
+        "Affine",
+        "ClampElementwise",
+        "PowIElementwise",
+        "PowIElementwiseBackward",
+        "MaximumElementwise",
+        "MinimumElementwise",
+        "EqualElementwise",
+        "NotEqualElementwise",
+        "LessElementwise",
+        "LessEqualElementwise",
+        "GreaterElementwise",
+        "GreaterEqualElementwise",
+        "Where",
+        "FloorElementwise",
+        "CeilElementwise",
+        "RoundElementwise",
+        "SignElementwise",
+        "ErfElementwise",
+        "GeluErfElementwise",
+        "PowElementwise",
+        "RsqrtElementwise",
+        "RemElementwise",
+        "Flip",
+        "Roll",
+        "CumSum",
+        "Pad",
+        "Triu",
+        "Tril",
+        "LogSoftmaxLastDim",
+        "LogSoftmaxLastDimBackward",
+        "MaskedFill",
+        "PadBackward",
+        "Concat",
+        "SoftmaxLastDim",
+        "SoftmaxLastDimBackward",
+        "RmsNormLastDim",
+        "RmsNormLastDimBackward",
+        "LayerNormLastDim",
+        "LayerNormLastDimBackward",
+        "ReduceMaxToBackward",
+        "IndexSelect",
+        "Gather",
+        "Rope",
+        "IndexAdd",
+        "ScatterAdd",
+        "ArgMaxDim",
+        "ArgMinDim",
+        "QMatMul",
+        "WriteSlice",
+        "WriteSliceRotating",
+        "Copy",
+        "ReluInplace",
+        "SiluInplace",
+        "GeluInplace",
+        "TanhInplace",
+        "SigmoidInplace",
+        "NegInplace",
+        "AbsInplace",
+        "SqrInplace",
+        "SqrtInplace",
+        "RsqrtInplace",
+        "RecipInplace",
+        "ExpInplace",
+        "LogInplace",
+        "SinInplace",
+        "CosInplace",
+        "SignInplace",
+        "FloorInplace",
+        "CeilInplace",
+        "RoundInplace",
+        "ErfInplace",
+        "GeluErfInplace",
+        "ClampInplace",
+        "PowIInplace",
+        "InplaceAffine",
+        "FusedSoftmaxCrossEntropy",
+        "CausalConv1d",
+        "SelectiveScan",
+        "SsdChunkScan",
+        "Nf4Matmul",
     ];
 
     /// The 29 internal single-op roots (`root_op_name` outputs) that MUST map to
@@ -2608,7 +2921,10 @@ mod tests {
         // erf (NOT the tanh-approx GeluElementwise).
         assert_eq!(fuel_primitive_op_kind("Rem"), Some("RemElementwise"));
         assert_eq!(fuel_primitive_op_kind("Step"), Some("StepElementwise"));
-        assert_eq!(fuel_primitive_op_kind("GeluErf"), Some("GeluErfElementwise"));
+        assert_eq!(
+            fuel_primitive_op_kind("GeluErf"),
+            Some("GeluErfElementwise")
+        );
         assert_ne!(fuel_primitive_op_kind("GeluErf"), Some("GeluElementwise"));
     }
 
@@ -2720,7 +3036,10 @@ mod tests {
         let mul_p = OpDef::elementwise("mul_p", 1, &[ElementKind::F32], input(0) * param(0));
         let km = generate(&mul_p, &key, &Cuda);
         assert!(contract(&mul_p, &key, &km, "cuda").is_none());
-        assert_eq!(root_op_name(&crate::derive_pattern(&mul_p).unwrap()), "MulScalar");
+        assert_eq!(
+            root_op_name(&crate::derive_pattern(&mul_p).unwrap()),
+            "MulScalar"
+        );
     }
 
     #[test]
@@ -2734,8 +3053,14 @@ mod tests {
         let key = key_for(2, OpCategory::UnaryElementwise);
         let kernel = generate(&copy, &key, &Cuda);
         let c = contract(&copy, &key, &kernel, "cuda").expect("a bare copy still contracts");
-        assert!(!c.contains("op_kind:"), "a Bind/Identity root must not emit op_kind: {c}");
-        assert!(c.contains("fused_op: copy"), "it advertises as fused_op instead: {c}");
+        assert!(
+            !c.contains("op_kind:"),
+            "a Bind/Identity root must not emit op_kind: {c}"
+        );
+        assert!(
+            c.contains("fused_op: copy"),
+            "it advertises as fused_op instead: {c}"
+        );
         // And the pattern really is a bare Bind (n_ops == 0).
         assert!(matches!(
             crate::derive_pattern(&copy).unwrap(),

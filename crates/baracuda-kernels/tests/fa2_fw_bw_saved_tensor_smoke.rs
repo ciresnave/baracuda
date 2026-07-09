@@ -31,7 +31,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 fn setup() -> (Context, Stream) {
@@ -65,7 +65,11 @@ fn gen_bf16(n: usize, phase: f32) -> Vec<bf16> {
 #[test]
 fn lse_size_matches_dense_formula() {
     let sz = unsafe { baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_lse_size(2, 4, 128) };
-    assert_eq!(sz, 2usize * 4 * 128, "lse_size = batch * num_heads * seq_q in f32 elements");
+    assert_eq!(
+        sz,
+        2usize * 4 * 128,
+        "lse_size = batch * num_heads * seq_q in f32 elements"
+    );
 }
 
 #[test]
@@ -81,9 +85,7 @@ fn lse_size_large_values_dont_overflow() {
     // Choose dimensions just below usize::MAX / 4 (so byte count fits too).
     // 32-bit i32 inputs cap each dim at ~2.1G; we test a more realistic
     // long-context shape: batch=1, h=64, q=1M → 64M f32 elements = 256MB.
-    let sz = unsafe {
-        baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_lse_size(1, 64, 1_048_576)
-    };
+    let sz = unsafe { baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_lse_size(1, 64, 1_048_576) };
     assert_eq!(sz, 64 * 1_048_576);
 }
 
@@ -111,9 +113,7 @@ fn run_fw_bw_roundtrip_f16(dk: i32, is_causal: bool) {
     let n_qkv = (b * h * q * dk) as usize;
     let n_kv = (b * h * k * dk) as usize;
     let n_y = (b * h * q * dv) as usize;
-    let n_lse_f32 = unsafe {
-        baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_lse_size(b, h, q)
-    };
+    let n_lse_f32 = unsafe { baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_lse_size(b, h, q) };
 
     // Reasonable input fixtures — sinusoidal so the attention pattern
     // is non-trivial and dQ/dK/dV will be non-zero.
@@ -134,7 +134,12 @@ fn run_fw_bw_roundtrip_f16(dk: i32, is_causal: bool) {
     // === Step 2: forward pass writes y AND lse. ===
     let fw_status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_f16_run(
-            b, h, h, q, k, dk,
+            b,
+            h,
+            h,
+            q,
+            k,
+            dk,
             scale,
             if is_causal { 1 } else { 0 },
             dev_q.as_slice().as_raw().0 as *const c_void,
@@ -142,7 +147,8 @@ fn run_fw_bw_roundtrip_f16(dk: i32, is_causal: bool) {
             dev_v.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             dev_lse.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -153,9 +159,16 @@ fn run_fw_bw_roundtrip_f16(dk: i32, is_causal: bool) {
     // something meaningful given sinusoidal inputs).
     let mut h_lse = vec![0_f32; n_lse_f32];
     dev_lse.copy_to_host(&mut h_lse).expect("download lse");
-    let nonzero_lse = h_lse.iter().filter(|&&x| x.is_finite() && x.abs() > 1e-6).count();
-    assert!(nonzero_lse > n_lse_f32 / 2,
-        "expected >50% of LSE cells non-zero finite, got {}/{}", nonzero_lse, n_lse_f32);
+    let nonzero_lse = h_lse
+        .iter()
+        .filter(|&&x| x.is_finite() && x.abs() > 1e-6)
+        .count();
+    assert!(
+        nonzero_lse > n_lse_f32 / 2,
+        "expected >50% of LSE cells non-zero finite, got {}/{}",
+        nonzero_lse,
+        n_lse_f32
+    );
 
     // === Step 3: BW workspace allocation. ===
     let bw_ws_bytes = unsafe {
@@ -172,13 +185,19 @@ fn run_fw_bw_roundtrip_f16(dk: i32, is_causal: bool) {
     // === Step 4: backward pass reads the SAME LSE we just wrote. ===
     let bw_status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_backward_f16_run(
-            b, h, h, q, k, dk,
+            b,
+            h,
+            h,
+            q,
+            k,
+            dk,
             scale,
             if is_causal { 1 } else { 0 },
-            core::ptr::null(),     // alibi_slopes
-            0,                     // alibi_batch_stride
-            -1, -1,                // window_size_left/right (no window)
-            0.0,                   // softcap
+            core::ptr::null(), // alibi_slopes
+            0,                 // alibi_batch_stride
+            -1,
+            -1,  // window_size_left/right (no window)
+            0.0, // softcap
             dev_q.as_slice().as_raw().0 as *const c_void,
             dev_k.as_slice().as_raw().0 as *const c_void,
             dev_v.as_slice().as_raw().0 as *const c_void,
@@ -237,9 +256,7 @@ fn run_fw_bw_roundtrip_bf16(dk: i32, is_causal: bool) {
     let n_qkv = (b * h * q * dk) as usize;
     let n_kv = (b * h * k * dk) as usize;
     let n_y = (b * h * q * dv) as usize;
-    let n_lse_f32 = unsafe {
-        baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_lse_size(b, h, q)
-    };
+    let n_lse_f32 = unsafe { baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_lse_size(b, h, q) };
 
     let q_host = gen_bf16(n_qkv, 0.1);
     let k_host = gen_bf16(n_kv, 0.2);
@@ -255,7 +272,12 @@ fn run_fw_bw_roundtrip_bf16(dk: i32, is_causal: bool) {
 
     let fw_status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_bf16_run(
-            b, h, h, q, k, dk,
+            b,
+            h,
+            h,
+            q,
+            k,
+            dk,
             scale,
             if is_causal { 1 } else { 0 },
             dev_q.as_slice().as_raw().0 as *const c_void,
@@ -263,7 +285,8 @@ fn run_fw_bw_roundtrip_bf16(dk: i32, is_causal: bool) {
             dev_v.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             dev_lse.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -281,11 +304,19 @@ fn run_fw_bw_roundtrip_bf16(dk: i32, is_causal: bool) {
 
     let bw_status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_backward_bf16_run(
-            b, h, h, q, k, dk,
+            b,
+            h,
+            h,
+            q,
+            k,
+            dk,
             scale,
             if is_causal { 1 } else { 0 },
-            core::ptr::null(), 0,
-            -1, -1, 0.0,
+            core::ptr::null(),
+            0,
+            -1,
+            -1,
+            0.0,
             dev_q.as_slice().as_raw().0 as *const c_void,
             dev_k.as_slice().as_raw().0 as *const c_void,
             dev_v.as_slice().as_raw().0 as *const c_void,
@@ -313,20 +344,61 @@ fn run_fw_bw_roundtrip_bf16(dk: i32, is_causal: bool) {
     let nz_dq = h_dq.iter().filter(|x| x.to_f32().abs() > 1e-3).count();
     let nz_dk = h_dk.iter().filter(|x| x.to_f32().abs() > 1e-3).count();
     let nz_dv = h_dv.iter().filter(|x| x.to_f32().abs() > 1e-3).count();
-    assert!(nz_dq > n_qkv / 10, "bf16 dQ mostly zero ({}/{})", nz_dq, n_qkv);
-    assert!(nz_dk > n_kv / 10, "bf16 dK mostly zero ({}/{})", nz_dk, n_kv);
-    assert!(nz_dv > n_kv / 10, "bf16 dV mostly zero ({}/{})", nz_dv, n_kv);
+    assert!(
+        nz_dq > n_qkv / 10,
+        "bf16 dQ mostly zero ({}/{})",
+        nz_dq,
+        n_qkv
+    );
+    assert!(
+        nz_dk > n_kv / 10,
+        "bf16 dK mostly zero ({}/{})",
+        nz_dk,
+        n_kv
+    );
+    assert!(
+        nz_dv > n_kv / 10,
+        "bf16 dV mostly zero ({}/{})",
+        nz_dv,
+        n_kv
+    );
 
-    for x in &h_dq { assert!(x.to_f32().is_finite()); }
-    for x in &h_dk { assert!(x.to_f32().is_finite()); }
-    for x in &h_dv { assert!(x.to_f32().is_finite()); }
+    for x in &h_dq {
+        assert!(x.to_f32().is_finite());
+    }
+    for x in &h_dk {
+        assert!(x.to_f32().is_finite());
+    }
+    for x in &h_dv {
+        assert!(x.to_f32().is_finite());
+    }
 }
 
-#[test] #[ignore] fn fw_bw_roundtrip_f16_d128_noncausal() { run_fw_bw_roundtrip_f16(128, false); }
-#[test] #[ignore] fn fw_bw_roundtrip_f16_d128_causal()    { run_fw_bw_roundtrip_f16(128, true ); }
-#[test] #[ignore] fn fw_bw_roundtrip_f16_d64_causal()     { run_fw_bw_roundtrip_f16(64,  true ); }
-#[test] #[ignore] fn fw_bw_roundtrip_bf16_d128_noncausal(){ run_fw_bw_roundtrip_bf16(128, false); }
-#[test] #[ignore] fn fw_bw_roundtrip_bf16_d128_causal()   { run_fw_bw_roundtrip_bf16(128, true ); }
+#[test]
+#[ignore]
+fn fw_bw_roundtrip_f16_d128_noncausal() {
+    run_fw_bw_roundtrip_f16(128, false);
+}
+#[test]
+#[ignore]
+fn fw_bw_roundtrip_f16_d128_causal() {
+    run_fw_bw_roundtrip_f16(128, true);
+}
+#[test]
+#[ignore]
+fn fw_bw_roundtrip_f16_d64_causal() {
+    run_fw_bw_roundtrip_f16(64, true);
+}
+#[test]
+#[ignore]
+fn fw_bw_roundtrip_bf16_d128_noncausal() {
+    run_fw_bw_roundtrip_bf16(128, false);
+}
+#[test]
+#[ignore]
+fn fw_bw_roundtrip_bf16_d128_causal() {
+    run_fw_bw_roundtrip_bf16(128, true);
+}
 
 // =========================================================================
 // Group 3: BW feature surface — sliding window, softcap, ALiBi.
@@ -359,9 +431,7 @@ fn run_fw_bw_with_features_f16(
     let n_qkv = (b * h * q * dk) as usize;
     let n_kv = (b * h * k * dk) as usize;
     let n_y = (b * h * q * dv) as usize;
-    let n_lse_f32 = unsafe {
-        baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_lse_size(b, h, q)
-    };
+    let n_lse_f32 = unsafe { baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_lse_size(b, h, q) };
 
     let q_host = gen_f16(n_qkv, 0.1);
     let k_host = gen_f16(n_kv, 0.2);
@@ -375,9 +445,8 @@ fn run_fw_bw_with_features_f16(
     let mut dev_y: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, n_y).expect("alloc y");
     let mut dev_lse: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, n_lse_f32).expect("alloc lse");
 
-    let dev_alibi: Option<DeviceBuffer<f32>> = alibi_slopes_host.map(|slopes| {
-        DeviceBuffer::from_slice(&ctx, slopes).expect("up alibi slopes")
-    });
+    let dev_alibi: Option<DeviceBuffer<f32>> = alibi_slopes_host
+        .map(|slopes| DeviceBuffer::from_slice(&ctx, slopes).expect("up alibi slopes"));
     let (alibi_ptr, alibi_stride): (*const c_void, i32) = match &dev_alibi {
         Some(buf) => (buf.as_slice().as_raw().0 as *const c_void, 0), // per-head layout
         None => (core::ptr::null(), 0),
@@ -386,17 +455,26 @@ fn run_fw_bw_with_features_f16(
     // FW with full v2 surface (carries ALiBi, sliding window, softcap).
     let fw_status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_f16_run_v2(
-            b, h, h, q, k, dk,
+            b,
+            h,
+            h,
+            q,
+            k,
+            dk,
             scale,
             if is_causal { 1 } else { 0 },
-            alibi_ptr, alibi_stride,
-            window_size_left, window_size_right, softcap,
+            alibi_ptr,
+            alibi_stride,
+            window_size_left,
+            window_size_right,
+            softcap,
             dev_q.as_slice().as_raw().0 as *const c_void,
             dev_k.as_slice().as_raw().0 as *const c_void,
             dev_v.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
             dev_lse.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -414,11 +492,19 @@ fn run_fw_bw_with_features_f16(
 
     let bw_status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_backward_f16_run(
-            b, h, h, q, k, dk,
+            b,
+            h,
+            h,
+            q,
+            k,
+            dk,
             scale,
             if is_causal { 1 } else { 0 },
-            alibi_ptr, alibi_stride,
-            window_size_left, window_size_right, softcap,
+            alibi_ptr,
+            alibi_stride,
+            window_size_left,
+            window_size_right,
+            softcap,
             dev_q.as_slice().as_raw().0 as *const c_void,
             dev_k.as_slice().as_raw().0 as *const c_void,
             dev_v.as_slice().as_raw().0 as *const c_void,
@@ -443,9 +529,15 @@ fn run_fw_bw_with_features_f16(
     dev_dk.copy_to_host(&mut h_dk).expect("dl dk");
     dev_dv.copy_to_host(&mut h_dv).expect("dl dv");
 
-    for x in &h_dq { assert!(x.to_f32().is_finite(), "dQ NaN/inf"); }
-    for x in &h_dk { assert!(x.to_f32().is_finite(), "dK NaN/inf"); }
-    for x in &h_dv { assert!(x.to_f32().is_finite(), "dV NaN/inf"); }
+    for x in &h_dq {
+        assert!(x.to_f32().is_finite(), "dQ NaN/inf");
+    }
+    for x in &h_dk {
+        assert!(x.to_f32().is_finite(), "dK NaN/inf");
+    }
+    for x in &h_dv {
+        assert!(x.to_f32().is_finite(), "dV NaN/inf");
+    }
 
     let any_nz_dq = h_dq.iter().any(|x| x.to_f32().abs() > 1e-4);
     let any_nz_dk = h_dk.iter().any(|x| x.to_f32().abs() > 1e-4);
@@ -461,12 +553,9 @@ fn fw_bw_with_sliding_window_f16() {
     // Sliding window: each query attends to a 32-token left window (no right).
     // Causal-compatible: causal + left=32 == "last 32 past tokens, no future".
     run_fw_bw_with_features_f16(
-        128,
-        /*causal*/ true,
-        /*window_left*/ 32,
-        /*window_right*/ 0,  // causal already forces right=0 inside FA2
-        /*softcap*/ 0.0,
-        /*alibi*/ None,
+        128, /*causal*/ true, /*window_left*/ 32,
+        /*window_right*/ 0, // causal already forces right=0 inside FA2
+        /*softcap*/ 0.0, /*alibi*/ None,
     );
 }
 
@@ -475,11 +564,8 @@ fn fw_bw_with_sliding_window_f16() {
 fn fw_bw_with_softcap_f16() {
     // Gemma-2 style tanh softcap on logits: tanh(s/cap) * cap.
     run_fw_bw_with_features_f16(
-        128,
-        /*causal*/ false,
-        /*window_left*/ -1,
-        /*window_right*/ -1,
-        /*softcap*/ 30.0,  // typical Gemma-2 value
+        128, /*causal*/ false, /*window_left*/ -1, /*window_right*/ -1,
+        /*softcap*/ 30.0, // typical Gemma-2 value
         /*alibi*/ None,
     );
 }

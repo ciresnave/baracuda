@@ -21,10 +21,10 @@ use std::sync::Arc;
 use baracuda_cuda_sys::types::{
     CUmemAllocationHandleType, CUmulticastGranularity_flags, CUmulticastObjectProp,
 };
-use baracuda_cuda_sys::{driver, CUdeviceptr, CUmemGenericAllocationHandle};
+use baracuda_cuda_sys::{CUdeviceptr, CUmemGenericAllocationHandle, driver};
 
 use crate::device::Device;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Query the minimum or recommended multicast granularity (bytes) for the
 /// given number of peer devices and `size_bytes`.

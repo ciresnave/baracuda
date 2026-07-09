@@ -289,7 +289,8 @@ macro_rules! impl_batched_qr_run {
                 }
                 let a_array_bytes = bu * core::mem::size_of::<u64>();
                 let a_array_ptr = ws_ptr;
-                let tau_array_ptr = unsafe { (ws_ptr as *mut u8).add(a_array_bytes) as *mut c_void };
+                let tau_array_ptr =
+                    unsafe { (ws_ptr as *mut u8).add(a_array_bytes) as *mut c_void };
                 unsafe {
                     copy_h2d(
                         a_array_ptr,

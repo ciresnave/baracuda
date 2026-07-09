@@ -12,14 +12,14 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    flash_flops, setup_device, time_with_events, warmup, FLASH_B, FLASH_D_SWEEP, FLASH_H_SWEEP,
-    FLASH_QK_SWEEP,
+    FLASH_B, FLASH_D_SWEEP, FLASH_H_SWEEP, FLASH_QK_SWEEP, flash_flops, setup_device,
+    time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use half::{bf16, f16};
 
 /// Generic Flash SDPA bench body. Takes `fill` for the QKV buffers
@@ -70,25 +70,12 @@ where
                     Err(_) => continue,
                 };
 
-                let desc = FlashSdpaDescriptor::new(
-                    b,
-                    h,
-                    q,
-                    k,
-                    d,
-                    d,
-                    scale,
-                    false,
-                    T::KIND,
-                );
-                let plan = match FlashSdpaPlan::<T>::select(
-                    &stream,
-                    &desc,
-                    PlanPreference::default(),
-                ) {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
+                let desc = FlashSdpaDescriptor::new(b, h, q, k, d, d, scale, false, T::KIND);
+                let plan =
+                    match FlashSdpaPlan::<T>::select(&stream, &desc, PlanPreference::default()) {
+                        Ok(p) => p,
+                        Err(_) => continue,
+                    };
 
                 let sq = [b, h, q, d];
                 let sk = [b, h, k, d];
@@ -130,8 +117,8 @@ where
                                 shape: sl,
                                 stride: stl,
                             },
-                                                    mask: None,
-                                                    alibi_slopes: None,
+                            mask: None,
+                            alibi_slopes: None,
                         };
                         plan.run(&stream, Workspace::None, args)
                             .expect("flash sdpa warmup run");
@@ -165,10 +152,11 @@ where
                                     shape: sl,
                                     stride: stl,
                                 },
-                                                            mask: None,
-                                                            alibi_slopes: None,
+                                mask: None,
+                                alibi_slopes: None,
                             };
-                            plan.run(&stream, Workspace::None, args).expect("flash sdpa run");
+                            plan.run(&stream, Workspace::None, args)
+                                .expect("flash sdpa run");
                         })
                     });
                 });
@@ -260,14 +248,12 @@ where
                     is_causal: false,
                     element: T::KIND,
                 };
-                let plan = match FlashSdpaSm89Plan::<T>::select(
-                    &stream,
-                    &desc,
-                    PlanPreference::default(),
-                ) {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
+                let plan =
+                    match FlashSdpaSm89Plan::<T>::select(&stream, &desc, PlanPreference::default())
+                    {
+                        Ok(p) => p,
+                        Err(_) => continue,
+                    };
 
                 let sq = [b, h, q, d];
                 let sk = [b, h, k, d];

@@ -8,10 +8,10 @@
 //!
 //! `#[ignore]` by default; run with `--ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryKind,
-    UnaryParamArgs, UnaryParamDescriptor, UnaryParamPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryKind, UnaryParamArgs,
+    UnaryParamDescriptor, UnaryParamPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -34,10 +34,7 @@ fn threshold_f32_3d() {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
     // Inputs straddle the threshold T so both branches fire.
     let host_x: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.01 - 5.0).collect();
-    let host_expected: Vec<f32> = host_x
-        .iter()
-        .map(|&x| if x > T { x } else { V })
-        .collect();
+    let host_expected: Vec<f32> = host_x.iter().map(|&x| if x > T { x } else { V }).collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
     let stride = contiguous_stride(shape);
@@ -50,8 +47,16 @@ fn threshold_f32_3d() {
     let plan = UnaryParamPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f32, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -72,7 +77,8 @@ fn threshold_f32_3d() {
         panic!(
             "threshold f32: {mismatches} mismatches / {numel}; first @ {i}: got {g} \
              (bits {:#x}) expected {e} (bits {:#x})",
-            g.to_bits(), e.to_bits()
+            g.to_bits(),
+            e.to_bits()
         );
     }
 }
@@ -100,8 +106,16 @@ fn threshold_f64_3d() {
     let plan = UnaryParamPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f64, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -109,7 +123,8 @@ fn threshold_f64_3d() {
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(host_expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "threshold f64 @ {i}: got {g} expected {e}"
         );
     }
@@ -143,8 +158,16 @@ fn threshold_f16_3d() {
     let plan = UnaryParamPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -152,9 +175,13 @@ fn threshold_f16_3d() {
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(host_expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "threshold f16 @ {i}: got {} (bits {:#x}) expected {} (bits {:#x})",
-            g.to_f32(), g.to_bits(), e.to_f32(), e.to_bits()
+            g.to_f32(),
+            g.to_bits(),
+            e.to_f32(),
+            e.to_bits()
         );
     }
 }
@@ -185,8 +212,16 @@ fn threshold_bf16_3d() {
     let plan = UnaryParamPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<bf16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -194,9 +229,13 @@ fn threshold_bf16_3d() {
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(host_expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "threshold bf16 @ {i}: got {} (bits {:#x}) expected {} (bits {:#x})",
-            g.to_f32(), g.to_bits(), e.to_f32(), e.to_bits()
+            g.to_f32(),
+            g.to_bits(),
+            e.to_f32(),
+            e.to_bits()
         );
     }
 }

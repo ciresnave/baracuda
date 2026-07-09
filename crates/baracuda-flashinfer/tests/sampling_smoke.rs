@@ -15,11 +15,11 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::sampling::{
     SamplerKind, TopKTopPSamplingArgs, TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
 };
-use baracuda_flashinfer::{contiguous_stride, PlanPreference, TensorMut, TensorRef, Workspace};
+use baracuda_flashinfer::{PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -45,7 +45,10 @@ fn sampling_plan_select_validates() {
         SamplerKind::TopK { top_k: 8 },
         SamplerKind::TopP { top_p: 0.9 },
         SamplerKind::MinP { min_p: 0.05 },
-        SamplerKind::TopKTopP { top_k: 8, top_p: 0.9 },
+        SamplerKind::TopKTopP {
+            top_k: 8,
+            top_p: 0.9,
+        },
     ] {
         let plan = TopKTopPSamplingPlan::select(&stream, &mk(s), PlanPreference::default())
             .expect("valid sampler descriptor should select");
@@ -53,11 +56,46 @@ fn sampling_plan_select_validates() {
     }
 
     // Out-of-range parameters are rejected.
-    assert!(TopKTopPSamplingPlan::select(&stream, &mk(SamplerKind::TopK { top_k: 0 }), PlanPreference::default()).is_err());
-    assert!(TopKTopPSamplingPlan::select(&stream, &mk(SamplerKind::TopK { top_k: 999 }), PlanPreference::default()).is_err());
-    assert!(TopKTopPSamplingPlan::select(&stream, &mk(SamplerKind::TopP { top_p: 0.0 }), PlanPreference::default()).is_err());
-    assert!(TopKTopPSamplingPlan::select(&stream, &mk(SamplerKind::TopP { top_p: 1.5 }), PlanPreference::default()).is_err());
-    assert!(TopKTopPSamplingPlan::select(&stream, &mk(SamplerKind::MinP { min_p: 0.0 }), PlanPreference::default()).is_err());
+    assert!(
+        TopKTopPSamplingPlan::select(
+            &stream,
+            &mk(SamplerKind::TopK { top_k: 0 }),
+            PlanPreference::default()
+        )
+        .is_err()
+    );
+    assert!(
+        TopKTopPSamplingPlan::select(
+            &stream,
+            &mk(SamplerKind::TopK { top_k: 999 }),
+            PlanPreference::default()
+        )
+        .is_err()
+    );
+    assert!(
+        TopKTopPSamplingPlan::select(
+            &stream,
+            &mk(SamplerKind::TopP { top_p: 0.0 }),
+            PlanPreference::default()
+        )
+        .is_err()
+    );
+    assert!(
+        TopKTopPSamplingPlan::select(
+            &stream,
+            &mk(SamplerKind::TopP { top_p: 1.5 }),
+            PlanPreference::default()
+        )
+        .is_err()
+    );
+    assert!(
+        TopKTopPSamplingPlan::select(
+            &stream,
+            &mk(SamplerKind::MinP { min_p: 0.0 }),
+            PlanPreference::default()
+        )
+        .is_err()
+    );
 }
 
 /// A one-hot probability row admits exactly one token; every sampler
@@ -84,7 +122,10 @@ fn sampling_one_hot_is_deterministic() {
         SamplerKind::TopK { top_k: 1 },
         SamplerKind::TopP { top_p: 0.5 },
         SamplerKind::MinP { min_p: 0.5 },
-        SamplerKind::TopKTopP { top_k: 1, top_p: 0.5 },
+        SamplerKind::TopKTopP {
+            top_k: 1,
+            top_p: 0.5,
+        },
     ]
     .into_iter()
     .enumerate()
@@ -102,7 +143,11 @@ fn sampling_one_hot_is_deterministic() {
         let mut valid_dev: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, 1).expect("alloc valid");
         let use_valid = i % 2 == 1;
         let valid = if use_valid {
-            Some(TensorMut { data: valid_dev.as_slice_mut(), shape: [1], stride: [1] })
+            Some(TensorMut {
+                data: valid_dev.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            })
         } else {
             None // exercises the null-success scratch path
         };
@@ -116,7 +161,11 @@ fn sampling_one_hot_is_deterministic() {
                     shape: probs_shape,
                     stride: contiguous_stride(probs_shape),
                 },
-                output: TensorMut { data: out_dev.as_slice_mut(), shape: [1], stride: [1] },
+                output: TensorMut {
+                    data: out_dev.as_slice_mut(),
+                    shape: [1],
+                    stride: [1],
+                },
                 valid,
                 seed_val: 0x1234_5678,
                 offset_val: 0,

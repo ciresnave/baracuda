@@ -9,10 +9,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test quantize_per_tensor_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, QuantizePerTensorArgs,
-    QuantizePerTensorDescriptor, QuantizePerTensorPlan, S8, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, QuantizePerTensorArgs, QuantizePerTensorDescriptor,
+    QuantizePerTensorPlan, S8, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -43,8 +43,7 @@ fn quantize_per_tensor_f32_s8_clipping() {
     let numel = host_x.len() as i32;
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
-    let mut dev_q: DeviceBuffer<S8> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc q");
+    let mut dev_q: DeviceBuffer<S8> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc q");
 
     let desc = QuantizePerTensorDescriptor {
         numel,

@@ -5707,7 +5707,7 @@ extern "C" {
 }
 extern "C" {
     pub fn cuModuleGetFunctionCount(count: *mut ::std::os::raw::c_uint, mod_: CUmodule)
-        -> CUresult;
+    -> CUresult;
 }
 extern "C" {
     pub fn cuModuleEnumerateFunctions(
@@ -6179,7 +6179,7 @@ extern "C" {
 }
 extern "C" {
     pub fn cuMemsetD8_v2(dstDevice: CUdeviceptr, uc: ::std::os::raw::c_uchar, N: usize)
-        -> CUresult;
+    -> CUresult;
 }
 extern "C" {
     pub fn cuMemsetD16_v2(
@@ -6190,7 +6190,7 @@ extern "C" {
 }
 extern "C" {
     pub fn cuMemsetD32_v2(dstDevice: CUdeviceptr, ui: ::std::os::raw::c_uint, N: usize)
-        -> CUresult;
+    -> CUresult;
 }
 extern "C" {
     pub fn cuMemsetD2D8_v2(
@@ -6747,7 +6747,7 @@ extern "C" {
 }
 extern "C" {
     pub fn cuStreamGetPriority(hStream: CUstream, priority: *mut ::std::os::raw::c_int)
-        -> CUresult;
+    -> CUresult;
 }
 extern "C" {
     pub fn cuStreamGetDevice(hStream: CUstream, device: *mut CUdevice) -> CUresult;
@@ -6757,7 +6757,7 @@ extern "C" {
 }
 extern "C" {
     pub fn cuStreamGetId(hStream: CUstream, streamId: *mut ::std::os::raw::c_ulonglong)
-        -> CUresult;
+    -> CUresult;
 }
 extern "C" {
     pub fn cuStreamGetCtx(hStream: CUstream, pctx: *mut CUcontext) -> CUresult;
@@ -7651,7 +7651,7 @@ extern "C" {
 }
 extern "C" {
     pub fn cuGraphNodeSetParams(hNode: CUgraphNode, nodeParams: *mut CUgraphNodeParams)
-        -> CUresult;
+    -> CUresult;
 }
 extern "C" {
     pub fn cuGraphExecNodeSetParams(
@@ -7985,7 +7985,7 @@ extern "C" {
 }
 extern "C" {
     pub fn cuCtxEnablePeerAccess(peerContext: CUcontext, Flags: ::std::os::raw::c_uint)
-        -> CUresult;
+    -> CUresult;
 }
 extern "C" {
     pub fn cuCtxDisablePeerAccess(peerContext: CUcontext) -> CUresult;

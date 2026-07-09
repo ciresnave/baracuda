@@ -2,7 +2,7 @@
 //! miscellaneous memcpy + memset variants.
 
 use baracuda_cuda_sys::driver;
-use baracuda_driver::memory::{memset_u16, memset_u16_async, memset_u32_async, memset_u8_async};
+use baracuda_driver::memory::{memset_u8_async, memset_u16, memset_u16_async, memset_u32_async};
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 
 #[test]

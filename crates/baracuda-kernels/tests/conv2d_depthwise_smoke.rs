@@ -7,10 +7,10 @@
 //! convolved with its own filter independently. Compares against a
 //! naive depthwise CPU reference.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Conv2dArgs, Conv2dDescriptor, Conv2dPlan, ElementKind, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    Conv2dArgs, Conv2dDescriptor, Conv2dPlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -106,10 +106,9 @@ fn conv2d_depthwise_f32() {
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, y_n).expect("alloc y");
 
     // depthwise: one filter per input channel → groups = c
-    let desc =
-        Conv2dDescriptor::new(n, c, h_in, w_in, c, kh, kw, ElementKind::F32)
-            .with_padding(pad_h, pad_w)
-            .with_groups(c);
+    let desc = Conv2dDescriptor::new(n, c, h_in, w_in, c, kh, kw, ElementKind::F32)
+        .with_padding(pad_h, pad_w)
+        .with_groups(c);
     let plan =
         Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     assert_eq!(plan.output_dims(), (h_out, w_out));
@@ -159,7 +158,8 @@ fn conv2d_depthwise_f32() {
         assert!(
             diff <= t,
             "depthwise conv2d FW mismatch @ {i}: got={}, want={}, diff={diff}",
-            got[i], exp_y[i]
+            got[i],
+            exp_y[i]
         );
     }
 }

@@ -18,10 +18,10 @@
 //!   `cargo test -p baracuda-kernels --release --features sm89 \
 //!     --test cast_subbyte_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, CastSubByteArgs, CastSubByteDescriptor, CastSubBytePlan, ElementKind,
-    Fp8E4M3, PlanPreference, TensorMut, TensorRef, Workspace, Bool, S4, U4,
+    Bool, CastSubByteArgs, CastSubByteDescriptor, CastSubBytePlan, ElementKind, Fp8E4M3,
+    PlanPreference, S4, TensorMut, TensorRef, U4, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -171,9 +171,8 @@ fn cast_fp8e4m3_to_f32_lattice_grid() {
         input_element: ElementKind::Fp8E4M3,
         output_element: ElementKind::F32,
     };
-    let plan =
-        CastSubBytePlan::<Fp8E4M3, f32>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+    let plan = CastSubBytePlan::<Fp8E4M3, f32>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = CastSubByteArgs::<Fp8E4M3, f32> {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -215,9 +214,8 @@ fn cast_f32_to_fp8e4m3_lattice_grid() {
         input_element: ElementKind::F32,
         output_element: ElementKind::Fp8E4M3,
     };
-    let plan =
-        CastSubBytePlan::<f32, Fp8E4M3>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+    let plan = CastSubBytePlan::<f32, Fp8E4M3>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = CastSubByteArgs::<f32, Fp8E4M3> {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -236,7 +234,9 @@ fn cast_f32_to_fp8e4m3_lattice_grid() {
     // Reinterpret dev_y as u8 for download.
     let dev_y_bytes_back: DeviceBuffer<u8> = unsafe { core::mem::transmute(dev_y) };
     let mut got_bytes = vec![0u8; numel as usize];
-    dev_y_bytes_back.copy_to_host(&mut got_bytes).expect("download");
+    dev_y_bytes_back
+        .copy_to_host(&mut got_bytes)
+        .expect("download");
 
     let expected: Vec<u8> = host_x.iter().map(|&f| Fp8E4M3::from_f32(f).0).collect();
     assert_eq!(got_bytes, expected, "f32 -> fp8e4m3");
@@ -325,6 +325,9 @@ fn select_rejects_unsupported_pair() {
         output_element: ElementKind::F64,
     };
     let res = CastSubBytePlan::<f32, f64>::select(&stream, &desc, PlanPreference::default());
-    assert!(res.is_err(), "f32 -> f64 must be rejected (not in 13.3 scope)");
+    assert!(
+        res.is_err(),
+        "f32 -> f64 must be rejected (not in 13.3 scope)"
+    );
     let _ = ctx;
 }

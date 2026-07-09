@@ -20,11 +20,11 @@
 //! is below an upper bound derived from chunk_size (with generous
 //! slack for CUDA's allocator quantization).
 
-use baracuda_driver::{init, memory::mem_get_info, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, memory::mem_get_info};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FusedLinearCrossEntropyArgs,
-    FusedLinearCrossEntropyDescriptor, FusedLinearCrossEntropyPlan, LossReduction,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, FusedLinearCrossEntropyArgs, FusedLinearCrossEntropyDescriptor,
+    FusedLinearCrossEntropyPlan, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -46,11 +46,16 @@ fn flce_chunk_size_picks_small_for_large_vocab() {
     let h = 512i32;
     let v = 32 * 1024i32;
     let desc = FusedLinearCrossEntropyDescriptor::new(bt, h, v, ElementKind::F32);
-    let plan = FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let plan =
+        FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     let chunk_size = plan.chunk_size();
 
     // Per the heuristic: inc=64, raw=16, chunk_size=16.
-    assert_eq!(chunk_size, 16, "expected chunk_size=16 for BT=1024, H=512, V=32K");
+    assert_eq!(
+        chunk_size, 16,
+        "expected chunk_size=16 for BT=1024, H=512, V=32K"
+    );
 
     // Implied per-chunk scratch (in MiB) vs unfused logits (in MiB).
     let elem_bytes = 4usize;
@@ -100,7 +105,9 @@ fn flce_real_gpu_memory_under_bound() {
     // Run the FW pass — internally allocates per-chunk scratch only.
     let desc = FusedLinearCrossEntropyDescriptor::new(bt, h, v, ElementKind::F32)
         .with_reduction(LossReduction::Mean);
-    let plan = FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let plan =
+        FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     let chunk_size = plan.chunk_size();
 
     plan.run(

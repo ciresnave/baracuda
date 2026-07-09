@@ -7,10 +7,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_minimum_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -66,23 +66,52 @@ fn minimum_f32_contig() {
 
     let plan = BinaryPlan::<f32, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Minimum, shape, element: ElementKind::F32 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Minimum,
+            shape,
+            element: ElementKind::F32,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, ((&a, &b), &g)) in host_a.iter().zip(host_b.iter()).zip(got.iter()).enumerate() {
         let want = minimum_ref_f32(a, b);
         if want.is_nan() {
-            assert!(g.is_nan(), "f32 minimum @ {i}: a={a} b={b} got={g} want=NaN");
+            assert!(
+                g.is_nan(),
+                "f32 minimum @ {i}: a={a} b={b} got={g} want=NaN"
+            );
         } else {
-            assert_eq!(g.to_bits(), want.to_bits(), "f32 minimum @ {i}: a={a} b={b} got={g} want={want}");
+            assert_eq!(
+                g.to_bits(),
+                want.to_bits(),
+                "f32 minimum @ {i}: a={a} b={b} got={g} want={want}"
+            );
         }
     }
 }
@@ -103,23 +132,52 @@ fn minimum_f64_contig() {
     let stride = contiguous_stride(shape);
     let plan = BinaryPlan::<f64, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Minimum, shape, element: ElementKind::F64 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Minimum,
+            shape,
+            element: ElementKind::F64,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f64; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, ((&a, &b), &g)) in host_a.iter().zip(host_b.iter()).zip(got.iter()).enumerate() {
         let want = minimum_ref_f64(a, b);
         if want.is_nan() {
-            assert!(g.is_nan(), "f64 minimum @ {i}: a={a} b={b} got={g} want=NaN");
+            assert!(
+                g.is_nan(),
+                "f64 minimum @ {i}: a={a} b={b} got={g} want=NaN"
+            );
         } else {
-            assert_eq!(g.to_bits(), want.to_bits(), "f64 minimum @ {i}: a={a} b={b} got={g} want={want}");
+            assert_eq!(
+                g.to_bits(),
+                want.to_bits(),
+                "f64 minimum @ {i}: a={a} b={b} got={g} want={want}"
+            );
         }
     }
 }
@@ -144,24 +202,53 @@ fn minimum_f16_contig() {
     let stride = contiguous_stride(shape);
     let plan = BinaryPlan::<f16, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Minimum, shape, element: ElementKind::F16 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Minimum,
+            shape,
+            element: ElementKind::F16,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![f16::ZERO; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, ((&a, &b), &g)) in host_a.iter().zip(host_b.iter()).zip(got.iter()).enumerate() {
         let want_f = minimum_ref_f32(a.to_f32(), b.to_f32());
         if want_f.is_nan() {
-            assert!(g.to_f32().is_nan(), "f16 minimum @ {i}: a={a} b={b} got={g} want=NaN");
+            assert!(
+                g.to_f32().is_nan(),
+                "f16 minimum @ {i}: a={a} b={b} got={g} want=NaN"
+            );
         } else {
             let want = f16::from_f32(want_f);
-            assert_eq!(g.to_bits(), want.to_bits(), "f16 minimum @ {i}: a={a} b={b} got={g} want={want}");
+            assert_eq!(
+                g.to_bits(),
+                want.to_bits(),
+                "f16 minimum @ {i}: a={a} b={b} got={g} want={want}"
+            );
         }
     }
 }
@@ -186,24 +273,53 @@ fn minimum_bf16_contig() {
     let stride = contiguous_stride(shape);
     let plan = BinaryPlan::<bf16, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Minimum, shape, element: ElementKind::Bf16 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Minimum,
+            shape,
+            element: ElementKind::Bf16,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![bf16::ZERO; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, ((&a, &b), &g)) in host_a.iter().zip(host_b.iter()).zip(got.iter()).enumerate() {
         let want_f = minimum_ref_f32(a.to_f32(), b.to_f32());
         if want_f.is_nan() {
-            assert!(g.to_f32().is_nan(), "bf16 minimum @ {i}: a={a} b={b} got={g} want=NaN");
+            assert!(
+                g.to_f32().is_nan(),
+                "bf16 minimum @ {i}: a={a} b={b} got={g} want=NaN"
+            );
         } else {
             let want = bf16::from_f32(want_f);
-            assert_eq!(g.to_bits(), want.to_bits(), "bf16 minimum @ {i}: a={a} b={b} got={g} want={want}");
+            assert_eq!(
+                g.to_bits(),
+                want.to_bits(),
+                "bf16 minimum @ {i}: a={a} b={b} got={g} want={want}"
+            );
         }
     }
 }

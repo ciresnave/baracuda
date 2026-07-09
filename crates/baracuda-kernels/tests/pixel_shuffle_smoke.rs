@@ -3,11 +3,11 @@
 //! dtype. Verifies inverse property (unshuffle(shuffle(x)) == x).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PixelShuffleArgs, PixelShuffleDescriptor, PixelShufflePlan,
-    PixelUnshuffleArgs, PixelUnshuffleDescriptor, PixelUnshufflePlan, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, PixelShuffleArgs, PixelShuffleDescriptor, PixelShufflePlan, PixelUnshuffleArgs,
+    PixelUnshuffleDescriptor, PixelUnshufflePlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -25,54 +25,76 @@ fn pixel_shuffle_roundtrip_f32() {
     let (ctx, stream) = setup();
     let (n, c, h, w, r) = (1, 2, 3, 3, 2);
     let cin = c * r * r;
-    let host_in: Vec<f32> =
-        (0..(n * cin * h * w)).map(|i| i as f32 * 0.5 + 1.0).collect();
+    let host_in: Vec<f32> = (0..(n * cin * h * w))
+        .map(|i| i as f32 * 0.5 + 1.0)
+        .collect();
     let dev_in = DeviceBuffer::from_slice(&ctx, &host_in).expect("");
     let mut dev_mid: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * c * h * r * w * r) as usize).expect("");
     let plan = PixelShufflePlan::<f32>::select(
         &stream,
         &PixelShuffleDescriptor {
-            n, c, h, w, upscale_factor: r,
+            n,
+            c,
+            h,
+            w,
+            upscale_factor: r,
             element: ElementKind::F32,
         },
         PlanPreference::default(),
-    ).expect("");
-    plan.run(&stream, Workspace::None, PixelShuffleArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, cin, h, w],
-            stride: contiguous_stride([n, cin, h, w]),
+    )
+    .expect("");
+    plan.run(
+        &stream,
+        Workspace::None,
+        PixelShuffleArgs {
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n, cin, h, w],
+                stride: contiguous_stride([n, cin, h, w]),
+            },
+            output: TensorMut {
+                data: dev_mid.as_slice_mut(),
+                shape: [n, c, h * r, w * r],
+                stride: contiguous_stride([n, c, h * r, w * r]),
+            },
         },
-        output: TensorMut {
-            data: dev_mid.as_slice_mut(),
-            shape: [n, c, h * r, w * r],
-            stride: contiguous_stride([n, c, h * r, w * r]),
-        },
-    }).expect("");
+    )
+    .expect("");
     // Round-trip back.
     let mut dev_out: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * cin * h * w) as usize).expect("");
     let uplan = PixelUnshufflePlan::<f32>::select(
         &stream,
         &PixelUnshuffleDescriptor {
-            n, c, h, w, downscale_factor: r,
+            n,
+            c,
+            h,
+            w,
+            downscale_factor: r,
             element: ElementKind::F32,
         },
         PlanPreference::default(),
-    ).expect("");
-    uplan.run(&stream, Workspace::None, PixelUnshuffleArgs {
-        input: TensorRef {
-            data: dev_mid.as_slice(),
-            shape: [n, c, h * r, w * r],
-            stride: contiguous_stride([n, c, h * r, w * r]),
-        },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, cin, h, w],
-            stride: contiguous_stride([n, cin, h, w]),
-        },
-    }).expect("");
+    )
+    .expect("");
+    uplan
+        .run(
+            &stream,
+            Workspace::None,
+            PixelUnshuffleArgs {
+                input: TensorRef {
+                    data: dev_mid.as_slice(),
+                    shape: [n, c, h * r, w * r],
+                    stride: contiguous_stride([n, c, h * r, w * r]),
+                },
+                output: TensorMut {
+                    data: dev_out.as_slice_mut(),
+                    shape: [n, cin, h, w],
+                    stride: contiguous_stride([n, cin, h, w]),
+                },
+            },
+        )
+        .expect("");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; host_in.len()];
     dev_out.copy_to_host(&mut got).expect("");
@@ -97,23 +119,33 @@ fn pixel_shuffle_known_permutation_f32() {
     let plan = PixelShufflePlan::<f32>::select(
         &stream,
         &PixelShuffleDescriptor {
-            n, c, h, w, upscale_factor: r,
+            n,
+            c,
+            h,
+            w,
+            upscale_factor: r,
             element: ElementKind::F32,
         },
         PlanPreference::default(),
-    ).expect("");
-    plan.run(&stream, Workspace::None, PixelShuffleArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, cin, h, w],
-            stride: contiguous_stride([n, cin, h, w]),
+    )
+    .expect("");
+    plan.run(
+        &stream,
+        Workspace::None,
+        PixelShuffleArgs {
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n, cin, h, w],
+                stride: contiguous_stride([n, cin, h, w]),
+            },
+            output: TensorMut {
+                data: dev_out.as_slice_mut(),
+                shape: [n, c, h * r, w * r],
+                stride: contiguous_stride([n, c, h * r, w * r]),
+            },
         },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, c, h * r, w * r],
-            stride: contiguous_stride([n, c, h * r, w * r]),
-        },
-    }).expect("");
+    )
+    .expect("");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 4];
     dev_out.copy_to_host(&mut got).expect("");
@@ -133,43 +165,65 @@ fn pixel_shuffle_roundtrip_f64() {
     PixelShufflePlan::<f64>::select(
         &stream,
         &PixelShuffleDescriptor {
-            n, c, h, w, upscale_factor: r,
+            n,
+            c,
+            h,
+            w,
+            upscale_factor: r,
             element: ElementKind::F64,
         },
         PlanPreference::default(),
-    ).expect("").run(&stream, Workspace::None, PixelShuffleArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, cin, h, w],
-            stride: contiguous_stride([n, cin, h, w]),
+    )
+    .expect("")
+    .run(
+        &stream,
+        Workspace::None,
+        PixelShuffleArgs {
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n, cin, h, w],
+                stride: contiguous_stride([n, cin, h, w]),
+            },
+            output: TensorMut {
+                data: dev_mid.as_slice_mut(),
+                shape: [n, c, h * r, w * r],
+                stride: contiguous_stride([n, c, h * r, w * r]),
+            },
         },
-        output: TensorMut {
-            data: dev_mid.as_slice_mut(),
-            shape: [n, c, h * r, w * r],
-            stride: contiguous_stride([n, c, h * r, w * r]),
-        },
-    }).expect("");
+    )
+    .expect("");
     let mut dev_out: DeviceBuffer<f64> =
         DeviceBuffer::zeros(&ctx, (n * cin * h * w) as usize).expect("");
     PixelUnshufflePlan::<f64>::select(
         &stream,
         &PixelUnshuffleDescriptor {
-            n, c, h, w, downscale_factor: r,
+            n,
+            c,
+            h,
+            w,
+            downscale_factor: r,
             element: ElementKind::F64,
         },
         PlanPreference::default(),
-    ).expect("").run(&stream, Workspace::None, PixelUnshuffleArgs {
-        input: TensorRef {
-            data: dev_mid.as_slice(),
-            shape: [n, c, h * r, w * r],
-            stride: contiguous_stride([n, c, h * r, w * r]),
+    )
+    .expect("")
+    .run(
+        &stream,
+        Workspace::None,
+        PixelUnshuffleArgs {
+            input: TensorRef {
+                data: dev_mid.as_slice(),
+                shape: [n, c, h * r, w * r],
+                stride: contiguous_stride([n, c, h * r, w * r]),
+            },
+            output: TensorMut {
+                data: dev_out.as_slice_mut(),
+                shape: [n, cin, h, w],
+                stride: contiguous_stride([n, cin, h, w]),
+            },
         },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, cin, h, w],
-            stride: contiguous_stride([n, cin, h, w]),
-        },
-    }).expect("");
+    )
+    .expect("");
     stream.synchronize().expect("sync");
     let mut got = vec![0f64; host_in.len()];
     dev_out.copy_to_host(&mut got).expect("");
@@ -192,22 +246,33 @@ fn pixel_shuffle_f16_bf16_smoke() {
     PixelShufflePlan::<f16>::select(
         &stream,
         &PixelShuffleDescriptor {
-            n, c, h, w, upscale_factor: r,
+            n,
+            c,
+            h,
+            w,
+            upscale_factor: r,
             element: ElementKind::F16,
         },
         PlanPreference::default(),
-    ).expect("").run(&stream, Workspace::None, PixelShuffleArgs {
-        input: TensorRef {
-            data: dev_in.as_slice(),
-            shape: [n, cin, h, w],
-            stride: contiguous_stride([n, cin, h, w]),
+    )
+    .expect("")
+    .run(
+        &stream,
+        Workspace::None,
+        PixelShuffleArgs {
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n, cin, h, w],
+                stride: contiguous_stride([n, cin, h, w]),
+            },
+            output: TensorMut {
+                data: dev_out.as_slice_mut(),
+                shape: [n, c, h * r, w * r],
+                stride: contiguous_stride([n, c, h * r, w * r]),
+            },
         },
-        output: TensorMut {
-            data: dev_out.as_slice_mut(),
-            shape: [n, c, h * r, w * r],
-            stride: contiguous_stride([n, c, h * r, w * r]),
-        },
-    }).expect("");
+    )
+    .expect("");
     stream.synchronize().expect("sync");
     let mut got = vec![f16::from_f32(0.0); 4];
     dev_out.copy_to_host(&mut got).expect("");
@@ -222,22 +287,33 @@ fn pixel_shuffle_f16_bf16_smoke() {
     PixelShufflePlan::<bf16>::select(
         &stream,
         &PixelShuffleDescriptor {
-            n, c, h, w, upscale_factor: r,
+            n,
+            c,
+            h,
+            w,
+            upscale_factor: r,
             element: ElementKind::Bf16,
         },
         PlanPreference::default(),
-    ).expect("").run(&stream, Workspace::None, PixelShuffleArgs {
-        input: TensorRef {
-            data: dev_in_bf16.as_slice(),
-            shape: [n, cin, h, w],
-            stride: contiguous_stride([n, cin, h, w]),
+    )
+    .expect("")
+    .run(
+        &stream,
+        Workspace::None,
+        PixelShuffleArgs {
+            input: TensorRef {
+                data: dev_in_bf16.as_slice(),
+                shape: [n, cin, h, w],
+                stride: contiguous_stride([n, cin, h, w]),
+            },
+            output: TensorMut {
+                data: dev_out_bf16.as_slice_mut(),
+                shape: [n, c, h * r, w * r],
+                stride: contiguous_stride([n, c, h * r, w * r]),
+            },
         },
-        output: TensorMut {
-            data: dev_out_bf16.as_slice_mut(),
-            shape: [n, c, h * r, w * r],
-            stride: contiguous_stride([n, c, h * r, w * r]),
-        },
-    }).expect("");
+    )
+    .expect("");
     stream.synchronize().expect("sync");
     let mut got_bf16 = vec![bf16::from_f32(0.0); 4];
     dev_out_bf16.copy_to_host(&mut got_bf16).expect("");

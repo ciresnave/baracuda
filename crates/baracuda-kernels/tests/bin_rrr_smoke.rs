@@ -17,7 +17,7 @@
 
 #![cfg(feature = "sm89")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     Bin, BinGemmArgs, BinGemmDescriptor, BinGemmPlan, LayoutSku, MatrixMut, MatrixRef,
     PlanPreference, Workspace,
@@ -85,7 +85,11 @@ fn cpu_bin_gemm_rrr(
 
 fn run_bin_rrr(m: i32, n: i32, k: i32) {
     assert_eq!(k % 8, 0, "K must be a multiple of 8 for packed-bit storage");
-    assert_eq!(n % 8, 0, "N must be a multiple of 8 for bin RRR (B is N-bit-packed)");
+    assert_eq!(
+        n % 8,
+        0,
+        "N must be a multiple of 8 for bin RRR (B is N-bit-packed)"
+    );
 
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -108,21 +112,27 @@ fn run_bin_rrr(m: i32, n: i32, k: i32) {
 
     let mut expected = vec![0i32; mu * nu];
     cpu_bin_gemm_rrr(
-        mu, nu, ku,
-        &host_a_bytes, k_bytes,
-        &host_b_bytes, n_bytes,
-        &mut expected, nu,
+        mu,
+        nu,
+        ku,
+        &host_a_bytes,
+        k_bytes,
+        &host_b_bytes,
+        n_bytes,
+        &mut expected,
+        nu,
     );
 
     let dev_a_bytes = DeviceBuffer::from_slice(&ctx, &host_a_bytes).expect("upload A");
     let dev_b_bytes = DeviceBuffer::from_slice(&ctx, &host_b_bytes).expect("upload B");
     let dev_a = dev_a_bytes.view_as::<Bin>();
     let dev_b = dev_b_bytes.view_as::<Bin>();
-    let mut dev_d: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
+    let mut dev_d: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
     let desc = BinGemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rrr,
     };
     let plan = BinGemmPlan::select(&stream, &desc, PlanPreference::default())
@@ -130,11 +140,26 @@ fn run_bin_rrr(m: i32, n: i32, k: i32) {
 
     let args = BinGemmArgs {
         // A: row-major [M, K]; ld in BYTES = K/8.
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k_bytes as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k_bytes as i64,
+        },
         // B: row-major [K, N] (RRR); ld in BYTES = N/8.
-        b: MatrixRef { data: dev_b, rows: k, cols: n, ld: n_bytes as i64 },
+        b: MatrixRef {
+            data: dev_b,
+            rows: k,
+            cols: n,
+            ld: n_bytes as i64,
+        },
         // D: row-major [M, N] int32; ld in ELEMENTS = N.
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
     };
     plan.run(&stream, Workspace::None, args)
         .expect("bin RRR GEMM run");
@@ -173,29 +198,34 @@ fn run_bin_rrr(m: i32, n: i32, k: i32) {
 // the RRR variant (B is bit-packed along N in gmem).
 // ============================================================================
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rrr_64_64_256() {
     run_bin_rrr(64, 64, 256);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rrr_128_128_512() {
     run_bin_rrr(128, 128, 512);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rrr_256_128_256() {
     run_bin_rrr(256, 128, 256);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rrr_104_72_128() {
     // Ragged in M and N; K=128 is below K_TILE=256 (exercises K-tile
     // padding). N=72 is divisible by 8 (RRR requires this).
     run_bin_rrr(104, 72, 128);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn bin_rrr_72_72_264() {
     // Tile-edge ragged: M, N each just past tile boundary; K=264 is
     // one K-tile + 8 bits (exercises K-tile padding when the second

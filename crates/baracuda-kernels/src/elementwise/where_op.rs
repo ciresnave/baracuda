@@ -256,9 +256,7 @@ impl<T: Element, const N: usize> WherePlan<T, N> {
             && args.y.is_contiguous();
 
         if !all_contig_same_shape {
-            return self.run_strided(
-                stream_ptr, cond_ptr, a_ptr, b_ptr, y_ptr, numel, &args,
-            );
+            return self.run_strided(stream_ptr, cond_ptr, a_ptr, b_ptr, y_ptr, numel, &args);
         }
 
         let status = match T::KIND {

@@ -5,7 +5,7 @@ use core::ffi::c_void;
 use core::mem::size_of;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use baracuda_cuda_sys::types::{CUgraphNodeType, CUmemorytype, CUDA_MEMCPY3D};
+use baracuda_cuda_sys::types::{CUDA_MEMCPY3D, CUgraphNodeType, CUmemorytype};
 use baracuda_driver::{Context, Device, DeviceBuffer, Graph, Module, Stream};
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");

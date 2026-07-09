@@ -16,10 +16,10 @@
 //!
 //! Marked `#[ignore]` per project convention.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, MoeArgs, MoeDescriptor, MoePlan, MoeVariant,
-    PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    ElementKind, MoeArgs, MoeDescriptor, MoePlan, MoeVariant, PlanPreference, TensorMut, TensorRef,
+    U8, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -46,8 +46,7 @@ fn moe_wmma_f16_small_fixture() {
     let mut acts_host = vec![f16::ZERO; (T * DM) as usize];
     for i in 0..T {
         for j in 0..DM {
-            acts_host[(i * DM + j) as usize] =
-                f16::from_f32(0.1 * (i as f32) + 0.01 * (j as f32));
+            acts_host[(i * DM + j) as usize] = f16::from_f32(0.1 * (i as f32) + 0.01 * (j as f32));
         }
     }
     // Weights per-expert: small deterministic pattern.
@@ -138,9 +137,8 @@ fn moe_wmma_f16_small_fixture() {
 
     let acts_dev: DeviceBuffer<f16> =
         DeviceBuffer::from_slice(&ctx, &acts_host).expect("up acts as f16");
-    let topk_weights_dev_f16: DeviceBuffer<f16> = {
-        DeviceBuffer::zeros(&ctx, (T * K) as usize).expect("up tk f16")
-    };
+    let topk_weights_dev_f16: DeviceBuffer<f16> =
+        { DeviceBuffer::zeros(&ctx, (T * K) as usize).expect("up tk f16") };
     let mut output_dev_f16: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (T * DE) as usize).expect("alloc out f16");
 

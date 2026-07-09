@@ -15,7 +15,7 @@
 
 #![cfg(feature = "marlin")]
 
-use baracuda_kernels::{gptq_to_marlin_repack, GptqWeights, MarlinWeights};
+use baracuda_kernels::{GptqWeights, MarlinWeights, gptq_to_marlin_repack};
 
 #[test]
 fn rejects_bad_group_size() {
@@ -163,8 +163,7 @@ fn repack_handles_nonzero_zp() {
         oc,
         group_size,
     };
-    let MarlinWeights { weight_packed, .. } =
-        gptq_to_marlin_repack(&g).expect("repack OK");
+    let MarlinWeights { weight_packed, .. } = gptq_to_marlin_repack(&g).expect("repack OK");
     let expected_word = 0xaaaaaaaa_u32 as i32;
     for (i, &w) in weight_packed.iter().enumerate() {
         assert_eq!(
@@ -196,8 +195,7 @@ fn repack_clamps_at_codebook_extremes() {
         oc,
         group_size,
     };
-    let MarlinWeights { weight_packed, .. } =
-        gptq_to_marlin_repack(&g).expect("repack OK");
+    let MarlinWeights { weight_packed, .. } = gptq_to_marlin_repack(&g).expect("repack OK");
     // Every nibble should be 0 (clamped from -7).
     let expected_word = 0i32;
     for (i, &w) in weight_packed.iter().enumerate() {

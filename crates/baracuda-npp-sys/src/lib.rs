@@ -15,7 +15,7 @@
 use core::ffi::{c_int, c_void};
 use std::sync::OnceLock;
 
-use baracuda_core::{platform, Library, LoaderError};
+use baracuda_core::{Library, LoaderError, platform};
 use baracuda_types::CudaStatus;
 
 /// NPP library version (returned by `nppGetLibVersion`).

@@ -10,7 +10,7 @@
 use core::ffi::c_int;
 use std::sync::OnceLock;
 
-use baracuda_core::{platform, Library, LoaderError};
+use baracuda_core::{Library, LoaderError, platform};
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_types::CudaStatus;
 
@@ -308,12 +308,8 @@ pub type PFN_cufftEstimate1d = unsafe extern "C" fn(
 ) -> cufftResult;
 
 /// Function-pointer type for `cufftEstimate2d` (estimate workspace size for a 2D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
-pub type PFN_cufftEstimate2d = unsafe extern "C" fn(
-    nx: c_int,
-    ny: c_int,
-    ty: cufftType,
-    work_size: *mut usize,
-) -> cufftResult;
+pub type PFN_cufftEstimate2d =
+    unsafe extern "C" fn(nx: c_int, ny: c_int, ty: cufftType, work_size: *mut usize) -> cufftResult;
 
 /// Function-pointer type for `cufftEstimate3d` (estimate workspace size for a 3D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftEstimate3d = unsafe extern "C" fn(
@@ -349,15 +345,14 @@ pub type PFN_cufftGetSize1d = unsafe extern "C" fn(
 ) -> cufftResult;
 
 /// Function-pointer type for `cufftGetSize` (query exact workspace size for a configured plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
-pub type PFN_cufftGetSize = unsafe extern "C" fn(plan: cufftHandle, work_size: *mut usize) -> cufftResult;
+pub type PFN_cufftGetSize =
+    unsafe extern "C" fn(plan: cufftHandle, work_size: *mut usize) -> cufftResult;
 
 // ---- Work-area management ----
 
 /// Function-pointer type for `cufftSetWorkArea` (supply caller-managed work area for a plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
-pub type PFN_cufftSetWorkArea = unsafe extern "C" fn(
-    plan: cufftHandle,
-    work_area: *mut core::ffi::c_void,
-) -> cufftResult;
+pub type PFN_cufftSetWorkArea =
+    unsafe extern "C" fn(plan: cufftHandle, work_area: *mut core::ffi::c_void) -> cufftResult;
 
 /// Function-pointer type for `cufftSetAutoAllocation` (toggle automatic workspace allocation). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftSetAutoAllocation =
@@ -447,11 +442,8 @@ pub type PFN_cufftXtClearCallback =
     unsafe extern "C" fn(plan: cufftHandle, cb_type: c_int) -> cufftResult;
 
 /// Function-pointer type for `cufftXtSetCallbackSharedSize` (set shared-memory size for a callback). See <https://docs.nvidia.com/cuda/cufft/index.html>.
-pub type PFN_cufftXtSetCallbackSharedSize = unsafe extern "C" fn(
-    plan: cufftHandle,
-    cb_type: c_int,
-    shared_size: usize,
-) -> cufftResult;
+pub type PFN_cufftXtSetCallbackSharedSize =
+    unsafe extern "C" fn(plan: cufftHandle, cb_type: c_int, shared_size: usize) -> cufftResult;
 
 /// `cudaDataType` forward-declared for cuFFT signatures. Matches
 /// `baracuda_cuda_sys::runtime::types::cudaDataType` but kept local to

@@ -147,7 +147,10 @@ fn async_drop_is_stream_ordered() {
     let mut got = vec![0.0f32; n as usize];
     d_c.copy_to_host_async(&mut got, &stream).unwrap();
     stream.synchronize().unwrap();
-    assert_eq!(expected, got, "stream-ordered free corrupted a pending read");
+    assert_eq!(
+        expected, got,
+        "stream-ordered free corrupted a pending read"
+    );
 }
 
 /// `zeros_async` returns a stream-ordered, zeroed buffer.
@@ -162,7 +165,10 @@ fn zeros_async_is_zeroed() {
     buf.copy_to_host_async(&mut back, &stream).unwrap();
     stream.synchronize().unwrap();
 
-    assert!(back.iter().all(|&x| x == 0.0), "zeros_async left non-zero bytes");
+    assert!(
+        back.iter().all(|&x| x == 0.0),
+        "zeros_async left non-zero bytes"
+    );
     // buf drops here → cuMemFreeAsync on `stream`, no explicit free needed.
 }
 

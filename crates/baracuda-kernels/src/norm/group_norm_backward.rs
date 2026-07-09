@@ -39,7 +39,11 @@ impl<const N: usize> GroupNormBackwardDescriptor<N> {
     /// Number of channels.
     #[inline]
     pub fn num_channels(&self) -> i32 {
-        if N >= 2 { self.input_shape[self.channel_axis as usize] } else { 1 }
+        if N >= 2 {
+            self.input_shape[self.channel_axis as usize]
+        } else {
+            1
+        }
     }
 }
 
@@ -137,7 +141,11 @@ impl<T: Element, const N: usize> GroupNormBackwardPlan<T, N> {
             backend: BackendKind::Bespoke,
             precision_guarantee,
         };
-        Ok(Self { desc: *desc, sku, _marker: PhantomData })
+        Ok(Self {
+            desc: *desc,
+            sku,
+            _marker: PhantomData,
+        })
     }
 
     /// Validate args.
@@ -186,10 +194,14 @@ impl<T: Element, const N: usize> GroupNormBackwardPlan<T, N> {
     }
     /// Kernel SKU identity.
     #[inline]
-    pub fn sku(&self) -> KernelSku { self.sku }
+    pub fn sku(&self) -> KernelSku {
+        self.sku
+    }
     /// Numerical guarantees.
     #[inline]
-    pub fn precision_guarantee(&self) -> PrecisionGuarantee { self.sku.precision_guarantee }
+    pub fn precision_guarantee(&self) -> PrecisionGuarantee {
+        self.sku.precision_guarantee
+    }
 
     /// Launch (also serves InstanceNormBackwardPlan).
     pub fn run(
@@ -202,8 +214,12 @@ impl<T: Element, const N: usize> GroupNormBackwardPlan<T, N> {
         let n_extent = self.desc.input_shape[0];
         let c_extent = self.desc.input_shape[1];
         let mut s_extent: i32 = 1;
-        for d in 2..N { s_extent = s_extent.saturating_mul(self.desc.input_shape[d]); }
-        if n_extent == 0 || c_extent == 0 || s_extent == 0 { return Ok(()); }
+        for d in 2..N {
+            s_extent = s_extent.saturating_mul(self.desc.input_shape[d]);
+        }
+        if n_extent == 0 || c_extent == 0 || s_extent == 0 {
+            return Ok(());
+        }
         let num_groups = self.desc.num_groups as i32;
 
         let needed = self.workspace_size();
@@ -216,7 +232,10 @@ impl<T: Element, const N: usize> GroupNormBackwardPlan<T, N> {
             }
             Workspace::Borrowed(slice) => {
                 if slice.len() < needed {
-                    return Err(Error::WorkspaceTooSmall { needed, got: slice.len() });
+                    return Err(Error::WorkspaceTooSmall {
+                        needed,
+                        got: slice.len(),
+                    });
                 }
                 (slice.as_raw().0 as *mut c_void, slice.len())
             }
@@ -228,44 +247,49 @@ impl<T: Element, const N: usize> GroupNormBackwardPlan<T, N> {
         let mean_ptr = args.saved_mean.data.as_raw().0 as *const c_void;
         let rstd_ptr = args.saved_rstd.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let gamma_ptr = args.gamma.as_ref().map(|g| g.data.as_raw().0 as *const c_void)
+        let gamma_ptr = args
+            .gamma
+            .as_ref()
+            .map(|g| g.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let dgamma_ptr = args.dgamma.as_mut().map(|g| g.data.as_raw().0 as *mut c_void)
+        let dgamma_ptr = args
+            .dgamma
+            .as_mut()
+            .map(|g| g.data.as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
-        let dbeta_ptr = args.dbeta.as_mut().map(|b| b.data.as_raw().0 as *mut c_void)
+        let dbeta_ptr = args
+            .dbeta
+            .as_mut()
+            .map(|b| b.data.as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_group_norm_backward_f32_run(
-                    n_extent, c_extent, s_extent, num_groups, 1,
-                    dy_ptr, x_ptr, gamma_ptr, mean_ptr, rstd_ptr,
-                    dx_ptr, dgamma_ptr, dbeta_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    n_extent, c_extent, s_extent, num_groups, 1, dy_ptr, x_ptr, gamma_ptr,
+                    mean_ptr, rstd_ptr, dx_ptr, dgamma_ptr, dbeta_ptr, ws_ptr, ws_bytes,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_group_norm_backward_f16_run(
-                    n_extent, c_extent, s_extent, num_groups, 1,
-                    dy_ptr, x_ptr, gamma_ptr, mean_ptr, rstd_ptr,
-                    dx_ptr, dgamma_ptr, dbeta_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    n_extent, c_extent, s_extent, num_groups, 1, dy_ptr, x_ptr, gamma_ptr,
+                    mean_ptr, rstd_ptr, dx_ptr, dgamma_ptr, dbeta_ptr, ws_ptr, ws_bytes,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_group_norm_backward_bf16_run(
-                    n_extent, c_extent, s_extent, num_groups, 1,
-                    dy_ptr, x_ptr, gamma_ptr, mean_ptr, rstd_ptr,
-                    dx_ptr, dgamma_ptr, dbeta_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    n_extent, c_extent, s_extent, num_groups, 1, dy_ptr, x_ptr, gamma_ptr,
+                    mean_ptr, rstd_ptr, dx_ptr, dgamma_ptr, dbeta_ptr, ws_ptr, ws_bytes,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_group_norm_backward_f64_run(
-                    n_extent, c_extent, s_extent, num_groups, 1,
-                    dy_ptr, x_ptr, gamma_ptr, mean_ptr, rstd_ptr,
-                    dx_ptr, dgamma_ptr, dbeta_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    n_extent, c_extent, s_extent, num_groups, 1, dy_ptr, x_ptr, gamma_ptr,
+                    mean_ptr, rstd_ptr, dx_ptr, dgamma_ptr, dbeta_ptr, ws_ptr, ws_bytes,
+                    stream_ptr,
                 )
             },
             _ => {

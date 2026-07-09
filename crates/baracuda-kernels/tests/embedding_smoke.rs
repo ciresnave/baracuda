@@ -11,10 +11,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, EmbeddingArgs, EmbeddingDescriptor, EmbeddingPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, EmbeddingArgs, EmbeddingDescriptor, EmbeddingPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -43,8 +43,7 @@ fn embedding_f32_basic() {
     }
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up weight");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
+    let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
 
     let desc = EmbeddingDescriptor {
         num_embeddings: v as i32,
@@ -53,8 +52,8 @@ fn embedding_f32_basic() {
         padding_idx: None,
         element: ElementKind::F32,
     };
-    let plan = EmbeddingPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        EmbeddingPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = EmbeddingArgs::<f32> {
         weight: TensorRef {
             data: dev_w.as_slice(),
@@ -99,8 +98,7 @@ fn embedding_f64_basic() {
     }
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up weight");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
+    let mut dev_out: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
 
     let desc = EmbeddingDescriptor {
         num_embeddings: v as i32,
@@ -109,8 +107,8 @@ fn embedding_f64_basic() {
         padding_idx: None,
         element: ElementKind::F64,
     };
-    let plan = EmbeddingPlan::<f64>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        EmbeddingPlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = EmbeddingArgs::<f64> {
         weight: TensorRef {
             data: dev_w.as_slice(),
@@ -160,8 +158,7 @@ fn embedding_f32_padding_idx_zeros_row() {
     }
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up weight");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
+    let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
 
     let desc = EmbeddingDescriptor {
         num_embeddings: v as i32,
@@ -170,8 +167,8 @@ fn embedding_f32_padding_idx_zeros_row() {
         padding_idx: Some(padding),
         element: ElementKind::F32,
     };
-    let plan = EmbeddingPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        EmbeddingPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = EmbeddingArgs::<f32> {
         weight: TensorRef {
             data: dev_w.as_slice(),
@@ -221,8 +218,7 @@ fn embedding_f16_basic() {
     }
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up weight");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
+    let mut dev_out: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
 
     let desc = EmbeddingDescriptor {
         num_embeddings: v as i32,
@@ -231,8 +227,8 @@ fn embedding_f16_basic() {
         padding_idx: None,
         element: ElementKind::F16,
     };
-    let plan = EmbeddingPlan::<f16>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        EmbeddingPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = EmbeddingArgs::<f16> {
         weight: TensorRef {
             data: dev_w.as_slice(),
@@ -278,8 +274,7 @@ fn embedding_bf16_basic() {
     }
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up weight");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<bf16> =
-        DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
+    let mut dev_out: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, n * d).expect("alloc out");
 
     let desc = EmbeddingDescriptor {
         num_embeddings: v as i32,
@@ -288,8 +283,8 @@ fn embedding_bf16_basic() {
         padding_idx: None,
         element: ElementKind::Bf16,
     };
-    let plan = EmbeddingPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        EmbeddingPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = EmbeddingArgs::<bf16> {
         weight: TensorRef {
             data: dev_w.as_slice(),

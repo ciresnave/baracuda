@@ -3,14 +3,15 @@
 //! AdaptiveAvgPool1d / 3d, AdaptiveMaxPool1d / 2d / 3d, and the stubbed
 //! FractionalMaxPool* / LpPool* plans (which assert `select()` rejects).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, AdaptiveAvgPool1dPlan, AdaptiveAvgPool3dPlan, AdaptiveMaxPool1dPlan,
-    AdaptiveMaxPool2dPlan, AdaptiveMaxPool3dPlan, AdaptivePool1dDescriptor, AdaptivePool1dFwArgs,
-    AdaptivePool2dDescriptor, AdaptivePool2dFwArgs, AdaptivePool3dDescriptor,
-    AdaptivePool3dFwArgs, ElementKind, FractionalMaxPool2dDescriptor, FractionalMaxPool2dPlan,
+    AdaptiveAvgPool1dPlan, AdaptiveAvgPool3dPlan, AdaptiveMaxPool1dPlan, AdaptiveMaxPool2dPlan,
+    AdaptiveMaxPool3dPlan, AdaptivePool1dDescriptor, AdaptivePool1dFwArgs,
+    AdaptivePool2dDescriptor, AdaptivePool2dFwArgs, AdaptivePool3dDescriptor, AdaptivePool3dFwArgs,
+    ElementKind, FractionalMaxPool2dDescriptor, FractionalMaxPool2dPlan,
     FractionalMaxPool3dDescriptor, FractionalMaxPool3dPlan, LpPool1dDescriptor, LpPool1dPlan,
     LpPool2dDescriptor, LpPool2dPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -41,10 +42,23 @@ fn adaptive_avg_pool1d_8_to_4_f32() {
     {
         assert_eq!(plan.derived_kernel_stride(), (0, 0));
     }
-    plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: [1, 1, 8], stride: contiguous_stride([1, 1, 8]) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1, 4], stride: contiguous_stride([1, 1, 4]) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        AdaptivePool1dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: [1, 1, 8],
+                stride: contiguous_stride([1, 1, 8]),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1, 4],
+                stride: contiguous_stride([1, 1, 4]),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 4];
     dev_y.copy_to_host(&mut got).expect("dl");
@@ -65,20 +79,36 @@ fn adaptive_avg_pool3d_2x2x2_to_1x1x1_f32() {
     let exp_y: Vec<f32> = vec![4.5];
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("y");
-    let desc =
-        AdaptivePool3dDescriptor::new(1, 1, 2, 2, 2, 1, 1, 1, ElementKind::F32);
+    let desc = AdaptivePool3dDescriptor::new(1, 1, 2, 2, 2, 1, 1, 1, ElementKind::F32);
     let plan = AdaptiveAvgPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
-    plan.run_fw(&stream, Workspace::None, AdaptivePool3dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: [1, 1, 2, 2, 2], stride: contiguous_stride([1, 1, 2, 2, 2]) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1, 1, 1, 1], stride: contiguous_stride([1, 1, 1, 1, 1]) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        AdaptivePool3dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: [1, 1, 2, 2, 2],
+                stride: contiguous_stride([1, 1, 2, 2, 2]),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1, 1, 1, 1],
+                stride: contiguous_stride([1, 1, 1, 1, 1]),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 1];
     dev_y.copy_to_host(&mut got).expect("dl");
     let tol = 32.0 * f32::EPSILON;
-    assert!((got[0] - exp_y[0]).abs() <= (exp_y[0].abs() * tol).max(tol),
-        "adaptive_avg_pool3d: got={} want={}", got[0], exp_y[0]);
+    assert!(
+        (got[0] - exp_y[0]).abs() <= (exp_y[0].abs() * tol).max(tol),
+        "adaptive_avg_pool3d: got={} want={}",
+        got[0],
+        exp_y[0]
+    );
 }
 
 #[test]
@@ -93,16 +123,33 @@ fn adaptive_max_pool1d_8_to_4_f32() {
     let desc = AdaptivePool1dDescriptor::new(1, 1, 8, 4, ElementKind::F32);
     let plan = AdaptiveMaxPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
-    plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: [1, 1, 8], stride: contiguous_stride([1, 1, 8]) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1, 4], stride: contiguous_stride([1, 1, 4]) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        AdaptivePool1dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: [1, 1, 8],
+                stride: contiguous_stride([1, 1, 8]),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1, 4],
+                stride: contiguous_stride([1, 1, 4]),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 4];
     dev_y.copy_to_host(&mut got).expect("dl");
     for i in 0..4 {
-        assert!((got[i] - exp_y[i]).abs() <= 16.0 * f32::EPSILON,
-            "adaptive_max_pool1d @ {i}: got={} want={}", got[i], exp_y[i]);
+        assert!(
+            (got[i] - exp_y[i]).abs() <= 16.0 * f32::EPSILON,
+            "adaptive_max_pool1d @ {i}: got={} want={}",
+            got[i],
+            exp_y[i]
+        );
     }
 }
 
@@ -115,20 +162,36 @@ fn adaptive_max_pool2d_4x4_to_2x2_f32() {
     let exp_y: Vec<f32> = vec![6.0, 8.0, 14.0, 16.0];
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("y");
-    let desc =
-        AdaptivePool2dDescriptor::new(1, 1, 4, 4, 2, 2, ElementKind::F32);
+    let desc = AdaptivePool2dDescriptor::new(1, 1, 4, 4, 2, 2, ElementKind::F32);
     let plan = AdaptiveMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
-    plan.run_fw(&stream, Workspace::None, AdaptivePool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: [1, 1, 4, 4], stride: contiguous_stride([1, 1, 4, 4]) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1, 2, 2], stride: contiguous_stride([1, 1, 2, 2]) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        AdaptivePool2dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: [1, 1, 4, 4],
+                stride: contiguous_stride([1, 1, 4, 4]),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1, 2, 2],
+                stride: contiguous_stride([1, 1, 2, 2]),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 4];
     dev_y.copy_to_host(&mut got).expect("dl");
     for i in 0..4 {
-        assert!((got[i] - exp_y[i]).abs() <= 16.0 * f32::EPSILON,
-            "adaptive_max_pool2d @ {i}: got={} want={}", got[i], exp_y[i]);
+        assert!(
+            (got[i] - exp_y[i]).abs() <= 16.0 * f32::EPSILON,
+            "adaptive_max_pool2d @ {i}: got={} want={}",
+            got[i],
+            exp_y[i]
+        );
     }
 }
 
@@ -140,19 +203,35 @@ fn adaptive_max_pool3d_2x2x2_to_1x1x1_f32() {
     let exp_y: Vec<f32> = vec![8.0];
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("y");
-    let desc =
-        AdaptivePool3dDescriptor::new(1, 1, 2, 2, 2, 1, 1, 1, ElementKind::F32);
+    let desc = AdaptivePool3dDescriptor::new(1, 1, 2, 2, 2, 1, 1, 1, ElementKind::F32);
     let plan = AdaptiveMaxPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
-    plan.run_fw(&stream, Workspace::None, AdaptivePool3dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: [1, 1, 2, 2, 2], stride: contiguous_stride([1, 1, 2, 2, 2]) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1, 1, 1, 1], stride: contiguous_stride([1, 1, 1, 1, 1]) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        AdaptivePool3dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: [1, 1, 2, 2, 2],
+                stride: contiguous_stride([1, 1, 2, 2, 2]),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1, 1, 1, 1],
+                stride: contiguous_stride([1, 1, 1, 1, 1]),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 1];
     dev_y.copy_to_host(&mut got).expect("dl");
-    assert!((got[0] - exp_y[0]).abs() <= 16.0 * f32::EPSILON,
-        "adaptive_max_pool3d: got={} want={}", got[0], exp_y[0]);
+    assert!(
+        (got[0] - exp_y[0]).abs() <= 16.0 * f32::EPSILON,
+        "adaptive_max_pool3d: got={} want={}",
+        got[0],
+        exp_y[0]
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -169,22 +248,25 @@ fn adaptive_max_pool3d_2x2x2_to_1x1x1_f32() {
 #[ignore]
 fn fractional_max_pool2d_select_accepts() {
     let (_ctx, stream) = setup();
-    let desc = FractionalMaxPool2dDescriptor::new(
-        1, 1, 8, 8, 2, 2, 4, 4, ElementKind::F32,
-    );
+    let desc = FractionalMaxPool2dDescriptor::new(1, 1, 8, 8, 2, 2, 4, 4, ElementKind::F32);
     let r = FractionalMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
-    assert!(r.is_ok(), "FractionalMaxPool2d should accept well-formed select");
+    assert!(
+        r.is_ok(),
+        "FractionalMaxPool2d should accept well-formed select"
+    );
 }
 
 #[test]
 #[ignore]
 fn fractional_max_pool3d_select_accepts() {
     let (_ctx, stream) = setup();
-    let desc = FractionalMaxPool3dDescriptor::new(
-        1, 1, 4, 8, 8, 2, 2, 2, 2, 4, 4, ElementKind::F32,
-    );
+    let desc =
+        FractionalMaxPool3dDescriptor::new(1, 1, 4, 8, 8, 2, 2, 2, 2, 4, 4, ElementKind::F32);
     let r = FractionalMaxPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
-    assert!(r.is_ok(), "FractionalMaxPool3d should accept well-formed select");
+    assert!(
+        r.is_ok(),
+        "FractionalMaxPool3d should accept well-formed select"
+    );
 }
 
 // Phase 16.2 — LpPool is now implemented as a bespoke fused kernel.
@@ -196,8 +278,7 @@ fn fractional_max_pool3d_select_accepts() {
 #[ignore]
 fn lp_pool1d_select_accepts() {
     let (_ctx, stream) = setup();
-    let desc = LpPool1dDescriptor::new(1, 1, 8, 2, 2.0, ElementKind::F32)
-        .with_stride(2);
+    let desc = LpPool1dDescriptor::new(1, 1, 8, 2, 2.0, ElementKind::F32).with_stride(2);
     let r = LpPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
     assert!(r.is_ok(), "LpPool1d should accept select for p=2");
 }
@@ -206,9 +287,7 @@ fn lp_pool1d_select_accepts() {
 #[ignore]
 fn lp_pool2d_select_accepts() {
     let (_ctx, stream) = setup();
-    let desc =
-        LpPool2dDescriptor::new(1, 1, 8, 8, 2, 2, 2.0, ElementKind::F32)
-            .with_stride(2, 2);
+    let desc = LpPool2dDescriptor::new(1, 1, 8, 8, 2, 2, 2.0, ElementKind::F32).with_stride(2, 2);
     let r = LpPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
     assert!(r.is_ok(), "LpPool2d should accept select for p=2");
 }

@@ -33,13 +33,11 @@ fn e4m3_roundtrip_f16_within_dynamic_range() {
         })
         .collect();
 
-    let x: DeviceBuffer<half::f16> =
-        DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
+    let x: DeviceBuffer<half::f16> = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
     let mut x_fp8: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, N_ELEMS).expect("alloc fp8");
     let mut y: DeviceBuffer<half::f16> = DeviceBuffer::zeros(&ctx, N_ELEMS).expect("alloc y");
 
-    let mut recipe =
-        Fp8Recipe::new(&ctx, &stream, Fp8Format::E4M3, HIST_LEN).expect("recipe new");
+    let mut recipe = Fp8Recipe::new(&ctx, &stream, Fp8Format::E4M3, HIST_LEN).expect("recipe new");
 
     // Stabilize the recipe — run the cast a few times so the amax
     // history populates, then update so `scale` reflects the actual
@@ -71,7 +69,8 @@ fn e4m3_roundtrip_f16_within_dynamic_range() {
     let scale = recipe.scale_host(&stream).expect("scale");
     assert!(
         scale.is_finite() && scale > 0.0,
-        "scale must be finite and positive, got {}", scale,
+        "scale must be finite and positive, got {}",
+        scale,
     );
 
     // Per-element relative error budget for E4M3 at well-conditioned
@@ -96,7 +95,10 @@ fn e4m3_roundtrip_f16_within_dynamic_range() {
         bad_frac < 0.02,
         "E4M3 roundtrip: {}/{} cells exceeded 8% relative error (worst {:.4}); \
          scale={}, max_repr=448.0",
-        bad, N_ELEMS, worst, scale,
+        bad,
+        N_ELEMS,
+        worst,
+        scale,
     );
 }
 
@@ -135,11 +137,13 @@ fn e4m3_saturates_on_overflow() {
     for v in &got {
         assert!(
             v.is_finite(),
-            "E4M3 saturating cast produced non-finite value {}", v,
+            "E4M3 saturating cast produced non-finite value {}",
+            v,
         );
         assert!(
             v.abs() <= 448.0 + 1e-3,
-            "E4M3 saturating cast did not clamp: got {} (expected <= 448.0)", v,
+            "E4M3 saturating cast did not clamp: got {} (expected <= 448.0)",
+            v,
         );
     }
 }

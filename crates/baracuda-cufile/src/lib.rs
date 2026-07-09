@@ -18,7 +18,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_cufile_sys::{cufile, CUfileDescr_t, CUfileError_t, CUfileHandle_t, CUfileOpError};
+use baracuda_cufile_sys::{CUfileDescr_t, CUfileError_t, CUfileHandle_t, CUfileOpError, cufile};
 
 /// Error type for cuFile operations.
 pub type Error = baracuda_core::Error<CUfileOpError>;
@@ -106,11 +106,13 @@ impl Driver {
     ///
     /// # Safety
     /// `props` must point to at least `sizeof(CUfileDrvProps_t)` bytes.
-    pub unsafe fn properties(&self, props: *mut core::ffi::c_void) -> Result<()> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_driver_get_properties()?;
-        check(cu(props))
-    }}
+    pub unsafe fn properties(&self, props: *mut core::ffi::c_void) -> Result<()> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_driver_get_properties()?;
+            check(cu(props))
+        }
+    }
 }
 
 /// Human-readable string describing a [`CUfileOpError`] code.
@@ -148,17 +150,19 @@ impl FileHandle {
     /// # Safety
     ///
     /// `fd` must stay open for the lifetime of the returned handle.
-    pub unsafe fn register(fd: i32) -> Result<Self> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_handle_register()?;
-        let mut descr = CUfileDescr_t {
-            handle_fd: fd,
-            ..Default::default()
-        };
-        let mut h: CUfileHandle_t = core::ptr::null_mut();
-        check(cu(&mut h, &mut descr))?;
-        Ok(Self { handle: h })
-    }}
+    pub unsafe fn register(fd: i32) -> Result<Self> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_handle_register()?;
+            let mut descr = CUfileDescr_t {
+                handle_fd: fd,
+                ..Default::default()
+            };
+            let mut h: CUfileHandle_t = core::ptr::null_mut();
+            check(cu(&mut h, &mut descr))?;
+            Ok(Self { handle: h })
+        }
+    }
 
     /// Raw `CUfileHandle_t`. Use with care.
     #[inline]
@@ -180,18 +184,20 @@ impl FileHandle {
         size: usize,
         file_offset: i64,
         buf_offset: i64,
-    ) -> Result<usize> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_read()?;
-        let n = cu(self.handle, dev_buf, size, file_offset, buf_offset);
-        if n < 0 {
-            Err(Error::Status {
-                status: CUfileOpError(n as i32),
-            })
-        } else {
-            Ok(n as usize)
+    ) -> Result<usize> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_read()?;
+            let n = cu(self.handle, dev_buf, size, file_offset, buf_offset);
+            if n < 0 {
+                Err(Error::Status {
+                    status: CUfileOpError(n as i32),
+                })
+            } else {
+                Ok(n as usize)
+            }
         }
-    }}
+    }
 
     /// Write `size` bytes from `dev_buf + buf_offset` into `file_offset`.
     ///
@@ -204,18 +210,20 @@ impl FileHandle {
         size: usize,
         file_offset: i64,
         buf_offset: i64,
-    ) -> Result<usize> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_write()?;
-        let n = cu(self.handle, dev_buf, size, file_offset, buf_offset);
-        if n < 0 {
-            Err(Error::Status {
-                status: CUfileOpError(n as i32),
-            })
-        } else {
-            Ok(n as usize)
+    ) -> Result<usize> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_write()?;
+            let n = cu(self.handle, dev_buf, size, file_offset, buf_offset);
+            if n < 0 {
+                Err(Error::Status {
+                    status: CUfileOpError(n as i32),
+                })
+            } else {
+                Ok(n as usize)
+            }
         }
-    }}
+    }
 }
 
 impl Drop for FileHandle {
@@ -247,15 +255,17 @@ impl BufRegistration {
     ///
     /// `dev_ptr` must be a device-memory pointer with `length` live
     /// bytes. Keep it alive for the full registration lifetime.
-    pub unsafe fn register(dev_ptr: *mut c_void, length: usize, flags: i32) -> Result<Self> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_buf_register()?;
-        check(cu(dev_ptr, length, flags))?;
-        Ok(Self {
-            ptr: dev_ptr,
-            _marker: core::marker::PhantomData,
-        })
-    }}
+    pub unsafe fn register(dev_ptr: *mut c_void, length: usize, flags: i32) -> Result<Self> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_buf_register()?;
+            check(cu(dev_ptr, length, flags))?;
+            Ok(Self {
+                ptr: dev_ptr,
+                _marker: core::marker::PhantomData,
+            })
+        }
+    }
 }
 
 impl Drop for BufRegistration {
@@ -285,12 +295,14 @@ impl StreamRegistration {
     /// # Safety
     ///
     /// `stream` must be a live `cudaStream_t` on the current context.
-    pub unsafe fn register(stream: *mut c_void, flags: u32) -> Result<Self> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_stream_register()?;
-        check(cu(stream, flags))?;
-        Ok(Self { stream })
-    }}
+    pub unsafe fn register(stream: *mut c_void, flags: u32) -> Result<Self> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_stream_register()?;
+            check(cu(stream, flags))?;
+            Ok(Self { stream })
+        }
+    }
 }
 
 impl Drop for StreamRegistration {
@@ -322,19 +334,21 @@ impl FileHandle {
         buf_offset_p: *mut i64,
         bytes_read: *mut isize,
         stream: *mut c_void,
-    ) -> Result<()> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_read_async()?;
-        check(cu(
-            self.handle,
-            dev_buf,
-            size_p,
-            file_offset_p,
-            buf_offset_p,
-            bytes_read,
-            stream,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_read_async()?;
+            check(cu(
+                self.handle,
+                dev_buf,
+                size_p,
+                file_offset_p,
+                buf_offset_p,
+                bytes_read,
+                stream,
+            ))
+        }
+    }
 
     /// Queue a stream-ordered write.
     ///
@@ -350,19 +364,21 @@ impl FileHandle {
         buf_offset_p: *mut i64,
         bytes_written: *mut isize,
         stream: *mut c_void,
-    ) -> Result<()> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_write_async()?;
-        check(cu(
-            self.handle,
-            dev_buf,
-            size_p,
-            file_offset_p,
-            buf_offset_p,
-            bytes_written,
-            stream,
-        ))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_write_async()?;
+            check(cu(
+                self.handle,
+                dev_buf,
+                size_p,
+                file_offset_p,
+                buf_offset_p,
+                bytes_written,
+                stream,
+            ))
+        }
+    }
 
     /// cuFile's per-handle ref-count (non-zero = handle in use by
     /// outstanding I/O).
@@ -403,16 +419,18 @@ impl BatchIO {
     /// # Safety
     ///
     /// Every entry's pointers must stay live until reaped.
-    pub unsafe fn submit(&self, params: &mut [CUfileIOParams_t], flags: u32) -> Result<()> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_batch_io_submit()?;
-        check(cu(
-            self.handle,
-            params.len() as u32,
-            params.as_mut_ptr(),
-            flags,
-        ))
-    }}
+    pub unsafe fn submit(&self, params: &mut [CUfileIOParams_t], flags: u32) -> Result<()> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_batch_io_submit()?;
+            check(cu(
+                self.handle,
+                params.len() as u32,
+                params.as_mut_ptr(),
+                flags,
+            ))
+        }
+    }
 
     /// Wait for at least `min_nr` entries to complete. Fills
     /// `events[..nr]` with outcomes. `timeout_ns = None` blocks
@@ -421,19 +439,21 @@ impl BatchIO {
     /// # Safety
     ///
     /// `events` is written up to its capacity.
-    pub unsafe fn poll(&self, min_nr: u32, events: &mut [CUfileIOEvents_t]) -> Result<u32> { unsafe {
-        let c = cufile()?;
-        let cu = c.cu_file_batch_io_get_status()?;
-        let mut nr: u32 = events.len() as u32;
-        check(cu(
-            self.handle,
-            min_nr,
-            &mut nr,
-            events.as_mut_ptr(),
-            core::ptr::null_mut(),
-        ))?;
-        Ok(nr)
-    }}
+    pub unsafe fn poll(&self, min_nr: u32, events: &mut [CUfileIOEvents_t]) -> Result<u32> {
+        unsafe {
+            let c = cufile()?;
+            let cu = c.cu_file_batch_io_get_status()?;
+            let mut nr: u32 = events.len() as u32;
+            check(cu(
+                self.handle,
+                min_nr,
+                &mut nr,
+                events.as_mut_ptr(),
+                core::ptr::null_mut(),
+            ))?;
+            Ok(nr)
+        }
+    }
 
     /// Cancel pending entries.
     pub fn cancel(&self) -> Result<()> {

@@ -6,10 +6,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test affine_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, AffineArgs, AffineDescriptor, AffinePlan, ElementKind, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    AffineArgs, AffineDescriptor, AffinePlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -42,8 +42,8 @@ fn affine_f32_bit_exact_when_no_fma_fusion() {
         b,
         element: ElementKind::F32,
     };
-    let plan = AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -92,8 +92,8 @@ fn affine_f64_close_to_reference() {
         b,
         element: ElementKind::F64,
     };
-    let plan = AffinePlan::<f64>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        AffinePlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
         input: TensorRef {
             data: dev_x.as_slice(),

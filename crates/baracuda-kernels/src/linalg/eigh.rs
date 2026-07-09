@@ -27,11 +27,11 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cuComplex, cuDoubleComplex, cusolverDnCheevd, cusolverDnCheevd_bufferSize, cusolverDnCreate,
+    CUBLAS_FILL_MODE_LOWER, CUBLAS_FILL_MODE_UPPER, CUSOLVER_EIG_MODE_VECTOR, cuComplex,
+    cuDoubleComplex, cusolverDnCheevd, cusolverDnCheevd_bufferSize, cusolverDnCreate,
     cusolverDnDestroy, cusolverDnDsyevd, cusolverDnDsyevd_bufferSize, cusolverDnHandle_t,
     cusolverDnSetStream, cusolverDnSsyevd, cusolverDnSsyevd_bufferSize, cusolverDnZheevd,
-    cusolverDnZheevd_bufferSize, CUBLAS_FILL_MODE_LOWER, CUBLAS_FILL_MODE_UPPER,
-    CUSOLVER_EIG_MODE_VECTOR,
+    cusolverDnZheevd_bufferSize,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FillMode, KernelSku,
@@ -119,11 +119,7 @@ pub struct EighPlan<T: Element> {
 
 impl<T: Element> EighPlan<T> {
     /// Pick a kernel + validate the descriptor.
-    pub fn select(
-        _stream: &Stream,
-        desc: &EighDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &EighDescriptor, _pref: PlanPreference) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::EighPlan: descriptor.element != T::KIND",

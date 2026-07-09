@@ -4,10 +4,10 @@
 //!
 //! `#[ignore]`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, QuantizePerGroupArgs,
-    QuantizePerGroupDescriptor, QuantizePerGroupPlan, TensorMut, TensorRef, Workspace, S8,
+    ElementKind, PlanPreference, QuantizePerGroupArgs, QuantizePerGroupDescriptor,
+    QuantizePerGroupPlan, S8, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -103,6 +103,10 @@ fn quantize_per_group_f32_s8_basic() {
     let mut got = vec![S8(0); total];
     dev_q.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.0, *e, "quant mismatch at idx {i}: got {} expected {}", g.0, e);
+        assert_eq!(
+            g.0, *e,
+            "quant mismatch at idx {i}: got {} expected {}",
+            g.0, e
+        );
     }
 }

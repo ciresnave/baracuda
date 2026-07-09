@@ -15,10 +15,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Complex32, Complex64, EigArgs, EigDescriptor, EigPlan, ElementKind,
-    PlanPreference, TensorMut, Workspace,
+    Complex32, Complex64, EigArgs, EigDescriptor, EigPlan, ElementKind, PlanPreference, TensorMut,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -125,7 +125,10 @@ fn eig_f32_pm_i() {
         );
     }
     let signs_opposite = (pairs[0].1 * pairs[1].1) < 0.0;
-    assert!(signs_opposite, "eig f32: wi pair {pairs:?} should have opposite signs");
+    assert!(
+        signs_opposite,
+        "eig f32: wi pair {pairs:?} should have opposite signs"
+    );
 }
 
 #[test]
@@ -193,7 +196,10 @@ fn eig_f64_pm_i() {
         );
     }
     let signs_opposite = (pairs[0].1 * pairs[1].1) < 0.0;
-    assert!(signs_opposite, "eig f64: wi pair {pairs:?} should have opposite signs");
+    assert!(
+        signs_opposite,
+        "eig f64: wi pair {pairs:?} should have opposite signs"
+    );
 }
 
 #[test]

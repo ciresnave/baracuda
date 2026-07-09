@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `KlDivLossBackwardPlan`. BW × 4 dtypes × Mean.
 //! `dinput[i] = -target[i] · dy / N`.
 
-use baracuda_driver::{init, DeviceBuffer};
+use baracuda_driver::{DeviceBuffer, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, KlDivLossBackwardArgs, KlDivLossBackwardDescriptor,
-    KlDivLossBackwardPlan, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, KlDivLossBackwardArgs, KlDivLossBackwardDescriptor, KlDivLossBackwardPlan,
+    LossReduction, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -37,14 +37,21 @@ fn loss_kl_div_backward_f32_mean() {
         element: ElementKind::F32,
     };
     let plan =
-        KlDivLossBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-            .unwrap();
+        KlDivLossBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::None,
         KlDivLossBackwardArgs {
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape,
@@ -83,14 +90,21 @@ fn loss_kl_div_backward_f64_mean() {
         element: ElementKind::F64,
     };
     let plan =
-        KlDivLossBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-            .unwrap();
+        KlDivLossBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::None,
         KlDivLossBackwardArgs {
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape,
@@ -130,14 +144,21 @@ fn loss_kl_div_backward_f16_mean() {
         element: ElementKind::F16,
     };
     let plan =
-        KlDivLossBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
-            .unwrap();
+        KlDivLossBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::None,
         KlDivLossBackwardArgs {
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape,
@@ -177,15 +198,22 @@ fn loss_kl_div_backward_bf16_mean() {
         reduction: LossReduction::Mean,
         element: ElementKind::Bf16,
     };
-    let plan =
-        KlDivLossBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
-            .unwrap();
+    let plan = KlDivLossBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
+        .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         KlDivLossBackwardArgs {
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dinput: TensorMut {
                 data: dev_di.as_slice_mut(),
                 shape,

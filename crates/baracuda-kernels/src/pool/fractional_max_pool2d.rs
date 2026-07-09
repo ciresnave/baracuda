@@ -268,40 +268,70 @@ impl<T: Element> FractionalMaxPool2dPlan<T> {
         let status = unsafe {
             match T::KIND {
                 ElementKind::F32 => baracuda_kernels_fractional_max_pool_2d_fw_f32_run(
-                    x, y, indices, rs,
-                    self.desc.batch, self.desc.channels,
-                    self.desc.h_in, self.desc.w_in,
-                    self.desc.h_out, self.desc.w_out,
-                    self.desc.window_h, self.desc.window_w,
+                    x,
+                    y,
+                    indices,
+                    rs,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.h_out,
+                    self.desc.w_out,
+                    self.desc.window_h,
+                    self.desc.window_w,
                     stream_ptr,
                 ),
                 ElementKind::F64 => baracuda_kernels_fractional_max_pool_2d_fw_f64_run(
-                    x, y, indices, rs,
-                    self.desc.batch, self.desc.channels,
-                    self.desc.h_in, self.desc.w_in,
-                    self.desc.h_out, self.desc.w_out,
-                    self.desc.window_h, self.desc.window_w,
+                    x,
+                    y,
+                    indices,
+                    rs,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.h_out,
+                    self.desc.w_out,
+                    self.desc.window_h,
+                    self.desc.window_w,
                     stream_ptr,
                 ),
                 ElementKind::F16 => baracuda_kernels_fractional_max_pool_2d_fw_f16_run(
-                    x, y, indices, rs,
-                    self.desc.batch, self.desc.channels,
-                    self.desc.h_in, self.desc.w_in,
-                    self.desc.h_out, self.desc.w_out,
-                    self.desc.window_h, self.desc.window_w,
+                    x,
+                    y,
+                    indices,
+                    rs,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.h_out,
+                    self.desc.w_out,
+                    self.desc.window_h,
+                    self.desc.window_w,
                     stream_ptr,
                 ),
                 ElementKind::Bf16 => baracuda_kernels_fractional_max_pool_2d_fw_bf16_run(
-                    x, y, indices, rs,
-                    self.desc.batch, self.desc.channels,
-                    self.desc.h_in, self.desc.w_in,
-                    self.desc.h_out, self.desc.w_out,
-                    self.desc.window_h, self.desc.window_w,
+                    x,
+                    y,
+                    indices,
+                    rs,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.h_out,
+                    self.desc.w_out,
+                    self.desc.window_h,
+                    self.desc.window_w,
                     stream_ptr,
                 ),
-                _ => return Err(Error::Unsupported(
-                    "baracuda-kernels::FractionalMaxPool2dPlan: dtype not in {f16, bf16, f32, f64}",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "baracuda-kernels::FractionalMaxPool2dPlan: dtype not in {f16, bf16, f32, f64}",
+                    ));
+                }
             }
         };
         ffi_status(status)
@@ -322,36 +352,58 @@ impl<T: Element> FractionalMaxPool2dPlan<T> {
         let status = unsafe {
             match T::KIND {
                 ElementKind::F32 => baracuda_kernels_fractional_max_pool_2d_bw_f32_run(
-                    dy, indices, dx,
-                    self.desc.batch, self.desc.channels,
-                    self.desc.h_in, self.desc.w_in,
-                    self.desc.h_out, self.desc.w_out,
+                    dy,
+                    indices,
+                    dx,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.h_out,
+                    self.desc.w_out,
                     stream_ptr,
                 ),
                 ElementKind::F64 => baracuda_kernels_fractional_max_pool_2d_bw_f64_run(
-                    dy, indices, dx,
-                    self.desc.batch, self.desc.channels,
-                    self.desc.h_in, self.desc.w_in,
-                    self.desc.h_out, self.desc.w_out,
+                    dy,
+                    indices,
+                    dx,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.h_out,
+                    self.desc.w_out,
                     stream_ptr,
                 ),
                 ElementKind::F16 => baracuda_kernels_fractional_max_pool_2d_bw_f16_run(
-                    dy, indices, dx,
-                    self.desc.batch, self.desc.channels,
-                    self.desc.h_in, self.desc.w_in,
-                    self.desc.h_out, self.desc.w_out,
+                    dy,
+                    indices,
+                    dx,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.h_out,
+                    self.desc.w_out,
                     stream_ptr,
                 ),
                 ElementKind::Bf16 => baracuda_kernels_fractional_max_pool_2d_bw_bf16_run(
-                    dy, indices, dx,
-                    self.desc.batch, self.desc.channels,
-                    self.desc.h_in, self.desc.w_in,
-                    self.desc.h_out, self.desc.w_out,
+                    dy,
+                    indices,
+                    dx,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.h_out,
+                    self.desc.w_out,
                     stream_ptr,
                 ),
-                _ => return Err(Error::Unsupported(
-                    "baracuda-kernels::FractionalMaxPool2dPlan: dtype not in {f16, bf16, f32, f64}",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "baracuda-kernels::FractionalMaxPool2dPlan: dtype not in {f16, bf16, f32, f64}",
+                    ));
+                }
             }
         };
         ffi_status(status)
@@ -362,9 +414,7 @@ impl<T: Element> FractionalMaxPool2dPlan<T> {
 // Shared helpers (used by the 3-D sibling too).
 // ============================================================================
 
-pub(crate) fn validate_descriptor<T: Element>(
-    desc: &FractionalMaxPool2dDescriptor,
-) -> Result<()> {
+pub(crate) fn validate_descriptor<T: Element>(desc: &FractionalMaxPool2dDescriptor) -> Result<()> {
     if desc.element != T::KIND {
         return Err(Error::Unsupported(
             "baracuda-kernels::FractionalMaxPool2dPlan: descriptor.element != T::KIND",

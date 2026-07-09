@@ -227,27 +227,47 @@ impl BinGemmPlan {
         let status = match self.sku.layout {
             LayoutSku::Rcr => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_bin_rcr_sm89_run(
-                    m, n, k,
-                    a_ptr, lda, b_ptr, ldb, d_ptr, ldd,
-                    core::ptr::null_mut(), 0,
+                    m,
+                    n,
+                    k,
+                    a_ptr,
+                    lda,
+                    b_ptr,
+                    ldb,
+                    d_ptr,
+                    ldd,
+                    core::ptr::null_mut(),
+                    0,
                     stream_ptr,
                 )
             },
             LayoutSku::Rrr => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_bin_rrr_sm89_run(
-                    m, n, k,
-                    a_ptr, lda, b_ptr, ldb, d_ptr, ldd,
-                    core::ptr::null_mut(), 0,
+                    m,
+                    n,
+                    k,
+                    a_ptr,
+                    lda,
+                    b_ptr,
+                    ldb,
+                    d_ptr,
+                    ldd,
+                    core::ptr::null_mut(),
+                    0,
                     stream_ptr,
                 )
             },
         };
 
         #[cfg(feature = "sm89")]
-        { map_status(status) }
+        {
+            map_status(status)
+        }
         #[cfg(not(feature = "sm89"))]
         #[allow(unreachable_code)]
-        { unreachable!("returned earlier under #[cfg(not(feature = \"sm89\"))]") }
+        {
+            unreachable!("returned earlier under #[cfg(not(feature = \"sm89\"))]")
+        }
     }
 }
 

@@ -53,25 +53,19 @@ pub use grid_sample::{GridSampleArgs, GridSampleDescriptor, GridSamplePlan};
 pub use grid_sample_backward::{
     GridSampleBackwardArgs, GridSampleBackwardDescriptor, GridSampleBackwardPlan,
 };
-pub use interpolate::{
-    InterpolateArgs, InterpolateDescriptor, InterpolateMode, InterpolatePlan,
-};
+pub use interpolate::{InterpolateArgs, InterpolateDescriptor, InterpolateMode, InterpolatePlan};
 pub use interpolate_backward::{
     InterpolateBackwardArgs, InterpolateBackwardDescriptor, InterpolateBackwardPlan,
 };
 pub use nms::{NmsArgs, NmsDescriptor, NmsPlan};
 pub use pixel_shuffle::{PixelShuffleArgs, PixelShuffleDescriptor, PixelShufflePlan};
-pub use pixel_unshuffle::{
-    PixelUnshuffleArgs, PixelUnshuffleDescriptor, PixelUnshufflePlan,
-};
+pub use pixel_unshuffle::{PixelUnshuffleArgs, PixelUnshuffleDescriptor, PixelUnshufflePlan};
 pub use roi_align::{RoiAlignArgs, RoiAlignDescriptor, RoiAlignPlan};
 pub use roi_align_backward::{
     RoiAlignBackwardArgs, RoiAlignBackwardDescriptor, RoiAlignBackwardPlan,
 };
 pub use roi_pool::{RoiPoolArgs, RoiPoolDescriptor, RoiPoolPlan};
-pub use roi_pool_backward::{
-    RoiPoolBackwardArgs, RoiPoolBackwardDescriptor, RoiPoolBackwardPlan,
-};
+pub use roi_pool_backward::{RoiPoolBackwardArgs, RoiPoolBackwardDescriptor, RoiPoolBackwardPlan};
 
 /// Map an `i32` status from the FFI launcher to a typed `Result`.
 /// Shared across the image family (mirrors the convention in

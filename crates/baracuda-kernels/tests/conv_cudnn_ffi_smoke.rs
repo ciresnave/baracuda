@@ -19,11 +19,11 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Conv1dArgs, Conv1dDescriptor, Conv1dPlan, Conv2dArgs, Conv2dBwArgs,
-    Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan, ConvTranspose2dArgs, ConvTranspose2dDescriptor,
-    ConvTranspose2dPlan, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    Conv1dArgs, Conv1dDescriptor, Conv1dPlan, Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor,
+    Conv2dDwArgs, Conv2dPlan, ConvTranspose2dArgs, ConvTranspose2dDescriptor, ConvTranspose2dPlan,
+    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -123,8 +123,7 @@ fn rust_plan_conv2d_fw_f32(
     let desc = d.to_descriptor(ElementKind::F32);
     let plan = Conv2dPlan::<f32>::select(stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan.query_fw_workspace_size(stream).expect("ws");
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(ctx, ws_bytes.max(1)).expect("alloc ws");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes.max(1)).expect("alloc ws");
     let x_shape = [d.n, d.c_in, d.h_in, d.w_in];
     let w_shape = [d.c_out, d.c_in / d.groups, d.h_filt, d.w_filt];
     let y_shape = [d.n, d.c_out, h_out, w_out];
@@ -176,17 +175,27 @@ fn ffi_conv2d_fw_f32(
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, y_numel).expect("alloc y");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_conv_2d_fw_f32_run(
-            d.n, d.c_in, d.c_out,
-            d.h_in, d.w_in, h_out, w_out,
-            d.h_filt, d.w_filt,
-            d.stride_h, d.stride_w,
-            d.pad_h, d.pad_w,
-            d.dilation_h, d.dilation_w,
+            d.n,
+            d.c_in,
+            d.c_out,
+            d.h_in,
+            d.w_in,
+            h_out,
+            w_out,
+            d.h_filt,
+            d.w_filt,
+            d.stride_h,
+            d.stride_w,
+            d.pad_h,
+            d.pad_w,
+            d.dilation_h,
+            d.dilation_w,
             d.groups,
             dev_x.as_slice().as_raw().0 as *const c_void,
             dev_w.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -228,8 +237,7 @@ fn ffi_conv2d_f32_bw_data_matches_plan() {
     // --- Rust plan reference ---
     let dev_w = DeviceBuffer::from_slice(&ctx, &w).expect("up w");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &dy).expect("up dy");
-    let mut dev_dx: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
+    let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
     let desc = d.to_descriptor(ElementKind::F32);
     let plan = Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan.query_bw_data_workspace_size(&stream).expect("ws");
@@ -272,21 +280,30 @@ fn ffi_conv2d_f32_bw_data_matches_plan() {
     // --- FFI under test ---
     let dev_w2 = DeviceBuffer::from_slice(&ctx, &w).expect("up w");
     let dev_dy2 = DeviceBuffer::from_slice(&ctx, &dy).expect("up dy");
-    let mut dev_dx2: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
+    let mut dev_dx2: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_conv_2d_bw_data_f32_run(
-            d.n, d.c_in, d.c_out,
-            d.h_in, d.w_in, h_out, w_out,
-            d.h_filt, d.w_filt,
-            d.stride_h, d.stride_w,
-            d.pad_h, d.pad_w,
-            d.dilation_h, d.dilation_w,
+            d.n,
+            d.c_in,
+            d.c_out,
+            d.h_in,
+            d.w_in,
+            h_out,
+            w_out,
+            d.h_filt,
+            d.w_filt,
+            d.stride_h,
+            d.stride_w,
+            d.pad_h,
+            d.pad_w,
+            d.dilation_h,
+            d.dilation_w,
             d.groups,
             dev_w2.as_slice().as_raw().0 as *const c_void,
             dev_dy2.as_slice().as_raw().0 as *const c_void,
             dev_dx2.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -296,7 +313,10 @@ fn ffi_conv2d_f32_bw_data_matches_plan() {
     dev_dx2.copy_to_host(&mut got).expect("dl dx");
 
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g, e, "FFI vs plan BW data mismatch @ {i}: ffi={g}, plan={e}");
+        assert_eq!(
+            g, e,
+            "FFI vs plan BW data mismatch @ {i}: ffi={g}, plan={e}"
+        );
     }
 }
 
@@ -312,8 +332,7 @@ fn ffi_conv2d_f32_bw_filter_matches_plan() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &x).expect("up x");
     let dev_dy = DeviceBuffer::from_slice(&ctx, &dy).expect("up dy");
-    let mut dev_dw: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, dw_numel).expect("alloc dw");
+    let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dw_numel).expect("alloc dw");
     let desc = d.to_descriptor(ElementKind::F32);
     let plan = Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan.query_bw_filter_workspace_size(&stream).expect("ws");
@@ -355,21 +374,30 @@ fn ffi_conv2d_f32_bw_filter_matches_plan() {
 
     let dev_x2 = DeviceBuffer::from_slice(&ctx, &x).expect("up x");
     let dev_dy2 = DeviceBuffer::from_slice(&ctx, &dy).expect("up dy");
-    let mut dev_dw2: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, dw_numel).expect("alloc dw");
+    let mut dev_dw2: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dw_numel).expect("alloc dw");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_conv_2d_bw_filter_f32_run(
-            d.n, d.c_in, d.c_out,
-            d.h_in, d.w_in, h_out, w_out,
-            d.h_filt, d.w_filt,
-            d.stride_h, d.stride_w,
-            d.pad_h, d.pad_w,
-            d.dilation_h, d.dilation_w,
+            d.n,
+            d.c_in,
+            d.c_out,
+            d.h_in,
+            d.w_in,
+            h_out,
+            w_out,
+            d.h_filt,
+            d.w_filt,
+            d.stride_h,
+            d.stride_w,
+            d.pad_h,
+            d.pad_w,
+            d.dilation_h,
+            d.dilation_w,
             d.groups,
             dev_x2.as_slice().as_raw().0 as *const c_void,
             dev_dy2.as_slice().as_raw().0 as *const c_void,
             dev_dw2.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -379,7 +407,10 @@ fn ffi_conv2d_f32_bw_filter_matches_plan() {
     dev_dw2.copy_to_host(&mut got).expect("dl dw");
 
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g, e, "FFI vs plan BW filter mismatch @ {i}: ffi={g}, plan={e}");
+        assert_eq!(
+            g, e,
+            "FFI vs plan BW filter mismatch @ {i}: ffi={g}, plan={e}"
+        );
     }
 }
 
@@ -400,7 +431,10 @@ fn ffi_conv2d_f32_depthwise_fw_matches_plan() {
     let expected = rust_plan_conv2d_fw_f32(&ctx, &stream, &d, &x, &w);
     let got = ffi_conv2d_fw_f32(&ctx, &stream, &d, &x, &w);
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g, e, "FFI vs plan depthwise FW mismatch @ {i}: ffi={g}, plan={e}");
+        assert_eq!(
+            g, e,
+            "FFI vs plan depthwise FW mismatch @ {i}: ffi={g}, plan={e}"
+        );
     }
 }
 
@@ -446,8 +480,7 @@ fn ffi_conv1d_f16_fw_matches_plan() {
         .with_stride(stride_l)
         .with_dilation(dilation_l)
         .with_groups(groups);
-    let plan =
-        Conv1dPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    let plan = Conv1dPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan.query_fw_workspace_size(&stream).expect("ws");
     let mut dev_ws: DeviceBuffer<u8> =
         DeviceBuffer::zeros(&ctx, ws_bytes.max(1)).expect("alloc ws");
@@ -491,15 +524,21 @@ fn ffi_conv1d_f16_fw_matches_plan() {
     let mut dev_y2: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, y_numel).expect("alloc y");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_conv_1d_fw_f16_run(
-            n, c_in, c_out,
-            l_in, l_out,
+            n,
+            c_in,
+            c_out,
+            l_in,
+            l_out,
             l_filt,
-            stride_l, pad_l, dilation_l,
+            stride_l,
+            pad_l,
+            dilation_l,
             groups,
             dev_x2.as_slice().as_raw().0 as *const c_void,
             dev_w2.as_slice().as_raw().0 as *const c_void,
             dev_y2.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -573,8 +612,8 @@ fn ffi_conv_transpose_2d_f32_fw_matches_plan() {
     .with_dilation(dilation_h, dilation_w)
     .with_output_padding(output_pad_h, output_pad_w)
     .with_groups(groups);
-    let plan = ConvTranspose2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ConvTranspose2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan.query_fw_workspace_size(&stream).expect("ws");
     let mut dev_ws: DeviceBuffer<u8> =
         DeviceBuffer::zeros(&ctx, ws_bytes.max(1)).expect("alloc ws");
@@ -618,18 +657,29 @@ fn ffi_conv_transpose_2d_f32_fw_matches_plan() {
     let mut dev_y2: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, y_numel).expect("alloc y");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_conv_transpose_2d_fw_f32_run(
-            n, c_in, c_out,
-            h_in, w_in, h_out, w_out,
-            h_filt, w_filt,
-            stride_h, stride_w,
-            pad_h, pad_w,
-            dilation_h, dilation_w,
-            output_pad_h, output_pad_w,
+            n,
+            c_in,
+            c_out,
+            h_in,
+            w_in,
+            h_out,
+            w_out,
+            h_filt,
+            w_filt,
+            stride_h,
+            stride_w,
+            pad_h,
+            pad_w,
+            dilation_h,
+            dilation_w,
+            output_pad_h,
+            output_pad_w,
             groups,
             dev_x2.as_slice().as_raw().0 as *const c_void,
             dev_w2.as_slice().as_raw().0 as *const c_void,
             dev_y2.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -639,6 +689,9 @@ fn ffi_conv_transpose_2d_f32_fw_matches_plan() {
     dev_y2.copy_to_host(&mut got).expect("dl y");
 
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g, e, "FFI vs plan ConvTranspose2d FW mismatch @ {i}: ffi={g}, plan={e}");
+        assert_eq!(
+            g, e,
+            "FFI vs plan ConvTranspose2d FW mismatch @ {i}: ffi={g}, plan={e}"
+        );
     }
 }

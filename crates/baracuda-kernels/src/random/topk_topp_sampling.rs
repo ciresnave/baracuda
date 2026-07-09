@@ -41,14 +41,12 @@
 //!   sample was accepted; 0 means rejection sampling timed out and
 //!   the caller should re-draw with a fresh seed.
 
-
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ElementKind, KernelSku, MathPrecision, OpCategory, PlanPreference,
     PrecisionGuarantee, RandomKind, TensorMut, TensorRef, Workspace,
 };
-
 
 /// Which sort-free sampler to run.
 ///

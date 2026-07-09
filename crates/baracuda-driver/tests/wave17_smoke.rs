@@ -1,7 +1,7 @@
 //! GPU-gated integration test for Wave-17 Driver-API additions:
 //! green contexts (CUDA 12.4+).
 
-use baracuda_driver::green::{device_sm_resource, sm_resource_split_by_count, GreenContext};
+use baracuda_driver::green::{GreenContext, device_sm_resource, sm_resource_split_by_count};
 use baracuda_driver::{Context, Device};
 
 #[test]

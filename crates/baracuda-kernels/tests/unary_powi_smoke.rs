@@ -15,11 +15,11 @@
 //!
 //! `#[ignore]` by default; run with `--ignored` on a CUDA host.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryKind,
-    UnaryParamArgs, UnaryParamBackwardArgs, UnaryParamBackwardDescriptor,
-    UnaryParamBackwardPlan, UnaryParamDescriptor, UnaryParamPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryKind, UnaryParamArgs,
+    UnaryParamBackwardArgs, UnaryParamBackwardDescriptor, UnaryParamBackwardPlan,
+    UnaryParamDescriptor, UnaryParamPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -60,8 +60,16 @@ fn run_powi_f32(shape: [i32; 3], n: i32) {
     let plan = UnaryParamPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f32, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -74,7 +82,9 @@ fn run_powi_f32(shape: [i32; 3], n: i32) {
     for (i, (g, e)) in got.iter().zip(host_expected.iter()).enumerate() {
         let denom = e.abs().max(1e-6);
         let rel = (g - e).abs() / denom;
-        if rel > max_err { max_err = rel; }
+        if rel > max_err {
+            max_err = rel;
+        }
         assert!(
             rel < 1e-5 || (g.is_nan() && e.is_nan()),
             "powi(n={n}) f32 @ {i}: x={}, got {g}, exp {e}, rel {rel}",
@@ -85,23 +95,33 @@ fn run_powi_f32(shape: [i32; 3], n: i32) {
 
 #[test]
 #[ignore]
-fn powi_f32_n0() { run_powi_f32([2, 16, 32], 0); }
+fn powi_f32_n0() {
+    run_powi_f32([2, 16, 32], 0);
+}
 
 #[test]
 #[ignore]
-fn powi_f32_n1() { run_powi_f32([2, 16, 32], 1); }
+fn powi_f32_n1() {
+    run_powi_f32([2, 16, 32], 1);
+}
 
 #[test]
 #[ignore]
-fn powi_f32_n2() { run_powi_f32([2, 16, 32], 2); }
+fn powi_f32_n2() {
+    run_powi_f32([2, 16, 32], 2);
+}
 
 #[test]
 #[ignore]
-fn powi_f32_n3() { run_powi_f32([2, 16, 32], 3); }
+fn powi_f32_n3() {
+    run_powi_f32([2, 16, 32], 3);
+}
 
 #[test]
 #[ignore]
-fn powi_f32_n_neg1() { run_powi_f32([2, 16, 32], -1); }
+fn powi_f32_n_neg1() {
+    run_powi_f32([2, 16, 32], -1);
+}
 
 #[test]
 #[ignore]
@@ -109,7 +129,10 @@ fn powi_f16_n2() {
     let (ctx, stream) = setup();
     let shape = [2i32, 16, 32];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<f16> = make_x_f32(numel).iter().map(|&v| f16::from_f32(v)).collect();
+    let host_x: Vec<f16> = make_x_f32(numel)
+        .iter()
+        .map(|&v| f16::from_f32(v))
+        .collect();
     // Host ref: do the math at f32, then round to f16 — matches the
     // kernel's f16→f32→pow→f16 convention.
     let host_expected: Vec<f16> = host_x
@@ -128,8 +151,16 @@ fn powi_f16_n2() {
     let plan = UnaryParamPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -144,7 +175,11 @@ fn powi_f16_n2() {
         assert!(
             diff <= 1 || (g.to_f32().is_nan() && e.to_f32().is_nan()),
             "powi(n=2) f16 @ {i}: x={}, got {} (bits {:#x}), exp {} (bits {:#x})",
-            host_x[i].to_f32(), g.to_f32(), g.to_bits(), e.to_f32(), e.to_bits()
+            host_x[i].to_f32(),
+            g.to_f32(),
+            g.to_bits(),
+            e.to_f32(),
+            e.to_bits()
         );
     }
 }
@@ -155,7 +190,10 @@ fn powi_bf16_n2() {
     let (ctx, stream) = setup();
     let shape = [2i32, 16, 32];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<bf16> = make_x_f32(numel).iter().map(|&v| bf16::from_f32(v)).collect();
+    let host_x: Vec<bf16> = make_x_f32(numel)
+        .iter()
+        .map(|&v| bf16::from_f32(v))
+        .collect();
     let host_expected: Vec<bf16> = host_x
         .iter()
         .map(|x| bf16::from_f32(x.to_f32().powi(2)))
@@ -172,8 +210,16 @@ fn powi_bf16_n2() {
     let plan = UnaryParamPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<bf16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -186,7 +232,11 @@ fn powi_bf16_n2() {
         assert!(
             diff <= 1 || (g.to_f32().is_nan() && e.to_f32().is_nan()),
             "powi(n=2) bf16 @ {i}: x={}, got {} (bits {:#x}), exp {} (bits {:#x})",
-            host_x[i].to_f32(), g.to_f32(), g.to_bits(), e.to_f32(), e.to_bits()
+            host_x[i].to_f32(),
+            g.to_f32(),
+            g.to_bits(),
+            e.to_f32(),
+            e.to_bits()
         );
     }
 }
@@ -220,8 +270,16 @@ fn powi_f64_n2() {
     let plan = UnaryParamPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f64, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -232,8 +290,10 @@ fn powi_f64_n2() {
         // bit-exact against host `x.powi(2)` (which also reduces to
         // `x * x` in libm).
         assert_eq!(
-            g.to_bits(), e.to_bits(),
-            "powi(n=2) f64 @ {i}: x={}, got {g}, exp {e}", host_x[i]
+            g.to_bits(),
+            e.to_bits(),
+            "powi(n=2) f64 @ {i}: x={}, got {g}, exp {e}",
+            host_x[i]
         );
     }
 }
@@ -261,9 +321,21 @@ fn run_powi_bw_f32(n: i32, expect: impl Fn(f32, f32) -> f32) {
     let plan = UnaryParamBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -274,9 +346,13 @@ fn run_powi_bw_f32(n: i32, expect: impl Fn(f32, f32) -> f32) {
         if n == 0 || n == 1 {
             // Special-cased branches: bit-exact (either 0 or pass-through dy).
             assert_eq!(
-                got[i].to_bits(), exp.to_bits(),
+                got[i].to_bits(),
+                exp.to_bits(),
                 "powi-bw(n={n}) f32 @ {i}: x={}, dy={}, got {}, exp {}",
-                host_x[i], host_dy[i], got[i], exp
+                host_x[i],
+                host_dy[i],
+                got[i],
+                exp
             );
         } else {
             let denom = exp.abs().max(1e-6);
@@ -284,7 +360,10 @@ fn run_powi_bw_f32(n: i32, expect: impl Fn(f32, f32) -> f32) {
             assert!(
                 rel < 1e-5,
                 "powi-bw(n={n}) f32 @ {i}: x={}, dy={}, got {}, exp {}, rel {rel}",
-                host_x[i], host_dy[i], got[i], exp
+                host_x[i],
+                host_dy[i],
+                got[i],
+                exp
             );
         }
     }

@@ -7,10 +7,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, OneHotArgs, OneHotDescriptor, OneHotPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, OneHotArgs, OneHotDescriptor, OneHotPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -45,8 +45,8 @@ fn one_hot_f32_i64idx_2d() {
         num_classes,
         element: ElementKind::F32,
     };
-    let plan = OneHotPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        OneHotPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     // Explicit `I = i64` opts into the new path.
     let args = OneHotArgs::<f32, 2, i64> {
         src: TensorRef {
@@ -66,7 +66,11 @@ fn one_hot_f32_i64idx_2d() {
     let mut got = vec![0f32; out_numel];
     dev_out.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "one_hot f32 i64idx mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "one_hot f32 i64idx mismatch @ {i}"
+        );
     }
 }
 
@@ -94,8 +98,8 @@ fn one_hot_i32_i64idx_2d_with_oob() {
         num_classes,
         element: ElementKind::I32,
     };
-    let plan = OneHotPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        OneHotPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<i32, 2, i64> {
         src: TensorRef {
             data: dev_src.as_slice(),
@@ -141,8 +145,8 @@ fn one_hot_f32_i32idx_default_path() {
         num_classes,
         element: ElementKind::F32,
     };
-    let plan = OneHotPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        OneHotPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     // No explicit `I` — relies on the `I = i32` default. This is what
     // every pre-Phase-15.2 caller looks like.
     let args = OneHotArgs::<f32, 2> {
@@ -163,6 +167,10 @@ fn one_hot_f32_i32idx_default_path() {
     let mut got = vec![0f32; out_numel];
     dev_out.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "one_hot f32 default-i32 path mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "one_hot f32 default-i32 path mismatch @ {i}"
+        );
     }
 }

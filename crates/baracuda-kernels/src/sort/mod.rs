@@ -50,8 +50,10 @@ pub use kthvalue::{KthvalueArgs, KthvalueDescriptor, KthvaluePlan};
 pub use kthvalue_backward::{
     KthvalueBackwardArgs, KthvalueBackwardDescriptor, KthvalueBackwardPlan,
 };
-pub use msort::{MsortArgs, MsortBackwardArgs, MsortBackwardDescriptor, MsortBackwardPlan,
-    MsortDescriptor, MsortPlan};
+pub use msort::{
+    MsortArgs, MsortBackwardArgs, MsortBackwardDescriptor, MsortBackwardPlan, MsortDescriptor,
+    MsortPlan,
+};
 pub use searchsorted::{SearchsortedArgs, SearchsortedDescriptor, SearchsortedPlan};
 pub use sort::{SortArgs, SortDescriptor, SortPlan};
 pub use sort_backward::{SortBackwardArgs, SortBackwardDescriptor, SortBackwardPlan};

@@ -322,10 +322,7 @@ impl<T: AwqActivation> Int4AwqGemmPlan<T> {
 
         let need = self.workspace_size();
         let (ws_ptr, ws_bytes) = match workspace {
-            Workspace::Borrowed(buf) => (
-                buf.as_raw().0 as *mut c_void,
-                buf.len(),
-            ),
+            Workspace::Borrowed(buf) => (buf.as_raw().0 as *mut c_void, buf.len()),
             Workspace::None => (core::ptr::null_mut(), 0usize),
         };
         if ws_bytes < need {
@@ -406,8 +403,19 @@ unsafe fn dispatch_awq<T: AwqActivation>(
     match T::KIND {
         ElementKind::F16 => unsafe {
             baracuda_kernels_sys::baracuda_kernels_int4_awq_gemm_f16_run(
-                m, ic, oc, group_size, split_k_iters,
-                a, w, s, z, out, workspace, workspace_bytes, stream,
+                m,
+                ic,
+                oc,
+                group_size,
+                split_k_iters,
+                a,
+                w,
+                s,
+                z,
+                out,
+                workspace,
+                workspace_bytes,
+                stream,
             )
         },
         _ => 3,
@@ -420,9 +428,19 @@ unsafe fn dispatch_awq<T: AwqActivation>(
 // signature: call sites use turbofish (`dispatch_awq::<T>`).
 #[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_awq<T: AwqActivation>(
-    _: i32, _: i32, _: i32, _: i32, _: i32,
-    _: *const c_void, _: *const c_void, _: *const c_void, _: *const c_void,
-    _: *mut c_void, _: *mut c_void, _: usize, _: *mut c_void,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: *const c_void,
+    _: *const c_void,
+    _: *const c_void,
+    _: *const c_void,
+    _: *mut c_void,
+    _: *mut c_void,
+    _: usize,
+    _: *mut c_void,
 ) -> i32 {
     // awq cargo feature is off; FFI symbol absent.
     3

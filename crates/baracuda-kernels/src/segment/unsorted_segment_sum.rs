@@ -21,7 +21,7 @@ use baracuda_kernels_types::{
 };
 
 use super::map_status;
-use super::segment_sum::{validate_desc, SegDescView};
+use super::segment_sum::{SegDescView, validate_desc};
 
 /// Descriptor for an `unsorted_segment_sum` op.
 #[derive(Copy, Clone, Debug)]

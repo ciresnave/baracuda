@@ -10,11 +10,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SdpaArgs, SdpaBackwardArgs,
-    SdpaBackwardDescriptor, SdpaBackwardPlan, SdpaDescriptor, SdpaPlan, TensorMut, TensorRef,
-    Workspace,
+    ElementKind, PlanPreference, SdpaArgs, SdpaBackwardArgs, SdpaBackwardDescriptor,
+    SdpaBackwardPlan, SdpaDescriptor, SdpaPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -554,8 +553,7 @@ fn sdpa_backward_f16_basic() {
     let v_f64 = gen_v_f64();
     let dy_f64 = gen_dy_f64();
     let scale = default_scale();
-    let (dq_ref, dk_ref, dv_ref) =
-        host_sdpa_bw_f64(&q_f64, &k_f64, &v_f64, &dy_f64, scale as f64);
+    let (dq_ref, dk_ref, dv_ref) = host_sdpa_bw_f64(&q_f64, &k_f64, &v_f64, &dy_f64, scale as f64);
 
     let q_h: Vec<f16> = q_f64.iter().map(|&v| f16::from_f64(v)).collect();
     let k_h: Vec<f16> = k_f64.iter().map(|&v| f16::from_f64(v)).collect();
@@ -736,8 +734,7 @@ fn sdpa_backward_bf16_basic() {
     let v_f64 = gen_v_f64();
     let dy_f64 = gen_dy_f64();
     let scale = default_scale();
-    let (dq_ref, dk_ref, dv_ref) =
-        host_sdpa_bw_f64(&q_f64, &k_f64, &v_f64, &dy_f64, scale as f64);
+    let (dq_ref, dk_ref, dv_ref) = host_sdpa_bw_f64(&q_f64, &k_f64, &v_f64, &dy_f64, scale as f64);
 
     let q_h: Vec<bf16> = q_f64.iter().map(|&v| bf16::from_f64(v)).collect();
     let k_h: Vec<bf16> = k_f64.iter().map(|&v| bf16::from_f64(v)).collect();

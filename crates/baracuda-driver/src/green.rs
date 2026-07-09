@@ -8,10 +8,10 @@
 use std::sync::Arc;
 
 use baracuda_cuda_sys::types::{CUdevResource, CUdevResourceType, CUdevSmResource};
-use baracuda_cuda_sys::{driver, CUcontext, CUdevResourceDesc, CUgreenCtx, CUstream};
+use baracuda_cuda_sys::{CUcontext, CUdevResourceDesc, CUgreenCtx, CUstream, driver};
 
 use crate::device::Device;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Fetch the device's full SM resource — the starting point for
 /// `split_by_count`.

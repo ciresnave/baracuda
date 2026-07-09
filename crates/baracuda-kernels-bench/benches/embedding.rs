@@ -16,14 +16,14 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, EmbeddingArgs, EmbeddingDescriptor, EmbeddingPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, EmbeddingArgs, EmbeddingDescriptor, EmbeddingPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline,
+    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns, setup_device,
+    time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::f16;
 
 const BENCH_NAME: &str = "embedding";
@@ -32,9 +32,9 @@ const BENCH_NAME: &str = "embedding";
 /// - Llama-2 7B vocab×hidden = 32000×4096 — prefill 2048 + decode 1.
 /// - Smaller dense lookup at vocab=8192.
 const EMBEDDING_SWEEP: &[(i32, i32, i32)] = &[
-    (32000, 4096, 1),     // Llama-2 7B decode-step
-    (32000, 4096, 2048),  // Llama-2 7B prefill
-    (8192, 1024, 512),    // Smaller / older-style model
+    (32000, 4096, 1),    // Llama-2 7B decode-step
+    (32000, 4096, 2048), // Llama-2 7B prefill
+    (8192, 1024, 512),   // Smaller / older-style model
 ];
 
 fn leak_str(s: &str) -> &'static str {
@@ -104,11 +104,10 @@ fn bench<T>(
             padding_idx: None,
             element: kind,
         };
-        let plan =
-            match EmbeddingPlan::<T>::select(&stream, &desc, PlanPreference::default()) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
+        let plan = match EmbeddingPlan::<T>::select(&stream, &desc, PlanPreference::default()) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
 
         warmup(&stream, || {
             let args = EmbeddingArgs::<T, i32> {
@@ -128,7 +127,8 @@ fn bench<T>(
                     stride: sto,
                 },
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda embedding");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda embedding");
         });
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = EmbeddingArgs::<T, i32> {
@@ -148,7 +148,8 @@ fn bench<T>(
                     stride: sto,
                 },
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda embedding");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda embedding");
         });
         append_csv_row(
             BENCH_NAME,
@@ -182,7 +183,8 @@ fn bench<T>(
                             stride: sto,
                         },
                     };
-                    plan.run(&stream, Workspace::None, args).expect("baracuda embedding");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("baracuda embedding");
                 })
             });
         });

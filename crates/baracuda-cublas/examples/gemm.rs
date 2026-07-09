@@ -9,7 +9,7 @@
 //! cargo run --example gemm -p baracuda-cublas
 //! ```
 
-use baracuda_cublas::{gemm, Handle, Op};
+use baracuda_cublas::{Handle, Op, gemm};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

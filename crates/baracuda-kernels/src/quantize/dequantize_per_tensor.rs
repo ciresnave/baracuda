@@ -30,9 +30,12 @@ pub struct DequantizePerTensorDescriptor {
     pub output_element: ElementKind,
 }
 
-impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug for DequantizePerTensorArgs<'a, TIn, TOut> {
+impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug
+    for DequantizePerTensorArgs<'a, TIn, TOut>
+{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("DequantizePerTensorArgs").finish_non_exhaustive()
+        f.debug_struct("DequantizePerTensorArgs")
+            .finish_non_exhaustive()
     }
 }
 
@@ -90,7 +93,10 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorPlan<TIn, TOut> {
             ));
         }
         validate_input_element(TIn::KIND, "DequantizePerTensorPlan: unsupported TIn dtype")?;
-        validate_output_element(TOut::KIND, "DequantizePerTensorPlan: unsupported TOut dtype")?;
+        validate_output_element(
+            TOut::KIND,
+            "DequantizePerTensorPlan: unsupported TOut dtype",
+        )?;
         if desc.numel < 0 {
             return Err(Error::InvalidProblem(
                 "DequantizePerTensorPlan: numel must be non-negative",
@@ -155,62 +161,114 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorPlan<TIn, TOut> {
             match TOut::KIND {
                 ElementKind::S8 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_f64_s8_run(
-                        numel, scale_f64, zp, q_ptr, x_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f64,
+                        zp,
+                        q_ptr,
+                        x_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::U8 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_f64_u8_run(
-                        numel, scale_f64, zp, q_ptr, x_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f64,
+                        zp,
+                        q_ptr,
+                        x_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
-                _ => return Err(Error::Unsupported(
-                    "DequantizePerTensorPlan: unsupported TOut at run()",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "DequantizePerTensorPlan: unsupported TOut at run()",
+                    ));
+                }
             }
         } else {
             let scale_f32 = args.scale.to_f32();
             match (TIn::KIND, TOut::KIND) {
                 (ElementKind::F32, ElementKind::S8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_f32_s8_run(
-                        numel, scale_f32, zp, q_ptr, x_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        q_ptr,
+                        x_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::F32, ElementKind::U8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_f32_u8_run(
-                        numel, scale_f32, zp, q_ptr, x_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        q_ptr,
+                        x_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::F16, ElementKind::S8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_f16_s8_run(
-                        numel, scale_f32, zp, q_ptr, x_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        q_ptr,
+                        x_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::F16, ElementKind::U8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_f16_u8_run(
-                        numel, scale_f32, zp, q_ptr, x_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        q_ptr,
+                        x_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::Bf16, ElementKind::S8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_bf16_s8_run(
-                        numel, scale_f32, zp, q_ptr, x_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        q_ptr,
+                        x_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 (ElementKind::Bf16, ElementKind::U8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_bf16_u8_run(
-                        numel, scale_f32, zp, q_ptr, x_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        q_ptr,
+                        x_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
-                _ => return Err(Error::Unsupported(
-                    "DequantizePerTensorPlan: unsupported (TIn, TOut) at run()",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "DequantizePerTensorPlan: unsupported (TIn, TOut) at run()",
+                    ));
+                }
             }
         };
         map_status(status)

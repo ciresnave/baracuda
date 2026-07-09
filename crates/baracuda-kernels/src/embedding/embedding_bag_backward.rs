@@ -18,14 +18,14 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, EmbeddingKind, IndexElement, IndexElementKind,
-    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut,
-    TensorRef, Workspace,
+    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef,
+    Workspace,
 };
 
 use crate::indexing::gather::map_status;
 
-use super::embedding_bag::EmbeddingBagMode;
 use super::PADDING_DISABLED;
+use super::embedding_bag::EmbeddingBagMode;
 
 /// Descriptor for an `embedding_bag_backward` op.
 #[derive(Copy, Clone, Debug)]
@@ -153,9 +153,11 @@ impl<T: Element> EmbeddingBagBackwardPlan<T> {
     }
 
     /// Validate args.
-    pub fn can_implement<I: IndexElement>(&self, args: &EmbeddingBagBackwardArgs<'_, T, I>) -> Result<()> {
-        if args.dout.shape[0] != self.desc.num_bags
-            || args.dout.shape[1] != self.desc.embedding_dim
+    pub fn can_implement<I: IndexElement>(
+        &self,
+        args: &EmbeddingBagBackwardArgs<'_, T, I>,
+    ) -> Result<()> {
+        if args.dout.shape[0] != self.desc.num_bags || args.dout.shape[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::EmbeddingBagBackwardPlan: dout shape must be \
@@ -258,34 +260,70 @@ impl<T: Element> EmbeddingBagBackwardPlan<T> {
         let status = match (T::KIND, I::KIND) {
             (ElementKind::F32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_bag_backward_f32_run(
-                    self.desc.total_indices, self.desc.num_embeddings, self.desc.embedding_dim,
-                    self.desc.num_bags, mode, padding_idx,
-                    dout_ptr, idx_ptr, off_ptr, dw_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.total_indices,
+                    self.desc.num_embeddings,
+                    self.desc.embedding_dim,
+                    self.desc.num_bags,
+                    mode,
+                    padding_idx,
+                    dout_ptr,
+                    idx_ptr,
+                    off_ptr,
+                    dw_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_bag_backward_f64_run(
-                    self.desc.total_indices, self.desc.num_embeddings, self.desc.embedding_dim,
-                    self.desc.num_bags, mode, padding_idx,
-                    dout_ptr, idx_ptr, off_ptr, dw_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.total_indices,
+                    self.desc.num_embeddings,
+                    self.desc.embedding_dim,
+                    self.desc.num_bags,
+                    mode,
+                    padding_idx,
+                    dout_ptr,
+                    idx_ptr,
+                    off_ptr,
+                    dw_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, IndexElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_bag_backward_i64idx_f32_run(
-                    self.desc.total_indices, self.desc.num_embeddings, self.desc.embedding_dim,
-                    self.desc.num_bags, mode, padding_idx,
-                    dout_ptr, idx_ptr, off_ptr, dw_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.total_indices,
+                    self.desc.num_embeddings,
+                    self.desc.embedding_dim,
+                    self.desc.num_bags,
+                    mode,
+                    padding_idx,
+                    dout_ptr,
+                    idx_ptr,
+                    off_ptr,
+                    dw_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, IndexElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_bag_backward_i64idx_f64_run(
-                    self.desc.total_indices, self.desc.num_embeddings, self.desc.embedding_dim,
-                    self.desc.num_bags, mode, padding_idx,
-                    dout_ptr, idx_ptr, off_ptr, dw_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.total_indices,
+                    self.desc.num_embeddings,
+                    self.desc.embedding_dim,
+                    self.desc.num_bags,
+                    mode,
+                    padding_idx,
+                    dout_ptr,
+                    idx_ptr,
+                    off_ptr,
+                    dw_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

@@ -6,10 +6,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test cast_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, CastArgs, CastDescriptor, CastPlan, ElementKind, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    CastArgs, CastDescriptor, CastPlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -37,8 +37,8 @@ fn cast_f32_to_f64_bit_exact() {
         input_element: ElementKind::F32,
         output_element: ElementKind::F64,
     };
-    let plan = CastPlan::<f32, f64>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        CastPlan::<f32, f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -77,8 +77,8 @@ fn cast_f64_to_f32_bit_exact() {
         input_element: ElementKind::F64,
         output_element: ElementKind::F32,
     };
-    let plan = CastPlan::<f64, f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        CastPlan::<f64, f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -106,9 +106,7 @@ fn cast_f64_to_f32_bit_exact() {
 fn cast_f32_to_i32_truncates_toward_zero() {
     let (ctx, stream) = setup();
     // Mixed signs + half-integers so truncation behaviour is observable.
-    let host_x: Vec<f32> = vec![
-        0.0, 0.5, 0.9, -0.5, -0.9, 1.5, -1.5, 100.7, -100.7, 7777.25,
-    ];
+    let host_x: Vec<f32> = vec![0.0, 0.5, 0.9, -0.5, -0.9, 1.5, -1.5, 100.7, -100.7, 7777.25];
     let numel = host_x.len();
     // CPU reference: f32->i32 is truncation toward zero (C++ static_cast
     // semantics, matches GPU `static_cast<int32_t>(float)`).
@@ -122,8 +120,8 @@ fn cast_f32_to_i32_truncates_toward_zero() {
         input_element: ElementKind::F32,
         output_element: ElementKind::I32,
     };
-    let plan = CastPlan::<f32, i32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        CastPlan::<f32, i32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -161,8 +159,8 @@ fn cast_i32_to_f32_lossless_in_24bit_range() {
         input_element: ElementKind::I32,
         output_element: ElementKind::F32,
     };
-    let plan = CastPlan::<i32, f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        CastPlan::<i32, f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -204,8 +202,8 @@ fn cast_f32_to_f16_round_to_nearest_even() {
         input_element: ElementKind::F32,
         output_element: ElementKind::F16,
     };
-    let plan = CastPlan::<f32, f16>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        CastPlan::<f32, f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -247,8 +245,8 @@ fn cast_bf16_to_f32_lossless() {
         input_element: ElementKind::Bf16,
         output_element: ElementKind::F32,
     };
-    let plan = CastPlan::<bf16, f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        CastPlan::<bf16, f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = CastArgs {
         input: TensorRef {
             data: dev_x.as_slice(),

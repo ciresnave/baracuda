@@ -17,9 +17,7 @@
 //! This scaffold takes the simpler single-process-multi-GPU path.
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
-use baracuda_megatron::{
-    ColumnParallelLinearPlan, RowParallelLinearPlan, TensorParallelContext,
-};
+use baracuda_megatron::{ColumnParallelLinearPlan, RowParallelLinearPlan, TensorParallelContext};
 use baracuda_nccl::Communicator;
 
 #[test]

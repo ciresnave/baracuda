@@ -8,10 +8,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device + cuDNN.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, AvgPool2dPlan, ElementKind, MaxPool2dPlan, PlanPreference, Pool2dBwArgs,
-    Pool2dDescriptor, Pool2dFwArgs, PoolMode, TensorMut, TensorRef, Workspace,
+    AvgPool2dPlan, ElementKind, MaxPool2dPlan, PlanPreference, Pool2dBwArgs, Pool2dDescriptor,
+    Pool2dFwArgs, PoolMode, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -28,10 +28,17 @@ fn setup() -> (Context, Stream) {
 
 /// CPU reference: max-pool FW over `[N, C, H, W]` NCHW row-major.
 fn host_max_pool_fw_f32(
-    n: usize, c: usize, h_in: usize, w_in: usize, x: &[f32],
-    window_h: usize, window_w: usize,
-    pad_h: usize, pad_w: usize,
-    stride_h: usize, stride_w: usize,
+    n: usize,
+    c: usize,
+    h_in: usize,
+    w_in: usize,
+    x: &[f32],
+    window_h: usize,
+    window_w: usize,
+    pad_h: usize,
+    pad_w: usize,
+    stride_h: usize,
+    stride_w: usize,
 ) -> (Vec<f32>, usize, usize) {
     let h_out = (h_in + 2 * pad_h - window_h) / stride_h + 1;
     let w_out = (w_in + 2 * pad_w - window_w) / stride_w + 1;
@@ -71,10 +78,18 @@ fn host_max_pool_fw_f32(
 /// the per-window argmax in the forward (ties: first occurrence wins —
 /// scan order matches the FW reference above).
 fn host_max_pool_bw_f32(
-    n: usize, c: usize, h_in: usize, w_in: usize, x: &[f32], dy: &[f32],
-    window_h: usize, window_w: usize,
-    pad_h: usize, pad_w: usize,
-    stride_h: usize, stride_w: usize,
+    n: usize,
+    c: usize,
+    h_in: usize,
+    w_in: usize,
+    x: &[f32],
+    dy: &[f32],
+    window_h: usize,
+    window_w: usize,
+    pad_h: usize,
+    pad_w: usize,
+    stride_h: usize,
+    stride_w: usize,
 ) -> Vec<f32> {
     let h_out = (h_in + 2 * pad_h - window_h) / stride_h + 1;
     let w_out = (w_in + 2 * pad_w - window_w) / stride_w + 1;
@@ -117,10 +132,17 @@ fn host_max_pool_bw_f32(
 
 /// CPU reference: avg-pool FW (count-exclude-padding — PyTorch default).
 fn host_avg_pool_fw_excl_f32(
-    n: usize, c: usize, h_in: usize, w_in: usize, x: &[f32],
-    window_h: usize, window_w: usize,
-    pad_h: usize, pad_w: usize,
-    stride_h: usize, stride_w: usize,
+    n: usize,
+    c: usize,
+    h_in: usize,
+    w_in: usize,
+    x: &[f32],
+    window_h: usize,
+    window_w: usize,
+    pad_h: usize,
+    pad_w: usize,
+    stride_h: usize,
+    stride_w: usize,
 ) -> (Vec<f32>, usize, usize) {
     let h_out = (h_in + 2 * pad_h - window_h) / stride_h + 1;
     let w_out = (w_in + 2 * pad_w - window_w) / stride_w + 1;
@@ -147,8 +169,11 @@ fn host_avg_pool_fw_excl_f32(
                             count += 1;
                         }
                     }
-                    y[((ni * c + ci) * h_out + oh) * w_out + ow] =
-                        if count > 0 { (sum / count as f64) as f32 } else { 0f32 };
+                    y[((ni * c + ci) * h_out + oh) * w_out + ow] = if count > 0 {
+                        (sum / count as f64) as f32
+                    } else {
+                        0f32
+                    };
                 }
             }
         }
@@ -158,10 +183,17 @@ fn host_avg_pool_fw_excl_f32(
 
 /// CPU reference: avg-pool BW (count-exclude-padding).
 fn host_avg_pool_bw_excl_f32(
-    n: usize, c: usize, h_in: usize, w_in: usize, dy: &[f32],
-    window_h: usize, window_w: usize,
-    pad_h: usize, pad_w: usize,
-    stride_h: usize, stride_w: usize,
+    n: usize,
+    c: usize,
+    h_in: usize,
+    w_in: usize,
+    dy: &[f32],
+    window_h: usize,
+    window_w: usize,
+    pad_h: usize,
+    pad_w: usize,
+    stride_h: usize,
+    stride_w: usize,
 ) -> Vec<f32> {
     let h_out = (h_in + 2 * pad_h - window_h) / stride_h + 1;
     let w_out = (w_in + 2 * pad_w - window_w) / stride_w + 1;
@@ -245,8 +277,17 @@ fn max_pool2d_f32() {
     let host_x = fixture_input_4x4_f32();
     let numel_x = host_x.len();
     let (exp_y, h_out, w_out) = host_max_pool_fw_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let numel_y = exp_y.len();
     assert_eq!(h_out, 2);
@@ -255,17 +296,28 @@ fn max_pool2d_f32() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
 
-    let desc = Pool2dDescriptor::new(
-        n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::F32,
-    );
-    let plan = MaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let desc = Pool2dDescriptor::new(n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::F32);
+    let plan =
+        MaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];
     let x_shape = [n, c, h_in, w_in];
-    plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        Pool2dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync fw");
 
     let mut got_y = vec![0f32; numel_y];
@@ -273,33 +325,72 @@ fn max_pool2d_f32() {
     let tol = 16.0 * f32::EPSILON;
     for i in 0..numel_y {
         let t = (exp_y[i].abs() * tol).max(tol);
-        assert!((got_y[i] - exp_y[i]).abs() <= t,
-            "max_pool f32 y @ {i}: got={} want={}", got_y[i], exp_y[i]);
+        assert!(
+            (got_y[i] - exp_y[i]).abs() <= t,
+            "max_pool f32 y @ {i}: got={} want={}",
+            got_y[i],
+            exp_y[i]
+        );
     }
 
     // BW: random-ish dy, propagate to dx, compare with host argmax-based
     // reference.
     let host_dy: Vec<f32> = (0..numel_y).map(|i| 0.5 + (i as f32) * 0.25).collect();
     let exp_dx = host_max_pool_bw_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x, &host_dy,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x,
+        &host_dy,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_x).expect("dx");
-    plan.run_bw(&stream, Workspace::None, Pool2dBwArgs {
-        y: TensorRef { data: dev_y.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        dy: TensorRef { data: dev_dy.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: x_shape, stride: contiguous_stride(x_shape) },
-    }).expect("bw");
+    plan.run_bw(
+        &stream,
+        Workspace::None,
+        Pool2dBwArgs {
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+        },
+    )
+    .expect("bw");
     stream.synchronize().expect("sync bw");
 
     let mut got_dx = vec![0f32; numel_x];
     dev_dx.copy_to_host(&mut got_dx).expect("dl dx");
     for i in 0..numel_x {
         let t = (exp_dx[i].abs() * tol).max(tol);
-        assert!((got_dx[i] - exp_dx[i]).abs() <= t,
-            "max_pool f32 dx @ {i}: got={} want={}", got_dx[i], exp_dx[i]);
+        assert!(
+            (got_dx[i] - exp_dx[i]).abs() <= t,
+            "max_pool f32 dx @ {i}: got={} want={}",
+            got_dx[i],
+            exp_dx[i]
+        );
     }
 }
 
@@ -312,24 +403,44 @@ fn max_pool2d_f64() {
     let host_x: Vec<f64> = host_x_f32.iter().map(|&v| v as f64).collect();
     let numel_x = host_x.len();
     let (exp_y_f32, h_out, w_out) = host_max_pool_fw_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x_f32,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x_f32,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let numel_y = exp_y_f32.len();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
-    let desc = Pool2dDescriptor::new(
-        n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::F64,
-    );
-    let plan = MaxPool2dPlan::<f64>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let desc = Pool2dDescriptor::new(n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::F64);
+    let plan =
+        MaxPool2dPlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];
     let x_shape = [n, c, h_in, w_in];
-    plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        Pool2dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync fw");
 
     let mut got_y = vec![0f64; numel_y];
@@ -338,24 +449,59 @@ fn max_pool2d_f64() {
     for i in 0..numel_y {
         let want = exp_y_f32[i] as f64;
         let t = (want.abs() * tol).max(tol);
-        assert!((got_y[i] - want).abs() <= t,
-            "max_pool f64 y @ {i}: got={} want={}", got_y[i], want);
+        assert!(
+            (got_y[i] - want).abs() <= t,
+            "max_pool f64 y @ {i}: got={} want={}",
+            got_y[i],
+            want
+        );
     }
 
     let host_dy_f32: Vec<f32> = (0..numel_y).map(|i| 0.5 + (i as f32) * 0.25).collect();
     let host_dy: Vec<f64> = host_dy_f32.iter().map(|&v| v as f64).collect();
     let exp_dx_f32 = host_max_pool_bw_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x_f32, &host_dy_f32,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x_f32,
+        &host_dy_f32,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
     let mut dev_dx: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel_x).expect("dx");
-    plan.run_bw(&stream, Workspace::None, Pool2dBwArgs {
-        y: TensorRef { data: dev_y.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        dy: TensorRef { data: dev_dy.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: x_shape, stride: contiguous_stride(x_shape) },
-    }).expect("bw");
+    plan.run_bw(
+        &stream,
+        Workspace::None,
+        Pool2dBwArgs {
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+        },
+    )
+    .expect("bw");
     stream.synchronize().expect("sync bw");
 
     let mut got_dx = vec![0f64; numel_x];
@@ -363,8 +509,12 @@ fn max_pool2d_f64() {
     for i in 0..numel_x {
         let want = exp_dx_f32[i] as f64;
         let t = (want.abs() * tol).max(tol);
-        assert!((got_dx[i] - want).abs() <= t,
-            "max_pool f64 dx @ {i}: got={} want={}", got_dx[i], want);
+        assert!(
+            (got_dx[i] - want).abs() <= t,
+            "max_pool f64 dx @ {i}: got={} want={}",
+            got_dx[i],
+            want
+        );
     }
 }
 
@@ -376,24 +526,53 @@ fn avg_pool2d_f32() {
     let host_x = fixture_input_4x4_f32();
     let numel_x = host_x.len();
     let (exp_y, h_out, w_out) = host_avg_pool_fw_excl_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let numel_y = exp_y.len();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
     let desc = Pool2dDescriptor::new(
-        n, c, h_in, w_in, 2, 2, PoolMode::AvgExcludePad, ElementKind::F32,
+        n,
+        c,
+        h_in,
+        w_in,
+        2,
+        2,
+        PoolMode::AvgExcludePad,
+        ElementKind::F32,
     );
-    let plan = AvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        AvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];
     let x_shape = [n, c, h_in, w_in];
-    plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        Pool2dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync fw");
 
     let mut got_y = vec![0f32; numel_y];
@@ -401,31 +580,69 @@ fn avg_pool2d_f32() {
     let tol = 32.0 * f32::EPSILON;
     for i in 0..numel_y {
         let t = (exp_y[i].abs() * tol).max(tol);
-        assert!((got_y[i] - exp_y[i]).abs() <= t,
-            "avg_pool f32 y @ {i}: got={} want={}", got_y[i], exp_y[i]);
+        assert!(
+            (got_y[i] - exp_y[i]).abs() <= t,
+            "avg_pool f32 y @ {i}: got={} want={}",
+            got_y[i],
+            exp_y[i]
+        );
     }
 
     let host_dy: Vec<f32> = (0..numel_y).map(|i| 0.5 + (i as f32) * 0.25).collect();
     let exp_dx = host_avg_pool_bw_excl_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_dy,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_dy,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_x).expect("dx");
-    plan.run_bw(&stream, Workspace::None, Pool2dBwArgs {
-        y: TensorRef { data: dev_y.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        dy: TensorRef { data: dev_dy.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: x_shape, stride: contiguous_stride(x_shape) },
-    }).expect("bw");
+    plan.run_bw(
+        &stream,
+        Workspace::None,
+        Pool2dBwArgs {
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+        },
+    )
+    .expect("bw");
     stream.synchronize().expect("sync bw");
 
     let mut got_dx = vec![0f32; numel_x];
     dev_dx.copy_to_host(&mut got_dx).expect("dl dx");
     for i in 0..numel_x {
         let t = (exp_dx[i].abs() * tol).max(tol);
-        assert!((got_dx[i] - exp_dx[i]).abs() <= t,
-            "avg_pool f32 dx @ {i}: got={} want={}", got_dx[i], exp_dx[i]);
+        assert!(
+            (got_dx[i] - exp_dx[i]).abs() <= t,
+            "avg_pool f32 dx @ {i}: got={} want={}",
+            got_dx[i],
+            exp_dx[i]
+        );
     }
 }
 
@@ -438,24 +655,53 @@ fn avg_pool2d_f64() {
     let host_x: Vec<f64> = host_x_f32.iter().map(|&v| v as f64).collect();
     let numel_x = host_x.len();
     let (exp_y_f32, h_out, w_out) = host_avg_pool_fw_excl_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x_f32,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x_f32,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let numel_y = exp_y_f32.len();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
     let desc = Pool2dDescriptor::new(
-        n, c, h_in, w_in, 2, 2, PoolMode::AvgExcludePad, ElementKind::F64,
+        n,
+        c,
+        h_in,
+        w_in,
+        2,
+        2,
+        PoolMode::AvgExcludePad,
+        ElementKind::F64,
     );
-    let plan = AvgPool2dPlan::<f64>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        AvgPool2dPlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];
     let x_shape = [n, c, h_in, w_in];
-    plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        Pool2dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync fw");
 
     let mut got_y = vec![0f64; numel_y];
@@ -464,24 +710,58 @@ fn avg_pool2d_f64() {
     for i in 0..numel_y {
         let want = exp_y_f32[i] as f64;
         let t = (want.abs() * tol).max(tol);
-        assert!((got_y[i] - want).abs() <= t,
-            "avg_pool f64 y @ {i}: got={} want={}", got_y[i], want);
+        assert!(
+            (got_y[i] - want).abs() <= t,
+            "avg_pool f64 y @ {i}: got={} want={}",
+            got_y[i],
+            want
+        );
     }
 
     let host_dy_f32: Vec<f32> = (0..numel_y).map(|i| 0.5 + (i as f32) * 0.25).collect();
     let host_dy: Vec<f64> = host_dy_f32.iter().map(|&v| v as f64).collect();
     let exp_dx_f32 = host_avg_pool_bw_excl_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_dy_f32,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_dy_f32,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
     let mut dev_dx: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel_x).expect("dx");
-    plan.run_bw(&stream, Workspace::None, Pool2dBwArgs {
-        y: TensorRef { data: dev_y.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        dy: TensorRef { data: dev_dy.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: x_shape, stride: contiguous_stride(x_shape) },
-    }).expect("bw");
+    plan.run_bw(
+        &stream,
+        Workspace::None,
+        Pool2dBwArgs {
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+        },
+    )
+    .expect("bw");
     stream.synchronize().expect("sync bw");
 
     let mut got_dx = vec![0f64; numel_x];
@@ -489,8 +769,12 @@ fn avg_pool2d_f64() {
     for i in 0..numel_x {
         let want = exp_dx_f32[i] as f64;
         let t = (want.abs() * tol).max(tol);
-        assert!((got_dx[i] - want).abs() <= t,
-            "avg_pool f64 dx @ {i}: got={} want={}", got_dx[i], want);
+        assert!(
+            (got_dx[i] - want).abs() <= t,
+            "avg_pool f64 dx @ {i}: got={} want={}",
+            got_dx[i],
+            want
+        );
     }
 }
 
@@ -502,12 +786,30 @@ fn pool2d_f16_smoke() {
     let host_x_f32 = fixture_input_4x4_f32();
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let (exp_y_max_f32, h_out, w_out) = host_max_pool_fw_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x_f32,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x_f32,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let (exp_y_avg_f32, _, _) = host_avg_pool_fw_excl_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x_f32,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x_f32,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let numel_y = exp_y_max_f32.len();
 
@@ -518,25 +820,59 @@ fn pool2d_f16_smoke() {
     let x_shape = [n, c, h_in, w_in];
 
     // max-pool FW
-    let max_desc =
-        Pool2dDescriptor::new(n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::F16);
+    let max_desc = Pool2dDescriptor::new(n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::F16);
     let max_plan = MaxPool2dPlan::<f16>::select(&stream, &max_desc, PlanPreference::default())
         .expect("max sel");
-    max_plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y_max.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("max fw");
+    max_plan
+        .run_fw(
+            &stream,
+            Workspace::None,
+            Pool2dFwArgs {
+                x: TensorRef {
+                    data: dev_x.as_slice(),
+                    shape: x_shape,
+                    stride: contiguous_stride(x_shape),
+                },
+                y: TensorMut {
+                    data: dev_y_max.as_slice_mut(),
+                    shape: y_shape,
+                    stride: contiguous_stride(y_shape),
+                },
+            },
+        )
+        .expect("max fw");
 
     // avg-pool FW
     let avg_desc = Pool2dDescriptor::new(
-        n, c, h_in, w_in, 2, 2, PoolMode::AvgExcludePad, ElementKind::F16,
+        n,
+        c,
+        h_in,
+        w_in,
+        2,
+        2,
+        PoolMode::AvgExcludePad,
+        ElementKind::F16,
     );
     let avg_plan = AvgPool2dPlan::<f16>::select(&stream, &avg_desc, PlanPreference::default())
         .expect("avg sel");
-    avg_plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y_avg.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("avg fw");
+    avg_plan
+        .run_fw(
+            &stream,
+            Workspace::None,
+            Pool2dFwArgs {
+                x: TensorRef {
+                    data: dev_x.as_slice(),
+                    shape: x_shape,
+                    stride: contiguous_stride(x_shape),
+                },
+                y: TensorMut {
+                    data: dev_y_avg.as_slice_mut(),
+                    shape: y_shape,
+                    stride: contiguous_stride(y_shape),
+                },
+            },
+        )
+        .expect("avg fw");
 
     stream.synchronize().expect("sync");
 
@@ -548,15 +884,19 @@ fn pool2d_f16_smoke() {
         let got = got_max[i].to_f32();
         let want = exp_y_max_f32[i];
         let t = (want.abs() * F16_TOL).max(F16_TOL);
-        assert!((got - want).abs() <= t,
-            "max_pool f16 y @ {i}: got={got} want={want}");
+        assert!(
+            (got - want).abs() <= t,
+            "max_pool f16 y @ {i}: got={got} want={want}"
+        );
     }
     for i in 0..numel_y {
         let got = got_avg[i].to_f32();
         let want = exp_y_avg_f32[i];
         let t = (want.abs() * F16_TOL).max(F16_TOL);
-        assert!((got - want).abs() <= t,
-            "avg_pool f16 y @ {i}: got={got} want={want}");
+        assert!(
+            (got - want).abs() <= t,
+            "avg_pool f16 y @ {i}: got={got} want={want}"
+        );
     }
 }
 
@@ -568,12 +908,30 @@ fn pool2d_bf16_smoke() {
     let host_x_f32 = fixture_input_4x4_f32();
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let (exp_y_max_f32, h_out, w_out) = host_max_pool_fw_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x_f32,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x_f32,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let (exp_y_avg_f32, _, _) = host_avg_pool_fw_excl_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x_f32,
-        2, 2, 0, 0, 2, 2,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x_f32,
+        2,
+        2,
+        0,
+        0,
+        2,
+        2,
     );
     let numel_y = exp_y_max_f32.len();
 
@@ -583,24 +941,58 @@ fn pool2d_bf16_smoke() {
     let y_shape = [n, c, h_out as i32, w_out as i32];
     let x_shape = [n, c, h_in, w_in];
 
-    let max_desc =
-        Pool2dDescriptor::new(n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::Bf16);
+    let max_desc = Pool2dDescriptor::new(n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::Bf16);
     let max_plan = MaxPool2dPlan::<bf16>::select(&stream, &max_desc, PlanPreference::default())
         .expect("max sel");
-    max_plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y_max.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("max fw");
+    max_plan
+        .run_fw(
+            &stream,
+            Workspace::None,
+            Pool2dFwArgs {
+                x: TensorRef {
+                    data: dev_x.as_slice(),
+                    shape: x_shape,
+                    stride: contiguous_stride(x_shape),
+                },
+                y: TensorMut {
+                    data: dev_y_max.as_slice_mut(),
+                    shape: y_shape,
+                    stride: contiguous_stride(y_shape),
+                },
+            },
+        )
+        .expect("max fw");
 
     let avg_desc = Pool2dDescriptor::new(
-        n, c, h_in, w_in, 2, 2, PoolMode::AvgExcludePad, ElementKind::Bf16,
+        n,
+        c,
+        h_in,
+        w_in,
+        2,
+        2,
+        PoolMode::AvgExcludePad,
+        ElementKind::Bf16,
     );
     let avg_plan = AvgPool2dPlan::<bf16>::select(&stream, &avg_desc, PlanPreference::default())
         .expect("avg sel");
-    avg_plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y_avg.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("avg fw");
+    avg_plan
+        .run_fw(
+            &stream,
+            Workspace::None,
+            Pool2dFwArgs {
+                x: TensorRef {
+                    data: dev_x.as_slice(),
+                    shape: x_shape,
+                    stride: contiguous_stride(x_shape),
+                },
+                y: TensorMut {
+                    data: dev_y_avg.as_slice_mut(),
+                    shape: y_shape,
+                    stride: contiguous_stride(y_shape),
+                },
+            },
+        )
+        .expect("avg fw");
 
     stream.synchronize().expect("sync");
 
@@ -612,15 +1004,19 @@ fn pool2d_bf16_smoke() {
         let got = got_max[i].to_f32();
         let want = exp_y_max_f32[i];
         let t = (want.abs() * BF16_TOL).max(BF16_TOL);
-        assert!((got - want).abs() <= t,
-            "max_pool bf16 y @ {i}: got={got} want={want}");
+        assert!(
+            (got - want).abs() <= t,
+            "max_pool bf16 y @ {i}: got={got} want={want}"
+        );
     }
     for i in 0..numel_y {
         let got = got_avg[i].to_f32();
         let want = exp_y_avg_f32[i];
         let t = (want.abs() * BF16_TOL).max(BF16_TOL);
-        assert!((got - want).abs() <= t,
-            "avg_pool bf16 y @ {i}: got={got} want={want}");
+        assert!(
+            (got - want).abs() <= t,
+            "avg_pool bf16 y @ {i}: got={got} want={want}"
+        );
     }
 }
 
@@ -632,15 +1028,20 @@ fn max_pool2d_with_padding_f32() {
     // border).
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 3i32, 3i32);
-    let host_x: Vec<f32> = vec![
-        1.0, 2.0, 3.0,
-        4.0, 5.0, 6.0,
-        7.0, 8.0, 9.0,
-    ];
+    let host_x: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
     let numel_x = host_x.len();
     let (exp_y, h_out, w_out) = host_max_pool_fw_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x,
-        3, 3, 1, 1, 1, 1,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x,
+        3,
+        3,
+        1,
+        1,
+        1,
+        1,
     );
     assert_eq!(h_out, 3);
     assert_eq!(w_out, 3);
@@ -648,18 +1049,30 @@ fn max_pool2d_with_padding_f32() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
-    let desc =
-        Pool2dDescriptor::new(n, c, h_in, w_in, 3, 3, PoolMode::Max, ElementKind::F32)
-            .with_padding(1, 1)
-            .with_stride(1, 1);
-    let plan = MaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let desc = Pool2dDescriptor::new(n, c, h_in, w_in, 3, 3, PoolMode::Max, ElementKind::F32)
+        .with_padding(1, 1)
+        .with_stride(1, 1);
+    let plan =
+        MaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];
     let x_shape = [n, c, h_in, w_in];
-    plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        Pool2dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync fw");
 
     let mut got_y = vec![0f32; numel_y];
@@ -667,31 +1080,70 @@ fn max_pool2d_with_padding_f32() {
     let tol = 16.0 * f32::EPSILON;
     for i in 0..numel_y {
         let t = (exp_y[i].abs() * tol).max(tol);
-        assert!((got_y[i] - exp_y[i]).abs() <= t,
-            "max_pool_pad f32 y @ {i}: got={} want={}", got_y[i], exp_y[i]);
+        assert!(
+            (got_y[i] - exp_y[i]).abs() <= t,
+            "max_pool_pad f32 y @ {i}: got={} want={}",
+            got_y[i],
+            exp_y[i]
+        );
     }
 
     // BW round-trip
     let host_dy: Vec<f32> = (0..numel_y).map(|i| 1.0 + (i as f32) * 0.5).collect();
     let exp_dx = host_max_pool_bw_f32(
-        n as usize, c as usize, h_in as usize, w_in as usize, &host_x, &host_dy,
-        3, 3, 1, 1, 1, 1,
+        n as usize,
+        c as usize,
+        h_in as usize,
+        w_in as usize,
+        &host_x,
+        &host_dy,
+        3,
+        3,
+        1,
+        1,
+        1,
+        1,
     );
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_x).expect("dx");
-    plan.run_bw(&stream, Workspace::None, Pool2dBwArgs {
-        y: TensorRef { data: dev_y.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        dy: TensorRef { data: dev_dy.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: x_shape, stride: contiguous_stride(x_shape) },
-    }).expect("bw");
+    plan.run_bw(
+        &stream,
+        Workspace::None,
+        Pool2dBwArgs {
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+        },
+    )
+    .expect("bw");
     stream.synchronize().expect("sync bw");
 
     let mut got_dx = vec![0f32; numel_x];
     dev_dx.copy_to_host(&mut got_dx).expect("dl dx");
     for i in 0..numel_x {
         let t = (exp_dx[i].abs() * tol).max(tol);
-        assert!((got_dx[i] - exp_dx[i]).abs() <= t,
-            "max_pool_pad f32 dx @ {i}: got={} want={}", got_dx[i], exp_dx[i]);
+        assert!(
+            (got_dx[i] - exp_dx[i]).abs() <= t,
+            "max_pool_pad f32 dx @ {i}: got={} want={}",
+            got_dx[i],
+            exp_dx[i]
+        );
     }
 }

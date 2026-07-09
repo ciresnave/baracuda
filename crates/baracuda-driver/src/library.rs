@@ -13,9 +13,9 @@ use core::ffi::{c_char, c_void};
 use std::ffi::CString;
 use std::sync::Arc;
 
-use baracuda_cuda_sys::{driver, CUdeviceptr, CUfunction, CUkernel, CUlibrary};
+use baracuda_cuda_sys::{CUdeviceptr, CUfunction, CUkernel, CUlibrary, driver};
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::module::Function;
 
 /// A loaded CUDA library (CUDA 12.0+).

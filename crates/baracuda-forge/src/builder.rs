@@ -3,7 +3,7 @@
 use crate::compute_cap::{ComputeCapability, GpuArch};
 use crate::dependency::DependencyManager;
 use crate::error::{Error, Result};
-use crate::hash::{hash_args, hash_paths, BuildCache};
+use crate::hash::{BuildCache, hash_args, hash_paths};
 use crate::parallel::ParallelConfig;
 use crate::source::SourceSelector;
 use crate::toolkit::CudaToolkit;
@@ -514,9 +514,9 @@ impl KernelBuilder {
                 // console, so the captured streams were ALWAYS empty and a
                 // failed compile reported a bare "nvcc error:" with no
                 // diagnostics (reported by Fuel, 2026-07-03).
-                let output = command.output().map_err(|e| {
-                    Error::NvccNotFound(format!("Failed to spawn nvcc: {}", e))
-                })?;
+                let output = command
+                    .output()
+                    .map_err(|e| Error::NvccNotFound(format!("Failed to spawn nvcc: {}", e)))?;
 
                 if !output.status.success() {
                     had_error.store(true, Ordering::Relaxed);
@@ -636,7 +636,9 @@ impl KernelBuilder {
         println!("cargo:rerun-if-env-changed=NVCC_CCBIN");
 
         let dep_args = self.dependencies.fetch_all(&self.out_dir)?;
-        let is_msvc = std::env::var("TARGET").ok().is_some_and(|t| t.contains("msvc"));
+        let is_msvc = std::env::var("TARGET")
+            .ok()
+            .is_some_and(|t| t.contains("msvc"));
         let ccbin = resolve_ccbin(is_msvc);
         let nvcc_threads = self.parallel.nvcc_threads();
         let watch_hash = hash_paths(self.sources.watch_paths());
@@ -737,9 +739,9 @@ impl KernelBuilder {
                 // See the object-compile path above: `output()` pipes the
                 // streams; spawn+wait_with_output inherited them and captured
                 // nothing, swallowing all nvcc diagnostics.
-                let output = command.output().map_err(|e| {
-                    Error::NvccNotFound(format!("Failed to spawn nvcc: {}", e))
-                })?;
+                let output = command
+                    .output()
+                    .map_err(|e| Error::NvccNotFound(format!("Failed to spawn nvcc: {}", e)))?;
 
                 if !output.status.success() {
                     return Err(Error::CompilationFailed {
@@ -898,9 +900,8 @@ fn find_msvc_lib_exe() -> Result<PathBuf> {
 /// Returns `None` on any miss (no vswhere, no VS, tool absent) — callers
 /// have their own fallbacks.
 fn find_msvc_tool(tool: &str) -> Option<PathBuf> {
-    let vswhere = PathBuf::from(
-        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
-    );
+    let vswhere =
+        PathBuf::from(r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe");
     if !vswhere.exists() {
         return None;
     }
@@ -989,11 +990,7 @@ fn resolve_ccbin(is_msvc: bool) -> Option<CcbinArg> {
 /// Invoke `lib.exe` to assemble a static archive from `obj_files`,
 /// passing the object list via a response file (`@file`) to avoid
 /// Windows' command-line-length limit.
-fn archive_with_msvc_lib(
-    out_file: &Path,
-    obj_files: &[PathBuf],
-    out_dir: &Path,
-) -> Result<()> {
+fn archive_with_msvc_lib(out_file: &Path, obj_files: &[PathBuf], out_dir: &Path) -> Result<()> {
     let lib_exe = find_msvc_lib_exe()?;
 
     let response_file = out_dir.join(".lib_response.txt");
@@ -1009,10 +1006,7 @@ fn archive_with_msvc_lib(
             // Each path on its own line, surrounded by quotes so any
             // embedded spaces survive lib.exe's response-file parser.
             writeln!(f, "\"{}\"", obj.display()).map_err(|e| {
-                Error::LinkingFailed(format!(
-                    "failed to write lib response file: {}",
-                    e
-                ))
+                Error::LinkingFailed(format!("failed to write lib response file: {}", e))
             })?;
         }
     }

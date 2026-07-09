@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `ScanPlan<T, N> + ScanKind::Cummin`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ScanArgs, ScanDescriptor, ScanKind, ScanPlan,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ScanArgs, ScanDescriptor, ScanKind, ScanPlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -46,17 +46,27 @@ fn host_cummin_f32<const N: usize>(
         let mut acc = f32::INFINITY;
         if reverse {
             for j in (k..extent).rev() {
-                let mut src = coord; src[axis] = j;
+                let mut src = coord;
+                src[axis] = j;
                 let mut idx = 0usize;
-                for d in 0..N { idx += src[d] as usize * stride[d]; }
-                if x[idx] < acc { acc = x[idx]; }
+                for d in 0..N {
+                    idx += src[d] as usize * stride[d];
+                }
+                if x[idx] < acc {
+                    acc = x[idx];
+                }
             }
         } else {
             for j in 0..=k {
-                let mut src = coord; src[axis] = j;
+                let mut src = coord;
+                src[axis] = j;
                 let mut idx = 0usize;
-                for d in 0..N { idx += src[d] as usize * stride[d]; }
-                if x[idx] < acc { acc = x[idx]; }
+                for d in 0..N {
+                    idx += src[d] as usize * stride[d];
+                }
+                if x[idx] < acc {
+                    acc = x[idx];
+                }
             }
         }
         y[linear as usize] = acc;
@@ -82,8 +92,16 @@ fn cummin_f32_1d_forward() {
     };
     let plan = ScanPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f32, 1> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -100,9 +118,7 @@ fn cummin_f64_2d_axis_1_reverse() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
     let host_x: Vec<f64> = vec![
-        1.0, -2.0, 3.0, 0.5, 4.5,
-        -1.0, 2.0, 5.0, 0.0, 3.5,
-        4.0, 1.5, -3.0, 2.5, 0.25,
+        1.0, -2.0, 3.0, 0.5, 4.5, -1.0, 2.0, 5.0, 0.0, 3.5, 4.0, 1.5, -3.0, 2.5, 0.25,
     ];
     let host_x_f32: Vec<f32> = host_x.iter().map(|&v| v as f32).collect();
     let expected_f32 = host_cummin_f32::<2>(shape, 1, true, &host_x_f32);
@@ -117,8 +133,16 @@ fn cummin_f64_2d_axis_1_reverse() {
     };
     let plan = ScanPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f64, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -135,11 +159,7 @@ fn cummin_f16_2d_axis_0_forward() {
     let (ctx, stream) = setup();
     let shape = [5i32, 3];
     let host_x_f32: Vec<f32> = vec![
-        1.0, -2.0, 3.0,
-        -1.0, 2.0, 0.5,
-        4.0, 1.5, -3.0,
-        0.0, 3.5, 2.0,
-        -1.5, 0.25, 1.0,
+        1.0, -2.0, 3.0, -1.0, 2.0, 0.5, 4.0, 1.5, -3.0, 0.0, 3.5, 2.0, -1.5, 0.25, 1.0,
     ];
     let expected_f32 = host_cummin_f32::<2>(shape, 0, false, &host_x_f32);
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
@@ -154,8 +174,16 @@ fn cummin_f16_2d_axis_0_forward() {
     };
     let plan = ScanPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -172,9 +200,7 @@ fn cummin_bf16_2d_axis_1_forward() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
     let host_x_f32: Vec<f32> = vec![
-        1.0, -2.0, 3.0, 0.5, 4.5,
-        -1.0, 2.0, 5.0, 0.0, 3.5,
-        4.0, 1.5, -3.0, 2.5, 0.25,
+        1.0, -2.0, 3.0, 0.5, 4.5, -1.0, 2.0, 5.0, 0.0, 3.5, 4.0, 1.5, -3.0, 2.5, 0.25,
     ];
     let expected_f32 = host_cummin_f32::<2>(shape, 1, false, &host_x_f32);
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
@@ -189,8 +215,16 @@ fn cummin_bf16_2d_axis_1_forward() {
     };
     let plan = ScanPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<bf16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

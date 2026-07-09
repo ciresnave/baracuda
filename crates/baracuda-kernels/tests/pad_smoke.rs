@@ -9,10 +9,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test pad_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PadArgs, PadDescriptor, PadMode, PadPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PadArgs, PadDescriptor, PadMode, PadPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -99,8 +99,8 @@ fn pad_constant_1d() {
         value,
         element: ElementKind::F32,
     };
-    let plan = PadPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        PadPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PadArgs::<f32, 1> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -119,7 +119,11 @@ fn pad_constant_1d() {
     let mut got = vec![0f32; out_numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "1d pad mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "1d pad mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -152,8 +156,8 @@ fn pad_constant_2d() {
         value,
         element: ElementKind::F32,
     };
-    let plan = PadPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        PadPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PadArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -172,7 +176,11 @@ fn pad_constant_2d() {
     let mut got = vec![0f32; out_numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "2d pad mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "2d pad mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -206,8 +214,8 @@ fn pad_constant_3d() {
         value,
         element: ElementKind::F32,
     };
-    let plan = PadPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        PadPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PadArgs::<f32, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -226,7 +234,11 @@ fn pad_constant_3d() {
     let mut got = vec![0f32; out_numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "3d pad mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "3d pad mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -255,8 +267,8 @@ fn pad_zero_amounts_is_identity() {
         value,
         element: ElementKind::F32,
     };
-    let plan = PadPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        PadPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PadArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),

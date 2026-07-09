@@ -21,10 +21,10 @@
 //! dy[n,co,oh,ow] · x[n,c,oh·sh + kh·dh - ph, ow·sw + kw·dw - pw]`,
 //! treating out-of-bound `x` cells as zero.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -78,18 +78,19 @@ fn host_conv2d_fw_f64(d: &ConvDims, x: &[f64], w: &[f64]) -> Vec<f64> {
                     for ci in 0..d.c_in {
                         for kh in 0..d.h_filt {
                             for kw in 0..d.w_filt {
-                                let ih = oh as i64 * d.stride_h as i64 + kh as i64 * d.dilation_h as i64
+                                let ih = oh as i64 * d.stride_h as i64
+                                    + kh as i64 * d.dilation_h as i64
                                     - d.pad_h as i64;
-                                let iw = ow as i64 * d.stride_w as i64 + kw as i64 * d.dilation_w as i64
+                                let iw = ow as i64 * d.stride_w as i64
+                                    + kw as i64 * d.dilation_w as i64
                                     - d.pad_w as i64;
                                 if ih < 0 || ih >= x_h || iw < 0 || iw >= x_w {
                                     continue;
                                 }
-                                let xi = ((n * d.c_in + ci) as i64 * x_h * x_w
-                                    + ih * x_w
-                                    + iw) as usize;
-                                let wi = (((co * d.c_in + ci) * d.h_filt + kh) * d.w_filt + kw)
-                                    as usize;
+                                let xi =
+                                    ((n * d.c_in + ci) as i64 * x_h * x_w + ih * x_w + iw) as usize;
+                                let wi =
+                                    (((co * d.c_in + ci) * d.h_filt + kh) * d.w_filt + kw) as usize;
                                 acc += x[xi] * w[wi];
                             }
                         }
@@ -117,18 +118,19 @@ fn host_conv2d_bw_data_f64(d: &ConvDims, w: &[f64], dy: &[f64]) -> Vec<f64> {
                     for ci in 0..d.c_in {
                         for kh in 0..d.h_filt {
                             for kw in 0..d.w_filt {
-                                let ih = oh as i64 * d.stride_h as i64 + kh as i64 * d.dilation_h as i64
+                                let ih = oh as i64 * d.stride_h as i64
+                                    + kh as i64 * d.dilation_h as i64
                                     - d.pad_h as i64;
-                                let iw = ow as i64 * d.stride_w as i64 + kw as i64 * d.dilation_w as i64
+                                let iw = ow as i64 * d.stride_w as i64
+                                    + kw as i64 * d.dilation_w as i64
                                     - d.pad_w as i64;
                                 if ih < 0 || ih >= x_h || iw < 0 || iw >= x_w {
                                     continue;
                                 }
-                                let xi = ((n * d.c_in + ci) as i64 * x_h * x_w
-                                    + ih * x_w
-                                    + iw) as usize;
-                                let wi = (((co * d.c_in + ci) * d.h_filt + kh) * d.w_filt + kw)
-                                    as usize;
+                                let xi =
+                                    ((n * d.c_in + ci) as i64 * x_h * x_w + ih * x_w + iw) as usize;
+                                let wi =
+                                    (((co * d.c_in + ci) * d.h_filt + kh) * d.w_filt + kw) as usize;
                                 dx[xi] += dy_v * w[wi];
                             }
                         }
@@ -154,18 +156,18 @@ fn host_conv2d_bw_filter_f64(d: &ConvDims, x: &[f64], dy: &[f64]) -> Vec<f64> {
                     for n in 0..d.n {
                         for oh in 0..h_out {
                             for ow in 0..w_out {
-                                let ih = oh as i64 * d.stride_h as i64 + kh as i64 * d.dilation_h as i64
+                                let ih = oh as i64 * d.stride_h as i64
+                                    + kh as i64 * d.dilation_h as i64
                                     - d.pad_h as i64;
-                                let iw = ow as i64 * d.stride_w as i64 + kw as i64 * d.dilation_w as i64
+                                let iw = ow as i64 * d.stride_w as i64
+                                    + kw as i64 * d.dilation_w as i64
                                     - d.pad_w as i64;
                                 if ih < 0 || ih >= x_h || iw < 0 || iw >= x_w {
                                     continue;
                                 }
-                                let xi = ((n * d.c_in + ci) as i64 * x_h * x_w
-                                    + ih * x_w
-                                    + iw) as usize;
-                                let dyi =
-                                    (((n * d.c_out + co) * h_out + oh) * w_out + ow) as usize;
+                                let xi =
+                                    ((n * d.c_in + ci) as i64 * x_h * x_w + ih * x_w + iw) as usize;
+                                let dyi = (((n * d.c_out + co) * h_out + oh) * w_out + ow) as usize;
                                 acc += x[xi] * dy[dyi];
                             }
                         }
@@ -253,8 +255,7 @@ fn run_fw_and_check<T, F, G>(
     assert_eq!(plan.output_dims(), (h_out, w_out));
 
     let ws_bytes = plan.query_fw_workspace_size(stream).expect("ws query");
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(ctx, ws_bytes.max(1)).expect("alloc ws");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes.max(1)).expect("alloc ws");
 
     let x_shape = [d.n, d.c_in, d.h_in, d.w_in];
     let w_shape = [d.c_out, d.c_in, d.h_filt, d.w_filt];

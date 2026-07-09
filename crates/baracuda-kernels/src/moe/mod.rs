@@ -53,7 +53,7 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ElementKind, GgufBlockFormat, KernelSku, MathPrecision, MoeKind,
-    OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace, U8,
+    OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, U8, Workspace,
 };
 
 use crate::quantize::map_status;
@@ -336,12 +336,18 @@ impl MoePlan {
                 }
             }
             MoeVariant::Wmma => {
-                let ec = args.expert_counts_scratch.as_ref().ok_or(Error::InvalidProblem(
-                    "MoePlan::run: Wmma variant requires expert_counts_scratch",
-                ))?;
-                let eo = args.expert_offsets_scratch.as_ref().ok_or(Error::InvalidProblem(
-                    "MoePlan::run: Wmma variant requires expert_offsets_scratch",
-                ))?;
+                let ec = args
+                    .expert_counts_scratch
+                    .as_ref()
+                    .ok_or(Error::InvalidProblem(
+                        "MoePlan::run: Wmma variant requires expert_counts_scratch",
+                    ))?;
+                let eo = args
+                    .expert_offsets_scratch
+                    .as_ref()
+                    .ok_or(Error::InvalidProblem(
+                        "MoePlan::run: Wmma variant requires expert_offsets_scratch",
+                    ))?;
                 let ec_ptr = ec.data.as_raw().0 as *mut i32;
                 let eo_ptr = eo.data.as_raw().0 as *mut i32;
                 let is_prefill = if self.desc.is_prefill { 1 } else { 0 };
@@ -394,12 +400,18 @@ impl MoePlan {
             MoeVariant::WmmaGguf => {
                 let bf = self.desc.block_format.expect("checked in select()");
                 let gguf_dtype = fuel_moe_gguf_dtype(bf).expect("checked in select()");
-                let ec = args.expert_counts_scratch.as_ref().ok_or(Error::InvalidProblem(
-                    "MoePlan::run: WmmaGguf variant requires expert_counts_scratch",
-                ))?;
-                let eo = args.expert_offsets_scratch.as_ref().ok_or(Error::InvalidProblem(
-                    "MoePlan::run: WmmaGguf variant requires expert_offsets_scratch",
-                ))?;
+                let ec = args
+                    .expert_counts_scratch
+                    .as_ref()
+                    .ok_or(Error::InvalidProblem(
+                        "MoePlan::run: WmmaGguf variant requires expert_counts_scratch",
+                    ))?;
+                let eo = args
+                    .expert_offsets_scratch
+                    .as_ref()
+                    .ok_or(Error::InvalidProblem(
+                        "MoePlan::run: WmmaGguf variant requires expert_offsets_scratch",
+                    ))?;
                 let ec_ptr = ec.data.as_raw().0 as *mut i32;
                 let eo_ptr = eo.data.as_raw().0 as *mut i32;
                 match self.desc.element {
@@ -445,7 +457,11 @@ impl MoePlan {
                             stream_ptr,
                         )
                     },
-                    _ => return Err(Error::Unsupported("MoePlan::run: WmmaGguf element unsupported")),
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "MoePlan::run: WmmaGguf element unsupported",
+                        ));
+                    }
                 }
             }
         };
@@ -473,9 +489,7 @@ fn fuel_moe_gguf_dtype(bf: GgufBlockFormat) -> Result<i32> {
             "MoePlan: GGUF MoE variants only support Q8_0 + k-quants (Q2_K..Q6_K)",
         )),
         // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
-        _ => Err(Error::Unsupported(
-            "MoePlan: unsupported GGUF block format",
-        )),
+        _ => Err(Error::Unsupported("MoePlan: unsupported GGUF block format")),
     }
 }
 

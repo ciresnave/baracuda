@@ -137,15 +137,19 @@ macro_rules! gemm_nobias_f32 {
         /// alignment and leading dimensions.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $ci(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64,
-            b: *const c_void, ldb: i64,
-            c: *const c_void, ldc: i64,
-            d: *mut c_void, ldd: i64,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            b: *const c_void,
+            ldb: i64,
+            c: *const c_void,
+            ldc: i64,
+            d: *mut c_void,
+            ldd: i64,
         ) -> i32 {
-            unsafe {
-                kk::$kk_ci(m, n, k, a, lda, b, ldb, c, ldc, d, ldd)
-            }
+            unsafe { kk::$kk_ci(m, n, k, a, lda, b, ldb, c, ldc, d, ldd) }
         }
 
         /// Launch this Cutlass GEMM SKU on `stream`.
@@ -157,19 +161,41 @@ macro_rules! gemm_nobias_f32 {
         /// bytes if non-zero.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $run(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64,
-            b: *const c_void, ldb: i64,
-            c: *const c_void, ldc: i64,
-            d: *mut c_void, ldd: i64,
-            alpha: f32, beta: f32,
-            workspace: *mut c_void, workspace_bytes: usize,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            b: *const c_void,
+            ldb: i64,
+            c: *const c_void,
+            ldc: i64,
+            d: *mut c_void,
+            ldd: i64,
+            alpha: f32,
+            beta: f32,
+            workspace: *mut c_void,
+            workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
             unsafe {
                 kk::$kk_run(
-                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                    alpha, beta, workspace, workspace_bytes, stream,
+                    m,
+                    n,
+                    k,
+                    a,
+                    lda,
+                    b,
+                    ldb,
+                    c,
+                    ldc,
+                    d,
+                    ldd,
+                    alpha,
+                    beta,
+                    workspace,
+                    workspace_bytes,
+                    stream,
                 )
             }
         }
@@ -196,15 +222,19 @@ macro_rules! gemm_nobias_f64 {
         /// No device dereferences.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $ci(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64,
-            b: *const c_void, ldb: i64,
-            c: *const c_void, ldc: i64,
-            d: *mut c_void, ldd: i64,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            b: *const c_void,
+            ldb: i64,
+            c: *const c_void,
+            ldc: i64,
+            d: *mut c_void,
+            ldd: i64,
         ) -> i32 {
-            unsafe {
-                kk::$kk_ci(m, n, k, a, lda, b, ldb, c, ldc, d, ldd)
-            }
+            unsafe { kk::$kk_ci(m, n, k, a, lda, b, ldb, c, ldc, d, ldd) }
         }
 
         /// Launch DGEMM. f64 alpha/beta.
@@ -213,19 +243,41 @@ macro_rules! gemm_nobias_f64 {
         /// See the `gemm_nobias_f32` trampoline family.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $run(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64,
-            b: *const c_void, ldb: i64,
-            c: *const c_void, ldc: i64,
-            d: *mut c_void, ldd: i64,
-            alpha: f64, beta: f64,
-            workspace: *mut c_void, workspace_bytes: usize,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            b: *const c_void,
+            ldb: i64,
+            c: *const c_void,
+            ldc: i64,
+            d: *mut c_void,
+            ldd: i64,
+            alpha: f64,
+            beta: f64,
+            workspace: *mut c_void,
+            workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
             unsafe {
                 kk::$kk_run(
-                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                    alpha, beta, workspace, workspace_bytes, stream,
+                    m,
+                    n,
+                    k,
+                    a,
+                    lda,
+                    b,
+                    ldb,
+                    c,
+                    ldc,
+                    d,
+                    ldd,
+                    alpha,
+                    beta,
+                    workspace,
+                    workspace_bytes,
+                    stream,
                 )
             }
         }
@@ -253,16 +305,20 @@ macro_rules! gemm_bias_f32 {
         /// No device dereferences.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $ci(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64,
-            b: *const c_void, ldb: i64,
-            c: *const c_void, ldc: i64,
-            d: *mut c_void, ldd: i64,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            b: *const c_void,
+            ldb: i64,
+            c: *const c_void,
+            ldc: i64,
+            d: *mut c_void,
+            ldd: i64,
             bias: *const c_void,
         ) -> i32 {
-            unsafe {
-                kk::$kk_ci(m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias)
-            }
+            unsafe { kk::$kk_ci(m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias) }
         }
 
         /// Launch bias-fused Cutlass GEMM on `stream`. `bias` is an
@@ -273,20 +329,43 @@ macro_rules! gemm_bias_f32 {
         /// device-resident.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $run(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64,
-            b: *const c_void, ldb: i64,
-            c: *const c_void, ldc: i64,
-            d: *mut c_void, ldd: i64,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            b: *const c_void,
+            ldb: i64,
+            c: *const c_void,
+            ldc: i64,
+            d: *mut c_void,
+            ldd: i64,
             bias: *const c_void,
-            alpha: f32, beta: f32,
-            workspace: *mut c_void, workspace_bytes: usize,
+            alpha: f32,
+            beta: f32,
+            workspace: *mut c_void,
+            workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
             unsafe {
                 kk::$kk_run(
-                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                    m,
+                    n,
+                    k,
+                    a,
+                    lda,
+                    b,
+                    ldb,
+                    c,
+                    ldc,
+                    d,
+                    ldd,
+                    bias,
+                    alpha,
+                    beta,
+                    workspace,
+                    workspace_bytes,
+                    stream,
                 )
             }
         }
@@ -313,16 +392,20 @@ macro_rules! gemm_bias_f64 {
         /// No device dereferences.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $ci(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64,
-            b: *const c_void, ldb: i64,
-            c: *const c_void, ldc: i64,
-            d: *mut c_void, ldd: i64,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            b: *const c_void,
+            ldb: i64,
+            c: *const c_void,
+            ldc: i64,
+            d: *mut c_void,
+            ldd: i64,
             bias: *const c_void,
         ) -> i32 {
-            unsafe {
-                kk::$kk_ci(m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias)
-            }
+            unsafe { kk::$kk_ci(m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias) }
         }
 
         /// Launch bias-fused DGEMM. f64 alpha/beta + f64 bias vector.
@@ -331,20 +414,43 @@ macro_rules! gemm_bias_f64 {
         /// See the `gemm_bias_f32` trampoline family.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $run(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64,
-            b: *const c_void, ldb: i64,
-            c: *const c_void, ldc: i64,
-            d: *mut c_void, ldd: i64,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            b: *const c_void,
+            ldb: i64,
+            c: *const c_void,
+            ldc: i64,
+            d: *mut c_void,
+            ldd: i64,
             bias: *const c_void,
-            alpha: f64, beta: f64,
-            workspace: *mut c_void, workspace_bytes: usize,
+            alpha: f64,
+            beta: f64,
+            workspace: *mut c_void,
+            workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
             unsafe {
                 kk::$kk_run(
-                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                    m,
+                    n,
+                    k,
+                    a,
+                    lda,
+                    b,
+                    ldb,
+                    c,
+                    ldc,
+                    d,
+                    ldd,
+                    bias,
+                    alpha,
+                    beta,
+                    workspace,
+                    workspace_bytes,
+                    stream,
                 )
             }
         }
@@ -363,9 +469,7 @@ macro_rules! gemm_batched_f32 {
         /// # Safety
         /// Pure host-side query.
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $ws(
-            m: i32, n: i32, k: i32, batch_count: i32,
-        ) -> usize {
+        pub unsafe extern "C" fn $ws(m: i32, n: i32, k: i32, batch_count: i32) -> usize {
             unsafe { kk::$kk_ws(m, n, k, batch_count) }
         }
 
@@ -375,18 +479,40 @@ macro_rules! gemm_batched_f32 {
         /// No device dereferences.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $ci(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64, stride_a: i64,
-            b: *const c_void, ldb: i64, stride_b: i64,
-            c: *const c_void, ldc: i64, stride_c: i64,
-            d: *mut c_void, ldd: i64, stride_d: i64,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            stride_a: i64,
+            b: *const c_void,
+            ldb: i64,
+            stride_b: i64,
+            c: *const c_void,
+            ldc: i64,
+            stride_c: i64,
+            d: *mut c_void,
+            ldd: i64,
+            stride_d: i64,
             batch_count: i32,
         ) -> i32 {
             unsafe {
                 kk::$kk_ci(
-                    m, n, k,
-                    a, lda, stride_a, b, ldb, stride_b,
-                    c, ldc, stride_c, d, ldd, stride_d,
+                    m,
+                    n,
+                    k,
+                    a,
+                    lda,
+                    stride_a,
+                    b,
+                    ldb,
+                    stride_b,
+                    c,
+                    ldc,
+                    stride_c,
+                    d,
+                    ldd,
+                    stride_d,
                     batch_count,
                 )
             }
@@ -401,23 +527,51 @@ macro_rules! gemm_batched_f32 {
         /// every derived per-batch pointer must remain device-resident.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $run(
-            m: i32, n: i32, k: i32,
-            a: *const c_void, lda: i64, stride_a: i64,
-            b: *const c_void, ldb: i64, stride_b: i64,
-            c: *const c_void, ldc: i64, stride_c: i64,
-            d: *mut c_void, ldd: i64, stride_d: i64,
-            alpha: f32, beta: f32,
+            m: i32,
+            n: i32,
+            k: i32,
+            a: *const c_void,
+            lda: i64,
+            stride_a: i64,
+            b: *const c_void,
+            ldb: i64,
+            stride_b: i64,
+            c: *const c_void,
+            ldc: i64,
+            stride_c: i64,
+            d: *mut c_void,
+            ldd: i64,
+            stride_d: i64,
+            alpha: f32,
+            beta: f32,
             batch_count: i32,
-            workspace: *mut c_void, workspace_bytes: usize,
+            workspace: *mut c_void,
+            workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
             unsafe {
                 kk::$kk_run(
-                    m, n, k,
-                    a, lda, stride_a, b, ldb, stride_b,
-                    c, ldc, stride_c, d, ldd, stride_d,
-                    alpha, beta, batch_count,
-                    workspace, workspace_bytes, stream,
+                    m,
+                    n,
+                    k,
+                    a,
+                    lda,
+                    stride_a,
+                    b,
+                    ldb,
+                    stride_b,
+                    c,
+                    ldc,
+                    stride_c,
+                    d,
+                    ldd,
+                    stride_d,
+                    alpha,
+                    beta,
+                    batch_count,
+                    workspace,
+                    workspace_bytes,
+                    stream,
                 )
             }
         }

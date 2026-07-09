@@ -9,10 +9,10 @@
 //! Tests fill `x` with strictly-increasing row-major values, so within
 //! any reduced group every value is unique → no ties → bit-exact compare.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceBackwardArgs,
-    ReduceBackwardDescriptor, ReduceBackwardPlan, ReduceKind, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceBackwardArgs, ReduceBackwardDescriptor, ReduceBackwardPlan,
+    ReduceKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -96,10 +96,26 @@ fn max_backward_f32_3d_axis1() {
     let plan = ReduceBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -155,10 +171,26 @@ fn max_backward_f64_3d_axis2() {
     let plan = ReduceBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -166,9 +198,16 @@ fn max_backward_f64_3d_axis2() {
     dev_dx.copy_to_host(&mut got).expect("download");
     for_each_coord::<3, _>(input_shape, |coord, dx_linear| {
         let dy_lin = dy_index(coord, axis, dy_shape) as usize;
-        let exp = if host_x[dx_linear as usize] == host_y[dy_lin] { host_dy[dy_lin] } else { 0.0 };
-        assert_eq!(got[dx_linear as usize].to_bits(), exp.to_bits(),
-                   "max bw f64 @ {dx_linear}");
+        let exp = if host_x[dx_linear as usize] == host_y[dy_lin] {
+            host_dy[dy_lin]
+        } else {
+            0.0
+        };
+        assert_eq!(
+            got[dx_linear as usize].to_bits(),
+            exp.to_bits(),
+            "max bw f64 @ {dx_linear}"
+        );
     });
 }
 
@@ -209,10 +248,26 @@ fn max_backward_f16_3d_axis0() {
     let plan = ReduceBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -225,8 +280,11 @@ fn max_backward_f16_3d_axis0() {
         } else {
             f16::from_f32(0.0)
         };
-        assert_eq!(got[dx_linear as usize].to_bits(), exp.to_bits(),
-                   "max bw f16 @ {dx_linear}");
+        assert_eq!(
+            got[dx_linear as usize].to_bits(),
+            exp.to_bits(),
+            "max bw f16 @ {dx_linear}"
+        );
     });
 }
 
@@ -267,10 +325,26 @@ fn max_backward_bf16_3d_axis1() {
     let plan = ReduceBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = ReduceBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -283,8 +357,11 @@ fn max_backward_bf16_3d_axis1() {
         } else {
             bf16::from_f32(0.0)
         };
-        assert_eq!(got[dx_linear as usize].to_bits(), exp.to_bits(),
-                   "max bw bf16 @ {dx_linear}");
+        assert_eq!(
+            got[dx_linear as usize].to_bits(),
+            exp.to_bits(),
+            "max bw bf16 @ {dx_linear}"
+        );
     });
 }
 
@@ -307,10 +384,18 @@ fn max_backward_requires_saves() {
     let dev_dy: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("alloc");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 16).expect("alloc");
     let args = ReduceBackwardArgs::<f32, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 4], stride: contiguous_stride([1, 4]) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: [1, 4],
+            stride: contiguous_stride([1, 4]),
+        },
         x: None,
         y: None,
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: [4, 4], stride: contiguous_stride([4, 4]) },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: [4, 4],
+            stride: contiguous_stride([4, 4]),
+        },
     };
     let err = plan.can_implement(&args);
     assert!(err.is_err(), "Max BW must reject missing saved x / y");

@@ -11,7 +11,7 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ElementKind, GgufBlockFormat, KernelSku, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, Workspace, U8,
+    PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, U8, Workspace,
 };
 
 use crate::quantize::map_status;
@@ -147,38 +147,103 @@ impl GgufDequantizePlan {
 
         let status = unsafe {
             match self.desc.block_format {
-                GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_dequantize_q4_0_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_dequantize_q4_1_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_dequantize_q5_0_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_dequantize_q5_1_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_dequantize_q8_0_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
-                ),
+                GgufBlockFormat::Q4_0 => {
+                    baracuda_kernels_sys::baracuda_kernels_dequantize_q4_0_run(
+                        numel,
+                        x_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    )
+                }
+                GgufBlockFormat::Q4_1 => {
+                    baracuda_kernels_sys::baracuda_kernels_dequantize_q4_1_run(
+                        numel,
+                        x_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    )
+                }
+                GgufBlockFormat::Q5_0 => {
+                    baracuda_kernels_sys::baracuda_kernels_dequantize_q5_0_run(
+                        numel,
+                        x_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    )
+                }
+                GgufBlockFormat::Q5_1 => {
+                    baracuda_kernels_sys::baracuda_kernels_dequantize_q5_1_run(
+                        numel,
+                        x_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    )
+                }
+                GgufBlockFormat::Q8_0 => {
+                    baracuda_kernels_sys::baracuda_kernels_dequantize_q8_0_run(
+                        numel,
+                        x_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    )
+                }
                 GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_dequantize_q2_K_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_dequantize_q3_K_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_dequantize_q4_K_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_dequantize_q5_K_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_dequantize_q6_K_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_dequantize_q8_K_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
                 _ => {

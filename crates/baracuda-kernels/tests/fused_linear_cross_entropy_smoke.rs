@@ -8,11 +8,11 @@
 //! precision isn't the bottleneck in LLM training; the plan supports it
 //! for API completeness).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FusedLinearCrossEntropyArgs,
-    FusedLinearCrossEntropyDescriptor, FusedLinearCrossEntropyPlan, LossReduction,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, FusedLinearCrossEntropyArgs, FusedLinearCrossEntropyDescriptor,
+    FusedLinearCrossEntropyPlan, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -26,7 +26,7 @@ fn setup() -> (Context, Stream) {
 
 /// Host reference (f64) — `mean(-log_softmax(input @ weight.T)[target])`.
 fn host_flce_mean_f64(
-    input: &[f64], // [bt, h] row-major
+    input: &[f64],  // [bt, h] row-major
     weight: &[f64], // [v, h] row-major
     target: &[i64],
     bt: usize,
@@ -100,7 +100,9 @@ fn flce_fw_f32_mean_small() {
 
     let desc = FusedLinearCrossEntropyDescriptor::new(bt, h, v, ElementKind::F32)
         .with_reduction(LossReduction::Mean);
-    let plan = FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let plan =
+        FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
@@ -184,7 +186,9 @@ fn flce_fw_f16_mean_small() {
 
     let desc = FusedLinearCrossEntropyDescriptor::new(bt, h, v, ElementKind::F16)
         .with_reduction(LossReduction::Mean);
-    let plan = FusedLinearCrossEntropyPlan::<f16>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let plan =
+        FusedLinearCrossEntropyPlan::<f16>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
@@ -222,7 +226,10 @@ fn flce_fw_f16_mean_small() {
 
     let expected = host_flce_mean_f64(
         &host_input_f32.iter().map(|&x| x as f64).collect::<Vec<_>>(),
-        &host_weight_f32.iter().map(|&x| x as f64).collect::<Vec<_>>(),
+        &host_weight_f32
+            .iter()
+            .map(|&x| x as f64)
+            .collect::<Vec<_>>(),
         &host_target,
         bt as usize,
         h as usize,
@@ -268,7 +275,9 @@ fn flce_fw_bf16_mean_small() {
 
     let desc = FusedLinearCrossEntropyDescriptor::new(bt, h, v, ElementKind::Bf16)
         .with_reduction(LossReduction::Mean);
-    let plan = FusedLinearCrossEntropyPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let plan =
+        FusedLinearCrossEntropyPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
@@ -306,7 +315,10 @@ fn flce_fw_bf16_mean_small() {
 
     let expected = host_flce_mean_f64(
         &host_input_f32.iter().map(|&x| x as f64).collect::<Vec<_>>(),
-        &host_weight_f32.iter().map(|&x| x as f64).collect::<Vec<_>>(),
+        &host_weight_f32
+            .iter()
+            .map(|&x| x as f64)
+            .collect::<Vec<_>>(),
         &host_target,
         bt as usize,
         h as usize,
@@ -352,7 +364,9 @@ fn flce_fw_f32_sum_with_ignore_index() {
 
     let desc = FusedLinearCrossEntropyDescriptor::new(bt, h, v, ElementKind::F32)
         .with_reduction(LossReduction::Sum);
-    let plan = FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let plan =
+        FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,

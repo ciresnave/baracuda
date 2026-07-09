@@ -5,7 +5,7 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     Complex32, Complex64, ElementKind, IrfftNdArgs, IrfftNdDescriptor, IrfftNdPlan, PlanPreference,
     RfftNdArgs, RfftNdDescriptor, RfftNdPlan, Workspace,
@@ -39,8 +39,8 @@ fn rfft3_irfft3_roundtrip_f32() {
             for i in 0..H as usize {
                 for j in 0..W as usize {
                     let idx = b * per_real + k * (H * W) as usize + i * W as usize + j;
-                    x_host[idx] = (i as f32) - 0.125 * (j as f32) + 0.25 * (k as f32)
-                        + 0.5 * (b as f32);
+                    x_host[idx] =
+                        (i as f32) - 0.125 * (j as f32) + 0.25 * (k as f32) + 0.5 * (b as f32);
                 }
             }
         }
@@ -49,8 +49,7 @@ fn rfft3_irfft3_roundtrip_f32() {
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex32> =
         DeviceBuffer::zeros(&ctx, total_complex).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
+    let mut dev_xr: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
     let fwd_desc = RfftNdDescriptor {
         dims: [D, H, W, 0],
@@ -114,8 +113,8 @@ fn rfft3_irfft3_roundtrip_f64() {
             for i in 0..H as usize {
                 for j in 0..W as usize {
                     let idx = b * per_real + k * (H * W) as usize + i * W as usize + j;
-                    x_host[idx] = (i as f64) - 0.125 * (j as f64) + 0.25 * (k as f64)
-                        + 0.5 * (b as f64);
+                    x_host[idx] =
+                        (i as f64) - 0.125 * (j as f64) + 0.25 * (k as f64) + 0.5 * (b as f64);
                 }
             }
         }
@@ -124,8 +123,7 @@ fn rfft3_irfft3_roundtrip_f64() {
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
     let mut dev_y: DeviceBuffer<Complex64> =
         DeviceBuffer::zeros(&ctx, total_complex).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
+    let mut dev_xr: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
     let fwd_desc = RfftNdDescriptor {
         dims: [D, H, W, 0],

@@ -9,11 +9,11 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BatchedQrArgs, BatchedQrDescriptor, BatchedQrMaterializeArgs,
-    BatchedQrMaterializeDescriptor, BatchedQrMaterializePlan, BatchedQrPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BatchedQrArgs, BatchedQrDescriptor, BatchedQrMaterializeArgs, BatchedQrMaterializeDescriptor,
+    BatchedQrMaterializePlan, BatchedQrPlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -94,8 +94,7 @@ fn qr_batched_materialize_f32_basic() {
     let qr_plan = BatchedQrPlan::<f32>::select(&stream, &qr_desc, PlanPreference::default())
         .expect("select QR");
     let ws_bytes = qr_plan.query_workspace_size(&stream).expect("ws query");
-    let mut dev_qr_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc qr ws");
+    let mut dev_qr_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc qr ws");
     let qr_args = BatchedQrArgs::<f32> {
         a: TensorMut {
             data: dev_a.as_slice_mut(),
@@ -109,7 +108,11 @@ fn qr_batched_materialize_f32_basic() {
         },
     };
     qr_plan
-        .run(&stream, Workspace::Borrowed(dev_qr_ws.as_slice_mut()), qr_args)
+        .run(
+            &stream,
+            Workspace::Borrowed(dev_qr_ws.as_slice_mut()),
+            qr_args,
+        )
         .expect("run batched QR");
 
     // 3. Materialize.
@@ -243,8 +246,7 @@ fn qr_batched_materialize_f64_basic() {
     let qr_plan = BatchedQrPlan::<f64>::select(&stream, &qr_desc, PlanPreference::default())
         .expect("select QR");
     let ws_bytes = qr_plan.query_workspace_size(&stream).expect("ws query");
-    let mut dev_qr_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc qr ws");
+    let mut dev_qr_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc qr ws");
     let qr_args = BatchedQrArgs::<f64> {
         a: TensorMut {
             data: dev_a.as_slice_mut(),
@@ -258,7 +260,11 @@ fn qr_batched_materialize_f64_basic() {
         },
     };
     qr_plan
-        .run(&stream, Workspace::Borrowed(dev_qr_ws.as_slice_mut()), qr_args)
+        .run(
+            &stream,
+            Workspace::Borrowed(dev_qr_ws.as_slice_mut()),
+            qr_args,
+        )
         .expect("run batched QR");
 
     let mut dev_q: DeviceBuffer<f64> =

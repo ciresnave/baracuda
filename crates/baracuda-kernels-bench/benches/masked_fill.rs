@@ -14,14 +14,14 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, MaskedFillArgs, MaskedFillDescriptor, MaskedFillPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, MaskedFillArgs, MaskedFillDescriptor, MaskedFillPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
+    CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP, PhaseTwentyNineRow, PytorchBaseline, append_csv_row,
+    measure_median_ns, setup_device, time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::f16;
 
 const BENCH_NAME: &str = "masked_fill";
@@ -69,14 +69,11 @@ fn bench<T>(
             let stx = contiguous_stride(xs);
 
             let desc = desc_for_dtype(xs);
-            let plan = match MaskedFillPlan::<T, 2>::select(
-                &stream,
-                &desc,
-                PlanPreference::default(),
-            ) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
+            let plan =
+                match MaskedFillPlan::<T, 2>::select(&stream, &desc, PlanPreference::default()) {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
 
             warmup(&stream, || {
                 let args = MaskedFillArgs::<T, 2> {
@@ -96,7 +93,8 @@ fn bench<T>(
                         stride: stx,
                     },
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda masked_fill");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda masked_fill");
             });
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = MaskedFillArgs::<T, 2> {
@@ -116,7 +114,8 @@ fn bench<T>(
                         stride: stx,
                     },
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda masked_fill");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda masked_fill");
             });
             append_csv_row(
                 BENCH_NAME,
@@ -127,8 +126,7 @@ fn bench<T>(
                     baracuda_ns,
                     reference_ns: None,
                     reference: "",
-                    pytorch_ns: baseline
-                        .and_then(|b| b.lookup("masked_fill", &label, dtype_label)),
+                    pytorch_ns: baseline.and_then(|b| b.lookup("masked_fill", &label, dtype_label)),
                 },
             );
             group.bench_with_input(BenchmarkId::from_parameter(&label), &(), |bb, _| {
@@ -151,7 +149,8 @@ fn bench<T>(
                                 stride: stx,
                             },
                         };
-                        plan.run(&stream, Workspace::None, args).expect("baracuda masked_fill");
+                        plan.run(&stream, Workspace::None, args)
+                            .expect("baracuda masked_fill");
                     })
                 });
             });
@@ -175,7 +174,7 @@ fn benches(c: &mut Criterion) {
         baseline_ref,
     );
     let _ = ElementKind::F32;
-    let _ = f16::ONE;  // suppress unused-import warning
+    let _ = f16::ONE; // suppress unused-import warning
 }
 
 #[allow(missing_docs)]

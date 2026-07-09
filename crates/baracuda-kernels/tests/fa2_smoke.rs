@@ -23,10 +23,10 @@
 
 #![cfg(feature = "fa2")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor,
-    FlashSdpaPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -79,18 +79,18 @@ fn gen_bf16(n: usize, phase: f32) -> Vec<bf16> {
 fn fa2_heuristic_short_picks_bespoke() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaDescriptor::new(
-            SC_B,
-            SC_H,
-            SC_Q,
-            SC_K,
-            DK,
-            DV,
-            default_scale(DK),
-            false,
-            ElementKind::F16,
-        );
-    let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+        SC_B,
+        SC_H,
+        SC_Q,
+        SC_K,
+        DK,
+        DV,
+        default_scale(DK),
+        false,
+        ElementKind::F16,
+    );
+    let plan =
+        FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     assert_eq!(
         plan.backend(),
         BackendKind::Bespoke,
@@ -108,18 +108,18 @@ fn fa2_heuristic_short_picks_bespoke() {
 fn fa2_heuristic_long_picks_fa2() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaDescriptor::new(
-            LC_B,
-            LC_H,
-            LC_Q,
-            LC_K,
-            DK,
-            DV,
-            default_scale(DK),
-            false,
-            ElementKind::F16,
-        );
-    let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+        LC_B,
+        LC_H,
+        LC_Q,
+        LC_K,
+        DK,
+        DV,
+        default_scale(DK),
+        false,
+        ElementKind::F16,
+    );
+    let plan =
+        FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     assert_eq!(
         plan.backend(),
         BackendKind::FlashAttentionV2,
@@ -137,16 +137,16 @@ fn fa2_heuristic_long_picks_fa2() {
 fn fa2_force_via_preference() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaDescriptor::new(
-            SC_B,
-            SC_H,
-            SC_Q,
-            SC_K,
-            DK,
-            DV,
-            default_scale(DK),
-            false,
-            ElementKind::F16,
-        );
+        SC_B,
+        SC_H,
+        SC_Q,
+        SC_K,
+        DK,
+        DV,
+        default_scale(DK),
+        false,
+        ElementKind::F16,
+    );
     let pref = PlanPreference {
         prefer_backend: Some(BackendKind::FlashAttentionV2),
         ..Default::default()
@@ -233,7 +233,7 @@ fn run_correctness_f16(is_causal: bool) {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("bespoke run");
@@ -250,8 +250,7 @@ fn run_correctness_f16(is_causal: bool) {
     let plan_fa2 = FlashSdpaPlan::<f16>::select(&stream, &desc, pref_fa2).expect("sel fa2");
     assert_eq!(plan_fa2.backend(), BackendKind::FlashAttentionV2);
     let ws_bytes = plan_fa2.workspace_size();
-    let mut ws_buf: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc fa2 ws");
+    let mut ws_buf: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc fa2 ws");
     plan_fa2
         .run(
             &stream,
@@ -283,7 +282,7 @@ fn run_correctness_f16(is_causal: bool) {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("fa2 run");
@@ -315,7 +314,11 @@ fn run_correctness_f16(is_causal: bool) {
     }
     eprintln!(
         "fa2 f16 vs bespoke {} max_diff = {max_diff:.6e} @ idx {max_idx}",
-        if is_causal { "(causal)" } else { "(non-causal)" }
+        if is_causal {
+            "(causal)"
+        } else {
+            "(non-causal)"
+        }
     );
 }
 
@@ -378,13 +381,33 @@ fn run_correctness_bf16(is_causal: bool) {
             &stream,
             Workspace::None,
             FlashSdpaArgs {
-                q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                y: TensorMut { data: dy_ref.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-                lse: TensorMut { data: dlse_ref.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: contiguous_stride(sq),
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk,
+                    stride: contiguous_stride(sk),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv,
+                    stride: contiguous_stride(sv),
+                },
+                y: TensorMut {
+                    data: dy_ref.as_slice_mut(),
+                    shape: sy,
+                    stride: contiguous_stride(sy),
+                },
+                lse: TensorMut {
+                    data: dlse_ref.as_slice_mut(),
+                    shape: sl,
+                    stride: contiguous_stride(sl),
+                },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("bespoke bf16 run");
@@ -399,20 +422,39 @@ fn run_correctness_bf16(is_causal: bool) {
     };
     let plan_fa2 = FlashSdpaPlan::<bf16>::select(&stream, &desc, pref_fa2).expect("sel fa2 bf16");
     let ws_bytes = plan_fa2.workspace_size();
-    let mut ws_buf: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc fa2 ws");
+    let mut ws_buf: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc fa2 ws");
     plan_fa2
         .run(
             &stream,
             Workspace::Borrowed(ws_buf.as_slice_mut()),
             FlashSdpaArgs {
-                q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                y: TensorMut { data: dy_fa2.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-                lse: TensorMut { data: dlse_fa2.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: contiguous_stride(sq),
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk,
+                    stride: contiguous_stride(sk),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv,
+                    stride: contiguous_stride(sv),
+                },
+                y: TensorMut {
+                    data: dy_fa2.as_slice_mut(),
+                    shape: sy,
+                    stride: contiguous_stride(sy),
+                },
+                lse: TensorMut {
+                    data: dlse_fa2.as_slice_mut(),
+                    shape: sl,
+                    stride: contiguous_stride(sl),
+                },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("fa2 bf16 run");
@@ -434,7 +476,11 @@ fn run_correctness_bf16(is_causal: bool) {
         assert!(
             diff <= t,
             "bf16 FA2 vs bespoke y @ {i} {}: diff={diff} fa2={f} bespoke={r}",
-            if is_causal { "(causal)" } else { "(non-causal)" }
+            if is_causal {
+                "(causal)"
+            } else {
+                "(non-causal)"
+            }
         );
     }
 }
@@ -489,18 +535,18 @@ fn fa2_capture_falls_back_to_bespoke() {
     let sl = [LC_B, LC_H, LC_Q];
 
     let desc = FlashSdpaDescriptor::new(
-            LC_B,
-            LC_H,
-            LC_Q,
-            LC_K,
-            DK,
-            DV,
-            default_scale(DK),
-            false,
-            ElementKind::F16,
-        );
-    let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+        LC_B,
+        LC_H,
+        LC_Q,
+        LC_K,
+        DK,
+        DV,
+        default_scale(DK),
+        false,
+        ElementKind::F16,
+    );
+    let plan =
+        FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     assert_eq!(plan.backend(), BackendKind::FlashAttentionV2);
     // Workspace sized for the FA2 path (bespoke ignores it).
     let ws_bytes = plan.workspace_size();
@@ -516,13 +562,33 @@ fn fa2_capture_falls_back_to_bespoke() {
         &stream,
         Workspace::Borrowed(ws_buf.as_slice_mut()),
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
-                mask: None,
-                    alibi_slopes: None,
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
+            mask: None,
+            alibi_slopes: None,
         },
     )
     .expect("captured run (should fallback to bespoke without error)");

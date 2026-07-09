@@ -65,18 +65,16 @@
 
 // Re-export the shared type vocabulary.
 pub use baracuda_kernels_types::{
-    contiguous_stride, ActivationKind, ArchSku, ArgReduceKind, AttentionKind, BackendKind,
-    BiasElement, BiasElementKind, Bin, BinElement, BinaryCmpKind, BinaryKind, Bool, Complex32,
-    Complex64, CrossEntropyTargetKind, Element, ElementKind, EmbeddingKind, EpilogueKind,
-    F32Strict, FftKind, FillMode, Fp8E4M3, Fp8E5M2, FpElement, GatedActivationKind,
-    GgufBlockFormat, ImageKind, IndexElement, IndexElementKind, IndexOutputElement,
-    IndexOutputKind, IndexingKind,
-    IntElement, KernelDtype, KernelSku, LayoutSku, LinalgKind, LossKind, LossReduction,
-    MathPrecision, MatrixMut, MatrixRef, MoeKind, NormalizationKind, OpCategory, PadMode,
-    PlanPreference, PoolKind, PrecisionGuarantee, QuantizeKind, RandomKind, ReduceKind,
-    ReduceToOp, S4, S8, ScalarType, ScanKind, SegmentKind,
-    ShapeLayoutKind, SoftmaxKind, SortKind, TensorMut, TensorRef, TernaryKind, U4, U8, UnaryKind,
-    VectorRef, Workspace,
+    ActivationKind, ArchSku, ArgReduceKind, AttentionKind, BackendKind, BiasElement,
+    BiasElementKind, Bin, BinElement, BinaryCmpKind, BinaryKind, Bool, Complex32, Complex64,
+    CrossEntropyTargetKind, Element, ElementKind, EmbeddingKind, EpilogueKind, F32Strict, FftKind,
+    FillMode, Fp8E4M3, Fp8E5M2, FpElement, GatedActivationKind, GgufBlockFormat, ImageKind,
+    IndexElement, IndexElementKind, IndexOutputElement, IndexOutputKind, IndexingKind, IntElement,
+    KernelDtype, KernelSku, LayoutSku, LinalgKind, LossKind, LossReduction, MathPrecision,
+    MatrixMut, MatrixRef, MoeKind, NormalizationKind, OpCategory, PadMode, PlanPreference,
+    PoolKind, PrecisionGuarantee, QuantizeKind, RandomKind, ReduceKind, ReduceToOp, S4, S8,
+    ScalarType, ScanKind, SegmentKind, ShapeLayoutKind, SoftmaxKind, SortKind, TensorMut,
+    TensorRef, TernaryKind, U4, U8, UnaryKind, VectorRef, Workspace, contiguous_stride,
 };
 
 // Re-export the float-GEMM plan types from baracuda-cutlass unchanged —
@@ -96,18 +94,18 @@ pub mod gemm;
 
 pub use gemm::{
     BinGemmArgs, BinGemmDescriptor, BinGemmPlan, DenseGemmArgs, DenseGemmDescriptor,
-    DenseGemmLayout, DenseGemmPlan, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan,
-    GemmSparse24Args, GemmSparse24Descriptor, GemmSparse24Plan, Int4GemmArgs, Int4GemmDescriptor,
-    Int4GemmPlan, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
+    DenseGemmLayout, DenseGemmPlan, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan, GemmSparse24Args,
+    GemmSparse24Descriptor, GemmSparse24Plan, Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan,
+    IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
 };
 
 // Phase 48 — Marlin + AWQ 4-bit GEMM + GPTQ→Marlin repack utility.
 // Plan types always exported; FFI calls inside `run()` are
 // `marlin` / `awq` feature-gated.
 pub use gemm::{
-    gptq_to_marlin_repack, AwqActivation, GptqWeights, Int4AwqGemmArgs, Int4AwqGemmDescriptor,
-    Int4AwqGemmPlan, Int4MarlinGemmArgs, Int4MarlinGemmDescriptor, Int4MarlinGemmPlan,
-    MarlinActivation, MarlinWeights, MARLIN_PERM_LEN, MARLIN_SCALE_PERM_LEN,
+    AwqActivation, GptqWeights, Int4AwqGemmArgs, Int4AwqGemmDescriptor, Int4AwqGemmPlan,
+    Int4MarlinGemmArgs, Int4MarlinGemmDescriptor, Int4MarlinGemmPlan, MARLIN_PERM_LEN,
+    MARLIN_SCALE_PERM_LEN, MarlinActivation, MarlinWeights, gptq_to_marlin_repack,
 };
 
 // Elementwise op family — Phase 3 trailblazer surface. See module docs
@@ -116,17 +114,16 @@ pub mod elementwise;
 
 pub use elementwise::{
     AffineArgs, AffineDescriptor, AffinePlan, BinaryArgs, BinaryBackwardArgs,
-    BinaryBackwardDescriptor, BinaryBackwardPlan, BinaryCmpArgs,
-    BinaryCmpDescriptor, BinaryCmpPlan, BinaryDescriptor, BinaryParamArgs,
-    BinaryParamBackwardArgs, BinaryParamBackwardDescriptor, BinaryParamBackwardPlan,
-    BinaryParamDescriptor, BinaryParamPlan, BinaryPlan, CastArgs, CastDescriptor, CastPlan,
-    CastSubByteArgs, CastSubByteDescriptor, CastSubBytePlan,
-    GatedActivationArgs,
-    GatedActivationBackwardArgs, GatedActivationBackwardDescriptor, GatedActivationBackwardPlan,
-    GatedActivationDescriptor, GatedActivationPlan, TernaryArgs, TernaryBackwardArgs,
-    TernaryBackwardDescriptor, TernaryBackwardPlan, TernaryDescriptor, TernaryPlan, UnaryArgs,
-    UnaryBackwardArgs, UnaryBackwardDescriptor, UnaryBackwardPlan, UnaryDescriptor,
-    UnaryParamArgs, UnaryParamBackwardArgs, UnaryParamBackwardDescriptor, UnaryParamBackwardPlan,
+    BinaryBackwardDescriptor, BinaryBackwardPlan, BinaryCmpArgs, BinaryCmpDescriptor,
+    BinaryCmpPlan, BinaryDescriptor, BinaryParamArgs, BinaryParamBackwardArgs,
+    BinaryParamBackwardDescriptor, BinaryParamBackwardPlan, BinaryParamDescriptor, BinaryParamPlan,
+    BinaryPlan, CastArgs, CastDescriptor, CastPlan, CastSubByteArgs, CastSubByteDescriptor,
+    CastSubBytePlan, GatedActivationArgs, GatedActivationBackwardArgs,
+    GatedActivationBackwardDescriptor, GatedActivationBackwardPlan, GatedActivationDescriptor,
+    GatedActivationPlan, TernaryArgs, TernaryBackwardArgs, TernaryBackwardDescriptor,
+    TernaryBackwardPlan, TernaryDescriptor, TernaryPlan, UnaryArgs, UnaryBackwardArgs,
+    UnaryBackwardDescriptor, UnaryBackwardPlan, UnaryDescriptor, UnaryParamArgs,
+    UnaryParamBackwardArgs, UnaryParamBackwardDescriptor, UnaryParamBackwardPlan,
     UnaryParamDescriptor, UnaryParamPlan, UnaryPlan, WhereArgs, WhereBackwardArgs,
     WhereBackwardDescriptor, WhereBackwardPlan, WhereDescriptor, WherePlan,
 };
@@ -141,20 +138,17 @@ pub use elementwise::{
 pub mod shape_layout;
 
 pub use shape_layout::{
-    ConcatArgs, ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan,
-    ConcatDescriptor, ConcatPlan, ContiguizeArgs, ContiguizeDescriptor, ContiguizePlan,
-    FillArgs, FillDescriptor, FillPlan, FlipArgs,
-    FlipBackwardArgs, FlipBackwardDescriptor,
-    FlipBackwardPlan, FlipDescriptor, FlipPlan, PadArgs, PadBackwardArgs,
-    PadBackwardDescriptor, PadBackwardPlan, PadDescriptor, PadPlan, PermuteArgs,
-    PermuteBackwardArgs, PermuteBackwardDescriptor, PermuteBackwardPlan, PermuteDescriptor,
-    PermutePlan, RepeatArgs, RepeatBackwardArgs, RepeatBackwardDescriptor,
+    ConcatArgs, ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan, ConcatDescriptor,
+    ConcatPlan, ContiguizeArgs, ContiguizeDescriptor, ContiguizePlan, FillArgs, FillDescriptor,
+    FillPlan, FlipArgs, FlipBackwardArgs, FlipBackwardDescriptor, FlipBackwardPlan, FlipDescriptor,
+    FlipPlan, PadArgs, PadBackwardArgs, PadBackwardDescriptor, PadBackwardPlan, PadDescriptor,
+    PadPlan, PermuteArgs, PermuteBackwardArgs, PermuteBackwardDescriptor, PermuteBackwardPlan,
+    PermuteDescriptor, PermutePlan, RepeatArgs, RepeatBackwardArgs, RepeatBackwardDescriptor,
     RepeatBackwardPlan, RepeatDescriptor, RepeatPlan, RollArgs, RollBackwardArgs,
-    RollBackwardDescriptor, RollBackwardPlan, RollDescriptor, RollPlan,
-    TrilArgs, TrilBackwardArgs, TrilBackwardDescriptor, TrilBackwardPlan,
-    TrilDescriptor, TrilPlan, TriuArgs, TriuBackwardArgs, TriuBackwardDescriptor,
-    TriuBackwardPlan, TriuDescriptor, TriuPlan,
-    WriteSliceArgs, WriteSliceDescriptor, WriteSlicePlan,
+    RollBackwardDescriptor, RollBackwardPlan, RollDescriptor, RollPlan, TrilArgs, TrilBackwardArgs,
+    TrilBackwardDescriptor, TrilBackwardPlan, TrilDescriptor, TrilPlan, TriuArgs, TriuBackwardArgs,
+    TriuBackwardDescriptor, TriuBackwardPlan, TriuDescriptor, TriuPlan, WriteSliceArgs,
+    WriteSliceDescriptor, WriteSlicePlan,
 };
 
 // Reduction op family — Phase 4 (Category E). Output shape differs
@@ -173,8 +167,7 @@ pub use reduce::{
 pub mod scan;
 
 pub use scan::{
-    ScanArgs, ScanBackwardArgs, ScanBackwardDescriptor, ScanBackwardPlan, ScanDescriptor,
-    ScanPlan,
+    ScanArgs, ScanBackwardArgs, ScanBackwardDescriptor, ScanBackwardPlan, ScanDescriptor, ScanPlan,
 };
 
 // Softmax family — Phase 5 (Category H). Length-preserving stable
@@ -183,10 +176,10 @@ pub mod softmax;
 
 pub use softmax::{
     GumbelSoftmaxArgs, GumbelSoftmaxBackwardArgs, GumbelSoftmaxBackwardDescriptor,
-    GumbelSoftmaxBackwardPlan, GumbelSoftmaxDescriptor, GumbelSoftmaxPlan, SoftmaxArgs,
-    SoftmaxBackwardArgs, SoftmaxBackwardDescriptor, SoftmaxBackwardPlan, SoftmaxDescriptor,
-    SoftmaxPlan, SparsemaxArgs, SparsemaxBackwardArgs, SparsemaxBackwardDescriptor,
-    SparsemaxBackwardPlan, SparsemaxDescriptor, SparsemaxPlan, SPARSEMAX_MAX_EXTENT,
+    GumbelSoftmaxBackwardPlan, GumbelSoftmaxDescriptor, GumbelSoftmaxPlan, SPARSEMAX_MAX_EXTENT,
+    SoftmaxArgs, SoftmaxBackwardArgs, SoftmaxBackwardDescriptor, SoftmaxBackwardPlan,
+    SoftmaxDescriptor, SoftmaxPlan, SparsemaxArgs, SparsemaxBackwardArgs,
+    SparsemaxBackwardDescriptor, SparsemaxBackwardPlan, SparsemaxDescriptor, SparsemaxPlan,
 };
 
 // Normalization family — Phase 5 (Category G). Per-row stable
@@ -214,21 +207,20 @@ pub use loss::{
     BceLossDescriptor, BceLossPlan, BceWithLogitsLossArgs, BceWithLogitsLossBackwardArgs,
     BceWithLogitsLossBackwardDescriptor, BceWithLogitsLossBackwardPlan,
     BceWithLogitsLossDescriptor, BceWithLogitsLossPlan, CrossEntropyLossArgs,
-    CrossEntropyLossBackwardArgs, CrossEntropyLossBackwardDescriptor,
-    CrossEntropyLossBackwardPlan, CrossEntropyLossDescriptor, CrossEntropyLossPlan,
+    CrossEntropyLossBackwardArgs, CrossEntropyLossBackwardDescriptor, CrossEntropyLossBackwardPlan,
+    CrossEntropyLossDescriptor, CrossEntropyLossPlan, FLCE_DEFAULT_IGNORE_INDEX,
     FusedLinearCrossEntropyArgs, FusedLinearCrossEntropyBackwardArgs,
     FusedLinearCrossEntropyBackwardDescriptor, FusedLinearCrossEntropyBackwardPlan,
-    FusedLinearCrossEntropyDescriptor, FusedLinearCrossEntropyPlan, FLCE_DEFAULT_IGNORE_INDEX,
-    GaussianNllLossArgs, GaussianNllLossBackwardArgs, GaussianNllLossBackwardDescriptor,
-    GaussianNllLossBackwardPlan, GaussianNllLossDescriptor, GaussianNllLossPlan, HuberLossArgs,
-    HuberLossBackwardArgs, HuberLossBackwardDescriptor, HuberLossBackwardPlan,
-    HuberLossDescriptor, HuberLossPlan, KlDivLossArgs, KlDivLossBackwardArgs,
-    KlDivLossBackwardDescriptor, KlDivLossBackwardPlan, KlDivLossDescriptor, KlDivLossPlan,
-    L1LossArgs, L1LossBackwardArgs, L1LossBackwardDescriptor, L1LossBackwardPlan,
-    L1LossDescriptor, L1LossPlan, MseLossArgs, MseLossBackwardArgs, MseLossBackwardDescriptor,
-    MseLossBackwardPlan, MseLossDescriptor, MseLossPlan, NllLossArgs, NllLossBackwardArgs,
-    NllLossBackwardDescriptor, NllLossBackwardPlan, NllLossDescriptor, NllLossPlan,
-    PoissonNllLossArgs, PoissonNllLossBackwardArgs, PoissonNllLossBackwardDescriptor,
+    FusedLinearCrossEntropyDescriptor, FusedLinearCrossEntropyPlan, GaussianNllLossArgs,
+    GaussianNllLossBackwardArgs, GaussianNllLossBackwardDescriptor, GaussianNllLossBackwardPlan,
+    GaussianNllLossDescriptor, GaussianNllLossPlan, HuberLossArgs, HuberLossBackwardArgs,
+    HuberLossBackwardDescriptor, HuberLossBackwardPlan, HuberLossDescriptor, HuberLossPlan,
+    KlDivLossArgs, KlDivLossBackwardArgs, KlDivLossBackwardDescriptor, KlDivLossBackwardPlan,
+    KlDivLossDescriptor, KlDivLossPlan, L1LossArgs, L1LossBackwardArgs, L1LossBackwardDescriptor,
+    L1LossBackwardPlan, L1LossDescriptor, L1LossPlan, MseLossArgs, MseLossBackwardArgs,
+    MseLossBackwardDescriptor, MseLossBackwardPlan, MseLossDescriptor, MseLossPlan, NllLossArgs,
+    NllLossBackwardArgs, NllLossBackwardDescriptor, NllLossBackwardPlan, NllLossDescriptor,
+    NllLossPlan, PoissonNllLossArgs, PoissonNllLossBackwardArgs, PoissonNllLossBackwardDescriptor,
     PoissonNllLossBackwardPlan, PoissonNllLossDescriptor, PoissonNllLossPlan, SmoothL1LossArgs,
     SmoothL1LossBackwardArgs, SmoothL1LossBackwardDescriptor, SmoothL1LossBackwardPlan,
     SmoothL1LossDescriptor, SmoothL1LossPlan,
@@ -283,21 +275,54 @@ pub use random::{
 pub mod attention;
 
 pub use attention::{
-    AlibiArgs, AlibiBackwardArgs, AlibiBackwardDescriptor, AlibiBackwardPlan, AlibiDescriptor,
+    AlibiArgs,
+    AlibiBackwardArgs,
+    AlibiBackwardDescriptor,
+    AlibiBackwardPlan,
+    AlibiDescriptor,
     AlibiPlan,
+    FLASH_DECODING_MAX_D,
+    FLASH_SDPA_MAX_D,
     // Phase 73 follow-up — FlashDecoding (split-K parallel decode).
-    FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan, FLASH_DECODING_MAX_D,
-    FlashSdpaArgs, FlashSdpaBackwardArgs, FlashSdpaBackwardDescriptor,
-    FlashSdpaBackwardPlan, FlashSdpaDescriptor, FlashSdpaPlan,
+    FlashDecodingArgs,
+    FlashDecodingDescriptor,
+    FlashDecodingPlan,
+    FlashSdpaArgs,
+    FlashSdpaBackwardArgs,
+    FlashSdpaBackwardDescriptor,
+    FlashSdpaBackwardPlan,
+    FlashSdpaDescriptor,
+    FlashSdpaPlan,
     // Phase 59b — packed-batch (varlen) FlashAttention v2 plans.
-    FlashSdpaVarlenArgs, FlashSdpaVarlenBackwardArgs, FlashSdpaVarlenBackwardPlan,
-    FlashSdpaVarlenDescriptor, FlashSdpaVarlenPlan,
-    HyperConnectionArgs, HyperConnectionDescriptor, HyperConnectionPlan, KvCacheAppendArgs,
-    KvCacheAppendDescriptor, KvCacheAppendPlan, RopeArgs, RopeBackwardArgs,
-    RopeBackwardDescriptor, RopeBackwardPlan, RopeDescriptor, RopePlan, SdpaArgs,
-    SdpaBackwardArgs, SdpaBackwardDescriptor, SdpaBackwardPlan, SdpaBlockSparseArgs,
-    SdpaBlockSparseDescriptor, SdpaBlockSparsePlan, SdpaDescriptor, SdpaPlan,
-    FLASH_SDPA_MAX_D, ROPE_DEFAULT_BASE, SDPA_BLOCK_SPARSE_MAX_BLOCK, SDPA_BLOCK_SPARSE_MAX_D,
+    FlashSdpaVarlenArgs,
+    FlashSdpaVarlenBackwardArgs,
+    FlashSdpaVarlenBackwardPlan,
+    FlashSdpaVarlenDescriptor,
+    FlashSdpaVarlenPlan,
+    HyperConnectionArgs,
+    HyperConnectionDescriptor,
+    HyperConnectionPlan,
+    KvCacheAppendArgs,
+    KvCacheAppendDescriptor,
+    KvCacheAppendPlan,
+    ROPE_DEFAULT_BASE,
+    RopeArgs,
+    RopeBackwardArgs,
+    RopeBackwardDescriptor,
+    RopeBackwardPlan,
+    RopeDescriptor,
+    RopePlan,
+    SDPA_BLOCK_SPARSE_MAX_BLOCK,
+    SDPA_BLOCK_SPARSE_MAX_D,
+    SdpaArgs,
+    SdpaBackwardArgs,
+    SdpaBackwardDescriptor,
+    SdpaBackwardPlan,
+    SdpaBlockSparseArgs,
+    SdpaBlockSparseDescriptor,
+    SdpaBlockSparsePlan,
+    SdpaDescriptor,
+    SdpaPlan,
 };
 
 // Phase 45 — long-context RoPE scaling helpers (pure-Rust host-side
@@ -341,13 +366,13 @@ pub mod conv;
 #[cfg(feature = "cudnn")]
 pub use conv::{
     Col2Im1dArgs, Col2Im1dDescriptor, Col2Im1dPlan, Conv1dArgs, Conv1dBwArgs, Conv1dDescriptor,
-    Conv1dDwArgs, Conv1dPlan, Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs,
-    Conv2dPlan, Conv3dArgs, Conv3dBwArgs, Conv3dDescriptor, Conv3dDwArgs, Conv3dPlan,
-    ConvTranspose1dArgs, ConvTranspose1dBwArgs, ConvTranspose1dDescriptor, ConvTranspose1dDwArgs,
-    ConvTranspose1dPlan, ConvTranspose2dArgs, ConvTranspose2dBwArgs, ConvTranspose2dDescriptor,
-    ConvTranspose2dDwArgs, ConvTranspose2dPlan, ConvTranspose3dArgs, ConvTranspose3dBwArgs,
-    ConvTranspose3dDescriptor, ConvTranspose3dDwArgs, ConvTranspose3dPlan, Im2Col1dArgs,
-    Im2Col1dDescriptor, Im2Col1dPlan, Im2ColArgs, Im2ColDescriptor, Im2ColPlan,
+    Conv1dDwArgs, Conv1dPlan, Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan,
+    Conv3dArgs, Conv3dBwArgs, Conv3dDescriptor, Conv3dDwArgs, Conv3dPlan, ConvTranspose1dArgs,
+    ConvTranspose1dBwArgs, ConvTranspose1dDescriptor, ConvTranspose1dDwArgs, ConvTranspose1dPlan,
+    ConvTranspose2dArgs, ConvTranspose2dBwArgs, ConvTranspose2dDescriptor, ConvTranspose2dDwArgs,
+    ConvTranspose2dPlan, ConvTranspose3dArgs, ConvTranspose3dBwArgs, ConvTranspose3dDescriptor,
+    ConvTranspose3dDwArgs, ConvTranspose3dPlan, Im2Col1dArgs, Im2Col1dDescriptor, Im2Col1dPlan,
+    Im2ColArgs, Im2ColDescriptor, Im2ColPlan,
 };
 
 // Pooling family — Phase 7 Milestone 7.2 (Category Pooling). Wraps
@@ -369,9 +394,9 @@ pub use pool::{
     FractionalMaxPool3dDescriptor, FractionalMaxPool3dFwArgs, FractionalMaxPool3dPlan,
     LpPool1dBackwardPlan, LpPool1dBwArgs, LpPool1dDescriptor, LpPool1dFwArgs, LpPool1dPlan,
     LpPool2dBackwardPlan, LpPool2dBwArgs, LpPool2dDescriptor, LpPool2dFwArgs, LpPool2dPlan,
-    MaxPool1dPlan, MaxPool2dPlan, MaxPool3dPlan, Pool1dBwArgs,
-    Pool1dDescriptor, Pool1dFwArgs, Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs, Pool3dBwArgs,
-    Pool3dDescriptor, Pool3dFwArgs, PoolMode,
+    MaxPool1dPlan, MaxPool2dPlan, MaxPool3dPlan, Pool1dBwArgs, Pool1dDescriptor, Pool1dFwArgs,
+    Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs, Pool3dBwArgs, Pool3dDescriptor, Pool3dFwArgs,
+    PoolMode,
 };
 
 // FFT family — Milestone 6.4 (Category Fft). Wraps cuFFT for the four
@@ -381,11 +406,11 @@ pub use pool::{
 pub mod fft;
 
 pub use fft::{
-    FftArgs, FftDescriptor, FftNdArgs, FftNdDescriptor, FftNdPlan, FftPlan, FftShiftArgs,
-    FftShiftDescriptor, FftShiftNdArgs, FftShiftNdDescriptor, FftShiftNdPlan, FftShiftPlan,
-    IrfftArgs, IrfftDescriptor, IrfftNdArgs, IrfftNdDescriptor, IrfftNdPlan, IrfftPlan, RfftArgs,
-    RfftDescriptor, RfftNdArgs, RfftNdDescriptor, RfftNdPlan, RfftPlan, FFTSHIFT_ND_MAX_RANK,
-    FFTSHIFT_ND_MAX_SHIFT_AXES,
+    FFTSHIFT_ND_MAX_RANK, FFTSHIFT_ND_MAX_SHIFT_AXES, FftArgs, FftDescriptor, FftNdArgs,
+    FftNdDescriptor, FftNdPlan, FftPlan, FftShiftArgs, FftShiftDescriptor, FftShiftNdArgs,
+    FftShiftNdDescriptor, FftShiftNdPlan, FftShiftPlan, IrfftArgs, IrfftDescriptor, IrfftNdArgs,
+    IrfftNdDescriptor, IrfftNdPlan, IrfftPlan, RfftArgs, RfftDescriptor, RfftNdArgs,
+    RfftNdDescriptor, RfftNdPlan, RfftPlan,
 };
 
 // Indexing / scatter / gather family — Phase 7 Milestone 7.3 (Category L).
@@ -396,14 +421,14 @@ pub use fft::{
 pub mod indexing;
 
 pub use indexing::{
-    GatherArgs, GatherBackwardArgs, GatherBackwardDescriptor, GatherBackwardPlan,
-    GatherDescriptor, GatherPlan, IndexAddArgs, IndexAddDescriptor, IndexAddPlan, IndexSelectArgs,
+    GatherArgs, GatherBackwardArgs, GatherBackwardDescriptor, GatherBackwardPlan, GatherDescriptor,
+    GatherPlan, IndexAddArgs, IndexAddDescriptor, IndexAddPlan, IndexSelectArgs,
     IndexSelectBackwardArgs, IndexSelectBackwardDescriptor, IndexSelectBackwardPlan,
     IndexSelectDescriptor, IndexSelectPlan, MaskedFillArgs, MaskedFillBackwardArgs,
     MaskedFillBackwardDescriptor, MaskedFillBackwardPlan, MaskedFillDescriptor, MaskedFillPlan,
     NonzeroArgs, NonzeroDescriptor, NonzeroPlan, OneHotArgs, OneHotDescriptor, OneHotPlan,
-    ScatterArgs, ScatterDescriptor, ScatterPlan, ScatterAddArgs, ScatterAddDescriptor,
-    ScatterAddPlan,
+    ScatterAddArgs, ScatterAddDescriptor, ScatterAddPlan, ScatterArgs, ScatterDescriptor,
+    ScatterPlan,
 };
 
 // Embedding family — Phase 7 Milestone 7.5 (Category M). Bespoke
@@ -462,10 +487,9 @@ pub use segment::{
 pub mod quantize;
 
 pub use quantize::{
-    DequantizePerGroupArgs, DequantizePerGroupBackwardArgs,
-    DequantizePerGroupBackwardDescriptor, DequantizePerGroupBackwardPlan,
-    DequantizePerGroupDescriptor, DequantizePerGroupPlan, DequantizePerTokenArgs,
-    DequantizePerTokenBackwardArgs, DequantizePerTokenBackwardDescriptor,
+    DequantizePerGroupArgs, DequantizePerGroupBackwardArgs, DequantizePerGroupBackwardDescriptor,
+    DequantizePerGroupBackwardPlan, DequantizePerGroupDescriptor, DequantizePerGroupPlan,
+    DequantizePerTokenArgs, DequantizePerTokenBackwardArgs, DequantizePerTokenBackwardDescriptor,
     DequantizePerTokenBackwardPlan, DequantizePerTokenDescriptor, DequantizePerTokenPlan,
     QuantizePerGroupArgs, QuantizePerGroupBackwardArgs, QuantizePerGroupBackwardDescriptor,
     QuantizePerGroupBackwardPlan, QuantizePerGroupDescriptor, QuantizePerGroupPlan,
@@ -492,15 +516,13 @@ pub use quantize::{
 // QuantizedLinear).
 pub use quantize::{
     DynamicRangeMode, DynamicRangeQuantizeArgs, DynamicRangeQuantizeDescriptor,
-    DynamicRangeQuantizePlan, DynamicRangeScope, QuantizedLinearArgs,
-    QuantizedLinearDescriptor, QuantizedLinearPlan,
+    DynamicRangeQuantizePlan, DynamicRangeScope, QuantizedLinearArgs, QuantizedLinearDescriptor,
+    QuantizedLinearPlan,
 };
 
 // Phase 45 — SmoothQuant linear (pure Rust composition over the
 // existing `quantized_linear_w8a8` kernel; zero new CUDA).
-pub use quantize::{
-    SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan,
-};
+pub use quantize::{SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan};
 
 // Milestone 8.4 — GGUF block-format dequant + MMVQ (Category P).
 // Vendored from llama.cpp via fuel-cuda-kernels.
@@ -525,8 +547,8 @@ pub use quantize::{GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMP
 // (matches the Phase 46 FlashInfer pattern — public API stable, link
 // surface opt-in). See `quantize/nf4.rs` for the full docs.
 pub use quantize::{
-    Nf4Activation, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, Nf4MmvqArgs,
-    Nf4MmvqMultiMArgs, Nf4MmvqMultiMDescriptor, Nf4MmvqMultiMPlan, Nf4MmvqPlan, NF4_CODEBOOK,
+    NF4_CODEBOOK, Nf4Activation, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, Nf4MmvqArgs,
+    Nf4MmvqMultiMArgs, Nf4MmvqMultiMDescriptor, Nf4MmvqMultiMPlan, Nf4MmvqPlan,
 };
 
 // Milestone 8.5 — Mixture-of-Experts inference forward (Category V).
@@ -542,15 +564,15 @@ pub use moe::{MoeArgs, MoeDescriptor, MoePlan, MoeVariant};
 pub mod image;
 
 pub use image::{
-    AffineGridArgs, AffineGridDescriptor, AffineGridPlan, GridSampleArgs,
-    GridSampleBackwardArgs, GridSampleBackwardDescriptor, GridSampleBackwardPlan,
-    GridSampleDescriptor, GridSamplePlan, InterpolateArgs, InterpolateBackwardArgs,
-    InterpolateBackwardDescriptor, InterpolateBackwardPlan, InterpolateDescriptor,
-    InterpolateMode, InterpolatePlan, NmsArgs, NmsDescriptor, NmsPlan, PixelShuffleArgs,
-    PixelShuffleDescriptor, PixelShufflePlan, PixelUnshuffleArgs, PixelUnshuffleDescriptor,
-    PixelUnshufflePlan, RoiAlignArgs, RoiAlignBackwardArgs, RoiAlignBackwardDescriptor,
-    RoiAlignBackwardPlan, RoiAlignDescriptor, RoiAlignPlan, RoiPoolArgs, RoiPoolBackwardArgs,
-    RoiPoolBackwardDescriptor, RoiPoolBackwardPlan, RoiPoolDescriptor, RoiPoolPlan,
+    AffineGridArgs, AffineGridDescriptor, AffineGridPlan, GridSampleArgs, GridSampleBackwardArgs,
+    GridSampleBackwardDescriptor, GridSampleBackwardPlan, GridSampleDescriptor, GridSamplePlan,
+    InterpolateArgs, InterpolateBackwardArgs, InterpolateBackwardDescriptor,
+    InterpolateBackwardPlan, InterpolateDescriptor, InterpolateMode, InterpolatePlan, NmsArgs,
+    NmsDescriptor, NmsPlan, PixelShuffleArgs, PixelShuffleDescriptor, PixelShufflePlan,
+    PixelUnshuffleArgs, PixelUnshuffleDescriptor, PixelUnshufflePlan, RoiAlignArgs,
+    RoiAlignBackwardArgs, RoiAlignBackwardDescriptor, RoiAlignBackwardPlan, RoiAlignDescriptor,
+    RoiAlignPlan, RoiPoolArgs, RoiPoolBackwardArgs, RoiPoolBackwardDescriptor, RoiPoolBackwardPlan,
+    RoiPoolDescriptor, RoiPoolPlan,
 };
 
 // Sorting / order-statistics family — Phase 9 Category O. Block-
@@ -568,12 +590,12 @@ pub use sort::{
     HistogramArgs, HistogramDescriptor, HistogramPlan, HistogramddArgs, HistogramddDescriptor,
     HistogramddPlan, KthvalueArgs, KthvalueBackwardArgs, KthvalueBackwardDescriptor,
     KthvalueBackwardPlan, KthvalueDescriptor, KthvaluePlan, MsortArgs, MsortBackwardArgs,
-    MsortBackwardDescriptor, MsortBackwardPlan, MsortDescriptor, MsortPlan, SearchsortedArgs,
-    SearchsortedDescriptor, SearchsortedPlan, SortArgs, SortBackwardArgs, SortBackwardDescriptor,
-    SortBackwardPlan, SortDescriptor, SortPlan, TopkArgs, TopkBackwardArgs,
-    TopkBackwardDescriptor, TopkBackwardPlan, TopkDescriptor, TopkPlan, UniqueArgs,
-    UniqueConsecutiveArgs, UniqueConsecutiveDescriptor, UniqueConsecutivePlan, UniqueDescriptor,
-    UniquePlan, SORT_MAX_ROW, TOPK_MAX_K,
+    MsortBackwardDescriptor, MsortBackwardPlan, MsortDescriptor, MsortPlan, SORT_MAX_ROW,
+    SearchsortedArgs, SearchsortedDescriptor, SearchsortedPlan, SortArgs, SortBackwardArgs,
+    SortBackwardDescriptor, SortBackwardPlan, SortDescriptor, SortPlan, TOPK_MAX_K, TopkArgs,
+    TopkBackwardArgs, TopkBackwardDescriptor, TopkBackwardPlan, TopkDescriptor, TopkPlan,
+    UniqueArgs, UniqueConsecutiveArgs, UniqueConsecutiveDescriptor, UniqueConsecutivePlan,
+    UniqueDescriptor, UniquePlan,
 };
 
 // Phase 50 — Mamba-2 causal-conv1d primitive. Bespoke kernel; lives at
@@ -609,7 +631,7 @@ pub use attention::{
 // `run()` method that actually invokes NCCL + the kernel is gated
 // behind the `ring_attention` cargo feature.
 pub use attention::{
-    RingAttentionArgs, RingAttentionDescriptor, RingAttentionPlan, RING_ATTENTION_HEAD_DIM,
+    RING_ATTENTION_HEAD_DIM, RingAttentionArgs, RingAttentionDescriptor, RingAttentionPlan,
 };
 
 // Phase 49 — Apex multi-tensor optimizer subset (Adam / LAMB / SGD).
@@ -672,13 +694,13 @@ pub mod megatron {
 // mirror them at the crate root so callers can use
 // `baracuda_kernels::TopKTopPSamplingPlan` (the documented path).
 pub use attention::{
-    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
-    BatchPagedDecodeFp8Args, BatchPagedDecodeFp8Descriptor, BatchPagedDecodeFp8Plan,
+    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodeFp8Args,
+    BatchPagedDecodeFp8Descriptor, BatchPagedDecodeFp8Plan, BatchPagedDecodePlan,
     BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
     BatchRaggedPrefillArgs, BatchRaggedPrefillDescriptor, BatchRaggedPrefillPlan,
-    CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
-    CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan, Fp8KvDtype,
-    PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
+    CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan, CascadeMergeStatesArgs,
+    CascadeMergeStatesDescriptor, CascadeMergeStatesPlan, Fp8KvDtype, PagedKvAppendArgs,
+    PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
 };
 pub use random::{
     PerRowSampler, PerRowSamplingArgs, PerRowSamplingDescriptor, PerRowSamplingPlan, SamplerKind,

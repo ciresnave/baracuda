@@ -12,10 +12,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test reduce_to_plan_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceToArgs, ReduceToDescriptor,
-    ReduceToOp, ReduceToPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceToArgs, ReduceToDescriptor, ReduceToOp, ReduceToPlan,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -75,9 +75,7 @@ fn cpu_reduce_to_f64(
             in_coord[d] = (lin % s) as i32;
             lin /= s;
         }
-        let in_off: i64 = (0..rank)
-            .map(|d| (in_coord[d] as i64) * in_stride[d])
-            .sum();
+        let in_off: i64 = (0..rank).map(|d| (in_coord[d] as i64) * in_stride[d]).sum();
         let mut out_lin: usize = 0;
         for d in 0..rank {
             let c = if out_shape[d] == 1 { 0 } else { in_coord[d] };
@@ -122,10 +120,19 @@ fn run_f32_3d(op: ReduceToOp, host_src: &[f32]) {
         .expect("select ReduceToPlan<f32, 3>");
     assert_eq!(plan.workspace_size(), 0, "reduce_to needs no workspace");
     let args = ReduceToArgs::<f32, 3> {
-        x: TensorRef { data: dev_src.as_slice(), shape: input_shape, stride: in_stride },
-        y: TensorMut { data: dev_dst.as_slice_mut(), shape: output_shape, stride: out_stride },
+        x: TensorRef {
+            data: dev_src.as_slice(),
+            shape: input_shape,
+            stride: in_stride,
+        },
+        y: TensorMut {
+            data: dev_dst.as_slice_mut(),
+            shape: output_shape,
+            stride: out_stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("reduce_to f32 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("reduce_to f32 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f32; out_numel];
@@ -133,9 +140,11 @@ fn run_f32_3d(op: ReduceToOp, host_src: &[f32]) {
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (*g as f64 - e).abs();
         let allow = e.abs().max(1.0) * 1e-5;
-        assert!(diff <= allow,
+        assert!(
+            diff <= allow,
             "reduce_to {op:?} f32 [2,3,4]→[2,1,1] @ {i}: got {g} expected {e} \
-             (diff {diff} > allow {allow})");
+             (diff {diff} > allow {allow})"
+        );
     }
 }
 
@@ -189,7 +198,11 @@ fn plan_reduce_to_sum_f16_3d() {
     // actually sees).
     let src_f64: Vec<f64> = host_src.iter().map(|v| v.to_f32() as f64).collect();
     let expected = cpu_reduce_to_f64(
-        &src_f64, &input_shape, &in_stride, &output_shape, ReduceToOp::Sum,
+        &src_f64,
+        &input_shape,
+        &in_stride,
+        &output_shape,
+        ReduceToOp::Sum,
     );
 
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("upload src");
@@ -204,10 +217,19 @@ fn plan_reduce_to_sum_f16_3d() {
     let plan = ReduceToPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select ReduceToPlan<f16, 3>");
     let args = ReduceToArgs::<f16, 3> {
-        x: TensorRef { data: dev_src.as_slice(), shape: input_shape, stride: in_stride },
-        y: TensorMut { data: dev_dst.as_slice_mut(), shape: output_shape, stride: out_stride },
+        x: TensorRef {
+            data: dev_src.as_slice(),
+            shape: input_shape,
+            stride: in_stride,
+        },
+        y: TensorMut {
+            data: dev_dst.as_slice_mut(),
+            shape: output_shape,
+            stride: out_stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("reduce_to sum f16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("reduce_to sum f16 run");
     stream.synchronize().expect("sync");
 
     let mut got_f16 = vec![f16::from_f32(0.0); out_numel];
@@ -216,8 +238,10 @@ fn plan_reduce_to_sum_f16_3d() {
         let g_f32 = g.to_f32();
         let diff = (g_f32 as f64 - e).abs();
         let allow = e.abs().max(1.0) * (4.0 * F16_EPS) as f64;
-        assert!(diff <= allow,
-            "reduce_to sum f16 @ {i}: got {g_f32} expected {e} (diff {diff} > allow {allow})");
+        assert!(
+            diff <= allow,
+            "reduce_to sum f16 @ {i}: got {g_f32} expected {e} (diff {diff} > allow {allow})"
+        );
     }
 }
 
@@ -238,7 +262,11 @@ fn plan_reduce_to_sum_f32_strided_transposed() {
     let x_buf: Vec<f32> = (0..(N_DIM * M)).map(|i| (i as f32) * 0.01 - 1.75).collect();
     let src_f64: Vec<f64> = x_buf.iter().map(|&v| v as f64).collect();
     let expected = cpu_reduce_to_f64(
-        &src_f64, &input_shape, &in_stride, &output_shape, ReduceToOp::Sum,
+        &src_f64,
+        &input_shape,
+        &in_stride,
+        &output_shape,
+        ReduceToOp::Sum,
     );
 
     let dev_src = DeviceBuffer::from_slice(&ctx, &x_buf).expect("upload src");
@@ -253,10 +281,19 @@ fn plan_reduce_to_sum_f32_strided_transposed() {
     let plan = ReduceToPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select ReduceToPlan<f32, 2>");
     let args = ReduceToArgs::<f32, 2> {
-        x: TensorRef { data: dev_src.as_slice(), shape: input_shape, stride: in_stride },
-        y: TensorMut { data: dev_dst.as_slice_mut(), shape: output_shape, stride: out_stride },
+        x: TensorRef {
+            data: dev_src.as_slice(),
+            shape: input_shape,
+            stride: in_stride,
+        },
+        y: TensorMut {
+            data: dev_dst.as_slice_mut(),
+            shape: output_shape,
+            stride: out_stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("reduce_to strided run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("reduce_to strided run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f32; N_DIM];
@@ -264,9 +301,11 @@ fn plan_reduce_to_sum_f32_strided_transposed() {
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (*g as f64 - e).abs();
         let allow = e.abs().max(1.0) * 1e-5;
-        assert!(diff <= allow,
+        assert!(
+            diff <= allow,
             "reduce_to sum f32 strided @ {i}: got {g} expected {e} \
-             (diff {diff} > allow {allow})");
+             (diff {diff} > allow {allow})"
+        );
     }
 }
 
@@ -299,10 +338,19 @@ fn plan_reduce_to_sum_f32_stride0_broadcast_input() {
     let plan = ReduceToPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select ReduceToPlan<f32, 2>");
     let args = ReduceToArgs::<f32, 2> {
-        x: TensorRef { data: dev_src.as_slice(), shape: input_shape, stride: in_stride },
-        y: TensorMut { data: dev_dst.as_slice_mut(), shape: output_shape, stride: out_stride },
+        x: TensorRef {
+            data: dev_src.as_slice(),
+            shape: input_shape,
+            stride: in_stride,
+        },
+        y: TensorMut {
+            data: dev_dst.as_slice_mut(),
+            shape: output_shape,
+            stride: out_stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("reduce_to stride-0 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("reduce_to stride-0 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f32; 5];
@@ -341,17 +389,27 @@ fn plan_reduce_to_prod_f32_empty_reduce_set_identity() {
     let plan = ReduceToPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select ReduceToPlan<f32, 2>");
     let args = ReduceToArgs::<f32, 2> {
-        x: TensorRef { data: dev_src.as_slice(), shape: input_shape, stride: in_stride },
-        y: TensorMut { data: dev_dst.as_slice_mut(), shape: output_shape, stride: out_stride },
+        x: TensorRef {
+            data: dev_src.as_slice(),
+            shape: input_shape,
+            stride: in_stride,
+        },
+        y: TensorMut {
+            data: dev_dst.as_slice_mut(),
+            shape: output_shape,
+            stride: out_stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("reduce_to prod empty run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("reduce_to prod empty run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f32; 4];
     dev_dst.copy_to_host(&mut got).expect("download");
     for (i, g) in got.iter().enumerate() {
         assert_eq!(
-            g.to_bits(), 1.0f32.to_bits(),
+            g.to_bits(),
+            1.0f32.to_bits(),
             "reduce_to prod empty set @ {i}: got {g} expected identity 1.0",
         );
     }

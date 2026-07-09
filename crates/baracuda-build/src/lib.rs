@@ -120,11 +120,7 @@ fn pick_nvcc(root: &Path) -> Option<PathBuf> {
         "nvcc"
     };
     let p = root.join("bin").join(exe);
-    if p.is_file() {
-        Some(p)
-    } else {
-        None
-    }
+    if p.is_file() { Some(p) } else { None }
 }
 
 fn pick_lib_dir(root: &Path) -> Option<PathBuf> {
@@ -335,8 +331,8 @@ mod tests {
 
     #[test]
     fn pick_lib_dir_prefers_arch_specific_subdir() {
-        let tmp = std::env::temp_dir()
-            .join(format!("baracuda-build-libdir-{}", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("baracuda-build-libdir-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
 
         if cfg!(target_os = "windows") {

@@ -8,7 +8,7 @@
 use baracuda_cuda_sys::runtime::runtime;
 use baracuda_types::CudaVersion;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// CUDA Runtime version linked via `libcudart`.
 pub fn runtime_version() -> Result<CudaVersion> {

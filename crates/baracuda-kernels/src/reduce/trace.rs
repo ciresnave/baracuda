@@ -59,11 +59,7 @@ pub struct TracePlan<T: Element> {
 
 impl<T: Element> TracePlan<T> {
     /// Pick a kernel for `desc`.
-    pub fn select(
-        _stream: &Stream,
-        desc: &TraceDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &TraceDescriptor, _pref: PlanPreference) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::TracePlan: descriptor element != type parameter T",

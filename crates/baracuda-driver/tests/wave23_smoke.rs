@@ -2,7 +2,7 @@
 //! profiler start/stop, func/kernel name + param info, device UUID,
 //! context ID, module loading mode, graph dot-print.
 
-use baracuda_driver::{profiler, Context, Device, Graph, Module};
+use baracuda_driver::{Context, Device, Graph, Module, profiler};
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 

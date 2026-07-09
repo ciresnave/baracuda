@@ -26,10 +26,10 @@
 //! `cargo test -p baracuda-kernels --release -- --ignored \
 //!  smoothquant_smoke`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    PlanPreference, SmoothQuantLinearArgs, SmoothQuantLinearDescriptor,
-    SmoothQuantLinearPlan, TensorMut, TensorRef, Workspace, S8,
+    PlanPreference, S8, SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan,
+    TensorMut, TensorRef, Workspace,
 };
 
 fn setup() -> (Context, Stream) {
@@ -43,7 +43,14 @@ fn setup() -> (Context, Stream) {
 /// SmoothQuant smoothing vector: `s[k] = max(|A[:, k]|)^α / max(|W[:, k]|)^(1-α)`.
 /// (Equation 5 in the SmoothQuant paper, with `α = 0.5` as the
 /// canonical default for OPT / LLaMA-class models.)
-fn compute_smoothing_vector(m: usize, n: usize, k: usize, a: &[f32], w: &[f32], alpha: f32) -> Vec<f32> {
+fn compute_smoothing_vector(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    w: &[f32],
+    alpha: f32,
+) -> Vec<f32> {
     let mut a_max = vec![0f32; k];
     for r in 0..m {
         for c in 0..k {
@@ -75,7 +82,11 @@ fn compute_smoothing_vector(m: usize, n: usize, k: usize, a: &[f32], w: &[f32], 
 fn quantize_per_tensor_symmetric(buf: &[f32]) -> (Vec<i8>, f32) {
     let qmax = 127i32;
     let max_abs = buf.iter().fold(0f32, |acc, &v| acc.max(v.abs()));
-    let scale = if max_abs > 0.0 { max_abs / qmax as f32 } else { 1.0 };
+    let scale = if max_abs > 0.0 {
+        max_abs / qmax as f32
+    } else {
+        1.0
+    };
     let inv_s = 1.0 / scale;
     let q: Vec<i8> = buf
         .iter()
@@ -86,11 +97,7 @@ fn quantize_per_tensor_symmetric(buf: &[f32]) -> (Vec<i8>, f32) {
 
 /// Per-output-channel symmetric int8 quantization, returning the
 /// `[N]` scale vector + the row-major `[N, K]` int8 buffer.
-fn quantize_weight_per_channel_symmetric(
-    n: usize,
-    k: usize,
-    w: &[f32],
-) -> (Vec<i8>, Vec<f32>) {
+fn quantize_weight_per_channel_symmetric(n: usize, k: usize, w: &[f32]) -> (Vec<i8>, Vec<f32>) {
     let qmax = 127i32;
     let mut scale = vec![0f32; n];
     let mut wq = vec![0i8; n * k];
@@ -102,7 +109,11 @@ fn quantize_weight_per_channel_symmetric(
                 max_abs = v;
             }
         }
-        let s = if max_abs > 0.0 { max_abs / qmax as f32 } else { 1.0 };
+        let s = if max_abs > 0.0 {
+            max_abs / qmax as f32
+        } else {
+            1.0
+        };
         scale[r] = s;
         let inv_s = 1.0 / s;
         for c in 0..k {
@@ -142,9 +153,8 @@ fn smoothquant_linear_f32_basic() {
     // pattern Xiao et al. report for the LLM activation in §2).
     let host_a: Vec<f32> = vec![
         // row 0
-        0.5, -0.3, 0.8,  12.0, -0.4, 0.6, 0.9, -0.7,
-        // row 1
-        0.4, -0.5,  0.6, -15.0, -0.2, 0.8, 0.3,  0.7,
+        0.5, -0.3, 0.8, 12.0, -0.4, 0.6, 0.9, -0.7, // row 1
+        0.4, -0.5, 0.6, -15.0, -0.2, 0.8, 0.3, 0.7,
     ];
 
     // Weight `[N, K]` — balanced per-channel magnitudes (channel 3
@@ -152,11 +162,9 @@ fn smoothquant_linear_f32_basic() {
     // SmoothQuant's whole point is to redistribute that imbalance).
     let host_w: Vec<f32> = vec![
         // chan 0
-        0.4, -0.3, 0.5,  0.1, -0.2,  0.4, -0.3,  0.4,
-        // chan 1
-        0.2,  0.3, -0.4, 0.2,  0.4, -0.5,  0.3, -0.4,
-        // chan 2
-        -0.5, 0.4,  0.3, 0.2, -0.4,  0.5, -0.4,  0.3,
+        0.4, -0.3, 0.5, 0.1, -0.2, 0.4, -0.3, 0.4, // chan 1
+        0.2, 0.3, -0.4, 0.2, 0.4, -0.5, 0.3, -0.4, // chan 2
+        -0.5, 0.4, 0.3, 0.2, -0.4, 0.5, -0.4, 0.3,
     ];
 
     let expected_fp = cpu_fp_matmul(m as usize, n as usize, k as usize, &host_a, &host_w);
@@ -192,12 +200,10 @@ fn smoothquant_linear_f32_basic() {
         quantize_weight_per_channel_symmetric(n as usize, k as usize, &host_w_smooth);
 
     // Device buffers.
-    let host_a_u: &[u8] = unsafe {
-        core::slice::from_raw_parts(host_a_q.as_ptr() as *const u8, host_a_q.len())
-    };
-    let host_w_u: &[u8] = unsafe {
-        core::slice::from_raw_parts(host_w_q.as_ptr() as *const u8, host_w_q.len())
-    };
+    let host_a_u: &[u8] =
+        unsafe { core::slice::from_raw_parts(host_a_q.as_ptr() as *const u8, host_a_q.len()) };
+    let host_w_u: &[u8] =
+        unsafe { core::slice::from_raw_parts(host_w_q.as_ptr() as *const u8, host_w_q.len()) };
     let dev_a_bytes = DeviceBuffer::from_slice(&ctx, host_a_u).expect("upload a_q");
     let dev_w_bytes = DeviceBuffer::from_slice(&ctx, host_w_u).expect("upload w_q");
     let dev_a_q = dev_a_bytes.view_as::<S8>();

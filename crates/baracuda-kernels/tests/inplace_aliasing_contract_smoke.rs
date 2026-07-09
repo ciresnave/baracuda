@@ -28,7 +28,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -64,7 +64,8 @@ fn unary_neg_f32_contig_aliasing_safe() {
             numel as i64,
             dev_x.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -81,19 +82,24 @@ fn unary_neg_f32_contig_aliasing_safe() {
             numel as i64,
             p as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
     assert_eq!(status, 0, "aliased run");
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; numel];
-    dev_inplace.copy_to_host(&mut aliased_out).expect("download");
+    dev_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("download");
 
     for i in 0..numel {
         assert!(
             close_enough_f32(aliased_out[i], ref_out[i]),
-            "@{i}: aliased {} vs ref {}", aliased_out[i], ref_out[i]
+            "@{i}: aliased {} vs ref {}",
+            aliased_out[i],
+            ref_out[i]
         );
     }
 }
@@ -118,7 +124,8 @@ fn binary_add_f32_contig_aliasing_a_eq_y_safe() {
             dev_a.as_slice().as_raw().0 as *const c_void,
             dev_b.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -134,21 +141,28 @@ fn binary_add_f32_contig_aliasing_a_eq_y_safe() {
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_binary_add_f32_run(
             numel as i64,
-            p as *const c_void, // a
+            p as *const c_void,                            // a
             dev_b2.as_slice().as_raw().0 as *const c_void, // b
-            p as *mut c_void,   // y == a
-            core::ptr::null_mut(), 0,
+            p as *mut c_void,                              // y == a
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
     assert_eq!(status, 0);
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; numel];
-    dev_a_inplace.copy_to_host(&mut aliased_out).expect("download");
+    dev_a_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("download");
 
     for i in 0..numel {
-        assert!(close_enough_f32(aliased_out[i], ref_out[i]),
-            "@{i}: aliased {} vs ref {}", aliased_out[i], ref_out[i]);
+        assert!(
+            close_enough_f32(aliased_out[i], ref_out[i]),
+            "@{i}: aliased {} vs ref {}",
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }
 
@@ -170,7 +184,8 @@ fn binary_add_f32_contig_aliasing_b_eq_y_safe() {
             dev_a.as_slice().as_raw().0 as *const c_void,
             dev_b.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -188,14 +203,17 @@ fn binary_add_f32_contig_aliasing_b_eq_y_safe() {
             dev_a2.as_slice().as_raw().0 as *const c_void,
             p as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
     assert_eq!(status, 0);
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; numel];
-    dev_b_inplace.copy_to_host(&mut aliased_out).expect("download");
+    dev_b_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("download");
 
     for i in 0..numel {
         assert!(close_enough_f32(aliased_out[i], ref_out[i]));
@@ -211,7 +229,7 @@ fn ternary_clamp_f32_contig_aliasing_a_eq_y_safe() {
     let numel = 1024;
     let host_a: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.1 - 50.0).collect();
     let host_b = vec![-10.0_f32; numel]; // lo
-    let host_c = vec![10.0_f32; numel];  // hi
+    let host_c = vec![10.0_f32; numel]; // hi
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload");
@@ -224,7 +242,8 @@ fn ternary_clamp_f32_contig_aliasing_a_eq_y_safe() {
             dev_b.as_slice().as_raw().0 as *const c_void,
             dev_c.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -245,18 +264,25 @@ fn ternary_clamp_f32_contig_aliasing_a_eq_y_safe() {
             dev_b2.as_slice().as_raw().0 as *const c_void,
             dev_c2.as_slice().as_raw().0 as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
     assert_eq!(status, 0);
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; numel];
-    dev_a_inplace.copy_to_host(&mut aliased_out).expect("download");
+    dev_a_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("download");
 
     for i in 0..numel {
-        assert!(close_enough_f32(aliased_out[i], ref_out[i]),
-            "@{i}: aliased {} vs ref {}", aliased_out[i], ref_out[i]);
+        assert!(
+            close_enough_f32(aliased_out[i], ref_out[i]),
+            "@{i}: aliased {} vs ref {}",
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }
 
@@ -296,7 +322,8 @@ fn unary_neg_f32_strided_aliasing_equal_strides_safe() {
 
     // Reference: separate x + y buffers, both with the same stride.
     let dev_x = DeviceBuffer::from_slice(&ctx, &host).expect("upload");
-    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::from_slice(&ctx, &vec![pad; STRIDED_PHYS_LEN]).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> =
+        DeviceBuffer::from_slice(&ctx, &vec![pad; STRIDED_PHYS_LEN]).expect("alloc y");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_unary_neg_f32_strided_run(
             STRIDED_NUMEL as i64,
@@ -306,7 +333,8 @@ fn unary_neg_f32_strided_aliasing_equal_strides_safe() {
             STRIDED_STRIDE.as_ptr(),
             dev_x.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -327,19 +355,26 @@ fn unary_neg_f32_strided_aliasing_equal_strides_safe() {
             STRIDED_STRIDE.as_ptr(),
             p as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
     assert_eq!(status, 0, "aliased run");
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; STRIDED_PHYS_LEN];
-    dev_inplace.copy_to_host(&mut aliased_out).expect("download");
+    dev_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("download");
 
     // Addressed cells must match the reference run.
     for &off in &offsets {
-        assert!(close_enough_f32(aliased_out[off], ref_out[off]),
-            "@{off}: aliased {} vs ref {}", aliased_out[off], ref_out[off]);
+        assert!(
+            close_enough_f32(aliased_out[off], ref_out[off]),
+            "@{off}: aliased {} vs ref {}",
+            aliased_out[off],
+            ref_out[off]
+        );
     }
     // Padding must remain the sentinel value.
     let addressed_set: std::collections::HashSet<usize> = offsets.iter().copied().collect();
@@ -366,7 +401,8 @@ fn binary_add_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
     // Reference.
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload");
-    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::from_slice(&ctx, &vec![pad; STRIDED_PHYS_LEN]).expect("alloc");
+    let mut dev_y: DeviceBuffer<f32> =
+        DeviceBuffer::from_slice(&ctx, &vec![pad; STRIDED_PHYS_LEN]).expect("alloc");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_binary_add_f32_strided_run(
             STRIDED_NUMEL as i64,
@@ -378,7 +414,8 @@ fn binary_add_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
             dev_a.as_slice().as_raw().0 as *const c_void,
             dev_b.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -402,14 +439,17 @@ fn binary_add_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
             p as *const c_void,
             dev_b2.as_slice().as_raw().0 as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
     assert_eq!(status, 0);
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; STRIDED_PHYS_LEN];
-    dev_a_inplace.copy_to_host(&mut aliased_out).expect("download");
+    dev_a_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("download");
 
     for &off in &offsets {
         assert!(close_enough_f32(aliased_out[off], ref_out[off]));
@@ -442,7 +482,8 @@ fn ternary_clamp_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload");
     let dev_c = DeviceBuffer::from_slice(&ctx, &host_c).expect("upload");
-    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::from_slice(&ctx, &vec![pad; STRIDED_PHYS_LEN]).expect("alloc");
+    let mut dev_y: DeviceBuffer<f32> =
+        DeviceBuffer::from_slice(&ctx, &vec![pad; STRIDED_PHYS_LEN]).expect("alloc");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_ternary_clamp_f32_strided_run(
             STRIDED_NUMEL as i64,
@@ -456,7 +497,8 @@ fn ternary_clamp_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
             dev_b.as_slice().as_raw().0 as *const c_void,
             dev_c.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -483,18 +525,25 @@ fn ternary_clamp_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
             dev_b2.as_slice().as_raw().0 as *const c_void,
             dev_c2.as_slice().as_raw().0 as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
     assert_eq!(status, 0);
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; STRIDED_PHYS_LEN];
-    dev_a_inplace.copy_to_host(&mut aliased_out).expect("download");
+    dev_a_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("download");
 
     for &off in &offsets {
-        assert!(close_enough_f32(aliased_out[off], ref_out[off]),
-            "@{off}: aliased {} vs ref {}", aliased_out[off], ref_out[off]);
+        assert!(
+            close_enough_f32(aliased_out[off], ref_out[off]),
+            "@{off}: aliased {} vs ref {}",
+            aliased_out[off],
+            ref_out[off]
+        );
     }
     let addressed_set: std::collections::HashSet<usize> = offsets.iter().copied().collect();
     for i in 0..STRIDED_PHYS_LEN {
@@ -515,16 +564,22 @@ fn strides_equal_helper_validates_in_place_preconditions() {
     use baracuda_kernels_types::strides_equal;
 
     // The aliasing test above uses equal strides — strides_equal must agree.
-    assert!(strides_equal(&STRIDED_STRIDE, &STRIDED_STRIDE),
-        "equal strides — in-place dispatch should be allowed");
+    assert!(
+        strides_equal(&STRIDED_STRIDE, &STRIDED_STRIDE),
+        "equal strides — in-place dispatch should be allowed"
+    );
 
     // A transposed view has different strides — must reject.
     let transposed: [i64; 2] = [1, 8];
-    assert!(!strides_equal(&STRIDED_STRIDE, &transposed),
-        "transposed view — in-place dispatch must NOT be allowed");
+    assert!(
+        !strides_equal(&STRIDED_STRIDE, &transposed),
+        "transposed view — in-place dispatch must NOT be allowed"
+    );
 
     // A broadcast input has zero strides — must reject.
     let broadcast: [i64; 2] = [0, 1];
-    assert!(!strides_equal(&STRIDED_STRIDE, &broadcast),
-        "broadcast input — in-place dispatch must NOT be allowed");
+    assert!(
+        !strides_equal(&STRIDED_STRIDE, &broadcast),
+        "broadcast input — in-place dispatch must NOT be allowed"
+    );
 }

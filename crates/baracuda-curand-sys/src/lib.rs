@@ -10,7 +10,7 @@
 use core::ffi::{c_int, c_void};
 use std::sync::OnceLock;
 
-use baracuda_core::{platform, Library, LoaderError};
+use baracuda_core::{Library, LoaderError, platform};
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_types::CudaStatus;
 
@@ -198,26 +198,20 @@ pub type PFN_curandGetVersion = unsafe extern "C" fn(version: *mut c_int) -> cur
 // ---- Additional generator configuration ----
 
 /// Function-pointer type for `curandCreateGeneratorHost` (create a host RNG). See <https://docs.nvidia.com/cuda/curand/index.html>.
-pub type PFN_curandCreateGeneratorHost = unsafe extern "C" fn(
-    generator: *mut curandGenerator_t,
-    ty: curandRngType_t,
-) -> curandStatus_t;
+pub type PFN_curandCreateGeneratorHost =
+    unsafe extern "C" fn(generator: *mut curandGenerator_t, ty: curandRngType_t) -> curandStatus_t;
 
 /// Function-pointer type for `curandSetGeneratorOffset` (set generator offset). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandSetGeneratorOffset =
     unsafe extern "C" fn(generator: curandGenerator_t, offset: u64) -> curandStatus_t;
 
 /// Function-pointer type for `curandSetGeneratorOrdering` (set generator ordering). See <https://docs.nvidia.com/cuda/curand/index.html>.
-pub type PFN_curandSetGeneratorOrdering = unsafe extern "C" fn(
-    generator: curandGenerator_t,
-    order: curandOrdering_t,
-) -> curandStatus_t;
+pub type PFN_curandSetGeneratorOrdering =
+    unsafe extern "C" fn(generator: curandGenerator_t, order: curandOrdering_t) -> curandStatus_t;
 
 /// Function-pointer type for `curandSetQuasiRandomGeneratorDimensions` (set dimensions for quasi-random generator). See <https://docs.nvidia.com/cuda/curand/index.html>.
-pub type PFN_curandSetQuasiRandomGeneratorDimensions = unsafe extern "C" fn(
-    generator: curandGenerator_t,
-    num_dimensions: u32,
-) -> curandStatus_t;
+pub type PFN_curandSetQuasiRandomGeneratorDimensions =
+    unsafe extern "C" fn(generator: curandGenerator_t, num_dimensions: u32) -> curandStatus_t;
 
 /// Function-pointer type for `curandGetDirectionVectors32` (fetch 32-bit Sobol direction vectors). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGetDirectionVectors32 = unsafe extern "C" fn(
@@ -291,7 +285,8 @@ pub type PFN_curandGenerateBinomial = unsafe extern "C" fn(
 // ---- Seed generation for pseudo-random generators ----
 
 /// Function-pointer type for `curandGenerateSeeds` (force generation of seeds (pseudo-random)). See <https://docs.nvidia.com/cuda/curand/index.html>.
-pub type PFN_curandGenerateSeeds = unsafe extern "C" fn(generator: curandGenerator_t) -> curandStatus_t;
+pub type PFN_curandGenerateSeeds =
+    unsafe extern "C" fn(generator: curandGenerator_t) -> curandStatus_t;
 
 // ---- loader ----
 

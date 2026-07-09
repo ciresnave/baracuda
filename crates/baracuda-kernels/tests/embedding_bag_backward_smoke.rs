@@ -5,10 +5,11 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, EmbeddingBagBackwardArgs, EmbeddingBagBackwardDescriptor,
+    ElementKind, EmbeddingBagBackwardArgs, EmbeddingBagBackwardDescriptor,
     EmbeddingBagBackwardPlan, EmbeddingBagMode, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -80,7 +81,9 @@ fn embedding_bag_backward_f32_sum() {
     let host_off: Vec<i32> = vec![0, 2, 5]; // bags [1,3], [0,4,2]
     let num_bags = host_off.len();
     let total_indices = host_idx.len();
-    let host_dout: Vec<f32> = (0..(num_bags * d)).map(|i| (i as f32) * 0.5 + 1.0).collect();
+    let host_dout: Vec<f32> = (0..(num_bags * d))
+        .map(|i| (i as f32) * 0.5 + 1.0)
+        .collect();
     let expected = cpu_embedding_bag_backward_f32(
         v,
         d,
@@ -95,8 +98,7 @@ fn embedding_bag_backward_f32_sum() {
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up dout");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
     let dev_off = DeviceBuffer::from_slice(&ctx, &host_off).expect("up offsets");
-    let mut dev_dw: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
+    let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
 
     let desc = EmbeddingBagBackwardDescriptor {
         num_embeddings: v as i32,
@@ -174,8 +176,7 @@ fn embedding_bag_backward_f32_mean_with_padding() {
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up dout");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
     let dev_off = DeviceBuffer::from_slice(&ctx, &host_off).expect("up offsets");
-    let mut dev_dw: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
+    let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
 
     let desc = EmbeddingBagBackwardDescriptor {
         num_embeddings: v as i32,
@@ -243,7 +244,9 @@ fn embedding_bag_backward_f64_sum() {
     let host_off: Vec<i32> = vec![0, 2, 4];
     let num_bags = host_off.len();
     let total_indices = host_idx.len();
-    let host_dout: Vec<f64> = (0..(num_bags * d)).map(|i| (i as f64) * 0.25 + 1.0).collect();
+    let host_dout: Vec<f64> = (0..(num_bags * d))
+        .map(|i| (i as f64) * 0.25 + 1.0)
+        .collect();
     let mut expected = vec![0f64; v * d];
     for b in 0..num_bags {
         let start = host_off[b] as usize;
@@ -262,8 +265,7 @@ fn embedding_bag_backward_f64_sum() {
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up dout");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
     let dev_off = DeviceBuffer::from_slice(&ctx, &host_off).expect("up offsets");
-    let mut dev_dw: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
+    let mut dev_dw: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
 
     let desc = EmbeddingBagBackwardDescriptor {
         num_embeddings: v as i32,

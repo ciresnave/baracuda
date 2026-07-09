@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `HuberLossBackwardPlan`. BW × 4 dtypes × Mean.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, HuberLossBackwardArgs, HuberLossBackwardDescriptor,
-    HuberLossBackwardPlan, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, HuberLossBackwardArgs, HuberLossBackwardDescriptor, HuberLossBackwardPlan,
+    LossReduction, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -15,20 +15,20 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
-fn host_huber_bw_f64(
-    pred: &[f64],
-    target: &[f64],
-    dy: f64,
-    n: usize,
-    delta: f64,
-) -> Vec<f64> {
+fn host_huber_bw_f64(pred: &[f64], target: &[f64], dy: f64, n: usize, delta: f64) -> Vec<f64> {
     let scale = dy / (n as f64);
     pred.iter()
         .zip(target.iter())
         .map(|(&p, &t)| {
             let x = p - t;
             let ax = x.abs();
-            let v = if ax < delta { x } else if x > 0.0 { delta } else { -delta };
+            let v = if ax < delta {
+                x
+            } else if x > 0.0 {
+                delta
+            } else {
+                -delta
+            };
             v * scale
         })
         .collect()
@@ -47,7 +47,9 @@ fn loss_huber_backward_f32_mean() {
     let expected: Vec<f32> = host_huber_bw_f64(
         &host_p.iter().map(|&v| v as f64).collect::<Vec<_>>(),
         &host_t.iter().map(|&v| v as f64).collect::<Vec<_>>(),
-        1.0, numel, delta as f64,
+        1.0,
+        numel,
+        delta as f64,
     )
     .into_iter()
     .map(|v| v as f32)
@@ -64,16 +66,27 @@ fn loss_huber_backward_f32_mean() {
         delta,
         element: ElementKind::F32,
     };
-    let plan = HuberLossBackwardPlan::<f32, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        HuberLossBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::None,
         HuberLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -87,8 +100,12 @@ fn loss_huber_backward_f32_mean() {
     dev_dp.copy_to_host(&mut got).unwrap();
     for i in 0..numel {
         let tol = expected[i].abs() * 8.0 * f32::EPSILON + 1e-6;
-        assert!((got[i] - expected[i]).abs() <= tol, "f32 Huber BW @{i}: got={} want={}",
-            got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 Huber BW @{i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -115,16 +132,27 @@ fn loss_huber_backward_f64_mean() {
         delta,
         element: ElementKind::F64,
     };
-    let plan = HuberLossBackwardPlan::<f64, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        HuberLossBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::None,
         HuberLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -169,16 +197,27 @@ fn loss_huber_backward_f16_mean() {
         delta,
         element: ElementKind::F16,
     };
-    let plan = HuberLossBackwardPlan::<f16, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan =
+        HuberLossBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
     plan.run(
         &stream,
         Workspace::None,
         HuberLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -194,7 +233,12 @@ fn loss_huber_backward_f16_mean() {
         let got_f32 = got[i].to_f32();
         let want = expected_f64[i] as f32;
         let tol = want.abs() * 8.0 * 9.77e-4_f32 + 5e-3;
-        assert!((got_f32 - want).abs() <= tol, "f16 Huber BW @{i}: got={} want={}", got_f32, want);
+        assert!(
+            (got_f32 - want).abs() <= tol,
+            "f16 Huber BW @{i}: got={} want={}",
+            got_f32,
+            want
+        );
     }
 }
 
@@ -225,16 +269,27 @@ fn loss_huber_backward_bf16_mean() {
         delta,
         element: ElementKind::Bf16,
     };
-    let plan = HuberLossBackwardPlan::<bf16, 2>::select(
-        &stream, &desc, PlanPreference::default()
-    ).unwrap();
+    let plan = HuberLossBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
+        .unwrap();
     plan.run(
         &stream,
         Workspace::None,
         HuberLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -250,6 +305,11 @@ fn loss_huber_backward_bf16_mean() {
         let got_f32 = got[i].to_f32();
         let want = expected_f64[i] as f32;
         let tol = want.abs() * 8.0 * 7.81e-3_f32 + 2e-2;
-        assert!((got_f32 - want).abs() <= tol, "bf16 Huber BW @{i}: got={} want={}", got_f32, want);
+        assert!(
+            (got_f32 - want).abs() <= tol,
+            "bf16 Huber BW @{i}: got={} want={}",
+            got_f32,
+            want
+        );
     }
 }

@@ -23,14 +23,14 @@
 use std::sync::Arc;
 
 use baracuda_cuda_sys::types::{
-    CUmemAccessDesc, CUmemAccess_flags, CUmemAllocationGranularity_flags, CUmemAllocationProp,
+    CUmemAccess_flags, CUmemAccessDesc, CUmemAllocationGranularity_flags, CUmemAllocationProp,
     CUmemAllocationPropFlags, CUmemAllocationType, CUmemLocation, CUmemLocationType,
 };
-use baracuda_cuda_sys::{driver, CUdevice, CUdeviceptr, CUmemGenericAllocationHandle};
+use baracuda_cuda_sys::{CUdevice, CUdeviceptr, CUmemGenericAllocationHandle, driver};
 
 use crate::context::Context;
 use crate::device::Device;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Query the minimum or recommended allocation granularity for a device.
 /// VMM allocations must be sized (and address ranges aligned) to this value.

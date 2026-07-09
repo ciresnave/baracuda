@@ -20,10 +20,10 @@
 // Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
 #![allow(non_snake_case)]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BlockQ4K, BlockQ8K, BlockQ8_0, GgufBlockFormat, GgufMmvqArgs,
-    GgufMmvqDescriptor, GgufMmvqPlan, PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    BlockQ4K, BlockQ8_0, BlockQ8K, GgufBlockFormat, GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
+    PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -38,7 +38,10 @@ fn setup() -> (Context, Stream) {
 // ---- packing helpers (same convention as mmvq_strided_smoke.rs) ----------
 
 fn pack_q8_0_row(d_f32: f32, qs: &[i8; 32]) -> Vec<u8> {
-    let blk = BlockQ8_0 { d: f16::from_f32(d_f32).to_bits(), qs: *qs };
+    let blk = BlockQ8_0 {
+        d: f16::from_f32(d_f32).to_bits(),
+        qs: *qs,
+    };
     let bytes: &[u8] = unsafe {
         core::slice::from_raw_parts(
             (&blk as *const BlockQ8_0) as *const u8,
@@ -50,7 +53,11 @@ fn pack_q8_0_row(d_f32: f32, qs: &[i8; 32]) -> Vec<u8> {
 
 fn pack_q8_k_row(d_f32: f32, qs: &[i8; 256]) -> Vec<u8> {
     let bsums = [0i16; 16];
-    let blk = BlockQ8K { d: d_f32, qs: *qs, bsums };
+    let blk = BlockQ8K {
+        d: d_f32,
+        qs: *qs,
+        bsums,
+    };
     let bytes: &[u8] = unsafe {
         core::slice::from_raw_parts(
             (&blk as *const BlockQ8K) as *const u8,
@@ -164,7 +171,8 @@ fn mmvq_q8_0_f16_smoke() {
     let mut dev_o: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
     let desc = GgufMmvqDescriptor {
-        nrows: 1, ncols: 32,
+        nrows: 1,
+        ncols: 32,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
@@ -175,7 +183,11 @@ fn mmvq_q8_0_f16_smoke() {
             shape: [host_w.len() as i32],
             stride: contiguous_stride([host_w.len() as i32]),
         },
-        activation: TensorRef { data: dev_y.as_slice(), shape: [32], stride: [1] },
+        activation: TensorRef {
+            data: dev_y.as_slice(),
+            shape: [32],
+            stride: [1],
+        },
         output: TensorMut {
             data: dev_o.as_slice_mut(),
             shape: [1],
@@ -221,18 +233,24 @@ fn mmvq_q8_0_bf16_smoke() {
     let mut dev_o: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
     let desc = GgufMmvqDescriptor {
-        nrows: 1, ncols: 32,
+        nrows: 1,
+        ncols: 32,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
-    let plan = GgufMmvqPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    let plan =
+        GgufMmvqPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
         weight: TensorRef {
             data: dev_w.as_slice(),
             shape: [host_w.len() as i32],
             stride: contiguous_stride([host_w.len() as i32]),
         },
-        activation: TensorRef { data: dev_y.as_slice(), shape: [32], stride: [1] },
+        activation: TensorRef {
+            data: dev_y.as_slice(),
+            shape: [32],
+            stride: [1],
+        },
         output: TensorMut {
             data: dev_o.as_slice_mut(),
             shape: [1],
@@ -288,7 +306,8 @@ fn mmvq_q4_K_f16_smoke() {
     let mut dev_o: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
     let desc = GgufMmvqDescriptor {
-        nrows: 1, ncols: 256,
+        nrows: 1,
+        ncols: 256,
         block_format: GgufBlockFormat::Q4K,
         w_start_byte_offset: 0,
     };
@@ -299,7 +318,11 @@ fn mmvq_q4_K_f16_smoke() {
             shape: [host_w.len() as i32],
             stride: contiguous_stride([host_w.len() as i32]),
         },
-        activation: TensorRef { data: dev_y.as_slice(), shape: [256], stride: [1] },
+        activation: TensorRef {
+            data: dev_y.as_slice(),
+            shape: [256],
+            stride: [1],
+        },
         output: TensorMut {
             data: dev_o.as_slice_mut(),
             shape: [1],
@@ -320,18 +343,14 @@ fn mmvq_q4_K_f16_smoke() {
 /// Helper: run the same Q4_K MMVQ with the f32 path so the f16 / bf16
 /// tests can compare against the kernel's own output rather than a
 /// reimplemented host reference.
-fn run_q4k_f32_ref(
-    ctx: &Context,
-    stream: &Stream,
-    host_w: &[U8],
-    host_y_f32: &[f32],
-) -> [f32; 1] {
+fn run_q4k_f32_ref(ctx: &Context, stream: &Stream, host_w: &[U8], host_y_f32: &[f32]) -> [f32; 1] {
     let dev_w = DeviceBuffer::from_slice(ctx, host_w).expect("up w");
     let dev_y = DeviceBuffer::from_slice(ctx, host_y_f32).expect("up y");
     let mut dev_o: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, 1).expect("alloc out");
 
     let desc = GgufMmvqDescriptor {
-        nrows: 1, ncols: host_y_f32.len() as i32,
+        nrows: 1,
+        ncols: host_y_f32.len() as i32,
         block_format: GgufBlockFormat::Q4K,
         w_start_byte_offset: 0,
     };
@@ -391,18 +410,24 @@ fn mmvq_q8_K_bf16_smoke() {
     let mut dev_o: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
     let desc = GgufMmvqDescriptor {
-        nrows: 1, ncols: 256,
+        nrows: 1,
+        ncols: 256,
         block_format: GgufBlockFormat::Q8K,
         w_start_byte_offset: 0,
     };
-    let plan = GgufMmvqPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    let plan =
+        GgufMmvqPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
         weight: TensorRef {
             data: dev_w.as_slice(),
             shape: [host_w.len() as i32],
             stride: contiguous_stride([host_w.len() as i32]),
         },
-        activation: TensorRef { data: dev_y.as_slice(), shape: [256], stride: [1] },
+        activation: TensorRef {
+            data: dev_y.as_slice(),
+            shape: [256],
+            stride: [1],
+        },
         output: TensorMut {
             data: dev_o.as_slice_mut(),
             shape: [1],
@@ -452,7 +477,8 @@ fn mmvq_q8_0_f16_stride2_smoke() {
     let mut dev_o: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
     let desc = GgufMmvqDescriptor {
-        nrows: 1, ncols: 32,
+        nrows: 1,
+        ncols: 32,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
@@ -463,7 +489,11 @@ fn mmvq_q8_0_f16_stride2_smoke() {
             shape: [host_w.len() as i32],
             stride: contiguous_stride([host_w.len() as i32]),
         },
-        activation: TensorRef { data: dev_y.as_slice(), shape: [32], stride: [2] },
+        activation: TensorRef {
+            data: dev_y.as_slice(),
+            shape: [32],
+            stride: [2],
+        },
         output: TensorMut {
             data: dev_o.as_slice_mut(),
             shape: [1],
@@ -507,18 +537,24 @@ fn mmvq_q4_K_bf16_stride0_broadcast_smoke() {
     let mut dev_o: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
 
     let desc = GgufMmvqDescriptor {
-        nrows: 1, ncols: 256,
+        nrows: 1,
+        ncols: 256,
         block_format: GgufBlockFormat::Q4K,
         w_start_byte_offset: 0,
     };
-    let plan = GgufMmvqPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    let plan =
+        GgufMmvqPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = GgufMmvqArgs {
         weight: TensorRef {
             data: dev_w.as_slice(),
             shape: [host_w.len() as i32],
             stride: contiguous_stride([host_w.len() as i32]),
         },
-        activation: TensorRef { data: dev_y.as_slice(), shape: [256], stride: [0] },
+        activation: TensorRef {
+            data: dev_y.as_slice(),
+            shape: [256],
+            stride: [0],
+        },
         output: TensorMut {
             data: dev_o.as_slice_mut(),
             shape: [1],
@@ -548,7 +584,8 @@ fn run_q4k_f32_ref_strided(
     let mut dev_o: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, 1).expect("alloc out");
 
     let desc = GgufMmvqDescriptor {
-        nrows: 1, ncols: 256,
+        nrows: 1,
+        ncols: 256,
         block_format: GgufBlockFormat::Q4K,
         w_start_byte_offset: 0,
     };

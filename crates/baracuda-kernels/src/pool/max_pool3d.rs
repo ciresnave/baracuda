@@ -18,7 +18,7 @@ use baracuda_kernels_types::{
     TensorRef, Workspace,
 };
 
-use super::max_pool2d::{build_sku, PoolMode};
+use super::max_pool2d::{PoolMode, build_sku};
 use super::pool_nd::{
     bind_stream, drop_descriptors_nd, ensure_descriptors_nd, ensure_handle, out_dim, run_bw_nd,
     run_fw_nd, validate_dtype,
@@ -305,12 +305,7 @@ pub(crate) fn validate_descriptor<T: Element>(desc: &Pool3dDescriptor) -> Result
             "baracuda-kernels::Pool3dPlan: descriptor.element != T::KIND",
         ));
     }
-    if desc.batch <= 0
-        || desc.channels <= 0
-        || desc.d_in <= 0
-        || desc.h_in <= 0
-        || desc.w_in <= 0
-    {
+    if desc.batch <= 0 || desc.channels <= 0 || desc.d_in <= 0 || desc.h_in <= 0 || desc.w_in <= 0 {
         return Err(Error::InvalidProblem(
             "baracuda-kernels::Pool3dPlan: input shape extents must be > 0",
         ));

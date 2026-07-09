@@ -17,19 +17,12 @@ use baracuda_cutlass::{
     EpilogueKind, GroupedGemmPlan, GroupedPlanPreference, GroupedProblem, MatrixMut, MatrixRef,
     Workspace,
 };
-use baracuda_driver::{init, CaptureMode, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{CaptureMode, Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 /// Per-expert: A is row-major `[M, K]`, B is column-major `[K, N]`,
 /// D is row-major `[M, N]`.
-fn cpu_gemm_rcr_f32(
-    m: usize,
-    n: usize,
-    k: usize,
-    a: &[f32],
-    b: &[f32],
-    d: &mut [f32],
-) {
+fn cpu_gemm_rcr_f32(m: usize, n: usize, k: usize, a: &[f32], b: &[f32], d: &mut [f32]) {
     for i in 0..m {
         for j in 0..n {
             let mut acc = 0.0f32;
@@ -166,9 +159,7 @@ fn grouped_gemm_f16_moe_4_experts() {
     let tol = (k as f32) * 5e-3;
     for (e, &m) in token_counts.iter().enumerate() {
         let mut host_d_out = vec![f16::ZERO; m * n];
-        dev_d[e]
-            .copy_to_host(&mut host_d_out)
-            .expect("download D");
+        dev_d[e].copy_to_host(&mut host_d_out).expect("download D");
 
         let mut max_err = 0.0f32;
         for (got, want) in host_d_out.iter().zip(expert_d_ref[e].iter()) {
@@ -181,9 +172,7 @@ fn grouped_gemm_f16_moe_4_experts() {
             max_err < tol,
             "expert {e} (M={m}, N={n}, K={k}): max abs err {max_err} exceeded tolerance {tol}"
         );
-        println!(
-            "  expert {e}: M={m} N={n} K={k} max abs err {max_err} (tol {tol}) ✅"
-        );
+        println!("  expert {e}: M={m} N={n} K={k} max abs err {max_err} (tol {tol}) ✅");
     }
 }
 
@@ -291,9 +280,7 @@ fn grouped_gemm_bf16_moe_3_experts() {
     let tol = (k as f32) * 5e-3;
     for (e, &m) in token_counts.iter().enumerate() {
         let mut host_d_out = vec![bf16::ZERO; m * n];
-        dev_d[e]
-            .copy_to_host(&mut host_d_out)
-            .expect("download D");
+        dev_d[e].copy_to_host(&mut host_d_out).expect("download D");
 
         let mut max_err = 0.0f32;
         for (got, want) in host_d_out.iter().zip(expert_d_ref[e].iter()) {
@@ -306,9 +293,7 @@ fn grouped_gemm_bf16_moe_3_experts() {
             max_err < tol,
             "bf16 expert {e}: max abs err {max_err} exceeded tolerance {tol}"
         );
-        println!(
-            "  bf16 expert {e}: M={m} N={n} K={k} max abs err {max_err} (tol {tol}) ✅"
-        );
+        println!("  bf16 expert {e}: M={m} N={n} K={k} max abs err {max_err} (tol {tol}) ✅");
     }
 }
 

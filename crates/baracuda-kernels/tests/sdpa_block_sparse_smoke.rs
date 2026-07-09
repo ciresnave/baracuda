@@ -20,11 +20,11 @@
 
 #![cfg(feature = "xformers_blocksparse")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SdpaArgs, SdpaBlockSparseArgs,
-    SdpaBlockSparseDescriptor, SdpaBlockSparsePlan, SdpaDescriptor, SdpaPlan, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, PlanPreference, SdpaArgs, SdpaBlockSparseArgs, SdpaBlockSparseDescriptor,
+    SdpaBlockSparsePlan, SdpaDescriptor, SdpaPlan, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -103,15 +103,35 @@ fn run_block_sparse(
         stream,
         Workspace::None,
         SdpaBlockSparseArgs {
-            q: TensorRef { data: dq.as_slice(), shape: s_qkv, stride: contiguous_stride(s_qkv) },
-            k: TensorRef { data: dk.as_slice(), shape: s_qkv, stride: contiguous_stride(s_qkv) },
-            v: TensorRef { data: dv.as_slice(), shape: s_qkv, stride: contiguous_stride(s_qkv) },
-            block_pattern: TensorRef {
-                data: dbp.as_slice(), shape: s_bp, stride: contiguous_stride(s_bp),
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: s_qkv,
+                stride: contiguous_stride(s_qkv),
             },
-            y: TensorMut { data: dy.as_slice_mut(), shape: s_y, stride: contiguous_stride(s_y) },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: s_qkv,
+                stride: contiguous_stride(s_qkv),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: s_qkv,
+                stride: contiguous_stride(s_qkv),
+            },
+            block_pattern: TensorRef {
+                data: dbp.as_slice(),
+                shape: s_bp,
+                stride: contiguous_stride(s_bp),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: s_y,
+                stride: contiguous_stride(s_y),
+            },
             lse: TensorMut {
-                data: dlse.as_slice_mut(), shape: s_lse, stride: contiguous_stride(s_lse),
+                data: dlse.as_slice_mut(),
+                shape: s_lse,
+                stride: contiguous_stride(s_lse),
             },
         },
     )
@@ -161,13 +181,31 @@ fn run_dense_sdpa_reference(
         stream,
         Workspace::None,
         SdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: s_qkv, stride: contiguous_stride(s_qkv) },
-            k: TensorRef { data: dk.as_slice(), shape: s_qkv, stride: contiguous_stride(s_qkv) },
-            v: TensorRef { data: dv.as_slice(), shape: s_qkv, stride: contiguous_stride(s_qkv) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: s_qkv,
+                stride: contiguous_stride(s_qkv),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: s_qkv,
+                stride: contiguous_stride(s_qkv),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: s_qkv,
+                stride: contiguous_stride(s_qkv),
+            },
             mask: None,
-            y: TensorMut { data: dy.as_slice_mut(), shape: s_qkv, stride: contiguous_stride(s_qkv) },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: s_qkv,
+                stride: contiguous_stride(s_qkv),
+            },
             attn: TensorMut {
-                data: dattn.as_slice_mut(), shape: s_attn, stride: contiguous_stride(s_attn),
+                data: dattn.as_slice_mut(),
+                shape: s_attn,
+                stride: contiguous_stride(s_attn),
             },
         },
     )
@@ -242,7 +280,10 @@ fn block_sparse_diagonal_band_zero_outside() {
             any_finite = true;
         }
     }
-    assert!(any_finite, "diagonal-band output entirely zero (expected diagonal blocks to contribute)");
+    assert!(
+        any_finite,
+        "diagonal-band output entirely zero (expected diagonal blocks to contribute)"
+    );
     assert!(max_abs > 1e-4, "diagonal-band max abs too small: {max_abs}");
 
     // lse must be finite for rows that have an active block (every row
@@ -268,6 +309,9 @@ fn block_sparse_empty_pattern_zero_output() {
     }
     // lse should be -INF for every row (no contributors).
     for &l in lse.iter() {
-        assert!(l.is_infinite() && l < 0.0, "empty-pattern lse expected -INF, got {l}");
+        assert!(
+            l.is_infinite() && l < 0.0,
+            "empty-pattern lse expected -INF, got {l}"
+        );
     }
 }

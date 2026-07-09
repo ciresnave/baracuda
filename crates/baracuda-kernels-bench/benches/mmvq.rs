@@ -21,14 +21,14 @@ use baracuda_kernels::quantize::gguf::mmvq::GgufMmvqActivation;
 use baracuda_kernels::{
     GgufBlockFormat, GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqMultiMArgs,
     GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan, GgufMmvqPlan, PlanPreference, TensorMut,
-    TensorRef, Workspace, U8,
+    TensorRef, U8, Workspace,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, CROSS_MMVQ_FORMATS, CROSS_MMVQ_SHAPES,
+    CROSS_MMVQ_FORMATS, CROSS_MMVQ_SHAPES, PhaseTwentyNineRow, append_csv_row, measure_median_ns,
+    setup_device, time_with_events, warmup,
 };
 use baracuda_kernels_types::contiguous_stride;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::{bf16, f16};
 
 const BENCH_NAME: &str = "mmvq";
@@ -121,7 +121,8 @@ where
                         stride: sto,
                     },
                 };
-                plan.run(&stream, Workspace::None, args).expect("mmvq warmup");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("mmvq warmup");
             });
 
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
@@ -354,11 +355,10 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
                 Ok(b) => b,
                 Err(_) => continue,
             };
-            let mut dev_out_1: DeviceBuffer<f32> =
-                match DeviceBuffer::zeros(&ctx, nrows as usize) {
-                    Ok(b) => b,
-                    Err(_) => continue,
-                };
+            let mut dev_out_1: DeviceBuffer<f32> = match DeviceBuffer::zeros(&ctx, nrows as usize) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
             let act1_shape = [ncols];
             let out1_shape = [nrows];
             let sta1 = contiguous_stride(act1_shape);
@@ -411,40 +411,32 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
                 baseline_ns as f64 / multim_ns as f64
             );
 
-            group.bench_with_input(
-                BenchmarkId::new("multim", &shape),
-                &(),
-                |bb, _| {
-                    bb.iter_custom(|iters| {
-                        time_with_events(&ctx, &stream, iters, || {
-                            let args = GgufMmvqMultiMArgs::<f32> {
-                                weight: TensorRef {
-                                    data: dev_w.as_slice(),
-                                    shape: w_shape,
-                                    stride: stw,
-                                },
-                                activations: TensorRef {
-                                    data: dev_act.as_slice(),
-                                    shape: act_shape,
-                                    stride: sta,
-                                },
-                                output: TensorMut {
-                                    data: dev_out.as_slice_mut(),
-                                    shape: out_shape,
-                                    stride: sto,
-                                },
-                            };
-                            plan_multim
-                                .run(
-                                    &stream,
-                                    Workspace::Borrowed(dev_ws.as_slice_mut()),
-                                    args,
-                                )
-                                .expect("multim run");
-                        })
-                    });
-                },
-            );
+            group.bench_with_input(BenchmarkId::new("multim", &shape), &(), |bb, _| {
+                bb.iter_custom(|iters| {
+                    time_with_events(&ctx, &stream, iters, || {
+                        let args = GgufMmvqMultiMArgs::<f32> {
+                            weight: TensorRef {
+                                data: dev_w.as_slice(),
+                                shape: w_shape,
+                                stride: stw,
+                            },
+                            activations: TensorRef {
+                                data: dev_act.as_slice(),
+                                shape: act_shape,
+                                stride: sta,
+                            },
+                            output: TensorMut {
+                                data: dev_out.as_slice_mut(),
+                                shape: out_shape,
+                                stride: sto,
+                            },
+                        };
+                        plan_multim
+                            .run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
+                            .expect("multim run");
+                    })
+                });
+            });
         }
     }
     group.finish();

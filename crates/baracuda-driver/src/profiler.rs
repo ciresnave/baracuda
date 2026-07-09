@@ -15,7 +15,7 @@
 
 use baracuda_cuda_sys::driver;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Request that the external profiler begin sampling now.
 pub fn start() -> Result<()> {

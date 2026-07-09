@@ -15,7 +15,7 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, Stream};
+use baracuda_driver::{Context, Device, Stream, init};
 use baracuda_kernels::{
     BatchPagedDecodeDescriptor, BatchPagedDecodePlan, ElementKind, PagedKvAppendDescriptor,
     PagedKvAppendPlan, PagedKvCacheDescriptor, PlanPreference,
@@ -73,8 +73,7 @@ fn paged_decode_plan_select_validates() {
         ..desc
     };
     assert!(
-        BatchPagedDecodePlan::<f16>::select(&stream, &gqa_bad, PlanPreference::default())
-            .is_err(),
+        BatchPagedDecodePlan::<f16>::select(&stream, &gqa_bad, PlanPreference::default()).is_err(),
         "non-integer GQA group size must be rejected",
     );
 }
@@ -123,9 +122,8 @@ fn paged_decode_workspace_size_matches_formula() {
             sm_scale: 1.0 / (128.0_f32).sqrt(),
             paged_kv: paged,
         };
-        let plan =
-            BatchPagedDecodePlan::<f16>::select(&stream, &desc, PlanPreference::default())
-                .expect("select");
+        let plan = BatchPagedDecodePlan::<f16>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
         let expected = ((3 * batch_size as usize) + 2) * 4;
         assert_eq!(
             plan.workspace_size(),

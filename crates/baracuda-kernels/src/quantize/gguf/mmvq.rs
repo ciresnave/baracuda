@@ -24,8 +24,8 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, GgufBlockFormat, KernelSku, MathPrecision,
-    OpCategory, PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, Workspace,
-    U8,
+    OpCategory, PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, U8,
+    Workspace,
 };
 use half::{bf16, f16};
 
@@ -204,8 +204,9 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
             ));
         }
         let blocks_per_row = self.desc.ncols / self.desc.block_format.block_size() as i32;
-        let expected_bytes =
-            (self.desc.nrows as i64) * (blocks_per_row as i64) * (self.desc.block_format.type_size() as i64);
+        let expected_bytes = (self.desc.nrows as i64)
+            * (blocks_per_row as i64)
+            * (self.desc.block_format.type_size() as i64);
         // When the host shares one allocation across multiple GGUF
         // matrices (`w_start_byte_offset > 0`) the weight TensorRef's
         // shape covers the *whole* allocation, not just this matrix.
@@ -275,9 +276,20 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
 
         let use_strided = w_off != 0 || stride_y != 1;
 
-        let status =
-            unsafe { dispatch_ffi::<T>(self.desc.block_format, use_strided, ncols, nrows, w_ptr,
-                w_off, stride_y, y_ptr, dst_ptr, stream_ptr) };
+        let status = unsafe {
+            dispatch_ffi::<T>(
+                self.desc.block_format,
+                use_strided,
+                ncols,
+                nrows,
+                w_ptr,
+                w_off,
+                stride_y,
+                y_ptr,
+                dst_ptr,
+                stream_ptr,
+            )
+        };
         map_status(status)
     }
 }
@@ -298,32 +310,40 @@ unsafe fn dispatch_ffi<T: GgufMmvqActivation>(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 { unsafe {
-    match T::KIND {
-        ElementKind::F32 => {
-            if !use_strided {
-                dispatch_f32_contig(fmt, ncols, nrows, w_ptr, y_ptr, dst_ptr, stream_ptr)
-            } else {
-                dispatch_f32_strided(fmt, ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, stream_ptr)
+) -> i32 {
+    unsafe {
+        match T::KIND {
+            ElementKind::F32 => {
+                if !use_strided {
+                    dispatch_f32_contig(fmt, ncols, nrows, w_ptr, y_ptr, dst_ptr, stream_ptr)
+                } else {
+                    dispatch_f32_strided(
+                        fmt, ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, stream_ptr,
+                    )
+                }
             }
-        }
-        ElementKind::F16 => {
-            if !use_strided {
-                dispatch_f16_contig(fmt, ncols, nrows, w_ptr, y_ptr, dst_ptr, stream_ptr)
-            } else {
-                dispatch_f16_strided(fmt, ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, stream_ptr)
+            ElementKind::F16 => {
+                if !use_strided {
+                    dispatch_f16_contig(fmt, ncols, nrows, w_ptr, y_ptr, dst_ptr, stream_ptr)
+                } else {
+                    dispatch_f16_strided(
+                        fmt, ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, stream_ptr,
+                    )
+                }
             }
-        }
-        ElementKind::Bf16 => {
-            if !use_strided {
-                dispatch_bf16_contig(fmt, ncols, nrows, w_ptr, y_ptr, dst_ptr, stream_ptr)
-            } else {
-                dispatch_bf16_strided(fmt, ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, stream_ptr)
+            ElementKind::Bf16 => {
+                if !use_strided {
+                    dispatch_bf16_contig(fmt, ncols, nrows, w_ptr, y_ptr, dst_ptr, stream_ptr)
+                } else {
+                    dispatch_bf16_strided(
+                        fmt, ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, stream_ptr,
+                    )
+                }
             }
+            _ => unreachable!("GgufMmvqActivation is sealed to f32 / f16 / bf16"),
         }
-        _ => unreachable!("GgufMmvqActivation is sealed to f32 / f16 / bf16"),
     }
-}}
+}
 
 // ---- f32 dispatch (legacy contig + strided) ------------------------------
 
@@ -335,37 +355,50 @@ unsafe fn dispatch_f32_contig(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 { unsafe {
-    let ws = core::ptr::null_mut();
-    match fmt {
-        GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
-        // Status 3 maps to `Error::Unsupported` via the shared
-        // `map_status` translator in `quantize::mod`.
-        _ => 3,
+) -> i32 {
+    unsafe {
+        let ws = core::ptr::null_mut();
+        match fmt {
+            GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+            // Status 3 maps to `Error::Unsupported` via the shared
+            // `map_status` translator in `quantize::mod`.
+            _ => 3,
+        }
     }
-}}
+}
 
 #[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_f32_strided(
@@ -378,35 +411,70 @@ unsafe fn dispatch_f32_strided(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 { unsafe {
-    let ws = core::ptr::null_mut();
-    match fmt {
-        GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
-        _ => 3,
+) -> i32 {
+    unsafe {
+        let ws = core::ptr::null_mut();
+        match fmt {
+            GgufBlockFormat::Q4_0 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q4_1 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q5_0 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q5_1 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q8_0 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q2K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q3K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q4K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q5K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q6K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q8K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+            _ => 3,
+        }
     }
-}}
+}
 
 // ---- f16 dispatch (Phase 18.1) -------------------------------------------
 
@@ -418,35 +486,48 @@ unsafe fn dispatch_f16_contig(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 { unsafe {
-    let ws = core::ptr::null_mut();
-    match fmt {
-        GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_f16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
-        _ => 3,
+) -> i32 {
+    unsafe {
+        let ws = core::ptr::null_mut();
+        match fmt {
+            GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_f16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+            _ => 3,
+        }
     }
-}}
+}
 
 #[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_f16_strided(
@@ -459,35 +540,70 @@ unsafe fn dispatch_f16_strided(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 { unsafe {
-    let ws = core::ptr::null_mut();
-    match fmt {
-        GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_f16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
-        _ => 3,
+) -> i32 {
+    unsafe {
+        let ws = core::ptr::null_mut();
+        match fmt {
+            GgufBlockFormat::Q4_0 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q4_1 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q5_0 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q5_1 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q8_0 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q2K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q3K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q4K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q5K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q6K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q8K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_f16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+            _ => 3,
+        }
     }
-}}
+}
 
 // ---- bf16 dispatch (Phase 18.1) ------------------------------------------
 
@@ -499,35 +615,48 @@ unsafe fn dispatch_bf16_contig(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 { unsafe {
-    let ws = core::ptr::null_mut();
-    match fmt {
-        GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_bf16_run(
-            ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
-        _ => 3,
+) -> i32 {
+    unsafe {
+        let ws = core::ptr::null_mut();
+        match fmt {
+            GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_bf16_run(
+                ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr,
+            ),
+            // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+            _ => 3,
+        }
     }
-}}
+}
 
 #[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_bf16_strided(
@@ -540,35 +669,70 @@ unsafe fn dispatch_bf16_strided(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 { unsafe {
-    let ws = core::ptr::null_mut();
-    match fmt {
-        GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_bf16_run(
-            ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
-        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
-        _ => 3,
+) -> i32 {
+    unsafe {
+        let ws = core::ptr::null_mut();
+        match fmt {
+            GgufBlockFormat::Q4_0 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q4_1 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q5_0 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q5_1 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q8_0 => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q2K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q3K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q4K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q5K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q6K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            GgufBlockFormat::Q8K => {
+                baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_bf16_run(
+                    ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr,
+                )
+            }
+            // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+            _ => 3,
+        }
     }
-}}
+}
 
 /// Natural byte alignment of a packed GGUF block struct, derived from
 /// the layouts in `baracuda_gguf.cuh`:

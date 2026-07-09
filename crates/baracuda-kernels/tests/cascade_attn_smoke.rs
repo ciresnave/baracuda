@@ -13,7 +13,7 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, Stream};
+use baracuda_driver::{Context, Device, Stream, init};
 use baracuda_kernels::{
     CascadeAttentionDescriptor, CascadeAttentionPlan, ElementKind, PlanPreference,
 };
@@ -45,9 +45,7 @@ fn cascade_attention_plan_select_validates_f32() {
         head_dim: 96,
         ..desc
     };
-    assert!(
-        CascadeAttentionPlan::<f32>::select(&stream, &bad, PlanPreference::default()).is_err()
-    );
+    assert!(CascadeAttentionPlan::<f32>::select(&stream, &bad, PlanPreference::default()).is_err());
 }
 
 #[test]
@@ -60,9 +58,8 @@ fn cascade_attention_plan_select_validates_f16() {
         head_dim: 128,
         element: ElementKind::F16,
     };
-    let plan =
-        CascadeAttentionPlan::<half::f16>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+    let plan = CascadeAttentionPlan::<half::f16>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     assert_eq!(plan.workspace_size(), 0);
 }
 

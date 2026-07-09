@@ -64,8 +64,8 @@ pub mod structure_key;
 pub mod tensor;
 
 pub use dispatch::{
-    merge, reported_entry, seed_winner, winner_of, CandidateResult, DispatchEntry, DispatchTable,
-    HwStamp, Implementor, Provenance, ReportedCandidate, MIN_FLIP_MARGIN,
+    CandidateResult, DispatchEntry, DispatchTable, HwStamp, Implementor, MIN_FLIP_MARGIN,
+    Provenance, ReportedCandidate, merge, reported_entry, seed_winner, winner_of,
 };
 pub use element::{
     BiasElement, BiasElementKind, Bin, BinElement, Bool, Complex32, Complex64, Element,
@@ -85,8 +85,8 @@ pub use ops::{
 pub use plan::{PlanPreference, PrecisionGuarantee, Workspace};
 pub use sku::{BackendKind, KernelSku, OpCategory};
 pub use structure_key::{
-    structure_key, structure_key_token, AxisMask, Contiguity, ContractionKey, DivBucket, IdxWidth,
-    OperandDesc, OperandKey, QuantFacts, QuantFamily, ScalePlacement, SizeClass, StructureKey,
-    SymExtent, SymKind, VecWidth, WorkClass, MAX_OPERANDS, MAX_RANK, STRUCTURE_KEY_VERSION,
+    AxisMask, Contiguity, ContractionKey, DivBucket, IdxWidth, MAX_OPERANDS, MAX_RANK, OperandDesc,
+    OperandKey, QuantFacts, QuantFamily, STRUCTURE_KEY_VERSION, ScalePlacement, SizeClass,
+    StructureKey, SymExtent, SymKind, VecWidth, WorkClass, structure_key, structure_key_token,
 };
-pub use tensor::{contiguous_stride, strides_equal, TensorMut, TensorRef};
+pub use tensor::{TensorMut, TensorRef, contiguous_stride, strides_equal};

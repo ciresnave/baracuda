@@ -182,30 +182,62 @@ impl<T: Element> LpPool1dPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_1d_f32_run(
-                    x_ptr, y_ptr, self.desc.batch, self.desc.channels, self.desc.l_in,
-                    self.desc.window, self.desc.stride, self.l_out,
-                    self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.l_in,
+                    self.desc.window,
+                    self.desc.stride,
+                    self.l_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_1d_f64_run(
-                    x_ptr, y_ptr, self.desc.batch, self.desc.channels, self.desc.l_in,
-                    self.desc.window, self.desc.stride, self.l_out,
-                    self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.l_in,
+                    self.desc.window,
+                    self.desc.stride,
+                    self.l_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_1d_f16_run(
-                    x_ptr, y_ptr, self.desc.batch, self.desc.channels, self.desc.l_in,
-                    self.desc.window, self.desc.stride, self.l_out,
-                    self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.l_in,
+                    self.desc.window,
+                    self.desc.stride,
+                    self.l_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_1d_bf16_run(
-                    x_ptr, y_ptr, self.desc.batch, self.desc.channels, self.desc.l_in,
-                    self.desc.window, self.desc.stride, self.l_out,
-                    self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.l_in,
+                    self.desc.window,
+                    self.desc.stride,
+                    self.l_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             _ => {

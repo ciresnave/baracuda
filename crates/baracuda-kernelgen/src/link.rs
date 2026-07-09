@@ -70,9 +70,9 @@ pub fn emit_link_registry(entries: &[LinkEntry]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{input, OpDef};
-    use crate::{generate, Cuda};
-    use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+    use crate::ir::{OpDef, input};
+    use crate::{Cuda, generate};
+    use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn entry(name: &str) -> LinkEntry {
         let op = OpDef::elementwise(name, 2, &[ElementKind::F32], input(0) + input(1));
@@ -101,7 +101,11 @@ mod tests {
         let a = src.find("alpha").unwrap();
         let z = src.find("zeta").unwrap();
         assert!(a < z, "entries must be sorted by entry_point");
-        assert_eq!(src.matches("\"baracuda_gen_alpha").count(), 1, "duplicate collapsed");
+        assert_eq!(
+            src.matches("\"baracuda_gen_alpha").count(),
+            1,
+            "duplicate collapsed"
+        );
         // closes cleanly.
         assert!(src.trim_end().ends_with("];"));
     }

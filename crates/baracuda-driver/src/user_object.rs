@@ -11,9 +11,9 @@
 
 use core::ffi::c_void;
 
-use baracuda_cuda_sys::{driver, CUuserObject};
+use baracuda_cuda_sys::{CUuserObject, driver};
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// A refcounted user object. Drop releases one reference.
 pub struct UserObject {

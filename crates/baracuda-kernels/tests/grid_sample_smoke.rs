@@ -2,12 +2,12 @@
 //! (Phase 9 Category T). PyTorch defaults: bilinear, zeros pad,
 //! `align_corners=false`. `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, AffineGridArgs, AffineGridDescriptor, AffineGridPlan, ElementKind,
-    GridSampleArgs, GridSampleBackwardArgs, GridSampleBackwardDescriptor,
-    GridSampleBackwardPlan, GridSampleDescriptor, GridSamplePlan, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    AffineGridArgs, AffineGridDescriptor, AffineGridPlan, ElementKind, GridSampleArgs,
+    GridSampleBackwardArgs, GridSampleBackwardDescriptor, GridSampleBackwardPlan,
+    GridSampleDescriptor, GridSamplePlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -47,11 +47,16 @@ fn grid_sample_identity_f32() {
     let mut dev_out: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc");
     let desc = GridSampleDescriptor {
-        n, c, ih, iw, oh, ow,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
         element: ElementKind::F32,
     };
-    let plan = GridSamplePlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        GridSamplePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GridSampleArgs {
         input: TensorRef {
             data: dev_in.as_slice(),
@@ -75,7 +80,10 @@ fn grid_sample_identity_f32() {
     let mut got = vec![0f32; host_in.len()];
     dev_out.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(host_in.iter()).enumerate() {
-        assert!((g - e).abs() < 1e-5, "grid_sample identity f32 mismatch @ {i}: got {g} vs {e}");
+        assert!(
+            (g - e).abs() < 1e-5,
+            "grid_sample identity f32 mismatch @ {i}: got {g} vs {e}"
+        );
     }
     // Suppress unused warning (sanity check helper is intentionally inline).
     let _ = grid_to_src(0.0, ih);
@@ -94,11 +102,16 @@ fn grid_sample_zero_pad_oob_f32() {
     let dev_grid = DeviceBuffer::from_slice(&ctx, &host_grid).expect("up grid");
     let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc");
     let desc = GridSampleDescriptor {
-        n, c, ih, iw, oh, ow,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
         element: ElementKind::F32,
     };
-    let plan = GridSamplePlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        GridSamplePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GridSampleArgs {
         input: TensorRef {
             data: dev_in.as_slice(),
@@ -120,7 +133,11 @@ fn grid_sample_zero_pad_oob_f32() {
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; 1];
     dev_out.copy_to_host(&mut got).expect("dl");
-    assert!(got[0].abs() < 1e-6, "grid_sample OOB should be 0, got {}", got[0]);
+    assert!(
+        got[0].abs() < 1e-6,
+        "grid_sample OOB should be 0, got {}",
+        got[0]
+    );
 }
 
 #[test]
@@ -148,7 +165,12 @@ fn grid_sample_backward_smoke_f32() {
     let mut dev_din: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("");
     let mut dev_dgrid: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 8).expect("");
     let desc = GridSampleBackwardDescriptor {
-        n, c, ih, iw, oh, ow,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
         element: ElementKind::F32,
     };
     let plan = GridSampleBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
@@ -193,12 +215,20 @@ fn grid_sample_backward_smoke_f32() {
 #[ignore]
 fn affine_grid_identity_f32() {
     let (ctx, stream) = setup();
-    let n = 1; let oh = 3; let ow = 4;
+    let n = 1;
+    let oh = 3;
+    let ow = 4;
     // Identity affine: 1,0,0 ; 0,1,0
     let host_theta: Vec<f32> = vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
     let dev_theta = DeviceBuffer::from_slice(&ctx, &host_theta).expect("");
-    let mut dev_grid: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n * oh * ow * 2) as usize).expect("");
-    let desc = AffineGridDescriptor { n, oh, ow, element: ElementKind::F32 };
+    let mut dev_grid: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (n * oh * ow * 2) as usize).expect("");
+    let desc = AffineGridDescriptor {
+        n,
+        oh,
+        ow,
+        element: ElementKind::F32,
+    };
     let plan = AffineGridPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("");
     let args = AffineGridArgs {
         theta: TensorRef {

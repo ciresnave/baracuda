@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `SortPlan<T>` (Phase 9 Category O).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SortArgs, SortDescriptor, SortPlan, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, PlanPreference, SortArgs, SortDescriptor, SortPlan, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -23,9 +23,8 @@ fn sort_f32_ascending_basic() {
     let row_len: i32 = 8;
     // Row 0: simple shuffled. Row 1: descending input. Row 2: ties.
     let input: Vec<f32> = vec![
-        5.0, 1.0, 4.0, 2.0, 8.0, 3.0, 7.0, 6.0,
-        8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0,
-        2.0, 2.0, 1.0, 3.0, 1.0, 3.0, 2.0, 1.0,
+        5.0, 1.0, 4.0, 2.0, 8.0, 3.0, 7.0, 6.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 2.0,
+        1.0, 3.0, 1.0, 3.0, 2.0, 1.0,
     ];
     let dev_in = DeviceBuffer::from_slice(&ctx, &input).expect("up");
     let mut dev_vals: DeviceBuffer<f32> =
@@ -142,7 +141,8 @@ fn sort_i32_descending_basic() {
         ref_vals.sort_by(|a, b| b.cmp(a));
         for i in 0..row_len as usize {
             assert_eq!(
-                got_v[off + i], ref_vals[i],
+                got_v[off + i],
+                ref_vals[i],
                 "sort i32 descending row {row} val[{i}]"
             );
         }

@@ -18,7 +18,7 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_broadcast_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, PlanPreference, TensorMut,
     TensorRef, Workspace,
@@ -94,11 +94,7 @@ fn gen_a_f32(non_div: bool) -> Vec<f32> {
     (0..N_DIM)
         .map(|i| {
             let v = (i as f32) * 0.125 - 8.0;
-            if non_div {
-                v
-            } else {
-                v
-            }
+            if non_div { v } else { v }
         })
         .collect()
 }
@@ -145,8 +141,7 @@ fn run_f32(op: Op) {
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
 
     let a_shape = [1i32, n];
     let a_stride = [0i64, 1];
@@ -160,8 +155,8 @@ fn run_f32(op: Op) {
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 2> {
         a: TensorRef {
             data: dev_a.as_slice(),
@@ -219,8 +214,7 @@ fn run_f64(op: Op) {
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
-    let mut dev_y: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
 
     let a_shape = [1i32, n];
     let a_stride = [0i64, 1];
@@ -234,8 +228,8 @@ fn run_f64(op: Op) {
         shape: y_shape,
         element: ElementKind::F64,
     };
-    let plan = BinaryPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f64, 2> {
         a: TensorRef {
             data: dev_a.as_slice(),
@@ -304,8 +298,7 @@ fn run_f16(op: Op) {
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
-    let mut dev_y: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
 
     let a_shape = [1i32, n];
     let a_stride = [0i64, 1];
@@ -319,8 +312,8 @@ fn run_f16(op: Op) {
         shape: y_shape,
         element: ElementKind::F16,
     };
-    let plan = BinaryPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f16, 2> {
         a: TensorRef {
             data: dev_a.as_slice(),
@@ -393,8 +386,7 @@ fn run_bf16(op: Op) {
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
-    let mut dev_y: DeviceBuffer<bf16> =
-        DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
+    let mut dev_y: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
 
     let a_shape = [1i32, n];
     let a_stride = [0i64, 1];
@@ -408,8 +400,8 @@ fn run_bf16(op: Op) {
         shape: y_shape,
         element: ElementKind::Bf16,
     };
-    let plan = BinaryPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<bf16, 2> {
         a: TensorRef {
             data: dev_a.as_slice(),

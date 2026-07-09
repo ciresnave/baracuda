@@ -14,17 +14,17 @@
 //! Ignored by default (needs a CUDA device + nvrtc); run with:
 //! `cargo test -p baracuda-kernels-bench --test variant_gate -- --ignored`
 
+use baracuda_driver::DeviceBuffer;
 use baracuda_driver::{Device, Module};
-use baracuda_kernelgen::{
-    generate_variants, input, Compiler, Cuda, NvrtcCompiler, OpDef, ReduceOp, VariantFidelity,
-};
 use baracuda_kernelgen::emit_dispatch_table;
+use baracuda_kernelgen::{
+    Compiler, Cuda, NvrtcCompiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input,
+};
 use baracuda_kernels_bench::{current_hwstamp, gate_cell, setup_device};
 use baracuda_kernels_types::{
-    merge, structure_key, ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind,
-    Implementor, OpCategory, OperandDesc, Provenance,
+    ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, Implementor, OpCategory,
+    OperandDesc, Provenance, merge, structure_key,
 };
-use baracuda_driver::DeviceBuffer;
 
 const ROWS: i64 = 16_384;
 const COLS: i64 = 1_024;
@@ -57,7 +57,10 @@ fn variant_gate_loop_end_to_end() {
     let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
     let variants = generate_variants(&op, &key, &Cuda);
     assert_eq!(variants.len(), 2, "base + splitk");
-    assert_eq!(variants[1].fidelity, VariantFidelity::ReassociatedDeterministic);
+    assert_eq!(
+        variants[1].fidelity,
+        VariantFidelity::ReassociatedDeterministic
+    );
 
     // ---- 2. nvrtc-compile every kernel of every variant; load via the driver. ----
     let compiler = NvrtcCompiler::new(ArchSku::Sm89);
@@ -229,7 +232,7 @@ fn variant_gate_loop_end_to_end() {
 #[test]
 #[ignore = "requires a CUDA device + nvrtc"]
 fn smemrow_variant_is_bit_identical_and_gated() {
-    use baracuda_kernelgen::{reduced, ReduceStage};
+    use baracuda_kernelgen::{ReduceStage, reduced};
 
     let (ctx, stream) = setup_device();
     let device = Device::get(0).expect("device");
@@ -246,8 +249,14 @@ fn smemrow_variant_is_bit_identical_and_gated() {
         1,
         &[ElementKind::F32],
         vec![
-            ReduceStage { pre: input(0).0, op: ReduceOp::Max },
-            ReduceStage { pre: (input(0) - reduced(0)).exp().0, op: ReduceOp::Sum },
+            ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Max,
+            },
+            ReduceStage {
+                pre: (input(0) - reduced(0)).exp().0,
+                op: ReduceOp::Sum,
+            },
         ],
         (input(0) - reduced(0)).exp() / reduced(1),
     );
@@ -349,8 +358,16 @@ fn smemrow_variant_is_bit_identical_and_gated() {
         7,
         10,
         vec![
-            (Implementor::Generated, Some(base_name), Box::new(launch_base)),
-            (Implementor::Generated, Some(smem_name), Box::new(launch_smem)),
+            (
+                Implementor::Generated,
+                Some(base_name),
+                Box::new(launch_base),
+            ),
+            (
+                Implementor::Generated,
+                Some(smem_name),
+                Box::new(launch_smem),
+            ),
         ],
     )
     .expect("measured entry");

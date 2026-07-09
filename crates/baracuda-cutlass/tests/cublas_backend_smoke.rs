@@ -15,19 +15,12 @@ use baracuda_cutlass::{
     BackendKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut, MatrixRef,
     PlanPreference, Workspace,
 };
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 /// Host CPU reference: D = alpha * (A @ B) + beta * C in f32.
 /// A row-major [m, k], lda=k. B column-major [k, n], ldb=k (RCR).
-fn cpu_gemm_rcr_f32(
-    m: usize,
-    n: usize,
-    k: usize,
-    a: &[f32],
-    b: &[f32],
-    d: &mut [f32],
-) {
+fn cpu_gemm_rcr_f32(m: usize, n: usize, k: usize, a: &[f32], b: &[f32], d: &mut [f32]) {
     for i in 0..m {
         for j in 0..n {
             let mut acc = 0.0f32;
@@ -47,12 +40,8 @@ fn run_one_f16_cublas(m: i32, n: i32, k: i32, force_cublas: bool) {
     let ctx = Context::new(&device).expect("context");
     let stream = Stream::new(&ctx).expect("stream");
 
-    let host_a_f32: Vec<f32> = (0..(m * k))
-        .map(|i| ((i as f32) * 0.01).sin())
-        .collect();
-    let host_b_f32: Vec<f32> = (0..(k * n))
-        .map(|i| ((i as f32) * 0.013).cos())
-        .collect();
+    let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
+    let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_gemm_rcr_f32(
         m as usize,
@@ -143,9 +132,7 @@ fn run_one_f16_cublas(m: i32, n: i32, k: i32, force_cublas: bool) {
     stream.synchronize().expect("sync");
 
     let mut host_d_out = vec![f16::ZERO; (m * n) as usize];
-    dev_d
-        .copy_to_host(&mut host_d_out)
-        .expect("download D");
+    dev_d.copy_to_host(&mut host_d_out).expect("download D");
 
     let mut max_err = 0.0f32;
     for (got, want) in host_d_out.iter().zip(host_d_ref.iter()) {
@@ -159,9 +146,7 @@ fn run_one_f16_cublas(m: i32, n: i32, k: i32, force_cublas: bool) {
         max_err < tol,
         "f16 cuBLAS GEMM ({m}x{n}x{k}, backend={chosen:?}): max abs err {max_err} exceeded tolerance {tol}"
     );
-    println!(
-        "f16 GEMM ({m}x{n}x{k}, backend={chosen:?}): max abs err {max_err} (tol {tol}) ✅"
-    );
+    println!("f16 GEMM ({m}x{n}x{k}, backend={chosen:?}): max abs err {max_err} (tol {tol}) ✅");
 }
 
 fn run_one_bf16_cublas(m: i32, n: i32, k: i32, force_cublas: bool) {
@@ -170,12 +155,8 @@ fn run_one_bf16_cublas(m: i32, n: i32, k: i32, force_cublas: bool) {
     let ctx = Context::new(&device).expect("context");
     let stream = Stream::new(&ctx).expect("stream");
 
-    let host_a_f32: Vec<f32> = (0..(m * k))
-        .map(|i| ((i as f32) * 0.01).sin())
-        .collect();
-    let host_b_f32: Vec<f32> = (0..(k * n))
-        .map(|i| ((i as f32) * 0.013).cos())
-        .collect();
+    let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
+    let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_gemm_rcr_f32(
         m as usize,
@@ -244,9 +225,7 @@ fn run_one_bf16_cublas(m: i32, n: i32, k: i32, force_cublas: bool) {
     stream.synchronize().expect("sync");
 
     let mut host_d_out = vec![bf16::ZERO; (m * n) as usize];
-    dev_d
-        .copy_to_host(&mut host_d_out)
-        .expect("download D");
+    dev_d.copy_to_host(&mut host_d_out).expect("download D");
 
     let mut max_err = 0.0f32;
     for (got, want) in host_d_out.iter().zip(host_d_ref.iter()) {
@@ -261,9 +240,7 @@ fn run_one_bf16_cublas(m: i32, n: i32, k: i32, force_cublas: bool) {
         max_err < tol,
         "bf16 cuBLAS GEMM ({m}x{n}x{k}, backend={chosen:?}): max abs err {max_err} exceeded tolerance {tol}"
     );
-    println!(
-        "bf16 GEMM ({m}x{n}x{k}, backend={chosen:?}): max abs err {max_err} (tol {tol}) ✅"
-    );
+    println!("bf16 GEMM ({m}x{n}x{k}, backend={chosen:?}): max abs err {max_err} (tol {tol}) ✅");
 }
 
 fn run_one_f32_cublas_forced(m: i32, n: i32, k: i32) {
@@ -272,12 +249,8 @@ fn run_one_f32_cublas_forced(m: i32, n: i32, k: i32) {
     let ctx = Context::new(&device).expect("context");
     let stream = Stream::new(&ctx).expect("stream");
 
-    let host_a: Vec<f32> = (0..(m * k))
-        .map(|i| ((i as f32) * 0.01).sin())
-        .collect();
-    let host_b: Vec<f32> = (0..(k * n))
-        .map(|i| ((i as f32) * 0.013).cos())
-        .collect();
+    let host_a: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
+    let host_b: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_gemm_rcr_f32(
         m as usize,
@@ -340,9 +313,7 @@ fn run_one_f32_cublas_forced(m: i32, n: i32, k: i32) {
     stream.synchronize().expect("sync");
 
     let mut host_d_out = vec![0.0f32; (m * n) as usize];
-    dev_d
-        .copy_to_host(&mut host_d_out)
-        .expect("download D");
+    dev_d.copy_to_host(&mut host_d_out).expect("download D");
 
     let mut max_err = 0.0f32;
     for (got, want) in host_d_out.iter().zip(host_d_ref.iter()) {
@@ -436,8 +407,8 @@ fn f16_auto_dispatch_large_m_picks_cutlass() {
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Identity,
     };
-    let plan = GemmPlan::<f16>::select(&stream, &desc, PlanPreference::default())
-        .expect("plan select");
+    let plan =
+        GemmPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("plan select");
     assert_eq!(
         plan.backend(),
         BackendKind::Cutlass,
@@ -467,8 +438,5 @@ fn force_cublas_with_bias_epilogue_errors() {
         ..PlanPreference::default()
     };
     let res = GemmPlan::<f16>::select(&stream, &desc, pref);
-    assert!(
-        res.is_err(),
-        "force-Cublas + BiasRelu should error, got Ok"
-    );
+    assert!(res.is_err(), "force-Cublas + BiasRelu should error, got Ok");
 }

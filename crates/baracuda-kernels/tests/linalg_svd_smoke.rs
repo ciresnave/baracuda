@@ -6,10 +6,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SvdArgs, SvdDescriptor, SvdPlan, TensorMut,
-    Workspace,
+    ElementKind, PlanPreference, SvdArgs, SvdDescriptor, SvdPlan, TensorMut, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -31,7 +31,10 @@ fn build_matrix_f32(m: usize, n: usize, seed: u32) -> Vec<f32> {
 }
 
 fn build_matrix_f64(m: usize, n: usize, seed: u32) -> Vec<f64> {
-    build_matrix_f32(m, n, seed).into_iter().map(|v| v as f64).collect()
+    build_matrix_f32(m, n, seed)
+        .into_iter()
+        .map(|v| v as f64)
+        .collect()
 }
 
 /// Column-major matmul.

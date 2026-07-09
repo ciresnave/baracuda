@@ -6,10 +6,10 @@
 //! Bit-exact comparison — All is integer-style AND of `(x != 0)`
 //! predicates, no FP math.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Bool, BoolReduceArgs, BoolReduceDescriptor, BoolReducePlan, ElementKind,
-    PlanPreference, ReduceKind, TensorMut, TensorRef, Workspace,
+    Bool, BoolReduceArgs, BoolReduceDescriptor, BoolReducePlan, ElementKind, PlanPreference,
+    ReduceKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -46,12 +46,7 @@ fn fill_pattern_f32(host: &mut Vec<f32>) {
     // row 2: all zeros (default).
 }
 
-fn run_all<T>(
-    ctx: &Context,
-    stream: &Stream,
-    host_x: &[T],
-    element: ElementKind,
-) -> Vec<u8>
+fn run_all<T>(ctx: &Context, stream: &Stream, host_x: &[T], element: ElementKind) -> Vec<u8>
 where
     T: baracuda_kernels::Element,
 {
@@ -166,10 +161,7 @@ fn all_bool() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
     fill_pattern_f32(&mut host_f32);
-    let host: Vec<Bool> = host_f32
-        .iter()
-        .map(|&v| Bool::new(v != 0.0))
-        .collect();
+    let host: Vec<Bool> = host_f32.iter().map(|&v| Bool::new(v != 0.0)).collect();
     let got = run_all::<Bool>(&ctx, &stream, &host, ElementKind::Bool);
     assert_expected(&got);
 }

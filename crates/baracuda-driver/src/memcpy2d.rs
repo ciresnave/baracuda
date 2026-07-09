@@ -8,13 +8,13 @@
 use core::ffi::c_void;
 use core::mem::size_of;
 
-use baracuda_cuda_sys::driver;
-use baracuda_cuda_sys::types::{CUmemorytype, CUDA_MEMCPY2D};
 use baracuda_cuda_sys::CUdeviceptr;
+use baracuda_cuda_sys::driver;
+use baracuda_cuda_sys::types::{CUDA_MEMCPY2D, CUmemorytype};
 use baracuda_types::DeviceRepr;
 
 use crate::context::Context;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// A pitched device allocation — a 2-D `height × width_in_bytes` block

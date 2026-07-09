@@ -10,14 +10,12 @@
 //!
 //! Both require the `flashinfer` cargo feature for `run`.
 
-
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ElementKind, KernelSku, MathPrecision, OpCategory, PlanPreference,
     PrecisionGuarantee, RandomKind, TensorMut, TensorRef, Workspace,
 };
-
 
 /// Which per-row sampler to run (thresholds supplied as device arrays in
 /// the args, not the descriptor).
@@ -117,38 +115,60 @@ impl PerRowSamplingPlan {
             ));
         }
         if args.output.shape != [b] {
-            return Err(Error::InvalidProblem("PerRowSamplingPlan: output shape must be [batch]"));
+            return Err(Error::InvalidProblem(
+                "PerRowSamplingPlan: output shape must be [batch]",
+            ));
         }
-        let need_k = matches!(self.desc.sampler, PerRowSampler::TopK | PerRowSampler::TopKTopP);
-        let need_p = matches!(self.desc.sampler, PerRowSampler::TopP | PerRowSampler::TopKTopP);
+        let need_k = matches!(
+            self.desc.sampler,
+            PerRowSampler::TopK | PerRowSampler::TopKTopP
+        );
+        let need_p = matches!(
+            self.desc.sampler,
+            PerRowSampler::TopP | PerRowSampler::TopKTopP
+        );
         let need_minp = matches!(self.desc.sampler, PerRowSampler::MinP);
         if need_k && args.top_k_arr.is_none() {
-            return Err(Error::InvalidProblem("PerRowSamplingPlan: top_k_arr required"));
+            return Err(Error::InvalidProblem(
+                "PerRowSamplingPlan: top_k_arr required",
+            ));
         }
         if need_p && args.top_p_arr.is_none() {
-            return Err(Error::InvalidProblem("PerRowSamplingPlan: top_p_arr required"));
+            return Err(Error::InvalidProblem(
+                "PerRowSamplingPlan: top_p_arr required",
+            ));
         }
         if need_minp && args.min_p_arr.is_none() {
-            return Err(Error::InvalidProblem("PerRowSamplingPlan: min_p_arr required"));
+            return Err(Error::InvalidProblem(
+                "PerRowSamplingPlan: min_p_arr required",
+            ));
         }
         if let Some(t) = &args.top_k_arr {
             if t.shape != [b] {
-                return Err(Error::InvalidProblem("PerRowSamplingPlan: top_k_arr must be [batch]"));
+                return Err(Error::InvalidProblem(
+                    "PerRowSamplingPlan: top_k_arr must be [batch]",
+                ));
             }
         }
         if let Some(t) = &args.top_p_arr {
             if t.shape != [b] {
-                return Err(Error::InvalidProblem("PerRowSamplingPlan: top_p_arr must be [batch]"));
+                return Err(Error::InvalidProblem(
+                    "PerRowSamplingPlan: top_p_arr must be [batch]",
+                ));
             }
         }
         if let Some(t) = &args.min_p_arr {
             if t.shape != [b] {
-                return Err(Error::InvalidProblem("PerRowSamplingPlan: min_p_arr must be [batch]"));
+                return Err(Error::InvalidProblem(
+                    "PerRowSamplingPlan: min_p_arr must be [batch]",
+                ));
             }
         }
         if let Some(v) = &args.valid {
             if v.shape != [b] {
-                return Err(Error::InvalidProblem("PerRowSamplingPlan: valid must be [batch]"));
+                return Err(Error::InvalidProblem(
+                    "PerRowSamplingPlan: valid must be [batch]",
+                ));
             }
         }
         if !args.probs.is_contiguous() || !args.output.is_contiguous() {
@@ -205,33 +225,63 @@ impl PerRowSamplingPlan {
             let k_ptr = args
                 .top_k_arr
                 .as_ref()
-                .map_or(core::ptr::null::<c_void>(), |t| t.data.as_raw().0 as *const c_void);
+                .map_or(core::ptr::null::<c_void>(), |t| {
+                    t.data.as_raw().0 as *const c_void
+                });
             let p_ptr = args
                 .top_p_arr
                 .as_ref()
-                .map_or(core::ptr::null::<c_void>(), |t| t.data.as_raw().0 as *const c_void);
+                .map_or(core::ptr::null::<c_void>(), |t| {
+                    t.data.as_raw().0 as *const c_void
+                });
             let mp_ptr = args
                 .min_p_arr
                 .as_ref()
-                .map_or(core::ptr::null::<c_void>(), |t| t.data.as_raw().0 as *const c_void);
+                .map_or(core::ptr::null::<c_void>(), |t| {
+                    t.data.as_raw().0 as *const c_void
+                });
 
             let status = match self.desc.sampler {
                 PerRowSampler::TopK => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_top_k_sampling_f32_arr_run(
-                        self.desc.batch_size, self.desc.vocab_size, k_ptr, det,
-                        args.seed_val, args.offset_val, probs_ptr, output_ptr, valid_ptr, stream_ptr,
+                        self.desc.batch_size,
+                        self.desc.vocab_size,
+                        k_ptr,
+                        det,
+                        args.seed_val,
+                        args.offset_val,
+                        probs_ptr,
+                        output_ptr,
+                        valid_ptr,
+                        stream_ptr,
                     )
                 },
                 PerRowSampler::TopP => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_top_p_sampling_f32_arr_run(
-                        self.desc.batch_size, self.desc.vocab_size, p_ptr, det,
-                        args.seed_val, args.offset_val, probs_ptr, output_ptr, valid_ptr, stream_ptr,
+                        self.desc.batch_size,
+                        self.desc.vocab_size,
+                        p_ptr,
+                        det,
+                        args.seed_val,
+                        args.offset_val,
+                        probs_ptr,
+                        output_ptr,
+                        valid_ptr,
+                        stream_ptr,
                     )
                 },
                 PerRowSampler::MinP => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_min_p_sampling_f32_arr_run(
-                        self.desc.batch_size, self.desc.vocab_size, mp_ptr, det,
-                        args.seed_val, args.offset_val, probs_ptr, output_ptr, valid_ptr, stream_ptr,
+                        self.desc.batch_size,
+                        self.desc.vocab_size,
+                        mp_ptr,
+                        det,
+                        args.seed_val,
+                        args.offset_val,
+                        probs_ptr,
+                        output_ptr,
+                        valid_ptr,
+                        stream_ptr,
                     )
                 },
                 PerRowSampler::TopKTopP => unsafe {
@@ -327,16 +377,24 @@ impl SpeculativeSamplingPlan {
     pub fn can_implement(&self, args: &SpeculativeSamplingArgs<'_>) -> Result<()> {
         let d = &self.desc;
         if args.draft_probs.shape != [d.batch_size, d.num_speculative_tokens, d.vocab_size] {
-            return Err(Error::InvalidProblem("SpeculativeSamplingPlan: draft_probs shape"));
+            return Err(Error::InvalidProblem(
+                "SpeculativeSamplingPlan: draft_probs shape",
+            ));
         }
         if args.draft_token_ids.shape != [d.batch_size, d.num_speculative_tokens] {
-            return Err(Error::InvalidProblem("SpeculativeSamplingPlan: draft_token_ids shape"));
+            return Err(Error::InvalidProblem(
+                "SpeculativeSamplingPlan: draft_token_ids shape",
+            ));
         }
         if args.target_probs.shape != [d.batch_size, d.num_speculative_tokens + 1, d.vocab_size] {
-            return Err(Error::InvalidProblem("SpeculativeSamplingPlan: target_probs shape"));
+            return Err(Error::InvalidProblem(
+                "SpeculativeSamplingPlan: target_probs shape",
+            ));
         }
         if args.output_token_ids.shape != [d.batch_size, d.num_speculative_tokens + 1] {
-            return Err(Error::InvalidProblem("SpeculativeSamplingPlan: output_token_ids shape"));
+            return Err(Error::InvalidProblem(
+                "SpeculativeSamplingPlan: output_token_ids shape",
+            ));
         }
         if args.output_accepted_token_num.shape != [d.batch_size]
             || args.output_emitted_draft_token_num.shape != [d.batch_size]
@@ -350,7 +408,9 @@ impl SpeculativeSamplingPlan {
             || !args.target_probs.is_contiguous()
             || !args.output_token_ids.is_contiguous()
         {
-            return Err(Error::Unsupported("SpeculativeSamplingPlan: tensors must be contiguous"));
+            return Err(Error::Unsupported(
+                "SpeculativeSamplingPlan: tensors must be contiguous",
+            ));
         }
         Ok(())
     }

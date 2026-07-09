@@ -5,11 +5,11 @@
 //! against an inline CPU reference using PyTorch's
 //! `align_corners=false` mapping. `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, InterpolateArgs, InterpolateBackwardArgs,
-    InterpolateBackwardDescriptor, InterpolateBackwardPlan, InterpolateDescriptor,
-    InterpolateMode, InterpolatePlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, InterpolateArgs, InterpolateBackwardArgs, InterpolateBackwardDescriptor,
+    InterpolateBackwardPlan, InterpolateDescriptor, InterpolateMode, InterpolatePlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -18,7 +18,12 @@ use half::{bf16, f16};
 /// device dtype is f16/bf16 — caller compares within tolerance.
 fn cpu_interp_bilinear_full_f32(
     x: &[f32],
-    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    n: i32,
+    c: i32,
+    ih: i32,
+    iw: i32,
+    oh: i32,
+    ow: i32,
     align_corners: bool,
     scale_h: Option<f64>,
     scale_w: Option<f64>,
@@ -28,7 +33,11 @@ fn cpu_interp_bilinear_full_f32(
         Some(s) => 1.0 / s,
         None => {
             if align_corners {
-                if oh > 1 { (ih - 1) as f64 / (oh - 1) as f64 } else { 0.0 }
+                if oh > 1 {
+                    (ih - 1) as f64 / (oh - 1) as f64
+                } else {
+                    0.0
+                }
             } else {
                 ih as f64 / oh as f64
             }
@@ -38,7 +47,11 @@ fn cpu_interp_bilinear_full_f32(
         Some(s) => 1.0 / s,
         None => {
             if align_corners {
-                if ow > 1 { (iw - 1) as f64 / (ow - 1) as f64 } else { 0.0 }
+                if ow > 1 {
+                    (iw - 1) as f64 / (ow - 1) as f64
+                } else {
+                    0.0
+                }
             } else {
                 iw as f64 / ow as f64
             }
@@ -94,7 +107,13 @@ fn setup() -> (Context, Stream) {
 }
 
 fn cpu_interp_bilinear_f32(
-    x: &[f32], n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    x: &[f32],
+    n: i32,
+    c: i32,
+    ih: i32,
+    iw: i32,
+    oh: i32,
+    ow: i32,
 ) -> Vec<f32> {
     let mut out = vec![0f32; (n * c * oh * ow) as usize];
     for nn in 0..n {
@@ -143,10 +162,17 @@ fn interpolate_bilinear_2d_f32_upsample_2x() {
     let mut dev_out: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out");
     let desc = InterpolateDescriptor::new(
-        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F32,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        InterpolateMode::Bilinear2d,
+        ElementKind::F32,
     );
-    let plan = InterpolatePlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        InterpolatePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = InterpolateArgs {
         input: TensorRef {
             data: dev_in.as_slice(),
@@ -166,7 +192,10 @@ fn interpolate_bilinear_2d_f32_upsample_2x() {
     dev_out.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
-        assert!(diff < 1e-5, "interpolate bilinear f32 mismatch @ {i}: got {g} vs {e}");
+        assert!(
+            diff < 1e-5,
+            "interpolate bilinear f32 mismatch @ {i}: got {g} vs {e}"
+        );
     }
 }
 
@@ -208,10 +237,17 @@ fn interpolate_bilinear_2d_f64_upsample_2x() {
     let mut dev_out: DeviceBuffer<f64> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out");
     let desc = InterpolateDescriptor::new(
-        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F64,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        InterpolateMode::Bilinear2d,
+        ElementKind::F64,
     );
-    let plan = InterpolatePlan::<f64>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        InterpolatePlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = InterpolateArgs {
         input: TensorRef {
             data: dev_in.as_slice(),
@@ -231,7 +267,10 @@ fn interpolate_bilinear_2d_f64_upsample_2x() {
     dev_out.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
-        assert!(diff < 1e-12, "interpolate bilinear f64 mismatch @ {i}: got {g} vs {e}");
+        assert!(
+            diff < 1e-12,
+            "interpolate bilinear f64 mismatch @ {i}: got {g} vs {e}"
+        );
     }
 }
 
@@ -247,7 +286,14 @@ fn interpolate_bilinear_2d_backward_f32_smoke() {
     let mut dev_din: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * c * ih * iw) as usize).expect("alloc");
     let desc = InterpolateBackwardDescriptor::new(
-        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F32,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        InterpolateMode::Bilinear2d,
+        ElementKind::F32,
     );
     let plan = InterpolateBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
@@ -271,7 +317,10 @@ fn interpolate_bilinear_2d_backward_f32_smoke() {
     // Sum of input gradients should equal sum of output gradients (16).
     let s: f32 = got.iter().sum();
     let target: f32 = host_dout.iter().sum();
-    assert!((s - target).abs() < 1e-4, "BW grad sum mismatch: {s} vs {target}");
+    assert!(
+        (s - target).abs() < 1e-4,
+        "BW grad sum mismatch: {s} vs {target}"
+    );
     for (i, &v) in got.iter().enumerate() {
         assert!(v > 0.0, "interpolate BW grad at {i} not positive: {v}");
     }
@@ -285,27 +334,49 @@ fn interpolate_bilinear_2d_backward_f32_smoke() {
 /// result alongside the CPU-equivalent reference. Used by the matrix
 /// of align_corners / scale_factor / dtype permutations below.
 fn run_fw_f32_case(
-    ctx: &Context, stream: &Stream,
+    ctx: &Context,
+    stream: &Stream,
     host_in: &[f32],
-    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    n: i32,
+    c: i32,
+    ih: i32,
+    iw: i32,
+    oh: i32,
+    ow: i32,
     align_corners: bool,
     scale_h: Option<f64>,
     scale_w: Option<f64>,
 ) -> (Vec<f32>, Vec<f32>) {
     let expected = cpu_interp_bilinear_full_f32(
-        host_in, n, c, ih, iw, oh, ow, align_corners, scale_h, scale_w,
+        host_in,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        align_corners,
+        scale_h,
+        scale_w,
     );
     let dev_in = DeviceBuffer::from_slice(ctx, host_in).expect("up");
     let mut dev_out: DeviceBuffer<f32> =
         DeviceBuffer::zeros(ctx, (n * c * oh * ow) as usize).expect("alloc out");
     let desc = InterpolateDescriptor::new(
-        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F32,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        InterpolateMode::Bilinear2d,
+        ElementKind::F32,
     )
     .with_align_corners(align_corners)
     .with_scale_h(scale_h)
     .with_scale_w(scale_w);
-    let plan = InterpolatePlan::<f32>::select(stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        InterpolatePlan::<f32>::select(stream, &desc, PlanPreference::default()).expect("select");
     let args = InterpolateArgs {
         input: TensorRef {
             data: dev_in.as_slice(),
@@ -336,33 +407,39 @@ fn interpolate_bilinear_2d_f32_align_corners_true_4x4_to_7x7() {
     let (ctx, stream) = setup();
     let host_in: Vec<f32> = (0..16).map(|i| i as f32 + 1.0).collect();
 
-    let (got_ac, exp_ac) = run_fw_f32_case(
-        &ctx, &stream, &host_in, 1, 1, 4, 4, 7, 7,
-        true, None, None,
-    );
-    let (got_no, exp_no) = run_fw_f32_case(
-        &ctx, &stream, &host_in, 1, 1, 4, 4, 7, 7,
-        false, None, None,
-    );
+    let (got_ac, exp_ac) =
+        run_fw_f32_case(&ctx, &stream, &host_in, 1, 1, 4, 4, 7, 7, true, None, None);
+    let (got_no, exp_no) =
+        run_fw_f32_case(&ctx, &stream, &host_in, 1, 1, 4, 4, 7, 7, false, None, None);
     // Each path must match its own reference.
     for (i, (g, e)) in got_ac.iter().zip(exp_ac.iter()).enumerate() {
-        assert!((g - e).abs() < 5e-5, "ac=true f32 mismatch @ {i}: {g} vs {e}");
+        assert!(
+            (g - e).abs() < 5e-5,
+            "ac=true f32 mismatch @ {i}: {g} vs {e}"
+        );
     }
     for (i, (g, e)) in got_no.iter().zip(exp_no.iter()).enumerate() {
-        assert!((g - e).abs() < 5e-5, "ac=false f32 mismatch @ {i}: {g} vs {e}");
+        assert!(
+            (g - e).abs() < 5e-5,
+            "ac=false f32 mismatch @ {i}: {g} vs {e}"
+        );
     }
     // align_corners=true must produce a different output than ac=false
     // for at least one cell (different mapping → different result).
-    let max_diff = got_ac.iter().zip(got_no.iter())
+    let max_diff = got_ac
+        .iter()
+        .zip(got_no.iter())
         .map(|(a, b)| (a - b).abs())
         .fold(0f32, f32::max);
-    assert!(max_diff > 0.1,
-        "ac=true vs ac=false produced near-identical output: max diff {max_diff}");
+    assert!(
+        max_diff > 0.1,
+        "ac=true vs ac=false produced near-identical output: max diff {max_diff}"
+    );
     // Corners should match input corners exactly under align_corners=true.
-    assert!((got_ac[0] - host_in[0]).abs() < 1e-5);     // top-left
-    assert!((got_ac[6] - host_in[3]).abs() < 1e-5);     // top-right
-    assert!((got_ac[42] - host_in[12]).abs() < 1e-5);   // bottom-left
-    assert!((got_ac[48] - host_in[15]).abs() < 1e-5);   // bottom-right
+    assert!((got_ac[0] - host_in[0]).abs() < 1e-5); // top-left
+    assert!((got_ac[6] - host_in[3]).abs() < 1e-5); // top-right
+    assert!((got_ac[42] - host_in[12]).abs() < 1e-5); // bottom-left
+    assert!((got_ac[48] - host_in[15]).abs() < 1e-5); // bottom-right
 }
 
 #[test]
@@ -376,22 +453,36 @@ fn interpolate_bilinear_2d_f32_scale_factor_override_differs() {
     let (ctx, stream) = setup();
     let host_in: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0];
     let (got_override, exp_override) = run_fw_f32_case(
-        &ctx, &stream, &host_in, 1, 1, 2, 2, 4, 4,
-        false, Some(3.0), Some(3.0),
+        &ctx,
+        &stream,
+        &host_in,
+        1,
+        1,
+        2,
+        2,
+        4,
+        4,
+        false,
+        Some(3.0),
+        Some(3.0),
     );
-    let (got_default, _) = run_fw_f32_case(
-        &ctx, &stream, &host_in, 1, 1, 2, 2, 4, 4,
-        false, None, None,
-    );
+    let (got_default, _) =
+        run_fw_f32_case(&ctx, &stream, &host_in, 1, 1, 2, 2, 4, 4, false, None, None);
     for (i, (g, e)) in got_override.iter().zip(exp_override.iter()).enumerate() {
-        assert!((g - e).abs() < 5e-5,
-            "scale-override f32 mismatch @ {i}: {g} vs {e}");
+        assert!(
+            (g - e).abs() < 5e-5,
+            "scale-override f32 mismatch @ {i}: {g} vs {e}"
+        );
     }
-    let max_diff = got_override.iter().zip(got_default.iter())
+    let max_diff = got_override
+        .iter()
+        .zip(got_default.iter())
         .map(|(a, b)| (a - b).abs())
         .fold(0f32, f32::max);
-    assert!(max_diff > 0.1,
-        "scale override vs derived produced near-identical output: max diff {max_diff}");
+    assert!(
+        max_diff > 0.1,
+        "scale override vs derived produced near-identical output: max diff {max_diff}"
+    );
 }
 
 #[test]
@@ -410,15 +501,21 @@ fn interpolate_bilinear_2d_f16_fw_matches_f32_ref() {
     // Use the f16-input-rounded values for the reference so we measure
     // kernel-only error rather than input-quantization error.
     let host_in_for_ref: Vec<f32> = host_in_f16.iter().map(|v| v.to_f32()).collect();
-    let expected = cpu_interp_bilinear_full_f32(
-        &host_in_for_ref, n, c, ih, iw, oh, ow, false, None, None,
-    );
+    let expected =
+        cpu_interp_bilinear_full_f32(&host_in_for_ref, n, c, ih, iw, oh, ow, false, None, None);
 
     let dev_in = DeviceBuffer::from_slice(&ctx, &host_in_f16).expect("up");
     let mut dev_out: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out");
     let desc = InterpolateDescriptor::new(
-        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F16,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        InterpolateMode::Bilinear2d,
+        ElementKind::F16,
     );
     let plan = InterpolatePlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select f16");
@@ -443,8 +540,10 @@ fn interpolate_bilinear_2d_f16_fw_matches_f32_ref() {
     let tol = 5e-3_f32;
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
-        assert!(diff <= tol * e.abs().max(1.0) + tol,
-            "f16 FW mismatch @ {i}: got {g}, ref {e}, diff {diff}");
+        assert!(
+            diff <= tol * e.abs().max(1.0) + tol,
+            "f16 FW mismatch @ {i}: got {g}, ref {e}, diff {diff}"
+        );
     }
 }
 
@@ -459,15 +558,21 @@ fn interpolate_bilinear_2d_bf16_fw_matches_f32_ref() {
         .collect();
     let host_in_bf16: Vec<bf16> = host_in_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let host_in_for_ref: Vec<f32> = host_in_bf16.iter().map(|v| v.to_f32()).collect();
-    let expected = cpu_interp_bilinear_full_f32(
-        &host_in_for_ref, n, c, ih, iw, oh, ow, true, None, None,
-    );
+    let expected =
+        cpu_interp_bilinear_full_f32(&host_in_for_ref, n, c, ih, iw, oh, ow, true, None, None);
 
     let dev_in = DeviceBuffer::from_slice(&ctx, &host_in_bf16).expect("up");
     let mut dev_out: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out");
     let desc = InterpolateDescriptor::new(
-        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::Bf16,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        InterpolateMode::Bilinear2d,
+        ElementKind::Bf16,
     )
     .with_align_corners(true);
     let plan = InterpolatePlan::<bf16>::select(&stream, &desc, PlanPreference::default())
@@ -493,8 +598,10 @@ fn interpolate_bilinear_2d_bf16_fw_matches_f32_ref() {
     let tol = 4e-2_f32;
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
-        assert!(diff <= tol * e.abs().max(1.0) + tol,
-            "bf16 FW mismatch @ {i}: got {g}, ref {e}, diff {diff}");
+        assert!(
+            diff <= tol * e.abs().max(1.0) + tol,
+            "bf16 FW mismatch @ {i}: got {g}, ref {e}, diff {diff}"
+        );
     }
 }
 
@@ -502,7 +609,12 @@ fn interpolate_bilinear_2d_bf16_fw_matches_f32_ref() {
 /// same bilinear weights as the FW. Mirrors the kernel formula.
 fn cpu_interp_bilinear_bw_f32(
     dout: &[f32],
-    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    n: i32,
+    c: i32,
+    ih: i32,
+    iw: i32,
+    oh: i32,
+    ow: i32,
     align_corners: bool,
     scale_h: Option<f64>,
     scale_w: Option<f64>,
@@ -512,16 +624,28 @@ fn cpu_interp_bilinear_bw_f32(
         Some(s) => 1.0 / s,
         None => {
             if align_corners {
-                if oh > 1 { (ih - 1) as f64 / (oh - 1) as f64 } else { 0.0 }
-            } else { ih as f64 / oh as f64 }
+                if oh > 1 {
+                    (ih - 1) as f64 / (oh - 1) as f64
+                } else {
+                    0.0
+                }
+            } else {
+                ih as f64 / oh as f64
+            }
         }
     };
     let sw: f64 = match scale_w {
         Some(s) => 1.0 / s,
         None => {
             if align_corners {
-                if ow > 1 { (iw - 1) as f64 / (ow - 1) as f64 } else { 0.0 }
-            } else { iw as f64 / ow as f64 }
+                if ow > 1 {
+                    (iw - 1) as f64 / (ow - 1) as f64
+                } else {
+                    0.0
+                }
+            } else {
+                iw as f64 / ow as f64
+            }
         }
     };
     for nn in 0..n {
@@ -529,7 +653,9 @@ fn cpu_interp_bilinear_bw_f32(
             for ohh in 0..oh {
                 let sy = if align_corners {
                     (ohh as f64) * sh
-                } else { ((ohh as f64) + 0.5) * sh - 0.5 } as f32;
+                } else {
+                    ((ohh as f64) + 0.5) * sh - 0.5
+                } as f32;
                 let y0 = sy.floor() as i32;
                 let wy1 = sy - y0 as f32;
                 let wy0 = 1.0 - wy1;
@@ -539,7 +665,9 @@ fn cpu_interp_bilinear_bw_f32(
                 for oww in 0..ow {
                     let sx = if align_corners {
                         (oww as f64) * sw
-                    } else { ((oww as f64) + 0.5) * sw - 0.5 } as f32;
+                    } else {
+                        ((oww as f64) + 0.5) * sw - 0.5
+                    } as f32;
                     let x0 = sx.floor() as i32;
                     let wx1 = sx - x0 as f32;
                     let wx0 = 1.0 - wx1;
@@ -560,21 +688,43 @@ fn cpu_interp_bilinear_bw_f32(
 }
 
 fn run_bw_f32_case(
-    ctx: &Context, stream: &Stream,
+    ctx: &Context,
+    stream: &Stream,
     host_dout: &[f32],
-    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    n: i32,
+    c: i32,
+    ih: i32,
+    iw: i32,
+    oh: i32,
+    ow: i32,
     align_corners: bool,
     scale_h: Option<f64>,
     scale_w: Option<f64>,
 ) -> (Vec<f32>, Vec<f32>) {
     let expected = cpu_interp_bilinear_bw_f32(
-        host_dout, n, c, ih, iw, oh, ow, align_corners, scale_h, scale_w,
+        host_dout,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        align_corners,
+        scale_h,
+        scale_w,
     );
     let dev_dout = DeviceBuffer::from_slice(ctx, host_dout).expect("up");
     let mut dev_din: DeviceBuffer<f32> =
         DeviceBuffer::zeros(ctx, (n * c * ih * iw) as usize).expect("alloc din");
     let desc = InterpolateBackwardDescriptor::new(
-        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F32,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        InterpolateMode::Bilinear2d,
+        ElementKind::F32,
     )
     .with_align_corners(align_corners)
     .with_scale_h(scale_h)
@@ -610,19 +760,22 @@ fn interpolate_bilinear_2d_bw_f32_align_corners_false_matches_cpu() {
         .map(|i| (i as f32) * 0.1 + 0.01)
         .collect();
     let (got, expected) = run_bw_f32_case(
-        &ctx, &stream, &host_dout, n, c, ih, iw, oh, ow,
-        false, None, None,
+        &ctx, &stream, &host_dout, n, c, ih, iw, oh, ow, false, None, None,
     );
     // Grad sum should match dout sum (mass conservation under bilinear
     // weighting that sums to 1 per output cell).
     let gs: f32 = got.iter().sum();
     let es: f32 = expected.iter().sum();
-    assert!((gs - es).abs() <= 1e-3 * es.abs().max(1.0),
-        "BW grad mass mismatch ac=false: device {gs} vs cpu {es}");
+    assert!(
+        (gs - es).abs() <= 1e-3 * es.abs().max(1.0),
+        "BW grad mass mismatch ac=false: device {gs} vs cpu {es}"
+    );
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
-        assert!(diff <= 1e-4 * e.abs().max(1.0) + 1e-4,
-            "BW ac=false @ {i}: {g} vs {e}");
+        assert!(
+            diff <= 1e-4 * e.abs().max(1.0) + 1e-4,
+            "BW ac=false @ {i}: {g} vs {e}"
+        );
     }
 }
 
@@ -639,13 +792,14 @@ fn interpolate_bilinear_2d_bw_f32_align_corners_true_matches_cpu() {
         .map(|i| 0.5 + (i as f32) * 0.05)
         .collect();
     let (got, expected) = run_bw_f32_case(
-        &ctx, &stream, &host_dout, n, c, ih, iw, oh, ow,
-        true, None, None,
+        &ctx, &stream, &host_dout, n, c, ih, iw, oh, ow, true, None, None,
     );
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
-        assert!(diff <= 1e-3 * e.abs().max(1.0) + 1e-3,
-            "BW ac=true @ {i}: got {g}, cpu {e}, diff {diff}");
+        assert!(
+            diff <= 1e-3 * e.abs().max(1.0) + 1e-3,
+            "BW ac=true @ {i}: got {g}, cpu {e}, diff {diff}"
+        );
     }
 }
 
@@ -659,12 +813,24 @@ fn interpolate_bilinear_2d_bw_f32_scale_factor_override_matches_cpu() {
         .map(|i| (i as f32) * 0.1 + 0.01)
         .collect();
     let (got, expected) = run_bw_f32_case(
-        &ctx, &stream, &host_dout, n, c, ih, iw, oh, ow,
-        false, Some(3.0), Some(3.0),
+        &ctx,
+        &stream,
+        &host_dout,
+        n,
+        c,
+        ih,
+        iw,
+        oh,
+        ow,
+        false,
+        Some(3.0),
+        Some(3.0),
     );
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
-        assert!(diff <= 1e-4 * e.abs().max(1.0) + 1e-4,
-            "BW scale-override @ {i}: {g} vs {e}");
+        assert!(
+            diff <= 1e-4 * e.abs().max(1.0) + 1e-4,
+            "BW scale-override @ {i}: {g} vs {e}"
+        );
     }
 }

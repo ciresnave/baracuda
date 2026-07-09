@@ -8,7 +8,7 @@ use baracuda_cuda_sys::runtime::types::{
 };
 
 use crate::device::Device;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Memory kind reported by [`pointer_attributes`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -209,13 +209,15 @@ pub fn device_properties(device: &Device) -> Result<DeviceProperties> {
 ///
 /// `func_symbol` must be a valid CUDA kernel symbol address. Passing
 /// garbage causes undefined behavior inside the driver.
-pub unsafe fn func_attributes(func_symbol: *const core::ffi::c_void) -> Result<cudaFuncAttributes> { unsafe {
-    let r = runtime()?;
-    let cu = r.cuda_func_get_attributes()?;
-    let mut attrs = cudaFuncAttributes::default();
-    check(cu(
-        &mut attrs as *mut cudaFuncAttributes as *mut core::ffi::c_void,
-        func_symbol,
-    ))?;
-    Ok(attrs)
-}}
+pub unsafe fn func_attributes(func_symbol: *const core::ffi::c_void) -> Result<cudaFuncAttributes> {
+    unsafe {
+        let r = runtime()?;
+        let cu = r.cuda_func_get_attributes()?;
+        let mut attrs = cudaFuncAttributes::default();
+        check(cu(
+            &mut attrs as *mut cudaFuncAttributes as *mut core::ffi::c_void,
+            func_symbol,
+        ))?;
+        Ok(attrs)
+    }
+}

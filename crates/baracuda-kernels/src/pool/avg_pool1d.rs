@@ -16,10 +16,9 @@ use baracuda_kernels_types::{
 };
 
 use super::max_pool1d::{
-    check_bw_args, check_fw_args, validate_descriptor, Pool1dBwArgs, Pool1dDescriptor,
-    Pool1dFwArgs,
+    Pool1dBwArgs, Pool1dDescriptor, Pool1dFwArgs, check_bw_args, check_fw_args, validate_descriptor,
 };
-use super::max_pool2d::{build_sku, PoolMode};
+use super::max_pool2d::{PoolMode, build_sku};
 use super::pool_nd::{
     bind_stream, drop_descriptors_nd, ensure_descriptors_nd, ensure_handle, out_dim, run_bw_nd,
     run_fw_nd,
@@ -90,7 +89,12 @@ impl<T: Element> AvgPool1dPlan<T> {
     /// `L_out` under the configured window / pad / stride.
     #[inline]
     pub fn output_dim(&self) -> i32 {
-        out_dim(self.desc.l_in, self.desc.pad, self.desc.window, self.desc.stride)
+        out_dim(
+            self.desc.l_in,
+            self.desc.pad,
+            self.desc.window,
+            self.desc.stride,
+        )
     }
 
     /// Run the forward pass. Computes `y := avg_pool(x)`.

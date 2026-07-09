@@ -499,8 +499,8 @@ pub type PFN_cuGraphClone =
 // ---- Wave 6: arrays, textures, surfaces ----------------------------------
 
 use crate::types::{
-    CUarray, CUsurfObject, CUtexObject, CUDA_ARRAY_DESCRIPTOR, CUDA_RESOURCE_DESC,
-    CUDA_TEXTURE_DESC,
+    CUDA_ARRAY_DESCRIPTOR, CUDA_RESOURCE_DESC, CUDA_TEXTURE_DESC, CUarray, CUsurfObject,
+    CUtexObject,
 };
 
 /// Function-pointer type for the Driver API entry-point `cuArrayCreate`.
@@ -666,9 +666,9 @@ pub type PFN_cuMemPoolImportPointer = unsafe extern "C" fn(
 // ---- Wave 9: external memory / semaphore interop ------------------------
 
 use crate::types::{
-    CUexternalMemory, CUexternalSemaphore, CUDA_EXTERNAL_MEMORY_BUFFER_DESC,
-    CUDA_EXTERNAL_MEMORY_HANDLE_DESC, CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC,
-    CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS, CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS,
+    CUDA_EXTERNAL_MEMORY_BUFFER_DESC, CUDA_EXTERNAL_MEMORY_HANDLE_DESC,
+    CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC, CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS,
+    CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS, CUexternalMemory, CUexternalSemaphore,
 };
 
 /// Function-pointer type for the Driver API entry-point `cuImportExternalMemory`.
@@ -724,7 +724,7 @@ pub type PFN_cuWaitExternalSemaphoresAsync = unsafe extern "C" fn(
 
 // ---- Wave 10: 3D memcpy + 3D arrays + mipmapped arrays ------------------
 
-use crate::types::{CUmipmappedArray, CUDA_ARRAY3D_DESCRIPTOR, CUDA_MEMCPY3D};
+use crate::types::{CUDA_ARRAY3D_DESCRIPTOR, CUDA_MEMCPY3D, CUmipmappedArray};
 
 /// Function-pointer type for the Driver API entry-point `cuArray3DCreate`.
 pub type PFN_cuArray3DCreate = unsafe extern "C" fn(
@@ -1513,7 +1513,7 @@ pub type PFN_cuLogsDumpToMemory = unsafe extern "C" fn(
 // ---- Wave 24: graph memory nodes + graph-exec update --------------------
 
 use crate::types::{
-    CUgraphExecUpdateResultInfo, CUDA_BATCH_MEM_OP_NODE_PARAMS, CUDA_MEM_ALLOC_NODE_PARAMS,
+    CUDA_BATCH_MEM_OP_NODE_PARAMS, CUDA_MEM_ALLOC_NODE_PARAMS, CUgraphExecUpdateResultInfo,
 };
 
 /// Function-pointer type for the Driver API entry-point `cuGraphAddMemAllocNode`.

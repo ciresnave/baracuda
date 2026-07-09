@@ -180,7 +180,9 @@ impl<T: Element> BatchPagedPrefillPlan<T> {
         let d = &self.desc;
         let qo_shape = [d.total_num_rows, d.num_qo_heads, d.paged_kv.head_dim];
         if args.q.shape != qo_shape || args.o.shape != qo_shape {
-            return Err(Error::InvalidProblem("BatchPagedPrefillPlan: q/o shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "BatchPagedPrefillPlan: q/o shape mismatch",
+            ));
         }
         if args.q_indptr.shape != [d.batch_size + 1] {
             return Err(Error::InvalidProblem(
@@ -279,18 +281,48 @@ impl<T: Element> BatchPagedPrefillPlan<T> {
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_paged_prefill_f16_run(
-                        d.batch_size, d.total_num_rows, d.paged_kv.page_size, d.paged_kv.head_dim,
-                        d.num_qo_heads, d.paged_kv.num_kv_heads, d.sm_scale, causal, enable_split,
-                        k_ptr, v_ptr, kv_indices_ptr, kv_indptr_ptr, last_page_len_ptr,
-                        q_ptr, q_indptr_ptr, o_ptr, lse_ptr, stream_ptr,
+                        d.batch_size,
+                        d.total_num_rows,
+                        d.paged_kv.page_size,
+                        d.paged_kv.head_dim,
+                        d.num_qo_heads,
+                        d.paged_kv.num_kv_heads,
+                        d.sm_scale,
+                        causal,
+                        enable_split,
+                        k_ptr,
+                        v_ptr,
+                        kv_indices_ptr,
+                        kv_indptr_ptr,
+                        last_page_len_ptr,
+                        q_ptr,
+                        q_indptr_ptr,
+                        o_ptr,
+                        lse_ptr,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_paged_prefill_bf16_run(
-                        d.batch_size, d.total_num_rows, d.paged_kv.page_size, d.paged_kv.head_dim,
-                        d.num_qo_heads, d.paged_kv.num_kv_heads, d.sm_scale, causal, enable_split,
-                        k_ptr, v_ptr, kv_indices_ptr, kv_indptr_ptr, last_page_len_ptr,
-                        q_ptr, q_indptr_ptr, o_ptr, lse_ptr, stream_ptr,
+                        d.batch_size,
+                        d.total_num_rows,
+                        d.paged_kv.page_size,
+                        d.paged_kv.head_dim,
+                        d.num_qo_heads,
+                        d.paged_kv.num_kv_heads,
+                        d.sm_scale,
+                        causal,
+                        enable_split,
+                        k_ptr,
+                        v_ptr,
+                        kv_indices_ptr,
+                        kv_indptr_ptr,
+                        last_page_len_ptr,
+                        q_ptr,
+                        q_indptr_ptr,
+                        o_ptr,
+                        lse_ptr,
+                        stream_ptr,
                     )
                 },
                 _ => {

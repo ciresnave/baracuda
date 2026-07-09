@@ -6,10 +6,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ScatterAddArgs, ScatterAddDescriptor,
-    ScatterAddPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ScatterAddArgs, ScatterAddDescriptor, ScatterAddPlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -28,7 +28,7 @@ fn scatter_add_f32_2d_dim1() {
     let upd_shape = [3i32, 4];
     let out_numel: usize = 3 * 6;
     let upd_numel: usize = 3 * 4;
-    let host_idx: Vec<i32> = vec![0, 1, 1, 5,  2, 0, 3, 4,  5, 5, 5, 0];
+    let host_idx: Vec<i32> = vec![0, 1, 1, 5, 2, 0, 3, 4, 5, 5, 5, 0];
     let host_upd: Vec<f32> = (0..upd_numel).map(|i| (i as f32) * 0.5 + 1.0).collect();
     // Pre-populated `out` with non-zero initial state.
     let host_out_init: Vec<f32> = (0..out_numel).map(|i| (i as f32) * 0.1).collect();
@@ -91,7 +91,7 @@ fn scatter_add_f64_2d_dim0() {
     let upd_shape = [4i32, 3];
     let out_numel: usize = 5 * 3;
     let upd_numel: usize = 4 * 3;
-    let host_idx: Vec<i32> = vec![0, 0, 0,  1, 2, 3,  4, 1, 2,  3, 3, 4];
+    let host_idx: Vec<i32> = vec![0, 0, 0, 1, 2, 3, 4, 1, 2, 3, 3, 4];
     let host_upd: Vec<f64> = (0..upd_numel).map(|i| (i as f64) * 0.25 + 2.0).collect();
     let mut expected = vec![0f64; out_numel]; // pre-zero state
     for i in 0..4usize {

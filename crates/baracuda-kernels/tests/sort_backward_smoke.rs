@@ -1,11 +1,10 @@
 //! Real-GPU smoke test for `SortBackwardPlan<T>` (Phase 9 Category O).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SortArgs, SortBackwardArgs,
-    SortBackwardDescriptor, SortBackwardPlan, SortDescriptor, SortPlan, TensorMut, TensorRef,
-    Workspace,
+    ElementKind, PlanPreference, SortArgs, SortBackwardArgs, SortBackwardDescriptor,
+    SortBackwardPlan, SortDescriptor, SortPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -22,13 +21,10 @@ fn sort_backward_f32_basic() {
     let (ctx, stream) = setup();
     let batch: i32 = 2;
     let row_len: i32 = 6;
-    let input: Vec<f32> = vec![3.0, 1.0, 4.0, 1.5, 5.0, 9.0,
-                                2.0, 6.0, 5.0, 3.5, 5.5, 1.0];
+    let input: Vec<f32> = vec![3.0, 1.0, 4.0, 1.5, 5.0, 9.0, 2.0, 6.0, 5.0, 3.5, 5.5, 1.0];
     let dev_in = DeviceBuffer::from_slice(&ctx, &input).expect("up");
-    let mut dev_vals: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, input.len()).expect("alloc v");
-    let mut dev_idx: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, input.len()).expect("alloc i");
+    let mut dev_vals: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, input.len()).expect("alloc v");
+    let mut dev_idx: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, input.len()).expect("alloc i");
 
     let desc = SortDescriptor {
         batch,
@@ -66,8 +62,7 @@ fn sort_backward_f32_basic() {
         .map(|i| (i + 1) as f32)
         .collect();
     let dev_dy = DeviceBuffer::from_slice(&ctx, &dy_host).expect("up dy");
-    let mut dev_dx: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, dy_host.len()).expect("alloc dx");
+    let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dy_host.len()).expect("alloc dx");
 
     let bw_desc = SortBackwardDescriptor {
         batch,

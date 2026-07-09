@@ -84,7 +84,7 @@ pub use kernel_arg::KernelArg;
 pub use numeric::{BFloat16, Complex32, Complex64, Half};
 pub use status::CudaStatus;
 pub use stream_mode::StreamMode;
-pub use version::{supports, CudaVersion, Feature};
+pub use version::{CudaVersion, Feature, supports};
 pub use zero_bits::ValidAsZeroBits;
 
 /// `#[derive(DeviceRepr)]` — attribute macro re-exported from

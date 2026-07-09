@@ -2,10 +2,10 @@
 //! cuRAND. Verifies sample mean / stddev match the requested parameters
 //! within a generous statistical tolerance.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RandomArgs, RandomDescriptor, RandomKind,
-    RandomPlan, TensorMut, Workspace,
+    ElementKind, PlanPreference, RandomArgs, RandomDescriptor, RandomKind, RandomPlan, TensorMut,
+    Workspace, contiguous_stride,
 };
 
 const N: usize = 1024 * 1024;
@@ -35,12 +35,17 @@ fn normal_f32_standard() {
         param2: 1.0, // stddev
         seed: 0x4242_4242_DEAD_BEEF,
     };
-    let plan = RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RandomArgs::<f32, 1> {
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("normal run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("normal run");
     stream.synchronize().expect("sync");
 
     let mut host = vec![0f32; N];
@@ -79,16 +84,21 @@ fn normal_f32_shifted() {
         kind: RandomKind::Normal,
         shape,
         element: ElementKind::F32,
-        param1: 5.0,  // mean
-        param2: 2.5,  // stddev
+        param1: 5.0, // mean
+        param2: 2.5, // stddev
         seed: 0xABCD_1234_BEEF_9999,
     };
-    let plan = RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RandomPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RandomArgs::<f32, 1> {
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("normal shifted run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("normal shifted run");
     stream.synchronize().expect("sync");
 
     let mut host = vec![0f32; N];
@@ -127,12 +137,17 @@ fn normal_f64_standard() {
         param2: 1.0,
         seed: 0x9876_5432_1010_0101,
     };
-    let plan = RandomPlan::<f64, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RandomPlan::<f64, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RandomArgs::<f64, 1> {
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("normal f64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("normal f64 run");
     stream.synchronize().expect("sync");
 
     let mut host = vec![0f64; N];

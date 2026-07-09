@@ -18,7 +18,7 @@
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels_sys as sys;
 use core::ffi::c_void;
 
@@ -44,7 +44,9 @@ fn rms_norm_f32_strided_smoke() {
     let eps = 1e-5f32;
 
     // Big buffer; only the even columns are the "live" view.
-    let host_x: Vec<f32> = (0..buf_len).map(|i| ((i % 17) as f32) * 0.125 - 1.0).collect();
+    let host_x: Vec<f32> = (0..buf_len)
+        .map(|i| ((i % 17) as f32) * 0.125 - 1.0)
+        .collect();
 
     // Reference: per-row RMS over the live cols only.
     let mut expected = vec![0f32; (rows as usize) * (cols as usize)];
@@ -118,7 +120,9 @@ fn layer_norm_f32_strided_smoke() {
     let buf_len = (rows as i64 * outer_stride) as usize;
     let eps = 1e-5f32;
 
-    let host_x: Vec<f32> = (0..buf_len).map(|i| ((i % 13) as f32) * 0.0625 - 0.5).collect();
+    let host_x: Vec<f32> = (0..buf_len)
+        .map(|i| ((i % 13) as f32) * 0.0625 - 0.5)
+        .collect();
 
     let mut expected = vec![0f32; (rows as usize) * (cols as usize)];
     for r in 0..rows as usize {
@@ -198,14 +202,18 @@ fn softmax_f32_strided_smoke() {
     let outer_stride = 2i64 * cols as i64;
     let buf_len = (rows as i64 * outer_stride) as usize;
 
-    let host_x: Vec<f32> = (0..buf_len).map(|i| ((i % 11) as f32) * 0.5 - 2.0).collect();
+    let host_x: Vec<f32> = (0..buf_len)
+        .map(|i| ((i % 11) as f32) * 0.5 - 2.0)
+        .collect();
 
     let mut expected = vec![0f32; (rows as usize) * (cols as usize)];
     for r in 0..rows as usize {
         let mut max_v = f32::NEG_INFINITY;
         for c in 0..cols as usize {
             let v = host_x[r * outer_stride as usize + c * 2];
-            if v > max_v { max_v = v; }
+            if v > max_v {
+                max_v = v;
+            }
         }
         let mut sum = 0.0f32;
         for c in 0..cols as usize {
@@ -277,7 +285,9 @@ fn log_softmax_f32_strided_smoke() {
         let mut max_v = f32::NEG_INFINITY;
         for c in 0..cols as usize {
             let v = host_x[r * outer_stride as usize + c * 2];
-            if v > max_v { max_v = v; }
+            if v > max_v {
+                max_v = v;
+            }
         }
         let mut sum = 0.0f32;
         for c in 0..cols as usize {
@@ -348,8 +358,8 @@ fn flip_f32_strided_smoke() {
     // Logical shape [W, H] with strides [1, W] = transposed view.
     let logical_shape = [w, h];
     let stride_x = [1i64, w as i64];
-    let stride_y = [h as i64, 1i64];  // contig output [W, H]
-    let flip_axes = [1i32, 0i32];     // flip axis 0 (logical W-dim)
+    let stride_y = [h as i64, 1i64]; // contig output [W, H]
+    let flip_axes = [1i32, 0i32]; // flip axis 0 (logical W-dim)
     let numel = (w * h) as i64;
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");

@@ -8,7 +8,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -31,12 +31,7 @@ fn contig_strides(shape: &[i32]) -> Vec<i64> {
 
 /// CPU reference: for each output cell, sum every input cell that
 /// broadcasts to it (matches the kernel semantics).
-fn cpu_sum_to_f32(
-    src: &[f32],
-    in_shape: &[i32],
-    in_stride: &[i64],
-    out_shape: &[i32],
-) -> Vec<f32> {
+fn cpu_sum_to_f32(src: &[f32], in_shape: &[i32], in_stride: &[i64], out_shape: &[i32]) -> Vec<f32> {
     let rank = in_shape.len();
     let out_numel: usize = out_shape.iter().map(|&d| d as usize).product();
     let mut dst = vec![0f32; out_numel];
@@ -58,9 +53,7 @@ fn cpu_sum_to_f32(
         // Compute input physical offset using in_stride (which may
         // differ from in_contig in the broadcast case here we use
         // in_contig because the test allocates contiguously).
-        let in_off: i64 = (0..rank)
-            .map(|d| (in_coord[d] as i64) * in_stride[d])
-            .sum();
+        let in_off: i64 = (0..rank).map(|d| (in_coord[d] as i64) * in_stride[d]).sum();
         let _ = in_contig; // (in_contig used only for the no-op identity check)
 
         // Output cell: for broadcast dims (out_shape[d] == 1) the
@@ -95,10 +88,12 @@ fn ffi_reduce_sum_to_f32_2d_reduce_dim0() {
         baracuda_kernels_sys::baracuda_kernels_reduce_sum_to_f32_run(
             dev_src.as_slice().as_raw().0 as *const c_void,
             dev_dst.as_slice_mut().as_raw().0 as *mut c_void,
-            in_shape.as_ptr(), in_stride.as_ptr(),
+            in_shape.as_ptr(),
+            in_stride.as_ptr(),
             in_shape.len() as i32,
             out_shape.as_ptr(),
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -111,8 +106,10 @@ fn ffi_reduce_sum_to_f32_2d_reduce_dim0() {
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
         let allow = e.abs().max(1.0) * 1e-5;
-        assert!(diff <= allow,
-            "sum_to f32 [3,4]→[1,4] @ {i}: got {g} expected {e} (diff {diff} > allow {allow})");
+        assert!(
+            diff <= allow,
+            "sum_to f32 [3,4]→[1,4] @ {i}: got {g} expected {e} (diff {diff} > allow {allow})"
+        );
     }
 }
 
@@ -135,10 +132,12 @@ fn ffi_reduce_sum_to_f32_3d_reduce_dim0_dim2() {
         baracuda_kernels_sys::baracuda_kernels_reduce_sum_to_f32_run(
             dev_src.as_slice().as_raw().0 as *const c_void,
             dev_dst.as_slice_mut().as_raw().0 as *mut c_void,
-            in_shape.as_ptr(), in_stride.as_ptr(),
+            in_shape.as_ptr(),
+            in_stride.as_ptr(),
             in_shape.len() as i32,
             out_shape.as_ptr(),
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -151,8 +150,10 @@ fn ffi_reduce_sum_to_f32_3d_reduce_dim0_dim2() {
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff = (g - e).abs();
         let allow = e.abs().max(1.0) * 1e-5;
-        assert!(diff <= allow,
-            "sum_to f32 [2,3,4]→[1,3,1] @ {i}: got {g} expected {e} (diff {diff} > allow {allow})");
+        assert!(
+            diff <= allow,
+            "sum_to f32 [2,3,4]→[1,3,1] @ {i}: got {g} expected {e} (diff {diff} > allow {allow})"
+        );
     }
 }
 
@@ -167,17 +168,18 @@ fn ffi_reduce_sum_to_f32_full_reduce() {
     let expected = vec![15.0_f32];
 
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("upload src");
-    let mut dev_dst: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, 1).expect("alloc dst");
+    let mut dev_dst: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc dst");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_reduce_sum_to_f32_run(
             dev_src.as_slice().as_raw().0 as *const c_void,
             dev_dst.as_slice_mut().as_raw().0 as *mut c_void,
-            in_shape.as_ptr(), in_stride.as_ptr(),
+            in_shape.as_ptr(),
+            in_stride.as_ptr(),
             in_shape.len() as i32,
             out_shape.as_ptr(),
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -186,6 +188,10 @@ fn ffi_reduce_sum_to_f32_full_reduce() {
 
     let mut got = vec![0f32; 1];
     dev_dst.copy_to_host(&mut got).expect("download");
-    assert!((got[0] - expected[0]).abs() < 1e-5,
-        "sum_to full reduce: got {} expected {}", got[0], expected[0]);
+    assert!(
+        (got[0] - expected[0]).abs() < 1e-5,
+        "sum_to full reduce: got {} expected {}",
+        got[0],
+        expected[0]
+    );
 }

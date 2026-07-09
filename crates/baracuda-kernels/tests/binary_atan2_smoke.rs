@@ -5,10 +5,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_atan2_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -38,14 +38,36 @@ fn atan2_f32_contig() {
 
     let plan = BinaryPlan::<f32, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Atan2, shape, element: ElementKind::F32 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Atan2,
+            shape,
+            element: ElementKind::F32,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; numel];
     dev_y.copy_to_host(&mut got).expect("download");
@@ -53,7 +75,10 @@ fn atan2_f32_contig() {
     for (i, ((&a, &b), &g)) in host_a.iter().zip(host_b.iter()).zip(got.iter()).enumerate() {
         let want = a.atan2(b);
         let tol = (want.abs() * eps).max(eps);
-        assert!((g - want).abs() <= tol, "f32 atan2 @ {i}: a={a} b={b} got={g} want={want}");
+        assert!(
+            (g - want).abs() <= tol,
+            "f32 atan2 @ {i}: a={a} b={b} got={g} want={want}"
+        );
     }
 }
 
@@ -71,14 +96,36 @@ fn atan2_f64_contig() {
     let stride = contiguous_stride(shape);
     let plan = BinaryPlan::<f64, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Atan2, shape, element: ElementKind::F64 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Atan2,
+            shape,
+            element: ElementKind::F64,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f64; numel];
     dev_y.copy_to_host(&mut got).expect("download");
@@ -86,7 +133,10 @@ fn atan2_f64_contig() {
     for (i, ((&a, &b), &g)) in host_a.iter().zip(host_b.iter()).zip(got.iter()).enumerate() {
         let want = a.atan2(b);
         let tol = (want.abs() * eps).max(eps);
-        assert!((g - want).abs() <= tol, "f64 atan2 @ {i}: a={a} b={b} got={g} want={want}");
+        assert!(
+            (g - want).abs() <= tol,
+            "f64 atan2 @ {i}: a={a} b={b} got={g} want={want}"
+        );
     }
 }
 
@@ -108,14 +158,36 @@ fn atan2_f16_contig() {
     let stride = contiguous_stride(shape);
     let plan = BinaryPlan::<f16, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Atan2, shape, element: ElementKind::F16 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Atan2,
+            shape,
+            element: ElementKind::F16,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![f16::ZERO; numel];
     dev_y.copy_to_host(&mut got).expect("download");
@@ -124,7 +196,10 @@ fn atan2_f16_contig() {
         let want = f16::from_f32(a.to_f32().atan2(b.to_f32()));
         let diff = (g.to_f32() - want.to_f32()).abs();
         let tol = (want.to_f32().abs() * eps).max(eps);
-        assert!(diff <= tol, "f16 atan2 @ {i}: got={g} want={want} diff={diff}");
+        assert!(
+            diff <= tol,
+            "f16 atan2 @ {i}: got={g} want={want} diff={diff}"
+        );
     }
 }
 
@@ -146,14 +221,36 @@ fn atan2_bf16_contig() {
     let stride = contiguous_stride(shape);
     let plan = BinaryPlan::<bf16, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Atan2, shape, element: ElementKind::Bf16 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Atan2,
+            shape,
+            element: ElementKind::Bf16,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![bf16::ZERO; numel];
     dev_y.copy_to_host(&mut got).expect("download");
@@ -162,6 +259,9 @@ fn atan2_bf16_contig() {
         let want = bf16::from_f32(a.to_f32().atan2(b.to_f32()));
         let diff = (g.to_f32() - want.to_f32()).abs();
         let tol = (want.to_f32().abs() * eps).max(eps);
-        assert!(diff <= tol, "bf16 atan2 @ {i}: got={g} want={want} diff={diff}");
+        assert!(
+            diff <= tol,
+            "bf16 atan2 @ {i}: got={g} want={want} diff={diff}"
+        );
     }
 }

@@ -1,6 +1,6 @@
 //! GPU-gated tests for cuBLAS L1/L2 additions.
 
-use baracuda_cublas::{asum, copy, dot, gemv, iamax, iamin, nrm2, scal, Handle, Op};
+use baracuda_cublas::{Handle, Op, asum, copy, dot, gemv, iamax, iamin, nrm2, scal};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 fn setup() -> (Context, Handle) {

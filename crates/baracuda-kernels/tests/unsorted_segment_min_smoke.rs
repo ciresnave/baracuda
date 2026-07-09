@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `UnsortedSegmentMinPlan<T>` (Phase 7 7.6).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef,
-    UnsortedSegmentMinArgs, UnsortedSegmentMinDescriptor, UnsortedSegmentMinPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnsortedSegmentMinArgs,
+    UnsortedSegmentMinDescriptor, UnsortedSegmentMinPlan, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -23,9 +23,7 @@ fn unsorted_segment_min_f32_scrambled() {
     let d: i32 = 2;
     let ns: i32 = 3;
     let seg: Vec<i32> = vec![2, 0, 1, 0, 2, 1];
-    let input: Vec<f32> = vec![
-        1.0, -2.0, 3.0, 4.0, 5.0, 1.0, 7.0, 0.0, 2.0, 9.0, -1.0, 5.0,
-    ];
+    let input: Vec<f32> = vec![1.0, -2.0, 3.0, 4.0, 5.0, 1.0, 7.0, 0.0, 2.0, 9.0, -1.0, 5.0];
     let mut expected = vec![f32::INFINITY; (ns * d) as usize];
     for row in 0..n as usize {
         let s = seg[row] as usize;

@@ -1,6 +1,6 @@
 //! Real-GPU smoke test for `MultilabelSoftMarginLossBackwardPlan`. BW × 4 dtypes.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     ElementKind, LossReduction, MultilabelSoftMarginLossBackwardArgs,
     MultilabelSoftMarginLossBackwardDescriptor, MultilabelSoftMarginLossBackwardPlan,
@@ -17,13 +17,20 @@ fn setup() -> (Context, Stream) {
 }
 
 fn sigmoid(x: f64) -> f64 {
-    if x >= 0.0 { 1.0 / (1.0 + (-x).exp()) } else { let e = x.exp(); e / (1.0 + e) }
+    if x >= 0.0 {
+        1.0 / (1.0 + (-x).exp())
+    } else {
+        let e = x.exp();
+        e / (1.0 + e)
+    }
 }
 
 fn host_mlsm_bw_f64(input: &[f64], tgt: &[f64], n: usize, c: usize, dy: f64) -> Vec<f64> {
     let scale = dy / (n as f64);
     let coef = scale / (c as f64);
-    (0..n * c).map(|i| (sigmoid(input[i]) - tgt[i]) * coef).collect()
+    (0..n * c)
+        .map(|i| (sigmoid(input[i]) - tgt[i]) * coef)
+        .collect()
 }
 
 #[test]
@@ -59,10 +66,26 @@ fn loss_multilabel_soft_margin_backward_f32_mean() {
         &stream,
         Workspace::None,
         MultilabelSoftMarginLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dinput: TensorMut { data: dev_dx.as_slice_mut(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dinput: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
         },
     )
     .unwrap();
@@ -105,10 +128,26 @@ fn loss_multilabel_soft_margin_backward_f64_mean() {
         &stream,
         Workspace::None,
         MultilabelSoftMarginLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dinput: TensorMut { data: dev_dx.as_slice_mut(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dinput: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
         },
     )
     .unwrap();
@@ -155,10 +194,26 @@ fn loss_multilabel_soft_margin_backward_f16_mean() {
         &stream,
         Workspace::None,
         MultilabelSoftMarginLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dinput: TensorMut { data: dev_dx.as_slice_mut(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dinput: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
         },
     )
     .unwrap();
@@ -169,7 +224,12 @@ fn loss_multilabel_soft_margin_backward_f16_mean() {
         let want = expected_f64[i] as f32;
         let g = got[i].to_f32();
         let tol = want.abs().max(1.0) * 32.0 * 9.77e-4_f32 + 1e-2;
-        assert!((g - want).abs() <= tol, "f16 MLSM BW @{i}: got={} want={}", g, want);
+        assert!(
+            (g - want).abs() <= tol,
+            "f16 MLSM BW @{i}: got={} want={}",
+            g,
+            want
+        );
     }
 }
 
@@ -207,10 +267,26 @@ fn loss_multilabel_soft_margin_backward_bf16_mean() {
         &stream,
         Workspace::None,
         MultilabelSoftMarginLossBackwardArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
-            dinput: TensorMut { data: dev_dx.as_slice_mut(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+            dinput: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
         },
     )
     .unwrap();
@@ -221,6 +297,11 @@ fn loss_multilabel_soft_margin_backward_bf16_mean() {
         let want = expected_f64[i] as f32;
         let g = got[i].to_f32();
         let tol = want.abs().max(1.0) * 32.0 * 7.81e-3_f32 + 5e-2;
-        assert!((g - want).abs() <= tol, "bf16 MLSM BW @{i}: got={} want={}", g, want);
+        assert!(
+            (g - want).abs() <= tol,
+            "bf16 MLSM BW @{i}: got={} want={}",
+            g,
+            want
+        );
     }
 }

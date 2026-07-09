@@ -67,10 +67,10 @@ mod source;
 mod toolkit;
 
 pub use builder::{KernelBuilder, PtxOutput};
-pub use compute_cap::{detect_compute_cap, get_gpu_arch_string, ComputeCapability, GpuArch};
-pub use dependency::{resolve_cutlass_from_cargo_checkouts, DependencyManager, ExternalDependency};
+pub use compute_cap::{ComputeCapability, GpuArch, detect_compute_cap, get_gpu_arch_string};
+pub use dependency::{DependencyManager, ExternalDependency, resolve_cutlass_from_cargo_checkouts};
 pub use error::{Error, Result};
 pub use hash::BuildCache;
 pub use parallel::ParallelConfig;
-pub use source::{collect_headers, SourceSelector};
+pub use source::{SourceSelector, collect_headers};
 pub use toolkit::CudaToolkit;

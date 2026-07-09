@@ -19,18 +19,18 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16,
+    CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT, CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
     cudnnConvolutionBackwardData, cudnnConvolutionBackwardFilter, cudnnConvolutionDescriptor_t,
     cudnnConvolutionForward, cudnnCreate, cudnnCreateConvolutionDescriptor,
     cudnnCreateFilterDescriptor, cudnnCreateTensorDescriptor, cudnnDestroy,
-    cudnnDestroyConvolutionDescriptor, cudnnDestroyFilterDescriptor,
-    cudnnDestroyTensorDescriptor, cudnnFilterDescriptor_t,
-    cudnnGetConvolutionBackwardDataWorkspaceSize, cudnnGetConvolutionBackwardFilterWorkspaceSize,
-    cudnnGetConvolutionForwardWorkspaceSize, cudnnHandle_t, cudnnSetConvolutionGroupCount,
-    cudnnSetConvolutionNdDescriptor, cudnnSetFilterNdDescriptor, cudnnSetStream,
-    cudnnSetTensorNdDescriptor, cudnnTensorDescriptor_t, CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
-    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT,
-    CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
+    cudnnDestroyConvolutionDescriptor, cudnnDestroyFilterDescriptor, cudnnDestroyTensorDescriptor,
+    cudnnFilterDescriptor_t, cudnnGetConvolutionBackwardDataWorkspaceSize,
+    cudnnGetConvolutionBackwardFilterWorkspaceSize, cudnnGetConvolutionForwardWorkspaceSize,
+    cudnnHandle_t, cudnnSetConvolutionGroupCount, cudnnSetConvolutionNdDescriptor,
+    cudnnSetFilterNdDescriptor, cudnnSetStream, cudnnSetTensorNdDescriptor,
+    cudnnTensorDescriptor_t,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ConvKind, Element, ElementKind, KernelSku, MathPrecision, OpCategory,
@@ -643,15 +643,8 @@ impl<T: Element> ConvTranspose1dPlan<T> {
         }
         let x_dims = [self.desc.batch, self.desc.c_out, l_out, 1];
         let x_strides = [self.desc.c_out * l_out, l_out, 1, 1];
-        let status = unsafe {
-            cudnnSetTensorNdDescriptor(
-                xd,
-                dt,
-                4,
-                x_dims.as_ptr(),
-                x_strides.as_ptr(),
-            )
-        };
+        let status =
+            unsafe { cudnnSetTensorNdDescriptor(xd, dt, 4, x_dims.as_ptr(), x_strides.as_ptr()) };
         if status != 0 {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(xd);
@@ -668,15 +661,8 @@ impl<T: Element> ConvTranspose1dPlan<T> {
         }
         let y_dims = [self.desc.batch, self.desc.c_in, self.desc.l_in, 1];
         let y_strides = [self.desc.c_in * self.desc.l_in, self.desc.l_in, 1, 1];
-        let status = unsafe {
-            cudnnSetTensorNdDescriptor(
-                yd,
-                dt,
-                4,
-                y_dims.as_ptr(),
-                y_strides.as_ptr(),
-            )
-        };
+        let status =
+            unsafe { cudnnSetTensorNdDescriptor(yd, dt, 4, y_dims.as_ptr(), y_strides.as_ptr()) };
         if status != 0 {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(yd);
@@ -692,9 +678,8 @@ impl<T: Element> ConvTranspose1dPlan<T> {
             return Err(Error::CutlassInternal(-status));
         }
         let w_dims = [self.desc.c_in, c_out_per_group, self.desc.l_filt, 1];
-        let status = unsafe {
-            cudnnSetFilterNdDescriptor(wd, dt, CUDNN_TENSOR_NCHW, 4, w_dims.as_ptr())
-        };
+        let status =
+            unsafe { cudnnSetFilterNdDescriptor(wd, dt, CUDNN_TENSOR_NCHW, 4, w_dims.as_ptr()) };
         if status != 0 {
             unsafe {
                 let _ = cudnnDestroyFilterDescriptor(wd);
@@ -864,10 +849,7 @@ impl<T: Element> Drop for ConvTranspose1dPlan<T> {
 /// output_padding + 1`.
 #[inline]
 fn compute_l_out(d: &ConvTranspose1dDescriptor) -> i32 {
-    (d.l_in - 1) * d.stride_l - 2 * d.pad_l
-        + d.dilation_l * (d.l_filt - 1)
-        + d.output_pad_l
-        + 1
+    (d.l_in - 1) * d.stride_l - 2 * d.pad_l + d.dilation_l * (d.l_filt - 1) + d.output_pad_l + 1
 }
 
 #[inline]

@@ -12,10 +12,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test ternary_addcmul_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, TernaryArgs,
-    TernaryDescriptor, TernaryKind, TernaryPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, TernaryArgs, TernaryDescriptor, TernaryKind,
+    TernaryPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -38,9 +38,15 @@ fn addcmul_f32_contig() {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
     let scale: f32 = 0.125;
 
-    let host_a: Vec<f32> = (0..numel).map(|i| (i as f32 % 100.0) * 0.05 - 2.5).collect();
-    let host_b: Vec<f32> = (0..numel).map(|i| (i as f32 % 100.0) * 0.05 + 0.1).collect();
-    let host_c: Vec<f32> = (0..numel).map(|i| (i as f32 % 100.0) * 0.05 - 1.0).collect();
+    let host_a: Vec<f32> = (0..numel)
+        .map(|i| (i as f32 % 100.0) * 0.05 - 2.5)
+        .collect();
+    let host_b: Vec<f32> = (0..numel)
+        .map(|i| (i as f32 % 100.0) * 0.05 + 0.1)
+        .collect();
+    let host_c: Vec<f32> = (0..numel)
+        .map(|i| (i as f32 % 100.0) * 0.05 - 1.0)
+        .collect();
     // PyTorch convention: a + scale * b * c (plain mul+add, no FMA)
     let expected: Vec<f32> = (0..numel)
         .map(|i| {
@@ -62,13 +68,29 @@ fn addcmul_f32_contig() {
         element: ElementKind::F32,
         scale,
     };
-    let plan = TernaryPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        TernaryPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TernaryArgs::<f32, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        c: TensorRef { data: dev_c.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        c: TensorRef {
+            data: dev_c.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -122,13 +144,29 @@ fn addcmul_f64_contig() {
         element: ElementKind::F64,
         scale,
     };
-    let plan = TernaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        TernaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TernaryArgs::<f64, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        c: TensorRef { data: dev_c.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        c: TensorRef {
+            data: dev_c.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -194,13 +232,29 @@ fn addcmul_f16_contig() {
         element: ElementKind::F16,
         scale,
     };
-    let plan = TernaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        TernaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TernaryArgs::<f16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        c: TensorRef { data: dev_c.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        c: TensorRef {
+            data: dev_c.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -258,13 +312,29 @@ fn addcmul_bf16_contig() {
         element: ElementKind::Bf16,
         scale,
     };
-    let plan = TernaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        TernaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TernaryArgs::<bf16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        c: TensorRef { data: dev_c.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        c: TensorRef {
+            data: dev_c.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -325,13 +395,29 @@ fn addcmul_f32_broadcast_per_row_c() {
         element: ElementKind::F32,
         scale,
     };
-    let plan = TernaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        TernaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TernaryArgs::<f32, 2> {
-        a: TensorRef { data: dev_a.as_slice(), shape: ab_shape, stride: ab_stride },
-        b: TensorRef { data: dev_b.as_slice(), shape: ab_shape, stride: ab_stride },
-        c: TensorRef { data: dev_c.as_slice(), shape: c_shape, stride: c_stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: y_stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape: ab_shape,
+            stride: ab_stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape: ab_shape,
+            stride: ab_stride,
+        },
+        c: TensorRef {
+            data: dev_c.as_slice(),
+            shape: c_shape,
+            stride: c_stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: y_shape,
+            stride: y_stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

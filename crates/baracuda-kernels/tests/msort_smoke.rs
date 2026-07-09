@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `MsortPlan<T>` — stable sort with tie-break
 //! on input index (Phase 9 Category O). `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, MsortArgs, MsortDescriptor, MsortPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, MsortArgs, MsortDescriptor, MsortPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -25,10 +25,8 @@ fn msort_f32_ties_stable() {
     // emit indices in original-position order for ties.
     let input: Vec<f32> = vec![2.0, 1.0, 2.0, 1.0, 3.0, 3.0, 1.0, 2.0];
     let dev_in = DeviceBuffer::from_slice(&ctx, &input).expect("up");
-    let mut dev_v: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, input.len()).expect("alloc v");
-    let mut dev_i: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, input.len()).expect("alloc i");
+    let mut dev_v: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, input.len()).expect("alloc v");
+    let mut dev_i: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, input.len()).expect("alloc i");
 
     let desc = MsortDescriptor {
         batch,

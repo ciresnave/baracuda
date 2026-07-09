@@ -11,10 +11,10 @@
 //!   3. Determinism — running twice with the same seed yields the
 //!      same output.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GumbelSoftmaxArgs, GumbelSoftmaxDescriptor, GumbelSoftmaxPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, GumbelSoftmaxArgs, GumbelSoftmaxDescriptor, GumbelSoftmaxPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -53,8 +53,16 @@ fn gumbel_softmax_f32_2d_axis_1() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GumbelSoftmaxArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("run");
@@ -67,10 +75,16 @@ fn gumbel_softmax_f32_2d_axis_1() {
         let mut sum = 0f32;
         for j in 0..6 {
             let v = got[row * 6 + j];
-            assert!(v >= 0.0 && v <= 1.0, "f32 gumbel out of [0,1] @ ({row},{j}) = {v}");
+            assert!(
+                v >= 0.0 && v <= 1.0,
+                "f32 gumbel out of [0,1] @ ({row},{j}) = {v}"
+            );
             sum += v;
         }
-        assert!((sum - 1.0).abs() <= 1e-5, "f32 gumbel row-sum @ row={row} = {sum}");
+        assert!(
+            (sum - 1.0).abs() <= 1e-5,
+            "f32 gumbel row-sum @ row={row} = {sum}"
+        );
     }
 }
 
@@ -101,8 +115,16 @@ fn gumbel_softmax_f32_hard_one_hot() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GumbelSoftmaxArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("run");
@@ -117,11 +139,19 @@ fn gumbel_softmax_f32_hard_one_hot() {
         for j in 0..5 {
             let v = got[row * 5 + j];
             sum += v;
-            if v == 1.0 { n_ones += 1; }
-            assert!(v == 0.0 || v == 1.0, "f32 gumbel hard non-binary @ ({row},{j}) = {v}");
+            if v == 1.0 {
+                n_ones += 1;
+            }
+            assert!(
+                v == 0.0 || v == 1.0,
+                "f32 gumbel hard non-binary @ ({row},{j}) = {v}"
+            );
         }
         assert_eq!(n_ones, 1, "f32 gumbel hard row {row}: {n_ones} ones");
-        assert!((sum - 1.0).abs() < 1e-6, "f32 gumbel hard row-sum row={row} = {sum}");
+        assert!(
+            (sum - 1.0).abs() < 1e-6,
+            "f32 gumbel hard row-sum row={row} = {sum}"
+        );
     }
 }
 
@@ -152,8 +182,16 @@ fn gumbel_softmax_f64_2d_axis_0() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GumbelSoftmaxArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("run");
@@ -166,10 +204,16 @@ fn gumbel_softmax_f64_2d_axis_0() {
         let mut sum = 0f64;
         for row in 0..5 {
             let v = got[row * 4 + col];
-            assert!(v >= 0.0 && v <= 1.0, "f64 gumbel out of [0,1] @ ({row},{col})");
+            assert!(
+                v >= 0.0 && v <= 1.0,
+                "f64 gumbel out of [0,1] @ ({row},{col})"
+            );
             sum += v;
         }
-        assert!((sum - 1.0).abs() <= 1e-10, "f64 gumbel col-sum col={col} = {sum}");
+        assert!(
+            (sum - 1.0).abs() <= 1e-10,
+            "f64 gumbel col-sum col={col} = {sum}"
+        );
     }
 }
 
@@ -201,8 +245,16 @@ fn gumbel_softmax_f16_2d_axis_1() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GumbelSoftmaxArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("run");
@@ -214,10 +266,16 @@ fn gumbel_softmax_f16_2d_axis_1() {
         let mut sum = 0f32;
         for j in 0..5 {
             let v = got[row * 5 + j].to_f32();
-            assert!(v >= -1e-3 && v <= 1.0 + 1e-3, "f16 gumbel out of [0,1] @ ({row},{j}) = {v}");
+            assert!(
+                v >= -1e-3 && v <= 1.0 + 1e-3,
+                "f16 gumbel out of [0,1] @ ({row},{j}) = {v}"
+            );
             sum += v;
         }
-        assert!((sum - 1.0).abs() <= 1e-2, "f16 gumbel row-sum row={row} = {sum}");
+        assert!(
+            (sum - 1.0).abs() <= 1e-2,
+            "f16 gumbel row-sum row={row} = {sum}"
+        );
     }
 }
 
@@ -227,7 +285,9 @@ fn gumbel_softmax_bf16_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
     let numel = 15usize;
-    let host_x_f32: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.25 - 1.0).cos()).collect();
+    let host_x_f32: Vec<f32> = (0..numel)
+        .map(|i| ((i as f32) * 0.25 - 1.0).cos())
+        .collect();
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
@@ -249,8 +309,16 @@ fn gumbel_softmax_bf16_2d_axis_1() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         GumbelSoftmaxArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("run");
@@ -262,9 +330,15 @@ fn gumbel_softmax_bf16_2d_axis_1() {
         let mut sum = 0f32;
         for j in 0..5 {
             let v = got[row * 5 + j].to_f32();
-            assert!(v >= -1e-2 && v <= 1.0 + 1e-2, "bf16 gumbel out of [0,1] @ ({row},{j}) = {v}");
+            assert!(
+                v >= -1e-2 && v <= 1.0 + 1e-2,
+                "bf16 gumbel out of [0,1] @ ({row},{j}) = {v}"
+            );
             sum += v;
         }
-        assert!((sum - 1.0).abs() <= 3e-2, "bf16 gumbel row-sum row={row} = {sum}");
+        assert!(
+            (sum - 1.0).abs() <= 3e-2,
+            "bf16 gumbel row-sum row={row} = {sum}"
+        );
     }
 }

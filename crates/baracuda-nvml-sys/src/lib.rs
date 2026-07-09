@@ -402,10 +402,8 @@ pub type PFN_nvmlDeviceSetApplicationsClocks = unsafe extern "C" fn(
 ) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetPowerManagementLimit`
-pub type PFN_nvmlDeviceGetPowerManagementLimit = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    limit: *mut c_uint,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetPowerManagementLimit =
+    unsafe extern "C" fn(device: nvmlDevice_t, limit: *mut c_uint) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetPowerManagementLimitConstraints`
 pub type PFN_nvmlDeviceGetPowerManagementLimitConstraints = unsafe extern "C" fn(
@@ -415,22 +413,16 @@ pub type PFN_nvmlDeviceGetPowerManagementLimitConstraints = unsafe extern "C" fn
 ) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceSetPowerManagementLimit`
-pub type PFN_nvmlDeviceSetPowerManagementLimit = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    limit: c_uint,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceSetPowerManagementLimit =
+    unsafe extern "C" fn(device: nvmlDevice_t, limit: c_uint) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetPowerState`
-pub type PFN_nvmlDeviceGetPowerState = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    p_state: *mut nvmlPstates_t,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetPowerState =
+    unsafe extern "C" fn(device: nvmlDevice_t, p_state: *mut nvmlPstates_t) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetPerformanceState`
-pub type PFN_nvmlDeviceGetPerformanceState = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    p_state: *mut nvmlPstates_t,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetPerformanceState =
+    unsafe extern "C" fn(device: nvmlDevice_t, p_state: *mut nvmlPstates_t) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetTemperatureThreshold`
 pub type PFN_nvmlDeviceGetTemperatureThreshold = unsafe extern "C" fn(
@@ -472,29 +464,20 @@ pub type PFN_nvmlDeviceSetEccMode =
 // ---- PCIe / NVLink -------------------------------------------------------
 
 /// function pointer for `nvmlDeviceGetPciInfo_v3`
-pub type PFN_nvmlDeviceGetPciInfo_v3 = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    pci: *mut nvmlPciInfo_t,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetPciInfo_v3 =
+    unsafe extern "C" fn(device: nvmlDevice_t, pci: *mut nvmlPciInfo_t) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetCurrPcieLinkGeneration`
-pub type PFN_nvmlDeviceGetCurrPcieLinkGeneration = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    generation: *mut c_uint,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetCurrPcieLinkGeneration =
+    unsafe extern "C" fn(device: nvmlDevice_t, generation: *mut c_uint) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetCurrPcieLinkWidth`
-pub type PFN_nvmlDeviceGetCurrPcieLinkWidth = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    width: *mut c_uint,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetCurrPcieLinkWidth =
+    unsafe extern "C" fn(device: nvmlDevice_t, width: *mut c_uint) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetPcieThroughput`
-pub type PFN_nvmlDeviceGetPcieThroughput = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    counter: c_uint,
-    value: *mut c_uint,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetPcieThroughput =
+    unsafe extern "C" fn(device: nvmlDevice_t, counter: c_uint, value: *mut c_uint) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetNvLinkState`
 pub type PFN_nvmlDeviceGetNvLinkState = unsafe extern "C" fn(
@@ -504,11 +487,8 @@ pub type PFN_nvmlDeviceGetNvLinkState = unsafe extern "C" fn(
 ) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetNvLinkVersion`
-pub type PFN_nvmlDeviceGetNvLinkVersion = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    link: c_uint,
-    version: *mut c_uint,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetNvLinkVersion =
+    unsafe extern "C" fn(device: nvmlDevice_t, link: c_uint, version: *mut c_uint) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetNvLinkCapability`
 pub type PFN_nvmlDeviceGetNvLinkCapability = unsafe extern "C" fn(
@@ -537,16 +517,12 @@ pub type PFN_nvmlDeviceGetGraphicsRunningProcesses_v3 = unsafe extern "C" fn(
 // ---- Compute mode --------------------------------------------------------
 
 /// function pointer for `nvmlDeviceGetComputeMode`
-pub type PFN_nvmlDeviceGetComputeMode = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    mode: *mut nvmlComputeMode_t,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetComputeMode =
+    unsafe extern "C" fn(device: nvmlDevice_t, mode: *mut nvmlComputeMode_t) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceSetComputeMode`
-pub type PFN_nvmlDeviceSetComputeMode = unsafe extern "C" fn(
-    device: nvmlDevice_t,
-    mode: nvmlComputeMode_t,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceSetComputeMode =
+    unsafe extern "C" fn(device: nvmlDevice_t, mode: nvmlComputeMode_t) -> nvmlReturn_t;
 
 // ---- Identity / UUID / serial --------------------------------------------
 
@@ -567,16 +543,12 @@ pub type PFN_nvmlDeviceGetMinorNumber =
     unsafe extern "C" fn(device: nvmlDevice_t, minor: *mut c_uint) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetHandleByUUID`
-pub type PFN_nvmlDeviceGetHandleByUUID = unsafe extern "C" fn(
-    uuid: *const c_char,
-    device: *mut nvmlDevice_t,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetHandleByUUID =
+    unsafe extern "C" fn(uuid: *const c_char, device: *mut nvmlDevice_t) -> nvmlReturn_t;
 
 /// function pointer for `nvmlDeviceGetHandleByPciBusId_v2`
-pub type PFN_nvmlDeviceGetHandleByPciBusId_v2 = unsafe extern "C" fn(
-    pci_bus_id: *const c_char,
-    device: *mut nvmlDevice_t,
-) -> nvmlReturn_t;
+pub type PFN_nvmlDeviceGetHandleByPciBusId_v2 =
+    unsafe extern "C" fn(pci_bus_id: *const c_char, device: *mut nvmlDevice_t) -> nvmlReturn_t;
 
 // ---- Event set -----------------------------------------------------------
 

@@ -10,10 +10,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_sub_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan,
-    BinaryKind, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan, BinaryKind, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -44,11 +44,23 @@ fn sub_backward_f32_3d() {
     let plan = BinaryBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         a: None,
         b: None,
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -86,11 +98,23 @@ fn sub_backward_f16_3d() {
     let plan = BinaryBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         a: None,
         b: None,
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -128,11 +152,23 @@ fn sub_backward_bf16_3d() {
     let plan = BinaryBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         a: None,
         b: None,
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -145,7 +181,11 @@ fn sub_backward_bf16_3d() {
     }
     for (i, (g, e)) in got_db.iter().zip(host_dy.iter()).enumerate() {
         let expected = bf16::from_f32(0.0) - *e;
-        assert_eq!(g.to_bits(), expected.to_bits(), "sub backward bf16 db @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            expected.to_bits(),
+            "sub backward bf16 db @ {i}"
+        );
     }
 }
 
@@ -168,11 +208,23 @@ fn sub_backward_f64_3d() {
     let plan = BinaryBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         a: None,
         b: None,
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -1,6 +1,6 @@
 //! GPU-gated integration tests for cuBLAS Sgemm + Saxpy.
 
-use baracuda_cublas::{axpy, gemm, Handle, Op};
+use baracuda_cublas::{Handle, Op, axpy, gemm};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]

@@ -10,12 +10,10 @@ use baracuda_kernels_types::{
     Element, KernelSku, PlanPreference, PoolKind, PrecisionGuarantee, Workspace,
 };
 
-use super::adaptive_avg_pool1d::{
-    build_sku, dispatch_max_bw, dispatch_max_fw, map_status,
-};
+use super::adaptive_avg_pool1d::{build_sku, dispatch_max_bw, dispatch_max_fw, map_status};
 use super::adaptive_avg_pool3d::{
-    check_bw_args, check_fw_args, validate_descriptor, AdaptivePool3dBwArgs,
-    AdaptivePool3dDescriptor, AdaptivePool3dFwArgs,
+    AdaptivePool3dBwArgs, AdaptivePool3dDescriptor, AdaptivePool3dFwArgs, check_bw_args,
+    check_fw_args, validate_descriptor,
 };
 
 /// Adaptive 3-D max-pool plan (bit-exact PyTorch, bespoke kernel).
@@ -86,8 +84,12 @@ impl<T: Element> AdaptiveMaxPool3dPlan<T> {
             y_ptr,
             nc,
             3,
-            self.desc.d_in, self.desc.h_in, self.desc.w_in,
-            self.desc.d_out, self.desc.h_out, self.desc.w_out,
+            self.desc.d_in,
+            self.desc.h_in,
+            self.desc.w_in,
+            self.desc.d_out,
+            self.desc.h_out,
+            self.desc.w_out,
             stream_ptr,
         );
         map_status(status)
@@ -112,8 +114,12 @@ impl<T: Element> AdaptiveMaxPool3dPlan<T> {
             dx_ptr,
             nc,
             3,
-            self.desc.d_in, self.desc.h_in, self.desc.w_in,
-            self.desc.d_out, self.desc.h_out, self.desc.w_out,
+            self.desc.d_in,
+            self.desc.h_in,
+            self.desc.w_in,
+            self.desc.d_out,
+            self.desc.h_out,
+            self.desc.w_out,
             stream_ptr,
         );
         map_status(status)

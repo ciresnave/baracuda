@@ -15,11 +15,11 @@
 // Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
 #![allow(non_snake_case)]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BlockQ4K, BlockQ8_0, GgufBlockFormat, GgufMmvqArgs, GgufMmvqBatchedArgs,
+    BlockQ4K, BlockQ8_0, GgufBlockFormat, GgufMmvqArgs, GgufMmvqBatchedArgs,
     GgufMmvqBatchedDescriptor, GgufMmvqBatchedFormat, GgufMmvqBatchedPlan, GgufMmvqDescriptor,
-    GgufMmvqPlan, PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    GgufMmvqPlan, PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -32,7 +32,10 @@ fn setup() -> (Context, Stream) {
 }
 
 fn pack_q8_0_row(d_f32: f32, qs: &[i8; 32]) -> Vec<u8> {
-    let blk = BlockQ8_0 { d: f16::from_f32(d_f32).to_bits(), qs: *qs };
+    let blk = BlockQ8_0 {
+        d: f16::from_f32(d_f32).to_bits(),
+        qs: *qs,
+    };
     let bytes: &[u8] = unsafe {
         core::slice::from_raw_parts(
             (&blk as *const BlockQ8_0) as *const u8,
@@ -105,12 +108,12 @@ fn batched_q8_0_f32_top_k_1_no_aliasing() {
 
     // Routing: token i → expert i, dispatch i.
     let sorted_token_ids: Vec<i32> = (0..m_total).collect();
-    let expert_offsets: Vec<i32> = (0..=n_experts).collect();  // [0,1,2,3,4]
+    let expert_offsets: Vec<i32> = (0..=n_experts).collect(); // [0,1,2,3,4]
 
     // CPU reference: output[t, r] = dot(W[expert=t, r, :], y[t, :])
     let mut expected = vec![0.0f32; (n_tokens * n_rows) as usize];
     for t in 0..n_tokens as usize {
-        let e = t;  // 1:1 mapping in this test
+        let e = t; // 1:1 mapping in this test
         for r in 0..n_rows as usize {
             let mut acc = 0.0f32;
             for c in 0..n_cols as usize {
@@ -133,7 +136,11 @@ fn batched_q8_0_f32_top_k_1_no_aliasing() {
         DeviceBuffer::zeros(&ctx, (m_total as usize) * 4).expect("alloc ws");
 
     let desc = GgufMmvqBatchedDescriptor {
-        n_experts, n_rows_per_expert: n_rows, n_cols, m_total, top_k,
+        n_experts,
+        n_rows_per_expert: n_rows,
+        n_cols,
+        m_total,
+        top_k,
         format: GgufMmvqBatchedFormat::Quantized(GgufBlockFormat::Q8_0),
     };
     let plan = GgufMmvqBatchedPlan::<f32>::select(&stream, &desc, PlanPreference::default())
@@ -263,7 +270,11 @@ fn batched_q8_0_f32_top_k_2_atomic() {
         DeviceBuffer::zeros(&ctx, (m_total as usize) * 4).expect("alloc ws");
 
     let desc = GgufMmvqBatchedDescriptor {
-        n_experts, n_rows_per_expert: n_rows, n_cols, m_total, top_k,
+        n_experts,
+        n_rows_per_expert: n_rows,
+        n_cols,
+        m_total,
+        top_k,
         format: GgufMmvqBatchedFormat::Quantized(GgufBlockFormat::Q8_0),
     };
     let plan = GgufMmvqBatchedPlan::<f32>::select(&stream, &desc, PlanPreference::default())
@@ -281,11 +292,13 @@ fn batched_q8_0_f32_top_k_2_atomic() {
         },
         sorted_token_ids: TensorRef {
             data: dev_tids.as_slice(),
-            shape: [m_total], stride: [1],
+            shape: [m_total],
+            stride: [1],
         },
         expert_offsets: TensorRef {
             data: dev_offs.as_slice(),
-            shape: [n_experts + 1], stride: [1],
+            shape: [n_experts + 1],
+            stride: [1],
         },
         topk_weights: None,
         output: TensorMut {
@@ -405,8 +418,7 @@ fn batched_q4_K_f16_top_k_1() {
             let host_y_ref_f32: Vec<f32> = (0..n_cols as usize)
                 .map(|c| host_y[t * n_cols as usize + c].to_f32())
                 .collect();
-            let dev_y_ref = DeviceBuffer::from_slice(&ctx, &host_y_ref_f32)
-                .expect("up y ref");
+            let dev_y_ref = DeviceBuffer::from_slice(&ctx, &host_y_ref_f32).expect("up y ref");
             let mut dev_out_ref: DeviceBuffer<f32> =
                 DeviceBuffer::zeros(&ctx, 1).expect("alloc out ref");
             let e_idx = t as i64; // 1:1 mapping in this test
@@ -436,7 +448,9 @@ fn batched_q4_K_f16_top_k_1() {
                     stride: contiguous_stride([1]),
                 },
             };
-            plan_ref.run(&stream, Workspace::None, args_ref).expect("run ref");
+            plan_ref
+                .run(&stream, Workspace::None, args_ref)
+                .expect("run ref");
             stream.synchronize().expect("sync ref");
             let mut out_h = [0f32; 1];
             dev_out_ref.copy_to_host(&mut out_h).expect("dl ref");
@@ -454,7 +468,11 @@ fn batched_q4_K_f16_top_k_1() {
         DeviceBuffer::zeros(&ctx, (m_total as usize) * 4).expect("alloc ws");
 
     let desc = GgufMmvqBatchedDescriptor {
-        n_experts, n_rows_per_expert: n_rows, n_cols, m_total, top_k,
+        n_experts,
+        n_rows_per_expert: n_rows,
+        n_cols,
+        m_total,
+        top_k,
         format: GgufMmvqBatchedFormat::Quantized(GgufBlockFormat::Q4K),
     };
     let plan = GgufMmvqBatchedPlan::<f16>::select(&stream, &desc, PlanPreference::default())
@@ -471,10 +489,14 @@ fn batched_q4_K_f16_top_k_1() {
             stride: [n_cols as i64, 1],
         },
         sorted_token_ids: TensorRef {
-            data: dev_tids.as_slice(), shape: [m_total], stride: [1],
+            data: dev_tids.as_slice(),
+            shape: [m_total],
+            stride: [1],
         },
         expert_offsets: TensorRef {
-            data: dev_offs.as_slice(), shape: [n_experts + 1], stride: [1],
+            data: dev_offs.as_slice(),
+            shape: [n_experts + 1],
+            stride: [1],
         },
         topk_weights: None,
         output: TensorMut {
@@ -570,7 +592,11 @@ fn batched_fp_f16_top_k_1() {
         DeviceBuffer::zeros(&ctx, (m_total as usize) * 4).expect("alloc ws");
 
     let desc = GgufMmvqBatchedDescriptor {
-        n_experts, n_rows_per_expert: n_rows, n_cols, m_total, top_k,
+        n_experts,
+        n_rows_per_expert: n_rows,
+        n_cols,
+        m_total,
+        top_k,
         format: GgufMmvqBatchedFormat::Fp,
     };
     let plan = GgufMmvqBatchedPlan::<f16>::select(&stream, &desc, PlanPreference::default())
@@ -587,10 +613,14 @@ fn batched_fp_f16_top_k_1() {
             stride: [n_cols as i64, 1],
         },
         sorted_token_ids: TensorRef {
-            data: dev_tids.as_slice(), shape: [m_total], stride: [1],
+            data: dev_tids.as_slice(),
+            shape: [m_total],
+            stride: [1],
         },
         expert_offsets: TensorRef {
-            data: dev_offs.as_slice(), shape: [n_experts + 1], stride: [1],
+            data: dev_offs.as_slice(),
+            shape: [n_experts + 1],
+            stride: [1],
         },
         topk_weights: None,
         output: TensorMut {
@@ -674,11 +704,17 @@ fn run_q8_0_with_optional_topk_weights(
     let dev_tids = DeviceBuffer::from_slice(ctx, &sorted_token_ids).expect("up tids");
     let dev_offs = DeviceBuffer::from_slice(ctx, &expert_offsets).expect("up offs");
     let dev_tw = DeviceBuffer::from_slice(ctx, &topk_w_vec).expect("up tw");
-    let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, n_tokens as usize).expect("alloc out");
-    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, (m_total as usize) * 4).expect("alloc ws");
+    let mut dev_out: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(ctx, n_tokens as usize).expect("alloc out");
+    let mut dev_ws: DeviceBuffer<u8> =
+        DeviceBuffer::zeros(ctx, (m_total as usize) * 4).expect("alloc ws");
 
     let desc = GgufMmvqBatchedDescriptor {
-        n_experts, n_rows_per_expert: n_rows, n_cols, m_total, top_k,
+        n_experts,
+        n_rows_per_expert: n_rows,
+        n_cols,
+        m_total,
+        top_k,
         format: GgufMmvqBatchedFormat::Quantized(GgufBlockFormat::Q8_0),
     };
     let plan = GgufMmvqBatchedPlan::<f32>::select(stream, &desc, PlanPreference::default())
@@ -695,10 +731,14 @@ fn run_q8_0_with_optional_topk_weights(
             stride: [n_cols as i64, 1],
         },
         sorted_token_ids: TensorRef {
-            data: dev_tids.as_slice(), shape: [m_total], stride: [1],
+            data: dev_tids.as_slice(),
+            shape: [m_total],
+            stride: [1],
         },
         expert_offsets: TensorRef {
-            data: dev_offs.as_slice(), shape: [n_experts + 1], stride: [1],
+            data: dev_offs.as_slice(),
+            shape: [n_experts + 1],
+            stride: [1],
         },
         topk_weights: if use_topk_weights {
             Some(TensorRef {
@@ -715,7 +755,8 @@ fn run_q8_0_with_optional_topk_weights(
             stride: [n_rows as i64, 1],
         },
     };
-    plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args).expect("run");
+    plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
+        .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0.0f32; n_tokens as usize];
@@ -732,7 +773,10 @@ fn batched_q8_0_with_topk_weights() {
     for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
         let abs_err = (g - e).abs();
         let tol = 1e-2 * e.abs().max(1.0);
-        assert!(abs_err < tol, "[batched_q8_0 +topk_weights] @{i}: got {g}, expected {e}");
+        assert!(
+            abs_err < tol,
+            "[batched_q8_0 +topk_weights] @{i}: got {g}, expected {e}"
+        );
     }
 }
 
@@ -746,6 +790,9 @@ fn batched_q8_0_no_topk_weights_path() {
     for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
         let abs_err = (g - e).abs();
         let tol = 1e-2 * e.abs().max(1.0);
-        assert!(abs_err < tol, "[batched_q8_0 nullptr_topk] @{i}: got {g}, expected {e}");
+        assert!(
+            abs_err < tol,
+            "[batched_q8_0 nullptr_topk] @{i}: got {g}, expected {e}"
+        );
     }
 }

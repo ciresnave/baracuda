@@ -32,8 +32,9 @@ use core::ffi::{c_int, c_uchar};
 use baracuda_driver::{DeviceBuffer, Stream};
 use baracuda_nvjpeg_sys::{
     nvjpeg, nvjpegBufferDevice_t, nvjpegBufferPinned_t, nvjpegDecodeParams_t,
-    nvjpegEncoderParams_t, nvjpegEncoderState_t, nvjpegHandle_t, nvjpegImage_t, nvjpegJpegDecoder_t,
-    nvjpegJpegState_t, nvjpegJpegStream_t, nvjpegOutputFormat_t, nvjpegStatus_t,
+    nvjpegEncoderParams_t, nvjpegEncoderState_t, nvjpegHandle_t, nvjpegImage_t,
+    nvjpegJpegDecoder_t, nvjpegJpegState_t, nvjpegJpegStream_t, nvjpegOutputFormat_t,
+    nvjpegStatus_t,
 };
 
 /// Error type for nvJPEG operations.
@@ -320,20 +321,22 @@ pub unsafe fn decode_batched(
     lengths: &mut [usize],
     images: *mut nvjpegImage_t,
     stream: Option<&Stream>,
-) -> Result<()> { unsafe {
-    assert_eq!(data.len(), lengths.len(), "data/lengths must match in size");
-    let n = nvjpeg()?;
-    let cu = n.nvjpeg_decode_batched()?;
-    let stream_handle = stream.map_or(core::ptr::null_mut(), |s| s.as_raw() as _);
-    check(cu(
-        handle.handle,
-        state.state,
-        data.as_mut_ptr(),
-        lengths.as_mut_ptr(),
-        images,
-        stream_handle,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        assert_eq!(data.len(), lengths.len(), "data/lengths must match in size");
+        let n = nvjpeg()?;
+        let cu = n.nvjpeg_decode_batched()?;
+        let stream_handle = stream.map_or(core::ptr::null_mut(), |s| s.as_raw() as _);
+        check(cu(
+            handle.handle,
+            state.state,
+            data.as_mut_ptr(),
+            lengths.as_mut_ptr(),
+            images,
+            stream_handle,
+        ))
+    }
+}
 
 // ---- encoder --------------------------------------------------------------
 
@@ -471,26 +474,28 @@ pub unsafe fn encode_image(
     width: i32,
     height: i32,
     stream: Option<&Stream>,
-) -> Result<()> { unsafe {
-    let n = nvjpeg()?;
-    let cu = n.nvjpeg_encode_image()?;
-    let mut image = nvjpegImage_t::default();
-    for i in 0..4 {
-        image.channel[i] = channels[i].as_raw().0 as *mut c_uchar;
-        image.pitch[i] = pitches[i];
+) -> Result<()> {
+    unsafe {
+        let n = nvjpeg()?;
+        let cu = n.nvjpeg_encode_image()?;
+        let mut image = nvjpegImage_t::default();
+        for i in 0..4 {
+            image.channel[i] = channels[i].as_raw().0 as *mut c_uchar;
+            image.pitch[i] = pitches[i];
+        }
+        let stream_handle = stream.map_or(core::ptr::null_mut(), |s| s.as_raw() as _);
+        check(cu(
+            handle.handle,
+            state.raw,
+            params.raw,
+            &image,
+            input_format.raw() as c_int,
+            width,
+            height,
+            stream_handle,
+        ))
     }
-    let stream_handle = stream.map_or(core::ptr::null_mut(), |s| s.as_raw() as _);
-    check(cu(
-        handle.handle,
-        state.raw,
-        params.raw,
-        &image,
-        input_format.raw() as c_int,
-        width,
-        height,
-        stream_handle,
-    ))
-}}
+}
 
 /// Pull the encoded JPEG byte stream out of the encoder state. First call
 /// returns the required length; then re-call with a properly-sized buffer.
@@ -504,9 +509,7 @@ pub fn retrieve_bitstream(
     let cu = n.nvjpeg_encode_retrieve_bitstream()?;
     let stream_handle = stream.map_or(core::ptr::null_mut(), |s| s.as_raw() as _);
     let mut length: usize = out.as_ref().map(|b| b.len()).unwrap_or(0);
-    let ptr = out
-        .map(|b| b.as_mut_ptr())
-        .unwrap_or(core::ptr::null_mut());
+    let ptr = out.map(|b| b.as_mut_ptr()).unwrap_or(core::ptr::null_mut());
     check(unsafe { cu(handle.handle, state.raw, ptr, &mut length, stream_handle) })?;
     Ok(length)
 }
@@ -554,7 +557,15 @@ impl Decoder {
     ) -> Result<()> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_decode_jpeg_host()?;
-        check(unsafe { cu(handle.handle, self.raw, state.state, params.raw, jpeg_stream.raw) })
+        check(unsafe {
+            cu(
+                handle.handle,
+                self.raw,
+                state.state,
+                params.raw,
+                jpeg_stream.raw,
+            )
+        })
     }
 
     /// Phase 2 of the 3-phase hybrid pipeline: enqueue the H2D transfer of
@@ -570,7 +581,13 @@ impl Decoder {
         let cu = n.nvjpeg_decode_jpeg_transfer_to_device()?;
         let stream_handle = stream.map_or(core::ptr::null_mut(), |s| s.as_raw() as _);
         check(unsafe {
-            cu(handle.handle, self.raw, state.state, jpeg_stream.raw, stream_handle)
+            cu(
+                handle.handle,
+                self.raw,
+                state.state,
+                jpeg_stream.raw,
+                stream_handle,
+            )
         })
     }
 
@@ -584,12 +601,20 @@ impl Decoder {
         state: &State,
         dest: &mut nvjpegImage_t,
         stream: Option<&Stream>,
-    ) -> Result<()> { unsafe {
-        let n = nvjpeg()?;
-        let cu = n.nvjpeg_decode_jpeg_device()?;
-        let stream_handle = stream.map_or(core::ptr::null_mut(), |s| s.as_raw() as _);
-        check(cu(handle.handle, self.raw, state.state, dest, stream_handle))
-    }}
+    ) -> Result<()> {
+        unsafe {
+            let n = nvjpeg()?;
+            let cu = n.nvjpeg_decode_jpeg_device()?;
+            let stream_handle = stream.map_or(core::ptr::null_mut(), |s| s.as_raw() as _);
+            check(cu(
+                handle.handle,
+                self.raw,
+                state.state,
+                dest,
+                stream_handle,
+            ))
+        }
+    }
 
     /// Raw `nvjpegJpegDecoder_t`. Use with care.
     #[inline]

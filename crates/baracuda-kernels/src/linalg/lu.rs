@@ -93,11 +93,7 @@ pub struct LuPlan<T: Element> {
 
 impl<T: Element> LuPlan<T> {
     /// Pick a kernel + validate the descriptor.
-    pub fn select(
-        _stream: &Stream,
-        desc: &LuDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &LuDescriptor, _pref: PlanPreference) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::LuPlan: descriptor.element != T::KIND",
@@ -279,9 +275,8 @@ impl LuPlan<f32> {
             self.workspace_bytes.get()
         };
         let (ws_ptr, _ws_bytes) = unpack_workspace(workspace, needed)?;
-        let status = unsafe {
-            cusolverDnSgetrf(h, m, n, a_ptr, m, ws_ptr as *mut f32, pivot_ptr, info_ptr)
-        };
+        let status =
+            unsafe { cusolverDnSgetrf(h, m, n, a_ptr, m, ws_ptr as *mut f32, pivot_ptr, info_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
@@ -314,9 +309,8 @@ impl LuPlan<f64> {
             self.workspace_bytes.get()
         };
         let (ws_ptr, _ws_bytes) = unpack_workspace(workspace, needed)?;
-        let status = unsafe {
-            cusolverDnDgetrf(h, m, n, a_ptr, m, ws_ptr as *mut f64, pivot_ptr, info_ptr)
-        };
+        let status =
+            unsafe { cusolverDnDgetrf(h, m, n, a_ptr, m, ws_ptr as *mut f64, pivot_ptr, info_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

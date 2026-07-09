@@ -12,7 +12,7 @@
 //! cargo run --example qr -p baracuda-cusolver
 //! ```
 
-use baracuda_cusolver::{geqrf, DnHandle};
+use baracuda_cusolver::{DnHandle, geqrf};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

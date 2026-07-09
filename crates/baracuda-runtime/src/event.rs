@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use baracuda_cuda_sys::runtime::{cudaEvent_t, runtime, types::cudaEventFlags};
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// A CUDA event (Runtime API).

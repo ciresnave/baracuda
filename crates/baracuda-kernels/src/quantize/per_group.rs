@@ -143,9 +143,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerGroupPlan<TIn, TOut> {
             ));
         }
         if desc.q_max < desc.q_min {
-            return Err(Error::InvalidProblem(
-                "QuantizePerGroupPlan: q_max < q_min",
-            ));
+            return Err(Error::InvalidProblem("QuantizePerGroupPlan: q_max < q_min"));
         }
         let sku = build_sku_group::<TIn, TOut>(QuantizeKind::PerGroup);
         Ok(Self {
@@ -217,56 +215,136 @@ impl<TIn: Element, TOut: IntElement> QuantizePerGroupPlan<TIn, TOut> {
         let status = match (TIn::KIND, TOut::KIND) {
             (ElementKind::F32, ElementKind::S8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_group_f32_s8_run(
-                    outer, axis, g, qmin, qmax, in_ptr, sc_ptr, zp_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    outer,
+                    axis,
+                    g,
+                    qmin,
+                    qmax,
+                    in_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, ElementKind::U8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_group_f32_u8_run(
-                    outer, axis, g, qmin, qmax, in_ptr, sc_ptr, zp_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    outer,
+                    axis,
+                    g,
+                    qmin,
+                    qmax,
+                    in_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, ElementKind::S8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_group_f64_s8_run(
-                    outer, axis, g, qmin, qmax, in_ptr, sc_ptr, zp_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    outer,
+                    axis,
+                    g,
+                    qmin,
+                    qmax,
+                    in_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F64, ElementKind::U8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_group_f64_u8_run(
-                    outer, axis, g, qmin, qmax, in_ptr, sc_ptr, zp_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    outer,
+                    axis,
+                    g,
+                    qmin,
+                    qmax,
+                    in_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F16, ElementKind::S8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_group_f16_s8_run(
-                    outer, axis, g, qmin, qmax, in_ptr, sc_ptr, zp_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    outer,
+                    axis,
+                    g,
+                    qmin,
+                    qmax,
+                    in_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F16, ElementKind::U8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_group_f16_u8_run(
-                    outer, axis, g, qmin, qmax, in_ptr, sc_ptr, zp_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    outer,
+                    axis,
+                    g,
+                    qmin,
+                    qmax,
+                    in_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bf16, ElementKind::S8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_group_bf16_s8_run(
-                    outer, axis, g, qmin, qmax, in_ptr, sc_ptr, zp_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    outer,
+                    axis,
+                    g,
+                    qmin,
+                    qmax,
+                    in_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bf16, ElementKind::U8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_group_bf16_u8_run(
-                    outer, axis, g, qmin, qmax, in_ptr, sc_ptr, zp_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    outer,
+                    axis,
+                    g,
+                    qmin,
+                    qmax,
+                    in_ptr,
+                    sc_ptr,
+                    zp_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {
                 return Err(Error::Unsupported(
                     "QuantizePerGroupPlan::run unsupported (TIn, TOut)",
-                ))
+                ));
             }
         };
         map_status(status)

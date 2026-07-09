@@ -17,10 +17,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test ternary_clamp_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, TernaryArgs,
-    TernaryDescriptor, TernaryKind, TernaryPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, TernaryArgs, TernaryDescriptor, TernaryKind,
+    TernaryPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -50,9 +50,7 @@ fn clamp_f16_3d() {
         .iter()
         .zip(host_lo.iter())
         .zip(host_hi.iter())
-        .map(|((x, lo), hi)| {
-            f16::from_f32(x.to_f32().max(lo.to_f32()).min(hi.to_f32()))
-        })
+        .map(|((x, lo), hi)| f16::from_f32(x.to_f32().max(lo.to_f32()).min(hi.to_f32())))
         .collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -70,12 +68,29 @@ fn clamp_f16_3d() {
     let plan = TernaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<f16, 3>");
     let args = TernaryArgs::<f16, 3> {
-        a: TensorRef { data: dev_x.as_slice(), shape, stride },
-        b: TensorRef { data: dev_lo.as_slice(), shape, stride },
-        c: TensorRef { data: dev_hi.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_lo.as_slice(),
+            shape,
+            stride,
+        },
+        c: TensorRef {
+            data: dev_hi.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("clamp f16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("clamp f16 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![f16::from_f32(0.0); numel];
@@ -107,9 +122,7 @@ fn clamp_bf16_3d() {
         .iter()
         .zip(host_lo.iter())
         .zip(host_hi.iter())
-        .map(|((x, lo), hi)| {
-            bf16::from_f32(x.to_f32().max(lo.to_f32()).min(hi.to_f32()))
-        })
+        .map(|((x, lo), hi)| bf16::from_f32(x.to_f32().max(lo.to_f32()).min(hi.to_f32())))
         .collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
@@ -127,12 +140,29 @@ fn clamp_bf16_3d() {
     let plan = TernaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<bf16, 3>");
     let args = TernaryArgs::<bf16, 3> {
-        a: TensorRef { data: dev_x.as_slice(), shape, stride },
-        b: TensorRef { data: dev_lo.as_slice(), shape, stride },
-        c: TensorRef { data: dev_hi.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_lo.as_slice(),
+            shape,
+            stride,
+        },
+        c: TensorRef {
+            data: dev_hi.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("clamp bf16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("clamp bf16 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![bf16::from_f32(0.0); numel];
@@ -180,12 +210,29 @@ fn clamp_f64_3d() {
     let plan = TernaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select TernaryPlan<f64, 3>");
     let args = TernaryArgs::<f64, 3> {
-        a: TensorRef { data: dev_x.as_slice(), shape, stride },
-        b: TensorRef { data: dev_lo.as_slice(), shape, stride },
-        c: TensorRef { data: dev_hi.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_lo.as_slice(),
+            shape,
+            stride,
+        },
+        c: TensorRef {
+            data: dev_hi.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("clamp f64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("clamp f64 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f64; numel];

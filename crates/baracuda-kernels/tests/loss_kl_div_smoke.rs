@@ -4,10 +4,10 @@
 //! `y = mean(target·(log(target) - input))`. Cells with target == 0
 //! contribute 0.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, KlDivLossArgs, KlDivLossDescriptor, KlDivLossPlan,
-    LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, KlDivLossArgs, KlDivLossDescriptor, KlDivLossPlan, LossReduction, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -63,8 +63,16 @@ fn loss_kl_div_f32_mean() {
                 shape,
                 stride: contiguous_stride(shape),
             },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -72,7 +80,12 @@ fn loss_kl_div_f32_mean() {
     let mut got = [0f32; 1];
     dev_y.copy_to_host(&mut got).unwrap();
     let tol = expected.abs() * 16.0 * f32::EPSILON + 1e-5;
-    assert!((got[0] - expected).abs() <= tol, "f32 KLDiv: got={} want={}", got[0], expected);
+    assert!(
+        (got[0] - expected).abs() <= tol,
+        "f32 KLDiv: got={} want={}",
+        got[0],
+        expected
+    );
 }
 
 #[test]
@@ -105,8 +118,16 @@ fn loss_kl_div_f64_mean() {
                 shape,
                 stride: contiguous_stride(shape),
             },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -152,8 +173,16 @@ fn loss_kl_div_f16_mean() {
                 shape,
                 stride: contiguous_stride(shape),
             },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -162,7 +191,12 @@ fn loss_kl_div_f16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let g = got[0].to_f32();
     let tol = expected.abs() * 16.0 * 9.77e-4_f32 + 3e-3;
-    assert!((g - expected).abs() <= tol, "f16 KLDiv: got={} want={}", g, expected);
+    assert!(
+        (g - expected).abs() <= tol,
+        "f16 KLDiv: got={} want={}",
+        g,
+        expected
+    );
 }
 
 #[test]
@@ -200,8 +234,16 @@ fn loss_kl_div_bf16_mean() {
                 shape,
                 stride: contiguous_stride(shape),
             },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -210,5 +252,10 @@ fn loss_kl_div_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let g = got[0].to_f32();
     let tol = expected.abs() * 16.0 * 7.81e-3_f32 + 2e-2;
-    assert!((g - expected).abs() <= tol, "bf16 KLDiv: got={} want={}", g, expected);
+    assert!(
+        (g - expected).abs() <= tol,
+        "bf16 KLDiv: got={} want={}",
+        g,
+        expected
+    );
 }

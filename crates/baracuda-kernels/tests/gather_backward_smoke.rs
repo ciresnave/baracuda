@@ -6,10 +6,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GatherBackwardArgs, GatherBackwardDescriptor,
-    GatherBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, GatherBackwardArgs, GatherBackwardDescriptor, GatherBackwardPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -29,7 +29,7 @@ fn gather_backward_f32_2d_dim1() {
     let dsrc_numel: usize = 4 * 5;
     let out_numel: usize = 4 * 3;
     // Index includes duplicates so atomicAdd accumulates.
-    let host_idx: Vec<i32> = vec![0, 0, 2,  4, 4, 4,  1, 3, 1,  2, 2, 0];
+    let host_idx: Vec<i32> = vec![0, 0, 2, 4, 4, 4, 1, 3, 1, 2, 2, 0];
     let host_dout: Vec<f32> = (0..out_numel).map(|i| (i as f32) * 0.5 + 1.0).collect();
     let mut expected = vec![0f32; dsrc_numel];
     for i in 0..4usize {
@@ -91,7 +91,7 @@ fn gather_backward_f64_2d_dim0() {
     let out_shape = [4i32, 3];
     let dsrc_numel: usize = 5 * 3;
     let out_numel: usize = 4 * 3;
-    let host_idx: Vec<i32> = vec![0, 1, 2,  3, 3, 3,  0, 0, 4,  2, 4, 1];
+    let host_idx: Vec<i32> = vec![0, 1, 2, 3, 3, 3, 0, 0, 4, 2, 4, 1];
     let host_dout: Vec<f64> = (0..out_numel).map(|i| (i as f64) * 0.125 - 1.5).collect();
     let mut expected = vec![0f64; dsrc_numel];
     for i in 0..4usize {

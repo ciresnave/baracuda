@@ -14,13 +14,13 @@ use core::mem::size_of;
 use std::sync::Arc;
 
 use baracuda_cuda_sys::types::{
-    CUarray_format, CUDA_ARRAY_DESCRIPTOR, CUDA_RESOURCE_DESC, CUDA_TEXTURE_DESC,
+    CUDA_ARRAY_DESCRIPTOR, CUDA_RESOURCE_DESC, CUDA_TEXTURE_DESC, CUarray_format,
 };
-use baracuda_cuda_sys::{driver, CUarray, CUsurfObject, CUtexObject};
+use baracuda_cuda_sys::{CUarray, CUsurfObject, CUtexObject, driver};
 use baracuda_types::DeviceRepr;
 
 use crate::context::Context;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// A 2-D CUDA array. Element format is chosen at creation; channels are
 /// typically 1, 2, or 4.
@@ -263,13 +263,15 @@ impl Array {
     /// # Safety
     ///
     /// `handle` must be a live `CUarray`.
-    pub unsafe fn descriptor_of_raw(handle: CUarray) -> Result<CUDA_ARRAY_DESCRIPTOR> { unsafe {
-        let d = driver()?;
-        let cu = d.cu_array_get_descriptor()?;
-        let mut desc = CUDA_ARRAY_DESCRIPTOR::default();
-        check(cu(&mut desc, handle))?;
-        Ok(desc)
-    }}
+    pub unsafe fn descriptor_of_raw(handle: CUarray) -> Result<CUDA_ARRAY_DESCRIPTOR> {
+        unsafe {
+            let d = driver()?;
+            let cu = d.cu_array_get_descriptor()?;
+            let mut desc = CUDA_ARRAY_DESCRIPTOR::default();
+            check(cu(&mut desc, handle))?;
+            Ok(desc)
+        }
+    }
 
     /// Synchronous array→host 2-D copy.
     pub fn copy_to_host<T: DeviceRepr>(&self, host: &mut [T]) -> Result<()> {

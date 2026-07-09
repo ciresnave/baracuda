@@ -6,7 +6,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 fn setup() -> (Context, Stream) {
@@ -251,7 +251,10 @@ fn argsort_fp8e4m3_basic() {
     for i in 1..got.len() {
         let a = float_eq[got[i - 1] as usize];
         let b = float_eq[got[i] as usize];
-        assert!(a <= b, "argsort_fp8e4m3 broken @ {i}: {a} > {b} (got {got:?})");
+        assert!(
+            a <= b,
+            "argsort_fp8e4m3 broken @ {i}: {a} > {b} (got {got:?})"
+        );
     }
     // Expected ordering by float value: -2.0, -1.0, 0.0, 0.5, 1.0, 2.0, 2.5, 3.5
     // -> indices: 4, 2, 0, 5, 1, 3, 7, 6

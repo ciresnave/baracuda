@@ -37,9 +37,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::{DeviceSlice, DeviceSliceMut, Stream};
 use baracuda_kernels_sys::{
-    baracuda_kernels_scale_inplace_c32_run, baracuda_kernels_scale_inplace_c64_run, cufftComplex,
-    cufftDestroy, cufftDoubleComplex, cufftExecC2C, cufftExecZ2Z, cufftHandle, cufftPlanMany,
-    cufftSetStream, CUFFT_C2C, CUFFT_FORWARD, CUFFT_INVERSE, CUFFT_Z2Z,
+    CUFFT_C2C, CUFFT_FORWARD, CUFFT_INVERSE, CUFFT_Z2Z, baracuda_kernels_scale_inplace_c32_run,
+    baracuda_kernels_scale_inplace_c64_run, cufftComplex, cufftDestroy, cufftDoubleComplex,
+    cufftExecC2C, cufftExecZ2Z, cufftHandle, cufftPlanMany, cufftSetStream,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FftKind, KernelSku,
@@ -138,11 +138,7 @@ pub struct FftNdPlan<T: Element> {
 
 impl<T: Element> FftNdPlan<T> {
     /// Pick a kernel + validate the descriptor.
-    pub fn select(
-        _stream: &Stream,
-        desc: &FftNdDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &FftNdDescriptor, _pref: PlanPreference) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::FftNdPlan: descriptor.element != T::KIND",

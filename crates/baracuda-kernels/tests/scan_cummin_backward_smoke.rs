@@ -3,10 +3,10 @@
 //! Mirror of cummax BW with `<` instead of `>`. First-occurrence
 //! argmin (PyTorch semantics).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ScanBackwardArgs, ScanBackwardDescriptor,
-    ScanBackwardPlan, ScanKind, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ScanBackwardArgs, ScanBackwardDescriptor, ScanBackwardPlan,
+    ScanKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -50,13 +50,19 @@ fn host_cummin_bw_f32<const N: usize>(
     for_each_coord::<N, _>(base_shape, |base_coord, _| {
         let mut running_winner = f32::INFINITY;
         let mut running_arg: i32 = -1;
-        let (i_start, i_end, i_step) = if fw_reverse { (extent - 1, -1, -1) } else { (0, extent, 1) };
+        let (i_start, i_end, i_step) = if fw_reverse {
+            (extent - 1, -1, -1)
+        } else {
+            (0, extent, 1)
+        };
         let mut ii = i_start;
         while ii != i_end {
             let mut coord = base_coord;
             coord[axis] = ii;
             let mut idx = 0usize;
-            for d in 0..N { idx += coord[d] as usize * stride[d]; }
+            for d in 0..N {
+                idx += coord[d] as usize * stride[d];
+            }
             let v = x[idx];
             let better = running_arg < 0 || v < running_winner;
             if better {
@@ -66,7 +72,9 @@ fn host_cummin_bw_f32<const N: usize>(
             let mut dx_coord = base_coord;
             dx_coord[axis] = running_arg;
             let mut dx_idx = 0usize;
-            for d in 0..N { dx_idx += dx_coord[d] as usize * stride[d]; }
+            for d in 0..N {
+                dx_idx += dx_coord[d] as usize * stride[d];
+            }
             dx[dx_idx] += dy[idx];
             ii += i_step;
         }
@@ -92,12 +100,24 @@ fn cummin_bw_f32_1d_forward_fw() {
         reverse: false,
         element: ElementKind::F32,
     };
-    let plan = ScanBackwardPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ScanBackwardPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanBackwardArgs::<f32, 1> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) }),
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
         y: None,
     };
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -105,8 +125,12 @@ fn cummin_bw_f32_1d_forward_fw() {
     let mut got = vec![0f32; 8];
     dev_dx.copy_to_host(&mut got).expect("dl");
     for i in 0..8 {
-        assert!((got[i] - expected[i]).abs() <= 4.0 * f32::EPSILON * expected[i].abs().max(1.0),
-            "f32 cummin BW @ {i}: got={} want={}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= 4.0 * f32::EPSILON * expected[i].abs().max(1.0),
+            "f32 cummin BW @ {i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -117,9 +141,7 @@ fn cummin_bw_f64_2d_reverse_fw() {
     let shape = [3i32, 5];
     let numel = 15;
     let host_x_f32: Vec<f32> = vec![
-        1.0, -2.0, 3.0, 0.5, 4.5,
-        -1.0, 2.0, 5.0, 0.0, 3.5,
-        4.0, 1.5, -3.0, 2.5, 0.25,
+        1.0, -2.0, 3.0, 0.5, 4.5, -1.0, 2.0, 5.0, 0.0, 3.5, 4.0, 1.5, -3.0, 2.5, 0.25,
     ];
     let host_dy_f32: Vec<f32> = (0..numel).map(|i| 0.1 + 0.05 * i as f32).collect();
     let expected_f32 = host_cummin_bw_f32::<2>(shape, 1, true, &host_dy_f32, &host_x_f32);
@@ -137,12 +159,24 @@ fn cummin_bw_f64_2d_reverse_fw() {
         reverse: true,
         element: ElementKind::F64,
     };
-    let plan = ScanBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ScanBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanBackwardArgs::<f64, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) }),
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
         y: None,
     };
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -164,9 +198,7 @@ fn cummin_bw_f16_2d() {
     let shape = [3i32, 5];
     let numel = 15;
     let host_x_f32: Vec<f32> = vec![
-        1.0, -2.0, 3.0, 0.5, 4.5,
-        -1.0, 2.0, 5.0, 0.0, 3.5,
-        4.0, 1.5, -3.0, 2.5, 0.25,
+        1.0, -2.0, 3.0, 0.5, 4.5, -1.0, 2.0, 5.0, 0.0, 3.5, 4.0, 1.5, -3.0, 2.5, 0.25,
     ];
     let host_dy_f32: Vec<f32> = (0..numel).map(|i| 0.125 * (i as f32 + 1.0)).collect();
     let expected_f32 = host_cummin_bw_f32::<2>(shape, 1, false, &host_dy_f32, &host_x_f32);
@@ -184,12 +216,24 @@ fn cummin_bw_f16_2d() {
         reverse: false,
         element: ElementKind::F16,
     };
-    let plan = ScanBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        ScanBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanBackwardArgs::<f16, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) }),
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
         y: None,
     };
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -211,9 +255,7 @@ fn cummin_bw_bf16_2d() {
     let shape = [3i32, 5];
     let numel = 15;
     let host_x_f32: Vec<f32> = vec![
-        1.0, -2.0, 3.0, 0.5, 4.5,
-        -1.0, 2.0, 5.0, 0.0, 3.5,
-        4.0, 1.5, -3.0, 2.5, 0.25,
+        1.0, -2.0, 3.0, 0.5, 4.5, -1.0, 2.0, 5.0, 0.0, 3.5, 4.0, 1.5, -3.0, 2.5, 0.25,
     ];
     let host_dy_f32: Vec<f32> = (0..numel).map(|i| 0.125 * (i as f32 + 1.0)).collect();
     let expected_f32 = host_cummin_bw_f32::<2>(shape, 1, false, &host_dy_f32, &host_x_f32);
@@ -234,9 +276,21 @@ fn cummin_bw_bf16_2d() {
     let plan = ScanBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ScanBackwardArgs::<bf16, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) }),
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        }),
         y: None,
     };
     plan.run(&stream, Workspace::None, args).expect("run");

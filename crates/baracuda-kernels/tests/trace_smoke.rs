@@ -10,10 +10,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test trace_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, TraceArgs,
-    TraceDescriptor, TracePlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, TraceArgs, TraceDescriptor, TracePlan,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -59,8 +59,7 @@ fn trace_f32() {
         n: D,
         element: ElementKind::F32,
     };
-    let plan =
-        TracePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let plan = TracePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TraceArgs::<f32> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -115,8 +114,7 @@ fn trace_f16() {
         n: D,
         element: ElementKind::F16,
     };
-    let plan =
-        TracePlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let plan = TracePlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TraceArgs::<f16> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -222,8 +220,7 @@ fn trace_f64() {
         n: D,
         element: ElementKind::F64,
     };
-    let plan =
-        TracePlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let plan = TracePlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TraceArgs::<f64> {
         x: TensorRef {
             data: dev_x.as_slice(),

@@ -22,7 +22,7 @@ use baracuda_kernels_types::{
 
 use super::sort::{SortArgs, SortDescriptor, SortPlan};
 use super::unique_consecutive::{
-    build_unique_sku, UniqueConsecutiveDescriptor, UniqueConsecutivePlan,
+    UniqueConsecutiveDescriptor, UniqueConsecutivePlan, build_unique_sku,
 };
 
 /// Descriptor for a `unique` op.
@@ -201,11 +201,8 @@ impl<T: Element> UniquePlan<T> {
             return_counts: true,
             element: T::KIND,
         };
-        let uc_plan = UniqueConsecutivePlan::<T>::select(
-            stream,
-            &uc_desc,
-            PlanPreference::default(),
-        )?;
+        let uc_plan =
+            UniqueConsecutivePlan::<T>::select(stream, &uc_desc, PlanPreference::default())?;
         // SAFETY: the sorted_scratch we re-borrow as TensorRef has
         // already been written by the sort; we don't borrow it
         // mutably again in this scope.
@@ -232,4 +229,3 @@ impl<T: Element> UniquePlan<T> {
         Ok(())
     }
 }
-

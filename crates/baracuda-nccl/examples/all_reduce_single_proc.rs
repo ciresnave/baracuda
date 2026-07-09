@@ -16,7 +16,7 @@
 //! ```
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
-use baracuda_nccl::{all_reduce, Communicator, RedOp};
+use baracuda_nccl::{Communicator, RedOp, all_reduce};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     baracuda_driver::init()?;

@@ -5,10 +5,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, IndexSelectArgs, IndexSelectDescriptor, IndexSelectPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, IndexSelectArgs, IndexSelectDescriptor, IndexSelectPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -38,8 +38,7 @@ fn index_select_f32_2d_dim0() {
     }
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("up src");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
+    let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
 
     let desc = IndexSelectDescriptor {
         out_shape,
@@ -97,8 +96,7 @@ fn index_select_f64_3d_dim2() {
     }
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("up src");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
+    let mut dev_out: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
 
     let desc = IndexSelectDescriptor {
         out_shape,
@@ -143,7 +141,9 @@ fn index_select_i32_2d_dim1() {
     let out_shape = [3i32, 4];
     let src_numel: usize = 3 * 5;
     let out_numel: usize = 3 * 4;
-    let host_src: Vec<i32> = (0..src_numel as i32).map(|i| i.wrapping_mul(17) - 50).collect();
+    let host_src: Vec<i32> = (0..src_numel as i32)
+        .map(|i| i.wrapping_mul(17) - 50)
+        .collect();
     let host_idx: Vec<i32> = vec![3, 0, 4, 1];
     let mut expected = vec![0i32; out_numel];
     for i in 0..3usize {
@@ -154,8 +154,7 @@ fn index_select_i32_2d_dim1() {
     }
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("up src");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
+    let mut dev_out: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
 
     let desc = IndexSelectDescriptor {
         out_shape,

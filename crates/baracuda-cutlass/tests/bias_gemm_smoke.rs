@@ -8,7 +8,7 @@ use baracuda_cutlass::{
     EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut, MatrixRef,
     PlanPreference, VectorRef, Workspace,
 };
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 /// CPU reference for `D = alpha*AB + beta*C + bias_broadcast(N)`,
@@ -75,19 +75,24 @@ fn bias_round_trip_f16(m: i32, n: i32, k: i32) {
     let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     // Bias values are O(1) and distinct per column so a simple
     // broadcast bug would show up clearly in the error metric.
-    let host_bias_f32: Vec<f32> = (0..n)
-        .map(|j| 0.25 + 0.1 * (j as f32))
-        .collect();
+    let host_bias_f32: Vec<f32> = (0..n).map(|j| 0.25 + 0.1 * (j as f32)).collect();
 
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_bias_gemm_rcr(
-        m as usize, n as usize, k as usize,
-        &host_a_f32, k as usize,
-        &host_b_f32, k as usize,
-        None, n as usize,
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a_f32,
+        k as usize,
+        &host_b_f32,
+        k as usize,
+        None,
+        n as usize,
         &host_bias_f32,
-        1.0, 0.0,
-        &mut host_d_ref, n as usize,
+        1.0,
+        0.0,
+        &mut host_d_ref,
+        n as usize,
     );
 
     let host_a: Vec<f16> = host_a_f32.iter().map(|&x| f16::from_f32(x)).collect();
@@ -101,7 +106,9 @@ fn bias_round_trip_f16(m: i32, n: i32, k: i32) {
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Bias,
     };
@@ -112,11 +119,30 @@ fn bias_round_trip_f16(m: i32, n: i32, k: i32) {
     assert_eq!(plan.sku().epilogue, EpilogueKind::Bias);
 
     let args = GemmArgs::<f16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
-        bias: Some(VectorRef { data: dev_bias.as_slice(), len: n, stride: 1 }),
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
+        bias: Some(VectorRef {
+            data: dev_bias.as_slice(),
+            len: n,
+            stride: 1,
+        }),
         alpha: 1.0,
         beta: 0.0,
     };
@@ -150,19 +176,24 @@ fn bias_round_trip_bf16(m: i32, n: i32, k: i32) {
 
     let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
     let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
-    let host_bias_f32: Vec<f32> = (0..n)
-        .map(|j| 0.25 + 0.1 * (j as f32))
-        .collect();
+    let host_bias_f32: Vec<f32> = (0..n).map(|j| 0.25 + 0.1 * (j as f32)).collect();
 
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_bias_gemm_rcr(
-        m as usize, n as usize, k as usize,
-        &host_a_f32, k as usize,
-        &host_b_f32, k as usize,
-        None, n as usize,
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a_f32,
+        k as usize,
+        &host_b_f32,
+        k as usize,
+        None,
+        n as usize,
         &host_bias_f32,
-        1.0, 0.0,
-        &mut host_d_ref, n as usize,
+        1.0,
+        0.0,
+        &mut host_d_ref,
+        n as usize,
     );
 
     let host_a: Vec<bf16> = host_a_f32.iter().map(|&x| bf16::from_f32(x)).collect();
@@ -176,18 +207,39 @@ fn bias_round_trip_bf16(m: i32, n: i32, k: i32) {
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Bias,
     };
     let plan =
         GemmPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("plan select");
     let args = GemmArgs::<bf16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
-        bias: Some(VectorRef { data: dev_bias.as_slice(), len: n, stride: 1 }),
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
+        bias: Some(VectorRef {
+            data: dev_bias.as_slice(),
+            len: n,
+            stride: 1,
+        }),
         alpha: 1.0,
         beta: 0.0,
     };
@@ -233,19 +285,37 @@ fn epilogue_bias_mismatch_rejected() {
 
     // Case 1: epilogue = Bias but bias = None → rejected.
     let desc_bias = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Bias,
     };
     let plan_bias = GemmPlan::<f16>::select(&stream, &desc_bias, PlanPreference::default())
         .expect("plan select Bias");
     let args_missing_bias = GemmArgs::<f16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         bias: None,
-        alpha: 1.0, beta: 0.0,
+        alpha: 1.0,
+        beta: 0.0,
     };
     let r1 = plan_bias.can_implement(&args_missing_bias);
     assert!(
@@ -255,20 +325,41 @@ fn epilogue_bias_mismatch_rejected() {
 
     // Case 2: epilogue = Identity but bias = Some(...) → rejected.
     let desc_identity = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Identity,
     };
-    let plan_identity =
-        GemmPlan::<f16>::select(&stream, &desc_identity, PlanPreference::default())
-            .expect("plan select Identity");
+    let plan_identity = GemmPlan::<f16>::select(&stream, &desc_identity, PlanPreference::default())
+        .expect("plan select Identity");
     let args_extra_bias = GemmArgs::<f16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
-        bias: Some(VectorRef { data: dev_bias.as_slice(), len: n, stride: 1 }),
-        alpha: 1.0, beta: 0.0,
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
+        bias: Some(VectorRef {
+            data: dev_bias.as_slice(),
+            len: n,
+            stride: 1,
+        }),
+        alpha: 1.0,
+        beta: 0.0,
     };
     let r2 = plan_identity.can_implement(&args_extra_bias);
     assert!(

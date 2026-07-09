@@ -15,10 +15,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test reduce_mean_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceArgs, ReduceDescriptor, ReduceKind,
-    ReducePlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceArgs, ReduceDescriptor, ReduceKind, ReducePlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -88,8 +88,7 @@ fn reduce_mean_f32() {
     }
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, out_numel()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, out_numel()).expect("alloc y");
 
     let desc = ReduceDescriptor {
         kind: ReduceKind::Mean,
@@ -98,8 +97,8 @@ fn reduce_mean_f32() {
         element: ElementKind::F32,
         correction: 1,
     };
-    let plan = ReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<f32, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -167,8 +166,7 @@ fn reduce_mean_f64() {
     }
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, out_numel()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, out_numel()).expect("alloc y");
 
     let desc = ReduceDescriptor {
         kind: ReduceKind::Mean,
@@ -177,8 +175,8 @@ fn reduce_mean_f64() {
         element: ElementKind::F64,
         correction: 1,
     };
-    let plan = ReducePlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ReducePlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<f64, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -246,8 +244,7 @@ fn reduce_mean_f16() {
     }
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, out_numel()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, out_numel()).expect("alloc y");
 
     let desc = ReduceDescriptor {
         kind: ReduceKind::Mean,
@@ -256,8 +253,8 @@ fn reduce_mean_f16() {
         element: ElementKind::F16,
         correction: 1,
     };
-    let plan = ReducePlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ReducePlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<f16, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -326,8 +323,7 @@ fn reduce_mean_bf16() {
     }
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<bf16> =
-        DeviceBuffer::zeros(&ctx, out_numel()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, out_numel()).expect("alloc y");
 
     let desc = ReduceDescriptor {
         kind: ReduceKind::Mean,
@@ -336,8 +332,8 @@ fn reduce_mean_bf16() {
         element: ElementKind::Bf16,
         correction: 1,
     };
-    let plan = ReducePlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ReducePlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ReduceArgs::<bf16, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),

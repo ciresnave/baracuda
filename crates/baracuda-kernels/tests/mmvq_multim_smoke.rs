@@ -10,10 +10,10 @@
 // Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
 #![allow(non_snake_case)]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BlockQ8_0, GgufBlockFormat, GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor,
-    GgufMmvqMultiMPlan, PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    BlockQ8_0, GgufBlockFormat, GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan,
+    PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -70,8 +70,7 @@ fn run_for_m(m: i32) {
     let mut host_act = vec![0.0f32; (m * ncols) as usize];
     for mi in 0..m {
         for c in 0..ncols {
-            host_act[(mi * ncols + c) as usize] =
-                (((mi * 11 + c * 3) % 20) as f32) * 0.07 - 0.5;
+            host_act[(mi * ncols + c) as usize] = (((mi * 11 + c * 3) % 20) as f32) * 0.07 - 0.5;
         }
     }
 
@@ -149,9 +148,7 @@ fn run_for_m(m: i32) {
             "M={m} idx={i}: got {a}, expected {b}, abs_err={abs_err}, rel_err={rel_err}"
         );
     }
-    eprintln!(
-        "M={m}: max_abs_err={max_abs_err:.4e}, max_rel_err={max_rel_err:.4e}"
-    );
+    eprintln!("M={m}: max_abs_err={max_abs_err:.4e}, max_rel_err={max_rel_err:.4e}");
 }
 
 #[test]
@@ -274,7 +271,11 @@ fn run_per_format(fmt: GgufBlockFormat, m: i32) {
         },
     };
     plan_multim
-        .run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args_multim)
+        .run(
+            &stream,
+            Workspace::Borrowed(dev_ws.as_slice_mut()),
+            args_multim,
+        )
         .expect("multim run");
     stream.synchronize().expect("sync after multim");
 
@@ -324,8 +325,7 @@ fn run_per_format(fmt: GgufBlockFormat, m: i32) {
 
         let mut buf = vec![0.0f32; nrows as usize];
         dev_out_1.copy_to_host(&mut buf).expect("d2h baseline");
-        host_out_baseline[(mi * nrows) as usize..((mi + 1) * nrows) as usize]
-            .copy_from_slice(&buf);
+        host_out_baseline[(mi * nrows) as usize..((mi + 1) * nrows) as usize].copy_from_slice(&buf);
     }
 
     // ---- 3. Compare with Q8_1 quant tolerance ----
@@ -439,7 +439,6 @@ fn mmvq_multim_q4_0_m1() {
 fn mmvq_multim_q5_0_m1() {
     run_per_format(GgufBlockFormat::Q5_0, 1);
 }
-
 
 #[test]
 #[ignore]

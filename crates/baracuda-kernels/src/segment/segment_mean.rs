@@ -17,8 +17,8 @@ use baracuda_kernels_types::{
 };
 
 use super::segment_sum::{
-    build_sku, run_sorted_fw, validate_args, validate_desc, SegDescView, SegmentSumDescriptor,
-    SortedFwOp,
+    SegDescView, SegmentSumDescriptor, SortedFwOp, build_sku, run_sorted_fw, validate_args,
+    validate_desc,
 };
 
 /// Descriptor for a `segment_mean` op.

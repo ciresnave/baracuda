@@ -10,7 +10,7 @@ use core::mem::size_of;
 use baracuda_cuda_sys::runtime::{cudaMemcpyKind, runtime};
 use baracuda_types::DeviceRepr;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// A pitched device allocation — `height × width_elems` grid of `T`s

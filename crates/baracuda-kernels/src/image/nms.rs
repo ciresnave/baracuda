@@ -72,11 +72,7 @@ pub struct NmsPlan<T: Element> {
 
 impl<T: Element> NmsPlan<T> {
     /// Pick a kernel.
-    pub fn select(
-        _stream: &Stream,
-        desc: &NmsDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &NmsDescriptor, _pref: PlanPreference) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::NmsPlan: descriptor element != T",
@@ -176,16 +172,24 @@ impl<T: Element> NmsPlan<T> {
                 baracuda_kernels_sys::baracuda_kernels_nms_f32_run(
                     self.desc.num_boxes,
                     self.desc.iou_threshold,
-                    boxes_ptr, mask_ptr, count_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    boxes_ptr,
+                    mask_ptr,
+                    count_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_nms_f64_run(
                     self.desc.num_boxes,
                     self.desc.iou_threshold,
-                    boxes_ptr, mask_ptr, count_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    boxes_ptr,
+                    mask_ptr,
+                    count_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

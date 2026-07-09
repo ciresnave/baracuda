@@ -12,11 +12,11 @@
 
 #![cfg(feature = "bnb_nf4")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::quantize::nf4::nf4_pack_weight;
 use baracuda_kernels::{
-    contiguous_stride, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, PlanPreference,
-    TensorMut, TensorRef, Workspace, NF4_CODEBOOK, U8,
+    NF4_CODEBOOK, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, PlanPreference, TensorMut,
+    TensorRef, U8, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -40,7 +40,8 @@ fn nf4_codebook_constants() {
         assert!(
             NF4_CODEBOOK[i] > NF4_CODEBOOK[i - 1],
             "codebook not monotone at idx {i}: prev={}, this={}",
-            NF4_CODEBOOK[i - 1], NF4_CODEBOOK[i]
+            NF4_CODEBOOK[i - 1],
+            NF4_CODEBOOK[i]
         );
     }
     // 16 entries.
@@ -107,10 +108,8 @@ fn nf4_dequant_roundtrip_f32() {
         k: k as i32,
         block_size: block_size as i32,
     };
-    let plan: Nf4DequantizePlan<f32> = Nf4DequantizePlan::select(
-        &stream, &desc, PlanPreference::default(),
-    )
-    .expect("plan select");
+    let plan: Nf4DequantizePlan<f32> =
+        Nf4DequantizePlan::select(&stream, &desc, PlanPreference::default()).expect("plan select");
 
     let weight_bytes_len = packed_u8.len() as i32;
     let absmax_len = absmax.len() as i32;
@@ -131,7 +130,8 @@ fn nf4_dequant_roundtrip_f32() {
             stride: contiguous_stride([n as i32, k as i32]),
         },
     };
-    plan.run(&stream, Workspace::None, args).expect("dequant run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("dequant run");
     stream.synchronize().expect("sync");
 
     // Pull back + compare.
@@ -147,7 +147,8 @@ fn nf4_dequant_roundtrip_f32() {
         assert!(
             err < 1e-6,
             "idx {i}: gpu={}, ref={}, err={err}",
-            host_out[i], host_dequant_ref[i]
+            host_out[i],
+            host_dequant_ref[i]
         );
     }
     eprintln!("nf4 dequant roundtrip max_abs_err = {max_abs_err:.4e}");

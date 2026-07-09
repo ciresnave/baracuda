@@ -49,13 +49,13 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cudnnCTCLoss, cudnnCTCLossDescriptor_t, cudnnCreate, cudnnCreateCTCLossDescriptor,
+    CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, CUDNN_CTC_LOSS_ALGO_NON_DETERMINISTIC, CUDNN_DATA_DOUBLE,
+    CUDNN_DATA_FLOAT, CUDNN_LOSS_NORMALIZATION_SOFTMAX, CUDNN_NOT_PROPAGATE_NAN, cudnnCTCLoss,
+    cudnnCTCLossDescriptor_t, cudnnCreate, cudnnCreateCTCLossDescriptor,
     cudnnCreateTensorDescriptor, cudnnDestroy, cudnnDestroyCTCLossDescriptor,
     cudnnDestroyTensorDescriptor, cudnnGetCTCLossWorkspaceSize, cudnnHandle_t,
     cudnnSetCTCLossDescriptorEx, cudnnSetStream, cudnnSetTensorNdDescriptor,
-    cudnnTensorDescriptor_t, CUDNN_CTC_LOSS_ALGO_DETERMINISTIC,
-    CUDNN_CTC_LOSS_ALGO_NON_DETERMINISTIC, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT,
-    CUDNN_LOSS_NORMALIZATION_SOFTMAX, CUDNN_NOT_PROPAGATE_NAN,
+    cudnnTensorDescriptor_t,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LossKind, MathPrecision, OpCategory,
@@ -153,9 +153,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
                 "baracuda-kernels::CtcLossCudnnPlan: dimensions must be non-negative",
             ));
         }
-        if desc.num_classes > 0
-            && (desc.blank_index < 0 || desc.blank_index >= desc.num_classes)
-        {
+        if desc.num_classes > 0 && (desc.blank_index < 0 || desc.blank_index >= desc.num_classes) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CtcLossCudnnPlan: blank_index must be in [0, num_classes)",
             ));
@@ -296,12 +294,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
         let needed = if self.workspace_queried.get() {
             self.workspace_bytes.get()
         } else {
-            self.query_workspace_size(
-                stream,
-                args.labels,
-                args.label_lengths,
-                args.input_lengths,
-            )?
+            self.query_workspace_size(stream, args.labels, args.label_lengths, args.input_lengths)?
         };
         let (ws_ptr, _ws_bytes) = unpack_workspace(workspace, needed)?;
 
@@ -358,9 +351,7 @@ impl<T: Element> CtcLossCudnnPlan<T> {
                 return Ok(handle);
             }
             last_status = status;
-            std::thread::sleep(std::time::Duration::from_millis(
-                50 * (attempt as u64 + 1),
-            ));
+            std::thread::sleep(std::time::Duration::from_millis(50 * (attempt as u64 + 1)));
         }
         Err(Error::CutlassInternal(-last_status))
     }
@@ -404,9 +395,8 @@ impl<T: Element> CtcLossCudnnPlan<T> {
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
-        let status = unsafe {
-            cudnnSetTensorNdDescriptor(pd, dt, 3, dims.as_ptr(), strides.as_ptr())
-        };
+        let status =
+            unsafe { cudnnSetTensorNdDescriptor(pd, dt, 3, dims.as_ptr(), strides.as_ptr()) };
         if status != 0 {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(pd);
@@ -422,9 +412,8 @@ impl<T: Element> CtcLossCudnnPlan<T> {
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
-        let status = unsafe {
-            cudnnSetTensorNdDescriptor(gd, dt, 3, dims.as_ptr(), strides.as_ptr())
-        };
+        let status =
+            unsafe { cudnnSetTensorNdDescriptor(gd, dt, 3, dims.as_ptr(), strides.as_ptr()) };
         if status != 0 {
             unsafe {
                 let _ = cudnnDestroyTensorDescriptor(gd);

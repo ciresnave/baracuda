@@ -7,10 +7,10 @@
 //! Covers FW × 4 FP dtypes × 2 mask modes (none + causal).
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan,
-    PlanPreference, SdpaArgs, SdpaDescriptor, SdpaPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference, SdpaArgs,
+    SdpaDescriptor, SdpaPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -149,17 +149,7 @@ fn run_f32(is_causal: bool) {
     let mut dlse: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse");
 
-    let desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        DK,
-        DV,
-        scale,
-        is_causal,
-        ElementKind::F32,
-    );
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, DK, DV, scale, is_causal, ElementKind::F32);
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("flash sel");
     plan.run(
@@ -191,8 +181,8 @@ fn run_f32(is_causal: bool) {
                 shape: sl,
                 stride: contiguous_stride(sl),
             },
-                mask: None,
-                    alibi_slopes: None,
+            mask: None,
+            alibi_slopes: None,
         },
     )
     .expect("flash run");
@@ -314,17 +304,7 @@ fn flash_sdpa_f64_basic() {
     let mut dlse: DeviceBuffer<f64> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse");
 
-    let desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        DK,
-        DV,
-        scale,
-        false,
-        ElementKind::F64,
-    );
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, DK, DV, scale, false, ElementKind::F64);
     let plan =
         FlashSdpaPlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -356,8 +336,8 @@ fn flash_sdpa_f64_basic() {
                 shape: sl,
                 stride: contiguous_stride(sl),
             },
-                mask: None,
-                    alibi_slopes: None,
+            mask: None,
+            alibi_slopes: None,
         },
     )
     .expect("run");
@@ -463,17 +443,7 @@ fn flash_sdpa_f16_basic() {
     let mut dlse: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse");
 
-    let desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        DK,
-        DV,
-        scale,
-        false,
-        ElementKind::F16,
-    );
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, DK, DV, scale, false, ElementKind::F16);
     let plan =
         FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -505,8 +475,8 @@ fn flash_sdpa_f16_basic() {
                 shape: sl,
                 stride: contiguous_stride(sl),
             },
-                mask: None,
-                    alibi_slopes: None,
+            mask: None,
+            alibi_slopes: None,
         },
     )
     .expect("run");
@@ -619,17 +589,7 @@ fn flash_sdpa_bf16_basic() {
     let mut dlse: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse");
 
-    let desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        DK,
-        DV,
-        scale,
-        false,
-        ElementKind::Bf16,
-    );
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, DK, DV, scale, false, ElementKind::Bf16);
     let plan =
         FlashSdpaPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -661,8 +621,8 @@ fn flash_sdpa_bf16_basic() {
                 shape: sl,
                 stride: contiguous_stride(sl),
             },
-                mask: None,
-                    alibi_slopes: None,
+            mask: None,
+            alibi_slopes: None,
         },
     )
     .expect("run");
@@ -721,8 +681,14 @@ fn run_broadcast_route_case(b: i32, h: i32, q: i32, k: i32, d: i32, tol_mul: f32
         .collect::<Vec<_>>();
 
     let q_h: Vec<f16> = q_f64.iter().map(|&x| f16::from_f32(x as f32)).collect();
-    let k_h: Vec<f16> = k_one_head_f64.iter().map(|&x| f16::from_f32(x as f32)).collect();
-    let v_h: Vec<f16> = v_one_head_f64.iter().map(|&x| f16::from_f32(x as f32)).collect();
+    let k_h: Vec<f16> = k_one_head_f64
+        .iter()
+        .map(|&x| f16::from_f32(x as f32))
+        .collect();
+    let v_h: Vec<f16> = v_one_head_f64
+        .iter()
+        .map(|&x| f16::from_f32(x as f32))
+        .collect();
 
     let dq = DeviceBuffer::from_slice(&ctx, &q_h).expect("up q");
     let dk = DeviceBuffer::from_slice(&ctx, &k_h).expect("up k");
@@ -745,8 +711,8 @@ fn run_broadcast_route_case(b: i32, h: i32, q: i32, k: i32, d: i32, tol_mul: f32
     let stl = contiguous_stride(sl);
 
     let desc = FlashSdpaDescriptor::new(b, h, q, k, d, d, scale, false, ElementKind::F16);
-    let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     // Workspace sized from the plan (FA2 backend needs LSE scratch;
     // bespoke/sm89 reports 0).
@@ -763,15 +729,36 @@ fn run_broadcast_route_case(b: i32, h: i32, q: i32, k: i32, d: i32, tol_mul: f32
             None => Workspace::None,
         };
         let args = FlashSdpaArgs::<f16> {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: stq },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: stk },
-            v: TensorRef { data: dv.as_slice(), shape: sk, stride: stk },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: sty },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: stl },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: stq,
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: stk,
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sk,
+                stride: stk,
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: sty,
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: stl,
+            },
             mask: None,
             alibi_slopes: None,
         };
-        plan.run(&stream, wsp, args).unwrap_or_else(|e| panic!("{label}: broadcast run: {e:?}"));
+        plan.run(&stream, wsp, args)
+            .unwrap_or_else(|e| panic!("{label}: broadcast run: {e:?}"));
     }
     stream.synchronize().expect("sync");
 
@@ -798,15 +785,36 @@ fn run_broadcast_route_case(b: i32, h: i32, q: i32, k: i32, d: i32, tol_mul: f32
             None => Workspace::None,
         };
         let args_rep = FlashSdpaArgs::<f16> {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: stq },
-            k: TensorRef { data: dk_rep.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv_rep.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            y: TensorMut { data: dy_rep.as_slice_mut(), shape: sy, stride: sty },
-            lse: TensorMut { data: dlse_rep.as_slice_mut(), shape: sl, stride: stl },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: stq,
+            },
+            k: TensorRef {
+                data: dk_rep.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv_rep.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            y: TensorMut {
+                data: dy_rep.as_slice_mut(),
+                shape: sy,
+                stride: sty,
+            },
+            lse: TensorMut {
+                data: dlse_rep.as_slice_mut(),
+                shape: sl,
+                stride: stl,
+            },
             mask: None,
             alibi_slopes: None,
         };
-        plan.run(&stream, wsp, args_rep).unwrap_or_else(|e| panic!("{label}: rep run: {e:?}"));
+        plan.run(&stream, wsp, args_rep)
+            .unwrap_or_else(|e| panic!("{label}: rep run: {e:?}"));
     }
     stream.synchronize().expect("sync rep");
 

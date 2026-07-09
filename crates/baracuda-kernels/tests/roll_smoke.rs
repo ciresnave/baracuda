@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `RollPlan<f32, N>` — cyclic shift along axes.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RollArgs, RollDescriptor, RollPlan, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, PlanPreference, RollArgs, RollDescriptor, RollPlan, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -36,8 +36,8 @@ fn roll_1d_positive() {
         shifts,
         element: ElementKind::F32,
     };
-    let plan = RollPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RollPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RollArgs::<f32, 1> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -81,8 +81,8 @@ fn roll_1d_negative() {
         shifts,
         element: ElementKind::F32,
     };
-    let plan = RollPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RollPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RollArgs::<f32, 1> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -129,8 +129,8 @@ fn roll_2d_mixed() {
         shifts,
         element: ElementKind::F32,
     };
-    let plan = RollPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RollPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RollArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -169,8 +169,8 @@ fn roll_zero_shifts_is_copy() {
         shifts,
         element: ElementKind::F32,
     };
-    let plan = RollPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        RollPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = RollArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),

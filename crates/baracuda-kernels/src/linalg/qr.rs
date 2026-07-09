@@ -38,10 +38,10 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cusolverDnCreate, cusolverDnDestroy, cusolverDnDgeqrf, cusolverDnDgeqrf_bufferSize,
-    cusolverDnDormqr, cusolverDnDormqr_bufferSize, cusolverDnHandle_t, cusolverDnSetStream,
-    cusolverDnSgeqrf, cusolverDnSgeqrf_bufferSize, cusolverDnSormqr, cusolverDnSormqr_bufferSize,
-    CUBLAS_OP_N, CUBLAS_SIDE_LEFT,
+    CUBLAS_OP_N, CUBLAS_SIDE_LEFT, cusolverDnCreate, cusolverDnDestroy, cusolverDnDgeqrf,
+    cusolverDnDgeqrf_bufferSize, cusolverDnDormqr, cusolverDnDormqr_bufferSize, cusolverDnHandle_t,
+    cusolverDnSetStream, cusolverDnSgeqrf, cusolverDnSgeqrf_bufferSize, cusolverDnSormqr,
+    cusolverDnSormqr_bufferSize,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
@@ -371,9 +371,8 @@ macro_rules! impl_qr_run {
 
                 // 1. geqrf — overwrites `a` with R (upper) + Householder
                 //    vectors (strict lower), populates `tau`.
-                let status = unsafe {
-                    $geqrf(h, m, n, a_ptr, m, tau_ptr, tail_ptr, lwork, info_ptr)
-                };
+                let status =
+                    unsafe { $geqrf(h, m, n, a_ptr, m, tau_ptr, tail_ptr, lwork, info_ptr) };
                 if status != 0 {
                     return Err(Error::CutlassInternal(-status));
                 }
@@ -384,7 +383,12 @@ macro_rules! impl_qr_run {
                 let bytes = elem_count * elem_size;
                 let mut host_a: Vec<$T> = vec![<$T as Default>::default(); elem_count];
                 unsafe {
-                    copy_d2h(host_a.as_mut_ptr() as *mut c_void, a_ptr as *const c_void, bytes, stream)?;
+                    copy_d2h(
+                        host_a.as_mut_ptr() as *mut c_void,
+                        a_ptr as *const c_void,
+                        bytes,
+                        stream,
+                    )?;
                 }
                 stream.synchronize().map_err(Error::Driver)?;
                 for j in 0..(n as usize) {
@@ -396,7 +400,12 @@ macro_rules! impl_qr_run {
                 }
                 let r_ptr = args.r.data.as_raw().0 as *mut $T;
                 unsafe {
-                    copy_h2d_typed(r_ptr as *mut c_void, host_a.as_ptr() as *const c_void, bytes, stream)?;
+                    copy_h2d_typed(
+                        r_ptr as *mut c_void,
+                        host_a.as_ptr() as *const c_void,
+                        bytes,
+                        stream,
+                    )?;
                 }
 
                 // 3. Stage an identity into `q`, then `ormqr` overwrites
@@ -407,7 +416,12 @@ macro_rules! impl_qr_run {
                 let q_ptr = args.q.data.as_raw().0 as *mut $T;
                 let q_bytes = m_sz * elem_size;
                 unsafe {
-                    copy_h2d_typed(q_ptr as *mut c_void, host_id.as_ptr() as *const c_void, q_bytes, stream)?;
+                    copy_h2d_typed(
+                        q_ptr as *mut c_void,
+                        host_id.as_ptr() as *const c_void,
+                        q_bytes,
+                        stream,
+                    )?;
                 }
                 stream.synchronize().map_err(Error::Driver)?;
 
@@ -416,7 +430,9 @@ macro_rules! impl_qr_run {
                         h,
                         CUBLAS_SIDE_LEFT,
                         CUBLAS_OP_N,
-                        m, m, k,
+                        m,
+                        m,
+                        k,
                         a_ptr as *const $T,
                         m,
                         tau_ptr as *const $T,
@@ -469,9 +485,7 @@ unsafe fn copy_d2h(
             h_stream: *mut c_void,
         ) -> CUresult;
     }
-    let status = unsafe {
-        cuMemcpyDtoHAsync_v2(dst, src as u64, bytes, stream.as_raw())
-    };
+    let status = unsafe { cuMemcpyDtoHAsync_v2(dst, src as u64, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }
@@ -494,9 +508,7 @@ unsafe fn copy_h2d_typed(
             h_stream: *mut c_void,
         ) -> CUresult;
     }
-    let status = unsafe {
-        cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw())
-    };
+    let status = unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }

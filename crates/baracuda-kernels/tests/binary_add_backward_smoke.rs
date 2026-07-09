@@ -8,10 +8,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_add_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan,
-    BinaryKind, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan, BinaryKind, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -32,10 +32,8 @@ fn run_case_f32<const N: usize>(shape: [i32; N]) {
     let expected_db = host_dy.clone();
 
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
-    let mut dev_da: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc da");
-    let mut dev_db: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc db");
+    let mut dev_da: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc da");
+    let mut dev_db: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc db");
 
     let stride = contiguous_stride(shape);
     let desc = BinaryBackwardDescriptor {
@@ -122,11 +120,23 @@ fn add_backward_f16_3d() {
     let plan = BinaryBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         a: None,
         b: None,
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -135,10 +145,18 @@ fn add_backward_f16_3d() {
     dev_da.copy_to_host(&mut got_da).expect("download da");
     dev_db.copy_to_host(&mut got_db).expect("download db");
     for (i, (g, e)) in got_da.iter().zip(host_dy.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "add backward f16 da mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "add backward f16 da mismatch @ {i}"
+        );
     }
     for (i, (g, e)) in got_db.iter().zip(host_dy.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "add backward f16 db mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "add backward f16 db mismatch @ {i}"
+        );
     }
 }
 
@@ -163,11 +181,23 @@ fn add_backward_bf16_3d() {
     let plan = BinaryBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         a: None,
         b: None,
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -176,10 +206,18 @@ fn add_backward_bf16_3d() {
     dev_da.copy_to_host(&mut got_da).expect("download da");
     dev_db.copy_to_host(&mut got_db).expect("download db");
     for (i, (g, e)) in got_da.iter().zip(host_dy.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "add backward bf16 da mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "add backward bf16 da mismatch @ {i}"
+        );
     }
     for (i, (g, e)) in got_db.iter().zip(host_dy.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "add backward bf16 db mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "add backward bf16 db mismatch @ {i}"
+        );
     }
 }
 
@@ -202,11 +240,23 @@ fn add_backward_f64_3d() {
     let plan = BinaryBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
         a: None,
         b: None,
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -215,10 +265,18 @@ fn add_backward_f64_3d() {
     dev_da.copy_to_host(&mut got_da).expect("download da");
     dev_db.copy_to_host(&mut got_db).expect("download db");
     for (i, (g, e)) in got_da.iter().zip(host_dy.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "add backward f64 da mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "add backward f64 da mismatch @ {i}"
+        );
     }
     for (i, (g, e)) in got_db.iter().zip(host_dy.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "add backward f64 db mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "add backward f64 db mismatch @ {i}"
+        );
     }
 }
 
@@ -243,11 +301,23 @@ fn mul_backward_requires_saves() {
     let mut dev_db: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("alloc db");
     let stride = contiguous_stride([4]);
     let args = BinaryBackwardArgs::<f32, 1> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: [4], stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: [4],
+            stride,
+        },
         a: None,
         b: None,
-        da: TensorMut { data: dev_da.as_slice_mut(), shape: [4], stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape: [4], stride },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape: [4],
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape: [4],
+            stride,
+        },
     };
     let err = plan.can_implement(&args);
     assert!(

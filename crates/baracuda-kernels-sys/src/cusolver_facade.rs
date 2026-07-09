@@ -94,25 +94,25 @@ use core::ffi::c_void;
 use core::ptr;
 
 use super::{
-    cuComplex, cuDoubleComplex, cudaDataType, cusolverDnCheevd, cusolverDnCheevd_bufferSize,
-    cusolverDnCreate, cusolverDnCreateGesvdjInfo, cusolverDnCreateParams, cusolverDnDDgels,
+    CUBLAS_FILL_MODE_LOWER, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUDA_C_32F, CUDA_C_64F,
+    CUDA_R_32F, CUDA_R_64F, CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR, cuComplex,
+    cuDoubleComplex, cudaDataType, cusolverDnCheevd, cusolverDnCheevd_bufferSize, cusolverDnCreate,
+    cusolverDnCreateGesvdjInfo, cusolverDnCreateParams, cusolverDnDDgels,
     cusolverDnDDgels_bufferSize, cusolverDnDestroy, cusolverDnDestroyGesvdjInfo,
-    cusolverDnDestroyParams, cusolverDnDgeqrf, cusolverDnDgeqrf_bufferSize,
-    cusolverDnDgesvd, cusolverDnDgesvd_bufferSize, cusolverDnDgesvdaStridedBatched,
+    cusolverDnDestroyParams, cusolverDnDgeqrf, cusolverDnDgeqrf_bufferSize, cusolverDnDgesvd,
+    cusolverDnDgesvd_bufferSize, cusolverDnDgesvdaStridedBatched,
     cusolverDnDgesvdaStridedBatched_bufferSize, cusolverDnDgesvdjBatched,
     cusolverDnDgesvdjBatched_bufferSize, cusolverDnDgetrf, cusolverDnDgetrf_bufferSize,
-    cusolverDnDgetrs, cusolverDnDormqr, cusolverDnDpotrf, cusolverDnDpotrfBatched,
-    cusolverDnDpotrf_bufferSize, cusolverDnDsyevd, cusolverDnDsyevd_bufferSize, cusolverDnHandle_t,
+    cusolverDnDgetrs, cusolverDnDormqr, cusolverDnDpotrf, cusolverDnDpotrf_bufferSize,
+    cusolverDnDpotrfBatched, cusolverDnDsyevd, cusolverDnDsyevd_bufferSize, cusolverDnHandle_t,
     cusolverDnParams_t, cusolverDnSSgels, cusolverDnSSgels_bufferSize, cusolverDnSetStream,
     cusolverDnSgeqrf, cusolverDnSgeqrf_bufferSize, cusolverDnSgesvd, cusolverDnSgesvd_bufferSize,
     cusolverDnSgesvdaStridedBatched, cusolverDnSgesvdaStridedBatched_bufferSize,
     cusolverDnSgesvdjBatched, cusolverDnSgesvdjBatched_bufferSize, cusolverDnSgetrf,
     cusolverDnSgetrf_bufferSize, cusolverDnSgetrs, cusolverDnSormqr, cusolverDnSpotrf,
-    cusolverDnSpotrfBatched, cusolverDnSpotrf_bufferSize, cusolverDnSsyevd,
+    cusolverDnSpotrf_bufferSize, cusolverDnSpotrfBatched, cusolverDnSsyevd,
     cusolverDnSsyevd_bufferSize, cusolverDnXgeev, cusolverDnXgeev_bufferSize, cusolverDnZheevd,
-    cusolverDnZheevd_bufferSize, gesvdjInfo_t, CUBLAS_FILL_MODE_LOWER, CUBLAS_FILL_MODE_UPPER,
-    CUBLAS_OP_N, CUDA_C_32F, CUDA_C_64F, CUDA_R_32F, CUDA_R_64F,
-    CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR,
+    cusolverDnZheevd_bufferSize, gesvdjInfo_t,
 };
 
 // =============================================================================
@@ -126,11 +126,7 @@ const INTERNAL: i32 = 5;
 
 #[inline]
 fn map_cusolver(status: i32) -> i32 {
-    if status == 0 {
-        OK
-    } else {
-        INTERNAL
-    }
+    if status == 0 { OK } else { INTERNAL }
 }
 
 // =============================================================================
@@ -276,7 +272,14 @@ macro_rules! cholesky_pair {
             }
             let mut lwork: i32 = 0;
             let st = unsafe {
-                $potrf_bs(h.h, CUBLAS_FILL_MODE_LOWER, n, ptr::null_mut(), lda, &mut lwork)
+                $potrf_bs(
+                    h.h,
+                    CUBLAS_FILL_MODE_LOWER,
+                    n,
+                    ptr::null_mut(),
+                    lda,
+                    &mut lwork,
+                )
             };
             if st != 0 {
                 return INTERNAL;
@@ -366,12 +369,7 @@ macro_rules! cholesky_pair {
             batch_size: i32,
             stream: *mut c_void,
         ) -> i32 {
-            if n <= 0
-                || lda < n
-                || batch_size <= 0
-                || a_array.is_null()
-                || info_array.is_null()
-            {
+            if n <= 0 || lda < n || batch_size <= 0 || a_array.is_null() || info_array.is_null() {
                 return INVALID;
             }
             if !matches!(uplo, CUBLAS_FILL_MODE_LOWER | CUBLAS_FILL_MODE_UPPER) {
@@ -468,8 +466,12 @@ macro_rules! lu_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if m <= 0 || n <= 0 || lda < m
-                || a_inout.is_null() || pivots_out.is_null() || info_out.is_null()
+            if m <= 0
+                || n <= 0
+                || lda < m
+                || a_inout.is_null()
+                || pivots_out.is_null()
+                || info_out.is_null()
             {
                 return INVALID;
             }
@@ -577,8 +579,13 @@ macro_rules! qr_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if m <= 0 || n <= 0 || m < n || lda < m
-                || a_inout.is_null() || tau_out.is_null() || info_out.is_null()
+            if m <= 0
+                || n <= 0
+                || m < n
+                || lda < m
+                || a_inout.is_null()
+                || tau_out.is_null()
+                || info_out.is_null()
             {
                 return INVALID;
             }
@@ -668,8 +675,15 @@ macro_rules! ormqr_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if m <= 0 || n <= 0 || k <= 0 || lda <= 0 || ldc <= 0
-                || a_packed.is_null() || tau.is_null() || c_inout.is_null() || info_out.is_null()
+            if m <= 0
+                || n <= 0
+                || k <= 0
+                || lda <= 0
+                || ldc <= 0
+                || a_packed.is_null()
+                || tau.is_null()
+                || c_inout.is_null()
+                || info_out.is_null()
             {
                 return INVALID;
             }
@@ -770,8 +784,13 @@ macro_rules! svd_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if m <= 0 || n <= 0 || m < n || lda < m
-                || a_inout.is_null() || s_out.is_null() || info_out.is_null()
+            if m <= 0
+                || n <= 0
+                || m < n
+                || lda < m
+                || a_inout.is_null()
+                || s_out.is_null()
+                || info_out.is_null()
             {
                 return INVALID;
             }
@@ -878,8 +897,20 @@ macro_rules! svd_batched_pair {
             let mut lwork: i32 = 0;
             let st = unsafe {
                 $gesvdj_bs(
-                    h.h, jobz, n, n, ptr::null(), n, ptr::null(), ptr::null(), n, ptr::null(), n,
-                    &mut lwork, p.p, batch_size,
+                    h.h,
+                    jobz,
+                    n,
+                    n,
+                    ptr::null(),
+                    n,
+                    ptr::null(),
+                    ptr::null(),
+                    n,
+                    ptr::null(),
+                    n,
+                    &mut lwork,
+                    p.p,
+                    batch_size,
                 )
             };
             if st != 0 {
@@ -913,8 +944,14 @@ macro_rules! svd_batched_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if n <= 0 || lda < n || ldu < n || ldv < n || batch_size <= 0
-                || a_inout.is_null() || s_out.is_null() || info_out.is_null()
+            if n <= 0
+                || lda < n
+                || ldu < n
+                || ldv < n
+                || batch_size <= 0
+                || a_inout.is_null()
+                || s_out.is_null()
+                || info_out.is_null()
             {
                 return INVALID;
             }
@@ -937,8 +974,20 @@ macro_rules! svd_batched_pair {
             let mut lwork: i32 = 0;
             let st = unsafe {
                 $gesvdj_bs(
-                    h.h, jobz, n, n, ptr::null(), lda, ptr::null(), ptr::null(), ldu, ptr::null(),
-                    ldv, &mut lwork, p.p, batch_size,
+                    h.h,
+                    jobz,
+                    n,
+                    n,
+                    ptr::null(),
+                    lda,
+                    ptr::null(),
+                    ptr::null(),
+                    ldu,
+                    ptr::null(),
+                    ldv,
+                    &mut lwork,
+                    p.p,
+                    batch_size,
                 )
             };
             if st != 0 {
@@ -1017,7 +1066,11 @@ macro_rules! svda_batched_pair {
             batch_size: i32,
             out_bytes: *mut usize,
         ) -> i32 {
-            if m <= 0 || n <= 0 || batch_size <= 0 || rank < 1 || rank > m.min(n)
+            if m <= 0
+                || n <= 0
+                || batch_size <= 0
+                || rank < 1
+                || rank > m.min(n)
                 || out_bytes.is_null()
             {
                 return INVALID;
@@ -1037,8 +1090,24 @@ macro_rules! svda_batched_pair {
             let mut lwork: i32 = 0;
             let st = unsafe {
                 $gesvda_bs(
-                    h.h, jobz, rank, m, n, ptr::null(), m, stride_a, ptr::null(), stride_s,
-                    ptr::null(), m, stride_u, ptr::null(), n, stride_v, &mut lwork, batch_size,
+                    h.h,
+                    jobz,
+                    rank,
+                    m,
+                    n,
+                    ptr::null(),
+                    m,
+                    stride_a,
+                    ptr::null(),
+                    stride_s,
+                    ptr::null(),
+                    m,
+                    stride_u,
+                    ptr::null(),
+                    n,
+                    stride_v,
+                    &mut lwork,
+                    batch_size,
                 )
             };
             if st != 0 {
@@ -1083,9 +1152,17 @@ macro_rules! svda_batched_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if m <= 0 || n <= 0 || batch_size <= 0 || rank < 1 || rank > m.min(n)
-                || lda < m || ldu < m || ldv < n
-                || a_in.is_null() || s_out.is_null() || info_out.is_null()
+            if m <= 0
+                || n <= 0
+                || batch_size <= 0
+                || rank < 1
+                || rank > m.min(n)
+                || lda < m
+                || ldu < m
+                || ldv < n
+                || a_in.is_null()
+                || s_out.is_null()
+                || info_out.is_null()
             {
                 return INVALID;
             }
@@ -1103,8 +1180,24 @@ macro_rules! svda_batched_pair {
             let mut lwork: i32 = 0;
             let st = unsafe {
                 $gesvda_bs(
-                    h.h, jobz, rank, m, n, ptr::null(), lda, stride_a, ptr::null(), stride_s,
-                    ptr::null(), ldu, stride_u, ptr::null(), ldv, stride_v, &mut lwork, batch_size,
+                    h.h,
+                    jobz,
+                    rank,
+                    m,
+                    n,
+                    ptr::null(),
+                    lda,
+                    stride_a,
+                    ptr::null(),
+                    stride_s,
+                    ptr::null(),
+                    ldu,
+                    stride_u,
+                    ptr::null(),
+                    ldv,
+                    stride_v,
+                    &mut lwork,
+                    batch_size,
                 )
             };
             if st != 0 {
@@ -1191,7 +1284,13 @@ macro_rules! eigh_real_pair {
             let mut lwork: i32 = 0;
             let st = unsafe {
                 $syevd_bs(
-                    h.h, CUSOLVER_EIG_MODE_VECTOR, uplo, n, ptr::null(), n, ptr::null(),
+                    h.h,
+                    CUSOLVER_EIG_MODE_VECTOR,
+                    uplo,
+                    n,
+                    ptr::null(),
+                    n,
+                    ptr::null(),
                     &mut lwork,
                 )
             };
@@ -1221,8 +1320,11 @@ macro_rules! eigh_real_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if n <= 0 || lda < n
-                || a_inout.is_null() || eigenvalues_out.is_null() || info_out.is_null()
+            if n <= 0
+                || lda < n
+                || a_inout.is_null()
+                || eigenvalues_out.is_null()
+                || info_out.is_null()
             {
                 return INVALID;
             }
@@ -1237,7 +1339,13 @@ macro_rules! eigh_real_pair {
             let mut lwork: i32 = 0;
             let st = unsafe {
                 $syevd_bs(
-                    h.h, CUSOLVER_EIG_MODE_VECTOR, uplo, n, ptr::null(), lda, ptr::null(),
+                    h.h,
+                    CUSOLVER_EIG_MODE_VECTOR,
+                    uplo,
+                    n,
+                    ptr::null(),
+                    lda,
+                    ptr::null(),
                     &mut lwork,
                 )
             };
@@ -1301,9 +1409,7 @@ pub unsafe extern "C" fn baracuda_kernels_eigh_c32_run(
     workspace_bytes: usize,
     stream: *mut c_void,
 ) -> i32 {
-    if n <= 0 || lda < n
-        || a_inout.is_null() || eigenvalues_out.is_null() || info_out.is_null()
-    {
+    if n <= 0 || lda < n || a_inout.is_null() || eigenvalues_out.is_null() || info_out.is_null() {
         return INVALID;
     }
     if !matches!(uplo, CUBLAS_FILL_MODE_LOWER | CUBLAS_FILL_MODE_UPPER) {
@@ -1317,7 +1423,14 @@ pub unsafe extern "C" fn baracuda_kernels_eigh_c32_run(
     let mut lwork: i32 = 0;
     let st = unsafe {
         cusolverDnCheevd_bufferSize(
-            h.h, CUSOLVER_EIG_MODE_VECTOR, uplo, n, ptr::null(), lda, ptr::null(), &mut lwork,
+            h.h,
+            CUSOLVER_EIG_MODE_VECTOR,
+            uplo,
+            n,
+            ptr::null(),
+            lda,
+            ptr::null(),
+            &mut lwork,
         )
     };
     if st != 0 {
@@ -1369,7 +1482,14 @@ pub unsafe extern "C" fn baracuda_kernels_eigh_c32_workspace_size(
     let mut lwork: i32 = 0;
     let st = unsafe {
         cusolverDnCheevd_bufferSize(
-            h.h, CUSOLVER_EIG_MODE_VECTOR, uplo, n, ptr::null(), n, ptr::null(), &mut lwork,
+            h.h,
+            CUSOLVER_EIG_MODE_VECTOR,
+            uplo,
+            n,
+            ptr::null(),
+            n,
+            ptr::null(),
+            &mut lwork,
         )
     };
     if st != 0 {
@@ -1396,9 +1516,7 @@ pub unsafe extern "C" fn baracuda_kernels_eigh_c64_run(
     workspace_bytes: usize,
     stream: *mut c_void,
 ) -> i32 {
-    if n <= 0 || lda < n
-        || a_inout.is_null() || eigenvalues_out.is_null() || info_out.is_null()
-    {
+    if n <= 0 || lda < n || a_inout.is_null() || eigenvalues_out.is_null() || info_out.is_null() {
         return INVALID;
     }
     if !matches!(uplo, CUBLAS_FILL_MODE_LOWER | CUBLAS_FILL_MODE_UPPER) {
@@ -1412,7 +1530,14 @@ pub unsafe extern "C" fn baracuda_kernels_eigh_c64_run(
     let mut lwork: i32 = 0;
     let st = unsafe {
         cusolverDnZheevd_bufferSize(
-            h.h, CUSOLVER_EIG_MODE_VECTOR, uplo, n, ptr::null(), lda, ptr::null(), &mut lwork,
+            h.h,
+            CUSOLVER_EIG_MODE_VECTOR,
+            uplo,
+            n,
+            ptr::null(),
+            lda,
+            ptr::null(),
+            &mut lwork,
         )
     };
     if st != 0 {
@@ -1464,7 +1589,14 @@ pub unsafe extern "C" fn baracuda_kernels_eigh_c64_workspace_size(
     let mut lwork: i32 = 0;
     let st = unsafe {
         cusolverDnZheevd_bufferSize(
-            h.h, CUSOLVER_EIG_MODE_VECTOR, uplo, n, ptr::null(), n, ptr::null(), &mut lwork,
+            h.h,
+            CUSOLVER_EIG_MODE_VECTOR,
+            uplo,
+            n,
+            ptr::null(),
+            n,
+            ptr::null(),
+            &mut lwork,
         )
     };
     if st != 0 {
@@ -1594,9 +1726,7 @@ pub unsafe extern "C" fn baracuda_kernels_eig_run(
     workspace_bytes_host: usize,
     stream: *mut c_void,
 ) -> i32 {
-    if n <= 0 || lda < n
-        || a_inout.is_null() || w_out.is_null() || info_out.is_null()
-    {
+    if n <= 0 || lda < n || a_inout.is_null() || w_out.is_null() || info_out.is_null() {
         return INVALID;
     }
     if !matches!(jobvl, CUSOLVER_EIG_MODE_VECTOR | CUSOLVER_EIG_MODE_NOVECTOR) {
@@ -1708,12 +1838,7 @@ macro_rules! lstsq_pair {
         /// # Safety
         /// `out_bytes` must point to a writable `usize`.
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $ws_name(
-            m: i32,
-            n: i32,
-            nrhs: i32,
-            out_bytes: *mut usize,
-        ) -> i32 {
+        pub unsafe extern "C" fn $ws_name(m: i32, n: i32, nrhs: i32, out_bytes: *mut usize) -> i32 {
             if m <= 0 || n <= 0 || nrhs <= 0 || m < n || out_bytes.is_null() {
                 return INVALID;
             }
@@ -1725,8 +1850,18 @@ macro_rules! lstsq_pair {
             let mut lwork_bytes: usize = 0;
             let st = unsafe {
                 $gels_bs(
-                    h.h, m, n, nrhs, ptr::null_mut(), m, ptr::null_mut(), m, ptr::null_mut(), n,
-                    ptr::null_mut(), &mut lwork_bytes,
+                    h.h,
+                    m,
+                    n,
+                    nrhs,
+                    ptr::null_mut(),
+                    m,
+                    ptr::null_mut(),
+                    m,
+                    ptr::null_mut(),
+                    n,
+                    ptr::null_mut(),
+                    &mut lwork_bytes,
                 )
             };
             if st != 0 {
@@ -1769,10 +1904,18 @@ macro_rules! lstsq_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if m <= 0 || n <= 0 || nrhs <= 0 || m < n
-                || lda < m || ldb < m || ldx < n
-                || a_inout.is_null() || b_inout.is_null() || x_out.is_null()
-                || niters_out.is_null() || info_out.is_null()
+            if m <= 0
+                || n <= 0
+                || nrhs <= 0
+                || m < n
+                || lda < m
+                || ldb < m
+                || ldx < n
+                || a_inout.is_null()
+                || b_inout.is_null()
+                || x_out.is_null()
+                || niters_out.is_null()
+                || info_out.is_null()
             {
                 return INVALID;
             }
@@ -1791,8 +1934,18 @@ macro_rules! lstsq_pair {
             let mut lwork_bytes: usize = 0;
             let st = unsafe {
                 $gels_bs(
-                    h.h, m, n, nrhs, ptr::null_mut(), lda, ptr::null_mut(), ldb,
-                    ptr::null_mut(), ldx, ptr::null_mut(), &mut lwork_bytes,
+                    h.h,
+                    m,
+                    n,
+                    nrhs,
+                    ptr::null_mut(),
+                    lda,
+                    ptr::null_mut(),
+                    ldb,
+                    ptr::null_mut(),
+                    ldx,
+                    ptr::null_mut(),
+                    &mut lwork_bytes,
                 )
             };
             if st != 0 {
@@ -1895,8 +2048,13 @@ macro_rules! solve_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if n <= 0 || nrhs <= 0 || lda < n || ldb < n
-                || a_inout.is_null() || pivots_out.is_null() || b_inout.is_null()
+            if n <= 0
+                || nrhs <= 0
+                || lda < n
+                || ldb < n
+                || a_inout.is_null()
+                || pivots_out.is_null()
+                || b_inout.is_null()
                 || info_out.is_null()
             {
                 return INVALID;
@@ -2029,8 +2187,12 @@ macro_rules! inverse_pair {
             workspace_bytes: usize,
             stream: *mut c_void,
         ) -> i32 {
-            if n <= 0 || lda < n || ldinv < n
-                || a_inout.is_null() || pivots_out.is_null() || inv_inout.is_null()
+            if n <= 0
+                || lda < n
+                || ldinv < n
+                || a_inout.is_null()
+                || pivots_out.is_null()
+                || inv_inout.is_null()
                 || info_out.is_null()
             {
                 return INVALID;

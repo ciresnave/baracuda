@@ -11,10 +11,10 @@
 //! Tolerance: matches the contig smoke test (Q8_0 ≈ 1e-2 relative due
 //! to fp16 scale round-trip; Q8_K ≈ 1e-3 since it has an f32 scale).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BlockQ8K, BlockQ8_0, BlockQ4_0, Error, GgufBlockFormat, GgufMmvqArgs,
-    GgufMmvqDescriptor, GgufMmvqPlan, PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    BlockQ4_0, BlockQ8_0, BlockQ8K, Error, GgufBlockFormat, GgufMmvqArgs, GgufMmvqDescriptor,
+    GgufMmvqPlan, PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -28,7 +28,10 @@ fn setup() -> (Context, Stream) {
 // ---- helpers --------------------------------------------------------------
 
 fn pack_q8_0_row(d_f32: f32, qs: &[i8; 32]) -> Vec<u8> {
-    let blk = BlockQ8_0 { d: half::f16::from_f32(d_f32).to_bits(), qs: *qs };
+    let blk = BlockQ8_0 {
+        d: half::f16::from_f32(d_f32).to_bits(),
+        qs: *qs,
+    };
     let bytes: &[u8] = unsafe {
         core::slice::from_raw_parts(
             (&blk as *const BlockQ8_0) as *const u8,
@@ -40,7 +43,11 @@ fn pack_q8_0_row(d_f32: f32, qs: &[i8; 32]) -> Vec<u8> {
 
 fn pack_q8_k_row(d_f32: f32, qs: &[i8; 256]) -> Vec<u8> {
     let bsums = [0i16; 16];
-    let blk = BlockQ8K { d: d_f32, qs: *qs, bsums };
+    let blk = BlockQ8K {
+        d: d_f32,
+        qs: *qs,
+        bsums,
+    };
     let bytes: &[u8] = unsafe {
         core::slice::from_raw_parts(
             (&blk as *const BlockQ8K) as *const u8,
@@ -60,7 +67,10 @@ fn pack_q4_0_row(d_f32: f32, vals: &[i8; 32]) -> Vec<u8> {
         let hi = (vals[i + 16] + 8) as u8 & 0x0f;
         qs[i] = lo | (hi << 4);
     }
-    let blk = BlockQ4_0 { d: half::f16::from_f32(d_f32).to_bits(), qs };
+    let blk = BlockQ4_0 {
+        d: half::f16::from_f32(d_f32).to_bits(),
+        qs,
+    };
     let bytes: &[u8] = unsafe {
         core::slice::from_raw_parts(
             (&blk as *const BlockQ4_0) as *const u8,
@@ -667,12 +677,8 @@ fn mmvq_w_offset_alignment_misaligned_rejected_debug() {
         let r = GgufMmvqPlan::<f32>::select(&stream, &desc, PlanPreference::default());
         match r {
             Err(Error::InvalidProblem(_)) => {} // expected
-            Err(e) => panic!(
-                "expected InvalidProblem for {fmt:?} @ offset {off}; got Err({e:?})"
-            ),
-            Ok(_) => panic!(
-                "expected InvalidProblem for {fmt:?} @ offset {off}; got Ok(_)"
-            ),
+            Err(e) => panic!("expected InvalidProblem for {fmt:?} @ offset {off}; got Err({e:?})"),
+            Ok(_) => panic!("expected InvalidProblem for {fmt:?} @ offset {off}; got Ok(_)"),
         }
     }
 }

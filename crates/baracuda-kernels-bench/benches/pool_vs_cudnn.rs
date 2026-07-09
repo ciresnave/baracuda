@@ -14,17 +14,17 @@ fn main() {
 #[cfg(feature = "cudnn")]
 mod cudnn_impl {
     use baracuda_cudnn::{
-        pooling_forward, CudnnDataType, DType, Handle as CudnnHandle, PoolingDescriptor,
-        PoolingMode as CudnnPoolMode, TensorDescriptor, TensorFormat,
+        CudnnDataType, DType, Handle as CudnnHandle, PoolingDescriptor,
+        PoolingMode as CudnnPoolMode, TensorDescriptor, TensorFormat, pooling_forward,
     };
     use baracuda_driver::DeviceBuffer;
     use baracuda_kernels::{
-        contiguous_stride, AvgPool2dPlan, ElementKind, MaxPool2dPlan, PlanPreference,
-        Pool2dDescriptor, Pool2dFwArgs, PoolMode, TensorMut, TensorRef, Workspace,
+        AvgPool2dPlan, ElementKind, MaxPool2dPlan, PlanPreference, Pool2dDescriptor, Pool2dFwArgs,
+        PoolMode, TensorMut, TensorRef, Workspace, contiguous_stride,
     };
     use baracuda_kernels_bench::{
-        append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-        PhaseTwentyNineRow, PoolShape, PytorchBaseline, POOL_SWEEP,
+        POOL_SWEEP, PhaseTwentyNineRow, PoolShape, PytorchBaseline, append_csv_row,
+        measure_median_ns, setup_device, time_with_events, warmup,
     };
     use criterion::{BenchmarkId, Criterion};
     use half::f16;
@@ -79,8 +79,7 @@ mod cudnn_impl {
             )
             .with_padding(shape.pad, shape.pad)
             .with_stride(shape.stride, shape.stride);
-            let plan = match MaxPool2dPlan::<T>::select(&stream, &desc, PlanPreference::default())
-            {
+            let plan = match MaxPool2dPlan::<T>::select(&stream, &desc, PlanPreference::default()) {
                 Ok(p) => p,
                 Err(_) => continue,
             };
@@ -103,7 +102,8 @@ mod cudnn_impl {
                         stride: sty,
                     },
                 };
-                plan.run_fw(&stream, Workspace::None, args).expect("baracuda maxpool");
+                plan.run_fw(&stream, Workspace::None, args)
+                    .expect("baracuda maxpool");
             });
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = Pool2dFwArgs::<T> {
@@ -118,7 +118,8 @@ mod cudnn_impl {
                         stride: sty,
                     },
                 };
-                plan.run_fw(&stream, Workspace::None, args).expect("baracuda maxpool");
+                plan.run_fw(&stream, Workspace::None, args)
+                    .expect("baracuda maxpool");
             });
             append_csv_row(
                 BENCH_NAME,
@@ -195,15 +196,9 @@ mod cudnn_impl {
                 shape.w,
             )
             .expect("x_desc");
-            let y_desc = TensorDescriptor::new_4d(
-                TensorFormat::Nchw,
-                dtype,
-                shape.n,
-                shape.c,
-                h_out,
-                w_out,
-            )
-            .expect("y_desc");
+            let y_desc =
+                TensorDescriptor::new_4d(TensorFormat::Nchw, dtype, shape.n, shape.c, h_out, w_out)
+                    .expect("y_desc");
             let pool_desc = PoolingDescriptor::new_2d(
                 CudnnPoolMode::Max,
                 shape.k,
@@ -216,12 +211,16 @@ mod cudnn_impl {
             .expect("pool_desc");
 
             warmup(&stream, || {
-                pooling_forward(&cudnn, &pool_desc, 1.0, &x_desc, &dev_x, 0.0, &y_desc, &mut dev_y)
-                    .expect("cudnn pool");
+                pooling_forward(
+                    &cudnn, &pool_desc, 1.0, &x_desc, &dev_x, 0.0, &y_desc, &mut dev_y,
+                )
+                .expect("cudnn pool");
             });
             let cudnn_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
-                pooling_forward(&cudnn, &pool_desc, 1.0, &x_desc, &dev_x, 0.0, &y_desc, &mut dev_y)
-                    .expect("cudnn pool");
+                pooling_forward(
+                    &cudnn, &pool_desc, 1.0, &x_desc, &dev_x, 0.0, &y_desc, &mut dev_y,
+                )
+                .expect("cudnn pool");
             });
             append_csv_row(
                 BENCH_NAME,
@@ -255,12 +254,8 @@ mod cudnn_impl {
     // parameterized. Same `Pool2dDescriptor` / `Pool2dFwArgs` shape;
     // only the mode + plan type + op label change.
 
-    pub fn bench_baracuda_avg<T>(
-        c: &mut Criterion,
-        dtype_label: &str,
-        kind: ElementKind,
-        fill: T,
-    ) where
+    pub fn bench_baracuda_avg<T>(c: &mut Criterion, dtype_label: &str, kind: ElementKind, fill: T)
+    where
         T: baracuda_kernels::Element + Copy + 'static,
     {
         let (ctx, stream) = setup_device();
@@ -297,8 +292,7 @@ mod cudnn_impl {
             )
             .with_padding(shape.pad, shape.pad)
             .with_stride(shape.stride, shape.stride);
-            let plan = match AvgPool2dPlan::<T>::select(&stream, &desc, PlanPreference::default())
-            {
+            let plan = match AvgPool2dPlan::<T>::select(&stream, &desc, PlanPreference::default()) {
                 Ok(p) => p,
                 Err(_) => continue,
             };
@@ -321,7 +315,8 @@ mod cudnn_impl {
                         stride: sty,
                     },
                 };
-                plan.run_fw(&stream, Workspace::None, args).expect("baracuda avgpool");
+                plan.run_fw(&stream, Workspace::None, args)
+                    .expect("baracuda avgpool");
             });
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = Pool2dFwArgs::<T> {
@@ -336,7 +331,8 @@ mod cudnn_impl {
                         stride: sty,
                     },
                 };
-                plan.run_fw(&stream, Workspace::None, args).expect("baracuda avgpool");
+                plan.run_fw(&stream, Workspace::None, args)
+                    .expect("baracuda avgpool");
             });
             append_csv_row(
                 BENCH_NAME,
@@ -413,15 +409,9 @@ mod cudnn_impl {
                 shape.w,
             )
             .expect("x_desc");
-            let y_desc = TensorDescriptor::new_4d(
-                TensorFormat::Nchw,
-                dtype,
-                shape.n,
-                shape.c,
-                h_out,
-                w_out,
-            )
-            .expect("y_desc");
+            let y_desc =
+                TensorDescriptor::new_4d(TensorFormat::Nchw, dtype, shape.n, shape.c, h_out, w_out)
+                    .expect("y_desc");
             // PyTorch's default `F.avg_pool2d` includes padded cells in the
             // denominator (`count_include_pad=True`); use the cuDNN matching
             // variant for a fair compare.
@@ -437,12 +427,16 @@ mod cudnn_impl {
             .expect("pool_desc");
 
             warmup(&stream, || {
-                pooling_forward(&cudnn, &pool_desc, 1.0, &x_desc, &dev_x, 0.0, &y_desc, &mut dev_y)
-                    .expect("cudnn pool");
+                pooling_forward(
+                    &cudnn, &pool_desc, 1.0, &x_desc, &dev_x, 0.0, &y_desc, &mut dev_y,
+                )
+                .expect("cudnn pool");
             });
             let cudnn_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
-                pooling_forward(&cudnn, &pool_desc, 1.0, &x_desc, &dev_x, 0.0, &y_desc, &mut dev_y)
-                    .expect("cudnn pool");
+                pooling_forward(
+                    &cudnn, &pool_desc, 1.0, &x_desc, &dev_x, 0.0, &y_desc, &mut dev_y,
+                )
+                .expect("cudnn pool");
             });
             append_csv_row(
                 BENCH_NAME,

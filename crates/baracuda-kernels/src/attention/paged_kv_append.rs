@@ -89,7 +89,10 @@ impl<T: Element> PagedKvAppendPlan<T> {
                 "PagedKvAppendPlan: head_dim must be 64, 128, or 256",
             ));
         }
-        if !matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32) {
+        if !matches!(
+            T::KIND,
+            ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32
+        ) {
             return Err(Error::Unsupported(
                 "PagedKvAppendPlan: element type must be f16, bf16, or f32",
             ));
@@ -212,8 +215,14 @@ impl<T: Element> PagedKvAppendPlan<T> {
                         self.desc.paged_kv.page_size,
                         self.desc.paged_kv.num_kv_heads,
                         self.desc.paged_kv.head_dim,
-                        k_ptr, v_ptr, indices_ptr, indptr_ptr, last_page_len_ptr,
-                        key_ptr, value_ptr, stream_ptr,
+                        k_ptr,
+                        v_ptr,
+                        indices_ptr,
+                        indptr_ptr,
+                        last_page_len_ptr,
+                        key_ptr,
+                        value_ptr,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
@@ -232,8 +241,14 @@ impl<T: Element> PagedKvAppendPlan<T> {
                         self.desc.paged_kv.page_size,
                         self.desc.paged_kv.num_kv_heads,
                         self.desc.paged_kv.head_dim,
-                        k_ptr, v_ptr, indices_ptr, indptr_ptr, last_page_len_ptr,
-                        key_ptr, value_ptr, stream_ptr,
+                        k_ptr,
+                        v_ptr,
+                        indices_ptr,
+                        indptr_ptr,
+                        last_page_len_ptr,
+                        key_ptr,
+                        value_ptr,
+                        stream_ptr,
                     )
                 },
                 _ => {

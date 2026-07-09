@@ -11,10 +11,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_cmp_eq_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpKind, BinaryCmpPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpKind, BinaryCmpPlan, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -56,8 +56,8 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
         shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryCmpPlan::<f32, N>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryCmpPlan::<f32, N>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     let args = BinaryCmpArgs::<f32, N> {
         a: TensorRef {
@@ -166,8 +166,8 @@ fn cmp_eq_f32_broadcast_row() {
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryCmpPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryCmpPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f32, 2> {
         a: TensorRef {
             data: dev_a.as_slice(),

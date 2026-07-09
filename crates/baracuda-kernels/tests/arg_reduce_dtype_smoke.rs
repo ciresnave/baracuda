@@ -10,10 +10,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test arg_reduce_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ArgReduceArgs, ArgReduceDescriptor, ArgReduceKind, ArgReducePlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    ArgReduceArgs, ArgReduceDescriptor, ArgReduceKind, ArgReducePlan, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -155,7 +155,11 @@ fn run_arg_reduce_f64(kind: ArgReduceKind, host_x_f32: &[f32; 16]) -> i64 {
 fn argmax_1d_f16() {
     let (host_x, max_idx, _min_idx) = build_pattern_f32();
     let got = run_arg_reduce_f16(ArgReduceKind::Argmax, &host_x);
-    assert_eq!(got, max_idx, "argmax f16: expected {}, got {}", max_idx, got);
+    assert_eq!(
+        got, max_idx,
+        "argmax f16: expected {}, got {}",
+        max_idx, got
+    );
 }
 
 #[test]
@@ -163,7 +167,11 @@ fn argmax_1d_f16() {
 fn argmin_1d_f16() {
     let (host_x, _max_idx, min_idx) = build_pattern_f32();
     let got = run_arg_reduce_f16(ArgReduceKind::Argmin, &host_x);
-    assert_eq!(got, min_idx, "argmin f16: expected {}, got {}", min_idx, got);
+    assert_eq!(
+        got, min_idx,
+        "argmin f16: expected {}, got {}",
+        min_idx, got
+    );
 }
 
 #[test]
@@ -171,7 +179,11 @@ fn argmin_1d_f16() {
 fn argmax_1d_bf16() {
     let (host_x, max_idx, _min_idx) = build_pattern_f32();
     let got = run_arg_reduce_bf16(ArgReduceKind::Argmax, &host_x);
-    assert_eq!(got, max_idx, "argmax bf16: expected {}, got {}", max_idx, got);
+    assert_eq!(
+        got, max_idx,
+        "argmax bf16: expected {}, got {}",
+        max_idx, got
+    );
 }
 
 #[test]
@@ -179,7 +191,11 @@ fn argmax_1d_bf16() {
 fn argmin_1d_bf16() {
     let (host_x, _max_idx, min_idx) = build_pattern_f32();
     let got = run_arg_reduce_bf16(ArgReduceKind::Argmin, &host_x);
-    assert_eq!(got, min_idx, "argmin bf16: expected {}, got {}", min_idx, got);
+    assert_eq!(
+        got, min_idx,
+        "argmin bf16: expected {}, got {}",
+        min_idx, got
+    );
 }
 
 #[test]
@@ -187,7 +203,11 @@ fn argmin_1d_bf16() {
 fn argmax_1d_f64() {
     let (host_x, max_idx, _min_idx) = build_pattern_f32();
     let got = run_arg_reduce_f64(ArgReduceKind::Argmax, &host_x);
-    assert_eq!(got, max_idx, "argmax f64: expected {}, got {}", max_idx, got);
+    assert_eq!(
+        got, max_idx,
+        "argmax f64: expected {}, got {}",
+        max_idx, got
+    );
 }
 
 #[test]
@@ -195,5 +215,9 @@ fn argmax_1d_f64() {
 fn argmin_1d_f64() {
     let (host_x, _max_idx, min_idx) = build_pattern_f32();
     let got = run_arg_reduce_f64(ArgReduceKind::Argmin, &host_x);
-    assert_eq!(got, min_idx, "argmin f64: expected {}, got {}", min_idx, got);
+    assert_eq!(
+        got, min_idx,
+        "argmin f64: expected {}, got {}",
+        min_idx, got
+    );
 }

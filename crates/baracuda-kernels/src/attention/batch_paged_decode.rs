@@ -61,7 +61,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-
 /// Descriptor for a paged KV-cache descriptor (kHND layout). Mirrors
 /// FlashInfer's `paged_kv_t` host-side fields.
 #[derive(Copy, Clone, Debug)]
@@ -165,7 +164,10 @@ impl<T: Element> BatchPagedDecodePlan<T> {
                 "BatchPagedDecodePlan: head_dim must be 64, 128, or 256",
             ));
         }
-        if !matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32) {
+        if !matches!(
+            T::KIND,
+            ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32
+        ) {
             return Err(Error::Unsupported(
                 "BatchPagedDecodePlan: element type must be f16, bf16, or f32",
             ));
@@ -202,7 +204,9 @@ impl<T: Element> BatchPagedDecodePlan<T> {
             self.desc.paged_kv.head_dim,
         ];
         if args.q.shape != q_shape {
-            return Err(Error::InvalidProblem("BatchPagedDecodePlan: q shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "BatchPagedDecodePlan: q shape mismatch",
+            ));
         }
         let cache_shape = [
             self.desc.paged_kv.num_total_pages,
@@ -226,7 +230,9 @@ impl<T: Element> BatchPagedDecodePlan<T> {
             ));
         }
         if args.o.shape != q_shape {
-            return Err(Error::InvalidProblem("BatchPagedDecodePlan: o shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "BatchPagedDecodePlan: o shape mismatch",
+            ));
         }
         if args.lse.shape != [self.desc.batch_size, self.desc.num_qo_heads] {
             return Err(Error::InvalidProblem(
@@ -279,7 +285,10 @@ impl<T: Element> BatchPagedDecodePlan<T> {
         let need = self.workspace_size();
         let (ws_ptr, ws_bytes) = match workspace {
             Workspace::None => {
-                return Err(Error::WorkspaceTooSmall { needed: need, got: 0 });
+                return Err(Error::WorkspaceTooSmall {
+                    needed: need,
+                    got: 0,
+                });
             }
             Workspace::Borrowed(slice) => {
                 if slice.len() < need {
@@ -319,9 +328,17 @@ impl<T: Element> BatchPagedDecodePlan<T> {
                         self.desc.num_qo_heads,
                         self.desc.paged_kv.num_kv_heads,
                         self.desc.sm_scale,
-                        k_ptr, v_ptr, indices_ptr, indptr_ptr, last_page_len_ptr,
-                        q_ptr, o_ptr, lse_ptr,
-                        ws_ptr, ws_bytes, stream_ptr,
+                        k_ptr,
+                        v_ptr,
+                        indices_ptr,
+                        indptr_ptr,
+                        last_page_len_ptr,
+                        q_ptr,
+                        o_ptr,
+                        lse_ptr,
+                        ws_ptr,
+                        ws_bytes,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
@@ -332,9 +349,17 @@ impl<T: Element> BatchPagedDecodePlan<T> {
                         self.desc.num_qo_heads,
                         self.desc.paged_kv.num_kv_heads,
                         self.desc.sm_scale,
-                        k_ptr, v_ptr, indices_ptr, indptr_ptr, last_page_len_ptr,
-                        q_ptr, o_ptr, lse_ptr,
-                        ws_ptr, ws_bytes, stream_ptr,
+                        k_ptr,
+                        v_ptr,
+                        indices_ptr,
+                        indptr_ptr,
+                        last_page_len_ptr,
+                        q_ptr,
+                        o_ptr,
+                        lse_ptr,
+                        ws_ptr,
+                        ws_bytes,
+                        stream_ptr,
                     )
                 },
                 ElementKind::F32 => unsafe {
@@ -345,9 +370,17 @@ impl<T: Element> BatchPagedDecodePlan<T> {
                         self.desc.num_qo_heads,
                         self.desc.paged_kv.num_kv_heads,
                         self.desc.sm_scale,
-                        k_ptr, v_ptr, indices_ptr, indptr_ptr, last_page_len_ptr,
-                        q_ptr, o_ptr, lse_ptr,
-                        ws_ptr, ws_bytes, stream_ptr,
+                        k_ptr,
+                        v_ptr,
+                        indices_ptr,
+                        indptr_ptr,
+                        last_page_len_ptr,
+                        q_ptr,
+                        o_ptr,
+                        lse_ptr,
+                        ws_ptr,
+                        ws_bytes,
+                        stream_ptr,
                     )
                 },
                 _ => {

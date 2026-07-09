@@ -6,10 +6,10 @@
 //! tensor is shape `[B, C, D]`; the caller pads to rank 4 with a
 //! trailing `1` extent.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, QuantizePerChannelArgs,
-    QuantizePerChannelDescriptor, QuantizePerChannelPlan, S8, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, QuantizePerChannelArgs, QuantizePerChannelDescriptor,
+    QuantizePerChannelPlan, S8, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -79,12 +79,8 @@ fn quantize_per_channel_f32_s8_rank3_axis1() {
         input_element: ElementKind::F32,
         output_element: ElementKind::S8,
     };
-    let plan = QuantizePerChannelPlan::<f32, S8>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .expect("select");
+    let plan = QuantizePerChannelPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = QuantizePerChannelArgs::<f32, S8> {
         input: TensorRef {
             data: dev_x.as_slice(),

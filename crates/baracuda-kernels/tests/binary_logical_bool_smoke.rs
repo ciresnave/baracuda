@@ -11,10 +11,10 @@
 //! `#[ignore]` by default; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, Bool, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, Bool, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn run_case_bool(kind: BinaryKind, shape: [i32; 2]) {
@@ -59,8 +59,7 @@ fn run_case_bool(kind: BinaryKind, shape: [i32; 2]) {
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload B");
-    let mut dev_y: DeviceBuffer<Bool> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc Y");
+    let mut dev_y: DeviceBuffer<Bool> = DeviceBuffer::zeros(&ctx, numel).expect("alloc Y");
 
     let stride = contiguous_stride(shape);
     let desc = BinaryDescriptor {
@@ -71,11 +70,24 @@ fn run_case_bool(kind: BinaryKind, shape: [i32; 2]) {
     let plan = BinaryPlan::<Bool, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select BinaryPlan<Bool, 2>");
     let args = BinaryArgs::<Bool, 2> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("binary logical bool run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("binary logical bool run");
     stream.synchronize().expect("stream sync");
 
     let mut host_got = vec![Bool(0); numel];

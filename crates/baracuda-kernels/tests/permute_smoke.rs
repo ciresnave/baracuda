@@ -7,10 +7,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test permute_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PermuteArgs, PermuteDescriptor, PermutePlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PermuteArgs, PermuteDescriptor, PermutePlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -48,8 +48,8 @@ fn permute_2d_transpose() {
         dims,
         element: ElementKind::F32,
     };
-    let plan = PermutePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        PermutePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PermuteArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -79,7 +79,7 @@ fn permute_2d_transpose() {
 fn permute_3d_rotate() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 12];
-    let dims = [1i32, 2, 0];  // [A, B, C] -> [B, C, A]
+    let dims = [1i32, 2, 0]; // [A, B, C] -> [B, C, A]
     let output_shape = [8i32, 12, 4];
     let numel = (4 * 8 * 12) as usize;
 
@@ -105,8 +105,8 @@ fn permute_3d_rotate() {
         dims,
         element: ElementKind::F32,
     };
-    let plan = PermutePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        PermutePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PermuteArgs::<f32, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -135,8 +135,8 @@ fn permute_3d_rotate() {
 #[ignore]
 fn permute_4d_nhwc_to_nchw() {
     let (ctx, stream) = setup();
-    let input_shape = [2i32, 8, 8, 4];   // [N=2, H=8, W=8, C=4]
-    let dims = [0i32, 3, 1, 2];           // [N, C, H, W]
+    let input_shape = [2i32, 8, 8, 4]; // [N=2, H=8, W=8, C=4]
+    let dims = [0i32, 3, 1, 2]; // [N, C, H, W]
     let output_shape = [2i32, 4, 8, 8];
     let numel = (2 * 8 * 8 * 4) as usize;
 
@@ -164,8 +164,8 @@ fn permute_4d_nhwc_to_nchw() {
         dims,
         element: ElementKind::F32,
     };
-    let plan = PermutePlan::<f32, 4>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        PermutePlan::<f32, 4>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PermuteArgs::<f32, 4> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -206,8 +206,8 @@ fn permute_identity_is_copy() {
         dims,
         element: ElementKind::F32,
     };
-    let plan = PermutePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        PermutePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = PermuteArgs::<f32, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),

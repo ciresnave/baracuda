@@ -184,37 +184,67 @@ impl<T: Element> FillPlan<T> {
                 ElementKind::F32 => {
                     let v: f32 = core::mem::transmute_copy(&self.desc.value);
                     baracuda_kernels_sys::baracuda_kernels_fill_f32_run(
-                        numel, y_ptr, v, core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        y_ptr,
+                        v,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
                 ElementKind::F64 => {
                     let v: f64 = core::mem::transmute_copy(&self.desc.value);
                     baracuda_kernels_sys::baracuda_kernels_fill_f64_run(
-                        numel, y_ptr, v, core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        y_ptr,
+                        v,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
                 ElementKind::I32 => {
                     let v: i32 = core::mem::transmute_copy(&self.desc.value);
                     baracuda_kernels_sys::baracuda_kernels_fill_i32_run(
-                        numel, y_ptr, v, core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        y_ptr,
+                        v,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
                 ElementKind::I64 => {
                     let v: i64 = core::mem::transmute_copy(&self.desc.value);
                     baracuda_kernels_sys::baracuda_kernels_fill_i64_run(
-                        numel, y_ptr, v, core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        y_ptr,
+                        v,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
                 ElementKind::F16 => {
                     let v: f16 = core::mem::transmute_copy(&self.desc.value);
                     baracuda_kernels_sys::baracuda_kernels_fill_f16_run(
-                        numel, y_ptr, v.to_bits(), core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        y_ptr,
+                        v.to_bits(),
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
                 ElementKind::Bf16 => {
                     let v: bf16 = core::mem::transmute_copy(&self.desc.value);
                     baracuda_kernels_sys::baracuda_kernels_fill_bf16_run(
-                        numel, y_ptr, v.to_bits(), core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        y_ptr,
+                        v.to_bits(),
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 }
                 _ => {

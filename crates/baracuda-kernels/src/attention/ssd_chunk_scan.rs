@@ -272,48 +272,80 @@ impl<T: Element> SsdChunkScanPlan<T> {
         args: SsdChunkScanArgs<'_, T>,
     ) -> Result<()> {
         self.can_implement(&args)?;
-        if self.desc.batch_size == 0
-            || self.desc.seq_len == 0
-            || self.desc.num_heads == 0
-        {
+        if self.desc.batch_size == 0 || self.desc.seq_len == 0 || self.desc.num_heads == 0 {
             return Ok(());
         }
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let x_ptr  = args.x.data.as_raw().0 as *const c_void;
+        let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let dt_ptr = args.dt.data.as_raw().0 as *const c_void;
-        let a_ptr  = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr  = args.b.data.as_raw().0 as *const c_void;
-        let c_ptr  = args.c.data.as_raw().0 as *const c_void;
-        let y_ptr  = args.y.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data.as_raw().0 as *const c_void;
+        let b_ptr = args.b.data.as_raw().0 as *const c_void;
+        let c_ptr = args.c.data.as_raw().0 as *const c_void;
+        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_ssd_chunk_scan_f32_run(
-                    self.desc.batch_size, self.desc.seq_len, self.desc.num_heads,
-                    self.desc.head_dim, self.desc.state_dim, self.desc.chunk_size,
-                    x_ptr, dt_ptr, a_ptr, b_ptr, c_ptr, y_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.num_heads,
+                    self.desc.head_dim,
+                    self.desc.state_dim,
+                    self.desc.chunk_size,
+                    x_ptr,
+                    dt_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_ssd_chunk_scan_f16_run(
-                    self.desc.batch_size, self.desc.seq_len, self.desc.num_heads,
-                    self.desc.head_dim, self.desc.state_dim, self.desc.chunk_size,
-                    x_ptr, dt_ptr, a_ptr, b_ptr, c_ptr, y_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.num_heads,
+                    self.desc.head_dim,
+                    self.desc.state_dim,
+                    self.desc.chunk_size,
+                    x_ptr,
+                    dt_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_ssd_chunk_scan_bf16_run(
-                    self.desc.batch_size, self.desc.seq_len, self.desc.num_heads,
-                    self.desc.head_dim, self.desc.state_dim, self.desc.chunk_size,
-                    x_ptr, dt_ptr, a_ptr, b_ptr, c_ptr, y_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.num_heads,
+                    self.desc.head_dim,
+                    self.desc.state_dim,
+                    self.desc.chunk_size,
+                    x_ptr,
+                    dt_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
-            _ => return Err(Error::Unsupported(
-                "baracuda-kernels::SsdChunkScanPlan: dtype not wired",
-            )),
+            _ => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::SsdChunkScanPlan: dtype not wired",
+                ));
+            }
         };
         map_status(status)
     }
@@ -441,9 +473,13 @@ impl<T: Element> SsdChunkScanBackwardPlan<T> {
     pub fn workspace_size(&self) -> usize {
         unsafe {
             baracuda_kernels_sys::baracuda_kernels_ssd_chunk_scan_workspace_bytes(
-                self.desc.batch_size, self.desc.seq_len, self.desc.num_heads,
-                self.desc.head_dim, self.desc.state_dim,
-                self.desc.chunk_size, 0,
+                self.desc.batch_size,
+                self.desc.seq_len,
+                self.desc.num_heads,
+                self.desc.head_dim,
+                self.desc.state_dim,
+                self.desc.chunk_size,
+                0,
             )
         }
     }
@@ -467,18 +503,12 @@ impl<T: Element> SsdChunkScanBackwardPlan<T> {
         workspace: Workspace<'_>,
         args: SsdChunkScanBackwardArgs<'_, T>,
     ) -> Result<()> {
-        if self.desc.batch_size == 0
-            || self.desc.seq_len == 0
-            || self.desc.num_heads == 0
-        {
+        if self.desc.batch_size == 0 || self.desc.seq_len == 0 || self.desc.num_heads == 0 {
             return Ok(());
         }
         let stream_ptr = stream.as_raw() as *mut c_void;
         let (ws_ptr, ws_bytes) = match workspace {
-            Workspace::Borrowed(buf) => (
-                buf.as_raw().0 as *mut c_void,
-                buf.len(),
-            ),
+            Workspace::Borrowed(buf) => (buf.as_raw().0 as *mut c_void, buf.len()),
             Workspace::None => (core::ptr::null_mut(), 0usize),
         };
         if ws_bytes < self.workspace_size() {
@@ -488,11 +518,11 @@ impl<T: Element> SsdChunkScanBackwardPlan<T> {
             });
         }
 
-        let x_ptr  = args.x.data.as_raw().0 as *const c_void;
+        let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let dt_ptr = args.dt.data.as_raw().0 as *const c_void;
-        let a_ptr  = args.a.data.as_raw().0 as *const c_void;
-        let b_ptr  = args.b.data.as_raw().0 as *const c_void;
-        let c_ptr  = args.c.data.as_raw().0 as *const c_void;
+        let a_ptr = args.a.data.as_raw().0 as *const c_void;
+        let b_ptr = args.b.data.as_raw().0 as *const c_void;
+        let c_ptr = args.c.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
         let db_ptr = args.d_b.data.as_raw().0 as *mut c_void;
@@ -503,34 +533,81 @@ impl<T: Element> SsdChunkScanBackwardPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_ssd_chunk_scan_f32_backward_run(
-                    self.desc.batch_size, self.desc.seq_len, self.desc.num_heads,
-                    self.desc.head_dim, self.desc.state_dim, self.desc.chunk_size,
-                    x_ptr, dt_ptr, a_ptr, b_ptr, c_ptr, dy_ptr,
-                    dx_ptr, db_ptr, dc_ptr, ddt_ptr, da_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.num_heads,
+                    self.desc.head_dim,
+                    self.desc.state_dim,
+                    self.desc.chunk_size,
+                    x_ptr,
+                    dt_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    db_ptr,
+                    dc_ptr,
+                    ddt_ptr,
+                    da_ptr,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_ssd_chunk_scan_f16_backward_run(
-                    self.desc.batch_size, self.desc.seq_len, self.desc.num_heads,
-                    self.desc.head_dim, self.desc.state_dim, self.desc.chunk_size,
-                    x_ptr, dt_ptr, a_ptr, b_ptr, c_ptr, dy_ptr,
-                    dx_ptr, db_ptr, dc_ptr, ddt_ptr, da_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.num_heads,
+                    self.desc.head_dim,
+                    self.desc.state_dim,
+                    self.desc.chunk_size,
+                    x_ptr,
+                    dt_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    db_ptr,
+                    dc_ptr,
+                    ddt_ptr,
+                    da_ptr,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_ssd_chunk_scan_bf16_backward_run(
-                    self.desc.batch_size, self.desc.seq_len, self.desc.num_heads,
-                    self.desc.head_dim, self.desc.state_dim, self.desc.chunk_size,
-                    x_ptr, dt_ptr, a_ptr, b_ptr, c_ptr, dy_ptr,
-                    dx_ptr, db_ptr, dc_ptr, ddt_ptr, da_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.num_heads,
+                    self.desc.head_dim,
+                    self.desc.state_dim,
+                    self.desc.chunk_size,
+                    x_ptr,
+                    dt_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    db_ptr,
+                    dc_ptr,
+                    ddt_ptr,
+                    da_ptr,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_ptr,
                 )
             },
-            _ => return Err(Error::Unsupported(
-                "baracuda-kernels::SsdChunkScanBackwardPlan: dtype not wired",
-            )),
+            _ => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::SsdChunkScanBackwardPlan: dtype not wired",
+                ));
+            }
         };
         map_status(status)
     }

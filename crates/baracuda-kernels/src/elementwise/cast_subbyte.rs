@@ -107,10 +107,7 @@ pub struct CastSubByteArgs<'a, TIn: DeviceRepr + Copy + 'static, TOut: DeviceRep
 ///
 /// **Workspace**: none.
 #[derive(Debug)]
-pub struct CastSubBytePlan<
-    TIn: DeviceRepr + Copy + 'static,
-    TOut: DeviceRepr + Copy + 'static,
-> {
+pub struct CastSubBytePlan<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static> {
     desc: CastSubByteDescriptor,
     sku: KernelSku,
     _marker_in: PhantomData<TIn>,
@@ -144,14 +141,8 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
             ));
         }
         // S4 / U4 endpoints require even numel (nibble packing).
-        let inv = matches!(
-            desc.input_element,
-            ElementKind::S4 | ElementKind::U4
-        );
-        let outv = matches!(
-            desc.output_element,
-            ElementKind::S4 | ElementKind::U4
-        );
+        let inv = matches!(desc.input_element, ElementKind::S4 | ElementKind::U4);
+        let outv = matches!(desc.output_element, ElementKind::S4 | ElementKind::U4);
         if (inv || outv) && (desc.numel % 2 != 0) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CastSubBytePlan: S4 / U4 endpoints require even numel \
@@ -207,8 +198,16 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
         let in_packed = matches!(self.desc.input_element, ElementKind::S4 | ElementKind::U4);
         let out_packed = matches!(self.desc.output_element, ElementKind::S4 | ElementKind::U4);
 
-        let needed_in = if in_packed { (expected + 1) / 2 } else { expected };
-        let needed_out = if out_packed { (expected + 1) / 2 } else { expected };
+        let needed_in = if in_packed {
+            (expected + 1) / 2
+        } else {
+            expected
+        };
+        let needed_out = if out_packed {
+            (expected + 1) / 2
+        } else {
+            expected
+        };
 
         if (args.input.data.len() as i64) < needed_in {
             return Err(Error::BufferTooSmall {
@@ -263,177 +262,347 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
             // ---- Bool -> T ----
             (ElementKind::Bool, ElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_bool_i32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bool, ElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_bool_i64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bool, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_bool_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bool, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_bool_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bool, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_bool_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // ---- T -> Bool ----
             (ElementKind::I32, ElementKind::Bool) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_i32_bool_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::I64, ElementKind::Bool) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_i64_bool_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, ElementKind::Bool) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f32_bool_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F16, ElementKind::Bool) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f16_bool_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bf16, ElementKind::Bool) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_bf16_bool_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // ---- Fp8E4M3 <-> {f32, f16, bf16} ----
             (ElementKind::Fp8E4M3, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_fp8e4m3_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Fp8E4M3, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_fp8e4m3_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Fp8E4M3, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_fp8e4m3_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, ElementKind::Fp8E4M3) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f32_fp8e4m3_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F16, ElementKind::Fp8E4M3) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f16_fp8e4m3_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bf16, ElementKind::Fp8E4M3) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_bf16_fp8e4m3_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // ---- Fp8E5M2 <-> {f32, f16, bf16} ----
             (ElementKind::Fp8E5M2, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_fp8e5m2_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Fp8E5M2, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_fp8e5m2_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Fp8E5M2, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_fp8e5m2_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, ElementKind::Fp8E5M2) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f32_fp8e5m2_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F16, ElementKind::Fp8E5M2) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f16_fp8e5m2_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::Bf16, ElementKind::Fp8E5M2) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_bf16_fp8e5m2_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // ---- S4 <-> {i32, i64, f32} ----
             (ElementKind::S4, ElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_s4_i32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::S4, ElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_s4_i64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::S4, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_s4_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::I32, ElementKind::S4) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_i32_s4_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::I64, ElementKind::S4) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_i64_s4_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, ElementKind::S4) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f32_s4_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             // ---- U4 <-> {i32, i64, f32} ----
             (ElementKind::U4, ElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_u4_i32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::U4, ElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_u4_i64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::U4, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_u4_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::I32, ElementKind::U4) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_i32_u4_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::I64, ElementKind::U4) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_i64_u4_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ElementKind::F32, ElementKind::U4) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f32_u4_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

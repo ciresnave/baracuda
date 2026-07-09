@@ -36,9 +36,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cusolverDnCreate, cusolverDnDestroy, cusolverDnDgetrf, cusolverDnDgetrf_bufferSize,
-    cusolverDnDgetrs, cusolverDnHandle_t, cusolverDnSetStream, cusolverDnSgetrf,
-    cusolverDnSgetrf_bufferSize, cusolverDnSgetrs, CUBLAS_OP_N,
+    CUBLAS_OP_N, cusolverDnCreate, cusolverDnDestroy, cusolverDnDgetrf,
+    cusolverDnDgetrf_bufferSize, cusolverDnDgetrs, cusolverDnHandle_t, cusolverDnSetStream,
+    cusolverDnSgetrf, cusolverDnSgetrf_bufferSize, cusolverDnSgetrs,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
@@ -290,9 +290,8 @@ macro_rules! impl_inverse_run {
                 let info_ptr = args.info.data.as_raw().0 as *mut i32;
 
                 // 1. getrf — factors A in place, writes pivot + info.
-                let status = unsafe {
-                    $getrf(h, m, m, a_ptr, m, ws_ptr as *mut $T, pivot_ptr, info_ptr)
-                };
+                let status =
+                    unsafe { $getrf(h, m, m, a_ptr, m, ws_ptr as *mut $T, pivot_ptr, info_ptr) };
                 if status != 0 {
                     return Err(Error::CutlassInternal(-status));
                 }
@@ -374,8 +373,7 @@ unsafe fn copy_h2d(
             h_stream: *mut c_void,
         ) -> CUresult;
     }
-    let status =
-        unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
+    let status = unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }

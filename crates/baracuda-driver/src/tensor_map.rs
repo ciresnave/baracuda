@@ -11,9 +11,9 @@
 //! `cuTensorMapEncodeTiled`.
 
 use baracuda_cuda_sys::types::CUtensorMap;
-use baracuda_cuda_sys::{driver, CUdeviceptr};
+use baracuda_cuda_sys::{CUdeviceptr, driver};
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 pub use baracuda_cuda_sys::types::{
     CUtensorMapDataType as DataType, CUtensorMapFloatOOBfill as OOBFill,

@@ -24,9 +24,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    baracuda_kernels_fftshift_16_run, baracuda_kernels_fftshift_4_run,
-    baracuda_kernels_fftshift_8_run, baracuda_kernels_ifftshift_16_run,
-    baracuda_kernels_ifftshift_4_run, baracuda_kernels_ifftshift_8_run,
+    baracuda_kernels_fftshift_4_run, baracuda_kernels_fftshift_8_run,
+    baracuda_kernels_fftshift_16_run, baracuda_kernels_ifftshift_4_run,
+    baracuda_kernels_ifftshift_8_run, baracuda_kernels_ifftshift_16_run,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, FftKind, KernelSku, MathPrecision, OpCategory,
@@ -228,22 +228,58 @@ impl<T: Element> FftShiftPlan<T> {
         let status = unsafe {
             match (size, self.desc.inverse) {
                 (4, false) => baracuda_kernels_fftshift_4_run(
-                    batch, n, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    batch,
+                    n,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 (4, true) => baracuda_kernels_ifftshift_4_run(
-                    batch, n, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    batch,
+                    n,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 (8, false) => baracuda_kernels_fftshift_8_run(
-                    batch, n, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    batch,
+                    n,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 (8, true) => baracuda_kernels_ifftshift_8_run(
-                    batch, n, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    batch,
+                    n,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 (16, false) => baracuda_kernels_fftshift_16_run(
-                    batch, n, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    batch,
+                    n,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 (16, true) => baracuda_kernels_ifftshift_16_run(
-                    batch, n, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    batch,
+                    n,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 ),
                 _ => unreachable!("select() gates on size_of::<T>() in 4 / 8 / 16"),
             }

@@ -34,7 +34,7 @@ pub mod status;
 /// `types` — submodule grouping related items.
 pub mod types;
 
-pub use driver::{driver, Driver};
-pub use runtime::{runtime, Runtime};
+pub use driver::{Driver, driver};
+pub use runtime::{Runtime, runtime};
 pub use status::CUresult;
 pub use types::*;

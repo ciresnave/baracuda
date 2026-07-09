@@ -17,7 +17,7 @@ use baracuda_kernels_types::{
     TensorRef, Workspace,
 };
 
-use super::lp_pool2d::{build_lp2d_sku, compute_out_2d, validate_lp2d, LpPool2dDescriptor};
+use super::lp_pool2d::{LpPool2dDescriptor, build_lp2d_sku, compute_out_2d, validate_lp2d};
 
 /// Args bundle for an `LpPool2d` backward launch.
 ///
@@ -98,38 +98,86 @@ impl<T: Element> LpPool2dBackwardPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_2d_f32_backward_run(
-                    x_ptr, y_ptr, dy_ptr, dx_ptr,
-                    self.desc.batch, self.desc.channels, self.desc.h_in, self.desc.w_in,
-                    self.desc.window_h, self.desc.window_w,
-                    self.desc.stride_h, self.desc.stride_w,
-                    self.h_out, self.w_out, self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.window_h,
+                    self.desc.window_w,
+                    self.desc.stride_h,
+                    self.desc.stride_w,
+                    self.h_out,
+                    self.w_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_2d_f64_backward_run(
-                    x_ptr, y_ptr, dy_ptr, dx_ptr,
-                    self.desc.batch, self.desc.channels, self.desc.h_in, self.desc.w_in,
-                    self.desc.window_h, self.desc.window_w,
-                    self.desc.stride_h, self.desc.stride_w,
-                    self.h_out, self.w_out, self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.window_h,
+                    self.desc.window_w,
+                    self.desc.stride_h,
+                    self.desc.stride_w,
+                    self.h_out,
+                    self.w_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_2d_f16_backward_run(
-                    x_ptr, y_ptr, dy_ptr, dx_ptr,
-                    self.desc.batch, self.desc.channels, self.desc.h_in, self.desc.w_in,
-                    self.desc.window_h, self.desc.window_w,
-                    self.desc.stride_h, self.desc.stride_w,
-                    self.h_out, self.w_out, self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.window_h,
+                    self.desc.window_w,
+                    self.desc.stride_h,
+                    self.desc.stride_w,
+                    self.h_out,
+                    self.w_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_lp_pool_2d_bf16_backward_run(
-                    x_ptr, y_ptr, dy_ptr, dx_ptr,
-                    self.desc.batch, self.desc.channels, self.desc.h_in, self.desc.w_in,
-                    self.desc.window_h, self.desc.window_w,
-                    self.desc.stride_h, self.desc.stride_w,
-                    self.h_out, self.w_out, self.desc.p, ceil_flag, stream_ptr,
+                    x_ptr,
+                    y_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    self.desc.batch,
+                    self.desc.channels,
+                    self.desc.h_in,
+                    self.desc.w_in,
+                    self.desc.window_h,
+                    self.desc.window_w,
+                    self.desc.stride_h,
+                    self.desc.stride_w,
+                    self.h_out,
+                    self.w_out,
+                    self.desc.p,
+                    ceil_flag,
+                    stream_ptr,
                 )
             },
             _ => {

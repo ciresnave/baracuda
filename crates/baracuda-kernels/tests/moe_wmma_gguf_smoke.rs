@@ -18,10 +18,10 @@
 //!
 //! Marked `#[ignore]` per project convention.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BlockQ8_0, ElementKind, GgufBlockFormat, MoeArgs, MoeDescriptor, MoePlan,
-    MoeVariant, PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    BlockQ8_0, ElementKind, GgufBlockFormat, MoeArgs, MoeDescriptor, MoePlan, MoeVariant,
+    PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -48,8 +48,7 @@ fn moe_wmma_gguf_q8_0_small_fixture() {
     let mut acts_host = vec![f16::ZERO; (T * DM) as usize];
     for i in 0..T {
         for j in 0..DM {
-            acts_host[(i * DM + j) as usize] =
-                f16::from_f32(0.1 * (i as f32) + 0.01 * (j as f32));
+            acts_host[(i * DM + j) as usize] = f16::from_f32(0.1 * (i as f32) + 0.01 * (j as f32));
         }
     }
     // Per-expert Q8_0-packed weights (one block per (expert, n) row).
@@ -113,9 +112,12 @@ fn moe_wmma_gguf_q8_0_small_fixture() {
     // Upload.
     let acts_dev: DeviceBuffer<f16> = DeviceBuffer::from_slice(&ctx, &acts_host).expect("up acts");
     let weights_dev: DeviceBuffer<U8> = DeviceBuffer::from_slice(&ctx, &weights_u8).expect("up w");
-    let sorted_dev: DeviceBuffer<i32> = DeviceBuffer::from_slice(&ctx, &sorted_token_ids).expect("up s");
-    let eids_dev: DeviceBuffer<i32> = DeviceBuffer::from_slice(&ctx, &flat_expert_ids).expect("up eids");
-    let tk_dev: DeviceBuffer<f32> = DeviceBuffer::from_slice(&ctx, &topk_weight_per_m).expect("up tk");
+    let sorted_dev: DeviceBuffer<i32> =
+        DeviceBuffer::from_slice(&ctx, &sorted_token_ids).expect("up s");
+    let eids_dev: DeviceBuffer<i32> =
+        DeviceBuffer::from_slice(&ctx, &flat_expert_ids).expect("up eids");
+    let tk_dev: DeviceBuffer<f32> =
+        DeviceBuffer::from_slice(&ctx, &topk_weight_per_m).expect("up tk");
     let mut ec_dev: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, NE as usize).expect("ec");
     let mut eo_dev: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, (NE + 1) as usize).expect("eo");
     let ew_dev: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (T * K) as usize).expect("ew");

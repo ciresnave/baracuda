@@ -12,7 +12,7 @@ use baracuda_cutlass::{
     GemmDescriptor, GemmPlan, LayoutSku, MathPrecision, MatrixMut, MatrixRef, PlanPreference,
     Workspace,
 };
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 // ---------- CPU references ----------
@@ -113,12 +113,19 @@ fn rrr_round_trip_f16(m: i32, n: i32, k: i32) {
     let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_gemm_rrr(
-        m as usize, n as usize, k as usize,
-        &host_a_f32, k as usize,
-        &host_b_f32, n as usize,
-        None, n as usize,
-        1.0, 0.0,
-        &mut host_d_ref, n as usize,
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a_f32,
+        k as usize,
+        &host_b_f32,
+        n as usize,
+        None,
+        n as usize,
+        1.0,
+        0.0,
+        &mut host_d_ref,
+        n as usize,
     );
 
     let host_a: Vec<f16> = host_a_f32.iter().map(|&x| f16::from_f32(x)).collect();
@@ -129,19 +136,37 @@ fn rrr_round_trip_f16(m: i32, n: i32, k: i32) {
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rrr,
         epilogue: EpilogueKind::Identity,
     };
     let plan =
         GemmPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("plan select");
     let args = GemmArgs::<f16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: n as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: n as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         bias: None,
-        alpha: 1.0, beta: 0.0,
+        alpha: 1.0,
+        beta: 0.0,
     };
 
     plan.can_implement(&args).expect("can_implement");
@@ -175,12 +200,19 @@ fn rrr_round_trip_bf16(m: i32, n: i32, k: i32) {
     let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_gemm_rrr(
-        m as usize, n as usize, k as usize,
-        &host_a_f32, k as usize,
-        &host_b_f32, n as usize,
-        None, n as usize,
-        1.0, 0.0,
-        &mut host_d_ref, n as usize,
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a_f32,
+        k as usize,
+        &host_b_f32,
+        n as usize,
+        None,
+        n as usize,
+        1.0,
+        0.0,
+        &mut host_d_ref,
+        n as usize,
     );
 
     let host_a: Vec<bf16> = host_a_f32.iter().map(|&x| bf16::from_f32(x)).collect();
@@ -191,19 +223,37 @@ fn rrr_round_trip_bf16(m: i32, n: i32, k: i32) {
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rrr,
         epilogue: EpilogueKind::Identity,
     };
     let plan =
         GemmPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("plan select");
     let args = GemmArgs::<bf16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: n as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: n as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         bias: None,
-        alpha: 1.0, beta: 0.0,
+        alpha: 1.0,
+        beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -250,12 +300,19 @@ fn tf32_round_trip(m: i32, n: i32, k: i32) {
     let host_b: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_gemm_rcr(
-        m as usize, n as usize, k as usize,
-        &host_a, k as usize,
-        &host_b, k as usize,
-        None, n as usize,
-        1.0, 0.0,
-        &mut host_d_ref, n as usize,
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a,
+        k as usize,
+        &host_b,
+        k as usize,
+        None,
+        n as usize,
+        1.0,
+        0.0,
+        &mut host_d_ref,
+        n as usize,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
@@ -264,7 +321,9 @@ fn tf32_round_trip(m: i32, n: i32, k: i32) {
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Identity,
     };
@@ -272,16 +331,35 @@ fn tf32_round_trip(m: i32, n: i32, k: i32) {
         GemmPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("plan select");
 
     // Sanity check: f32 input → TF32 math (10-bit mantissa).
-    assert_eq!(plan.precision_guarantee().math_precision, MathPrecision::Tf32);
+    assert_eq!(
+        plan.precision_guarantee().math_precision,
+        MathPrecision::Tf32
+    );
     assert_eq!(plan.precision_guarantee().accumulator, ElementKind::F32);
 
     let args = GemmArgs::<f32> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         bias: None,
-        alpha: 1.0, beta: 0.0,
+        alpha: 1.0,
+        beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -340,12 +418,10 @@ fn batched_round_trip_f16(m: i32, n: i32, k: i32, batch_count: i32) {
     let mut host_b_f32 = vec![0.0f32; total_b];
     for batch in 0..batch_count as usize {
         for i in 0..elements_a {
-            host_a_f32[batch * elements_a + i] =
-                (((batch * 1000 + i) as f32) * 0.01).sin();
+            host_a_f32[batch * elements_a + i] = (((batch * 1000 + i) as f32) * 0.01).sin();
         }
         for i in 0..elements_b {
-            host_b_f32[batch * elements_b + i] =
-                (((batch * 1000 + i) as f32) * 0.013).cos();
+            host_b_f32[batch * elements_b + i] = (((batch * 1000 + i) as f32) * 0.013).cos();
         }
     }
 
@@ -355,12 +431,19 @@ fn batched_round_trip_f16(m: i32, n: i32, k: i32, batch_count: i32) {
         let b_off = batch * elements_b;
         let d_off = batch * elements_d;
         cpu_gemm_rcr(
-            m as usize, n as usize, k as usize,
-            &host_a_f32[a_off..a_off + elements_a], k as usize,
-            &host_b_f32[b_off..b_off + elements_b], k as usize,
-            None, n as usize,
-            1.0, 0.0,
-            &mut host_d_ref[d_off..d_off + elements_d], n as usize,
+            m as usize,
+            n as usize,
+            k as usize,
+            &host_a_f32[a_off..a_off + elements_a],
+            k as usize,
+            &host_b_f32[b_off..b_off + elements_b],
+            k as usize,
+            None,
+            n as usize,
+            1.0,
+            0.0,
+            &mut host_d_ref[d_off..d_off + elements_d],
+            n as usize,
         );
     }
 
@@ -371,7 +454,9 @@ fn batched_round_trip_f16(m: i32, n: i32, k: i32, batch_count: i32) {
     let mut dev_d: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, total_d).expect("alloc D");
 
     let desc = BatchedGemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         batch_count,
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Identity,
@@ -380,15 +465,31 @@ fn batched_round_trip_f16(m: i32, n: i32, k: i32, batch_count: i32) {
         .expect("plan select");
 
     let args = BatchedGemmArgs::<f16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
         stride_a: elements_a as i64,
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         stride_b: elements_b as i64,
         c: None,
         stride_c: 0,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         stride_d: elements_d as i64,
-        alpha: 1.0, beta: 0.0,
+        alpha: 1.0,
+        beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -430,12 +531,10 @@ fn batched_round_trip_bf16(m: i32, n: i32, k: i32, batch_count: i32) {
     let mut host_b_f32 = vec![0.0f32; total_b];
     for batch in 0..batch_count as usize {
         for i in 0..elements_a {
-            host_a_f32[batch * elements_a + i] =
-                (((batch * 1000 + i) as f32) * 0.01).sin();
+            host_a_f32[batch * elements_a + i] = (((batch * 1000 + i) as f32) * 0.01).sin();
         }
         for i in 0..elements_b {
-            host_b_f32[batch * elements_b + i] =
-                (((batch * 1000 + i) as f32) * 0.013).cos();
+            host_b_f32[batch * elements_b + i] = (((batch * 1000 + i) as f32) * 0.013).cos();
         }
     }
 
@@ -445,12 +544,19 @@ fn batched_round_trip_bf16(m: i32, n: i32, k: i32, batch_count: i32) {
         let b_off = batch * elements_b;
         let d_off = batch * elements_d;
         cpu_gemm_rcr(
-            m as usize, n as usize, k as usize,
-            &host_a_f32[a_off..a_off + elements_a], k as usize,
-            &host_b_f32[b_off..b_off + elements_b], k as usize,
-            None, n as usize,
-            1.0, 0.0,
-            &mut host_d_ref[d_off..d_off + elements_d], n as usize,
+            m as usize,
+            n as usize,
+            k as usize,
+            &host_a_f32[a_off..a_off + elements_a],
+            k as usize,
+            &host_b_f32[b_off..b_off + elements_b],
+            k as usize,
+            None,
+            n as usize,
+            1.0,
+            0.0,
+            &mut host_d_ref[d_off..d_off + elements_d],
+            n as usize,
         );
     }
 
@@ -461,7 +567,9 @@ fn batched_round_trip_bf16(m: i32, n: i32, k: i32, batch_count: i32) {
     let mut dev_d: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, total_d).expect("alloc D");
 
     let desc = BatchedGemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         batch_count,
         layout: LayoutSku::Rcr,
         epilogue: EpilogueKind::Identity,
@@ -469,15 +577,31 @@ fn batched_round_trip_bf16(m: i32, n: i32, k: i32, batch_count: i32) {
     let plan = BatchedGemmPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
     let args = BatchedGemmArgs::<bf16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
         stride_a: elements_a as i64,
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         stride_b: elements_b as i64,
         c: None,
         stride_c: 0,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         stride_d: elements_d as i64,
-        alpha: 1.0, beta: 0.0,
+        alpha: 1.0,
+        beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
     plan.run(&stream, Workspace::None, args).expect("run");

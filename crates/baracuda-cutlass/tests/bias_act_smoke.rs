@@ -14,7 +14,7 @@ use baracuda_cutlass::{
     ActivationKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut,
     MatrixRef, PlanPreference, VectorRef, Workspace,
 };
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 // ---- CPU references for each activation ----
@@ -98,19 +98,22 @@ fn run_f16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: Epilogu
     // pre-activation values land negative and must clamp to 0).
     let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
     let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
-    let host_bias_f32: Vec<f32> = (0..n)
-        .map(|j| -0.5 + 0.1 * (j as f32 % 7.0))
-        .collect();
+    let host_bias_f32: Vec<f32> = (0..n).map(|j| -0.5 + 0.1 * (j as f32 % 7.0)).collect();
 
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_bias_act_gemm_rcr(
-        m as usize, n as usize, k as usize,
-        &host_a_f32, k as usize,
-        &host_b_f32, k as usize,
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a_f32,
+        k as usize,
+        &host_b_f32,
+        k as usize,
         &host_bias_f32,
         1.0,
         activation,
-        &mut host_d_ref, n as usize,
+        &mut host_d_ref,
+        n as usize,
     );
 
     let host_a: Vec<f16> = host_a_f32.iter().map(|&x| f16::from_f32(x)).collect();
@@ -124,7 +127,9 @@ fn run_f16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: Epilogu
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue,
     };
@@ -134,12 +139,32 @@ fn run_f16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: Epilogu
     assert_eq!(plan.sku().epilogue.activation(), Some(activation));
 
     let args = GemmArgs::<f16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
-        bias: Some(VectorRef { data: dev_bias.as_slice(), len: n, stride: 1 }),
-        alpha: 1.0, beta: 0.0,
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
+        bias: Some(VectorRef {
+            data: dev_bias.as_slice(),
+            len: n,
+            stride: 1,
+        }),
+        alpha: 1.0,
+        beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -174,19 +199,22 @@ fn run_bf16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: Epilog
 
     let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
     let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
-    let host_bias_f32: Vec<f32> = (0..n)
-        .map(|j| -0.5 + 0.1 * (j as f32 % 7.0))
-        .collect();
+    let host_bias_f32: Vec<f32> = (0..n).map(|j| -0.5 + 0.1 * (j as f32 % 7.0)).collect();
 
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_bias_act_gemm_rcr(
-        m as usize, n as usize, k as usize,
-        &host_a_f32, k as usize,
-        &host_b_f32, k as usize,
+        m as usize,
+        n as usize,
+        k as usize,
+        &host_a_f32,
+        k as usize,
+        &host_b_f32,
+        k as usize,
         &host_bias_f32,
         1.0,
         activation,
-        &mut host_d_ref, n as usize,
+        &mut host_d_ref,
+        n as usize,
     );
 
     let host_a: Vec<bf16> = host_a_f32.iter().map(|&x| bf16::from_f32(x)).collect();
@@ -200,7 +228,9 @@ fn run_bf16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: Epilog
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
     let desc = GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rcr,
         epilogue,
     };
@@ -209,12 +239,32 @@ fn run_bf16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: Epilog
     assert_eq!(plan.sku().epilogue.activation(), Some(activation));
 
     let args = GemmArgs::<bf16> {
-        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a.as_slice(),
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b.as_slice(),
+            rows: k,
+            cols: n,
+            ld: k as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
-        bias: Some(VectorRef { data: dev_bias.as_slice(), len: n, stride: 1 }),
-        alpha: 1.0, beta: 0.0,
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
+        bias: Some(VectorRef {
+            data: dev_bias.as_slice(),
+            len: n,
+            stride: 1,
+        }),
+        alpha: 1.0,
+        beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
     plan.run(&stream, Workspace::None, args).expect("run");
@@ -286,7 +336,9 @@ fn bf16_bias_silu_rcr_sm80_64_64_32() {
 #[test]
 fn test_inputs_actually_exercise_relu_clamp() {
     // Reproduce the CPU reference for the (m=64, n=64, k=32) f16 case.
-    let m: usize = 64; let n: usize = 64; let k: usize = 32;
+    let m: usize = 64;
+    let n: usize = 64;
+    let k: usize = 32;
     let a: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
     let b: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     let bias: Vec<f32> = (0..n).map(|j| -0.5 + 0.1 * (j as f32 % 7.0)).collect();

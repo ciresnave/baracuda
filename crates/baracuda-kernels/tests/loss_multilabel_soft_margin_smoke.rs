@@ -1,10 +1,9 @@
 //! Real-GPU smoke test for `MultilabelSoftMarginLossPlan`. FW × 4 dtypes.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    ElementKind, LossReduction, MultilabelSoftMarginLossArgs,
-    MultilabelSoftMarginLossDescriptor, MultilabelSoftMarginLossPlan, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, LossReduction, MultilabelSoftMarginLossArgs, MultilabelSoftMarginLossDescriptor,
+    MultilabelSoftMarginLossPlan, PlanPreference, TensorMut, TensorRef, Workspace,
 };
 use half::{bf16, f16};
 
@@ -43,7 +42,8 @@ fn loss_multilabel_soft_margin_f32_mean() {
     let expected = host_mlsm_mean_f64(
         &h_in.iter().map(|&v| v as f64).collect::<Vec<_>>(),
         &h_t.iter().map(|&v| v as f64).collect::<Vec<_>>(),
-        n, c,
+        n,
+        c,
     ) as f32;
     let dev_in = DeviceBuffer::from_slice(&ctx, &h_in).unwrap();
     let dev_t = DeviceBuffer::from_slice(&ctx, &h_t).unwrap();
@@ -55,19 +55,28 @@ fn loss_multilabel_soft_margin_f32_mean() {
         reduction: LossReduction::Mean,
         element: ElementKind::F32,
     };
-    let plan = MultilabelSoftMarginLossPlan::<f32>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MultilabelSoftMarginLossPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MultilabelSoftMarginLossArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -97,19 +106,28 @@ fn loss_multilabel_soft_margin_f64_mean() {
         reduction: LossReduction::Mean,
         element: ElementKind::F64,
     };
-    let plan = MultilabelSoftMarginLossPlan::<f64>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MultilabelSoftMarginLossPlan::<f64>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MultilabelSoftMarginLossArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -143,19 +161,28 @@ fn loss_multilabel_soft_margin_f16_mean() {
         reduction: LossReduction::Mean,
         element: ElementKind::F16,
     };
-    let plan = MultilabelSoftMarginLossPlan::<f16>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MultilabelSoftMarginLossPlan::<f16>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MultilabelSoftMarginLossArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -165,7 +192,12 @@ fn loss_multilabel_soft_margin_f16_mean() {
     let got_f32 = got[0].to_f32();
     // log/exp pipeline — wider tolerance at half precision.
     let tol = expected.abs() * 32.0 * 9.77e-4_f32 + 1e-2;
-    assert!((got_f32 - expected).abs() <= tol, "f16 MLSM: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "f16 MLSM: got={} want={}",
+        got_f32,
+        expected
+    );
 }
 
 #[test]
@@ -191,19 +223,28 @@ fn loss_multilabel_soft_margin_bf16_mean() {
         reduction: LossReduction::Mean,
         element: ElementKind::Bf16,
     };
-    let plan = MultilabelSoftMarginLossPlan::<bf16>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .unwrap();
+    let plan =
+        MultilabelSoftMarginLossPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         MultilabelSoftMarginLossArgs {
-            input: TensorRef { data: dev_in.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            target: TensorRef { data: dev_t.as_slice(), shape: [n as i32, c as i32], stride: [c as i64, 1] },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            input: TensorRef {
+                data: dev_in.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, c as i32],
+                stride: [c as i64, 1],
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -212,5 +253,10 @@ fn loss_multilabel_soft_margin_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 32.0 * 7.81e-3_f32 + 5e-2;
-    assert!((got_f32 - expected).abs() <= tol, "bf16 MLSM: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "bf16 MLSM: got={} want={}",
+        got_f32,
+        expected
+    );
 }

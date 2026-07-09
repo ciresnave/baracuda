@@ -8,7 +8,7 @@
 
 use baracuda_cuda_sys::driver;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::module::Function;
 
 /// How many blocks of `block_size` threads (using `dynamic_smem_bytes` of

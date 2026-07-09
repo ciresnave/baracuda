@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `L1LossPlan`. FW × 4 dtypes × Mean reduction.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, L1LossArgs, L1LossDescriptor, L1LossPlan, LossReduction,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, L1LossArgs, L1LossDescriptor, L1LossPlan, LossReduction, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -73,7 +73,12 @@ fn loss_l1_f32_mean() {
     let mut got = [0f32; 1];
     dev_y.copy_to_host(&mut got).unwrap();
     let tol = expected.abs() * 8.0 * f32::EPSILON + 1e-6;
-    assert!((got[0] - expected).abs() <= tol, "f32 L1: got={} want={}", got[0], expected);
+    assert!(
+        (got[0] - expected).abs() <= tol,
+        "f32 L1: got={} want={}",
+        got[0],
+        expected
+    );
 }
 
 #[test]
@@ -178,7 +183,12 @@ fn loss_l1_f16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 16.0 * 9.77e-4_f32 + 5e-3;
-    assert!((got_f32 - expected).abs() <= tol, "f16 L1: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "f16 L1: got={} want={}",
+        got_f32,
+        expected
+    );
 }
 
 #[test]
@@ -233,5 +243,10 @@ fn loss_l1_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 16.0 * 7.81e-3_f32 + 2e-2;
-    assert!((got_f32 - expected).abs() <= tol, "bf16 L1: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "bf16 L1: got={} want={}",
+        got_f32,
+        expected
+    );
 }

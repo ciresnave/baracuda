@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `NllLossPlan`. FW × 4 dtypes × Mean reduction.
 //! `y = -mean(input[i, target[i]])`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, LossReduction, NllLossArgs, NllLossDescriptor, NllLossPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, LossReduction, NllLossArgs, NllLossDescriptor, NllLossPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -45,8 +45,7 @@ fn loss_nll_f32_mean() {
     let dev_inp = DeviceBuffer::from_slice(&ctx, &host_inp).unwrap();
     let dev_t = DeviceBuffer::from_slice(&ctx, &host_t).unwrap();
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).unwrap();
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, (n_rows as usize) * 4).unwrap();
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, (n_rows as usize) * 4).unwrap();
 
     let desc = NllLossDescriptor {
         n_rows,
@@ -69,7 +68,11 @@ fn loss_nll_f32_mean() {
                 shape: [n_rows],
                 stride: contiguous_stride([n_rows]),
             },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1], stride: [1] },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -77,7 +80,12 @@ fn loss_nll_f32_mean() {
     let mut got = [0f32; 1];
     dev_y.copy_to_host(&mut got).unwrap();
     let tol = expected.abs() * 8.0 * f32::EPSILON + 1e-6;
-    assert!((got[0] - expected).abs() <= tol, "f32 NLL: got={} want={}", got[0], expected);
+    assert!(
+        (got[0] - expected).abs() <= tol,
+        "f32 NLL: got={} want={}",
+        got[0],
+        expected
+    );
 }
 
 #[test]
@@ -90,18 +98,12 @@ fn loss_nll_f64_mean() {
         .map(|i| -0.7 - (i as f64) * 0.08)
         .collect();
     let host_t: Vec<i64> = vec![1, 3, 5];
-    let expected = host_nll_mean_f64(
-        &host_inp,
-        &host_t,
-        n_rows as usize,
-        class_extent as usize,
-    );
+    let expected = host_nll_mean_f64(&host_inp, &host_t, n_rows as usize, class_extent as usize);
 
     let dev_inp = DeviceBuffer::from_slice(&ctx, &host_inp).unwrap();
     let dev_t = DeviceBuffer::from_slice(&ctx, &host_t).unwrap();
     let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, 1).unwrap();
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, (n_rows as usize) * 8).unwrap();
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, (n_rows as usize) * 8).unwrap();
 
     let desc = NllLossDescriptor {
         n_rows,
@@ -124,7 +126,11 @@ fn loss_nll_f64_mean() {
                 shape: [n_rows],
                 stride: contiguous_stride([n_rows]),
             },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1], stride: [1] },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -156,8 +162,7 @@ fn loss_nll_f16_mean() {
     let dev_inp = DeviceBuffer::from_slice(&ctx, &host_inp).unwrap();
     let dev_t = DeviceBuffer::from_slice(&ctx, &host_t).unwrap();
     let mut dev_y: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, 1).unwrap();
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, (n_rows as usize) * 2).unwrap();
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, (n_rows as usize) * 2).unwrap();
 
     let desc = NllLossDescriptor {
         n_rows,
@@ -180,7 +185,11 @@ fn loss_nll_f16_mean() {
                 shape: [n_rows],
                 stride: contiguous_stride([n_rows]),
             },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1], stride: [1] },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -189,7 +198,12 @@ fn loss_nll_f16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let g = got[0].to_f32();
     let tol = expected.abs() * 8.0 * 9.77e-4_f32 + 5e-3;
-    assert!((g - expected).abs() <= tol, "f16 NLL: got={} want={}", g, expected);
+    assert!(
+        (g - expected).abs() <= tol,
+        "f16 NLL: got={} want={}",
+        g,
+        expected
+    );
 }
 
 #[test]
@@ -213,8 +227,7 @@ fn loss_nll_bf16_mean() {
     let dev_inp = DeviceBuffer::from_slice(&ctx, &host_inp).unwrap();
     let dev_t = DeviceBuffer::from_slice(&ctx, &host_t).unwrap();
     let mut dev_y: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, 1).unwrap();
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, (n_rows as usize) * 2).unwrap();
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, (n_rows as usize) * 2).unwrap();
 
     let desc = NllLossDescriptor {
         n_rows,
@@ -237,7 +250,11 @@ fn loss_nll_bf16_mean() {
                 shape: [n_rows],
                 stride: contiguous_stride([n_rows]),
             },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1], stride: [1] },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
         },
     )
     .unwrap();
@@ -246,5 +263,10 @@ fn loss_nll_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let g = got[0].to_f32();
     let tol = expected.abs() * 8.0 * 7.81e-3_f32 + 3e-2;
-    assert!((g - expected).abs() <= tol, "bf16 NLL: got={} want={}", g, expected);
+    assert!(
+        (g - expected).abs() <= tol,
+        "bf16 NLL: got={} want={}",
+        g,
+        expected
+    );
 }

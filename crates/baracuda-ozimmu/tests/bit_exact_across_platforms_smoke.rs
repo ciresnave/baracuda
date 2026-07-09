@@ -57,13 +57,19 @@ fn run_once(seed: u64) -> Vec<f64> {
 
     unsafe {
         h.dgemm(
-            Op::N, Op::N,
-            M, M, M,
+            Op::N,
+            Op::N,
+            M,
+            M,
+            M,
             1.0,
-            a.as_raw().0 as *const f64, M,
-            b.as_raw().0 as *const f64, M,
+            a.as_raw().0 as *const f64,
+            M,
+            b.as_raw().0 as *const f64,
+            M,
             0.0,
-            c.as_raw().0 as *mut f64, M,
+            c.as_raw().0 as *mut f64,
+            M,
             OzakiSlices::S8,
         )
         .expect("dgemm");
@@ -89,7 +95,8 @@ fn same_hardware_bit_exact_across_runs() {
         }
     }
     assert_eq!(
-        differ, 0,
+        differ,
+        0,
         "ozIMMU is supposed to be deterministic across runs on the same hardware; \
          {differ} of {} cells differed",
         a.len()
@@ -98,7 +105,10 @@ fn same_hardware_bit_exact_across_runs() {
     // Print the first 8 cells' bit patterns. Capture this in CI logs
     // for both Linux and Windows runs; when we have both, hard-code
     // the expected pattern below.
-    eprintln!("Phase 44b cross-platform bit-pattern fingerprint (M={}, SEED=0x{:x}, S=8):", M, SEED);
+    eprintln!(
+        "Phase 44b cross-platform bit-pattern fingerprint (M={}, SEED=0x{:x}, S=8):",
+        M, SEED
+    );
     for (i, &v) in a.iter().take(8).enumerate() {
         eprintln!("  cell[{i}] = 0x{:016x} ({v:e})", v.to_bits());
     }

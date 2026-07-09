@@ -24,17 +24,17 @@ fn main() {
 #[cfg(feature = "cudnn")]
 mod cudnn_impl {
     use baracuda_cudnn::{
-        softmax_forward, DType, Handle as CudnnHandle, SoftmaxAlgo, SoftmaxMode,
-        TensorDescriptor, TensorFormat,
+        DType, Handle as CudnnHandle, SoftmaxAlgo, SoftmaxMode, TensorDescriptor, TensorFormat,
+        softmax_forward,
     };
     use baracuda_driver::DeviceBuffer;
     use baracuda_kernels::{
-        contiguous_stride, ElementKind, PlanPreference, SoftmaxArgs, SoftmaxDescriptor,
-        SoftmaxKind, SoftmaxPlan, TensorMut, TensorRef, Workspace,
+        ElementKind, PlanPreference, SoftmaxArgs, SoftmaxDescriptor, SoftmaxKind, SoftmaxPlan,
+        TensorMut, TensorRef, Workspace, contiguous_stride,
     };
     use baracuda_kernels_bench::{
+        CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP, PhaseTwentyNineRow, PytorchBaseline,
         append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-        PhaseTwentyNineRow, PytorchBaseline, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
     };
     use criterion::{BenchmarkId, Criterion};
     use half::f16;
@@ -79,14 +79,11 @@ mod cudnn_impl {
                     softmax_axis: 1,
                     element: T::KIND,
                 };
-                let plan = match SoftmaxPlan::<T, 2>::select(
-                    &stream,
-                    &desc,
-                    PlanPreference::default(),
-                ) {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
+                let plan =
+                    match SoftmaxPlan::<T, 2>::select(&stream, &desc, PlanPreference::default()) {
+                        Ok(p) => p,
+                        Err(_) => continue,
+                    };
                 let xs = [rows, cols];
                 let stx = contiguous_stride(xs);
 
@@ -103,7 +100,8 @@ mod cudnn_impl {
                             stride: stx,
                         },
                     };
-                    plan.run(&stream, Workspace::None, args).expect("baracuda softmax");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("baracuda softmax");
                 });
                 let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                     let args = SoftmaxArgs::<T, 2> {
@@ -118,7 +116,8 @@ mod cudnn_impl {
                             stride: stx,
                         },
                     };
-                    plan.run(&stream, Workspace::None, args).expect("baracuda softmax");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("baracuda softmax");
                 });
                 append_csv_row(
                     BENCH_NAME,
@@ -147,7 +146,8 @@ mod cudnn_impl {
                                     stride: stx,
                                 },
                             };
-                            plan.run(&stream, Workspace::None, args).expect("baracuda softmax");
+                            plan.run(&stream, Workspace::None, args)
+                                .expect("baracuda softmax");
                         })
                     });
                 });
@@ -171,8 +171,7 @@ mod cudnn_impl {
         let cudnn = CudnnHandle::new().expect("cudnn handle");
         cudnn.set_stream(&stream).expect("cudnn set_stream");
 
-        let mut group =
-            c.benchmark_group(format!("{BENCH_NAME}/cudnn/{kind_label}/{dtype_label}"));
+        let mut group = c.benchmark_group(format!("{BENCH_NAME}/cudnn/{kind_label}/{dtype_label}"));
 
         for &rows in CROSS_SEQLEN_SWEEP {
             for &cols in CROSS_HIDDEN_SWEEP {
@@ -190,12 +189,10 @@ mod cudnn_impl {
                 };
 
                 // (N, C, H, W) = (rows, cols, 1, 1) — softmax along C.
-                let x_desc =
-                    TensorDescriptor::new_4d(TensorFormat::Nchw, dtype, rows, cols, 1, 1)
-                        .expect("x_desc");
-                let y_desc =
-                    TensorDescriptor::new_4d(TensorFormat::Nchw, dtype, rows, cols, 1, 1)
-                        .expect("y_desc");
+                let x_desc = TensorDescriptor::new_4d(TensorFormat::Nchw, dtype, rows, cols, 1, 1)
+                    .expect("x_desc");
+                let y_desc = TensorDescriptor::new_4d(TensorFormat::Nchw, dtype, rows, cols, 1, 1)
+                    .expect("y_desc");
 
                 warmup(&stream, || {
                     softmax_forward(
@@ -266,14 +263,42 @@ mod cudnn_impl {
         let baseline_ref = baseline.as_ref();
         // Softmax variants
         bench_baracuda::<f32>(c, SoftmaxKind::Softmax, "softmax", "f32", 1.0_f32);
-        bench_cudnn::<f32>(c, SoftmaxAlgo::Accurate, "softmax", "f32", DType::F32, baseline_ref);
+        bench_cudnn::<f32>(
+            c,
+            SoftmaxAlgo::Accurate,
+            "softmax",
+            "f32",
+            DType::F32,
+            baseline_ref,
+        );
         bench_baracuda::<f16>(c, SoftmaxKind::Softmax, "softmax", "f16", f16::ONE);
-        bench_cudnn::<f16>(c, SoftmaxAlgo::Accurate, "softmax", "f16", DType::F16, baseline_ref);
+        bench_cudnn::<f16>(
+            c,
+            SoftmaxAlgo::Accurate,
+            "softmax",
+            "f16",
+            DType::F16,
+            baseline_ref,
+        );
         // Phase 73.4: LogSoftmax variants (same harness, kind toggle).
         bench_baracuda::<f32>(c, SoftmaxKind::LogSoftmax, "log_softmax", "f32", 1.0_f32);
-        bench_cudnn::<f32>(c, SoftmaxAlgo::Log, "log_softmax", "f32", DType::F32, baseline_ref);
+        bench_cudnn::<f32>(
+            c,
+            SoftmaxAlgo::Log,
+            "log_softmax",
+            "f32",
+            DType::F32,
+            baseline_ref,
+        );
         bench_baracuda::<f16>(c, SoftmaxKind::LogSoftmax, "log_softmax", "f16", f16::ONE);
-        bench_cudnn::<f16>(c, SoftmaxAlgo::Log, "log_softmax", "f16", DType::F16, baseline_ref);
+        bench_cudnn::<f16>(
+            c,
+            SoftmaxAlgo::Log,
+            "log_softmax",
+            "f16",
+            DType::F16,
+            baseline_ref,
+        );
     }
 }
 

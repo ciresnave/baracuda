@@ -11,7 +11,7 @@ use baracuda_cutlass::{
     EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut, MatrixRef,
     PlanPreference, Workspace,
 };
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 /// Compute D = alpha * (A @ B) + beta * C on the host in f32.
@@ -40,8 +40,8 @@ fn cpu_gemm_rcr(
         for j in 0..n {
             let mut acc = 0.0f32;
             for kk in 0..k {
-                let a_val = a[i * lda + kk];           // row-major A[i, kk]
-                let b_val = b[j * ldb + kk];           // column-major B[kk, j]
+                let a_val = a[i * lda + kk]; // row-major A[i, kk]
+                let b_val = b[j * ldb + kk]; // column-major B[kk, j]
                 acc += a_val * b_val;
             }
             let c_val = match c {
@@ -60,12 +60,8 @@ fn run_one_f16(m: i32, n: i32, k: i32) {
     let stream = Stream::new(&ctx).expect("stream");
 
     // Host reference data — small bounded values so f16 rounding stays sane.
-    let host_a_f32: Vec<f32> = (0..(m * k))
-        .map(|i| ((i as f32) * 0.01).sin())
-        .collect();
-    let host_b_f32: Vec<f32> = (0..(k * n))
-        .map(|i| ((i as f32) * 0.013).cos())
-        .collect();
+    let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
+    let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_gemm_rcr(
         m as usize,
@@ -130,9 +126,7 @@ fn run_one_f16(m: i32, n: i32, k: i32) {
     plan.run(&stream, Workspace::None, args).expect("run");
 
     let mut host_d_out_f16 = vec![f16::ZERO; (m * n) as usize];
-    dev_d
-        .copy_to_host(&mut host_d_out_f16)
-        .expect("download D");
+    dev_d.copy_to_host(&mut host_d_out_f16).expect("download D");
 
     let mut max_err = 0.0f32;
     for (got, want) in host_d_out_f16.iter().zip(host_d_ref.iter()) {
@@ -157,12 +151,8 @@ fn run_one_bf16(m: i32, n: i32, k: i32) {
     let ctx = Context::new(&device).expect("context");
     let stream = Stream::new(&ctx).expect("stream");
 
-    let host_a_f32: Vec<f32> = (0..(m * k))
-        .map(|i| ((i as f32) * 0.01).sin())
-        .collect();
-    let host_b_f32: Vec<f32> = (0..(k * n))
-        .map(|i| ((i as f32) * 0.013).cos())
-        .collect();
+    let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
+    let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_gemm_rcr(
         m as usize,
@@ -281,10 +271,8 @@ fn can_implement_accepts_aligned_problem() {
     let n = 128i32;
     let k = 64i32;
 
-    let dev_a: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, (m * k) as usize).expect("alloc A");
-    let dev_b: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, (k * n) as usize).expect("alloc B");
+    let dev_a: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (m * k) as usize).expect("alloc A");
+    let dev_b: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (k * n) as usize).expect("alloc B");
     let mut dev_d: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
@@ -345,10 +333,8 @@ fn can_implement_rejects_misaligned_k() {
     let n = 128i32;
     let k = 7i32; // not a multiple of 8 — CUTLASS will refuse
 
-    let dev_a: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, (m * k) as usize).expect("alloc A");
-    let dev_b: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, (k * n) as usize).expect("alloc B");
+    let dev_a: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (m * k) as usize).expect("alloc A");
+    let dev_b: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (k * n) as usize).expect("alloc B");
     let mut dev_d: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc D");
 
@@ -421,12 +407,8 @@ fn null_c_with_nonzero_beta_overwrites_d() {
     let n = 64i32;
     let k = 32i32;
 
-    let host_a_f32: Vec<f32> = (0..(m * k))
-        .map(|i| ((i as f32) * 0.01).sin())
-        .collect();
-    let host_b_f32: Vec<f32> = (0..(k * n))
-        .map(|i| ((i as f32) * 0.013).cos())
-        .collect();
+    let host_a_f32: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
+    let host_b_f32: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
 
     let mut host_d_ref = vec![0.0f32; (m * n) as usize];
     cpu_gemm_rcr(
@@ -492,9 +474,7 @@ fn null_c_with_nonzero_beta_overwrites_d() {
     plan.run(&stream, Workspace::None, args).expect("run");
 
     let mut host_d_out = vec![f16::ZERO; (m * n) as usize];
-    dev_d
-        .copy_to_host(&mut host_d_out)
-        .expect("download D");
+    dev_d.copy_to_host(&mut host_d_out).expect("download D");
 
     let mut max_err = 0.0f32;
     for (got, want) in host_d_out.iter().zip(host_d_ref.iter()) {
@@ -509,7 +489,5 @@ fn null_c_with_nonzero_beta_overwrites_d() {
         "null-C regression: D was not overwritten; max abs err {max_err} exceeded tol {tol} \
          (likely the pre-existing 42.0 garbage was being accumulated via beta=7.0)"
     );
-    println!(
-        "null-C beta override regression: max abs err {max_err} (tol {tol}) ✅"
-    );
+    println!("null-C beta override regression: max abs err {max_err} (tol {tol}) ✅");
 }

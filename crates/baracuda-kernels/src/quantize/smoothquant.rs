@@ -359,7 +359,7 @@ impl<TIn: Element, TWQ: IntElement> SmoothQuantLinearPlan<TIn, TWQ> {
                 return Err(Error::Unsupported(
                     "SmoothQuantLinearPlan::run reached unsupported TIn at \
                      act-scale broadcast (select should have caught)",
-                ))
+                ));
             }
         };
         map_status(fill_status)?;
@@ -405,7 +405,7 @@ impl<TIn: Element, TWQ: IntElement> SmoothQuantLinearPlan<TIn, TWQ> {
                 return Err(Error::Unsupported(
                     "SmoothQuantLinearPlan::run reached unsupported TIn at \
                      quantized-linear pass (select should have caught)",
-                ))
+                ));
             }
         };
         map_status(ql_status)

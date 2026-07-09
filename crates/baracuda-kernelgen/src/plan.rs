@@ -11,7 +11,7 @@ use crate::ir::{
     WriteIndex,
 };
 use baracuda_kernels_types::{
-    AxisMask, Contiguity, ElementKind, OperandKey, StructureKey, VecWidth, MAX_OPERANDS,
+    AxisMask, Contiguity, ElementKind, MAX_OPERANDS, OperandKey, StructureKey, VecWidth,
 };
 
 /// How the kernel iterates the data — the backend-neutral schedule.
@@ -257,8 +257,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
             // `class`/`keepdim` are consumed by the emitter in step 3; today all
             // classes lower to the same sequential fold, so the legacy last-axis
             // path (empty mask ⇒ `InnerContig`) stays byte-identical.
-            let input0_contig =
-                key.n_operands > 0 && key.operands[0].contig == Contiguity::Contig;
+            let input0_contig = key.n_operands > 0 && key.operands[0].contig == Contiguity::Contig;
             Schedule::Reduction {
                 op: rop,
                 class: classify_reduce_axes(axes, key.rank, input0_contig),
@@ -277,7 +276,11 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 block: true,
             }
         }
-        Access::Contraction { ref axes, ref epilogue, .. } => {
+        Access::Contraction {
+            ref axes,
+            ref epilogue,
+            ..
+        } => {
             // v1 admissibility: the canonical rank-2 dense matmul cell, keyed
             // with contraction facts, and an epilogue over the K-sum only.
             assert_eq!(
@@ -353,14 +356,21 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         // cooperative smem bitonic pair-sort is produced separately by
         // `cuda::row_sort_bitonic_variant` (a `lower_variants` filter), never
         // here. All payload fields are Copy — no `ref` borrow.
-        Access::RowSort { order, stable, argsort } => {
+        Access::RowSort {
+            order,
+            stable,
+            argsort,
+        } => {
             validate_row_sort(op, key, order, stable, argsort);
-            Schedule::RowSort { order, stable, argsort }
+            Schedule::RowSort {
+                order,
+                stable,
+                argsort,
+            }
         }
         Access::Elementwise => {
             let n = key.n_operands as usize;
-            let all_contig =
-                n > 0 && (0..n).all(|k| key.operands[k].contig == Contiguity::Contig);
+            let all_contig = n > 0 && (0..n).all(|k| key.operands[k].contig == Contiguity::Contig);
             // The kernel vectorizes at the *narrowest* width every operand supports.
             let min_width = (0..n)
                 .map(|k| vec_width_elems(key.operands[k].vec_width))
@@ -1001,7 +1011,10 @@ fn assert_valid_gather(op: &OpDef, key: &StructureKey) {
          input cannot index itself"
     );
     assert!(
-        matches!(index_dtype, ElementKind::I32 | ElementKind::I64 | ElementKind::U32),
+        matches!(
+            index_dtype,
+            ElementKind::I32 | ElementKind::I64 | ElementKind::U32
+        ),
         "OpDef '{name}': gather index_dtype must be an integer index dtype \
          (I32/I64/U32), got {index_dtype:?} — a float index address is meaningless"
     );
@@ -1069,7 +1082,11 @@ pub(crate) fn combine_legal_for_dtype(combine: WriteCombine, out_dtype: ElementK
         WriteCombine::Assign => true,
         WriteCombine::AtomicAdd => matches!(
             out_dtype,
-            ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64 | ElementKind::I32 | ElementKind::I64
+            ElementKind::F32
+                | ElementKind::F32Strict
+                | ElementKind::F64
+                | ElementKind::I32
+                | ElementKind::I64
         ),
         WriteCombine::AtomicMax | WriteCombine::AtomicMin => {
             matches!(out_dtype, ElementKind::I32 | ElementKind::I64)
@@ -1138,7 +1155,10 @@ fn assert_valid_scatter(op: &OpDef, key: &StructureKey) {
         op.n_inputs
     );
     assert!(
-        matches!(index_dtype, ElementKind::I32 | ElementKind::I64 | ElementKind::U32),
+        matches!(
+            index_dtype,
+            ElementKind::I32 | ElementKind::I64 | ElementKind::U32
+        ),
         "OpDef '{name}': scatter index_dtype must be an integer index dtype \
          (I32/I64/U32), got {index_dtype:?} — a float destination address is meaningless"
     );
@@ -1325,13 +1345,7 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
     }
     let int_dt = is_int_dtype(dtype);
     let elementwise = matches!(op.access, Access::Elementwise);
-    fn walk(
-        e: &ScalarExpr,
-        op_name: &str,
-        dtype: ElementKind,
-        int_dt: bool,
-        elementwise: bool,
-    ) {
+    fn walk(e: &ScalarExpr, op_name: &str, dtype: ElementKind, int_dt: bool, elementwise: bool) {
         match e {
             ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => {}
             // Coord's own gate (`assert_coord_admissibility`, which also runs
@@ -1778,7 +1792,12 @@ fn assert_valid_reduction_post(op: &OpDef) {
     walk(post, &op.name);
 }
 
-fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: u8, key: &StructureKey) {
+fn validate_row_reduce(
+    stages: &[ReduceStage],
+    epilogue: &ScalarExpr,
+    n_inputs: u8,
+    key: &StructureKey,
+) {
     let dtype = key.dtype;
     assert!(
         matches!(
@@ -1891,7 +1910,10 @@ fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: 
     // as row-streamed — its full extent [n_out,k] is a caller precondition (the key
     // cannot see n_out/k), the identical trust level as input 0. See the module note.
     if n > 1 {
-        assert!(rank >= 2, "RowReduce with a multi-operand epilogue needs rank >= 2");
+        assert!(
+            rank >= 2,
+            "RowReduce with a multi-operand epilogue needs rank >= 2"
+        );
     }
     let out = key.operands[n];
     assert!(
@@ -1927,7 +1949,9 @@ fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: 
                      Coord is Elementwise-only in 0d"
                 )
             }
-            ScalarExpr::Const(v) => assert!(v.is_finite(), "RowReduce Const must be finite, got {v}"),
+            ScalarExpr::Const(v) => {
+                assert!(v.is_finite(), "RowReduce Const must be finite, got {v}")
+            }
             ScalarExpr::Unary(_, x) => check(x, n_inputs, max_reduced, in_stage, is_col),
             ScalarExpr::Add(a, b)
             | ScalarExpr::Sub(a, b)
@@ -2207,7 +2231,10 @@ fn validate_window(
     );
 
     // Window-parameter legality — a degenerate (empty-window) config is a reject.
-    assert!(size >= 1, "Window size must be >= 1 (an empty window has no taps)");
+    assert!(
+        size >= 1,
+        "Window size must be >= 1 (an empty window has no taps)"
+    );
     assert!(stride >= 1, "Window stride must be >= 1");
     assert!(dilation >= 1, "Window dilation must be >= 1");
     // span = the tap footprint (dilation*(size-1)+1); each edge window must overlap
@@ -2258,7 +2285,10 @@ fn validate_window(
                     rank >= 2 && (0..last).all(|d| !o.bcast.is_set(d)),
                     "Window row-scalar input {i} needs rank >= 2 and no outer-axis broadcast (in_i[row]); an all-broadcast operand is a true scalar (bake as Const)"
                 );
-                assert!(!o.flipped, "Window row-scalar input {i} must not be reversed");
+                assert!(
+                    !o.flipped,
+                    "Window row-scalar input {i} must not be reversed"
+                );
             }
         }
     }
@@ -2345,7 +2375,13 @@ fn validate_window(
 /// bound is NOT checkable here (the structure key carries no numeric extents) —
 /// it is a `launch_note` precondition + on-device-validated contract, the same
 /// trust level as smemrow/blockscan; the base rank sort has no length limit.
-fn validate_row_sort(op: &OpDef, key: &StructureKey, _order: SortOrder, stable: bool, argsort: bool) {
+fn validate_row_sort(
+    op: &OpDef,
+    key: &StructureKey,
+    _order: SortOrder,
+    stable: bool,
+    argsort: bool,
+) {
     let name = &op.name;
 
     // v1 emits only the stable pair-sort. Reject stable=false before anything else
@@ -2469,9 +2505,9 @@ mod multi_output_validate {
     //! Increment-1 multi-output gate-rejection tests. Per the house rule these
     //! call `build_plan` DIRECTLY (an emitter panic would mask a gate mutation).
     use super::build_plan;
-    use crate::ir::{input, konst, Access, OpDef, ReduceOp, ScalarExpr};
+    use crate::ir::{Access, OpDef, ReduceOp, ScalarExpr, input, konst};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     // n_operands contiguous 1D operands of `dtype`.
@@ -2648,11 +2684,11 @@ mod rowreduce_role_validate {
     //! would mask a gate mutation). Covers the new `RowScalar` role, the lifted
     //! "inputs>0 must be column-broadcast" restriction, and the rejected-ambiguous
     //! cases.
-    use super::{build_plan, rr_role, RrRole};
-    use crate::ir::{input, reduced, OpDef, ReduceOp, ReduceStage};
+    use super::{RrRole, build_plan, rr_role};
+    use crate::ir::{OpDef, ReduceOp, ReduceStage, input, reduced};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, AxisMask, Contiguity, DivBucket, ElementKind, OpCategory,
-        OperandDesc, OperandKey, VecWidth,
+        ArchSku, AxisMask, Contiguity, DivBucket, ElementKind, OpCategory, OperandDesc, OperandKey,
+        VecWidth, structure_key,
     };
 
     // A minimal OperandKey carrying only the broadcast mask + flip (all rr_role /
@@ -2698,7 +2734,10 @@ mod rowreduce_role_validate {
             "softmax_bw",
             2,
             &[ElementKind::F32],
-            vec![ReduceStage { pre: (input(0) * input(1)).0, op: ReduceOp::Sum }],
+            vec![ReduceStage {
+                pre: (input(0) * input(1)).0,
+                op: ReduceOp::Sum,
+            }],
             input(0) * (input(1) - reduced(0)),
         );
         let s = stream();
@@ -2716,8 +2755,14 @@ mod rowreduce_role_validate {
             4,
             &[ElementKind::F32],
             vec![
-                ReduceStage { pre: input(1).0, op: ReduceOp::Mean },
-                ReduceStage { pre: (input(1) * x_hat.clone()).0, op: ReduceOp::Mean },
+                ReduceStage {
+                    pre: input(1).0,
+                    op: ReduceOp::Mean,
+                },
+                ReduceStage {
+                    pre: (input(1) * x_hat.clone()).0,
+                    op: ReduceOp::Mean,
+                },
             ],
             input(3) * (input(1) - reduced(0) - x_hat * reduced(1)),
         );
@@ -2733,7 +2778,10 @@ mod rowreduce_role_validate {
             "probe",
             2,
             &[ElementKind::F32],
-            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Sum }],
+            vec![ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Sum,
+            }],
             input(0) + input(1),
         )
     }
@@ -2796,7 +2844,10 @@ mod rowreduce_role_validate {
             "t",
             1,
             &[ElementKind::F32],
-            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Sum }],
+            vec![ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Sum,
+            }],
             reduced(0),
         );
         let key = structure_key(OpCategory::Softmax, &[rowscalar(), stream()], ArchSku::Sm89);
@@ -2809,10 +2860,10 @@ mod view_gate_validate {
     //! Item-01 layout-view gate-rejection + schedule-routing tests. Per the house
     //! rule these call `build_plan` DIRECTLY — an emitter panic would mask a gate
     //! mutation (the 0c lesson).
-    use super::{build_plan, Schedule};
-    use crate::ir::{input, OpDef, ReduceOp, View};
+    use super::{Schedule, build_plan};
+    use crate::ir::{OpDef, ReduceOp, View, input};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, AxisMask, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, AxisMask, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     // A rank-2 contiguous [128,256] f32 cell (1 input + 1 output) — the input keys
@@ -2834,7 +2885,10 @@ mod view_gate_validate {
         let key = contig_2d_key();
         // Baseline: the view-free relu vectorizes on this contiguous cell.
         assert!(
-            matches!(build_plan(&relu(), &key).schedule, Schedule::Vectorized { .. }),
+            matches!(
+                build_plan(&relu(), &key).schedule,
+                Schedule::Vectorized { .. }
+            ),
             "precondition: the view-free relu must vectorize on a contiguous cell"
         );
         // A Permute view forces the STRIDED schedule (a transposed read is
@@ -2848,9 +2902,8 @@ mod view_gate_validate {
     fn identity_views_route_exactly_like_view_free() {
         let key = contig_2d_key();
         // An all-Identity views vec is byte-identical to view-free: same schedule.
-        let identated =
-            OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu())
-                .with_views(vec![View::Identity]);
+        let identated = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu())
+            .with_views(vec![View::Identity]);
         assert_eq!(
             build_plan(&relu(), &key).schedule,
             build_plan(&identated, &key).schedule,
@@ -2902,7 +2955,11 @@ mod view_gate_validate {
         // them orthogonal.
         let bcast_in = OperandDesc::new(2, &[128, 256], &[0, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
-        let key = structure_key(OpCategory::UnaryElementwise, &[bcast_in, out], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::UnaryElementwise,
+            &[bcast_in, out],
+            ArchSku::Sm89,
+        );
         let _ = build_plan(&relu_t(), &key);
     }
 
@@ -2911,7 +2968,9 @@ mod view_gate_validate {
     fn broadcast_view_disagreeing_with_key_rejected() {
         // The view declares axis 0 broadcast, but the key operand is dense (no
         // broadcast) — a lie the key-driven emitter would ignore.
-        let op = relu().with_views(vec![View::Broadcast { bcast: AxisMask(0b01) }]);
+        let op = relu().with_views(vec![View::Broadcast {
+            bcast: AxisMask(0b01),
+        }]);
         let _ = build_plan(&op, &contig_2d_key());
     }
 
@@ -2969,10 +3028,10 @@ mod gather_gate_validate {
     //! Increment-4 GATHER gate-rejection + schedule-routing tests. Per the house
     //! rule these call `build_plan` DIRECTLY — an emitter panic would mask a gate
     //! mutation (the 0c lesson).
-    use super::{build_plan, Schedule};
-    use crate::ir::{input, OobPolicy, OpDef, ReadIndex, ReduceOp};
+    use super::{Schedule, build_plan};
+    use crate::ir::{OobPolicy, OpDef, ReadIndex, ReduceOp, input};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     // rank-2 gather cell: data [4,3] (input 0), index [4,3] (input 1), out [4,3].
@@ -2980,22 +3039,46 @@ mod gather_gate_validate {
         let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
         let out = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
-        structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89)
+        structure_key(
+            OpCategory::BinaryElementwise,
+            &[data, idx, out],
+            ArchSku::Sm89,
+        )
     }
 
     #[test]
     fn gather_forces_the_strided_schedule() {
-        let op = OpDef::gather("g", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
-        assert_eq!(build_plan(&op, &gather_key(ElementKind::I32)).schedule, Schedule::Strided);
+        let op = OpDef::gather(
+            "g",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        );
+        assert_eq!(
+            build_plan(&op, &gather_key(ElementKind::I32)).schedule,
+            Schedule::Strided
+        );
         // The plan carries the read_index through to the backend.
-        assert_eq!(build_plan(&op, &gather_key(ElementKind::I32)).read_index.len(), 2);
+        assert_eq!(
+            build_plan(&op, &gather_key(ElementKind::I32))
+                .read_index
+                .len(),
+            2
+        );
     }
 
     #[test]
     #[should_panic(expected = "index_dtype must be an integer")]
     fn non_integer_index_operand_rejected() {
         // A float index dtype is meaningless (the emitted load type must be int).
-        let op = OpDef::gather("g", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::F32);
+        let op = OpDef::gather(
+            "g",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::F32,
+        );
         let _ = build_plan(&op, &gather_key(ElementKind::F32));
     }
 
@@ -3003,7 +3086,13 @@ mod gather_gate_validate {
     #[should_panic(expected = "gather axis")]
     fn axis_ge_rank_rejected() {
         // axis 2 on a rank-2 cell.
-        let op = OpDef::gather("g", &[ElementKind::F32], 2, OobPolicy::Skip, ElementKind::I32);
+        let op = OpDef::gather(
+            "g",
+            &[ElementKind::F32],
+            2,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        );
         let _ = build_plan(&op, &gather_key(ElementKind::I32));
     }
 
@@ -3077,8 +3166,14 @@ mod gather_gate_validate {
     fn gather_plus_view_on_the_same_input_rejected() {
         use crate::ir::View;
         // The gathered input 0 also carries a Permute view — gather ⊥ view in v1.
-        let op = OpDef::gather("g", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32)
-            .with_views(vec![View::Permute { perm: vec![1, 0] }, View::Identity]);
+        let op = OpDef::gather(
+            "g",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        )
+        .with_views(vec![View::Permute { perm: vec![1, 0] }, View::Identity]);
         let _ = build_plan(&op, &gather_key(ElementKind::I32));
     }
 }
@@ -3088,10 +3183,10 @@ mod scatter_gate_validate {
     //! Increment-5 SCATTER gate-rejection + schedule-routing tests. Per the house
     //! rule these call `build_plan` DIRECTLY — an emitter panic would mask a gate
     //! mutation (the 0c lesson).
-    use super::{build_plan, Schedule};
-    use crate::ir::{input, OobPolicy, OpDef, ReduceOp, WriteCombine, WriteIndex};
+    use super::{Schedule, build_plan};
+    use crate::ir::{OobPolicy, OpDef, ReduceOp, WriteCombine, WriteIndex, input};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     // rank-2 scatter cell: updates [4,3] (input 0), index [4,3] (input 1), dst
@@ -3101,15 +3196,26 @@ mod scatter_gate_validate {
         let upd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
         let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
-        structure_key(OpCategory::BinaryElementwise, &[upd, idx, dst], ArchSku::Sm89)
+        structure_key(
+            OpCategory::BinaryElementwise,
+            &[upd, idx, dst],
+            ArchSku::Sm89,
+        )
     }
 
     #[test]
     fn scatter_forces_the_strided_schedule() {
         let op = OpDef::scatter("s", &[ElementKind::F32], 0, ElementKind::I32);
-        assert_eq!(build_plan(&op, &scatter_key(ElementKind::I32)).schedule, Schedule::Strided);
+        assert_eq!(
+            build_plan(&op, &scatter_key(ElementKind::I32)).schedule,
+            Schedule::Strided
+        );
         // The plan carries the write role through to the backend.
-        assert!(!build_plan(&op, &scatter_key(ElementKind::I32)).write_index.is_direct());
+        assert!(
+            !build_plan(&op, &scatter_key(ElementKind::I32))
+                .write_index
+                .is_direct()
+        );
     }
 
     #[test]
@@ -3196,14 +3302,15 @@ mod scatter_gate_validate {
         // the deterministic gather-sum base (it sums the value operand directly).
         // A fused `relu(updates)` scatter_add is a v1 deferral. Via build_plan
         // DIRECTLY so only the plan gate can fire (not an emitter panic).
-        let op = OpDef::elementwise("s", 2, &[ElementKind::F32], input(0).relu())
-            .with_scatter(WriteIndex::ScatterIndexed {
+        let op = OpDef::elementwise("s", 2, &[ElementKind::F32], input(0).relu()).with_scatter(
+            WriteIndex::ScatterIndexed {
                 index_operand: 1,
                 axis: 0,
                 combine: WriteCombine::AtomicAdd,
                 oob: OobPolicy::Skip,
                 index_dtype: ElementKind::I32,
-            });
+            },
+        );
         let _ = build_plan(&op, &scatter_key(ElementKind::I32));
     }
 
@@ -3214,7 +3321,11 @@ mod scatter_gate_validate {
         let iupd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
         let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[iupd, idx, dst], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[iupd, idx, dst],
+            ArchSku::Sm89,
+        );
         assert_eq!(build_plan(&op, &key).schedule, Schedule::Strided);
     }
 }
@@ -3225,10 +3336,10 @@ mod scan_gate_validate {
     //! `build_plan` DIRECTLY — an emitter panic would mask a gate mutation (the 0c
     //! lesson). Every `validate_scan` (and `assert_valid_out_dtype`) rejection has a
     //! test here; each is mutation-checked both directions by a targeted reverse-edit.
-    use super::{build_plan, Schedule};
-    use crate::ir::{input, konst, reduced, OpDef, ReduceOp};
+    use super::{Schedule, build_plan};
+    use crate::ir::{OpDef, ReduceOp, input, konst, reduced};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     // A rank-2 [256,128] scan cell: contiguous input + full-width contiguous output.
@@ -3251,7 +3362,13 @@ mod scan_gate_validate {
                     let plan = build_plan(&sc, &key);
                     assert_eq!(
                         plan.schedule,
-                        Schedule::Scan { op, axis: 1, reverse, exclusive, block: false }
+                        Schedule::Scan {
+                            op,
+                            axis: 1,
+                            reverse,
+                            exclusive,
+                            block: false
+                        }
                     );
                 }
             }
@@ -3271,12 +3388,22 @@ mod scan_gate_validate {
     #[test]
     fn prod_is_admitted_unlike_rowreduce() {
         // DELIBERATE difference from validate_row_reduce: Prod IS admitted (cumprod).
-        let sc = OpDef::scan_simple("cumprod", &[ElementKind::F32], ReduceOp::Prod, 1, false, false);
+        let sc = OpDef::scan_simple(
+            "cumprod",
+            &[ElementKind::F32],
+            ReduceOp::Prod,
+            1,
+            false,
+            false,
+        );
         let key = scan_key(ElementKind::F32);
         let plan = build_plan(&sc, &key);
         assert!(matches!(
             plan.schedule,
-            Schedule::Scan { op: ReduceOp::Prod, .. }
+            Schedule::Scan {
+                op: ReduceOp::Prod,
+                ..
+            }
         ));
     }
 
@@ -3284,7 +3411,14 @@ mod scan_gate_validate {
     #[should_panic(expected = "not a monoid")]
     fn mean_combine_rejected() {
         // Mean is not a monoid — rejected (unlike Sum/Prod/Max/Min).
-        let sc = OpDef::scan_simple("cummean", &[ElementKind::F32], ReduceOp::Mean, 1, false, false);
+        let sc = OpDef::scan_simple(
+            "cummean",
+            &[ElementKind::F32],
+            ReduceOp::Mean,
+            1,
+            false,
+            false,
+        );
         let _ = build_plan(&sc, &scan_key(ElementKind::F32));
     }
 
@@ -3343,8 +3477,15 @@ mod scan_gate_validate {
         // The pre-map runs BEFORE the fold — the running prefix does not exist yet,
         // so a `Reduced` read in `pre` would lower to an undefined register.
         let sc = OpDef::scan(
-            "cum", 1, &[ElementKind::F32], ReduceOp::Sum, 1, false, false,
-            reduced(0), reduced(0),
+            "cum",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+            reduced(0),
+            reduced(0),
         );
         let _ = build_plan(&sc, &scan_key(ElementKind::F32));
     }
@@ -3354,8 +3495,15 @@ mod scan_gate_validate {
     fn post_reading_reduced_nonzero_rejected() {
         // The running prefix is the single Reduced(0) leaf; Reduced(1) has no source.
         let sc = OpDef::scan(
-            "cum", 1, &[ElementKind::F32], ReduceOp::Sum, 1, false, false,
-            input(0), reduced(1),
+            "cum",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+            input(0),
+            reduced(1),
         );
         let _ = build_plan(&sc, &scan_key(ElementKind::F32));
     }
@@ -3365,8 +3513,15 @@ mod scan_gate_validate {
     fn pre_input_out_of_range_rejected() {
         // Input(5) with n_inputs = 1 — the kernel signature has no in5.
         let sc = OpDef::scan(
-            "cum", 1, &[ElementKind::F32], ReduceOp::Sum, 1, false, false,
-            input(5), reduced(0),
+            "cum",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+            input(5),
+            reduced(0),
         );
         let _ = build_plan(&sc, &scan_key(ElementKind::F32));
     }
@@ -3376,7 +3531,13 @@ mod scan_gate_validate {
     fn nonfinite_const_in_post_rejected() {
         // A non-finite Const in the epilogue (here NaN) has no valid emission.
         let sc = OpDef::scan(
-            "cum", 1, &[ElementKind::F32], ReduceOp::Sum, 1, false, false,
+            "cum",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
             input(0),
             crate::ir::Expr(crate::ir::ScalarExpr::Add(
                 Box::new(reduced(0).0),
@@ -3421,10 +3582,10 @@ mod window_gate_validate {
     //! lesson). Every `validate_window` (and `assert_valid_out_dtype`) rejection
     //! has a test here; each window-specific gate is mutation-checked both
     //! directions by a targeted reverse-edit.
-    use super::{build_plan, Schedule};
-    use crate::ir::{input, konst, reduced, OpDef, ReduceOp};
+    use super::{Schedule, build_plan};
+    use crate::ir::{OpDef, ReduceOp, input, konst, reduced};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     // A rank-2 window cell: contiguous input [256,128] + downsampled contiguous
@@ -3449,7 +3610,18 @@ mod window_gate_validate {
         pad_hi: u8,
         cip: bool,
     ) -> OpDef {
-        OpDef::window_simple("pool", &[dt], op, axis, size, stride, dilation, pad_lo, pad_hi, cip)
+        OpDef::window_simple(
+            "pool",
+            &[dt],
+            op,
+            axis,
+            size,
+            stride,
+            dilation,
+            pad_lo,
+            pad_hi,
+            cip,
+        )
     }
 
     #[test]
@@ -3457,10 +3629,23 @@ mod window_gate_validate {
         // Max/Min/Sum/Mean × a spread of stride/dilation/pad build; the schedule is
         // the pooling Window on the innermost axis (rank-1 = 1).
         for op in [ReduceOp::Max, ReduceOp::Min, ReduceOp::Sum, ReduceOp::Mean] {
-            for &(size, stride, dilation, pad) in
-                &[(2u8, 2u8, 1u8, 0u8), (3, 1, 1, 1), (3, 2, 2, 2), (5, 3, 1, 2)]
-            {
-                let p = pool(op, ElementKind::F32, 1, size, stride, dilation, pad, pad, false);
+            for &(size, stride, dilation, pad) in &[
+                (2u8, 2u8, 1u8, 0u8),
+                (3, 1, 1, 1),
+                (3, 2, 2, 2),
+                (5, 3, 1, 2),
+            ] {
+                let p = pool(
+                    op,
+                    ElementKind::F32,
+                    1,
+                    size,
+                    stride,
+                    dilation,
+                    pad,
+                    pad,
+                    false,
+                );
                 let key = window_key(ElementKind::F32);
                 let plan = build_plan(&p, &key);
                 assert_eq!(
@@ -3497,7 +3682,11 @@ mod window_gate_validate {
         let plan = build_plan(&p, &key);
         assert!(matches!(
             plan.schedule,
-            Schedule::Window { op: ReduceOp::Mean, count_include_pad: true, .. }
+            Schedule::Window {
+                op: ReduceOp::Mean,
+                count_include_pad: true,
+                ..
+            }
         ));
     }
 
@@ -3616,8 +3805,19 @@ mod window_gate_validate {
     #[should_panic(expected = "must not read Reduced")]
     fn pre_map_reading_reduced_rejected() {
         let p = OpDef::window(
-            "pool", 1, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
-            reduced(0), reduced(0),
+            "pool",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            false,
+            reduced(0),
+            reduced(0),
         );
         let _ = build_plan(&p, &window_key(ElementKind::F32));
     }
@@ -3626,8 +3826,19 @@ mod window_gate_validate {
     #[should_panic(expected = "single Reduced(0) leaf")]
     fn post_reading_reduced_nonzero_rejected() {
         let p = OpDef::window(
-            "pool", 1, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
-            input(0), reduced(1),
+            "pool",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            false,
+            input(0),
+            reduced(1),
         );
         let _ = build_plan(&p, &window_key(ElementKind::F32));
     }
@@ -3636,8 +3847,19 @@ mod window_gate_validate {
     #[should_panic(expected = ">= n_inputs")]
     fn pre_input_out_of_range_rejected() {
         let p = OpDef::window(
-            "pool", 1, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
-            input(5), reduced(0),
+            "pool",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            false,
+            input(5),
+            reduced(0),
         );
         let _ = build_plan(&p, &window_key(ElementKind::F32));
     }
@@ -3646,7 +3868,17 @@ mod window_gate_validate {
     #[should_panic(expected = "Const must be finite")]
     fn nonfinite_const_in_post_rejected() {
         let p = OpDef::window(
-            "pool", 1, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
+            "pool",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            false,
             input(0),
             crate::ir::Expr(crate::ir::ScalarExpr::Add(
                 Box::new(reduced(0).0),
@@ -3668,7 +3900,14 @@ mod window_gate_validate {
         let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 1, 1, false);
         let key = window_key(ElementKind::F32);
         let plan = build_plan(&p, &key);
-        assert!(matches!(plan.schedule, Schedule::Window { pad_lo: 1, pad_hi: 1, .. }));
+        assert!(matches!(
+            plan.schedule,
+            Schedule::Window {
+                pad_lo: 1,
+                pad_hi: 1,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -3696,9 +3935,23 @@ mod window_gate_validate {
     fn two_input_pool(second: OperandDesc) -> (OpDef, StructureKey) {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
-        let key = structure_key(OpCategory::BinaryElementwise, &[a, second, o], ArchSku::Sm89);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[a, second, o],
+            ArchSku::Sm89,
+        );
         let p = OpDef::window(
-            "wpool", 2, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
+            "wpool",
+            2,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            false,
             input(0) * input(1),
             reduced(0),
         );
@@ -3745,10 +3998,10 @@ mod sort_gate_validate {
     //! coupling + `assert_valid_multi_output`) rejection has a test here; each
     //! sort-specific gate is mutation-checked both directions by a targeted
     //! reverse-edit.
-    use super::{access_tag, build_plan, Schedule};
-    use crate::ir::{input, Access, OpDef, ScalarExpr, SortOrder};
+    use super::{Schedule, access_tag, build_plan};
+    use crate::ir::{Access, OpDef, ScalarExpr, SortOrder, input};
     use baracuda_kernels_types::{
-        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     // A rank-2 [256,128] sort cell: contiguous input + full-width contiguous output.
@@ -3774,7 +4027,11 @@ mod sort_gate_validate {
             let plan = build_plan(&sc, &key);
             assert_eq!(
                 plan.schedule,
-                Schedule::RowSort { order, stable: true, argsort: false }
+                Schedule::RowSort {
+                    order,
+                    stable: true,
+                    argsort: false
+                }
             );
             assert_eq!(access_tag(&sc.access), "RowSort");
         }
@@ -3788,7 +4045,11 @@ mod sort_gate_validate {
         let plan = build_plan(&sc, &key);
         assert_eq!(
             plan.schedule,
-            Schedule::RowSort { order: SortOrder::Desc, stable: true, argsort: true }
+            Schedule::RowSort {
+                order: SortOrder::Desc,
+                stable: true,
+                argsort: true
+            }
         );
     }
 
@@ -3807,7 +4068,11 @@ mod sort_gate_validate {
     fn unstable_rejected() {
         // v1 emits only the stable pair-sort; stable=false is dead keying.
         let mut sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
-        sc.access = Access::RowSort { order: SortOrder::Asc, stable: false, argsort: false };
+        sc.access = Access::RowSort {
+            order: SortOrder::Asc,
+            stable: false,
+            argsort: false,
+        };
         let _ = build_plan(&sc, &sort_key(ElementKind::F32));
     }
 

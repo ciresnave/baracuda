@@ -224,8 +224,7 @@ impl<T: Element, const N: usize> RandomPlan<T, N> {
         }
         let mut handle: curandGenerator_t = core::ptr::null_mut();
         // CURAND_RNG_PSEUDO_DEFAULT == 100 (XORWOW).
-        let status =
-            unsafe { curandCreateGenerator(&mut handle as *mut _, 100) };
+        let status = unsafe { curandCreateGenerator(&mut handle as *mut _, 100) };
         if status != 0 {
             return Err(Error::CutlassInternal(curand_to_status(status)));
         }
@@ -380,7 +379,8 @@ impl<const N: usize> RandomPlan<f64, N> {
             RandomKind::Normal => {
                 let mean = self.desc.param1 as f64;
                 let stddev = self.desc.param2 as f64;
-                let status = unsafe { curandGenerateNormalDouble(gen_handle, ptr, n, mean, stddev) };
+                let status =
+                    unsafe { curandGenerateNormalDouble(gen_handle, ptr, n, mean, stddev) };
                 if status != 0 {
                     return Err(Error::CutlassInternal(curand_to_status(status)));
                 }
@@ -421,12 +421,7 @@ impl<const N: usize> RandomPlan<Bool, N> {
         }
         let needed = self.workspace_size();
         let (ws_ptr, ws_bytes): (*mut c_void, usize) = match workspace {
-            Workspace::None => {
-                return Err(Error::WorkspaceTooSmall {
-                    needed,
-                    got: 0,
-                })
-            }
+            Workspace::None => return Err(Error::WorkspaceTooSmall { needed, got: 0 }),
             Workspace::Borrowed(slice) => {
                 if slice.len() < needed {
                     return Err(Error::WorkspaceTooSmall {
@@ -485,11 +480,7 @@ impl<T: Element, const N: usize> Drop for RandomPlan<T, N> {
 // space (0..=5), so we offset them into the negative range to make the
 // origin visible when the error surfaces.
 fn curand_to_status(curand_code: i32) -> i32 {
-    if curand_code == 0 {
-        0
-    } else {
-        -curand_code
-    }
+    if curand_code == 0 { 0 } else { -curand_code }
 }
 
 fn map_status(code: i32) -> Result<()> {

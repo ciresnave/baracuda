@@ -13,10 +13,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test where_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, WhereArgs,
-    WhereDescriptor, WherePlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, WhereArgs, WhereDescriptor, WherePlan,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -52,8 +52,8 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
         shape,
         element: ElementKind::F32,
     };
-    let plan = WherePlan::<f32, N>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        WherePlan::<f32, N>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     let args = WhereArgs::<f32, N> {
         cond: TensorRef {
@@ -124,9 +124,7 @@ fn where_f32_broadcast_row_cond() {
 
     // Cond is per-row: alternating 1 / 0 by row index.
     let host_cond: Vec<u8> = (0..M).map(|i| if i % 2 == 0 { 1 } else { 0 }).collect();
-    let host_a: Vec<f32> = (0..(M * N_DIM))
-        .map(|i| (i as f32) * 0.25 - 3.0)
-        .collect();
+    let host_a: Vec<f32> = (0..(M * N_DIM)).map(|i| (i as f32) * 0.25 - 3.0).collect();
     let host_b: Vec<f32> = (0..(M * N_DIM))
         .map(|i| (i as f32) * 0.0625 + 50.0)
         .collect();
@@ -156,8 +154,8 @@ fn where_f32_broadcast_row_cond() {
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = WherePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        WherePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = WhereArgs::<f32, 2> {
         cond: TensorRef {
             data: dev_cond.as_slice(),
@@ -230,8 +228,8 @@ fn where_f32_scalar_cond() {
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = WherePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        WherePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = WhereArgs::<f32, 2> {
         cond: TensorRef {
             data: dev_cond.as_slice(),

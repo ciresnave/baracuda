@@ -68,10 +68,10 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cudaDataType, cusolverDnCreate, cusolverDnCreateParams, cusolverDnDestroy,
-    cusolverDnDestroyParams, cusolverDnHandle_t, cusolverDnParams_t, cusolverDnSetStream,
-    cusolverDnXgeev, cusolverDnXgeev_bufferSize, CUDA_C_32F, CUDA_C_64F, CUDA_R_32F, CUDA_R_64F,
-    CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR,
+    CUDA_C_32F, CUDA_C_64F, CUDA_R_32F, CUDA_R_64F, CUSOLVER_EIG_MODE_NOVECTOR,
+    CUSOLVER_EIG_MODE_VECTOR, cudaDataType, cusolverDnCreate, cusolverDnCreateParams,
+    cusolverDnDestroy, cusolverDnDestroyParams, cusolverDnHandle_t, cusolverDnParams_t,
+    cusolverDnSetStream, cusolverDnXgeev, cusolverDnXgeev_bufferSize,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
@@ -167,11 +167,7 @@ pub struct EigPlan<T: Element> {
 
 impl<T: Element> EigPlan<T> {
     /// Pick a kernel + validate the descriptor.
-    pub fn select(
-        _stream: &Stream,
-        desc: &EigDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &EigDescriptor, _pref: PlanPreference) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::EigPlan: descriptor.element != T::KIND",

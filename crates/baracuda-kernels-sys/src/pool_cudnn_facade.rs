@@ -58,14 +58,14 @@ use core::ffi::c_void;
 use core::ptr;
 
 use super::{
-    cudnnCreate, cudnnCreatePoolingDescriptor, cudnnCreateTensorDescriptor, cudnnDataType_t,
-    cudnnDestroy, cudnnDestroyPoolingDescriptor, cudnnDestroyTensorDescriptor, cudnnHandle_t,
+    CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT, CUDNN_DATA_HALF,
+    CUDNN_NOT_PROPAGATE_NAN, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING,
+    CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_MAX, CUDNN_TENSOR_NCHW, cudnnCreate,
+    cudnnCreatePoolingDescriptor, cudnnCreateTensorDescriptor, cudnnDataType_t, cudnnDestroy,
+    cudnnDestroyPoolingDescriptor, cudnnDestroyTensorDescriptor, cudnnHandle_t,
     cudnnPoolingBackward, cudnnPoolingDescriptor_t, cudnnPoolingForward,
     cudnnSetPooling2dDescriptor, cudnnSetPoolingNdDescriptor, cudnnSetStream,
     cudnnSetTensor4dDescriptor, cudnnSetTensorNdDescriptor, cudnnTensorDescriptor_t,
-    CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT, CUDNN_DATA_HALF,
-    CUDNN_NOT_PROPAGATE_NAN, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING,
-    CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_MAX, CUDNN_TENSOR_NCHW,
 };
 
 // =============================================================================
@@ -120,11 +120,7 @@ impl Drop for PoolResources {
 
 #[inline]
 fn map_status(code: i32) -> i32 {
-    if code == 0 {
-        0
-    } else {
-        5
-    }
+    if code == 0 { 0 } else { 5 }
 }
 
 /// Compute contiguous row-major strides for a rank-`nb_dims` tensor
@@ -170,14 +166,7 @@ fn validate_2d(
 }
 
 #[inline]
-fn validate_1d(
-    batch: i32,
-    channels: i32,
-    l_in: i32,
-    kl: i32,
-    sl: i32,
-    pl: i32,
-) -> i32 {
+fn validate_1d(batch: i32, channels: i32, l_in: i32, kl: i32, sl: i32, pl: i32) -> i32 {
     if batch <= 0 || channels <= 0 || l_in <= 0 {
         return 2;
     }

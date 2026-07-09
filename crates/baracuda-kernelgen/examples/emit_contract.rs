@@ -12,10 +12,10 @@
 //! `cargo run -p baracuda-kernelgen --example emit_contract`
 
 use baracuda_kernelgen::{
-    bundle, contract, emit_link_registry, generate, input, link_entry, param, Cuda, LinkEntry,
-    OpDef,
+    Cuda, LinkEntry, OpDef, bundle, contract, emit_link_registry, generate, input, link_entry,
+    param,
 };
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
 fn cell(n_operands: usize, op: OpCategory) -> baracuda_kernels_types::StructureKey {
     // [128, 256] row-major f32, 256-byte aligned (contiguous, float4-vectorizable).
@@ -52,7 +52,10 @@ fn main() {
         }
         registry.push(link_entry(op, &key, &kernel));
     }
-    print!("{}", bundle("cuda", "feat/kernel-specialization@e3907f6", &contracts));
+    print!(
+        "{}",
+        bundle("cuda", "feat/kernel-specialization@e3907f6", &contracts)
+    );
     println!();
 
     // The link registry that resolves these entry_points at module load.

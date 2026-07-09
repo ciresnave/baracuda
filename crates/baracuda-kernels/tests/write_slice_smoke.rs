@@ -17,10 +17,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm80 \
 //!   --test write_slice_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, S4, TensorMut, TensorRef, Workspace,
-    WriteSliceArgs, WriteSliceDescriptor, WriteSlicePlan,
+    ElementKind, PlanPreference, S4, TensorMut, TensorRef, Workspace, WriteSliceArgs,
+    WriteSliceDescriptor, WriteSlicePlan, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -107,7 +107,12 @@ fn write_slice_kv_cache_append_f32() {
     let dest_bytes = bytemuck_slice(&dest_init);
     let source_bytes = bytemuck_slice(&source);
     let expected_bytes = cpu_write_slice::<3>(
-        &dest_bytes, dest_shape, &source_bytes, source_shape, ranges, byte_width,
+        &dest_bytes,
+        dest_shape,
+        &source_bytes,
+        source_shape,
+        ranges,
+        byte_width,
     );
 
     let mut dev_dest = DeviceBuffer::from_slice(&ctx, &dest_init).expect("upload dest");
@@ -204,7 +209,8 @@ fn write_slice_kv_cache_append_f16() {
     expected[row_off..row_off + row_elems].copy_from_slice(&source);
     for i in 0..dest_numel {
         assert_eq!(
-            got[i].to_bits(), expected[i].to_bits(),
+            got[i].to_bits(),
+            expected[i].to_bits(),
             "kv_cache_append_f16 mismatch @ {i}"
         );
     }
@@ -263,7 +269,8 @@ fn write_slice_kv_cache_append_bf16() {
     expected[row_off..row_off + source_numel].copy_from_slice(&source);
     for i in 0..dest_numel {
         assert_eq!(
-            got[i].to_bits(), expected[i].to_bits(),
+            got[i].to_bits(),
+            expected[i].to_bits(),
             "kv_cache_append_bf16 mismatch @ {i}"
         );
     }
@@ -318,7 +325,8 @@ fn write_slice_kv_cache_append_f64() {
     expected[row_off..row_off + source_numel].copy_from_slice(&source);
     for i in 0..dest_numel {
         assert_eq!(
-            got[i].to_bits(), expected[i].to_bits(),
+            got[i].to_bits(),
+            expected[i].to_bits(),
             "kv_cache_append_f64 mismatch @ {i}"
         );
     }
@@ -343,7 +351,12 @@ fn write_slice_interior_2d_f32() {
     let dest_bytes = bytemuck_slice(&dest_init);
     let source_bytes = bytemuck_slice(&source);
     let expected_bytes = cpu_write_slice::<2>(
-        &dest_bytes, dest_shape, &source_bytes, source_shape, ranges, 4,
+        &dest_bytes,
+        dest_shape,
+        &source_bytes,
+        source_shape,
+        ranges,
+        4,
     );
 
     let mut dev_dest = DeviceBuffer::from_slice(&ctx, &dest_init).expect("upload dest");
@@ -446,8 +459,12 @@ fn write_slice_nibble_s4_rank2() {
     let source_storage: usize = (2 * 4) / 2;
 
     // Init dest bytes with a distinctive pattern.
-    let dest_init: Vec<u8> = (0..dest_storage as u8).map(|i| i.wrapping_mul(17)).collect();
-    let source_init: Vec<u8> = (0..source_storage as u8).map(|i| 0xA0 | (i & 0x0F)).collect();
+    let dest_init: Vec<u8> = (0..dest_storage as u8)
+        .map(|i| i.wrapping_mul(17))
+        .collect();
+    let source_init: Vec<u8> = (0..source_storage as u8)
+        .map(|i| 0xA0 | (i & 0x0F))
+        .collect();
 
     // Wrap u8 buffers as S4 via view_as.
     let mut dev_dest_u8 = DeviceBuffer::from_slice(&ctx, &dest_init).expect("upload dest");
@@ -459,8 +476,8 @@ fn write_slice_nibble_s4_rank2() {
         ranges,
         element: ElementKind::S4,
     };
-    let plan = WriteSlicePlan::<S4, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        WriteSlicePlan::<S4, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     {
         let dev_dest_s4 = dev_dest_u8.view_as_mut::<S4>();
         let dev_source_s4 = dev_source_u8.view_as::<S4>();
@@ -489,7 +506,7 @@ fn write_slice_nibble_s4_rank2() {
     let mut expected = dest_init.clone();
     let row_byte_stride = 4usize;
     let inner_start_byte = 2usize / 2; // 1
-    let inner_len_bytes = (6 - 2) / 2;  // 2
+    let inner_len_bytes = (6 - 2) / 2; // 2
     for r in 0..2 {
         let dest_row = (ranges[0].0 as usize + r) * row_byte_stride;
         let src_row = r * inner_len_bytes;
@@ -515,7 +532,10 @@ fn write_slice_out_of_bounds_rejected() {
         element: ElementKind::F32,
     };
     let res = WriteSlicePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default());
-    assert!(res.is_err(), "out-of-bounds range must be rejected at select");
+    assert!(
+        res.is_err(),
+        "out-of-bounds range must be rejected at select"
+    );
 }
 
 /// Negative: nibble innermost odd start → `select` rejects with

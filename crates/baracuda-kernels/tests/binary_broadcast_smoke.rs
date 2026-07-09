@@ -12,10 +12,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_broadcast_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -79,9 +79,7 @@ fn broadcast_add_row_bias() {
     let n = N_DIM as i32;
 
     let a_host: Vec<f32> = (0..N_DIM).map(|i| (i as f32) * 0.5 - 7.25).collect();
-    let b_host: Vec<f32> = (0..(M * N_DIM))
-        .map(|i| (i as f32) * 0.125 + 1.0)
-        .collect();
+    let b_host: Vec<f32> = (0..(M * N_DIM)).map(|i| (i as f32) * 0.125 + 1.0).collect();
 
     let a_shape = [1i32, n];
     let a_stride = [0i64, 1];
@@ -91,23 +89,20 @@ fn broadcast_add_row_bias() {
     let y_stride = [n as i64, 1];
 
     let expected = cpu_strided_add::<2>(
-        &a_host, a_shape, a_stride,
-        &b_host, b_shape, b_stride,
-        y_shape,
+        &a_host, a_shape, a_stride, &b_host, b_shape, b_stride, y_shape,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("upload b");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
 
     let desc = BinaryDescriptor {
         kind: BinaryKind::Add,
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     let args = BinaryArgs::<f32, 2> {
         a: TensorRef {
@@ -170,23 +165,20 @@ fn broadcast_add_col_bias() {
     let y_stride = [n as i64, 1];
 
     let expected = cpu_strided_add::<2>(
-        &a_host, a_shape, a_stride,
-        &b_host, b_shape, b_stride,
-        y_shape,
+        &a_host, a_shape, a_stride, &b_host, b_shape, b_stride, y_shape,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("upload b");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
 
     let desc = BinaryDescriptor {
         kind: BinaryKind::Add,
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 2> {
         a: TensorRef {
             data: dev_a.as_slice(),
@@ -245,23 +237,20 @@ fn broadcast_add_scalar() {
     let y_stride = [n as i64, 1];
 
     let expected = cpu_strided_add::<2>(
-        &a_host, a_shape, a_stride,
-        &b_host, b_shape, b_stride,
-        y_shape,
+        &a_host, a_shape, a_stride, &b_host, b_shape, b_stride, y_shape,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("upload b");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
 
     let desc = BinaryDescriptor {
         kind: BinaryKind::Add,
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 2> {
         a: TensorRef {
             data: dev_a.as_slice(),
@@ -327,23 +316,20 @@ fn broadcast_add_rank3_seq_only() {
     let y_stride = [(S * D) as i64, D as i64, 1];
 
     let expected = cpu_strided_add::<3>(
-        &a_host, a_shape, a_stride,
-        &b_host, b_shape, b_stride,
-        y_shape,
+        &a_host, a_shape, a_stride, &b_host, b_shape, b_stride, y_shape,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("upload b");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, B * S * D).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, B * S * D).expect("alloc y");
 
     let desc = BinaryDescriptor {
         kind: BinaryKind::Add,
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 3> {
         a: TensorRef {
             data: dev_a.as_slice(),
@@ -394,15 +380,11 @@ fn strided_add_transposed_b() {
     let m = M as i32;
     let n = N_DIM as i32;
 
-    let a_host: Vec<f32> = (0..(M * N_DIM))
-        .map(|i| (i as f32) * 0.25 - 1.5)
-        .collect();
+    let a_host: Vec<f32> = (0..(M * N_DIM)).map(|i| (i as f32) * 0.25 - 1.5).collect();
     // b_buf is [N, M] contig. We view it as [M, N] by transposing
     // (stride [1, M] instead of contig [N, 1]). So b_logical[i, j] =
     // b_buf[j, i] = b_buf[j * M + i].
-    let b_buf: Vec<f32> = (0..(N_DIM * M))
-        .map(|i| (i as f32) * 0.1 + 2.0)
-        .collect();
+    let b_buf: Vec<f32> = (0..(N_DIM * M)).map(|i| (i as f32) * 0.1 + 2.0).collect();
 
     let a_shape = [m, n];
     let a_stride = contiguous_stride([m, n]);
@@ -412,23 +394,20 @@ fn strided_add_transposed_b() {
     let y_stride = contiguous_stride([m, n]);
 
     let expected = cpu_strided_add::<2>(
-        &a_host, a_shape, a_stride,
-        &b_buf, b_shape, b_stride,
-        y_shape,
+        &a_host, a_shape, a_stride, &b_buf, b_shape, b_stride, y_shape,
     );
 
     let dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
     let dev_b = DeviceBuffer::from_slice(&ctx, &b_buf).expect("upload b");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, M * N_DIM).expect("alloc y");
 
     let desc = BinaryDescriptor {
         kind: BinaryKind::Add,
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryArgs::<f32, 2> {
         a: TensorRef {
             data: dev_a.as_slice(),

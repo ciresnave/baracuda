@@ -12,7 +12,7 @@
 use core::ffi::{c_int, c_uchar, c_void};
 use std::sync::OnceLock;
 
-use baracuda_core::{platform, Library, LoaderError};
+use baracuda_core::{Library, LoaderError, platform};
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_types::CudaStatus;
 
@@ -374,16 +374,12 @@ pub type PFN_nvjpegBufferDeviceDestroy =
     unsafe extern "C" fn(buf: nvjpegBufferDevice_t) -> nvjpegStatus_t;
 
 /// Function-pointer type for `nvjpegStateAttachPinnedBuffer`.
-pub type PFN_nvjpegStateAttachPinnedBuffer = unsafe extern "C" fn(
-    state: nvjpegJpegState_t,
-    buf: nvjpegBufferPinned_t,
-) -> nvjpegStatus_t;
+pub type PFN_nvjpegStateAttachPinnedBuffer =
+    unsafe extern "C" fn(state: nvjpegJpegState_t, buf: nvjpegBufferPinned_t) -> nvjpegStatus_t;
 
 /// Function-pointer type for `nvjpegStateAttachDeviceBuffer`.
-pub type PFN_nvjpegStateAttachDeviceBuffer = unsafe extern "C" fn(
-    state: nvjpegJpegState_t,
-    buf: nvjpegBufferDevice_t,
-) -> nvjpegStatus_t;
+pub type PFN_nvjpegStateAttachDeviceBuffer =
+    unsafe extern "C" fn(state: nvjpegJpegState_t, buf: nvjpegBufferDevice_t) -> nvjpegStatus_t;
 
 // ---- Decode params ----
 

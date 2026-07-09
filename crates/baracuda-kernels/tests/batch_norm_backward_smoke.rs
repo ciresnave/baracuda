@@ -4,10 +4,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BatchNormBackwardArgs, BatchNormBackwardDescriptor,
-    BatchNormBackwardPlan, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BatchNormBackwardArgs, BatchNormBackwardDescriptor, BatchNormBackwardPlan, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -24,8 +24,14 @@ fn setup() -> (Context, Stream) {
 
 /// CPU reference for BN BW. Returns `(dx, dgamma, dbeta)`.
 fn host_bn_bw_f32(
-    n: usize, c: usize, s: usize, dy: &[f32], x: &[f32],
-    gamma: Option<&[f32]>, saved_mean: &[f32], saved_rstd: &[f32],
+    n: usize,
+    c: usize,
+    s: usize,
+    dy: &[f32],
+    x: &[f32],
+    gamma: Option<&[f32]>,
+    saved_mean: &[f32],
+    saved_rstd: &[f32],
 ) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
     let m = (n * s) as f64;
     let mut sum_dxh = vec![0f64; c];
@@ -86,9 +92,7 @@ fn host_bn_bw_f32(
 
 /// Compute saved_mean / saved_rstd from x at f32 precision (matches the
 /// training-mode FW that would have produced these saves).
-fn compute_saves_f32(
-    n: usize, c: usize, s: usize, x: &[f32], eps: f32,
-) -> (Vec<f32>, Vec<f32>) {
+fn compute_saves_f32(n: usize, c: usize, s: usize, x: &[f32], eps: f32) -> (Vec<f32>, Vec<f32>) {
     let m = (n * s) as f64;
     let mut sums = vec![0f64; c];
     let mut sqs = vec![0f64; c];
@@ -130,12 +134,17 @@ fn batch_norm_bw_f32_with_affine() {
         .map(|i| ((i as f32) * 0.07 - 1.1).cos() * 0.4)
         .collect();
     let host_gamma: Vec<f32> = (0..c).map(|i| 0.7 + 0.1 * i as f32).collect();
-    let (saved_mean, saved_rstd) =
-        compute_saves_f32(n as usize, c as usize, s, &host_x, 1e-5);
+    let (saved_mean, saved_rstd) = compute_saves_f32(n as usize, c as usize, s, &host_x, 1e-5);
 
     let (exp_dx, exp_dgamma, exp_dbeta) = host_bn_bw_f32(
-        n as usize, c as usize, s, &host_dy, &host_x,
-        Some(&host_gamma), &saved_mean, &saved_rstd,
+        n as usize,
+        c as usize,
+        s,
+        &host_dy,
+        &host_x,
+        Some(&host_gamma),
+        &saved_mean,
+        &saved_rstd,
     );
 
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
@@ -161,16 +170,49 @@ fn batch_norm_bw_f32_with_affine() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BatchNormBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-            saved_mean: TensorRef { data: dev_sm.as_slice(), shape: [c], stride: [1] },
-            saved_rstd: TensorRef { data: dev_sr.as_slice(), shape: [c], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dgamma: Some(TensorMut { data: dev_dg.as_slice_mut(), shape: [c], stride: [1] }),
-            dbeta: Some(TensorMut { data: dev_db.as_slice_mut(), shape: [c], stride: [1] }),
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            saved_mean: TensorRef {
+                data: dev_sm.as_slice(),
+                shape: [c],
+                stride: [1],
+            },
+            saved_rstd: TensorRef {
+                data: dev_sr.as_slice(),
+                shape: [c],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dgamma: Some(TensorMut {
+                data: dev_dg.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
+            dbeta: Some(TensorMut {
+                data: dev_db.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
         },
-    ).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_dx = vec![0f32; numel];
@@ -183,16 +225,28 @@ fn batch_norm_bw_f32_with_affine() {
     let eps_tol = 64.0 * f32::EPSILON;
     for i in 0..numel {
         let tol = (exp_dx[i].abs() * eps_tol).max(eps_tol);
-        assert!((got_dx[i] - exp_dx[i]).abs() <= tol,
-            "bn bw f32 dx @ {i}: got={} want={}", got_dx[i], exp_dx[i]);
+        assert!(
+            (got_dx[i] - exp_dx[i]).abs() <= tol,
+            "bn bw f32 dx @ {i}: got={} want={}",
+            got_dx[i],
+            exp_dx[i]
+        );
     }
     for i in 0..c as usize {
         let tol = (exp_dgamma[i].abs() * eps_tol).max(eps_tol);
-        assert!((got_dg[i] - exp_dgamma[i]).abs() <= tol,
-            "bn bw f32 dgamma @ {i}: got={} want={}", got_dg[i], exp_dgamma[i]);
+        assert!(
+            (got_dg[i] - exp_dgamma[i]).abs() <= tol,
+            "bn bw f32 dgamma @ {i}: got={} want={}",
+            got_dg[i],
+            exp_dgamma[i]
+        );
         let tol2 = (exp_dbeta[i].abs() * eps_tol).max(eps_tol);
-        assert!((got_db[i] - exp_dbeta[i]).abs() <= tol2,
-            "bn bw f32 dbeta @ {i}: got={} want={}", got_db[i], exp_dbeta[i]);
+        assert!(
+            (got_db[i] - exp_dbeta[i]).abs() <= tol2,
+            "bn bw f32 dbeta @ {i}: got={} want={}",
+            got_db[i],
+            exp_dbeta[i]
+        );
     }
 }
 
@@ -218,8 +272,14 @@ fn batch_norm_bw_f64_with_affine() {
         compute_saves_f32(n as usize, c as usize, s, &host_x_f32, 1e-5);
 
     let (exp_dx_f32, exp_dgamma_f32, exp_dbeta_f32) = host_bn_bw_f32(
-        n as usize, c as usize, s, &host_dy_f32, &host_x_f32,
-        Some(&host_gamma_f32), &saved_mean_f32, &saved_rstd_f32,
+        n as usize,
+        c as usize,
+        s,
+        &host_dy_f32,
+        &host_x_f32,
+        Some(&host_gamma_f32),
+        &saved_mean_f32,
+        &saved_rstd_f32,
     );
 
     let host_x: Vec<f64> = host_x_f32.iter().map(|&v| v as f64).collect();
@@ -251,16 +311,49 @@ fn batch_norm_bw_f64_with_affine() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BatchNormBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-            saved_mean: TensorRef { data: dev_sm.as_slice(), shape: [c], stride: [1] },
-            saved_rstd: TensorRef { data: dev_sr.as_slice(), shape: [c], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dgamma: Some(TensorMut { data: dev_dg.as_slice_mut(), shape: [c], stride: [1] }),
-            dbeta: Some(TensorMut { data: dev_db.as_slice_mut(), shape: [c], stride: [1] }),
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            saved_mean: TensorRef {
+                data: dev_sm.as_slice(),
+                shape: [c],
+                stride: [1],
+            },
+            saved_rstd: TensorRef {
+                data: dev_sr.as_slice(),
+                shape: [c],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dgamma: Some(TensorMut {
+                data: dev_dg.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
+            dbeta: Some(TensorMut {
+                data: dev_db.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
         },
-    ).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_dx = vec![0f64; numel];
@@ -275,18 +368,20 @@ fn batch_norm_bw_f64_with_affine() {
     for i in 0..numel {
         let want = exp_dx_f32[i] as f64;
         let tol = (want.abs() * eps_tol).max(eps_tol);
-        assert!((got_dx[i] - want).abs() <= tol,
-            "bn bw f64 dx @ {i}: got={} want={}", got_dx[i], want);
+        assert!(
+            (got_dx[i] - want).abs() <= tol,
+            "bn bw f64 dx @ {i}: got={} want={}",
+            got_dx[i],
+            want
+        );
     }
     for i in 0..c as usize {
         let want_g = exp_dgamma_f32[i] as f64;
         let tol = (want_g.abs() * eps_tol).max(eps_tol);
-        assert!((got_dg[i] - want_g).abs() <= tol,
-            "bn bw f64 dgamma @ {i}");
+        assert!((got_dg[i] - want_g).abs() <= tol, "bn bw f64 dgamma @ {i}");
         let want_b = exp_dbeta_f32[i] as f64;
         let tol2 = (want_b.abs() * eps_tol).max(eps_tol);
-        assert!((got_db[i] - want_b).abs() <= tol2,
-            "bn bw f64 dbeta @ {i}");
+        assert!((got_db[i] - want_b).abs() <= tol2, "bn bw f64 dbeta @ {i}");
     }
 }
 
@@ -312,8 +407,14 @@ fn batch_norm_bw_f16_with_affine() {
         compute_saves_f32(n as usize, c as usize, s, &host_x_f32, 1e-5);
 
     let (exp_dx_f32, exp_dgamma_f32, exp_dbeta_f32) = host_bn_bw_f32(
-        n as usize, c as usize, s, &host_dy_f32, &host_x_f32,
-        Some(&host_gamma_f32), &saved_mean_f32, &saved_rstd_f32,
+        n as usize,
+        c as usize,
+        s,
+        &host_dy_f32,
+        &host_x_f32,
+        Some(&host_gamma_f32),
+        &saved_mean_f32,
+        &saved_rstd_f32,
     );
 
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
@@ -345,16 +446,49 @@ fn batch_norm_bw_f16_with_affine() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BatchNormBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-            saved_mean: TensorRef { data: dev_sm.as_slice(), shape: [c], stride: [1] },
-            saved_rstd: TensorRef { data: dev_sr.as_slice(), shape: [c], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dgamma: Some(TensorMut { data: dev_dg.as_slice_mut(), shape: [c], stride: [1] }),
-            dbeta: Some(TensorMut { data: dev_db.as_slice_mut(), shape: [c], stride: [1] }),
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            saved_mean: TensorRef {
+                data: dev_sm.as_slice(),
+                shape: [c],
+                stride: [1],
+            },
+            saved_rstd: TensorRef {
+                data: dev_sr.as_slice(),
+                shape: [c],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dgamma: Some(TensorMut {
+                data: dev_dg.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
+            dbeta: Some(TensorMut {
+                data: dev_db.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
         },
-    ).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_dx = vec![f16::ZERO; numel];
@@ -369,9 +503,12 @@ fn batch_norm_bw_f16_with_affine() {
     for i in 0..numel {
         let tol = (exp_dx_f32[i].abs() * eps_tol).max(eps_tol);
         let diff = (got_dx[i].to_f32() - exp_dx_f32[i]).abs();
-        assert!(diff <= tol,
+        assert!(
+            diff <= tol,
             "bn bw f16 dx @ {i}: diff={diff} got={} want={}",
-            got_dx[i].to_f32(), exp_dx_f32[i]);
+            got_dx[i].to_f32(),
+            exp_dx_f32[i]
+        );
     }
     for i in 0..c as usize {
         let tol = (exp_dgamma_f32[i].abs() * eps_tol).max(eps_tol);
@@ -405,8 +542,14 @@ fn batch_norm_bw_bf16_with_affine() {
         compute_saves_f32(n as usize, c as usize, s, &host_x_f32, 1e-5);
 
     let (exp_dx_f32, exp_dgamma_f32, exp_dbeta_f32) = host_bn_bw_f32(
-        n as usize, c as usize, s, &host_dy_f32, &host_x_f32,
-        Some(&host_gamma_f32), &saved_mean_f32, &saved_rstd_f32,
+        n as usize,
+        c as usize,
+        s,
+        &host_dy_f32,
+        &host_x_f32,
+        Some(&host_gamma_f32),
+        &saved_mean_f32,
+        &saved_rstd_f32,
     );
 
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
@@ -438,16 +581,49 @@ fn batch_norm_bw_bf16_with_affine() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BatchNormBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-            gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-            saved_mean: TensorRef { data: dev_sm.as_slice(), shape: [c], stride: [1] },
-            saved_rstd: TensorRef { data: dev_sr.as_slice(), shape: [c], stride: [1] },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            dgamma: Some(TensorMut { data: dev_dg.as_slice_mut(), shape: [c], stride: [1] }),
-            dbeta: Some(TensorMut { data: dev_db.as_slice_mut(), shape: [c], stride: [1] }),
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            saved_mean: TensorRef {
+                data: dev_sm.as_slice(),
+                shape: [c],
+                stride: [1],
+            },
+            saved_rstd: TensorRef {
+                data: dev_sr.as_slice(),
+                shape: [c],
+                stride: [1],
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dgamma: Some(TensorMut {
+                data: dev_dg.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
+            dbeta: Some(TensorMut {
+                data: dev_db.as_slice_mut(),
+                shape: [c],
+                stride: [1],
+            }),
         },
-    ).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_dx = vec![bf16::ZERO; numel];
@@ -462,9 +638,12 @@ fn batch_norm_bw_bf16_with_affine() {
     for i in 0..numel {
         let tol = (exp_dx_f32[i].abs() * eps_tol).max(eps_tol);
         let diff = (got_dx[i].to_f32() - exp_dx_f32[i]).abs();
-        assert!(diff <= tol,
+        assert!(
+            diff <= tol,
             "bn bw bf16 dx @ {i}: diff={diff} got={} want={}",
-            got_dx[i].to_f32(), exp_dx_f32[i]);
+            got_dx[i].to_f32(),
+            exp_dx_f32[i]
+        );
     }
     for i in 0..c as usize {
         let tol = (exp_dgamma_f32[i].abs() * eps_tol).max(eps_tol);

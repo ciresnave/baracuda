@@ -231,9 +231,9 @@ impl Communicator {
         let mut comms = Self::init_all(&[device])?;
         // `init_all(&[device])` asks NCCL for exactly one communicator;
         // on success NCCL fills the slot — pop is infallible in practice.
-        Ok(comms.pop().expect(
-            "ncclCommInitAll returned Success but produced no communicators",
-        ))
+        Ok(comms
+            .pop()
+            .expect("ncclCommInitAll returned Success but produced no communicators"))
     }
 
     /// Multi-process initialization. `id` is a 128-byte unique identifier
@@ -254,10 +254,7 @@ impl Communicator {
         let ndev = devices.len() as core::ffi::c_int;
         let mut comms = vec![core::ptr::null_mut::<core::ffi::c_void>(); devices.len()];
         check(unsafe { cu(comms.as_mut_ptr(), ndev, devices.as_ptr()) })?;
-        comms
-            .into_iter()
-            .map(Self::from_raw_handle)
-            .collect()
+        comms.into_iter().map(Self::from_raw_handle).collect()
     }
 
     /// Initialize one rank of a multi-process communicator.
@@ -285,13 +282,15 @@ impl Communicator {
         id: UniqueId,
         rank: i32,
         config: *mut core::ffi::c_void,
-    ) -> Result<Self> { unsafe {
-        let n = nccl()?;
-        let cu = n.nccl_comm_init_rank_config()?;
-        let mut handle: ncclComm_t = core::ptr::null_mut();
-        check(cu(&mut handle, nranks, id.0, rank, config))?;
-        Self::from_raw_handle(handle)
-    }}
+    ) -> Result<Self> {
+        unsafe {
+            let n = nccl()?;
+            let cu = n.nccl_comm_init_rank_config()?;
+            let mut handle: ncclComm_t = core::ptr::null_mut();
+            check(cu(&mut handle, nranks, id.0, rank, config))?;
+            Self::from_raw_handle(handle)
+        }
+    }
 
     /// Wrap a raw `ncclComm_t` produced by NCCL itself (e.g. after
     /// `ncclCommSplit`). Reads rank / world_size from the handle.
@@ -599,7 +598,15 @@ impl Communicator {
         let n = nccl()?;
         let cu = n.nccl_comm_split()?;
         let mut new_comm: ncclComm_t = core::ptr::null_mut();
-        check(unsafe { cu(self.handle, color, key, &mut new_comm, core::ptr::null_mut()) })?;
+        check(unsafe {
+            cu(
+                self.handle,
+                color,
+                key,
+                &mut new_comm,
+                core::ptr::null_mut(),
+            )
+        })?;
         Communicator::from_raw_handle(new_comm)
     }
 
@@ -613,24 +620,28 @@ impl Communicator {
         &self,
         dev_ptr: *mut core::ffi::c_void,
         size: usize,
-    ) -> Result<*mut core::ffi::c_void> { unsafe {
-        let n = nccl()?;
-        let cu = n.nccl_comm_register()?;
-        let mut handle: *mut core::ffi::c_void = core::ptr::null_mut();
-        check(cu(self.handle, dev_ptr, size, &mut handle))?;
-        Ok(handle)
-    }}
+    ) -> Result<*mut core::ffi::c_void> {
+        unsafe {
+            let n = nccl()?;
+            let cu = n.nccl_comm_register()?;
+            let mut handle: *mut core::ffi::c_void = core::ptr::null_mut();
+            check(cu(self.handle, dev_ptr, size, &mut handle))?;
+            Ok(handle)
+        }
+    }
 
     /// Deregister a previously-registered buffer.
     ///
     /// # Safety
     ///
     /// `handle` must come from a [`Self::register`] call on this comm.
-    pub unsafe fn deregister(&self, handle: *mut core::ffi::c_void) -> Result<()> { unsafe {
-        let n = nccl()?;
-        let cu = n.nccl_comm_deregister()?;
-        check(cu(self.handle, handle))
-    }}
+    pub unsafe fn deregister(&self, handle: *mut core::ffi::c_void) -> Result<()> {
+        unsafe {
+            let n = nccl()?;
+            let cu = n.nccl_comm_deregister()?;
+            check(cu(self.handle, handle))
+        }
+    }
 
     /// Create a custom pre-multiplied-sum reduction op:
     /// `out = sum_i (scalar * x_i)`. Use the returned [`RedOp::Custom`]
@@ -648,13 +659,15 @@ impl Communicator {
         &self,
         scalar: *mut core::ffi::c_void,
         residence: ScalarResidence,
-    ) -> Result<RedOp> { unsafe {
-        let n = nccl()?;
-        let cu = n.nccl_red_op_create_pre_mul_sum()?;
-        let mut op = ncclRedOp_t(0);
-        check(cu(&mut op, scalar, T::raw(), residence as i32, self.handle))?;
-        Ok(RedOp::Custom(op.0))
-    }}
+    ) -> Result<RedOp> {
+        unsafe {
+            let n = nccl()?;
+            let cu = n.nccl_red_op_create_pre_mul_sum()?;
+            let mut op = ncclRedOp_t(0);
+            check(cu(&mut op, scalar, T::raw(), residence as i32, self.handle))?;
+            Ok(RedOp::Custom(op.0))
+        }
+    }
 
     /// Destroy a custom op previously returned by [`Self::create_pre_mul_sum`].
     /// NCCL 2.11+. Calling on a built-in op (Sum/Prod/Max/Min/Avg) is a

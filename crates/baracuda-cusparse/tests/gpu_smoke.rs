@@ -1,6 +1,6 @@
 //! GPU-gated integration test for cuSPARSE SpMV.
 
-use baracuda_cusparse::{spmv, spmv_buffer_size, DnVec, Handle, Op, SpMVAlg, SpMat};
+use baracuda_cusparse::{DnVec, Handle, Op, SpMVAlg, SpMat, spmv, spmv_buffer_size};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]
@@ -35,17 +35,9 @@ fn csr_spmv_matches_cpu_reference() {
     let x_d: DnVec<'_, f32> = DnVec::new(&mut x).unwrap();
     let mut y_d: DnVec<'_, f32> = DnVec::new(&mut y).unwrap();
 
-    let buffer_bytes = spmv_buffer_size::<f32>(
-        &handle,
-        Op::N,
-        &1.0,
-        &a,
-        &x_d,
-        &0.0,
-        &y_d,
-        SpMVAlg::Default,
-    )
-    .unwrap();
+    let buffer_bytes =
+        spmv_buffer_size::<f32>(&handle, Op::N, &1.0, &a, &x_d, &0.0, &y_d, SpMVAlg::Default)
+            .unwrap();
 
     let mut workspace: DeviceBuffer<u8> = DeviceBuffer::new(&ctx, buffer_bytes.max(1)).unwrap();
 

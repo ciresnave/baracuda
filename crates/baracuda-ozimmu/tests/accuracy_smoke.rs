@@ -14,7 +14,7 @@
 //! 10× regression. Real workloads with bad condition numbers are
 //! covered by `ill_conditioned_smoke.rs`.
 
-use baracuda_cublas::{gemm as cublas_gemm, Handle as CublasHandle, Op as CublasOp};
+use baracuda_cublas::{Handle as CublasHandle, Op as CublasOp, gemm as cublas_gemm};
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_ozimmu::{Handle as OzimmuHandle, Op as OzimmuOp, OzakiSlices, OzakiVariant};
 
@@ -82,13 +82,19 @@ fn run_case(m: usize, slices: OzakiSlices, tolerance: f64) {
     let mut c_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, m * n).expect("alloc c_ref");
     cublas_gemm(
         &cublas_handle,
-        CublasOp::N, CublasOp::N,
-        m as i32, n as i32, k as i32,
+        CublasOp::N,
+        CublasOp::N,
+        m as i32,
+        n as i32,
+        k as i32,
         1.0,
-        &a, m as i32,
-        &b, k as i32,
+        &a,
+        m as i32,
+        &b,
+        k as i32,
         0.0,
-        &mut c_ref, m as i32,
+        &mut c_ref,
+        m as i32,
     )
     .expect("cublas dgemm");
 
@@ -99,13 +105,19 @@ fn run_case(m: usize, slices: OzakiSlices, tolerance: f64) {
     unsafe {
         oz_handle
             .dgemm(
-                OzimmuOp::N, OzimmuOp::N,
-                m, n, k,
+                OzimmuOp::N,
+                OzimmuOp::N,
+                m,
+                n,
+                k,
                 1.0,
-                a.as_raw().0 as *const f64, m,
-                b.as_raw().0 as *const f64, k,
+                a.as_raw().0 as *const f64,
+                m,
+                b.as_raw().0 as *const f64,
+                k,
                 0.0,
-                c_oz.as_raw().0 as *mut f64, m,
+                c_oz.as_raw().0 as *mut f64,
+                m,
                 slices,
             )
             .expect("ozimmu dgemm");
@@ -121,7 +133,10 @@ fn run_case(m: usize, slices: OzakiSlices, tolerance: f64) {
     assert!(
         err < tolerance,
         "ozIMMU @ {:?} M=N=K={} relative-Fro error = {:e} (tolerance {:e})",
-        slices, m, err, tolerance
+        slices,
+        m,
+        err,
+        tolerance
     );
 }
 
@@ -188,11 +203,7 @@ fn ozimmu_dgemm_512_s_auto() {
 /// Run a variant-aware dgemm on bounded sin/cos inputs and return the
 /// output cells. No cuBLAS reference — variants compare against each
 /// other rather than against native DGEMM.
-fn run_variant_sincos(
-    m: usize,
-    slices: OzakiSlices,
-    variant: OzakiVariant,
-) -> Vec<f64> {
+fn run_variant_sincos(m: usize, slices: OzakiSlices, variant: OzakiVariant) -> Vec<f64> {
     baracuda_driver::init().expect("driver init");
     let device = Device::get(0).expect("device");
     let ctx = Context::new(&device).expect("context");
@@ -200,28 +211,35 @@ fn run_variant_sincos(
 
     let n = m;
     let k = m;
-    let a_host: Vec<f64> =
-        (0..(m * k)).map(|i| ((i as f64) * 0.01).sin() * 0.5).collect();
-    let b_host: Vec<f64> =
-        (0..(k * n)).map(|i| ((i as f64) * 0.013).cos() * 0.5).collect();
+    let a_host: Vec<f64> = (0..(m * k))
+        .map(|i| ((i as f64) * 0.01).sin() * 0.5)
+        .collect();
+    let b_host: Vec<f64> = (0..(k * n))
+        .map(|i| ((i as f64) * 0.013).cos() * 0.5)
+        .collect();
 
     let a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload A");
     let b = DeviceBuffer::from_slice(&ctx, &b_host).expect("upload B");
 
     let oz_handle = OzimmuHandle::new().expect("ozimmu handle");
     oz_handle.set_stream(&stream);
-    let c_oz: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, m * n).expect("alloc c_oz");
+    let c_oz: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, m * n).expect("alloc c_oz");
     unsafe {
         oz_handle
             .dgemm_with_variant(
-                OzimmuOp::N, OzimmuOp::N,
-                m, n, k,
+                OzimmuOp::N,
+                OzimmuOp::N,
+                m,
+                n,
+                k,
                 1.0,
-                a.as_raw().0 as *const f64, m,
-                b.as_raw().0 as *const f64, k,
+                a.as_raw().0 as *const f64,
+                m,
+                b.as_raw().0 as *const f64,
+                k,
                 0.0,
-                c_oz.as_raw().0 as *mut f64, m,
+                c_oz.as_raw().0 as *mut f64,
+                m,
                 slices,
                 variant,
             )
@@ -238,11 +256,7 @@ fn run_variant_sincos(
 /// `mmvq_global_relative_tol` (absorbs single-cell cancellation
 /// outliers from synthetic fixtures, only flags systemic divergence).
 fn relative_global(got: &[f64], ref_: &[f64]) -> f64 {
-    let diff_sq: f64 = got
-        .iter()
-        .zip(ref_)
-        .map(|(g, r)| (g - r) * (g - r))
-        .sum();
+    let diff_sq: f64 = got.iter().zip(ref_).map(|(g, r)| (g - r) * (g - r)).sum();
     let ref_sq: f64 = ref_.iter().map(|v| v * v).sum();
     (diff_sq / ref_sq.max(1e-300)).sqrt()
 }
@@ -263,9 +277,12 @@ fn variants_all_finite_at_s8() {
         let out = run_variant_sincos(256, OzakiSlices::S8, variant);
         let bad_cells = out.iter().filter(|v| !v.is_finite()).count();
         assert_eq!(
-            bad_cells, 0,
+            bad_cells,
+            0,
             "variant {:?} produced {} non-finite cells (out of {})",
-            variant, bad_cells, out.len(),
+            variant,
+            bad_cells,
+            out.len(),
         );
     }
 }
@@ -278,7 +295,7 @@ fn ef_matches_base_at_s8() {
     // should be bit-very-close (the only difference is FP rounding
     // order from a different group-of-pairs).
     let base = run_variant_sincos(256, OzakiSlices::S8, OzakiVariant::Base);
-    let ef   = run_variant_sincos(256, OzakiSlices::S8, OzakiVariant::EF);
+    let ef = run_variant_sincos(256, OzakiSlices::S8, OzakiVariant::EF);
     let rel = relative_global(&ef, &base);
     assert!(
         rel < 1e-10,
@@ -307,7 +324,8 @@ fn rn_and_h_finite_match_base_within_split_difference() {
             rel < 1e-2,
             "{:?} disagreed with Base by global-relative {} \
              (>1e-2 quantization budget; algorithm bug)",
-            variant, rel,
+            variant,
+            rel,
         );
     }
 }

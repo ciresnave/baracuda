@@ -7,7 +7,7 @@ use core::mem::size_of;
 use baracuda_cuda_sys::runtime::{cudaMemcpyKind, runtime};
 use baracuda_types::DeviceRepr;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// Owned, typed allocation of device memory (Runtime API).
@@ -247,11 +247,13 @@ pub unsafe fn mem_prefetch_async(
     count: usize,
     target: PrefetchTarget,
     stream: &Stream,
-) -> Result<()> { unsafe {
-    let r = runtime()?;
-    let cu = r.cuda_mem_prefetch_async()?;
-    check(cu(dev_ptr, count, target.as_raw(), stream.as_raw()))
-}}
+) -> Result<()> {
+    unsafe {
+        let r = runtime()?;
+        let cu = r.cuda_mem_prefetch_async()?;
+        check(cu(dev_ptr, count, target.as_raw(), stream.as_raw()))
+    }
+}
 
 /// `cudaMemAdvise` — unified-memory placement hint. `advice` is a
 /// constant from [`baracuda_cuda_sys::runtime::types::cudaMemoryAdvise`].
@@ -264,11 +266,13 @@ pub unsafe fn mem_advise(
     count: usize,
     advice: i32,
     target: PrefetchTarget,
-) -> Result<()> { unsafe {
-    let r = runtime()?;
-    let cu = r.cuda_mem_advise()?;
-    check(cu(dev_ptr, count, advice, target.as_raw()))
-}}
+) -> Result<()> {
+    unsafe {
+        let r = runtime()?;
+        let cu = r.cuda_mem_advise()?;
+        check(cu(dev_ptr, count, advice, target.as_raw()))
+    }
+}
 
 // ---- Managed memory -------------------------------------------------------
 

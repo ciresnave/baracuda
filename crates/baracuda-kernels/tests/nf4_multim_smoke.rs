@@ -12,11 +12,11 @@
 
 #![cfg(feature = "bnb_nf4")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::quantize::nf4::nf4_pack_weight;
 use baracuda_kernels::{
-    contiguous_stride, Nf4Descriptor, Nf4MmvqArgs, Nf4MmvqMultiMArgs, Nf4MmvqMultiMDescriptor,
-    Nf4MmvqMultiMPlan, Nf4MmvqPlan, PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    Nf4Descriptor, Nf4MmvqArgs, Nf4MmvqMultiMArgs, Nf4MmvqMultiMDescriptor, Nf4MmvqMultiMPlan,
+    Nf4MmvqPlan, PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -70,10 +70,8 @@ fn run_for_m(m_test: i32) {
         k: k as i32,
         block_size: block_size as i32,
     };
-    let plan_m1: Nf4MmvqPlan<f16> = Nf4MmvqPlan::select(
-        &stream, &desc_m1, PlanPreference::default(),
-    )
-    .expect("plan m1 select");
+    let plan_m1: Nf4MmvqPlan<f16> =
+        Nf4MmvqPlan::select(&stream, &desc_m1, PlanPreference::default()).expect("plan m1 select");
 
     for mi in 0..m_test as usize {
         // Each row of activations is contiguous; reference path reads
@@ -121,12 +119,9 @@ fn run_for_m(m_test: i32) {
         base: desc_m1,
         m: m_test,
     };
-    let plan_multi: Nf4MmvqMultiMPlan<f16> = Nf4MmvqMultiMPlan::select(
-        &stream,
-        &desc_multi,
-        PlanPreference::default(),
-    )
-    .expect("plan multi select");
+    let plan_multi: Nf4MmvqMultiMPlan<f16> =
+        Nf4MmvqMultiMPlan::select(&stream, &desc_multi, PlanPreference::default())
+            .expect("plan multi select");
 
     let args = Nf4MmvqMultiMArgs::<f16> {
         weight: TensorRef {
@@ -177,9 +172,7 @@ fn run_for_m(m_test: i32) {
             "M={m_test} idx={i}: multi={g}, ref={r}, abs_err={err}"
         );
     }
-    eprintln!(
-        "nf4 multi-M={m_test}: max_ref={max_ref:.4e}, max_abs_err={max_abs_err:.4e}"
-    );
+    eprintln!("nf4 multi-M={m_test}: max_ref={max_ref:.4e}, max_abs_err={max_abs_err:.4e}");
 }
 
 #[test]

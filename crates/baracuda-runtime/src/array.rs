@@ -15,7 +15,7 @@ use baracuda_cuda_sys::runtime::types::{
     cudaTextureObject_t,
 };
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Construct a `cudaChannelFormatDesc` with 1/2/4 channels of `bits` bits
 /// of the given `kind` (matches the `cudaCreateChannelDesc<T>()` helpers
@@ -348,24 +348,26 @@ impl TextureObject {
         res_desc: &cudaResourceDesc,
         tex_desc: &cudaTextureDesc,
         view_desc: Option<&cudaResourceViewDesc>,
-    ) -> Result<Self> { unsafe {
-        let r = runtime()?;
-        let cu = r.cuda_create_texture_object()?;
-        let mut obj: cudaTextureObject_t = 0;
-        let view_ptr = view_desc
-            .map(|v| v as *const cudaResourceViewDesc as *const c_void)
-            .unwrap_or(core::ptr::null());
-        check(cu(
-            &mut obj,
-            res_desc as *const cudaResourceDesc as *const c_void,
-            tex_desc as *const cudaTextureDesc as *const c_void,
-            view_ptr,
-        ))?;
-        Ok(Self {
-            handle: obj,
-            _backing: None,
-        })
-    }}
+    ) -> Result<Self> {
+        unsafe {
+            let r = runtime()?;
+            let cu = r.cuda_create_texture_object()?;
+            let mut obj: cudaTextureObject_t = 0;
+            let view_ptr = view_desc
+                .map(|v| v as *const cudaResourceViewDesc as *const c_void)
+                .unwrap_or(core::ptr::null());
+            check(cu(
+                &mut obj,
+                res_desc as *const cudaResourceDesc as *const c_void,
+                tex_desc as *const cudaTextureDesc as *const c_void,
+                view_ptr,
+            ))?;
+            Ok(Self {
+                handle: obj,
+                _backing: None,
+            })
+        }
+    }
 
     /// Raw `cudaTextureObject_t` handle. Use with care — owned by `self`.
     #[inline]

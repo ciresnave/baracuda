@@ -4,10 +4,10 @@
 //!
 //! `#[ignore]`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, DequantizePerTokenArgs, DequantizePerTokenDescriptor, DequantizePerTokenPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, S8,
+    DequantizePerTokenArgs, DequantizePerTokenDescriptor, DequantizePerTokenPlan, ElementKind,
+    PlanPreference, S8, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -24,10 +24,7 @@ fn dequantize_per_token_f32_s8_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 2;
     let d: i32 = 4;
-    let host_q: Vec<S8> = vec![
-        S8(1), S8(2), S8(-3), S8(4),
-        S8(20), S8(2), S8(-1), S8(8),
-    ];
+    let host_q: Vec<S8> = vec![S8(1), S8(2), S8(-3), S8(4), S8(20), S8(2), S8(-1), S8(8)];
     let host_scale: Vec<f32> = vec![0.1, 0.5];
     let host_zp: Vec<i32> = vec![0, 0];
 
@@ -52,9 +49,8 @@ fn dequantize_per_token_f32_s8_basic() {
         input_element: ElementKind::F32,
         output_element: ElementKind::S8,
     };
-    let plan =
-        DequantizePerTokenPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
-            .expect("select");
+    let plan = DequantizePerTokenPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = DequantizePerTokenArgs::<f32, S8> {
         input: TensorRef {
             data: dev_q.as_slice(),

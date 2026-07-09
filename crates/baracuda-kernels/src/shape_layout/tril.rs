@@ -198,44 +198,86 @@ impl<T: Element, const N: usize> TrilPlan<T, N> {
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_tril_f16_strided_run(
-                        input_ptr, output_ptr, shape.as_ptr(), rank,
-                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                        input_ptr,
+                        output_ptr,
+                        shape.as_ptr(),
+                        rank,
+                        stride_x.as_ptr(),
+                        stride_y.as_ptr(),
+                        diagonal,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_tril_bf16_strided_run(
-                        input_ptr, output_ptr, shape.as_ptr(), rank,
-                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                        input_ptr,
+                        output_ptr,
+                        shape.as_ptr(),
+                        rank,
+                        stride_x.as_ptr(),
+                        stride_y.as_ptr(),
+                        diagonal,
+                        stream_ptr,
                     )
                 },
                 ElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_tril_f32_strided_run(
-                        input_ptr, output_ptr, shape.as_ptr(), rank,
-                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                        input_ptr,
+                        output_ptr,
+                        shape.as_ptr(),
+                        rank,
+                        stride_x.as_ptr(),
+                        stride_y.as_ptr(),
+                        diagonal,
+                        stream_ptr,
                     )
                 },
                 ElementKind::F64 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_tril_f64_strided_run(
-                        input_ptr, output_ptr, shape.as_ptr(), rank,
-                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                        input_ptr,
+                        output_ptr,
+                        shape.as_ptr(),
+                        rank,
+                        stride_x.as_ptr(),
+                        stride_y.as_ptr(),
+                        diagonal,
+                        stream_ptr,
                     )
                 },
                 ElementKind::I32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_tril_i32_strided_run(
-                        input_ptr, output_ptr, shape.as_ptr(), rank,
-                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                        input_ptr,
+                        output_ptr,
+                        shape.as_ptr(),
+                        rank,
+                        stride_x.as_ptr(),
+                        stride_y.as_ptr(),
+                        diagonal,
+                        stream_ptr,
                     )
                 },
                 ElementKind::I64 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_tril_i64_strided_run(
-                        input_ptr, output_ptr, shape.as_ptr(), rank,
-                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                        input_ptr,
+                        output_ptr,
+                        shape.as_ptr(),
+                        rank,
+                        stride_x.as_ptr(),
+                        stride_y.as_ptr(),
+                        diagonal,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bool => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_tril_bool_strided_run(
-                        input_ptr, output_ptr, shape.as_ptr(), rank,
-                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                        input_ptr,
+                        output_ptr,
+                        shape.as_ptr(),
+                        rank,
+                        stride_x.as_ptr(),
+                        stride_y.as_ptr(),
+                        diagonal,
+                        stream_ptr,
                     )
                 },
                 _ => {
@@ -251,37 +293,72 @@ impl<T: Element, const N: usize> TrilPlan<T, N> {
         let status = match T::KIND {
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_tril_f16_run(
-                    input_ptr, output_ptr, shape.as_ptr(), rank, diagonal, stream_ptr,
+                    input_ptr,
+                    output_ptr,
+                    shape.as_ptr(),
+                    rank,
+                    diagonal,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_tril_bf16_run(
-                    input_ptr, output_ptr, shape.as_ptr(), rank, diagonal, stream_ptr,
+                    input_ptr,
+                    output_ptr,
+                    shape.as_ptr(),
+                    rank,
+                    diagonal,
+                    stream_ptr,
                 )
             },
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_tril_f32_run(
-                    input_ptr, output_ptr, shape.as_ptr(), rank, diagonal, stream_ptr,
+                    input_ptr,
+                    output_ptr,
+                    shape.as_ptr(),
+                    rank,
+                    diagonal,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_tril_f64_run(
-                    input_ptr, output_ptr, shape.as_ptr(), rank, diagonal, stream_ptr,
+                    input_ptr,
+                    output_ptr,
+                    shape.as_ptr(),
+                    rank,
+                    diagonal,
+                    stream_ptr,
                 )
             },
             ElementKind::I32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_tril_i32_run(
-                    input_ptr, output_ptr, shape.as_ptr(), rank, diagonal, stream_ptr,
+                    input_ptr,
+                    output_ptr,
+                    shape.as_ptr(),
+                    rank,
+                    diagonal,
+                    stream_ptr,
                 )
             },
             ElementKind::I64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_tril_i64_run(
-                    input_ptr, output_ptr, shape.as_ptr(), rank, diagonal, stream_ptr,
+                    input_ptr,
+                    output_ptr,
+                    shape.as_ptr(),
+                    rank,
+                    diagonal,
+                    stream_ptr,
                 )
             },
             ElementKind::Bool => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_tril_bool_run(
-                    input_ptr, output_ptr, shape.as_ptr(), rank, diagonal, stream_ptr,
+                    input_ptr,
+                    output_ptr,
+                    shape.as_ptr(),
+                    rank,
+                    diagonal,
+                    stream_ptr,
                 )
             },
             _ => {

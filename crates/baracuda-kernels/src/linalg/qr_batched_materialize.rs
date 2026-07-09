@@ -233,7 +233,7 @@ impl<T: Element> BatchedQrMaterializePlan<T> {
         let k = m.min(n);
         let desc = BatchedOrmqrDescriptor {
             m,
-            n: m,                       // C is the M×M identity → output Q is M×M
+            n: m, // C is the M×M identity → output Q is M×M
             k,
             batch_size: self.desc.batch_size,
             side: BatchedOrmqrSide::Left,
@@ -272,12 +272,28 @@ impl<T: Element> BatchedQrMaterializePlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_batched_qr_materialize_r_f32_run(
-                    b, m, n, k, a_ptr, r_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    b,
+                    m,
+                    n,
+                    k,
+                    a_ptr,
+                    r_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_batched_qr_materialize_r_f64_run(
-                    b, m, n, k, a_ptr, r_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    b,
+                    m,
+                    n,
+                    k,
+                    a_ptr,
+                    r_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {
@@ -293,12 +309,22 @@ impl<T: Element> BatchedQrMaterializePlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_batched_qr_materialize_identity_f32_run(
-                    b, m, q_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    b,
+                    m,
+                    q_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_batched_qr_materialize_identity_f64_run(
-                    b, m, q_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    b,
+                    m,
+                    q_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => unreachable!(),

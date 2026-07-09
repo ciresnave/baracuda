@@ -38,7 +38,7 @@ mod inner {
     use baracuda_driver::DeviceBuffer;
     use baracuda_kernels_bench::{setup_device, time_with_events, warmup};
     use baracuda_ozimmu::{Handle, Op, OzakiSlices, OzakiVariant};
-    use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+    use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
     // LLM-style FP64 GEMM shapes — square m=n=k matrices at three
     // useful sizes. 1024 fits comfortably in any GPU; 4096 is the
@@ -62,8 +62,7 @@ mod inner {
             .collect();
         let a = DeviceBuffer::from_slice(ctx, &a_host).expect("upload A");
         let b = DeviceBuffer::from_slice(ctx, &b_host).expect("upload B");
-        let c: DeviceBuffer<f64> =
-            DeviceBuffer::zeros(ctx, m * n).expect("alloc C");
+        let c: DeviceBuffer<f64> = DeviceBuffer::zeros(ctx, m * n).expect("alloc C");
         (a, b, c)
     }
 
@@ -100,13 +99,19 @@ mod inner {
 
                 let run = || unsafe {
                     h.dgemm_with_variant(
-                        Op::N, Op::N,
-                        m, n, k,
+                        Op::N,
+                        Op::N,
+                        m,
+                        n,
+                        k,
                         1.0,
-                        a.as_raw().0 as *const f64, m,
-                        b.as_raw().0 as *const f64, k,
+                        a.as_raw().0 as *const f64,
+                        m,
+                        b.as_raw().0 as *const f64,
+                        k,
                         0.0,
-                        c_buf.as_raw().0 as *mut f64, m,
+                        c_buf.as_raw().0 as *mut f64,
+                        m,
                         slice,
                         variant,
                     )
@@ -116,9 +121,7 @@ mod inner {
                 warmup(&stream, run);
 
                 group.bench_function(bid, |bench| {
-                    bench.iter_custom(|iters| {
-                        time_with_events(&ctx, &stream, iters, run)
-                    });
+                    bench.iter_custom(|iters| time_with_events(&ctx, &stream, iters, run));
                 });
             }
         }

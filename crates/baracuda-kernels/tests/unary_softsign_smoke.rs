@@ -11,10 +11,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \`
 //!   `--test unary_softsign_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs,
-    UnaryDescriptor, UnaryKind, UnaryPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind,
+    UnaryPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -30,11 +30,25 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
-fn cpu_ref_f32(x: f32) -> f32 { { let f = x; f / (1.0 + f.abs()) } }
-fn cpu_ref_f64(x: f64) -> f64 { { let f = x; f / (1.0 + f.abs()) } }
+fn cpu_ref_f32(x: f32) -> f32 {
+    {
+        let f = x;
+        f / (1.0 + f.abs())
+    }
+}
+fn cpu_ref_f64(x: f64) -> f64 {
+    {
+        let f = x;
+        f / (1.0 + f.abs())
+    }
+}
 
-fn sample_f32(i: usize) -> f32 { (i as f32) * 0.5 - 17.25 }
-fn sample_f64(i: usize) -> f64 { (i as f64) * 0.5 - 17.25 }
+fn sample_f32(i: usize) -> f32 {
+    (i as f32) * 0.5 - 17.25
+}
+fn sample_f64(i: usize) -> f64 {
+    (i as f64) * 0.5 - 17.25
+}
 
 fn assert_close_f32(got: f32, expected: f32, idx: usize) {
     let diff = (got - expected).abs();
@@ -93,10 +107,19 @@ fn run_f32_contig<const N: usize>(shape: [i32; N]) {
     let plan = UnaryPlan::<f32, N>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f32, N>");
     let args = UnaryArgs::<f32, N> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("softsign f32 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("softsign f32 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f32; numel];
@@ -130,10 +153,19 @@ fn run_f16_contig_3d(shape: [i32; 3]) {
     let plan = UnaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f16, 3>");
     let args = UnaryArgs::<f16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("softsign f16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("softsign f16 run");
     stream.synchronize().expect("sync");
 
     let mut host_got = vec![f16::from_f32(0.0); numel];
@@ -167,10 +199,19 @@ fn run_bf16_contig_3d(shape: [i32; 3]) {
     let plan = UnaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<bf16, 3>");
     let args = UnaryArgs::<bf16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("softsign bf16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("softsign bf16 run");
     stream.synchronize().expect("sync");
 
     let mut host_got = vec![bf16::from_f32(0.0); numel];
@@ -201,10 +242,19 @@ fn run_f64_contig_3d(shape: [i32; 3]) {
     let plan = UnaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f64, 3>");
     let args = UnaryArgs::<f64, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("softsign f64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("softsign f64 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f64; numel];
@@ -249,11 +299,19 @@ fn softsign_f32_strided_transposed() {
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = UnaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        UnaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = UnaryArgs::<f32, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: x_stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: y_stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: x_shape,
+            stride: x_stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: y_shape,
+            stride: y_stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

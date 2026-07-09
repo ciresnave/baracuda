@@ -11,10 +11,10 @@
 //!
 //! Marked `#[ignore]` per the project convention for real-GPU tests.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BlockQ4_0, GgufBlockFormat, GgufDequantizeArgs, GgufDequantizeDescriptor,
-    GgufDequantizePlan, PlanPreference, TensorMut, TensorRef, Workspace, U8,
+    BlockQ4_0, GgufBlockFormat, GgufDequantizeArgs, GgufDequantizeDescriptor, GgufDequantizePlan,
+    PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -59,7 +59,8 @@ fn gguf_dequantize_q4_0_all_high_nibbles() {
         numel,
         block_format: GgufBlockFormat::Q4_0,
     };
-    let plan = GgufDequantizePlan::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let plan =
+        GgufDequantizePlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GgufDequantizeArgs {
         input: TensorRef {
             data: dev_packed.as_slice(),
@@ -122,7 +123,8 @@ fn gguf_dequantize_q8_0_known_values() {
         numel,
         block_format: GgufBlockFormat::Q8_0,
     };
-    let plan = GgufDequantizePlan::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let plan =
+        GgufDequantizePlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GgufDequantizeArgs {
         input: TensorRef {
             data: dev_packed.as_slice(),

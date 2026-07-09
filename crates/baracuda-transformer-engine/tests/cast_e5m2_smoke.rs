@@ -29,13 +29,11 @@ fn e5m2_roundtrip_bf16_within_dynamic_range() {
         })
         .collect();
 
-    let x: DeviceBuffer<half::bf16> =
-        DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
+    let x: DeviceBuffer<half::bf16> = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
     let mut x_fp8: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, N_ELEMS).expect("alloc fp8");
     let mut y: DeviceBuffer<half::bf16> = DeviceBuffer::zeros(&ctx, N_ELEMS).expect("alloc y");
 
-    let mut recipe =
-        Fp8Recipe::new(&ctx, &stream, Fp8Format::E5M2, HIST_LEN).expect("recipe new");
+    let mut recipe = Fp8Recipe::new(&ctx, &stream, Fp8Format::E5M2, HIST_LEN).expect("recipe new");
 
     let cast_plan: Fp8CastPlan<half::bf16> = Fp8CastPlan::select().expect("cast plan");
     for _ in 0..HIST_LEN {
@@ -81,7 +79,10 @@ fn e5m2_roundtrip_bf16_within_dynamic_range() {
         bad_frac < 0.05,
         "E5M2 roundtrip: {}/{} cells exceeded 25% relative error (worst {:.4}); \
          scale={}, max_repr=57344.0",
-        bad, N_ELEMS, worst, scale,
+        bad,
+        N_ELEMS,
+        worst,
+        scale,
     );
 }
 
@@ -128,7 +129,9 @@ fn e5m2_wider_dynamic_range_than_e4m3() {
         let rel = ((*v) - 1000.0).abs() / 1000.0;
         assert!(
             rel < 0.30,
-            "E5M2 roundtrip of 1000.0 too far: got {} (rel err {})", v, rel,
+            "E5M2 roundtrip of 1000.0 too far: got {} (rel err {})",
+            v,
+            rel,
         );
     }
 }

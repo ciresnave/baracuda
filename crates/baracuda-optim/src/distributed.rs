@@ -306,10 +306,8 @@ impl<'comm, T: AdamParamDtype + NcclScalar> DistributedAdamStepPlan<'comm, T> {
         // all_gather in step 3 then assembles each rank's
         // local-shard updates back into the full tensor.
         {
-            let params_immut: Vec<&DeviceBuffer<T>> =
-                param_buffers.iter().map(|b| &**b).collect();
-            let grads_immut: Vec<&DeviceBuffer<T>> =
-                grad_buffers.iter().map(|b| &**b).collect();
+            let params_immut: Vec<&DeviceBuffer<T>> = param_buffers.iter().map(|b| &**b).collect();
+            let grads_immut: Vec<&DeviceBuffer<T>> = grad_buffers.iter().map(|b| &**b).collect();
             let params = TensorList::<T>::new(&params_immut)?;
             let grads = TensorList::<T>::new(&grads_immut)?;
             self.inner
@@ -390,20 +388,12 @@ impl<'comm, T: AdamParamDtype + NcclScalar> DistributedAdamStepPlan<'comm, T> {
 
         // Step 2: local Adam step with mixed-precision f32 moments.
         {
-            let params_immut: Vec<&DeviceBuffer<T>> =
-                param_buffers.iter().map(|b| &**b).collect();
-            let grads_immut: Vec<&DeviceBuffer<T>> =
-                grad_buffers.iter().map(|b| &**b).collect();
+            let params_immut: Vec<&DeviceBuffer<T>> = param_buffers.iter().map(|b| &**b).collect();
+            let grads_immut: Vec<&DeviceBuffer<T>> = grad_buffers.iter().map(|b| &**b).collect();
             let params = TensorList::<T>::new(&params_immut)?;
             let grads = TensorList::<T>::new(&grads_immut)?;
-            self.inner.step_with_f32_state(
-                &params,
-                &grads,
-                exp_avg,
-                exp_avg_sq,
-                step_index,
-                stream,
-            )?;
+            self.inner
+                .step_with_f32_state(&params, &grads, exp_avg, exp_avg_sq, step_index, stream)?;
         }
 
         // Step 3 (multi-rank only): all-gather updated params.

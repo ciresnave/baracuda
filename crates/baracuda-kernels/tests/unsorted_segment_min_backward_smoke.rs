@@ -1,11 +1,11 @@
 //! Real-GPU smoke test for `UnsortedSegmentMinBackwardPlan<T>` (Phase 25).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef,
-    UnsortedSegmentMinBackwardArgs, UnsortedSegmentMinBackwardDescriptor,
-    UnsortedSegmentMinBackwardPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnsortedSegmentMinBackwardArgs,
+    UnsortedSegmentMinBackwardDescriptor, UnsortedSegmentMinBackwardPlan, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -17,8 +17,12 @@ fn setup() -> (Context, Stream) {
 }
 
 fn cpu_unsorted_min_bw(
-    n: usize, d: usize, ns: usize,
-    d_out: &[f32], input: &[f32], seg: &[i32],
+    n: usize,
+    d: usize,
+    ns: usize,
+    d_out: &[f32],
+    input: &[f32],
+    seg: &[i32],
 ) -> Vec<f32> {
     let mut din = vec![0f32; n * d];
     for s in 0..ns {
@@ -53,9 +57,7 @@ fn unsorted_segment_min_backward_f32_basic() {
     let seg: Vec<i32> = vec![1, 0, 0, 1, 0];
     let input: Vec<f32> = vec![3.0, -2.0, 1.0, 4.0, -1.0, 5.0, 7.0, -6.0, 2.0, 0.0];
     let d_out: Vec<f32> = vec![0.5, 1.0, 2.0, -1.5];
-    let expected = cpu_unsorted_min_bw(
-        n as usize, d as usize, ns as usize, &d_out, &input, &seg,
-    );
+    let expected = cpu_unsorted_min_bw(n as usize, d as usize, ns as usize, &d_out, &input, &seg);
 
     let dev_dout = DeviceBuffer::from_slice(&ctx, &d_out).expect("up dout");
     let dev_in = DeviceBuffer::from_slice(&ctx, &input).expect("up in");
@@ -69,10 +71,9 @@ fn unsorted_segment_min_backward_f32_basic() {
         num_segments: ns,
         element: ElementKind::F32,
     };
-    let plan = UnsortedSegmentMinBackwardPlan::<f32>::select(
-        &stream, &desc, PlanPreference::default(),
-    )
-    .expect("select");
+    let plan =
+        UnsortedSegmentMinBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = UnsortedSegmentMinBackwardArgs::<f32> {
         d_output: TensorRef {
             data: dev_dout.as_slice(),
@@ -101,6 +102,9 @@ fn unsorted_segment_min_backward_f32_basic() {
     let mut got = vec![0f32; (n * d) as usize];
     dev_din.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g, e, "unsorted_segment_min_backward f32 mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g, e,
+            "unsorted_segment_min_backward f32 mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }

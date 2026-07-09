@@ -3,7 +3,7 @@
 //! `mpirun`). On hosts without it, or when run as a plain `cargo test` single
 //! process, these skip gracefully instead of failing — hence `#[ignore]`.
 
-use baracuda_nvshmem::{version, Context, Team};
+use baracuda_nvshmem::{Context, Team, version};
 
 #[test]
 #[ignore = "requires NVSHMEM runtime (Linux, sm_70+) + a PE launcher"]

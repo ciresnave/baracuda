@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `TopkPlan<T>` (Phase 9 Category O).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, TopkArgs,
-    TopkDescriptor, TopkPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, TopkArgs, TopkDescriptor, TopkPlan,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

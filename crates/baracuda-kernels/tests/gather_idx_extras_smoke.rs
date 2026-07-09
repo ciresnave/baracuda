@@ -10,7 +10,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -30,7 +30,7 @@ fn gather_u8idx_f32_2d_dim1() {
     let src_shape = [3i32, 6]; // src extent on dim=1 is 6 (fits u8)
     let out_numel: usize = 3 * 4;
     let src_numel: usize = 3 * 6;
-    let host_idx: Vec<u8> = vec![0, 1, 2, 5,  3, 0, 4, 1,  5, 4, 0, 2];
+    let host_idx: Vec<u8> = vec![0, 1, 2, 5, 3, 0, 4, 1, 5, 4, 0, 2];
     let host_src: Vec<f32> = (0..src_numel).map(|i| (i as f32) * 0.5 + 1.0).collect();
     // Reference: out[i, j] = src[i, idx[i, j]].
     let mut expected = vec![0f32; out_numel];
@@ -96,7 +96,7 @@ fn gather_u8idx_f64_2d_dim0() {
     let src_shape = [5i32, 4]; // src extent on dim=0 is 5
     let out_numel: usize = 3 * 4;
     let src_numel: usize = 5 * 4;
-    let host_idx: Vec<u8> = vec![0, 1, 4, 3,  2, 0, 3, 1,  4, 4, 2, 0];
+    let host_idx: Vec<u8> = vec![0, 1, 4, 3, 2, 0, 3, 1, 4, 4, 2, 0];
     let host_src: Vec<f64> = (0..src_numel).map(|i| (i as f64) * 0.25 + 2.0).collect();
     let mut expected = vec![0f64; out_numel];
     for i in 0..3usize {

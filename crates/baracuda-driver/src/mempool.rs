@@ -15,13 +15,13 @@ use std::sync::Arc;
 
 use baracuda_cuda_sys::types::{
     CUmemAccessDesc, CUmemAllocationHandleType, CUmemAllocationType, CUmemLocation,
-    CUmemLocationType, CUmemPoolProps, CUmemPoolPtrExportData, CUmemPool_attribute,
+    CUmemLocationType, CUmemPool_attribute, CUmemPoolProps, CUmemPoolPtrExportData,
 };
-use baracuda_cuda_sys::{driver, CUdeviceptr, CUmemoryPool};
+use baracuda_cuda_sys::{CUdeviceptr, CUmemoryPool, driver};
 
 use crate::context::Context;
 use crate::device::Device;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 use crate::vmm::AccessFlags;
 

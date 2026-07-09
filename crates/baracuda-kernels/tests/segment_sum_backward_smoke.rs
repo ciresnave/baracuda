@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `SegmentSumBackwardPlan<T>` (Phase 7 7.6).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SegmentSumBackwardArgs,
-    SegmentSumBackwardDescriptor, SegmentSumBackwardPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SegmentSumBackwardArgs, SegmentSumBackwardDescriptor,
+    SegmentSumBackwardPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

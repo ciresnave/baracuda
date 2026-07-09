@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `BceLossPlan`. FW × 4 dtypes × Mean.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BceLossArgs, BceLossDescriptor, BceLossPlan, ElementKind, LossReduction,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BceLossArgs, BceLossDescriptor, BceLossPlan, ElementKind, LossReduction, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -33,7 +33,9 @@ fn loss_bce_f32_mean() {
     let numel = 16usize;
     // pred ∈ (0, 1)
     let host_p: Vec<f32> = (0..numel).map(|i| 0.2 + (i as f32) * 0.04).collect();
-    let host_t: Vec<f32> = (0..numel).map(|i| if i % 2 == 0 { 1.0 } else { 0.0 }).collect();
+    let host_t: Vec<f32> = (0..numel)
+        .map(|i| if i % 2 == 0 { 1.0 } else { 0.0 })
+        .collect();
     let expected = host_bce_mean_f64(
         &host_p.iter().map(|&v| v as f64).collect::<Vec<_>>(),
         &host_t.iter().map(|&v| v as f64).collect::<Vec<_>>(),
@@ -54,9 +56,21 @@ fn loss_bce_f32_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BceLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -64,7 +78,12 @@ fn loss_bce_f32_mean() {
     let mut got = [0f32; 1];
     dev_y.copy_to_host(&mut got).unwrap();
     let tol = expected.abs() * 32.0 * f32::EPSILON + 1e-5;
-    assert!((got[0] - expected).abs() <= tol, "f32 BCE: got={} want={}", got[0], expected);
+    assert!(
+        (got[0] - expected).abs() <= tol,
+        "f32 BCE: got={} want={}",
+        got[0],
+        expected
+    );
 }
 
 #[test]
@@ -74,7 +93,9 @@ fn loss_bce_f64_mean() {
     let shape = [3i32, 4];
     let numel = 12usize;
     let host_p: Vec<f64> = (0..numel).map(|i| 0.3 + (i as f64) * 0.05).collect();
-    let host_t: Vec<f64> = (0..numel).map(|i| if i % 3 == 0 { 1.0 } else { 0.0 }).collect();
+    let host_t: Vec<f64> = (0..numel)
+        .map(|i| if i % 3 == 0 { 1.0 } else { 0.0 })
+        .collect();
     let expected = host_bce_mean_f64(&host_p, &host_t);
 
     let dev_p = DeviceBuffer::from_slice(&ctx, &host_p).unwrap();
@@ -92,9 +113,21 @@ fn loss_bce_f64_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BceLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -112,7 +145,9 @@ fn loss_bce_f16_mean() {
     let shape = [4i32, 5];
     let numel = 20usize;
     let host_p_f32: Vec<f32> = (0..numel).map(|i| 0.25 + (i as f32) * 0.03).collect();
-    let host_t_f32: Vec<f32> = (0..numel).map(|i| if i % 2 == 0 { 1.0 } else { 0.0 }).collect();
+    let host_t_f32: Vec<f32> = (0..numel)
+        .map(|i| if i % 2 == 0 { 1.0 } else { 0.0 })
+        .collect();
     let expected = host_bce_mean_f64(
         &host_p_f32.iter().map(|&v| v as f64).collect::<Vec<_>>(),
         &host_t_f32.iter().map(|&v| v as f64).collect::<Vec<_>>(),
@@ -135,9 +170,21 @@ fn loss_bce_f16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BceLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -146,7 +193,12 @@ fn loss_bce_f16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let g = got[0].to_f32();
     let tol = expected.abs() * 32.0 * 9.77e-4_f32 + 5e-3;
-    assert!((g - expected).abs() <= tol, "f16 BCE: got={} want={}", g, expected);
+    assert!(
+        (g - expected).abs() <= tol,
+        "f16 BCE: got={} want={}",
+        g,
+        expected
+    );
 }
 
 #[test]
@@ -156,7 +208,9 @@ fn loss_bce_bf16_mean() {
     let shape = [4i32, 4];
     let numel = 16usize;
     let host_p_f32: Vec<f32> = (0..numel).map(|i| 0.3 + (i as f32) * 0.04).collect();
-    let host_t_f32: Vec<f32> = (0..numel).map(|i| if i % 2 == 0 { 1.0 } else { 0.0 }).collect();
+    let host_t_f32: Vec<f32> = (0..numel)
+        .map(|i| if i % 2 == 0 { 1.0 } else { 0.0 })
+        .collect();
     let expected = host_bce_mean_f64(
         &host_p_f32.iter().map(|&v| v as f64).collect::<Vec<_>>(),
         &host_t_f32.iter().map(|&v| v as f64).collect::<Vec<_>>(),
@@ -179,9 +233,21 @@ fn loss_bce_bf16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         BceLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -190,5 +256,10 @@ fn loss_bce_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let g = got[0].to_f32();
     let tol = expected.abs() * 32.0 * 7.81e-3_f32 + 3e-2;
-    assert!((g - expected).abs() <= tol, "bf16 BCE: got={} want={}", g, expected);
+    assert!(
+        (g - expected).abs() <= tol,
+        "bf16 BCE: got={} want={}",
+        g,
+        expected
+    );
 }

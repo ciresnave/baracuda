@@ -12,10 +12,10 @@
 //!
 //! Bit-exact compare via `to_bits()` (contiguize is pure copy — no math).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ContiguizeArgs, ContiguizeDescriptor, ContiguizePlan, ElementKind,
-    PlanPreference, S4, TensorMut, TensorRef, Workspace,
+    ContiguizeArgs, ContiguizeDescriptor, ContiguizePlan, ElementKind, PlanPreference, S4,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -336,7 +336,9 @@ fn contiguize_s4_contiguous_rank1() {
     let (ctx, stream) = setup();
     // 8 s4 elements packed into 4 bytes. Values in [-8, +7].
     let elems: Vec<i8> = vec![1, -2, 3, -4, 5, -6, 7, -8];
-    let packed: Vec<S4> = (0..4).map(|i| S4::pack(elems[2 * i], elems[2 * i + 1])).collect();
+    let packed: Vec<S4> = (0..4)
+        .map(|i| S4::pack(elems[2 * i], elems[2 * i + 1]))
+        .collect();
     let dev_src = DeviceBuffer::from_slice(&ctx, &packed).expect("upload s4");
     // Dest: 4 storage slots == 8 nibbles.
     let mut dev_dst: DeviceBuffer<S4> = DeviceBuffer::zeros(&ctx, 4).expect("alloc s4");
@@ -371,8 +373,7 @@ fn contiguize_s4_contiguous_rank1() {
     // copy of the packed bytes.
     for i in 0..4 {
         assert_eq!(
-            got[i].0,
-            packed[i].0,
+            got[i].0, packed[i].0,
             "s4 contig copy mismatch @ pack slot {i}"
         );
     }
@@ -382,8 +383,11 @@ fn contiguize_s4_contiguous_rank1() {
 // Dtype fanout — transposed rank-2 source in f16 / bf16 / f64.
 // =============================================================================
 
-fn contiguize_transposed_dtype<T>(kind: ElementKind, make: impl Fn(usize) -> T, to_bits: impl Fn(T) -> u128)
-where
+fn contiguize_transposed_dtype<T>(
+    kind: ElementKind,
+    make: impl Fn(usize) -> T,
+    to_bits: impl Fn(T) -> u128,
+) where
     T: baracuda_types::DeviceRepr + Copy + 'static + core::fmt::Debug,
 {
     let (ctx, stream) = setup();
@@ -403,8 +407,8 @@ where
         source_offset: 0,
         element: kind,
     };
-    let plan = ContiguizePlan::<T, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ContiguizePlan::<T, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ContiguizeArgs::<T, 2> {
         source: TensorRef {
             data: dev_phys.as_slice(),

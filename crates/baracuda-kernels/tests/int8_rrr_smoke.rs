@@ -18,7 +18,7 @@
 //! `#[ignore]` by default; run with
 //! `cargo test -p baracuda-kernels --release -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     ActivationKind, BiasElement, EpilogueKind, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
     LayoutSku, MatrixMut, MatrixRef, PlanPreference, S8, U8, VectorRef, Workspace,
@@ -173,24 +173,31 @@ fn run_s8_smoke<BT: BiasElement + Copy + Default>(
 
     let mut host_d_ref = vec![0f32; mu * nu];
     cpu_int_gemm_rrr::<i8, BT>(
-        mu, nu, ku,
-        &host_a, ku,
-        &host_b, nu,
+        mu,
+        nu,
+        ku,
+        &host_a,
+        ku,
+        &host_b,
+        nu,
         None,
-        if case.epilogue.requires_bias() { Some(&host_bias) } else { None },
+        if case.epilogue.requires_bias() {
+            Some(&host_bias)
+        } else {
+            None
+        },
         bias_to_f32,
         alpha,
         beta,
         case.epilogue.activation(),
-        &mut host_d_ref, nu,
+        &mut host_d_ref,
+        nu,
     );
 
-    let host_a_u: &[u8] = unsafe {
-        core::slice::from_raw_parts(host_a.as_ptr() as *const u8, host_a.len())
-    };
-    let host_b_u: &[u8] = unsafe {
-        core::slice::from_raw_parts(host_b.as_ptr() as *const u8, host_b.len())
-    };
+    let host_a_u: &[u8] =
+        unsafe { core::slice::from_raw_parts(host_a.as_ptr() as *const u8, host_a.len()) };
+    let host_b_u: &[u8] =
+        unsafe { core::slice::from_raw_parts(host_b.as_ptr() as *const u8, host_b.len()) };
     let dev_a_bytes = DeviceBuffer::from_slice(&ctx, host_a_u).expect("upload A");
     let dev_b_bytes = DeviceBuffer::from_slice(&ctx, host_b_u).expect("upload B");
     let dev_a = dev_a_bytes.view_as::<S8>();
@@ -200,11 +207,12 @@ fn run_s8_smoke<BT: BiasElement + Copy + Default>(
     } else {
         None
     };
-    let mut dev_d: DeviceBuffer<S8> =
-        DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
+    let mut dev_d: DeviceBuffer<S8> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
     let desc = IntGemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rrr,
         epilogue: case.epilogue,
     };
@@ -212,10 +220,25 @@ fn run_s8_smoke<BT: BiasElement + Copy + Default>(
         .expect("select s8 RRR plan");
 
     let args = IntGemmArgs::<S8, BT> {
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b, rows: k, cols: n, ld: n as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b,
+            rows: k,
+            cols: n,
+            ld: n as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         bias: dev_bias_opt.as_ref().map(|buf| VectorRef {
             data: buf.as_slice(),
             len: n,
@@ -224,7 +247,8 @@ fn run_s8_smoke<BT: BiasElement + Copy + Default>(
         alpha,
         beta,
     };
-    plan.run(&stream, Workspace::None, args).expect("s8 RRR GEMM run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("s8 RRR GEMM run");
     stream.synchronize().expect("stream sync");
 
     let mut host_d_s8 = vec![S8(0); mu * nu];
@@ -286,16 +310,25 @@ fn run_u8_smoke<BT: BiasElement + Copy + Default>(
 
     let mut host_d_ref = vec![0f32; mu * nu];
     cpu_int_gemm_rrr::<u8, BT>(
-        mu, nu, ku,
-        &host_a, ku,
-        &host_b, nu,
+        mu,
+        nu,
+        ku,
+        &host_a,
+        ku,
+        &host_b,
+        nu,
         None,
-        if case.epilogue.requires_bias() { Some(&host_bias) } else { None },
+        if case.epilogue.requires_bias() {
+            Some(&host_bias)
+        } else {
+            None
+        },
         bias_to_f32,
         alpha,
         beta,
         case.epilogue.activation(),
-        &mut host_d_ref, nu,
+        &mut host_d_ref,
+        nu,
     );
 
     let dev_a_bytes = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload A");
@@ -307,11 +340,12 @@ fn run_u8_smoke<BT: BiasElement + Copy + Default>(
     } else {
         None
     };
-    let mut dev_d: DeviceBuffer<U8> =
-        DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
+    let mut dev_d: DeviceBuffer<U8> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
     let desc = IntGemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rrr,
         epilogue: case.epilogue,
     };
@@ -319,10 +353,25 @@ fn run_u8_smoke<BT: BiasElement + Copy + Default>(
         .expect("select u8 RRR plan");
 
     let args = IntGemmArgs::<U8, BT> {
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b, rows: k, cols: n, ld: n as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b,
+            rows: k,
+            cols: n,
+            ld: n as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         bias: dev_bias_opt.as_ref().map(|buf| VectorRef {
             data: buf.as_slice(),
             len: n,
@@ -331,7 +380,8 @@ fn run_u8_smoke<BT: BiasElement + Copy + Default>(
         alpha,
         beta,
     };
-    plan.run(&stream, Workspace::None, args).expect("u8 RRR GEMM run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("u8 RRR GEMM run");
     stream.synchronize().expect("stream sync");
 
     let mut host_d_u8 = vec![U8(0); mu * nu];
@@ -387,39 +437,63 @@ fn bias_to_f32_i32(b: i32) -> f32 {
 
 // ---- S8 Identity — 4 problem shapes ----
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_identity_64_64_32() {
     run_s8_smoke::<f32>(
-        64, 64, 32,
-        IntSmokeCase { epilogue: EpilogueKind::Identity },
-        mk_bias_f32, bias_to_f32_f32,
+        64,
+        64,
+        32,
+        IntSmokeCase {
+            epilogue: EpilogueKind::Identity,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
     );
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_identity_128_128_128() {
     run_s8_smoke::<f32>(
-        128, 128, 128,
-        IntSmokeCase { epilogue: EpilogueKind::Identity },
-        mk_bias_f32, bias_to_f32_f32,
+        128,
+        128,
+        128,
+        IntSmokeCase {
+            epilogue: EpilogueKind::Identity,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
     );
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_identity_256_128_64() {
     run_s8_smoke::<f32>(
-        256, 128, 64,
-        IntSmokeCase { epilogue: EpilogueKind::Identity },
-        mk_bias_f32, bias_to_f32_f32,
+        256,
+        128,
+        64,
+        IntSmokeCase {
+            epilogue: EpilogueKind::Identity,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
     );
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_identity_100_70_50() {
     run_s8_smoke::<f32>(
-        100, 70, 50,
-        IntSmokeCase { epilogue: EpilogueKind::Identity },
-        mk_bias_f32, bias_to_f32_f32,
+        100,
+        70,
+        50,
+        IntSmokeCase {
+            epilogue: EpilogueKind::Identity,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
     );
 }
 
@@ -429,117 +503,253 @@ const M: i32 = 128;
 const N: i32 = 128;
 const K: i32 = 128;
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_bias_f32() {
-    run_s8_smoke::<f32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::Bias },
-        mk_bias_f32, bias_to_f32_f32);
+    run_s8_smoke::<f32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::Bias,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_bias_relu_f32() {
-    run_s8_smoke::<f32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasRelu },
-        mk_bias_f32, bias_to_f32_f32);
+    run_s8_smoke::<f32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasRelu,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_bias_gelu_f32() {
-    run_s8_smoke::<f32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasGelu },
-        mk_bias_f32, bias_to_f32_f32);
+    run_s8_smoke::<f32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasGelu,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_bias_silu_f32() {
-    run_s8_smoke::<f32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasSilu },
-        mk_bias_f32, bias_to_f32_f32);
+    run_s8_smoke::<f32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasSilu,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
+    );
 }
 
 // ---- S8 × i32 bias ----
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_bias_i32() {
-    run_s8_smoke::<i32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::Bias },
-        mk_bias_i32, bias_to_f32_i32);
+    run_s8_smoke::<i32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::Bias,
+        },
+        mk_bias_i32,
+        bias_to_f32_i32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_bias_relu_i32() {
-    run_s8_smoke::<i32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasRelu },
-        mk_bias_i32, bias_to_f32_i32);
+    run_s8_smoke::<i32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasRelu,
+        },
+        mk_bias_i32,
+        bias_to_f32_i32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_bias_gelu_i32() {
-    run_s8_smoke::<i32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasGelu },
-        mk_bias_i32, bias_to_f32_i32);
+    run_s8_smoke::<i32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasGelu,
+        },
+        mk_bias_i32,
+        bias_to_f32_i32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s8_rrr_bias_silu_i32() {
-    run_s8_smoke::<i32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasSilu },
-        mk_bias_i32, bias_to_f32_i32);
+    run_s8_smoke::<i32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasSilu,
+        },
+        mk_bias_i32,
+        bias_to_f32_i32,
+    );
 }
 
 // ---- U8 Identity ----
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u8_rrr_identity_128_128_128() {
-    run_u8_smoke::<f32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::Identity },
-        mk_bias_f32, bias_to_f32_f32);
+    run_u8_smoke::<f32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::Identity,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
+    );
 }
 
 // ---- U8 × f32 bias ----
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u8_rrr_bias_f32() {
-    run_u8_smoke::<f32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::Bias },
-        mk_bias_f32, bias_to_f32_f32);
+    run_u8_smoke::<f32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::Bias,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u8_rrr_bias_relu_f32() {
-    run_u8_smoke::<f32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasRelu },
-        mk_bias_f32, bias_to_f32_f32);
+    run_u8_smoke::<f32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasRelu,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u8_rrr_bias_gelu_f32() {
-    run_u8_smoke::<f32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasGelu },
-        mk_bias_f32, bias_to_f32_f32);
+    run_u8_smoke::<f32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasGelu,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u8_rrr_bias_silu_f32() {
-    run_u8_smoke::<f32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasSilu },
-        mk_bias_f32, bias_to_f32_f32);
+    run_u8_smoke::<f32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasSilu,
+        },
+        mk_bias_f32,
+        bias_to_f32_f32,
+    );
 }
 
 // ---- U8 × i32 bias ----
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u8_rrr_bias_i32() {
-    run_u8_smoke::<i32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::Bias },
-        mk_bias_i32, bias_to_f32_i32);
+    run_u8_smoke::<i32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::Bias,
+        },
+        mk_bias_i32,
+        bias_to_f32_i32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u8_rrr_bias_relu_i32() {
-    run_u8_smoke::<i32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasRelu },
-        mk_bias_i32, bias_to_f32_i32);
+    run_u8_smoke::<i32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasRelu,
+        },
+        mk_bias_i32,
+        bias_to_f32_i32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u8_rrr_bias_gelu_i32() {
-    run_u8_smoke::<i32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasGelu },
-        mk_bias_i32, bias_to_f32_i32);
+    run_u8_smoke::<i32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasGelu,
+        },
+        mk_bias_i32,
+        bias_to_f32_i32,
+    );
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u8_rrr_bias_silu_i32() {
-    run_u8_smoke::<i32>(M, N, K,
-        IntSmokeCase { epilogue: EpilogueKind::BiasSilu },
-        mk_bias_i32, bias_to_f32_i32);
+    run_u8_smoke::<i32>(
+        M,
+        N,
+        K,
+        IntSmokeCase {
+            epilogue: EpilogueKind::BiasSilu,
+        },
+        mk_bias_i32,
+        bias_to_f32_i32,
+    );
 }

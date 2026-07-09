@@ -330,26 +330,58 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
         let status = match (self.desc.kind, T::KIND) {
             (ReduceKind::Sum, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_reduce_sum_backward_f32_run(
-                    numel, rank, shape.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                    dy_ptr, dx_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_dy.as_ptr(),
+                    stride_dx.as_ptr(),
+                    dy_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ReduceKind::Sum, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_reduce_sum_backward_f16_run(
-                    numel, rank, shape.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                    dy_ptr, dx_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_dy.as_ptr(),
+                    stride_dx.as_ptr(),
+                    dy_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ReduceKind::Sum, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_reduce_sum_backward_bf16_run(
-                    numel, rank, shape.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                    dy_ptr, dx_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_dy.as_ptr(),
+                    stride_dx.as_ptr(),
+                    dy_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ReduceKind::Sum, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_reduce_sum_backward_f64_run(
-                    numel, rank, shape.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                    dy_ptr, dx_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    rank,
+                    shape.as_ptr(),
+                    stride_dy.as_ptr(),
+                    stride_dx.as_ptr(),
+                    dy_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             (ReduceKind::Max, _) | (ReduceKind::Min, _) => {
@@ -366,44 +398,82 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_max_min_backward_f32_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_max_min_backward_f16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::Bf16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_max_min_backward_bf16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F64 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_max_min_backward_f64_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
-                    _ => return Err(Error::Unsupported(
-                        "baracuda-kernels::ReduceBackwardPlan::run: Max/Min BW reached an \
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::ReduceBackwardPlan::run: Max/Min BW reached an \
                          unimplemented dtype — select() should have caught this",
-                    )),
+                        ));
+                    }
                 }
             }
             (ReduceKind::Mean, _) => {
@@ -420,36 +490,70 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_mean_backward_f32_run(
-                            numel, rank, shape.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, dx_ptr, inv_extent,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            dx_ptr,
+                            inv_extent,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_mean_backward_f16_run(
-                            numel, rank, shape.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, dx_ptr, inv_extent,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            dx_ptr,
+                            inv_extent,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::Bf16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_mean_backward_bf16_run(
-                            numel, rank, shape.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, dx_ptr, inv_extent,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            dx_ptr,
+                            inv_extent,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F64 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_mean_backward_f64_run(
-                            numel, rank, shape.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, dx_ptr, inv_extent,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            dx_ptr,
+                            inv_extent,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
-                    _ => return Err(Error::Unsupported(
-                        "baracuda-kernels::ReduceBackwardPlan::run: Mean BW reached an \
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::ReduceBackwardPlan::run: Mean BW reached an \
                          unimplemented dtype — select() should have caught this",
-                    )),
+                        ));
+                    }
                 }
             }
             (ReduceKind::Prod, _) => {
@@ -464,44 +568,82 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_prod_backward_f32_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_prod_backward_f16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::Bf16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_prod_backward_bf16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F64 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_prod_backward_f64_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
-                    _ => return Err(Error::Unsupported(
-                        "baracuda-kernels::ReduceBackwardPlan::run: Prod BW reached an \
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::ReduceBackwardPlan::run: Prod BW reached an \
                          unimplemented dtype — select() should have caught this",
-                    )),
+                        ));
+                    }
                 }
             }
             (ReduceKind::Var, _) | (ReduceKind::Std, _) => {
@@ -513,14 +655,10 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 // where `m = max(n - correction, 1)`. Internal Welford
                 // accumulator runs at f32 for f32/f16/bf16 and f64 for
                 // f64 (see `WelfordAcc<T>` in the kernel header).
-                let x = args
-                    .x
-                    .as_ref()
-                    .expect("Var/Std BW require saved x");
-                let y = args
-                    .y
-                    .as_ref()
-                    .expect("Var/Std BW require saved y (Var ignores it; passed for ABI uniformity)");
+                let x = args.x.as_ref().expect("Var/Std BW require saved x");
+                let y = args.y.as_ref().expect(
+                    "Var/Std BW require saved y (Var ignores it; passed for ABI uniformity)",
+                );
                 let x_ptr = x.data.as_raw().0 as *const c_void;
                 let y_ptr = y.data.as_raw().0 as *const c_void;
                 let stride_x = x.stride;
@@ -533,88 +671,186 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 match (self.desc.kind, T::KIND) {
                     (ReduceKind::Var, ElementKind::F32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_var_backward_f32_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            reduce_axis_i32, reduce_extent, reduce_stride_x, correction,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            reduce_axis_i32,
+                            reduce_extent,
+                            reduce_stride_x,
+                            correction,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     (ReduceKind::Var, ElementKind::F16) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_var_backward_f16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            reduce_axis_i32, reduce_extent, reduce_stride_x, correction,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            reduce_axis_i32,
+                            reduce_extent,
+                            reduce_stride_x,
+                            correction,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     (ReduceKind::Var, ElementKind::Bf16) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_var_backward_bf16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            reduce_axis_i32, reduce_extent, reduce_stride_x, correction,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            reduce_axis_i32,
+                            reduce_extent,
+                            reduce_stride_x,
+                            correction,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     (ReduceKind::Var, ElementKind::F64) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_var_backward_f64_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            reduce_axis_i32, reduce_extent, reduce_stride_x, correction,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            reduce_axis_i32,
+                            reduce_extent,
+                            reduce_stride_x,
+                            correction,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     (ReduceKind::Std, ElementKind::F32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_std_backward_f32_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            reduce_axis_i32, reduce_extent, reduce_stride_x, correction,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            reduce_axis_i32,
+                            reduce_extent,
+                            reduce_stride_x,
+                            correction,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     (ReduceKind::Std, ElementKind::F16) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_std_backward_f16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            reduce_axis_i32, reduce_extent, reduce_stride_x, correction,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            reduce_axis_i32,
+                            reduce_extent,
+                            reduce_stride_x,
+                            correction,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     (ReduceKind::Std, ElementKind::Bf16) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_std_backward_bf16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            reduce_axis_i32, reduce_extent, reduce_stride_x, correction,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            reduce_axis_i32,
+                            reduce_extent,
+                            reduce_stride_x,
+                            correction,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     (ReduceKind::Std, ElementKind::F64) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_std_backward_f64_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            reduce_axis_i32, reduce_extent, reduce_stride_x, correction,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            reduce_axis_i32,
+                            reduce_extent,
+                            reduce_stride_x,
+                            correction,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
-                    _ => return Err(Error::Unsupported(
-                        "baracuda-kernels::ReduceBackwardPlan::run: Var/Std BW reached an \
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::ReduceBackwardPlan::run: Var/Std BW reached an \
                          unimplemented dtype — select() should have caught this",
-                    )),
+                        ));
+                    }
                 }
             }
             (ReduceKind::Norm2, _) => {
@@ -629,44 +865,82 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_norm2_backward_f32_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_norm2_backward_f16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::Bf16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_norm2_backward_bf16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F64 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_norm2_backward_f64_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
-                    _ => return Err(Error::Unsupported(
-                        "baracuda-kernels::ReduceBackwardPlan::run: Norm2 BW reached an \
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::ReduceBackwardPlan::run: Norm2 BW reached an \
                          unimplemented dtype — select() should have caught this",
-                    )),
+                        ));
+                    }
                 }
             }
             (ReduceKind::LogSumExp, _) => {
@@ -684,44 +958,82 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
                 match T::KIND {
                     ElementKind::F32 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_logsumexp_backward_f32_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_logsumexp_backward_f16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::Bf16 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_logsumexp_backward_bf16_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
                     ElementKind::F64 => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_reduce_logsumexp_backward_f64_run(
-                            numel, rank, shape.as_ptr(),
-                            stride_dy.as_ptr(), stride_x.as_ptr(),
-                            stride_y.as_ptr(), stride_dx.as_ptr(),
-                            dy_ptr, x_ptr, y_ptr, dx_ptr,
-                            core::ptr::null_mut(), 0, stream_ptr,
+                            numel,
+                            rank,
+                            shape.as_ptr(),
+                            stride_dy.as_ptr(),
+                            stride_x.as_ptr(),
+                            stride_y.as_ptr(),
+                            stride_dx.as_ptr(),
+                            dy_ptr,
+                            x_ptr,
+                            y_ptr,
+                            dx_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
                         )
                     },
-                    _ => return Err(Error::Unsupported(
-                        "baracuda-kernels::ReduceBackwardPlan::run: LogSumExp BW reached an \
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::ReduceBackwardPlan::run: LogSumExp BW reached an \
                          unimplemented dtype — select() should have caught this",
-                    )),
+                        ));
+                    }
                 }
             }
             _ => {

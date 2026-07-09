@@ -4,10 +4,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, MaskedFillBackwardArgs, MaskedFillBackwardDescriptor,
-    MaskedFillBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, MaskedFillBackwardArgs, MaskedFillBackwardDescriptor, MaskedFillBackwardPlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -64,7 +64,11 @@ fn masked_fill_backward_f32_2d() {
     let mut got = vec![0f32; numel];
     dev_dsrc.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "masked_fill_backward f32 mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "masked_fill_backward f32 mismatch @ {i}"
+        );
     }
 }
 
@@ -114,7 +118,11 @@ fn masked_fill_backward_f64_1d() {
     let mut got = vec![0f64; numel];
     dev_dsrc.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "masked_fill_backward f64 mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "masked_fill_backward f64 mismatch @ {i}"
+        );
     }
 }
 

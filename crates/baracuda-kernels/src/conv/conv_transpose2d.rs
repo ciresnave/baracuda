@@ -35,18 +35,18 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1, CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+    CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16,
+    CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT, CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
     cudnnConvolutionBackwardData, cudnnConvolutionBackwardFilter, cudnnConvolutionDescriptor_t,
     cudnnConvolutionForward, cudnnCreate, cudnnCreateConvolutionDescriptor,
     cudnnCreateFilterDescriptor, cudnnCreateTensorDescriptor, cudnnDestroy,
-    cudnnDestroyConvolutionDescriptor, cudnnDestroyFilterDescriptor,
-    cudnnDestroyTensorDescriptor, cudnnFilterDescriptor_t,
-    cudnnGetConvolutionBackwardDataWorkspaceSize, cudnnGetConvolutionBackwardFilterWorkspaceSize,
-    cudnnGetConvolutionForwardWorkspaceSize, cudnnHandle_t, cudnnSetConvolution2dDescriptor,
-    cudnnSetConvolutionGroupCount, cudnnSetFilter4dDescriptor, cudnnSetStream,
-    cudnnSetTensor4dDescriptor, cudnnTensorDescriptor_t, CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
-    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT,
-    CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
+    cudnnDestroyConvolutionDescriptor, cudnnDestroyFilterDescriptor, cudnnDestroyTensorDescriptor,
+    cudnnFilterDescriptor_t, cudnnGetConvolutionBackwardDataWorkspaceSize,
+    cudnnGetConvolutionBackwardFilterWorkspaceSize, cudnnGetConvolutionForwardWorkspaceSize,
+    cudnnHandle_t, cudnnSetConvolution2dDescriptor, cudnnSetConvolutionGroupCount,
+    cudnnSetFilter4dDescriptor, cudnnSetStream, cudnnSetTensor4dDescriptor,
+    cudnnTensorDescriptor_t,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ConvKind, Element, ElementKind, KernelSku, MathPrecision, OpCategory,
@@ -276,10 +276,7 @@ impl<T: Element> ConvTranspose2dPlan<T> {
                 "baracuda-kernels::ConvTranspose2dPlan: filter shape extents must be > 0",
             ));
         }
-        if desc.stride_h <= 0
-            || desc.stride_w <= 0
-            || desc.dilation_h <= 0
-            || desc.dilation_w <= 0
+        if desc.stride_h <= 0 || desc.stride_w <= 0 || desc.dilation_h <= 0 || desc.dilation_w <= 0
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose2dPlan: stride / dilation must be > 0",
@@ -728,7 +725,15 @@ impl<T: Element> ConvTranspose2dPlan<T> {
             return Err(Error::CutlassInternal(-status));
         }
         let status = unsafe {
-            cudnnSetTensor4dDescriptor(xd, CUDNN_TENSOR_NCHW, dt, self.desc.batch, self.desc.c_out, h_out, w_out)
+            cudnnSetTensor4dDescriptor(
+                xd,
+                CUDNN_TENSOR_NCHW,
+                dt,
+                self.desc.batch,
+                self.desc.c_out,
+                h_out,
+                w_out,
+            )
         };
         if status != 0 {
             unsafe {
@@ -834,7 +839,12 @@ impl<T: Element> ConvTranspose2dPlan<T> {
     fn check_fw_args(&self, args: &ConvTranspose2dArgs<'_, T>) -> Result<()> {
         let (h_out, w_out) = compute_output_dims(&self.desc);
         let c_out_per_group = self.desc.c_out / self.desc.groups;
-        let x_shape = [self.desc.batch, self.desc.c_in, self.desc.h_in, self.desc.w_in];
+        let x_shape = [
+            self.desc.batch,
+            self.desc.c_in,
+            self.desc.h_in,
+            self.desc.w_in,
+        ];
         let w_shape = [
             self.desc.c_in,
             c_out_per_group,
@@ -870,7 +880,12 @@ impl<T: Element> ConvTranspose2dPlan<T> {
             self.desc.w_filt,
         ];
         let dy_shape = [self.desc.batch, self.desc.c_out, h_out, w_out];
-        let dx_shape = [self.desc.batch, self.desc.c_in, self.desc.h_in, self.desc.w_in];
+        let dx_shape = [
+            self.desc.batch,
+            self.desc.c_in,
+            self.desc.h_in,
+            self.desc.w_in,
+        ];
         if args.w.shape != w_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConvTranspose2dPlan: w shape != [C_in, C_out/groups, kH, kW]",
@@ -892,7 +907,12 @@ impl<T: Element> ConvTranspose2dPlan<T> {
     fn check_dw_args(&self, args: &ConvTranspose2dDwArgs<'_, T>) -> Result<()> {
         let (h_out, w_out) = compute_output_dims(&self.desc);
         let c_out_per_group = self.desc.c_out / self.desc.groups;
-        let x_shape = [self.desc.batch, self.desc.c_in, self.desc.h_in, self.desc.w_in];
+        let x_shape = [
+            self.desc.batch,
+            self.desc.c_in,
+            self.desc.h_in,
+            self.desc.w_in,
+        ];
         let dy_shape = [self.desc.batch, self.desc.c_out, h_out, w_out];
         let dw_shape = [
             self.desc.c_in,

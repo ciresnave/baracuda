@@ -69,17 +69,16 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    baracuda_kernels_batched_ormqr_wy_build_t_complex32_run,
+    CUBLAS_OP_C, CUBLAS_OP_N, CUBLAS_OP_T, baracuda_kernels_batched_ormqr_wy_build_t_complex32_run,
     baracuda_kernels_batched_ormqr_wy_build_t_complex64_run,
     baracuda_kernels_batched_ormqr_wy_build_t_f32_run,
     baracuda_kernels_batched_ormqr_wy_build_t_f64_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_complex32_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_complex64_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_f32_run,
-    baracuda_kernels_batched_ormqr_wy_extract_v_f64_run, cublasCgemmStridedBatched, cublasCreate_v2,
-    cublasDestroy_v2, cublasDgemmStridedBatched, cublasHandle_t, cublasSetStream_v2,
-    cublasSgemmStridedBatched, cublasZgemmStridedBatched, cuComplex, cuDoubleComplex, CUBLAS_OP_C,
-    CUBLAS_OP_N, CUBLAS_OP_T,
+    baracuda_kernels_batched_ormqr_wy_extract_v_f64_run, cuComplex, cuDoubleComplex,
+    cublasCgemmStridedBatched, cublasCreate_v2, cublasDestroy_v2, cublasDgemmStridedBatched,
+    cublasHandle_t, cublasSetStream_v2, cublasSgemmStridedBatched, cublasZgemmStridedBatched,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, KernelSku, LinalgKind,
@@ -469,10 +468,7 @@ macro_rules! impl_batched_ormqr_wy_run {
                 let w_ptr = unsafe { v_ptr.add(v_elems * elem) };
                 let w2_ptr = unsafe { w_ptr.add(w_elems * elem) };
                 // sanity: stays within `needed`.
-                debug_assert_eq!(
-                    needed,
-                    (t_elems + v_elems + w_elems + w2_elems) * elem
-                );
+                debug_assert_eq!(needed, (t_elems + v_elems + w_elems + w2_elems) * elem);
                 let _ = w2_elems; // used implicitly via ws-bytes accounting above
 
                 let a_ptr_v = args.a.data.as_raw().0 as *const c_void;
@@ -551,9 +547,8 @@ macro_rules! impl_batched_ormqr_wy_run {
                     // T for this block is at offset (blk * nb * nb) per slot
                     // (slot stride = num_blocks * nb * nb).
                     let t_block_offset_elems = (blk as i64) * (nb as i64) * (nb as i64);
-                    let t_block_ptr = unsafe {
-                        (t_ptr as *mut $CublasT).offset(t_block_offset_elems as isize)
-                    };
+                    let t_block_ptr =
+                        unsafe { (t_ptr as *mut $CublasT).offset(t_block_offset_elems as isize) };
                     let t_slot_stride: i64 = (num_blocks as i64) * (nb as i64) * (nb as i64);
 
                     let v_typed = v_ptr as *const $CublasT;
@@ -573,12 +568,20 @@ macro_rules! impl_batched_ormqr_wy_run {
                             h,
                             adjoint_trans,
                             CUBLAS_OP_N,
-                            nb, n, m,
+                            nb,
+                            n,
+                            m,
                             &$alpha_one as *const $CublasT,
-                            v_typed, m, v_slot_stride,
-                            c_ptr as *const $CublasT, m, c_slot_stride,
+                            v_typed,
+                            m,
+                            v_slot_stride,
+                            c_ptr as *const $CublasT,
+                            m,
+                            c_slot_stride,
                             &$beta_zero as *const $CublasT,
-                            w_typed, nb, w_slot_stride,
+                            w_typed,
+                            nb,
+                            w_slot_stride,
                             b,
                         )
                     };
@@ -600,12 +603,20 @@ macro_rules! impl_batched_ormqr_wy_run {
                             h,
                             trans_t,
                             CUBLAS_OP_N,
-                            nb, n, nb,
+                            nb,
+                            n,
+                            nb,
                             &$alpha_one as *const $CublasT,
-                            t_block_ptr as *const $CublasT, nb, t_slot_stride,
-                            w_typed as *const $CublasT, nb, w_slot_stride,
+                            t_block_ptr as *const $CublasT,
+                            nb,
+                            t_slot_stride,
+                            w_typed as *const $CublasT,
+                            nb,
+                            w_slot_stride,
                             &$beta_zero as *const $CublasT,
-                            w2_typed, nb, w2_slot_stride,
+                            w2_typed,
+                            nb,
+                            w2_slot_stride,
                             b,
                         )
                     };
@@ -622,12 +633,20 @@ macro_rules! impl_batched_ormqr_wy_run {
                             h,
                             CUBLAS_OP_N,
                             CUBLAS_OP_N,
-                            m, n, nb,
+                            m,
+                            n,
+                            nb,
                             &$alpha_neg_one as *const $CublasT,
-                            v_typed, m, v_slot_stride,
-                            w2_typed as *const $CublasT, nb, w2_slot_stride,
+                            v_typed,
+                            m,
+                            v_slot_stride,
+                            w2_typed as *const $CublasT,
+                            nb,
+                            w2_slot_stride,
                             &$beta_one as *const $CublasT,
-                            c_ptr, m, c_slot_stride,
+                            c_ptr,
+                            m,
+                            c_slot_stride,
                             b,
                         )
                     };

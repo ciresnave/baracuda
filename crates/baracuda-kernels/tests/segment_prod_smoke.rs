@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `SegmentProdPlan<T>` (Phase 7 7.6).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SegmentProdArgs, SegmentProdDescriptor,
-    SegmentProdPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SegmentProdArgs, SegmentProdDescriptor, SegmentProdPlan,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -42,8 +42,8 @@ fn segment_prod_f32_basic() {
         num_segments: ns,
         element: ElementKind::F32,
     };
-    let plan = SegmentProdPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        SegmentProdPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = SegmentProdArgs::<f32> {
         input: TensorRef {
             data: dev_in.as_slice(),

@@ -195,9 +195,7 @@ fn main() {
     check_for_fake_link_exe();
 
     if env::var_os("DOCS_RS").is_some() {
-        println!(
-            "cargo:warning=baracuda-kernels-sys: DOCS_RS=1 detected; skipping nvcc build."
-        );
+        println!("cargo:warning=baracuda-kernels-sys: DOCS_RS=1 detected; skipping nvcc build.");
         return;
     }
 
@@ -407,9 +405,7 @@ fn main() {
         // Phase 43 — mHC vendor: one launcher TU. The .cuh kernel
         // sources are template-instantiated through the launcher's
         // includes — they are not separately compiled.
-        for f in &[
-            "kernels/attention/mhc_launcher.cu",
-        ] {
+        for f in &["kernels/attention/mhc_launcher.cu"] {
             if std::path::Path::new(f).exists() {
                 builder = builder.source_files([*f]);
             }
@@ -466,9 +462,7 @@ fn main() {
     // no cooperative groups, no cp.async).
     if cfg!(feature = "bnb_nf4") {
         builder = builder.include_path("vendor/bitsandbytes/src");
-        for f in &[
-            "kernels/quantize/nf4_launcher.cu",
-        ] {
+        for f in &["kernels/quantize/nf4_launcher.cu"] {
             if std::path::Path::new(f).exists() {
                 builder = builder.source_files([*f]);
             }
@@ -521,9 +515,7 @@ fn main() {
     // `ldmatrix.sync` + `mma.sync.m16n8k16` (Ampere+).
     if cfg!(feature = "awq") {
         builder = builder.include_path("vendor/awq/src");
-        for f in &[
-            "kernels/quantize/awq_launcher.cu",
-        ] {
+        for f in &["kernels/quantize/awq_launcher.cu"] {
             if std::path::Path::new(f).exists() {
                 builder = builder.source_files([*f]);
             }
@@ -669,7 +661,10 @@ fn main() {
         let cudnn_lib_dir = locate_cudnn_lib_dir();
         if let Some(dir) = cudnn_lib_dir.as_deref() {
             println!("cargo:rustc-link-search=native={}", dir);
-            println!("cargo:warning=baracuda-kernels-sys: cuDNN lib dir → {}", dir);
+            println!(
+                "cargo:warning=baracuda-kernels-sys: cuDNN lib dir → {}",
+                dir
+            );
         } else {
             println!(
                 "cargo:warning=baracuda-kernels-sys: `cudnn` feature is on but no cuDNN \

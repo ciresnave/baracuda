@@ -6,10 +6,10 @@
 //!
 //! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Conv3dArgs, Conv3dBwArgs, Conv3dDescriptor, Conv3dDwArgs, Conv3dPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    Conv3dArgs, Conv3dBwArgs, Conv3dDescriptor, Conv3dDwArgs, Conv3dPlan, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -73,8 +73,8 @@ fn host_conv3d_fw_f64(d: &Dims, x: &[f64], w: &[f64]) -> Vec<f64> {
                                         let id = od + kd;
                                         let ih = oh + kh;
                                         let iw = ow + kw;
-                                        let xi = (((n * d.c_in + ci) * dd + id) * dh + ih) * dw
-                                            + iw;
+                                        let xi =
+                                            (((n * d.c_in + ci) * dd + id) * dh + ih) * dw + iw;
                                         let wi = (((co * d.c_in + ci) * d.d_filt + kd) * d.h_filt
                                             + kh)
                                             * d.w_filt
@@ -175,7 +175,12 @@ fn conv3d_f32_fw() {
     for i in 0..y_n {
         let diff = (got[i] as f64 - exp[i]).abs();
         let t = tol * exp[i].abs().max(1.0);
-        assert!(diff <= t, "conv3d FW mismatch @ {i}: got={}, want={}", got[i], exp[i]);
+        assert!(
+            diff <= t,
+            "conv3d FW mismatch @ {i}: got={}, want={}",
+            got[i],
+            exp[i]
+        );
     }
 }
 
@@ -292,6 +297,9 @@ fn conv3d_f32_bw_data_filter_runs() {
     let mut got_dw = vec![0f32; w_n];
     dev_dw.copy_to_host(&mut got_dw).expect("dl dw");
     for (i, &v) in got_dw.iter().enumerate() {
-        assert!(v.abs() < 1e-6, "conv3d BW-filter: dw[{i}] = {v}, expected 0");
+        assert!(
+            v.abs() < 1e-6,
+            "conv3d BW-filter: dw[{i}] = {v}, expected 0"
+        );
     }
 }

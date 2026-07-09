@@ -1,6 +1,6 @@
 //! Real-GPU smoke test for `CosineEmbeddingLossPlan`. FW × 4 dtypes.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     CosineEmbeddingLossArgs, CosineEmbeddingLossDescriptor, CosineEmbeddingLossPlan, ElementKind,
     LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
@@ -49,7 +49,9 @@ fn loss_cosine_embedding_f32_mean() {
     let numel = n * d;
     let h_x1: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.1 - 0.5).collect();
     let h_x2: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.07 + 0.1).collect();
-    let h_t: Vec<f32> = (0..n).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+    let h_t: Vec<f32> = (0..n)
+        .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
     let x1_64: Vec<f64> = h_x1.iter().map(|&v| v as f64).collect();
     let x2_64: Vec<f64> = h_x2.iter().map(|&v| v as f64).collect();
     let t_64: Vec<f64> = h_t.iter().map(|&v| v as f64).collect();
@@ -72,10 +74,26 @@ fn loss_cosine_embedding_f32_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         CosineEmbeddingLossArgs {
-            x1: TensorRef { data: dev_x1.as_slice(), shape: [n as i32, d as i32], stride: [d as i64, 1] },
-            x2: TensorRef { data: dev_x2.as_slice(), shape: [n as i32, d as i32], stride: [d as i64, 1] },
-            t: TensorRef { data: dev_t.as_slice(), shape: [n as i32, 1], stride: [1, 1] },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            x1: TensorRef {
+                data: dev_x1.as_slice(),
+                shape: [n as i32, d as i32],
+                stride: [d as i64, 1],
+            },
+            x2: TensorRef {
+                data: dev_x2.as_slice(),
+                shape: [n as i32, d as i32],
+                stride: [d as i64, 1],
+            },
+            t: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, 1],
+                stride: [1, 1],
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -83,7 +101,12 @@ fn loss_cosine_embedding_f32_mean() {
     let mut got = [0f32; 1];
     dev_y.copy_to_host(&mut got).unwrap();
     let tol = expected.abs() * 16.0 * f32::EPSILON + 1e-5;
-    assert!((got[0] - expected).abs() <= tol, "f32 Cos: got={} want={}", got[0], expected);
+    assert!(
+        (got[0] - expected).abs() <= tol,
+        "f32 Cos: got={} want={}",
+        got[0],
+        expected
+    );
 }
 
 #[test]
@@ -116,10 +139,26 @@ fn loss_cosine_embedding_f64_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         CosineEmbeddingLossArgs {
-            x1: TensorRef { data: dev_x1.as_slice(), shape: [n as i32, d as i32], stride: [d as i64, 1] },
-            x2: TensorRef { data: dev_x2.as_slice(), shape: [n as i32, d as i32], stride: [d as i64, 1] },
-            t: TensorRef { data: dev_t.as_slice(), shape: [n as i32, 1], stride: [1, 1] },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            x1: TensorRef {
+                data: dev_x1.as_slice(),
+                shape: [n as i32, d as i32],
+                stride: [d as i64, 1],
+            },
+            x2: TensorRef {
+                data: dev_x2.as_slice(),
+                shape: [n as i32, d as i32],
+                stride: [d as i64, 1],
+            },
+            t: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, 1],
+                stride: [1, 1],
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -140,7 +179,9 @@ fn loss_cosine_embedding_f16_mean() {
     let numel = n * d;
     let x1_f32: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.05 + 0.05).collect();
     let x2_f32: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.04 + 0.1).collect();
-    let t_f32: Vec<f32> = (0..n).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+    let t_f32: Vec<f32> = (0..n)
+        .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
     let h_x1: Vec<f16> = x1_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let h_x2: Vec<f16> = x2_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let h_t: Vec<f16> = t_f32.iter().map(|&v| f16::from_f32(v)).collect();
@@ -166,10 +207,26 @@ fn loss_cosine_embedding_f16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         CosineEmbeddingLossArgs {
-            x1: TensorRef { data: dev_x1.as_slice(), shape: [n as i32, d as i32], stride: [d as i64, 1] },
-            x2: TensorRef { data: dev_x2.as_slice(), shape: [n as i32, d as i32], stride: [d as i64, 1] },
-            t: TensorRef { data: dev_t.as_slice(), shape: [n as i32, 1], stride: [1, 1] },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            x1: TensorRef {
+                data: dev_x1.as_slice(),
+                shape: [n as i32, d as i32],
+                stride: [d as i64, 1],
+            },
+            x2: TensorRef {
+                data: dev_x2.as_slice(),
+                shape: [n as i32, d as i32],
+                stride: [d as i64, 1],
+            },
+            t: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, 1],
+                stride: [1, 1],
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -179,7 +236,12 @@ fn loss_cosine_embedding_f16_mean() {
     let got_f32 = got[0].to_f32();
     // Cosine involves dot/sqrt/division — wider tolerance at half precision.
     let tol = expected.abs() * 32.0 * 9.77e-4_f32 + 1e-2;
-    assert!((got_f32 - expected).abs() <= tol, "f16 Cos: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "f16 Cos: got={} want={}",
+        got_f32,
+        expected
+    );
 }
 
 #[test]
@@ -192,7 +254,9 @@ fn loss_cosine_embedding_bf16_mean() {
     let numel = n * d;
     let x1_f32: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.05 + 0.05).collect();
     let x2_f32: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.04 + 0.1).collect();
-    let t_f32: Vec<f32> = (0..n).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+    let t_f32: Vec<f32> = (0..n)
+        .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
     let h_x1: Vec<bf16> = x1_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let h_x2: Vec<bf16> = x2_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let h_t: Vec<bf16> = t_f32.iter().map(|&v| bf16::from_f32(v)).collect();
@@ -218,10 +282,26 @@ fn loss_cosine_embedding_bf16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         CosineEmbeddingLossArgs {
-            x1: TensorRef { data: dev_x1.as_slice(), shape: [n as i32, d as i32], stride: [d as i64, 1] },
-            x2: TensorRef { data: dev_x2.as_slice(), shape: [n as i32, d as i32], stride: [d as i64, 1] },
-            t: TensorRef { data: dev_t.as_slice(), shape: [n as i32, 1], stride: [1, 1] },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            x1: TensorRef {
+                data: dev_x1.as_slice(),
+                shape: [n as i32, d as i32],
+                stride: [d as i64, 1],
+            },
+            x2: TensorRef {
+                data: dev_x2.as_slice(),
+                shape: [n as i32, d as i32],
+                stride: [d as i64, 1],
+            },
+            t: TensorRef {
+                data: dev_t.as_slice(),
+                shape: [n as i32, 1],
+                stride: [1, 1],
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -230,5 +310,10 @@ fn loss_cosine_embedding_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 32.0 * 7.81e-3_f32 + 5e-2;
-    assert!((got_f32 - expected).abs() <= tol, "bf16 Cos: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "bf16 Cos: got={} want={}",
+        got_f32,
+        expected
+    );
 }

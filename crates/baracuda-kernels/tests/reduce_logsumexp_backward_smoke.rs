@@ -15,10 +15,10 @@
 //! rounding through the f32-detour and the final cast back — bump to
 //! `4 * dtype_eps` (matches the existing FW LSE smoke convention).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ReduceBackwardArgs,
-    ReduceBackwardDescriptor, ReduceBackwardPlan, ReduceKind, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ReduceBackwardArgs, ReduceBackwardDescriptor, ReduceBackwardPlan,
+    ReduceKind, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -85,7 +85,11 @@ fn host_lse_bw_f32(
         let dy_lin = dy_index(coord, axis, dy_shape) as usize;
         s[dy_lin] += (x[x_linear as usize] - m[dy_lin]).exp();
     });
-    let y: Vec<f32> = s.iter().zip(m.iter()).map(|(&si, &mi)| si.ln() + mi).collect();
+    let y: Vec<f32> = s
+        .iter()
+        .zip(m.iter())
+        .map(|(&si, &mi)| si.ln() + mi)
+        .collect();
 
     // Backward: dx = dy * exp(x - y).
     let mut dx = vec![0f32; dx_numel];
@@ -129,10 +133,26 @@ fn logsumexp_backward_f32_3d_axis1() {
     let plan = ReduceBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -141,8 +161,12 @@ fn logsumexp_backward_f32_3d_axis1() {
     let eps = 8.0 * f32::EPSILON;
     for i in 0..dx_numel {
         let tol = (expected_dx[i].abs() * eps).max(eps);
-        assert!((got[i] - expected_dx[i]).abs() <= tol,
-            "f32 lse BW @ {i}: got={} want={}", got[i], expected_dx[i]);
+        assert!(
+            (got[i] - expected_dx[i]).abs() <= tol,
+            "f32 lse BW @ {i}: got={} want={}",
+            got[i],
+            expected_dx[i]
+        );
     }
 }
 
@@ -177,7 +201,11 @@ fn logsumexp_backward_f64_3d_axis2() {
         let dy_lin = dy_index(coord, axis, dy_shape_usize) as usize;
         s[dy_lin] += (host_x[x_lin as usize] - m[dy_lin]).exp();
     });
-    let host_y: Vec<f64> = s.iter().zip(m.iter()).map(|(&si, &mi)| si.ln() + mi).collect();
+    let host_y: Vec<f64> = s
+        .iter()
+        .zip(m.iter())
+        .map(|(&si, &mi)| si.ln() + mi)
+        .collect();
     let mut expected_dx = vec![0f64; dx_numel];
     for_each_coord::<3, _>(input_shape, |coord, x_lin| {
         let dy_lin = dy_index(coord, axis, dy_shape_usize) as usize;
@@ -199,10 +227,26 @@ fn logsumexp_backward_f64_3d_axis2() {
     let plan = ReduceBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -251,10 +295,26 @@ fn logsumexp_backward_f16_3d_axis0() {
     let plan = ReduceBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -304,10 +364,26 @@ fn logsumexp_backward_bf16_3d_axis1() {
     let plan = ReduceBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let args = ReduceBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) },
-        x: Some(TensorRef { data: dev_x.as_slice(), shape: input_shape, stride: contiguous_stride(input_shape) }),
-        y: Some(TensorRef { data: dev_y.as_slice(), shape: dy_shape, stride: contiguous_stride(dy_shape) }),
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        },
+        x: Some(TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        }),
+        y: Some(TensorRef {
+            data: dev_y.as_slice(),
+            shape: dy_shape,
+            stride: contiguous_stride(dy_shape),
+        }),
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

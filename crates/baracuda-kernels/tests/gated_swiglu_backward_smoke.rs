@@ -8,11 +8,11 @@
 //! cancellation-weighted bound the unary silu BW uses (the bracket
 //! `1 + b·(1-s)` cancels for b ≈ -1.5).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GatedActivationBackwardArgs, GatedActivationBackwardDescriptor,
+    ElementKind, GatedActivationBackwardArgs, GatedActivationBackwardDescriptor,
     GatedActivationBackwardPlan, GatedActivationKind, PlanPreference, TensorMut, TensorRef,
-    Workspace,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -29,7 +29,12 @@ fn setup() -> (Context, Stream) {
 
 /// Returns (da, db, cancel_mag_da, cancel_mag_db).
 fn swiglu_bw_ref_f32(dy: f32, a: f32, b: f32) -> (f32, f32, f32, f32) {
-    let s = if b >= 0.0 { 1.0 / (1.0 + (-b).exp()) } else { let e = b.exp(); e / (1.0 + e) };
+    let s = if b >= 0.0 {
+        1.0 / (1.0 + (-b).exp())
+    } else {
+        let e = b.exp();
+        e / (1.0 + e)
+    };
     let silu_b = b * s;
     let silu_prime_b = s * (1.0 + b * (1.0 - s));
     let da = dy * silu_b;
@@ -39,7 +44,12 @@ fn swiglu_bw_ref_f32(dy: f32, a: f32, b: f32) -> (f32, f32, f32, f32) {
     (da, db, cancel_mag_da, cancel_mag_db)
 }
 fn swiglu_bw_ref_f64(dy: f64, a: f64, b: f64) -> (f64, f64, f64, f64) {
-    let s = if b >= 0.0 { 1.0 / (1.0 + (-b).exp()) } else { let e = b.exp(); e / (1.0 + e) };
+    let s = if b >= 0.0 {
+        1.0 / (1.0 + (-b).exp())
+    } else {
+        let e = b.exp();
+        e / (1.0 + e)
+    };
     let silu_b = b * s;
     let silu_prime_b = s * (1.0 + b * (1.0 - s));
     let da = dy * silu_b;
@@ -52,7 +62,10 @@ fn swiglu_bw_ref_f64(dy: f64, a: f64, b: f64) -> (f64, f64, f64, f64) {
 /// Compute expected dx (length = input_numel, indexed via row-major
 /// contig over input_shape) for contig x / dy / dx.
 fn cpu_ref_bw_f32(
-    x: &[f32], dy: &[f32], input_shape: &[i32], split_dim: usize,
+    x: &[f32],
+    dy: &[f32],
+    input_shape: &[i32],
+    split_dim: usize,
 ) -> (Vec<f32>, Vec<f32>) {
     let half = input_shape[split_dim] as usize / 2;
     let mut out_shape: Vec<i32> = input_shape.to_vec();
@@ -81,7 +94,7 @@ fn cpu_ref_bw_f32(
             let s = out_shape[d] as i64;
             let coord = linear % s;
             linear /= s;
-            off_x  += coord * in_strides[d];
+            off_x += coord * in_strides[d];
             off_dy += coord * out_strides[d];
         }
         let a = x[off_x as usize];
@@ -97,7 +110,10 @@ fn cpu_ref_bw_f32(
 }
 
 fn cpu_ref_bw_f64(
-    x: &[f64], dy: &[f64], input_shape: &[i32], split_dim: usize,
+    x: &[f64],
+    dy: &[f64],
+    input_shape: &[i32],
+    split_dim: usize,
 ) -> (Vec<f64>, Vec<f64>) {
     let half = input_shape[split_dim] as usize / 2;
     let mut out_shape: Vec<i32> = input_shape.to_vec();
@@ -126,7 +142,7 @@ fn cpu_ref_bw_f64(
             let s = out_shape[d] as i64;
             let coord = linear % s;
             linear /= s;
-            off_x  += coord * in_strides[d];
+            off_x += coord * in_strides[d];
             off_dy += coord * out_strides[d];
         }
         let a = x[off_x as usize];
@@ -148,11 +164,15 @@ fn swiglu_bw_f32() {
     let input_shape = [2i32, 4, 8];
     let split_dim: u8 = 1;
     let in_numel: usize = input_shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<f32> = (0..in_numel).map(|i| ((i % 200) as f32) * 0.05 - 5.0).collect();
+    let host_x: Vec<f32> = (0..in_numel)
+        .map(|i| ((i % 200) as f32) * 0.05 - 5.0)
+        .collect();
 
     let desc = GatedActivationBackwardDescriptor {
         kind: GatedActivationKind::SwiGlu,
-        input_shape, split_dim, element: ElementKind::F32,
+        input_shape,
+        split_dim,
+        element: ElementKind::F32,
     };
     let output_shape = desc.output_shape();
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
@@ -164,12 +184,25 @@ fn swiglu_bw_f32() {
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, in_numel).expect("alloc dx");
 
-    let plan = GatedActivationBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        GatedActivationBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = GatedActivationBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: output_shape, stride: contiguous_stride(output_shape) },
-        x:  TensorRef { data: dev_x.as_slice(),  shape: input_shape,  stride: contiguous_stride(input_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: output_shape,
+            stride: contiguous_stride(output_shape),
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -182,7 +215,10 @@ fn swiglu_bw_f32() {
         let tol = cm.max(exp.abs()).max(1.0) * 8.0 * f32::EPSILON;
         assert!(
             (got[i] - exp).abs() <= tol,
-            "swiglu bw f32 @ {i}: got {} exp {} tol {}", got[i], exp, tol,
+            "swiglu bw f32 @ {i}: got {} exp {} tol {}",
+            got[i],
+            exp,
+            tol,
         );
     }
 }
@@ -194,11 +230,15 @@ fn swiglu_bw_f64() {
     let input_shape = [3i32, 32];
     let split_dim: u8 = 1;
     let in_numel: usize = input_shape.iter().map(|&d| d as usize).product();
-    let host_x: Vec<f64> = (0..in_numel).map(|i| ((i % 200) as f64) * 0.05 - 5.0).collect();
+    let host_x: Vec<f64> = (0..in_numel)
+        .map(|i| ((i % 200) as f64) * 0.05 - 5.0)
+        .collect();
 
     let desc = GatedActivationBackwardDescriptor {
         kind: GatedActivationKind::SwiGlu,
-        input_shape, split_dim, element: ElementKind::F64,
+        input_shape,
+        split_dim,
+        element: ElementKind::F64,
     };
     let output_shape = desc.output_shape();
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
@@ -210,12 +250,25 @@ fn swiglu_bw_f64() {
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let mut dev_dx: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, in_numel).expect("alloc dx");
 
-    let plan = GatedActivationBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        GatedActivationBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = GatedActivationBackwardArgs::<f64, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: output_shape, stride: contiguous_stride(output_shape) },
-        x:  TensorRef { data: dev_x.as_slice(),  shape: input_shape,  stride: contiguous_stride(input_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: output_shape,
+            stride: contiguous_stride(output_shape),
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -228,7 +281,10 @@ fn swiglu_bw_f64() {
         let tol = cm.max(exp.abs()).max(1.0) * 8.0 * f64::EPSILON;
         assert!(
             (got[i] - exp).abs() <= tol,
-            "swiglu bw f64 @ {i}: got {} exp {} tol {}", got[i], exp, tol,
+            "swiglu bw f64 @ {i}: got {} exp {} tol {}",
+            got[i],
+            exp,
+            tol,
         );
     }
 }
@@ -246,7 +302,9 @@ fn swiglu_bw_f16() {
 
     let desc = GatedActivationBackwardDescriptor {
         kind: GatedActivationKind::SwiGlu,
-        input_shape, split_dim, element: ElementKind::F16,
+        input_shape,
+        split_dim,
+        element: ElementKind::F16,
     };
     let output_shape = desc.output_shape();
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
@@ -262,12 +320,25 @@ fn swiglu_bw_f16() {
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let mut dev_dx: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, in_numel).expect("alloc dx");
 
-    let plan = GatedActivationBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        GatedActivationBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = GatedActivationBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: output_shape, stride: contiguous_stride(output_shape) },
-        x:  TensorRef { data: dev_x.as_slice(),  shape: input_shape,  stride: contiguous_stride(input_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: output_shape,
+            stride: contiguous_stride(output_shape),
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -279,7 +350,10 @@ fn swiglu_bw_f16() {
         let cm = cancel[i];
         let g = got[i].to_f32();
         let tol = cm.max(exp.abs()).max(1.0) * 8.0 * F16_EPS;
-        assert!((g - exp).abs() <= tol, "swiglu bw f16 @ {i}: got {g} exp {exp} tol {tol}");
+        assert!(
+            (g - exp).abs() <= tol,
+            "swiglu bw f16 @ {i}: got {g} exp {exp} tol {tol}"
+        );
     }
 }
 
@@ -296,7 +370,9 @@ fn swiglu_bw_bf16() {
 
     let desc = GatedActivationBackwardDescriptor {
         kind: GatedActivationKind::SwiGlu,
-        input_shape, split_dim, element: ElementKind::Bf16,
+        input_shape,
+        split_dim,
+        element: ElementKind::Bf16,
     };
     let output_shape = desc.output_shape();
     let out_numel: usize = output_shape.iter().map(|&d| d as usize).product();
@@ -312,12 +388,25 @@ fn swiglu_bw_bf16() {
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload dy");
     let mut dev_dx: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, in_numel).expect("alloc dx");
 
-    let plan = GatedActivationBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        GatedActivationBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = GatedActivationBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: output_shape, stride: contiguous_stride(output_shape) },
-        x:  TensorRef { data: dev_x.as_slice(),  shape: input_shape,  stride: contiguous_stride(input_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: input_shape, stride: contiguous_stride(input_shape) },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: output_shape,
+            stride: contiguous_stride(output_shape),
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape: input_shape,
+            stride: contiguous_stride(input_shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -329,6 +418,9 @@ fn swiglu_bw_bf16() {
         let cm = cancel[i];
         let g = got[i].to_f32();
         let tol = cm.max(exp.abs()).max(1.0) * 8.0 * BF16_EPS;
-        assert!((g - exp).abs() <= tol, "swiglu bw bf16 @ {i}: got {g} exp {exp} tol {tol}");
+        assert!(
+            (g - exp).abs() <= tol,
+            "swiglu bw bf16 @ {i}: got {g} exp {exp} tol {tol}"
+        );
     }
 }

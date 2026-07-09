@@ -8,10 +8,10 @@
 use std::sync::Arc;
 
 use baracuda_cuda_sys::types::CUcontext_flags;
-use baracuda_cuda_sys::{driver, CUcontext};
+use baracuda_cuda_sys::{CUcontext, driver};
 
 use crate::device::Device;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::init::init;
 
 /// A CUDA context created by `cuCtxCreate`.

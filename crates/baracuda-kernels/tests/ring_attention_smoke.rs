@@ -9,11 +9,11 @@
 
 #![cfg(feature = "ring_attention")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan,
-    PlanPreference, RingAttentionArgs, RingAttentionDescriptor, RingAttentionPlan,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference,
+    RingAttentionArgs, RingAttentionDescriptor, RingAttentionPlan, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use baracuda_nccl::Communicator;
 use half::{bf16, f16};
@@ -96,12 +96,8 @@ fn ring_attention_f16_single_rank_matches_flash_sdpa() {
         false,
         ElementKind::F16,
     );
-    let flash_plan = FlashSdpaPlan::<f16>::select(
-        &stream,
-        &flash_desc,
-        PlanPreference::default(),
-    )
-    .expect("flash sel");
+    let flash_plan = FlashSdpaPlan::<f16>::select(&stream, &flash_desc, PlanPreference::default())
+        .expect("flash sel");
     flash_plan
         .run(
             &stream,
@@ -133,7 +129,7 @@ fn ring_attention_f16_single_rank_matches_flash_sdpa() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("flash run");
@@ -160,12 +156,9 @@ fn ring_attention_f16_single_rank_matches_flash_sdpa() {
         is_causal: false,
         element: ElementKind::F16,
     };
-    let ring_plan = RingAttentionPlan::<f16>::select(
-        &stream,
-        &ring_desc,
-        PlanPreference::default(),
-    )
-    .expect("ring sel");
+    let ring_plan =
+        RingAttentionPlan::<f16>::select(&stream, &ring_desc, PlanPreference::default())
+            .expect("ring sel");
 
     let kv_elems = ring_plan.kv_scratch_elements();
     let acc_bytes = ring_plan.accumulator_scratch_bytes();
@@ -174,12 +167,9 @@ fn ring_attention_f16_single_rank_matches_flash_sdpa() {
     staged.extend_from_slice(&k_h);
     staged.extend_from_slice(&v_h);
     assert_eq!(staged.len(), kv_elems);
-    let mut dkv_a: DeviceBuffer<f16> =
-        DeviceBuffer::from_slice(&ctx, &staged).expect("alloc kv_a");
-    let mut dkv_b: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, kv_elems).expect("alloc kv_b");
-    let mut dacc: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, acc_bytes).expect("alloc acc");
+    let mut dkv_a: DeviceBuffer<f16> = DeviceBuffer::from_slice(&ctx, &staged).expect("alloc kv_a");
+    let mut dkv_b: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, kv_elems).expect("alloc kv_b");
+    let mut dacc: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, acc_bytes).expect("alloc acc");
 
     let mut dy_ring: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q_LOCAL * HEAD_DIM) as usize).expect("alloc y_ring");
@@ -237,7 +227,10 @@ fn ring_attention_f16_single_rank_matches_flash_sdpa() {
             "f16 ring vs flash @ {i}: diff={diff} ring={g} flash={r}",
         );
     }
-    eprintln!("ring_attention_f16_single_rank: max abs diff = {:.6e}", max_diff);
+    eprintln!(
+        "ring_attention_f16_single_rank: max abs diff = {:.6e}",
+        max_diff
+    );
 }
 
 // bf16 single-rank degenerate case.
@@ -277,12 +270,8 @@ fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
         false,
         ElementKind::Bf16,
     );
-    let flash_plan = FlashSdpaPlan::<bf16>::select(
-        &stream,
-        &flash_desc,
-        PlanPreference::default(),
-    )
-    .expect("flash sel");
+    let flash_plan = FlashSdpaPlan::<bf16>::select(&stream, &flash_desc, PlanPreference::default())
+        .expect("flash sel");
     flash_plan
         .run(
             &stream,
@@ -314,7 +303,7 @@ fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("flash run");
@@ -338,12 +327,9 @@ fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
         is_causal: false,
         element: ElementKind::Bf16,
     };
-    let ring_plan = RingAttentionPlan::<bf16>::select(
-        &stream,
-        &ring_desc,
-        PlanPreference::default(),
-    )
-    .expect("ring sel");
+    let ring_plan =
+        RingAttentionPlan::<bf16>::select(&stream, &ring_desc, PlanPreference::default())
+            .expect("ring sel");
 
     let kv_elems = ring_plan.kv_scratch_elements();
     let acc_bytes = ring_plan.accumulator_scratch_bytes();
@@ -352,10 +338,8 @@ fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
     staged.extend_from_slice(&v_h);
     let mut dkv_a: DeviceBuffer<bf16> =
         DeviceBuffer::from_slice(&ctx, &staged).expect("alloc kv_a");
-    let mut dkv_b: DeviceBuffer<bf16> =
-        DeviceBuffer::zeros(&ctx, kv_elems).expect("alloc kv_b");
-    let mut dacc: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, acc_bytes).expect("alloc acc");
+    let mut dkv_b: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, kv_elems).expect("alloc kv_b");
+    let mut dacc: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, acc_bytes).expect("alloc acc");
 
     let mut dy_ring: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q_LOCAL * HEAD_DIM) as usize).expect("alloc y_ring");
@@ -403,7 +387,10 @@ fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
             "bf16 ring vs flash @ {i}: diff={diff} ring={g} flash={r}",
         );
     }
-    eprintln!("ring_attention_bf16_single_rank: max abs diff = {:.6e}", max_diff);
+    eprintln!(
+        "ring_attention_bf16_single_rank: max abs diff = {:.6e}",
+        max_diff
+    );
 }
 
 // Single-rank causal-mask check — also validates that the
@@ -446,12 +433,8 @@ fn ring_attention_f16_single_rank_causal() {
         true,
         ElementKind::F16,
     );
-    let flash_plan = FlashSdpaPlan::<f16>::select(
-        &stream,
-        &flash_desc,
-        PlanPreference::default(),
-    )
-    .expect("flash sel");
+    let flash_plan = FlashSdpaPlan::<f16>::select(&stream, &flash_desc, PlanPreference::default())
+        .expect("flash sel");
     flash_plan
         .run(
             &stream,
@@ -483,7 +466,7 @@ fn ring_attention_f16_single_rank_causal() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("flash run");
@@ -507,24 +490,18 @@ fn ring_attention_f16_single_rank_causal() {
         is_causal: true,
         element: ElementKind::F16,
     };
-    let ring_plan = RingAttentionPlan::<f16>::select(
-        &stream,
-        &ring_desc,
-        PlanPreference::default(),
-    )
-    .expect("ring sel");
+    let ring_plan =
+        RingAttentionPlan::<f16>::select(&stream, &ring_desc, PlanPreference::default())
+            .expect("ring sel");
 
     let kv_elems = ring_plan.kv_scratch_elements();
     let acc_bytes = ring_plan.accumulator_scratch_bytes();
     let mut staged: Vec<f16> = Vec::with_capacity(kv_elems);
     staged.extend_from_slice(&k_h);
     staged.extend_from_slice(&v_h);
-    let mut dkv_a: DeviceBuffer<f16> =
-        DeviceBuffer::from_slice(&ctx, &staged).expect("alloc kv_a");
-    let mut dkv_b: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, kv_elems).expect("alloc kv_b");
-    let mut dacc: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, acc_bytes).expect("alloc acc");
+    let mut dkv_a: DeviceBuffer<f16> = DeviceBuffer::from_slice(&ctx, &staged).expect("alloc kv_a");
+    let mut dkv_b: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, kv_elems).expect("alloc kv_b");
+    let mut dacc: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, acc_bytes).expect("alloc acc");
 
     let mut dy_ring: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q_LOCAL * HEAD_DIM) as usize).expect("alloc y_ring");

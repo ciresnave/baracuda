@@ -5,10 +5,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, LstSqArgs, LstSqDescriptor, LstSqPlan, PlanPreference,
-    TensorMut, Workspace,
+    ElementKind, LstSqArgs, LstSqDescriptor, LstSqPlan, PlanPreference, TensorMut, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -369,7 +369,11 @@ fn lstsq_f32_qr_fallback_succeeds_with_backup() {
 
     let mut info_host = vec![0i32; 1];
     dev_info.copy_to_host(&mut info_host).expect("dl info");
-    assert_eq!(info_host[0], 0, "geqrf/ormqr info nonzero: {}", info_host[0]);
+    assert_eq!(
+        info_host[0], 0,
+        "geqrf/ormqr info nonzero: {}",
+        info_host[0]
+    );
 
     let mut x_host = vec![0f32; (n * nrhs) as usize];
     dev_x.copy_to_host(&mut x_host).expect("dl X");
@@ -384,7 +388,11 @@ fn lstsq_f32_qr_fallback_succeeds_with_backup() {
         a_fro_sq += v * v;
     }
     let a_fro = a_fro_sq.sqrt();
-    let x_norm: f32 = x_ref_f64.iter().map(|v| (*v as f32).powi(2)).sum::<f32>().sqrt();
+    let x_norm: f32 = x_ref_f64
+        .iter()
+        .map(|v| (*v as f32).powi(2))
+        .sum::<f32>()
+        .sqrt();
     let tol = 100.0 * f32::EPSILON * a_fro * x_norm.max(1.0);
     // Floor the tolerance: Hilbert at cond~10^7 in f32 cannot resolve
     // truth components to better than ~1e-1, so demand only that we

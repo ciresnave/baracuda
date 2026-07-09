@@ -5,10 +5,10 @@
 //! threaded multiply is well-conditioned; non-determinism across runs
 //! is tolerated by comparing to a small absolute tolerance.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef,
-    UnsortedSegmentProdArgs, UnsortedSegmentProdDescriptor, UnsortedSegmentProdPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnsortedSegmentProdArgs,
+    UnsortedSegmentProdDescriptor, UnsortedSegmentProdPlan, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

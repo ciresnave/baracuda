@@ -8,7 +8,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Meta};
+use syn::{Data, DeriveInput, Fields, Meta, parse_macro_input};
 
 /// `#[derive(DeviceRepr)]` — implement `baracuda_types::DeviceRepr` for a
 /// `#[repr(C)]` or `#[repr(transparent)]` struct whose fields are all
@@ -163,8 +163,7 @@ mod tests {
             #[repr(packed)]
             struct S { a: u32 }
         };
-        ensure_repr_c_or_transparent(&input)
-            .expect_err("repr(packed) alone (no C) must error");
+        ensure_repr_c_or_transparent(&input).expect_err("repr(packed) alone (no C) must error");
     }
 
     #[test]
@@ -193,7 +192,9 @@ mod tests {
         // the Ok type (`Vec<syn::Type>`) to be `Debug`, which needs syn's
         // `extra-traits` feature (only present here by cross-crate feature
         // unification in a full-workspace build, so `-p` checks failed).
-        let err = collect_field_types(&input).err().expect("enum body must be rejected");
+        let err = collect_field_types(&input)
+            .err()
+            .expect("enum body must be rejected");
         assert!(err.to_string().contains("enums"), "msg: {}", err);
     }
 
@@ -203,7 +204,9 @@ mod tests {
             #[repr(C)]
             union U { a: u32, b: f32 }
         };
-        let err = collect_field_types(&input).err().expect("union body must be rejected");
+        let err = collect_field_types(&input)
+            .err()
+            .expect("union body must be rejected");
         assert!(err.to_string().contains("unions"), "msg: {}", err);
     }
 

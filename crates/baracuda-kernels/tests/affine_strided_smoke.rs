@@ -8,10 +8,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test affine_strided_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, AffineArgs, AffineDescriptor, AffinePlan, ElementKind, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    AffineArgs, AffineDescriptor, AffinePlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::bf16;
 
@@ -45,8 +45,8 @@ fn affine_f32_contig_path_still_correct() {
         b,
         element: ElementKind::F32,
     };
-    let plan = AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -88,9 +88,7 @@ fn affine_f32_strided_input_stride2() {
 
     // Big buffer; we'll read every-other element.
     let host_x: Vec<f32> = (0..buf_len).map(|i| (i as f32) * 0.0625 - 4.0).collect();
-    let expected: Vec<f32> = (0..numel)
-        .map(|i| a * host_x[i * stride] + b)
-        .collect();
+    let expected: Vec<f32> = (0..numel).map(|i| a * host_x[i * stride] + b).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc");
@@ -101,8 +99,8 @@ fn affine_f32_strided_input_stride2() {
         b,
         element: ElementKind::F32,
     };
-    let plan = AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -157,8 +155,8 @@ fn affine_f32_strided_output_stride2_interior_view() {
         b,
         element: ElementKind::F32,
     };
-    let plan = AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        AffinePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -183,7 +181,10 @@ fn affine_f32_strided_output_stride2_interior_view() {
         let e = a * host_x[i] + b;
         let err = (g - e).abs();
         let tol = e.abs().max(1.0) * tol_eps;
-        assert!(err <= tol, "affine_f32 out-stride2 @ {i}: got {g} expected {e}");
+        assert!(
+            err <= tol,
+            "affine_f32 out-stride2 @ {i}: got {g} expected {e}"
+        );
     }
     // Verify the in-between slots are untouched.
     for i in 0..numel {
@@ -221,8 +222,8 @@ fn affine_bf16_strided_input_stride2() {
         b,
         element: ElementKind::Bf16,
     };
-    let plan = AffinePlan::<bf16>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        AffinePlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -249,7 +250,10 @@ fn affine_bf16_strided_input_stride2() {
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let err = (g - e).abs();
         let tol = e.abs().max(1.0) * tol_rel;
-        assert!(err <= tol, "affine_bf16 stride2 @ {i}: got {g} expected {e}");
+        assert!(
+            err <= tol,
+            "affine_bf16 stride2 @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -278,8 +282,8 @@ fn affine_i32_strided_input_stride2() {
         b,
         element: ElementKind::I32,
     };
-    let plan = AffinePlan::<i32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        AffinePlan::<i32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = AffineArgs {
         input: TensorRef {
             data: dev_x.as_slice(),
@@ -348,7 +352,10 @@ fn affine_u8_strided_input_stride2() {
             stream_ptr,
         )
     };
-    assert_eq!(status, 0, "u8 strided FFI returned non-zero status: {status}");
+    assert_eq!(
+        status, 0,
+        "u8 strided FFI returned non-zero status: {status}"
+    );
     stream.synchronize().expect("sync");
 
     let mut got = vec![0u8; numel];

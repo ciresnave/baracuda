@@ -3,7 +3,7 @@
 
 use baracuda_cuda_sys::runtime::runtime;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// `cudaProfilerStart`.
 pub fn start() -> Result<()> {

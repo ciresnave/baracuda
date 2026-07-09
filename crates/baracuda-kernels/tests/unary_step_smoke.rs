@@ -9,10 +9,10 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs,
-    UnaryDescriptor, UnaryKind, UnaryPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind,
+    UnaryPlan, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -33,13 +33,13 @@ fn ffi_unary_step_f32_matches_cpu() {
     host_x.push(0.0);
     host_x.push(f32::NAN);
 
-    let expected: Vec<f32> = host_x.iter()
+    let expected: Vec<f32> = host_x
+        .iter()
         .map(|&x| if x > 0.0 { 1.0 } else { 0.0 })
         .collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_unary_step_f32_run(
@@ -60,7 +60,8 @@ fn ffi_unary_step_f32_matches_cpu() {
     // Step is exact (no math; just a compare). Use bit-equality.
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "step f32 @ {i} (x = {}): got {g} expected {e}",
             host_x[i],
         );
@@ -72,13 +73,13 @@ fn ffi_unary_step_f32_matches_cpu() {
 fn ffi_unary_step_f64_matches_cpu() {
     let (ctx, stream) = setup();
     let host_x: Vec<f64> = (0..256).map(|i| (i as f64) * 0.02 - 2.56).collect();
-    let expected: Vec<f64> = host_x.iter()
+    let expected: Vec<f64> = host_x
+        .iter()
         .map(|&x| if x > 0.0 { 1.0 } else { 0.0 })
         .collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_unary_step_f64_run(
@@ -143,17 +144,27 @@ fn plan_unary_step_f32_3d() {
     let plan = UnaryPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f32, 3>");
     let args = UnaryArgs::<f32, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("step f32 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("step f32 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f32; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "step f32 plan mismatch @ {i}: got {g} expected {e} (input was {})",
             host_x[i],
         );
@@ -187,19 +198,31 @@ fn plan_unary_step_f16_3d() {
     let plan = UnaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f16, 3>");
     let args = UnaryArgs::<f16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("step f16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("step f16 run");
     stream.synchronize().expect("sync");
 
     let mut host_got = vec![f16::from_f32(0.0); numel];
     dev_y.copy_to_host(&mut host_got).expect("download");
     for (i, (g, e)) in host_got.iter().zip(host_expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "step f16 plan mismatch @ {i}: got {} expected {} (input was {})",
-            g.to_f32(), e.to_f32(), host_x[i].to_f32(),
+            g.to_f32(),
+            e.to_f32(),
+            host_x[i].to_f32(),
         );
     }
 }
@@ -237,11 +260,19 @@ fn plan_unary_step_f32_strided_transposed() {
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = UnaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        UnaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = UnaryArgs::<f32, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: x_stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: y_stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: x_shape,
+            stride: x_stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: y_shape,
+            stride: y_stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -250,7 +281,8 @@ fn plan_unary_step_f32_strided_transposed() {
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         assert_eq!(
-            g.to_bits(), e.to_bits(),
+            g.to_bits(),
+            e.to_bits(),
             "step f32 strided plan mismatch @ {i}: got {g} expected {e}",
         );
     }

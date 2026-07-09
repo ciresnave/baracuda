@@ -7,10 +7,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GatherArgs, GatherDescriptor, GatherPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, GatherArgs, GatherDescriptor, GatherPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -29,10 +29,9 @@ fn scatter_add_backward_via_gather_f32_2d_dim1() {
     // BW: dupdates = gather(dout, dim=1, idx).
     let out_shape = [3i32, 6];
     let upd_shape = [3i32, 4];
-    let host_idx: Vec<i32> = vec![0, 1, 1, 5,  2, 0, 3, 4,  5, 5, 5, 0];
+    let host_idx: Vec<i32> = vec![0, 1, 1, 5, 2, 0, 3, 4, 5, 5, 5, 0];
     // dout is the upstream gradient w.r.t. the FW scatter_add output.
-    let host_dout: Vec<f32> =
-        (0..(3 * 6)).map(|i| (i as f32) * 0.5 - 4.0).collect();
+    let host_dout: Vec<f32> = (0..(3 * 6)).map(|i| (i as f32) * 0.5 - 4.0).collect();
     // Reference: dupdates[i, j] = dout[i, idx[i, j]].
     let mut expected = vec![0f32; 3 * 4];
     for i in 0..3usize {
@@ -44,8 +43,7 @@ fn scatter_add_backward_via_gather_f32_2d_dim1() {
 
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up dout");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_dupd: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, 3 * 4).expect("alloc dupd");
+    let mut dev_dupd: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 3 * 4).expect("alloc dupd");
 
     let desc = GatherDescriptor {
         out_shape: upd_shape,

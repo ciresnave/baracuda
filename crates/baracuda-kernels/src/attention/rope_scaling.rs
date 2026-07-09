@@ -358,8 +358,7 @@ impl RopeScaledTableBuilder {
                 // smooth linear ramp between α and β
                 (beta - rotations) / (beta - alpha)
             };
-            let interpolated_inv_freq =
-                (1.0 - ramp) * inv_freq + ramp * (inv_freq / scale);
+            let interpolated_inv_freq = (1.0 - ramp) * inv_freq + ramp * (inv_freq / scale);
             for s in 0..seq {
                 let theta = (s as f32) * interpolated_inv_freq;
                 cos_tab[s * half_d + pair] = theta.cos() * inv_attn_temp;
@@ -368,12 +367,7 @@ impl RopeScaledTableBuilder {
         }
     }
 
-    fn fill_longrope(
-        &self,
-        cos_tab: &mut [f32],
-        sin_tab: &mut [f32],
-        per_dim_factors: &[f32],
-    ) {
+    fn fill_longrope(&self, cos_tab: &mut [f32], sin_tab: &mut [f32], per_dim_factors: &[f32]) {
         let half_d = (self.head_dim / 2) as usize;
         let seq = self.max_seq_len as usize;
         for s in 0..seq {
@@ -406,8 +400,7 @@ mod tests {
         let head_dim = 16i32;
         let seq = 4i32;
         let base = 10000.0f32;
-        let builder =
-            RopeScaledTableBuilder::new(head_dim, seq, base, RopeScaling::Linear);
+        let builder = RopeScaledTableBuilder::new(head_dim, seq, base, RopeScaling::Linear);
         let (cos, sin) = builder.build_host_tables().expect("build");
         assert_eq!(cos.len(), (seq * head_dim / 2) as usize);
         assert_eq!(sin.len(), (seq * head_dim / 2) as usize);
@@ -425,12 +418,14 @@ mod tests {
                 assert!(
                     (cos[i] - expected_cos).abs() < 1e-6,
                     "linear cos mismatch @ ({s},{pair}): got {} expected {}",
-                    cos[i], expected_cos
+                    cos[i],
+                    expected_cos
                 );
                 assert!(
                     (sin[i] - expected_sin).abs() < 1e-6,
                     "linear sin mismatch @ ({s},{pair}): got {} expected {}",
-                    sin[i], expected_sin
+                    sin[i],
+                    expected_sin
                 );
             }
         }

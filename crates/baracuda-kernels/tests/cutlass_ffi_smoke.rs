@@ -19,7 +19,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels_sys::{
     baracuda_kernels_gemm_batched_f16_rcr_sm80_run,
     baracuda_kernels_gemm_batched_f16_rcr_sm80_workspace_size,
@@ -73,9 +73,7 @@ fn gemm_f32_simt_rrr_ffi() {
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc d");
 
     // Query workspace.
-    let ws_bytes = unsafe {
-        baracuda_kernels_gemm_f32_simt_rrr_sm80_workspace_size(m, n, k)
-    };
+    let ws_bytes = unsafe { baracuda_kernels_gemm_f32_simt_rrr_sm80_workspace_size(m, n, k) };
     let mut ws_buf: Option<DeviceBuffer<u8>> = if ws_bytes > 0 {
         Some(DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws"))
     } else {
@@ -88,13 +86,21 @@ fn gemm_f32_simt_rrr_ffi() {
 
     let status = unsafe {
         baracuda_kernels_gemm_f32_simt_rrr_sm80_run(
-            m, n, k,
-            dev_a.as_raw().0 as *const c_void, lda,
-            dev_b.as_raw().0 as *const c_void, ldb,
-            core::ptr::null(), 0,
-            dev_d.as_raw().0 as *mut c_void, ldd,
-            1.0_f32, 0.0_f32,
-            ws_ptr, ws_bytes_arg,
+            m,
+            n,
+            k,
+            dev_a.as_raw().0 as *const c_void,
+            lda,
+            dev_b.as_raw().0 as *const c_void,
+            ldb,
+            core::ptr::null(),
+            0,
+            dev_d.as_raw().0 as *mut c_void,
+            ldd,
+            1.0_f32,
+            0.0_f32,
+            ws_ptr,
+            ws_bytes_arg,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -109,7 +115,14 @@ fn gemm_f32_simt_rrr_ffi() {
         for j in 0..(n as usize) {
             let want = a_host[i * (k as usize) + j];
             let got = d_host[i * (n as usize) + j];
-            assert!((want - got).abs() < 1e-5, "i={} j={} want={} got={}", i, j, want, got);
+            assert!(
+                (want - got).abs() < 1e-5,
+                "i={} j={} want={} got={}",
+                i,
+                j,
+                want,
+                got
+            );
         }
     }
 }
@@ -143,9 +156,7 @@ fn gemm_bias_f32_simt_rrr_ffi() {
     let mut dev_d: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (m * n) as usize).expect("alloc d");
 
-    let ws_bytes = unsafe {
-        baracuda_kernels_gemm_bias_f32_simt_rrr_sm80_workspace_size(m, n, k)
-    };
+    let ws_bytes = unsafe { baracuda_kernels_gemm_bias_f32_simt_rrr_sm80_workspace_size(m, n, k) };
     let mut ws_buf: Option<DeviceBuffer<u8>> = if ws_bytes > 0 {
         Some(DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws"))
     } else {
@@ -158,14 +169,22 @@ fn gemm_bias_f32_simt_rrr_ffi() {
 
     let status = unsafe {
         baracuda_kernels_gemm_bias_f32_simt_rrr_sm80_run(
-            m, n, k,
-            dev_a.as_raw().0 as *const c_void, k as i64,
-            dev_b.as_raw().0 as *const c_void, n as i64,
-            core::ptr::null(), 0,
-            dev_d.as_raw().0 as *mut c_void, n as i64,
+            m,
+            n,
+            k,
+            dev_a.as_raw().0 as *const c_void,
+            k as i64,
+            dev_b.as_raw().0 as *const c_void,
+            n as i64,
+            core::ptr::null(),
+            0,
+            dev_d.as_raw().0 as *mut c_void,
+            n as i64,
             dev_bias.as_raw().0 as *const c_void,
-            1.0_f32, 0.0_f32,
-            ws_ptr, ws_bytes_arg,
+            1.0_f32,
+            0.0_f32,
+            ws_ptr,
+            ws_bytes_arg,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -179,7 +198,14 @@ fn gemm_bias_f32_simt_rrr_ffi() {
         for j in 0..(n as usize) {
             let want = (if i == j { 1.0 } else { 0.0 }) + bias_host[j];
             let got = d_host[i * (n as usize) + j];
-            assert!((want - got).abs() < 1e-5, "i={} j={} want={} got={}", i, j, want, got);
+            assert!(
+                (want - got).abs() < 1e-5,
+                "i={} j={} want={} got={}",
+                i,
+                j,
+                want,
+                got
+            );
         }
     }
 }
@@ -194,9 +220,9 @@ fn gemm_batched_f16_rcr_ffi() {
     let n: i32 = 16;
     let k: i32 = 16;
     let batch_count: i32 = 2;
-    let lda: i64 = k as i64;        // row-major [M, K]
-    let ldb: i64 = k as i64;        // column-major [K, N] → ld is the K dim
-    let ldd: i64 = n as i64;        // row-major [M, N]
+    let lda: i64 = k as i64; // row-major [M, K]
+    let ldb: i64 = k as i64; // column-major [K, N] → ld is the K dim
+    let ldd: i64 = n as i64; // row-major [M, N]
     let stride_a = (m * k) as i64;
     let stride_b = (k * n) as i64;
     let stride_d = (m * n) as i64;
@@ -225,9 +251,8 @@ fn gemm_batched_f16_rcr_ffi() {
     let mut dev_d: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (batch_count * m * n) as usize).expect("alloc d");
 
-    let ws_bytes = unsafe {
-        baracuda_kernels_gemm_batched_f16_rcr_sm80_workspace_size(m, n, k, batch_count)
-    };
+    let ws_bytes =
+        unsafe { baracuda_kernels_gemm_batched_f16_rcr_sm80_workspace_size(m, n, k, batch_count) };
     let mut ws_buf: Option<DeviceBuffer<u8>> = if ws_bytes > 0 {
         Some(DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws"))
     } else {
@@ -240,14 +265,26 @@ fn gemm_batched_f16_rcr_ffi() {
 
     let status = unsafe {
         baracuda_kernels_gemm_batched_f16_rcr_sm80_run(
-            m, n, k,
-            dev_a.as_raw().0 as *const c_void, lda, stride_a,
-            dev_b.as_raw().0 as *const c_void, ldb, stride_b,
-            core::ptr::null(), 0, 0,
-            dev_d.as_raw().0 as *mut c_void, ldd, stride_d,
-            1.0_f32, 0.0_f32,
+            m,
+            n,
+            k,
+            dev_a.as_raw().0 as *const c_void,
+            lda,
+            stride_a,
+            dev_b.as_raw().0 as *const c_void,
+            ldb,
+            stride_b,
+            core::ptr::null(),
+            0,
+            0,
+            dev_d.as_raw().0 as *mut c_void,
+            ldd,
+            stride_d,
+            1.0_f32,
+            0.0_f32,
             batch_count,
-            ws_ptr, ws_bytes_arg,
+            ws_ptr,
+            ws_bytes_arg,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -266,7 +303,14 @@ fn gemm_batched_f16_rcr_ffi() {
         for j in 0..(n as usize) {
             let want = if i == j { 1.0 } else { 0.0 };
             let got = d_host[(stride_d as usize) + i * (n as usize) + j].to_f32();
-            assert!((want - got).abs() < 1e-3, "batch1 i={} j={} want={} got={}", i, j, want, got);
+            assert!(
+                (want - got).abs() < 1e-3,
+                "batch1 i={} j={} want={} got={}",
+                i,
+                j,
+                want,
+                got
+            );
         }
     }
 }

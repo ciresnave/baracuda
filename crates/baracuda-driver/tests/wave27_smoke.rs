@@ -3,11 +3,11 @@
 
 use baracuda_cuda_sys::types::CUmem_advise;
 use baracuda_driver::memory::{
-    self, allocation_properties_from_handle, mem_advise_v2, mem_prefetch_v2,
-    retain_allocation_handle, PrefetchTarget,
+    self, PrefetchTarget, allocation_properties_from_handle, mem_advise_v2, mem_prefetch_v2,
+    retain_allocation_handle,
 };
 use baracuda_driver::vmm::{AccessFlags, AddressRange, MappedRange, PhysicalMemory};
-use baracuda_driver::{vmm, Context, Device, ManagedBuffer, Stream};
+use baracuda_driver::{Context, Device, ManagedBuffer, Stream, vmm};
 
 #[test]
 #[ignore = "requires an NVIDIA GPU"]

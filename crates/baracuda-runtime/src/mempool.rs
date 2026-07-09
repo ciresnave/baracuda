@@ -10,12 +10,12 @@ use std::sync::Arc;
 use baracuda_cuda_sys::runtime::runtime;
 use baracuda_cuda_sys::runtime::types::{
     cudaMemAccessDesc, cudaMemAllocationHandleType, cudaMemAllocationType, cudaMemLocation,
-    cudaMemLocationType, cudaMemPoolAttr, cudaMemPoolProps, cudaMemPoolPtrExportData,
-    cudaMemPool_t,
+    cudaMemLocationType, cudaMemPool_t, cudaMemPoolAttr, cudaMemPoolProps,
+    cudaMemPoolPtrExportData,
 };
 
 use crate::device::Device;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// Access rights granted to a device for a pool's allocations.
@@ -223,11 +223,13 @@ impl MemoryPool {
     /// # Safety
     ///
     /// `ptr` must be a live allocation from this (or another) pool.
-    pub unsafe fn free_async(&self, ptr: *mut core::ffi::c_void, stream: &Stream) -> Result<()> { unsafe {
-        let r = runtime()?;
-        let cu = r.cuda_free_async()?;
-        check(cu(ptr, stream.as_raw()))
-    }}
+    pub unsafe fn free_async(&self, ptr: *mut core::ffi::c_void, stream: &Stream) -> Result<()> {
+        unsafe {
+            let r = runtime()?;
+            let cu = r.cuda_free_async()?;
+            check(cu(ptr, stream.as_raw()))
+        }
+    }
 
     /// Export a pointer in this pool for sharing with a peer process.
     ///
@@ -237,13 +239,15 @@ impl MemoryPool {
     pub unsafe fn export_pointer(
         &self,
         ptr: *mut core::ffi::c_void,
-    ) -> Result<cudaMemPoolPtrExportData> { unsafe {
-        let r = runtime()?;
-        let cu = r.cuda_mem_pool_export_pointer()?;
-        let mut data = cudaMemPoolPtrExportData::default();
-        check(cu(&mut data, ptr))?;
-        Ok(data)
-    }}
+    ) -> Result<cudaMemPoolPtrExportData> {
+        unsafe {
+            let r = runtime()?;
+            let cu = r.cuda_mem_pool_export_pointer()?;
+            let mut data = cudaMemPoolPtrExportData::default();
+            check(cu(&mut data, ptr))?;
+            Ok(data)
+        }
+    }
 
     /// Import an exported pointer into this pool.
     pub fn import_pointer(

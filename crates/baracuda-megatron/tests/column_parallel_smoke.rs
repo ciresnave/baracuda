@@ -8,9 +8,7 @@
 //! Megatron path without needing multi-GPU hardware.
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
-use baracuda_megatron::{
-    ColumnParallelLinearPlan, Error as MegError, TensorParallelContext,
-};
+use baracuda_megatron::{ColumnParallelLinearPlan, Error as MegError, TensorParallelContext};
 use baracuda_nccl::Communicator;
 
 /// CPU reference for `y = x @ w^T`, row-major.

@@ -21,10 +21,10 @@
 
 #![cfg(feature = "xformers_sparse24")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Event, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Event, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GemmSparse24Args, GemmSparse24Descriptor, GemmSparse24Plan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, GemmSparse24Args, GemmSparse24Descriptor, GemmSparse24Plan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -86,8 +86,8 @@ fn sparse24_throughput_smoke_documentation() {
         k: K_DIM,
         element: ElementKind::F32,
     };
-    let plan = GemmSparse24Plan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("plan");
+    let plan =
+        GemmSparse24Plan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("plan");
     let ws_bytes = plan.workspace_size();
     let mut dws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("ws");
 
@@ -97,19 +97,23 @@ fn sparse24_throughput_smoke_documentation() {
         Workspace::Borrowed(dws.as_slice_mut()),
         GemmSparse24Args {
             w_compressed: TensorRef {
-                data: dwc.as_slice(), shape: [M_DIM, K_DIM / 2],
+                data: dwc.as_slice(),
+                shape: [M_DIM, K_DIM / 2],
                 stride: contiguous_stride([M_DIM, K_DIM / 2]),
             },
             w_metadata: TensorRef {
-                data: dwm.as_slice(), shape: [M_DIM, K_DIM / 8],
+                data: dwm.as_slice(),
+                shape: [M_DIM, K_DIM / 8],
                 stride: contiguous_stride([M_DIM, K_DIM / 8]),
             },
             x: TensorRef {
-                data: dx.as_slice(), shape: [N_DIM, K_DIM],
+                data: dx.as_slice(),
+                shape: [N_DIM, K_DIM],
                 stride: contiguous_stride([N_DIM, K_DIM]),
             },
             y: TensorMut {
-                data: dy.as_slice_mut(), shape: [N_DIM, M_DIM],
+                data: dy.as_slice_mut(),
+                shape: [N_DIM, M_DIM],
                 stride: contiguous_stride([N_DIM, M_DIM]),
             },
         },
@@ -128,19 +132,23 @@ fn sparse24_throughput_smoke_documentation() {
             Workspace::Borrowed(dws.as_slice_mut()),
             GemmSparse24Args {
                 w_compressed: TensorRef {
-                    data: dwc.as_slice(), shape: [M_DIM, K_DIM / 2],
+                    data: dwc.as_slice(),
+                    shape: [M_DIM, K_DIM / 2],
                     stride: contiguous_stride([M_DIM, K_DIM / 2]),
                 },
                 w_metadata: TensorRef {
-                    data: dwm.as_slice(), shape: [M_DIM, K_DIM / 8],
+                    data: dwm.as_slice(),
+                    shape: [M_DIM, K_DIM / 8],
                     stride: contiguous_stride([M_DIM, K_DIM / 8]),
                 },
                 x: TensorRef {
-                    data: dx.as_slice(), shape: [N_DIM, K_DIM],
+                    data: dx.as_slice(),
+                    shape: [N_DIM, K_DIM],
                     stride: contiguous_stride([N_DIM, K_DIM]),
                 },
                 y: TensorMut {
-                    data: dy.as_slice_mut(), shape: [N_DIM, M_DIM],
+                    data: dy.as_slice_mut(),
+                    shape: [N_DIM, M_DIM],
                     stride: contiguous_stride([N_DIM, M_DIM]),
                 },
             },

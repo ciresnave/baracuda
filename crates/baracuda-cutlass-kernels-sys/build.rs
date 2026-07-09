@@ -70,7 +70,10 @@ fn main() {
         .out_dir(&out_dir);
 
     if let Ok(root) = env::var("DEP_CUTLASS_ROOT") {
-        let util = PathBuf::from(&root).join("tools").join("util").join("include");
+        let util = PathBuf::from(&root)
+            .join("tools")
+            .join("util")
+            .join("include");
         if util.is_dir() {
             builder = builder.include_path(util);
         }
@@ -107,7 +110,10 @@ fn main() {
             // forge's `lib_dir` resolves to the import-library directory
             // (`lib\x64` on Windows, `lib64` on Linux) where `cudart.lib`
             // lives, regardless of detection path.
-            println!("cargo:rustc-link-search=native={}", toolkit.lib_dir.display());
+            println!(
+                "cargo:rustc-link-search=native={}",
+                toolkit.lib_dir.display()
+            );
         }
         Ok(toolkit) => {
             println!(

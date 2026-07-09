@@ -16,10 +16,10 @@
 
 #![cfg(feature = "sm89")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    EpilogueKind, Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan, IntElement, LayoutSku,
-    MatrixMut, MatrixRef, PlanPreference, S4, U4, Workspace,
+    EpilogueKind, Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan, IntElement, LayoutSku, MatrixMut,
+    MatrixRef, PlanPreference, S4, U4, Workspace,
 };
 
 // ============================================================================
@@ -104,11 +104,9 @@ fn cpu_int4_gemm_rrr_identity(
                 let j0 = 2 * j_pair;
                 let j1 = j0 + 1;
                 // B row K_lo, pair (j0, j1):
-                let [b_lo_lo, b_lo_hi] =
-                    unpack(b_bytes[(2 * kk_byte) * ldb_bytes + j_pair]);
+                let [b_lo_lo, b_lo_hi] = unpack(b_bytes[(2 * kk_byte) * ldb_bytes + j_pair]);
                 // B row K_hi, pair (j0, j1):
-                let [b_hi_lo, b_hi_hi] =
-                    unpack(b_bytes[(2 * kk_byte + 1) * ldb_bytes + j_pair]);
+                let [b_hi_lo, b_hi_hi] = unpack(b_bytes[(2 * kk_byte + 1) * ldb_bytes + j_pair]);
                 acc_row[j0] += a_lo * b_lo_lo + a_hi * b_hi_lo;
                 acc_row[j1] += a_lo * b_lo_hi + a_hi * b_hi_hi;
             }
@@ -118,8 +116,7 @@ fn cpu_int4_gemm_rrr_identity(
             let j1 = j0 + 1;
             let q0 = sat_cast(alpha * acc_row[j0] as f32);
             let q1 = sat_cast(alpha * acc_row[j1] as f32);
-            expected_bytes[i * ldd_bytes + j_pair] =
-                pack_pair(q0 as i8 as i32, q1 as i8 as i32);
+            expected_bytes[i * ldd_bytes + j_pair] = pack_pair(q0 as i8 as i32, q1 as i8 as i32);
             expected_i32[i * n + j0] = acc_row[j0];
             expected_i32[i * n + j1] = acc_row[j1];
         }
@@ -178,9 +175,13 @@ fn run_int4_rrr_identity<T: IntElement + Default>(
     let mut expected_bytes = vec![0u8; mu * n_bytes];
     let mut expected_i32 = vec![0i32; mu * nu];
     cpu_int4_gemm_rrr_identity(
-        mu, nu, ku,
-        &host_a_bytes, k_bytes,
-        &host_b_bytes, n_bytes,
+        mu,
+        nu,
+        ku,
+        &host_a_bytes,
+        k_bytes,
+        &host_b_bytes,
+        n_bytes,
         alpha,
         &mut expected_bytes,
         &mut expected_i32,
@@ -192,11 +193,12 @@ fn run_int4_rrr_identity<T: IntElement + Default>(
     let dev_b_bytes = DeviceBuffer::from_slice(&ctx, &host_b_bytes).expect("upload B");
     let dev_a = dev_a_bytes.view_as::<T>();
     let dev_b = dev_b_bytes.view_as::<T>();
-    let mut dev_d: DeviceBuffer<T> =
-        DeviceBuffer::zeros(&ctx, mu * n_bytes).expect("alloc D");
+    let mut dev_d: DeviceBuffer<T> = DeviceBuffer::zeros(&ctx, mu * n_bytes).expect("alloc D");
 
     let desc = Int4GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rrr,
         epilogue: EpilogueKind::Identity,
     };
@@ -204,11 +206,26 @@ fn run_int4_rrr_identity<T: IntElement + Default>(
         .expect("select int4 RRR plan");
 
     let args = Int4GemmArgs::<T> {
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k_bytes as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k_bytes as i64,
+        },
         // RRR: B row-major [K, N], row stride = N/2 bytes.
-        b: MatrixRef { data: dev_b, rows: k, cols: n, ld: n_bytes as i64 },
+        b: MatrixRef {
+            data: dev_b,
+            rows: k,
+            cols: n,
+            ld: n_bytes as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n_bytes as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n_bytes as i64,
+        },
         bias: None,
         alpha,
         beta,
@@ -228,9 +245,8 @@ fn run_int4_rrr_identity<T: IntElement + Default>(
         dev_d.copy_to_host(&mut tmp_t).expect("download D");
         // SAFETY: T is `#[repr(transparent)]` around `u8` for both S4
         // and U4 (single packed-pair byte per element).
-        let src: &[u8] = unsafe {
-            core::slice::from_raw_parts(tmp_t.as_ptr() as *const u8, tmp_t.len())
-        };
+        let src: &[u8] =
+            unsafe { core::slice::from_raw_parts(tmp_t.as_ptr() as *const u8, tmp_t.len()) };
         host_d_bytes.copy_from_slice(src);
     }
 
@@ -283,11 +299,8 @@ fn run_s4(m: i32, n: i32, k: i32) {
         (((j as i32 * 11 + kk as i32 * 5) % 5) - 2).clamp(-7, 7)
     }
     run_int4_rrr_identity::<S4>(
-        m, n, k,
-        /*is_signed=*/true,
-        mk_a, mk_b,
-        /*abs_max_a=*/2, /*abs_max_b=*/2,
-        /*out_max_abs=*/5.0,
+        m, n, k, /*is_signed=*/ true, mk_a, mk_b, /*abs_max_a=*/ 2,
+        /*abs_max_b=*/ 2, /*out_max_abs=*/ 5.0,
     );
 }
 
@@ -299,11 +312,8 @@ fn run_u4(m: i32, n: i32, k: i32) {
         ((j as i32 * 11 + kk as i32 * 5) % 5).clamp(0, 15)
     }
     run_int4_rrr_identity::<U4>(
-        m, n, k,
-        /*is_signed=*/false,
-        mk_a, mk_b,
-        /*abs_max_a=*/4, /*abs_max_b=*/4,
-        /*out_max_abs=*/12.0,
+        m, n, k, /*is_signed=*/ false, mk_a, mk_b, /*abs_max_a=*/ 4,
+        /*abs_max_b=*/ 4, /*out_max_abs=*/ 12.0,
     );
 }
 
@@ -311,36 +321,44 @@ fn run_u4(m: i32, n: i32, k: i32) {
 // Tests — Identity at four shapes that exercise tile-alignment edges.
 // ============================================================================
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_identity_64_64_64() {
     run_s4(64, 64, 64);
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_identity_128_128_128() {
     run_s4(128, 128, 128);
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_identity_256_128_64() {
     run_s4(256, 128, 64);
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn s4_rrr_identity_100_70_64() {
     run_s4(100, 70, 64);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_identity_64_64_64() {
     run_u4(64, 64, 64);
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_identity_128_128_128() {
     run_u4(128, 128, 128);
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_identity_256_128_64() {
     run_u4(256, 128, 64);
 }
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn u4_rrr_identity_100_70_64() {
     run_u4(100, 70, 64);
 }

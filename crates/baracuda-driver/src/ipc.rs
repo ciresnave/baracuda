@@ -13,9 +13,9 @@
 //! for Windows IPC.
 
 use baracuda_cuda_sys::types::{CUipcEventHandle, CUipcMemHandle};
-use baracuda_cuda_sys::{driver, CUdeviceptr, CUevent};
+use baracuda_cuda_sys::{CUdeviceptr, CUevent, driver};
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::event::Event;
 
 /// Export a CUDA event for sharing with another process.

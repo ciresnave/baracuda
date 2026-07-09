@@ -40,7 +40,7 @@
 use core::ffi::{c_int, c_void};
 
 use baracuda_driver::Stream;
-use baracuda_nvshmem_sys::{nvshmem, nvshmemResult_t, nvshmem_team_t, nvshmemx_uniqueid_t};
+use baracuda_nvshmem_sys::{nvshmem, nvshmem_team_t, nvshmemResult_t, nvshmemx_uniqueid_t};
 use baracuda_types::DeviceRepr;
 
 /// Error type for NVSHMEM operations.
@@ -217,7 +217,10 @@ impl Context {
         count: usize,
         pe: i32,
     ) -> Result<()> {
-        assert!(count <= dest.len() && count <= src.len(), "put out of range");
+        assert!(
+            count <= dest.len() && count <= src.len(),
+            "put out of range"
+        );
         let n = nvshmem()?;
         let cu = n.nvshmem_putmem()?;
         unsafe {
@@ -240,7 +243,10 @@ impl Context {
         count: usize,
         pe: i32,
     ) -> Result<()> {
-        assert!(count <= dest.len() && count <= src.len(), "get out of range");
+        assert!(
+            count <= dest.len() && count <= src.len(),
+            "get out of range"
+        );
         let n = nvshmem()?;
         let cu = n.nvshmem_getmem()?;
         unsafe {
@@ -264,7 +270,10 @@ impl Context {
         pe: i32,
         stream: &Stream,
     ) -> Result<()> {
-        assert!(count <= dest.len() && count <= src.len(), "put out of range");
+        assert!(
+            count <= dest.len() && count <= src.len(),
+            "put out of range"
+        );
         let n = nvshmem()?;
         let cu = n.nvshmemx_putmem_on_stream()?;
         unsafe {
@@ -288,7 +297,10 @@ impl Context {
         pe: i32,
         stream: &Stream,
     ) -> Result<()> {
-        assert!(count <= dest.len() && count <= src.len(), "get out of range");
+        assert!(
+            count <= dest.len() && count <= src.len(),
+            "get out of range"
+        );
         let n = nvshmem()?;
         let cu = n.nvshmemx_getmem_on_stream()?;
         unsafe {
@@ -349,12 +361,7 @@ impl Team {
     ///
     /// Defaults are used for the team config (`config = null`,
     /// `config_mask = 0`).
-    pub fn split_strided(
-        &self,
-        start: i32,
-        stride: i32,
-        size: i32,
-    ) -> Result<Option<Team>> {
+    pub fn split_strided(&self, start: i32, stride: i32, size: i32) -> Result<Option<Team>> {
         let n = nvshmem()?;
         let cu = n.nvshmem_team_split_strided()?;
         let mut new_team = nvshmem_team_t::INVALID;
@@ -449,7 +456,9 @@ impl<T: DeviceRepr> SymmetricBuffer<T> {
     pub fn new(len: usize) -> Result<Self> {
         let n = nvshmem()?;
         let cu = n.nvshmem_malloc()?;
-        let bytes = len.checked_mul(core::mem::size_of::<T>()).expect("size overflow");
+        let bytes = len
+            .checked_mul(core::mem::size_of::<T>())
+            .expect("size overflow");
         let ptr = unsafe { cu(bytes) };
         if ptr.is_null() && bytes != 0 {
             // nvshmem_malloc aborts internally on real OOM; a null with a

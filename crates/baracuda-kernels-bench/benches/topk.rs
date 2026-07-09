@@ -14,23 +14,23 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, TopkArgs,
-    TopkDescriptor, TopkPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, TopkArgs, TopkDescriptor, TopkPlan,
+    Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline,
+    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns, setup_device,
+    time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 const BENCH_NAME: &str = "topk";
 
 /// TopK sweep: `(batch, row_len, k)`. All within baracuda's trailblazer
 /// caps (`row_len ≤ 1024`, `k ≤ 64`).
 const TOPK_SWEEP: &[(i32, i32, i32)] = &[
-    (32, 128, 4),    // MoE expert dispatch — 32 tokens × 128 experts → top-4
-    (8, 512, 16),    // Intermediate top-k
-    (1, 1024, 64),   // Trailblazer-cap shape
+    (32, 128, 4),  // MoE expert dispatch — 32 tokens × 128 experts → top-4
+    (8, 512, 16),  // Intermediate top-k
+    (1, 1024, 64), // Trailblazer-cap shape
 ];
 
 fn leak_str(s: &str) -> &'static str {
@@ -86,8 +86,7 @@ fn bench_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
             largest: true,
             element: ElementKind::F32,
         };
-        let plan = match TopkPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        {
+        let plan = match TopkPlan::<f32>::select(&stream, &desc, PlanPreference::default()) {
             Ok(p) => p,
             Err(_) => continue,
         };
@@ -110,7 +109,8 @@ fn bench_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
                     stride: sto,
                 },
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda topk");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda topk");
         });
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = TopkArgs::<f32> {
@@ -130,7 +130,8 @@ fn bench_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
                     stride: sto,
                 },
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda topk");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda topk");
         });
         append_csv_row(
             BENCH_NAME,
@@ -164,7 +165,8 @@ fn bench_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
                             stride: sto,
                         },
                     };
-                    plan.run(&stream, Workspace::None, args).expect("baracuda topk");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("baracuda topk");
                 })
             });
         });

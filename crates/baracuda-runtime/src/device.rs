@@ -7,7 +7,7 @@
 
 use baracuda_cuda_sys::runtime::{runtime, types::cudaDeviceAttr as Attr};
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// A CUDA device (Runtime API view — a bare ordinal).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]

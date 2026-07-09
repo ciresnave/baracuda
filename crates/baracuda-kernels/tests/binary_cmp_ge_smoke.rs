@@ -10,10 +10,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_cmp_ge_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpKind, BinaryCmpPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpKind, BinaryCmpPlan, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -48,12 +48,29 @@ fn cmp_ge_f32_3d() {
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
     let mut dev_y: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
     let stride = contiguous_stride(shape);
-    let desc = BinaryCmpDescriptor { kind: BinaryCmpKind::Ge, shape, element: ElementKind::F32 };
-    let plan = BinaryCmpPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let desc = BinaryCmpDescriptor {
+        kind: BinaryCmpKind::Ge,
+        shape,
+        element: ElementKind::F32,
+    };
+    let plan =
+        BinaryCmpPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f32, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -64,7 +81,10 @@ fn cmp_ge_f32_3d() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed, got zeros={zeros} ones={ones}"
+    );
 }
 
 #[test]
@@ -92,12 +112,29 @@ fn cmp_ge_f16_3d() {
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
     let mut dev_y: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
     let stride = contiguous_stride(shape);
-    let desc = BinaryCmpDescriptor { kind: BinaryCmpKind::Ge, shape, element: ElementKind::F16 };
-    let plan = BinaryCmpPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let desc = BinaryCmpDescriptor {
+        kind: BinaryCmpKind::Ge,
+        shape,
+        element: ElementKind::F16,
+    };
+    let plan =
+        BinaryCmpPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -108,7 +145,10 @@ fn cmp_ge_f16_3d() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed, got zeros={zeros} ones={ones}"
+    );
 }
 
 #[test]
@@ -136,12 +176,29 @@ fn cmp_ge_bf16_3d() {
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
     let mut dev_y: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
     let stride = contiguous_stride(shape);
-    let desc = BinaryCmpDescriptor { kind: BinaryCmpKind::Ge, shape, element: ElementKind::Bf16 };
-    let plan = BinaryCmpPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let desc = BinaryCmpDescriptor {
+        kind: BinaryCmpKind::Ge,
+        shape,
+        element: ElementKind::Bf16,
+    };
+    let plan = BinaryCmpPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
     let args = BinaryCmpArgs::<bf16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -152,7 +209,10 @@ fn cmp_ge_bf16_3d() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed, got zeros={zeros} ones={ones}"
+    );
 }
 
 #[test]
@@ -178,12 +238,29 @@ fn cmp_ge_f64_3d() {
     let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).expect("upload b");
     let mut dev_y: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
     let stride = contiguous_stride(shape);
-    let desc = BinaryCmpDescriptor { kind: BinaryCmpKind::Ge, shape, element: ElementKind::F64 };
-    let plan = BinaryCmpPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let desc = BinaryCmpDescriptor {
+        kind: BinaryCmpKind::Ge,
+        shape,
+        element: ElementKind::F64,
+    };
+    let plan =
+        BinaryCmpPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f64, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -194,7 +271,10 @@ fn cmp_ge_f64_3d() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed, got zeros={zeros} ones={ones}"
+    );
 }
 
 #[test]
@@ -206,7 +286,9 @@ fn cmp_ge_f32_strided_transposed() {
     let m = M as i32;
     let n = N_DIM as i32;
 
-    let a_buf: Vec<f32> = (0..(N_DIM * M)).map(|i| ((i % 41) as f32) * 0.5 - 10.0).collect();
+    let a_buf: Vec<f32> = (0..(N_DIM * M))
+        .map(|i| ((i % 41) as f32) * 0.5 - 10.0)
+        .collect();
     let b_buf: Vec<f32> = (0..(M * N_DIM))
         .map(|i| {
             let row = i / N_DIM;
@@ -241,12 +323,29 @@ fn cmp_ge_f32_strided_transposed() {
     let dev_b = DeviceBuffer::from_slice(&ctx, &b_buf).expect("upload b");
     let mut dev_y: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
 
-    let desc = BinaryCmpDescriptor { kind: BinaryCmpKind::Ge, shape: y_shape, element: ElementKind::F32 };
-    let plan = BinaryCmpPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let desc = BinaryCmpDescriptor {
+        kind: BinaryCmpKind::Ge,
+        shape: y_shape,
+        element: ElementKind::F32,
+    };
+    let plan =
+        BinaryCmpPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f32, 2> {
-        a: TensorRef { data: dev_a.as_slice(), shape: a_shape, stride: a_stride },
-        b: TensorRef { data: dev_b.as_slice(), shape: b_shape, stride: b_stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: y_stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape: a_shape,
+            stride: a_stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape: b_shape,
+            stride: b_stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: y_shape,
+            stride: y_stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -258,5 +357,8 @@ fn cmp_ge_f32_strided_transposed() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed, got zeros={zeros} ones={ones}"
+    );
 }

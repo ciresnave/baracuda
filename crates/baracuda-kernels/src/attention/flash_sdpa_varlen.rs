@@ -62,7 +62,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-
 // ---------------------------------------------------------------------------
 // Descriptor (shared between FW + BW)
 // ---------------------------------------------------------------------------
@@ -271,16 +270,12 @@ impl<T: Element> FlashSdpaVarlenPlan<T> {
         let total_q = args.q.shape[0];
         let total_k = args.k.shape[0];
 
-        if args.q.shape[1] != self.desc.num_heads
-            || args.q.shape[2] != self.desc.d_k
-        {
+        if args.q.shape[1] != self.desc.num_heads || args.q.shape[2] != self.desc.d_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaVarlenPlan: Q shape must be [total_q, H, D_k]",
             ));
         }
-        if args.k.shape[1] != self.desc.num_heads_k
-            || args.k.shape[2] != self.desc.d_k
-        {
+        if args.k.shape[1] != self.desc.num_heads_k || args.k.shape[2] != self.desc.d_k {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashSdpaVarlenPlan: K shape must be [total_k, H_k, D_k]",
             ));
@@ -379,30 +374,60 @@ impl<T: Element> FlashSdpaVarlenPlan<T> {
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_varlen_f16_run(
-                        self.desc.batch_size, self.desc.num_heads, self.desc.num_heads_k,
-                        self.desc.max_seqlen_q, self.desc.max_seqlen_k,
-                        total_q, total_k, self.desc.d_k,
-                        self.desc.scale, is_causal_flag,
-                        alibi_ptr, alibi_batch_stride,
-                        window_left, window_right, softcap,
-                        q_ptr, k_ptr, v_ptr,
-                        cu_q_ptr, cu_k_ptr,
-                        y_ptr, lse_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.num_heads_k,
+                        self.desc.max_seqlen_q,
+                        self.desc.max_seqlen_k,
+                        total_q,
+                        total_k,
+                        self.desc.d_k,
+                        self.desc.scale,
+                        is_causal_flag,
+                        alibi_ptr,
+                        alibi_batch_stride,
+                        window_left,
+                        window_right,
+                        softcap,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        cu_q_ptr,
+                        cu_k_ptr,
+                        y_ptr,
+                        lse_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_varlen_bf16_run(
-                        self.desc.batch_size, self.desc.num_heads, self.desc.num_heads_k,
-                        self.desc.max_seqlen_q, self.desc.max_seqlen_k,
-                        total_q, total_k, self.desc.d_k,
-                        self.desc.scale, is_causal_flag,
-                        alibi_ptr, alibi_batch_stride,
-                        window_left, window_right, softcap,
-                        q_ptr, k_ptr, v_ptr,
-                        cu_q_ptr, cu_k_ptr,
-                        y_ptr, lse_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.num_heads_k,
+                        self.desc.max_seqlen_q,
+                        self.desc.max_seqlen_k,
+                        total_q,
+                        total_k,
+                        self.desc.d_k,
+                        self.desc.scale,
+                        is_causal_flag,
+                        alibi_ptr,
+                        alibi_batch_stride,
+                        window_left,
+                        window_right,
+                        softcap,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        cu_q_ptr,
+                        cu_k_ptr,
+                        y_ptr,
+                        lse_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 _ => {
@@ -529,28 +554,44 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
         let shape_v = [total_k, self.desc.num_heads_k, self.desc.d_v];
         let shape_y = [total_q, self.desc.num_heads, self.desc.d_v];
         if args.q.shape != shape_q {
-            return Err(Error::InvalidProblem("FlashSdpaVarlenBackwardPlan: Q shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "FlashSdpaVarlenBackwardPlan: Q shape mismatch",
+            ));
         }
         if args.k.shape != shape_k {
-            return Err(Error::InvalidProblem("FlashSdpaVarlenBackwardPlan: K shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "FlashSdpaVarlenBackwardPlan: K shape mismatch",
+            ));
         }
         if args.v.shape != shape_v {
-            return Err(Error::InvalidProblem("FlashSdpaVarlenBackwardPlan: V shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "FlashSdpaVarlenBackwardPlan: V shape mismatch",
+            ));
         }
         if args.y.shape != shape_y {
-            return Err(Error::InvalidProblem("FlashSdpaVarlenBackwardPlan: y shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "FlashSdpaVarlenBackwardPlan: y shape mismatch",
+            ));
         }
         if args.dy.shape != shape_y {
-            return Err(Error::InvalidProblem("FlashSdpaVarlenBackwardPlan: dy shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "FlashSdpaVarlenBackwardPlan: dy shape mismatch",
+            ));
         }
         if args.dq.shape != shape_q {
-            return Err(Error::InvalidProblem("FlashSdpaVarlenBackwardPlan: dQ shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "FlashSdpaVarlenBackwardPlan: dQ shape mismatch",
+            ));
         }
         if args.dk.shape != shape_k {
-            return Err(Error::InvalidProblem("FlashSdpaVarlenBackwardPlan: dK shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "FlashSdpaVarlenBackwardPlan: dK shape mismatch",
+            ));
         }
         if args.dv.shape != shape_v {
-            return Err(Error::InvalidProblem("FlashSdpaVarlenBackwardPlan: dV shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "FlashSdpaVarlenBackwardPlan: dV shape mismatch",
+            ));
         }
         if args.cu_seqlens_q.shape != [self.desc.batch_size + 1] {
             return Err(Error::InvalidProblem(
@@ -564,9 +605,7 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
         }
         // LSE: f32 [H, total_q + 128*B]
         let lse_cols = (total_q as usize).saturating_add(128usize * self.desc.batch_size as usize);
-        if args.lse.shape[0] != self.desc.num_heads
-            || (args.lse.shape[1] as usize) < lse_cols
-        {
+        if args.lse.shape[0] != self.desc.num_heads || (args.lse.shape[1] as usize) < lse_cols {
             return Err(Error::InvalidProblem(
                 "FlashSdpaVarlenBackwardPlan: lse shape must be [H, total_q + 128*B] f32",
             ));
@@ -628,7 +667,10 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
             let (ws_ptr, ws_bytes) = match workspace {
                 Workspace::None => {
                     if need > 0 {
-                        return Err(Error::WorkspaceTooSmall { needed: need, got: 0 });
+                        return Err(Error::WorkspaceTooSmall {
+                            needed: need,
+                            got: 0,
+                        });
                     }
                     (core::ptr::null_mut::<c_void>(), 0usize)
                 }
@@ -665,30 +707,68 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_varlen_backward_f16_run(
-                        self.desc.batch_size, self.desc.num_heads, self.desc.num_heads_k,
-                        self.desc.max_seqlen_q, self.desc.max_seqlen_k,
-                        total_q, total_k, self.desc.d_k,
-                        self.desc.scale, is_causal_flag,
-                        alibi_ptr, alibi_batch_stride,
-                        window_left, window_right, softcap,
-                        q_ptr, k_ptr, v_ptr, y_ptr, dy_ptr, lse_ptr,
-                        cu_q_ptr, cu_k_ptr,
-                        dq_ptr, dk_ptr, dv_ptr,
-                        ws_ptr, ws_bytes, stream_ptr,
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.num_heads_k,
+                        self.desc.max_seqlen_q,
+                        self.desc.max_seqlen_k,
+                        total_q,
+                        total_k,
+                        self.desc.d_k,
+                        self.desc.scale,
+                        is_causal_flag,
+                        alibi_ptr,
+                        alibi_batch_stride,
+                        window_left,
+                        window_right,
+                        softcap,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        y_ptr,
+                        dy_ptr,
+                        lse_ptr,
+                        cu_q_ptr,
+                        cu_k_ptr,
+                        dq_ptr,
+                        dk_ptr,
+                        dv_ptr,
+                        ws_ptr,
+                        ws_bytes,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_varlen_backward_bf16_run(
-                        self.desc.batch_size, self.desc.num_heads, self.desc.num_heads_k,
-                        self.desc.max_seqlen_q, self.desc.max_seqlen_k,
-                        total_q, total_k, self.desc.d_k,
-                        self.desc.scale, is_causal_flag,
-                        alibi_ptr, alibi_batch_stride,
-                        window_left, window_right, softcap,
-                        q_ptr, k_ptr, v_ptr, y_ptr, dy_ptr, lse_ptr,
-                        cu_q_ptr, cu_k_ptr,
-                        dq_ptr, dk_ptr, dv_ptr,
-                        ws_ptr, ws_bytes, stream_ptr,
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.num_heads_k,
+                        self.desc.max_seqlen_q,
+                        self.desc.max_seqlen_k,
+                        total_q,
+                        total_k,
+                        self.desc.d_k,
+                        self.desc.scale,
+                        is_causal_flag,
+                        alibi_ptr,
+                        alibi_batch_stride,
+                        window_left,
+                        window_right,
+                        softcap,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        y_ptr,
+                        dy_ptr,
+                        lse_ptr,
+                        cu_q_ptr,
+                        cu_k_ptr,
+                        dq_ptr,
+                        dk_ptr,
+                        dv_ptr,
+                        ws_ptr,
+                        ws_bytes,
+                        stream_ptr,
                     )
                 },
                 _ => {

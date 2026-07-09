@@ -182,8 +182,15 @@ fn distributed_adam_single_rank_three_tensors_no_collective_overhead() {
     let plan = DistributedAdamStepPlan::<f32>::new(cfg, &comm);
     let mut pbufs_storage = [&mut bp1, &mut bp2, &mut bp3];
     let mut gbufs_storage = [&mut bg1, &mut bg2, &mut bg3];
-    plan.step(&mut pbufs_storage, &mut gbufs_storage, &mom, &vel, 1, &stream)
-        .expect("distributed Adam step (3 tensors, single rank)");
+    plan.step(
+        &mut pbufs_storage,
+        &mut gbufs_storage,
+        &mom,
+        &vel,
+        1,
+        &stream,
+    )
+    .expect("distributed Adam step (3 tensors, single rank)");
     stream.synchronize().unwrap();
 
     // We don't compare against a reference here — the bit-exact

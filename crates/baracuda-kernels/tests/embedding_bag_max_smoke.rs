@@ -4,10 +4,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, EmbeddingBagMaxArgs, EmbeddingBagMaxDescriptor,
-    EmbeddingBagMaxPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, EmbeddingBagMaxArgs, EmbeddingBagMaxDescriptor, EmbeddingBagMaxPlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -77,7 +77,14 @@ fn embedding_bag_max_f32_basic() {
     let num_bags = 3usize;
     let total_indices = host_idx.len();
     let (expected, expected_idx) = cpu_bag_max_f32(
-        v, d, &host_w, &host_idx, &host_off, num_bags, total_indices, None,
+        v,
+        d,
+        &host_w,
+        &host_idx,
+        &host_off,
+        num_bags,
+        total_indices,
+        None,
     );
 
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up weight");
@@ -140,7 +147,10 @@ fn embedding_bag_max_f32_basic() {
         );
     }
     for (i, (g, e)) in got_idx.iter().zip(expected_idx.iter()).enumerate() {
-        assert_eq!(g, e, "embedding_bag_max f32 out_index mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g, e,
+            "embedding_bag_max f32 out_index mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -158,7 +168,14 @@ fn embedding_bag_max_f32_padding_and_empty() {
     let num_bags = host_off.len();
     let total_indices = host_idx.len();
     let (expected, expected_idx) = cpu_bag_max_f32(
-        v, d, &host_w, &host_idx, &host_off, num_bags, total_indices, Some(padding),
+        v,
+        d,
+        &host_w,
+        &host_idx,
+        &host_off,
+        num_bags,
+        total_indices,
+        Some(padding),
     );
 
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up weight");
@@ -221,7 +238,10 @@ fn embedding_bag_max_f32_padding_and_empty() {
         );
     }
     for (i, (g, e)) in got_idx.iter().zip(expected_idx.iter()).enumerate() {
-        assert_eq!(g, e, "embedding_bag_max f32 padding out_index mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g, e,
+            "embedding_bag_max f32 padding out_index mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -318,7 +338,11 @@ fn embedding_bag_max_f64() {
     dev_out.copy_to_host(&mut got).expect("dl");
     dev_oidx.copy_to_host(&mut got_idx).expect("dl idx");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "embedding_bag_max f64 mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "embedding_bag_max f64 mismatch @ {i}: got {g} expected {e}"
+        );
     }
     for (i, (g, e)) in got_idx.iter().zip(expected_idx.iter()).enumerate() {
         assert_eq!(g, e, "embedding_bag_max f64 out_index mismatch @ {i}");

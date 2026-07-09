@@ -128,9 +128,7 @@ mod index_output_sealed {
 /// genuinely want the **union** of every kernel dtype (sub-byte +
 /// FP8 + packed-bit included) — e.g. a generic dtype-size helper,
 /// telemetry function, or downstream wrapper.
-pub trait KernelDtype:
-    DeviceRepr + kerneldtype_sealed::Sealed + Copy + 'static
-{
+pub trait KernelDtype: DeviceRepr + kerneldtype_sealed::Sealed + Copy + 'static {
     /// Runtime tag for this dtype. Stable across the workspace —
     /// keyed by this same enum in [`crate::KernelSku::element`].
     const KIND: ElementKind;
@@ -184,17 +182,35 @@ impl ScalarType for f32 {
     const IS_F64: bool = false;
     const ZERO: Self = 0.0;
     const ONE: Self = 1.0;
-    #[inline] fn to_f32(self) -> f32 { self }
-    #[inline] fn to_f64(self) -> f64 { self as f64 }
-    #[inline] fn from_f32(x: f32) -> Self { x }
+    #[inline]
+    fn to_f32(self) -> f32 {
+        self
+    }
+    #[inline]
+    fn to_f64(self) -> f64 {
+        self as f64
+    }
+    #[inline]
+    fn from_f32(x: f32) -> Self {
+        x
+    }
 }
 impl ScalarType for f64 {
     const IS_F64: bool = true;
     const ZERO: Self = 0.0;
     const ONE: Self = 1.0;
-    #[inline] fn to_f32(self) -> f32 { self as f32 }
-    #[inline] fn to_f64(self) -> f64 { self }
-    #[inline] fn from_f32(x: f32) -> Self { x as f64 }
+    #[inline]
+    fn to_f32(self) -> f32 {
+        self as f32
+    }
+    #[inline]
+    fn to_f64(self) -> f64 {
+        self
+    }
+    #[inline]
+    fn from_f32(x: f32) -> Self {
+        x as f64
+    }
 }
 
 /// Element types supported by the kernel facade.

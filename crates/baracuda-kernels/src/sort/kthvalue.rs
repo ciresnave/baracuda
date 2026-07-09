@@ -18,13 +18,13 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::{DeviceBuffer, Stream};
 use baracuda_kernels_types::{
-    contiguous_stride, Element, ElementKind, KernelSku, PlanPreference, PrecisionGuarantee,
-    SortKind, TensorMut, TensorRef, Workspace,
+    Element, ElementKind, KernelSku, PlanPreference, PrecisionGuarantee, SortKind, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
+use super::TOPK_MAX_K;
 use super::sort::build_sku;
 use super::topk::{TopkArgs, TopkDescriptor, TopkPlan};
-use super::TOPK_MAX_K;
 
 /// Descriptor for a `kthvalue` op.
 ///
@@ -308,8 +308,7 @@ unsafe fn copy_h2d_async(
             h_stream: *mut c_void,
         ) -> CUresult;
     }
-    let status =
-        unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
+    let status = unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }
@@ -317,12 +316,7 @@ unsafe fn copy_h2d_async(
 }
 
 /// D2H copy helper.
-unsafe fn copy_d2h_async(
-    dst: *mut c_void,
-    src: u64,
-    bytes: usize,
-    stream: &Stream,
-) -> Result<()> {
+unsafe fn copy_d2h_async(dst: *mut c_void, src: u64, bytes: usize, stream: &Stream) -> Result<()> {
     if bytes == 0 {
         return Ok(());
     }
@@ -336,8 +330,7 @@ unsafe fn copy_d2h_async(
             h_stream: *mut c_void,
         ) -> CUresult;
     }
-    let status =
-        unsafe { cuMemcpyDtoHAsync_v2(dst, src, bytes, stream.as_raw()) };
+    let status = unsafe { cuMemcpyDtoHAsync_v2(dst, src, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }

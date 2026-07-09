@@ -5,10 +5,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Bool, ElementKind, OneHotArgs, OneHotDescriptor, OneHotPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    Bool, ElementKind, OneHotArgs, OneHotDescriptor, OneHotPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -42,8 +42,8 @@ fn one_hot_f32_2d() {
         num_classes,
         element: ElementKind::F32,
     };
-    let plan = OneHotPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        OneHotPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<f32, 2> {
         src: TensorRef {
             data: dev_src.as_slice(),
@@ -89,8 +89,8 @@ fn one_hot_f64_2d_with_oob() {
         num_classes,
         element: ElementKind::F64,
     };
-    let plan = OneHotPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        OneHotPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<f64, 2> {
         src: TensorRef {
             data: dev_src.as_slice(),
@@ -135,8 +135,8 @@ fn one_hot_i32_2d() {
         num_classes,
         element: ElementKind::I32,
     };
-    let plan = OneHotPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        OneHotPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<i32, 2> {
         src: TensorRef {
             data: dev_src.as_slice(),
@@ -179,8 +179,8 @@ fn one_hot_bool_2d() {
         num_classes,
         element: ElementKind::Bool,
     };
-    let plan = OneHotPlan::<Bool, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        OneHotPlan::<Bool, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = OneHotArgs::<Bool, 2> {
         src: TensorRef {
             data: dev_src.as_slice(),

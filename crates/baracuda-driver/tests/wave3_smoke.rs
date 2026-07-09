@@ -1,7 +1,7 @@
 //! GPU-gated integration tests for Wave-3 Driver-API additions:
 //! cuLaunchKernelEx, and cuLibrary* (context-independent module loading).
 
-use baracuda_driver::{library::Library, Context, Device, DeviceBuffer, Module, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Module, Stream, library::Library};
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 

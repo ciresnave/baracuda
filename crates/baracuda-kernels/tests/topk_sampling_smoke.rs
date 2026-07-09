@@ -15,7 +15,7 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, Stream};
+use baracuda_driver::{Context, Device, Stream, init};
 use baracuda_kernels::{
     PlanPreference, SamplerKind, TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
 };
@@ -41,8 +41,8 @@ fn topk_topp_sampling_plan_select_validates() {
         },
         deterministic: true,
     };
-    let plan = TopKTopPSamplingPlan::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        TopKTopPSamplingPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     assert_eq!(plan.workspace_size(), 0);
 
     // Invalid top_k.
@@ -50,27 +50,21 @@ fn topk_topp_sampling_plan_select_validates() {
         sampler: SamplerKind::TopK { top_k: 0 },
         ..desc
     };
-    assert!(
-        TopKTopPSamplingPlan::select(&stream, &bad_topk, PlanPreference::default()).is_err()
-    );
+    assert!(TopKTopPSamplingPlan::select(&stream, &bad_topk, PlanPreference::default()).is_err());
 
     // Invalid top_p (out of (0, 1]).
     let bad_topp = TopKTopPSamplingDescriptor {
         sampler: SamplerKind::TopP { top_p: 1.5 },
         ..desc
     };
-    assert!(
-        TopKTopPSamplingPlan::select(&stream, &bad_topp, PlanPreference::default()).is_err()
-    );
+    assert!(TopKTopPSamplingPlan::select(&stream, &bad_topp, PlanPreference::default()).is_err());
 
     // Invalid min_p (out of (0, 1]).
     let bad_minp = TopKTopPSamplingDescriptor {
         sampler: SamplerKind::MinP { min_p: 0.0 },
         ..desc
     };
-    assert!(
-        TopKTopPSamplingPlan::select(&stream, &bad_minp, PlanPreference::default()).is_err()
-    );
+    assert!(TopKTopPSamplingPlan::select(&stream, &bad_minp, PlanPreference::default()).is_err());
 }
 
 #[test]
@@ -83,8 +77,7 @@ fn topk_sampling_plan_selectable() {
         sampler: SamplerKind::TopK { top_k: 5 },
         deterministic: true,
     };
-    TopKTopPSamplingPlan::select(&stream, &desc, PlanPreference::default())
-        .expect("top-k select");
+    TopKTopPSamplingPlan::select(&stream, &desc, PlanPreference::default()).expect("top-k select");
 }
 
 #[test]
@@ -97,8 +90,7 @@ fn topp_sampling_plan_selectable() {
         sampler: SamplerKind::TopP { top_p: 0.9 },
         deterministic: true,
     };
-    TopKTopPSamplingPlan::select(&stream, &desc, PlanPreference::default())
-        .expect("top-p select");
+    TopKTopPSamplingPlan::select(&stream, &desc, PlanPreference::default()).expect("top-p select");
 }
 
 #[test]
@@ -111,8 +103,7 @@ fn min_p_sampling_plan_selectable() {
         sampler: SamplerKind::MinP { min_p: 0.1 },
         deterministic: true,
     };
-    TopKTopPSamplingPlan::select(&stream, &desc, PlanPreference::default())
-        .expect("min-p select");
+    TopKTopPSamplingPlan::select(&stream, &desc, PlanPreference::default()).expect("min-p select");
 }
 
 #[test]

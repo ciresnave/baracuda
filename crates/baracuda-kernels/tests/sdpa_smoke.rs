@@ -6,10 +6,10 @@
 //! Covers FW × 4 FP dtypes × 3 mask modes (none, explicit, causal).
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SdpaArgs, SdpaDescriptor, SdpaPlan, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, PlanPreference, SdpaArgs, SdpaDescriptor, SdpaPlan, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -138,9 +138,7 @@ fn gen_v_f64() -> Vec<f64> {
 }
 fn gen_mask_f64() -> Vec<f64> {
     let n = (B * H * Q * K) as usize;
-    (0..n)
-        .map(|i| ((i as f64) * 0.01).sin() * 0.3)
-        .collect()
+    (0..n).map(|i| ((i as f64) * 0.01).sin() * 0.3).collect()
 }
 
 fn default_scale() -> f32 {

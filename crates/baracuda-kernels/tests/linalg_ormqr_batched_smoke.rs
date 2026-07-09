@@ -12,19 +12,19 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BatchedOrmqrArgs, BatchedOrmqrDescriptor, BatchedOrmqrOp, BatchedOrmqrPlan,
-    BatchedOrmqrSide, BatchedQrArgs, BatchedQrDescriptor, BatchedQrPlan, Complex32, Complex64,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BatchedOrmqrArgs, BatchedOrmqrDescriptor, BatchedOrmqrOp, BatchedOrmqrPlan, BatchedOrmqrSide,
+    BatchedQrArgs, BatchedQrDescriptor, BatchedQrPlan, Complex32, Complex64, ElementKind,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_sys::{
-    cuDoubleComplex, cuFloatComplex, cusolverDnCgeqrf, cusolverDnCgeqrf_bufferSize,
-    cusolverDnCreate, cusolverDnCunmqr, cusolverDnCunmqr_bufferSize, cusolverDnDestroy,
-    cusolverDnDormqr, cusolverDnDormqr_bufferSize, cusolverDnHandle_t, cusolverDnSetStream,
-    cusolverDnSormqr, cusolverDnSormqr_bufferSize, cusolverDnZgeqrf, cusolverDnZgeqrf_bufferSize,
-    cusolverDnZunmqr, cusolverDnZunmqr_bufferSize, CUBLAS_OP_C, CUBLAS_OP_N, CUBLAS_OP_T,
-    CUBLAS_SIDE_LEFT, CUBLAS_SIDE_RIGHT,
+    CUBLAS_OP_C, CUBLAS_OP_N, CUBLAS_OP_T, CUBLAS_SIDE_LEFT, CUBLAS_SIDE_RIGHT, cuDoubleComplex,
+    cuFloatComplex, cusolverDnCgeqrf, cusolverDnCgeqrf_bufferSize, cusolverDnCreate,
+    cusolverDnCunmqr, cusolverDnCunmqr_bufferSize, cusolverDnDestroy, cusolverDnDormqr,
+    cusolverDnDormqr_bufferSize, cusolverDnHandle_t, cusolverDnSetStream, cusolverDnSormqr,
+    cusolverDnSormqr_bufferSize, cusolverDnZgeqrf, cusolverDnZgeqrf_bufferSize, cusolverDnZunmqr,
+    cusolverDnZunmqr_bufferSize,
 };
 
 fn setup() -> (Context, Stream) {
@@ -198,18 +198,14 @@ fn cusolver_ormqr_per_slot_f32(
     let trans = op_to_cublas(op);
 
     for bi in 0..b as usize {
-        let dev_a_slot = DeviceBuffer::from_slice(
-            ctx,
-            &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems],
-        )
-        .expect("upload slot a");
+        let dev_a_slot =
+            DeviceBuffer::from_slice(ctx, &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems])
+                .expect("upload slot a");
         let dev_tau_slot =
             DeviceBuffer::from_slice(ctx, &tau[bi * ku..(bi + 1) * ku]).expect("upload slot tau");
-        let mut dev_c_slot = DeviceBuffer::from_slice(
-            ctx,
-            &c_init[bi * mu * nu..(bi + 1) * mu * nu],
-        )
-        .expect("upload slot c");
+        let mut dev_c_slot =
+            DeviceBuffer::from_slice(ctx, &c_init[bi * mu * nu..(bi + 1) * mu * nu])
+                .expect("upload slot c");
 
         let mut lwork: i32 = 0;
         let s = unsafe {
@@ -304,18 +300,14 @@ fn cusolver_ormqr_per_slot_f64(
     let trans = op_to_cublas(op);
 
     for bi in 0..b as usize {
-        let dev_a_slot = DeviceBuffer::from_slice(
-            ctx,
-            &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems],
-        )
-        .expect("upload slot a");
+        let dev_a_slot =
+            DeviceBuffer::from_slice(ctx, &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems])
+                .expect("upload slot a");
         let dev_tau_slot =
             DeviceBuffer::from_slice(ctx, &tau[bi * ku..(bi + 1) * ku]).expect("upload slot tau");
-        let mut dev_c_slot = DeviceBuffer::from_slice(
-            ctx,
-            &c_init[bi * mu * nu..(bi + 1) * mu * nu],
-        )
-        .expect("upload slot c");
+        let mut dev_c_slot =
+            DeviceBuffer::from_slice(ctx, &c_init[bi * mu * nu..(bi + 1) * mu * nu])
+                .expect("upload slot c");
 
         let mut lwork: i32 = 0;
         let s = unsafe {
@@ -531,8 +523,8 @@ fn ormqr_batched_f32_left_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
     let m: i32 = 4;
-    let n: i32 = 3;          // columns of C
-    let k = m.min(n);        // == 3 — number of reflectors
+    let n: i32 = 3; // columns of C
+    let k = m.min(n); // == 3 — number of reflectors
     let a_host = build_matrix_f32(b as usize, m as usize, n as usize, 0xA1A2_A3A4);
     let (a_packed, tau) = run_batched_qr_f32(&ctx, &stream, &a_host, b, m, n);
     let c_init = build_matrix_f32(b as usize, m as usize, n as usize, 0xB1B2_B3B4);
@@ -546,7 +538,12 @@ fn ormqr_batched_f32_left_n() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 32.0 * f32::EPSILON;
-    check_f32(&bespoke, &reference, tol, &format!("f32 ormqr_batched op={}", fmt_op(op)));
+    check_f32(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("f32 ormqr_batched op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -570,7 +567,12 @@ fn ormqr_batched_f32_left_t() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 32.0 * f32::EPSILON;
-    check_f32(&bespoke, &reference, tol, &format!("f32 ormqr_batched op={}", fmt_op(op)));
+    check_f32(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("f32 ormqr_batched op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -594,7 +596,12 @@ fn ormqr_batched_f64_left_n() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 64.0 * f64::EPSILON;
-    check_f64(&bespoke, &reference, tol, &format!("f64 ormqr_batched op={}", fmt_op(op)));
+    check_f64(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("f64 ormqr_batched op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -618,7 +625,12 @@ fn ormqr_batched_f64_left_t() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 64.0 * f64::EPSILON;
-    check_f64(&bespoke, &reference, tol, &format!("f64 ormqr_batched op={}", fmt_op(op)));
+    check_f64(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("f64 ormqr_batched op={}", fmt_op(op)),
+    );
 }
 
 // =============================================================================
@@ -676,11 +688,9 @@ fn run_cusolver_geqrf_per_slot_complex32(
     let mut tau = vec![Complex32::new(0.0, 0.0); (b * k) as usize];
 
     for bi in 0..b as usize {
-        let mut dev_a_slot = DeviceBuffer::from_slice(
-            ctx,
-            &a_host[bi * mu * nu..(bi + 1) * mu * nu],
-        )
-        .expect("upload slot a (cgeqrf)");
+        let mut dev_a_slot =
+            DeviceBuffer::from_slice(ctx, &a_host[bi * mu * nu..(bi + 1) * mu * nu])
+                .expect("upload slot a (cgeqrf)");
         let mut dev_tau_slot: DeviceBuffer<Complex32> =
             DeviceBuffer::zeros(ctx, ku).expect("alloc slot tau (cgeqrf)");
         let mut lwork: i32 = 0;
@@ -752,11 +762,9 @@ fn run_cusolver_geqrf_per_slot_complex64(
     let mut tau = vec![Complex64::new(0.0, 0.0); (b * k) as usize];
 
     for bi in 0..b as usize {
-        let mut dev_a_slot = DeviceBuffer::from_slice(
-            ctx,
-            &a_host[bi * mu * nu..(bi + 1) * mu * nu],
-        )
-        .expect("upload slot a (zgeqrf)");
+        let mut dev_a_slot =
+            DeviceBuffer::from_slice(ctx, &a_host[bi * mu * nu..(bi + 1) * mu * nu])
+                .expect("upload slot a (zgeqrf)");
         let mut dev_tau_slot: DeviceBuffer<Complex64> =
             DeviceBuffer::zeros(ctx, ku).expect("alloc slot tau (zgeqrf)");
         let mut lwork: i32 = 0;
@@ -838,18 +846,14 @@ fn cusolver_unmqr_per_slot_complex32(
     let mut c_post = vec![Complex32::new(0.0, 0.0); (b * m * n) as usize];
 
     for bi in 0..b as usize {
-        let dev_a_slot = DeviceBuffer::from_slice(
-            ctx,
-            &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems],
-        )
-        .expect("upload slot a (cunmqr)");
+        let dev_a_slot =
+            DeviceBuffer::from_slice(ctx, &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems])
+                .expect("upload slot a (cunmqr)");
         let dev_tau_slot =
             DeviceBuffer::from_slice(ctx, &tau[bi * ku..(bi + 1) * ku]).expect("upload slot tau");
-        let mut dev_c_slot = DeviceBuffer::from_slice(
-            ctx,
-            &c_init[bi * mu * nu..(bi + 1) * mu * nu],
-        )
-        .expect("upload slot c");
+        let mut dev_c_slot =
+            DeviceBuffer::from_slice(ctx, &c_init[bi * mu * nu..(bi + 1) * mu * nu])
+                .expect("upload slot c");
         let mut lwork: i32 = 0;
         let s = unsafe {
             cusolverDnCunmqr_bufferSize(
@@ -935,18 +939,14 @@ fn cusolver_unmqr_per_slot_complex64(
     let mut c_post = vec![Complex64::new(0.0, 0.0); (b * m * n) as usize];
 
     for bi in 0..b as usize {
-        let dev_a_slot = DeviceBuffer::from_slice(
-            ctx,
-            &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems],
-        )
-        .expect("upload slot a (zunmqr)");
+        let dev_a_slot =
+            DeviceBuffer::from_slice(ctx, &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems])
+                .expect("upload slot a (zunmqr)");
         let dev_tau_slot =
             DeviceBuffer::from_slice(ctx, &tau[bi * ku..(bi + 1) * ku]).expect("upload slot tau");
-        let mut dev_c_slot = DeviceBuffer::from_slice(
-            ctx,
-            &c_init[bi * mu * nu..(bi + 1) * mu * nu],
-        )
-        .expect("upload slot c");
+        let mut dev_c_slot =
+            DeviceBuffer::from_slice(ctx, &c_init[bi * mu * nu..(bi + 1) * mu * nu])
+                .expect("upload slot c");
         let mut lwork: i32 = 0;
         let s = unsafe {
             cusolverDnZunmqr_bufferSize(
@@ -1127,7 +1127,8 @@ fn check_complex32(got: &[Complex32], expected: &[Complex32], tol: f32, label: &
         assert!(
             diff_re <= t && diff_im <= t,
             "{label}: cell {i}: got={:?}, expected={:?}, diff=({diff_re}, {diff_im}), tol={t}",
-            g, e,
+            g,
+            e,
         );
     }
 }
@@ -1142,7 +1143,8 @@ fn check_complex64(got: &[Complex64], expected: &[Complex64], tol: f64, label: &
         assert!(
             diff_re <= t && diff_im <= t,
             "{label}: cell {i}: got={:?}, expected={:?}, diff=({diff_re}, {diff_im}), tol={t}",
-            g, e,
+            g,
+            e,
         );
     }
 }
@@ -1161,9 +1163,9 @@ fn check_complex64(got: &[Complex64], expected: &[Complex64], tol: f64, label: &
 fn ormqr_batched_f32_right_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
-    let m: i32 = 3;          // rows of C
-    let n: i32 = 4;          // cols of C == size of Q
-    let k = n;               // K = N for Right-side
+    let m: i32 = 3; // rows of C
+    let n: i32 = 4; // cols of C == size of Q
+    let k = n; // K = N for Right-side
     // Factor a square [B, N, N] to get the packed Householder Q.
     let a_host = build_matrix_f32(b as usize, n as usize, n as usize, 0x10_2030_40);
     let (a_packed, tau) = run_batched_qr_f32(&ctx, &stream, &a_host, b, n, n);
@@ -1178,8 +1180,12 @@ fn ormqr_batched_f32_right_n() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 32.0 * f32::EPSILON;
-    check_f32(&bespoke, &reference, tol,
-        &format!("f32 ormqr_batched side=Right op={}", fmt_op(op)));
+    check_f32(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("f32 ormqr_batched side=Right op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -1203,8 +1209,12 @@ fn ormqr_batched_f32_right_t() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 32.0 * f32::EPSILON;
-    check_f32(&bespoke, &reference, tol,
-        &format!("f32 ormqr_batched side=Right op={}", fmt_op(op)));
+    check_f32(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("f32 ormqr_batched side=Right op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -1228,8 +1238,12 @@ fn ormqr_batched_f64_right_n() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 64.0 * f64::EPSILON;
-    check_f64(&bespoke, &reference, tol,
-        &format!("f64 ormqr_batched side=Right op={}", fmt_op(op)));
+    check_f64(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("f64 ormqr_batched side=Right op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -1253,8 +1267,12 @@ fn ormqr_batched_f64_right_t() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 64.0 * f64::EPSILON;
-    check_f64(&bespoke, &reference, tol,
-        &format!("f64 ormqr_batched side=Right op={}", fmt_op(op)));
+    check_f64(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("f64 ormqr_batched side=Right op={}", fmt_op(op)),
+    );
 }
 
 // ============================================================================
@@ -1270,8 +1288,7 @@ fn ormqr_batched_complex32_left_n() {
     let n: i32 = 3;
     let k = m.min(n);
     let a_host = build_matrix_complex32(b as usize, m as usize, n as usize, 0x77_7777_77);
-    let (a_packed, tau) =
-        run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, m, n);
+    let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, m, n);
     let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0x88_8888_88);
 
     let op = BatchedOrmqrOp::N;
@@ -1283,8 +1300,12 @@ fn ormqr_batched_complex32_left_n() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 32.0 * f32::EPSILON;
-    check_complex32(&bespoke, &reference, tol,
-        &format!("Complex32 unmqr_batched side=Left op={}", fmt_op(op)));
+    check_complex32(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("Complex32 unmqr_batched side=Left op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -1296,8 +1317,7 @@ fn ormqr_batched_complex32_left_c() {
     let n: i32 = 3;
     let k = m.min(n);
     let a_host = build_matrix_complex32(b as usize, m as usize, n as usize, 0x99_9999_99);
-    let (a_packed, tau) =
-        run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, m, n);
+    let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, m, n);
     let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0xAA_AAAA_AA);
 
     let op = BatchedOrmqrOp::C;
@@ -1309,8 +1329,12 @@ fn ormqr_batched_complex32_left_c() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 32.0 * f32::EPSILON;
-    check_complex32(&bespoke, &reference, tol,
-        &format!("Complex32 unmqr_batched side=Left op={}", fmt_op(op)));
+    check_complex32(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("Complex32 unmqr_batched side=Left op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -1322,8 +1346,7 @@ fn ormqr_batched_complex64_left_n() {
     let n: i32 = 3;
     let k = m.min(n);
     let a_host = build_matrix_complex64(b as usize, m as usize, n as usize, 0xBB_BBBB_BB);
-    let (a_packed, tau) =
-        run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, m, n);
+    let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, m, n);
     let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0xCC_CCCC_CC);
 
     let op = BatchedOrmqrOp::N;
@@ -1335,8 +1358,12 @@ fn ormqr_batched_complex64_left_n() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 64.0 * f64::EPSILON;
-    check_complex64(&bespoke, &reference, tol,
-        &format!("Complex64 unmqr_batched side=Left op={}", fmt_op(op)));
+    check_complex64(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("Complex64 unmqr_batched side=Left op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -1348,8 +1375,7 @@ fn ormqr_batched_complex64_left_c() {
     let n: i32 = 3;
     let k = m.min(n);
     let a_host = build_matrix_complex64(b as usize, m as usize, n as usize, 0xDD_DDDD_DD);
-    let (a_packed, tau) =
-        run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, m, n);
+    let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, m, n);
     let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0xEE_EEEE_EE);
 
     let op = BatchedOrmqrOp::C;
@@ -1361,8 +1387,12 @@ fn ormqr_batched_complex64_left_c() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 64.0 * f64::EPSILON;
-    check_complex64(&bespoke, &reference, tol,
-        &format!("Complex64 unmqr_batched side=Left op={}", fmt_op(op)));
+    check_complex64(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("Complex64 unmqr_batched side=Left op={}", fmt_op(op)),
+    );
 }
 
 // ============================================================================
@@ -1378,8 +1408,7 @@ fn ormqr_batched_complex32_right_n() {
     let n: i32 = 4;
     let k = n;
     let a_host = build_matrix_complex32(b as usize, n as usize, n as usize, 0x12_3456_78);
-    let (a_packed, tau) =
-        run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, n, n);
+    let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, n, n);
     let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0x9A_BCDE_F0);
 
     let op = BatchedOrmqrOp::N;
@@ -1391,8 +1420,12 @@ fn ormqr_batched_complex32_right_n() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 32.0 * f32::EPSILON;
-    check_complex32(&bespoke, &reference, tol,
-        &format!("Complex32 unmqr_batched side=Right op={}", fmt_op(op)));
+    check_complex32(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("Complex32 unmqr_batched side=Right op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -1404,8 +1437,7 @@ fn ormqr_batched_complex32_right_c() {
     let n: i32 = 4;
     let k = n;
     let a_host = build_matrix_complex32(b as usize, n as usize, n as usize, 0x21_4365_87);
-    let (a_packed, tau) =
-        run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, n, n);
+    let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex32(&ctx, &stream, &a_host, b, n, n);
     let c_init = build_matrix_complex32(b as usize, m as usize, n as usize, 0xA9_CBED_0F);
 
     let op = BatchedOrmqrOp::C;
@@ -1417,8 +1449,12 @@ fn ormqr_batched_complex32_right_c() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 32.0 * f32::EPSILON;
-    check_complex32(&bespoke, &reference, tol,
-        &format!("Complex32 unmqr_batched side=Right op={}", fmt_op(op)));
+    check_complex32(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("Complex32 unmqr_batched side=Right op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -1430,8 +1466,7 @@ fn ormqr_batched_complex64_right_n() {
     let n: i32 = 4;
     let k = n;
     let a_host = build_matrix_complex64(b as usize, n as usize, n as usize, 0xFE_DCBA_98);
-    let (a_packed, tau) =
-        run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, n, n);
+    let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, n, n);
     let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0x76_5432_10);
 
     let op = BatchedOrmqrOp::N;
@@ -1443,8 +1478,12 @@ fn ormqr_batched_complex64_right_n() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 64.0 * f64::EPSILON;
-    check_complex64(&bespoke, &reference, tol,
-        &format!("Complex64 unmqr_batched side=Right op={}", fmt_op(op)));
+    check_complex64(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("Complex64 unmqr_batched side=Right op={}", fmt_op(op)),
+    );
 }
 
 #[test]
@@ -1456,8 +1495,7 @@ fn ormqr_batched_complex64_right_c() {
     let n: i32 = 4;
     let k = n;
     let a_host = build_matrix_complex64(b as usize, n as usize, n as usize, 0xEF_CDAB_89);
-    let (a_packed, tau) =
-        run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, n, n);
+    let (a_packed, tau) = run_cusolver_geqrf_per_slot_complex64(&ctx, &stream, &a_host, b, n, n);
     let c_init = build_matrix_complex64(b as usize, m as usize, n as usize, 0x67_4523_01);
 
     let op = BatchedOrmqrOp::C;
@@ -1469,6 +1507,10 @@ fn ormqr_batched_complex64_right_c() {
         &ctx, &stream, &a_packed, &tau, &c_init, b, m, n, k, side, op,
     );
     let tol = 64.0 * f64::EPSILON;
-    check_complex64(&bespoke, &reference, tol,
-        &format!("Complex64 unmqr_batched side=Right op={}", fmt_op(op)));
+    check_complex64(
+        &bespoke,
+        &reference,
+        tol,
+        &format!("Complex64 unmqr_batched side=Right op={}", fmt_op(op)),
+    );
 }

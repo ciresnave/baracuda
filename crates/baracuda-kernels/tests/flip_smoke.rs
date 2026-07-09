@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `FlipPlan<f32, N>` — reverse along selected
 //! axes. Bit-exact (no math, pure element copy).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlipArgs, FlipDescriptor, FlipPlan, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, FlipArgs, FlipDescriptor, FlipPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -32,8 +32,8 @@ fn flip_1d() {
         flip_axes: [true],
         element: ElementKind::F32,
     };
-    let plan = FlipPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        FlipPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = FlipArgs::<f32, 1> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -78,8 +78,8 @@ fn flip_2d_axis_1() {
         flip_axes: [false, true],
         element: ElementKind::F32,
     };
-    let plan = FlipPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        FlipPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = FlipArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -129,8 +129,8 @@ fn flip_3d_both_axes() {
         flip_axes: [true, false, true],
         element: ElementKind::F32,
     };
-    let plan = FlipPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        FlipPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = FlipArgs::<f32, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -168,8 +168,8 @@ fn flip_no_axes_is_copy() {
         flip_axes: [false, false],
         element: ElementKind::F32,
     };
-    let plan = FlipPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        FlipPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = FlipArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),

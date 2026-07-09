@@ -24,7 +24,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-
 /// FP8 encoding of the KV cache.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -150,7 +149,9 @@ impl<T: Element> BatchPagedDecodeFp8Plan<T> {
         let d = &self.desc;
         let q_shape = [d.batch_size, d.num_qo_heads, d.head_dim];
         if args.q.shape != q_shape || args.o.shape != q_shape {
-            return Err(Error::InvalidProblem("BatchPagedDecodeFp8Plan: q/o shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "BatchPagedDecodeFp8Plan: q/o shape mismatch",
+            ));
         }
         let cache_shape = [d.num_total_pages, d.num_kv_heads, d.page_size, d.head_dim];
         if args.k_data.shape != cache_shape || args.v_data.shape != cache_shape {
@@ -214,10 +215,18 @@ impl<T: Element> BatchPagedDecodeFp8Plan<T> {
         self.can_implement(&args)?;
         let need = self.workspace_size();
         let (ws_ptr, ws_bytes) = match workspace {
-            Workspace::None => return Err(Error::WorkspaceTooSmall { needed: need, got: 0 }),
+            Workspace::None => {
+                return Err(Error::WorkspaceTooSmall {
+                    needed: need,
+                    got: 0,
+                });
+            }
             Workspace::Borrowed(slice) => {
                 if slice.len() < need {
-                    return Err(Error::WorkspaceTooSmall { needed: need, got: slice.len() });
+                    return Err(Error::WorkspaceTooSmall {
+                        needed: need,
+                        got: slice.len(),
+                    });
                 }
                 (slice.as_raw().0 as *mut c_void, slice.len())
             }
@@ -246,9 +255,23 @@ impl<T: Element> BatchPagedDecodeFp8Plan<T> {
                 ($f:ident) => {{
                     unsafe {
                         baracuda_kernels_sys::$f(
-                            d.batch_size, d.page_size, d.head_dim, d.num_qo_heads, d.num_kv_heads,
-                            d.sm_scale, k_ptr, v_ptr, indices_ptr, indptr_ptr, last_page_len_ptr,
-                            q_ptr, o_ptr, lse_ptr, ws_ptr, ws_bytes, stream_ptr,
+                            d.batch_size,
+                            d.page_size,
+                            d.head_dim,
+                            d.num_qo_heads,
+                            d.num_kv_heads,
+                            d.sm_scale,
+                            k_ptr,
+                            v_ptr,
+                            indices_ptr,
+                            indptr_ptr,
+                            last_page_len_ptr,
+                            q_ptr,
+                            o_ptr,
+                            lse_ptr,
+                            ws_ptr,
+                            ws_bytes,
+                            stream_ptr,
                         )
                     }
                 }};
@@ -269,7 +292,7 @@ impl<T: Element> BatchPagedDecodeFp8Plan<T> {
                 _ => {
                     return Err(Error::Unsupported(
                         "BatchPagedDecodeFp8Plan::run reached an unimplemented dtype",
-                    ))
+                    ));
                 }
             };
             map_status(status)

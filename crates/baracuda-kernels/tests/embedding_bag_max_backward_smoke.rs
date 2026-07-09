@@ -5,11 +5,11 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, EmbeddingBagMaxBackwardArgs,
-    EmbeddingBagMaxBackwardDescriptor, EmbeddingBagMaxBackwardPlan, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, EmbeddingBagMaxBackwardArgs, EmbeddingBagMaxBackwardDescriptor,
+    EmbeddingBagMaxBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -60,8 +60,7 @@ fn embedding_bag_max_backward_f32_basic() {
 
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up dout");
     let dev_oidx = DeviceBuffer::from_slice(&ctx, &host_oidx).expect("up oidx");
-    let mut dev_dw: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
+    let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
 
     let desc = EmbeddingBagMaxBackwardDescriptor {
         num_embeddings: v as i32,
@@ -69,10 +68,9 @@ fn embedding_bag_max_backward_f32_basic() {
         num_bags: num_bags as i32,
         element: ElementKind::F32,
     };
-    let plan = EmbeddingBagMaxBackwardPlan::<f32>::select(
-        &stream, &desc, PlanPreference::default(),
-    )
-    .expect("select");
+    let plan =
+        EmbeddingBagMaxBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = EmbeddingBagMaxBackwardArgs::<f32> {
         dout: TensorRef {
             data: dev_dout.as_slice(),
@@ -127,8 +125,7 @@ fn embedding_bag_max_backward_f64_basic() {
 
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up dout");
     let dev_oidx = DeviceBuffer::from_slice(&ctx, &host_oidx).expect("up oidx");
-    let mut dev_dw: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
+    let mut dev_dw: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, v * d).expect("alloc dweight");
 
     let desc = EmbeddingBagMaxBackwardDescriptor {
         num_embeddings: v as i32,
@@ -136,10 +133,9 @@ fn embedding_bag_max_backward_f64_basic() {
         num_bags: num_bags as i32,
         element: ElementKind::F64,
     };
-    let plan = EmbeddingBagMaxBackwardPlan::<f64>::select(
-        &stream, &desc, PlanPreference::default(),
-    )
-    .expect("select");
+    let plan =
+        EmbeddingBagMaxBackwardPlan::<f64>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = EmbeddingBagMaxBackwardArgs::<f64> {
         dout: TensorRef {
             data: dev_dout.as_slice(),

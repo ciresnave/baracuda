@@ -33,22 +33,21 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels_sys::{
+    CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_SIDE_LEFT, CUDA_R_32F, CUSOLVER_EIG_MODE_VECTOR,
     baracuda_kernels_cholesky_f32_run, baracuda_kernels_cholesky_f32_workspace_size,
-    baracuda_kernels_eig_run, baracuda_kernels_eig_workspace_size,
-    baracuda_kernels_eigh_c32_run, baracuda_kernels_eigh_c32_workspace_size,
-    baracuda_kernels_eigh_f32_run, baracuda_kernels_eigh_f32_workspace_size,
-    baracuda_kernels_inverse_f32_run, baracuda_kernels_inverse_f32_workspace_size,
-    baracuda_kernels_lstsq_f32_run, baracuda_kernels_lstsq_f32_workspace_size,
-    baracuda_kernels_lu_f32_run, baracuda_kernels_lu_f32_workspace_size,
-    baracuda_kernels_ormqr_f32_run, baracuda_kernels_qr_f32_run,
-    baracuda_kernels_qr_f32_workspace_size, baracuda_kernels_solve_f32_run,
-    baracuda_kernels_solve_f32_workspace_size, baracuda_kernels_svd_batched_f32_run,
-    baracuda_kernels_svd_batched_f32_workspace_size, baracuda_kernels_svd_f32_run,
-    baracuda_kernels_svd_f32_workspace_size, baracuda_kernels_svda_batched_f32_run,
-    baracuda_kernels_svda_batched_f32_workspace_size, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N,
-    CUBLAS_SIDE_LEFT, CUDA_R_32F, CUSOLVER_EIG_MODE_VECTOR,
+    baracuda_kernels_eig_run, baracuda_kernels_eig_workspace_size, baracuda_kernels_eigh_c32_run,
+    baracuda_kernels_eigh_c32_workspace_size, baracuda_kernels_eigh_f32_run,
+    baracuda_kernels_eigh_f32_workspace_size, baracuda_kernels_inverse_f32_run,
+    baracuda_kernels_inverse_f32_workspace_size, baracuda_kernels_lstsq_f32_run,
+    baracuda_kernels_lstsq_f32_workspace_size, baracuda_kernels_lu_f32_run,
+    baracuda_kernels_lu_f32_workspace_size, baracuda_kernels_ormqr_f32_run,
+    baracuda_kernels_qr_f32_run, baracuda_kernels_qr_f32_workspace_size,
+    baracuda_kernels_solve_f32_run, baracuda_kernels_solve_f32_workspace_size,
+    baracuda_kernels_svd_batched_f32_run, baracuda_kernels_svd_batched_f32_workspace_size,
+    baracuda_kernels_svd_f32_run, baracuda_kernels_svd_f32_workspace_size,
+    baracuda_kernels_svda_batched_f32_run, baracuda_kernels_svda_batched_f32_workspace_size,
 };
 
 fn setup() -> (Context, Stream) {
@@ -124,9 +123,8 @@ fn cholesky_f32_ffi() {
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc info");
 
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_cholesky_f32_workspace_size(n, n, &mut ws_bytes as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_cholesky_f32_workspace_size(n, n, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0, "cholesky_f32_workspace_size status");
     assert!(ws_bytes > 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
@@ -163,9 +161,8 @@ fn lu_f32_ffi() {
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc info");
 
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_lu_f32_workspace_size(n, n, n, &mut ws_bytes as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_lu_f32_workspace_size(n, n, n, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
@@ -197,14 +194,12 @@ fn qr_f32_ffi() {
     let (m, n) = (6i32, 4i32);
     let a_host = tall_matrix_f32(m as usize, n as usize, 0x77);
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
-    let mut dev_tau: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, m.min(n) as usize).expect("tau");
+    let mut dev_tau: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, m.min(n) as usize).expect("tau");
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("info");
 
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_qr_f32_workspace_size(m, n, m, &mut ws_bytes as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_qr_f32_workspace_size(m, n, m, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("ws");
 
@@ -252,9 +247,8 @@ fn ormqr_f32_ffi() {
 
     // QR workspace (geqrf-only — ormqr workspace will be sized separately).
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_qr_f32_workspace_size(m, n, m, &mut ws_bytes as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_qr_f32_workspace_size(m, n, m, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("ws");
 
@@ -313,16 +307,12 @@ fn svd_f32_ffi() {
     let a_host = tall_matrix_f32(m as usize, n as usize, 0xBE);
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
     let mut dev_s: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, k as usize).expect("s");
-    let mut dev_u: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, (m * m) as usize).expect("u");
-    let mut dev_vt: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, (n * n) as usize).expect("vt");
+    let mut dev_u: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * m) as usize).expect("u");
+    let mut dev_vt: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n * n) as usize).expect("vt");
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("info");
 
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_svd_f32_workspace_size(m, n, &mut ws_bytes as *mut _)
-    };
+    let status = unsafe { baracuda_kernels_svd_f32_workspace_size(m, n, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("ws");
 
@@ -368,12 +358,9 @@ fn svd_batched_f32_ffi() {
         a_host[slot * nu * nu..(slot + 1) * nu * nu].copy_from_slice(&sub);
     }
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
-    let mut dev_s: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, (b * n) as usize).expect("s");
-    let mut dev_u: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, (b * n * n) as usize).expect("u");
-    let mut dev_v: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, (b * n * n) as usize).expect("v");
+    let mut dev_s: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (b * n) as usize).expect("s");
+    let mut dev_u: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (b * n * n) as usize).expect("u");
+    let mut dev_v: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (b * n * n) as usize).expect("v");
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, bu).expect("info");
 
     let mut ws_bytes: usize = 0;
@@ -431,8 +418,7 @@ fn svda_batched_f32_ffi() {
         a_host[base..base + sub.len()].copy_from_slice(&sub);
     }
     let dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
-    let mut dev_s: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, (b * rank) as usize).expect("s");
+    let mut dev_s: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (b * rank) as usize).expect("s");
     let mut dev_u: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (b * m * rank) as usize).expect("u");
     let mut dev_v: DeviceBuffer<f32> =
@@ -506,11 +492,7 @@ fn eigh_f32_ffi() {
 
     let mut ws_bytes: usize = 0;
     let status = unsafe {
-        baracuda_kernels_eigh_f32_workspace_size(
-            CUBLAS_FILL_MODE_UPPER,
-            n,
-            &mut ws_bytes as *mut _,
-        )
+        baracuda_kernels_eigh_f32_workspace_size(CUBLAS_FILL_MODE_UPPER, n, &mut ws_bytes as *mut _)
     };
     assert_eq!(status, 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("ws");
@@ -558,11 +540,7 @@ fn eigh_c32_ffi() {
 
     let mut ws_bytes: usize = 0;
     let status = unsafe {
-        baracuda_kernels_eigh_c32_workspace_size(
-            CUBLAS_FILL_MODE_UPPER,
-            n,
-            &mut ws_bytes as *mut _,
-        )
+        baracuda_kernels_eigh_c32_workspace_size(CUBLAS_FILL_MODE_UPPER, n, &mut ws_bytes as *mut _)
     };
     assert_eq!(status, 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("ws");
@@ -657,8 +635,7 @@ fn lstsq_f32_ffi() {
         .collect();
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
     let mut dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("up b");
-    let mut dev_x: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, (n * nrhs) as usize).expect("x");
+    let mut dev_x: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n * nrhs) as usize).expect("x");
     // `niters` is a HOST scalar — cuSOLVER's `_gels` writes it from
     // the host-side iterative-refinement loop, not from a kernel.
     // Passing a device pointer here triggers STATUS_ACCESS_VIOLATION.
@@ -666,9 +643,8 @@ fn lstsq_f32_ffi() {
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("info");
 
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_lstsq_f32_workspace_size(m, n, nrhs, &mut ws_bytes as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_lstsq_f32_workspace_size(m, n, nrhs, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes.max(1)).expect("ws");
 
@@ -709,14 +685,12 @@ fn solve_f32_ffi() {
         .collect();
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("up a");
     let mut dev_b = DeviceBuffer::from_slice(&ctx, &b_host).expect("up b");
-    let mut dev_pivot: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, n as usize).expect("pivot");
+    let mut dev_pivot: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, n as usize).expect("pivot");
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("info");
 
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_solve_f32_workspace_size(n, n, &mut ws_bytes as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_solve_f32_workspace_size(n, n, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("ws");
 
@@ -761,9 +735,8 @@ fn inverse_f32_ffi() {
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("info");
 
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_inverse_f32_workspace_size(n, n, &mut ws_bytes as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_inverse_f32_workspace_size(n, n, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0);
     let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("ws");
 

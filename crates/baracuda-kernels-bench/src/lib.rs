@@ -57,9 +57,9 @@
 
 use std::time::Duration;
 
-use baracuda_driver::{init, version, Context, Device, Event, Stream};
+use baracuda_driver::{Context, Device, Event, Stream, init, version};
 use baracuda_kernels_types::{
-    winner_of, ArchSku, CandidateResult, DispatchEntry, HwStamp, Implementor, StructureKey,
+    ArchSku, CandidateResult, DispatchEntry, HwStamp, Implementor, StructureKey, winner_of,
 };
 
 // ---------------------------------------------------------------------
@@ -94,8 +94,8 @@ pub fn setup_device() -> (Context, Stream) {
 #[must_use]
 pub fn arch_sku_of(major: u32, minor: u32) -> Option<ArchSku> {
     match (major, minor) {
-        (8, 9) => Some(ArchSku::Sm89), // Ada — RTX 4070 / RTX 6000 Ada / L40S
-        (8, _) => Some(ArchSku::Sm80), // Ampere — A100 (sm_80), consumer sm_86/87
+        (8, 9) => Some(ArchSku::Sm89),  // Ada — RTX 4070 / RTX 6000 Ada / L40S
+        (8, _) => Some(ArchSku::Sm80),  // Ampere — A100 (sm_80), consumer sm_86/87
         (9, _) => Some(ArchSku::Sm90a), // Hopper
         _ => None,
     }
@@ -178,12 +178,7 @@ pub fn gate_cell<'a>(
 /// a misconfigured CUDA context, not a bench-harness bug, and a panic
 /// inside a `b.iter_custom` closure is the cleanest way to surface it
 /// to the criterion runner.
-pub fn time_with_events<F>(
-    ctx: &Context,
-    stream: &Stream,
-    iters: u64,
-    mut launch: F,
-) -> Duration
+pub fn time_with_events<F>(ctx: &Context, stream: &Stream, iters: u64, mut launch: F) -> Duration
 where
     F: FnMut(),
 {
@@ -527,11 +522,7 @@ pub const CROSS_HIDDEN_SWEEP: &[i32] = &[1024, 4096];
 /// shapes: 4096×4096 (Q/K/V projection), 4096×11008 (Llama-2 7B FFN
 /// up_proj), 32000×4096 (Llama-2 7B LM head). 11008 is a multiple of
 /// 256, satisfying every k-quant block-size constraint.
-pub const CROSS_MMVQ_SHAPES: &[(i32, i32)] = &[
-    (4096, 4096),
-    (11008, 4096),
-    (32000, 4096),
-];
+pub const CROSS_MMVQ_SHAPES: &[(i32, i32)] = &[(4096, 4096), (11008, 4096), (32000, 4096)];
 
 // Conv2d shape set — same as `CONV2D_SWEEP` (the Phase-10 sweep is
 // already minimal at 3 picks).
@@ -666,9 +657,8 @@ impl PytorchBaseline {
     /// Parse a baseline JSON from `path`. Returns `Err` with a human-
     /// readable message on parse / IO failure.
     pub fn load_from(path: &std::path::Path) -> Result<Self, String> {
-        let raw = std::fs::read(path).map_err(|e| {
-            format!("pytorch baseline: failed to read {}: {e}", path.display())
-        })?;
+        let raw = std::fs::read(path)
+            .map_err(|e| format!("pytorch baseline: failed to read {}: {e}", path.display()))?;
         let parsed: PytorchBaselineFile = serde_json::from_slice(&raw).map_err(|e| {
             format!(
                 "pytorch baseline: failed to parse {} as JSON: {e}",
@@ -710,8 +700,7 @@ impl PytorchBaseline {
     /// the bench binary runs from the bench crate root, not the
     /// workspace root.
     pub fn load_default() -> Option<Self> {
-        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("bench-baselines");
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("bench-baselines");
         let entries: Vec<_> = match std::fs::read_dir(&dir) {
             Ok(it) => it
                 .filter_map(|e| e.ok())
@@ -729,7 +718,10 @@ impl PytorchBaseline {
         };
         match entries.len() {
             0 => {
-                eprintln!("pytorch baseline: no pytorch_*.json in {} — skipping", dir.display());
+                eprintln!(
+                    "pytorch baseline: no pytorch_*.json in {} — skipping",
+                    dir.display()
+                );
                 None
             }
             1 => match Self::load_from(&entries[0]) {
@@ -776,8 +768,8 @@ impl PytorchBaseline {
 mod gate_tests {
     use super::*;
     use baracuda_kernels_types::{
-        merge, structure_key, DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc,
-        Provenance,
+        DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc, Provenance, merge,
+        structure_key,
     };
 
     #[test]

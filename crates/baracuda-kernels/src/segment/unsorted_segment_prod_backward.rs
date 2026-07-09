@@ -21,7 +21,7 @@ use baracuda_kernels_types::{
 };
 
 use super::map_status;
-use super::segment_sum::{build_sku, validate_desc, SegDescView};
+use super::segment_sum::{SegDescView, build_sku, validate_desc};
 
 /// Descriptor for an `unsorted_segment_prod_backward` op.
 #[derive(Copy, Clone, Debug)]

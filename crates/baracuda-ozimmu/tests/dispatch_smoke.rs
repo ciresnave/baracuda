@@ -60,13 +60,19 @@ fn pregrown_workspace_then_dgemm() {
 
     unsafe {
         h.dgemm(
-            Op::N, Op::N,
-            m, m, m,
+            Op::N,
+            Op::N,
+            m,
+            m,
+            m,
             1.0,
-            a.as_raw().0 as *const f64, m,
-            b.as_raw().0 as *const f64, m,
+            a.as_raw().0 as *const f64,
+            m,
+            b.as_raw().0 as *const f64,
+            m,
             0.0,
-            c.as_raw().0 as *mut f64, m,
+            c.as_raw().0 as *mut f64,
+            m,
             OzakiSlices::S8,
         )
         .expect("dgemm");
@@ -78,13 +84,21 @@ fn pregrown_workspace_then_dgemm() {
     let mut got = vec![0.0f64; m * m];
     c.copy_to_host(&mut got).expect("D2H");
     let nonfinite = got.iter().filter(|v| !v.is_finite()).count();
-    let l2: f64 = got.iter().filter(|v| v.is_finite()).map(|v| v * v).sum::<f64>().sqrt();
+    let l2: f64 = got
+        .iter()
+        .filter(|v| v.is_finite())
+        .map(|v| v * v)
+        .sum::<f64>()
+        .sqrt();
     assert_eq!(
         nonfinite, 0,
         "result has {} non-finite cells (ozIMMU produced inf/NaN)",
         nonfinite,
     );
-    assert!(l2 > 0.0, "result has zero L2 norm (ozIMMU launch produced nothing?)");
+    assert!(
+        l2 > 0.0,
+        "result has zero L2 norm (ozIMMU launch produced nothing?)"
+    );
 }
 
 #[test]
@@ -102,13 +116,19 @@ fn invalid_shape_rejected() {
     // m == 0 → InvalidArgument
     let r = unsafe {
         h.dgemm(
-            Op::N, Op::N,
-            0, 8, 8,
+            Op::N,
+            Op::N,
+            0,
+            8,
+            8,
             1.0,
-            buf.as_raw().0 as *const f64, 8,
-            buf.as_raw().0 as *const f64, 8,
+            buf.as_raw().0 as *const f64,
+            8,
+            buf.as_raw().0 as *const f64,
+            8,
             0.0,
-            buf.as_raw().0 as *mut f64, 8,
+            buf.as_raw().0 as *mut f64,
+            8,
             OzakiSlices::S8,
         )
     };
@@ -117,13 +137,19 @@ fn invalid_shape_rejected() {
     // ldc < m → InvalidArgument
     let r = unsafe {
         h.dgemm(
-            Op::N, Op::N,
-            8, 8, 8,
+            Op::N,
+            Op::N,
+            8,
+            8,
+            8,
             1.0,
-            buf.as_raw().0 as *const f64, 8,
-            buf.as_raw().0 as *const f64, 8,
+            buf.as_raw().0 as *const f64,
+            8,
+            buf.as_raw().0 as *const f64,
+            8,
             0.0,
-            buf.as_raw().0 as *mut f64, 4,
+            buf.as_raw().0 as *mut f64,
+            4,
             OzakiSlices::S8,
         )
     };
@@ -144,7 +170,12 @@ fn slices_enum_round_trip() {
         (OzakiSlices::Auto, None),
     ];
     for (s, expected) in all {
-        assert_eq!(s.slice_count(), expected, "slice_count mismatch for {:?}", s);
+        assert_eq!(
+            s.slice_count(),
+            expected,
+            "slice_count mismatch for {:?}",
+            s
+        );
         // to_compute_mode should not return 0 (sgemm) or anything out of range.
         let cm = s.to_compute_mode();
         assert!(cm >= 1 && cm <= 18, "compute_mode {cm} out of range");

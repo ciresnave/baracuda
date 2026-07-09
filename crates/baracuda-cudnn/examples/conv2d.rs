@@ -12,9 +12,8 @@
 //! ```
 
 use baracuda_cudnn::{
-    convolution_forward, convolution_forward_workspace_size, ConvMode,
-    ConvolutionDescriptor, DType, FilterDescriptor, FwdAlgo, Handle, TensorDescriptor,
-    TensorFormat,
+    ConvMode, ConvolutionDescriptor, DType, FilterDescriptor, FwdAlgo, Handle, TensorDescriptor,
+    TensorFormat, convolution_forward, convolution_forward_workspace_size,
 };
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
@@ -53,7 +52,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let y_desc = TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, on, oc, oh, ow)?;
 
     let algo = FwdAlgo::ImplicitGemm;
-    let ws_bytes = convolution_forward_workspace_size(&cudnn, &x_desc, &w_desc, &conv, &y_desc, algo)?;
+    let ws_bytes =
+        convolution_forward_workspace_size(&cudnn, &x_desc, &w_desc, &conv, &y_desc, algo)?;
     println!("workspace bytes: {ws_bytes}");
 
     // Inputs: all ones in X and W → each output cell = number of valid
@@ -67,17 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes.max(1))?;
 
     convolution_forward(
-        &cudnn,
-        1.0,
-        &x_desc,
-        &x_buf,
-        &w_desc,
-        &w_buf,
-        &conv,
-        algo,
-        &mut ws,
-        0.0,
-        &y_desc,
+        &cudnn, 1.0, &x_desc, &x_buf, &w_desc, &w_buf, &conv, algo, &mut ws, 0.0, &y_desc,
         &mut y_buf,
     )?;
 

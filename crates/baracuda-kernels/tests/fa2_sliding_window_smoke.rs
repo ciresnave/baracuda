@@ -16,12 +16,12 @@
 
 #![cfg(feature = "fa2")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
-use baracuda_kernels::{
-    contiguous_stride, BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor,
-    FlashSdpaPlan, PlanPreference, TensorMut, TensorRef, Workspace,
-};
 use baracuda_cutlass::Error;
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+use baracuda_kernels::{
+    BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
+};
 use half::f16;
 
 fn setup() -> (Context, Stream) {
@@ -76,10 +76,8 @@ fn fa2_sliding_window_left_runs() {
 
     // Sliding window: left = 128, right unbounded (matches "look back at
     // most 128 tokens; see all future tokens too" — unusual but valid).
-    let desc = FlashSdpaDescriptor::new(
-        B, H, Q, K, D, D, default_scale(), false, ElementKind::F16,
-    )
-    .with_window_size_left(Some(128));
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, D, D, default_scale(), false, ElementKind::F16)
+        .with_window_size_left(Some(128));
 
     let pref = PlanPreference {
         prefer_backend: Some(BackendKind::FlashAttentionV2),
@@ -87,18 +85,37 @@ fn fa2_sliding_window_left_runs() {
     };
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, pref).expect("sel fa2");
     let ws_bytes = plan.workspace_size();
-    let mut ws_buf: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
+    let mut ws_buf: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     plan.run(
         &stream,
         Workspace::Borrowed(ws_buf.as_slice_mut()),
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: None,
             alibi_slopes: None,
         },
@@ -143,10 +160,8 @@ fn fa2_sliding_window_causal_compose() {
     // Mistral-style: causal + left sliding window. FA2 forces right=0
     // internally; combined with left=256 means each query attends to
     // its last 256 past tokens (no future).
-    let desc = FlashSdpaDescriptor::new(
-        B, H, Q, K, D, D, default_scale(), true, ElementKind::F16,
-    )
-    .with_window_size_left(Some(256));
+    let desc = FlashSdpaDescriptor::new(B, H, Q, K, D, D, default_scale(), true, ElementKind::F16)
+        .with_window_size_left(Some(256));
 
     let pref = PlanPreference {
         prefer_backend: Some(BackendKind::FlashAttentionV2),
@@ -154,18 +169,37 @@ fn fa2_sliding_window_causal_compose() {
     };
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, pref).expect("sel fa2");
     let ws_bytes = plan.workspace_size();
-    let mut ws_buf: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
+    let mut ws_buf: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     plan.run(
         &stream,
         Workspace::Borrowed(ws_buf.as_slice_mut()),
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: None,
             alibi_slopes: None,
         },
@@ -191,7 +225,15 @@ fn fa2_sliding_window_rejected_on_bespoke() {
     let _ = ctx;
 
     let desc = FlashSdpaDescriptor::new(
-        B, H, 128, 128, D, D, default_scale(), false, ElementKind::F16,
+        B,
+        H,
+        128,
+        128,
+        D,
+        D,
+        default_scale(),
+        false,
+        ElementKind::F16,
     )
     .with_window_size_left(Some(64));
     let pref = PlanPreference {

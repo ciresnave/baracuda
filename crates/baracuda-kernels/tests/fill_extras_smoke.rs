@@ -3,7 +3,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -139,18 +139,28 @@ fn fill_f32_strided_skip_every_other_row() {
                 0.0
             };
             let i = row * 16 + col;
-            assert_eq!(got[i], expected, "row={row} col={col} got={} expected={expected}", got[i]);
+            assert_eq!(
+                got[i], expected,
+                "row={row} col={col} got={} expected={expected}",
+                got[i]
+            );
         }
     }
 }
 
 #[test]
 fn can_implement_basic() {
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_fill_u32_can_implement(8, core::ptr::null()) };
+    let s = unsafe {
+        baracuda_kernels_sys::baracuda_kernels_fill_u32_can_implement(8, core::ptr::null())
+    };
     assert_eq!(s, 0);
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_fill_i16_can_implement(-1, core::ptr::null()) };
+    let s = unsafe {
+        baracuda_kernels_sys::baracuda_kernels_fill_i16_can_implement(-1, core::ptr::null())
+    };
     assert_ne!(s, 0, "should reject negative numel");
-    let s = unsafe { baracuda_kernels_sys::baracuda_kernels_fill_fp8e4m3_can_implement(0, core::ptr::null()) };
+    let s = unsafe {
+        baracuda_kernels_sys::baracuda_kernels_fill_fp8e4m3_can_implement(0, core::ptr::null())
+    };
     assert_eq!(s, 0);
     let s = unsafe { baracuda_kernels_sys::baracuda_kernels_fill_f32_strided_can_implement(8, 2) };
     assert_eq!(s, 0);

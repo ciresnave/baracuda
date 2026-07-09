@@ -5,10 +5,10 @@
 //! and lives in `[-INF, 0]`; we verify the per-cell formula and that
 //! `Σ_j exp(y[j]) = 1` (invariant).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SoftmaxArgs, SoftmaxDescriptor,
-    SoftmaxKind, SoftmaxPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SoftmaxArgs, SoftmaxDescriptor, SoftmaxKind, SoftmaxPlan,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -94,10 +94,23 @@ fn log_softmax_f32_3d_axis_1() {
     };
     let plan =
         SoftmaxPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-    plan.run(&stream, Workspace::None, SoftmaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    }).expect("run");
+    plan.run(
+        &stream,
+        Workspace::None,
+        SoftmaxArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; numel];
     dev_y.copy_to_host(&mut got).expect("dl");
@@ -105,8 +118,12 @@ fn log_softmax_f32_3d_axis_1() {
     for i in 0..numel {
         // log-softmax outputs live near 0..-15 so absolute eps is fine.
         let tol = (expected[i].abs() * eps).max(eps);
-        assert!((got[i] - expected[i]).abs() <= tol,
-            "f32 log_softmax @ {i}: got={} want={}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 log_softmax @ {i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
     // Σ_j exp(y[j]) = 1 invariant.
     for outer_i in 0..(2 * 4) {
@@ -116,7 +133,10 @@ fn log_softmax_f32_3d_axis_1() {
         for j in 0..5 {
             sum += got[(i * 5 + j) * 4 + k].exp();
         }
-        assert!((sum - 1.0).abs() <= 1e-5, "f32 exp-row-sum @ ({i},{k}) = {sum}");
+        assert!(
+            (sum - 1.0).abs() <= 1e-5,
+            "f32 exp-row-sum @ ({i},{k}) = {sum}"
+        );
     }
 }
 
@@ -133,7 +153,9 @@ fn log_softmax_f64_2d_axis_1() {
         let mut max = f64::NEG_INFINITY;
         for j in 0..extent {
             let v = host_x[i * 8 + j];
-            if v > max { max = v; }
+            if v > max {
+                max = v;
+            }
         }
         let mut sum = 0f64;
         for j in 0..extent {
@@ -155,10 +177,23 @@ fn log_softmax_f64_2d_axis_1() {
     };
     let plan =
         SoftmaxPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-    plan.run(&stream, Workspace::None, SoftmaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    }).expect("run");
+    plan.run(
+        &stream,
+        Workspace::None,
+        SoftmaxArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f64; numel];
     dev_y.copy_to_host(&mut got).expect("dl");
@@ -190,10 +225,23 @@ fn log_softmax_f16_2d_axis_1() {
     };
     let plan =
         SoftmaxPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-    plan.run(&stream, Workspace::None, SoftmaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    }).expect("run");
+    plan.run(
+        &stream,
+        Workspace::None,
+        SoftmaxArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![f16::ZERO; numel];
     dev_y.copy_to_host(&mut got).expect("dl");
@@ -211,7 +259,9 @@ fn log_softmax_bf16_2d_axis_0() {
     let (ctx, stream) = setup();
     let shape = [6i32, 4];
     let numel = 24;
-    let host_x_f32: Vec<f32> = (0..numel).map(|i| ((i as f32) * 0.25 - 3.0).cos()).collect();
+    let host_x_f32: Vec<f32> = (0..numel)
+        .map(|i| ((i as f32) * 0.25 - 3.0).cos())
+        .collect();
     let expected_f32 = host_log_softmax_f32([1i32, shape[0], shape[1]], 1, &host_x_f32);
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
 
@@ -225,10 +275,23 @@ fn log_softmax_bf16_2d_axis_0() {
     };
     let plan =
         SoftmaxPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-    plan.run(&stream, Workspace::None, SoftmaxArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-    }).expect("run");
+    plan.run(
+        &stream,
+        Workspace::None,
+        SoftmaxArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![bf16::ZERO; numel];
     dev_y.copy_to_host(&mut got).expect("dl");

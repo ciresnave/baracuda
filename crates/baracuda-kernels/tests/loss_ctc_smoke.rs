@@ -4,10 +4,10 @@
 //! of the standard forward DP recurrence. Reference: PyTorch's
 //! `torch.nn.CTCLoss` semantics with `reduction='none'`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, CtcLossArgs, CtcLossDescriptor, CtcLossPlan, ElementKind, LossReduction,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    CtcLossArgs, CtcLossDescriptor, CtcLossPlan, ElementKind, LossReduction, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -62,9 +62,7 @@ fn host_ctc_fw_f32(
         }
         // α[t, k]; allocate one t at a time.
         let mut prev = vec![NEG_INF; l];
-        let lp_at = |t: usize, cls: usize| -> f32 {
-            log_probs[t * n * c + sample * c + cls]
-        };
+        let lp_at = |t: usize, cls: usize| -> f32 { log_probs[t * n * c + sample * c + cls] };
         prev[0] = lp_at(0, ext[0]);
         if l >= 2 {
             prev[1] = lp_at(0, ext[1]);
@@ -74,10 +72,7 @@ fn host_ctc_fw_f32(
             for k in 0..l {
                 let self_a = prev[k];
                 let prev_a = if k >= 1 { prev[k - 1] } else { NEG_INF };
-                let skip_a = if k >= 2
-                    && ext[k] != blank
-                    && ext[k] != ext[k - 2]
-                {
+                let skip_a = if k >= 2 && ext[k] != blank && ext[k] != ext[k - 2] {
                     prev[k - 2]
                 } else {
                     NEG_INF
@@ -128,8 +123,7 @@ where
         LossReduction::None => n as usize,
         _ => 1,
     };
-    let mut dev_loss: DeviceBuffer<T> =
-        DeviceBuffer::zeros(ctx, loss_numel).expect("alloc loss");
+    let mut dev_loss: DeviceBuffer<T> = DeviceBuffer::zeros(ctx, loss_numel).expect("alloc loss");
 
     let desc = CtcLossDescriptor {
         max_time: t_max,
@@ -141,15 +135,13 @@ where
         zero_infinity: false,
         element: elem,
     };
-    let plan = CtcLossPlan::<T>::select(stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan = CtcLossPlan::<T>::select(stream, &desc, PlanPreference::default()).expect("select");
 
     let alpha_bytes = plan.alpha_workspace_size();
     let aux_bytes = plan.workspace_size();
     let mut dev_alpha: DeviceBuffer<u8> =
         DeviceBuffer::zeros(ctx, alpha_bytes).expect("alloc alpha");
-    let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(ctx, aux_bytes).expect("alloc ws");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, aux_bytes).expect("alloc ws");
 
     let loss_shape = [loss_numel as i32];
     let args = CtcLossArgs::<T> {
@@ -224,7 +216,13 @@ fn ctc_fw_f32_uniform_t2_c2() {
     );
     let want = (4.0f32 / 3.0f32).ln();
     let diff = (got[0] - want).abs();
-    assert!(diff <= 1e-5, "f32 ctc fw: got={} want={} diff={}", got[0], want, diff);
+    assert!(
+        diff <= 1e-5,
+        "f32 ctc fw: got={} want={} diff={}",
+        got[0],
+        want,
+        diff
+    );
 }
 
 fn run_general_case<T>(
@@ -301,8 +299,7 @@ fn run_general_case<T>(
             match core::mem::size_of::<T>() {
                 4 => f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
                 8 => f64::from_le_bytes([
-                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
-                    bytes[7],
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
                 ]) as f32,
                 2 => {
                     let bits = u16::from_le_bytes([bytes[0], bytes[1]]);

@@ -40,7 +40,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_cublas::{gemm_ex, Handle as CublasHandle, Op};
+use baracuda_cublas::{Handle as CublasHandle, Op, gemm_ex};
 use baracuda_cublas_sys::functions::{cublasComputeType_t, cudaDataType_t};
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
@@ -48,10 +48,10 @@ use baracuda_kernels::{
     PlanPreference, Workspace,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, gemm_flops, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow,
+    PhaseTwentyNineRow, append_csv_row, gemm_flops, measure_median_ns, setup_device,
+    time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use half::f16;
 
 const BENCH_NAME: &str = "gemm_vs_cuda_l2";
@@ -68,7 +68,7 @@ const CUDA_L2_SHAPES: &[(i32, i32)] = &[(128, 4096), (2048, 4096)];
 /// These let the default-mode bench output a comparable side-by-side
 /// without compiling the CUDA-L2 kernels in the workspace build path.
 const REFERENCE_PROBE_NUMBERS: &[(i32, i32, f64, f64)] = &[
-    (128, 4096, 175.20, 177.37),  // CUDA-L2 +1.2% over cuBLAS
+    (128, 4096, 175.20, 177.37),    // CUDA-L2 +1.2% over cuBLAS
     (2048, 4096, 2452.73, 2621.46), // CUDA-L2 +6.4% over cuBLAS
 ];
 
@@ -169,28 +169,60 @@ fn bench_baracuda_f16(c: &mut Criterion) {
 
         warmup(&stream, || {
             let args = GemmArgs::<f16> {
-                a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-                b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+                a: MatrixRef {
+                    data: dev_a.as_slice(),
+                    rows: m,
+                    cols: k,
+                    ld: k as i64,
+                },
+                b: MatrixRef {
+                    data: dev_b.as_slice(),
+                    rows: k,
+                    cols: n,
+                    ld: k as i64,
+                },
                 c: None,
-                d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+                d: MatrixMut {
+                    data: dev_d.as_slice_mut(),
+                    rows: m,
+                    cols: n,
+                    ld: n as i64,
+                },
                 bias: None,
                 alpha: 1.0_f32,
                 beta: 0.0_f32,
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda f16 gemm");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda f16 gemm");
         });
 
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = GemmArgs::<f16> {
-                a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-                b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+                a: MatrixRef {
+                    data: dev_a.as_slice(),
+                    rows: m,
+                    cols: k,
+                    ld: k as i64,
+                },
+                b: MatrixRef {
+                    data: dev_b.as_slice(),
+                    rows: k,
+                    cols: n,
+                    ld: k as i64,
+                },
                 c: None,
-                d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+                d: MatrixMut {
+                    data: dev_d.as_slice_mut(),
+                    rows: m,
+                    cols: n,
+                    ld: n as i64,
+                },
                 bias: None,
                 alpha: 1.0_f32,
                 beta: 0.0_f32,
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda f16 gemm");
+            plan.run(&stream, Workspace::None, args)
+                .expect("baracuda f16 gemm");
         });
         append_csv_row(
             BENCH_NAME,
@@ -210,8 +242,18 @@ fn bench_baracuda_f16(c: &mut Criterion) {
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = GemmArgs::<f16> {
-                        a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
-                        b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
+                        a: MatrixRef {
+                            data: dev_a.as_slice(),
+                            rows: m,
+                            cols: k,
+                            ld: k as i64,
+                        },
+                        b: MatrixRef {
+                            data: dev_b.as_slice(),
+                            rows: k,
+                            cols: n,
+                            ld: k as i64,
+                        },
                         c: None,
                         d: MatrixMut {
                             data: dev_d.as_slice_mut(),
@@ -223,7 +265,8 @@ fn bench_baracuda_f16(c: &mut Criterion) {
                         alpha: 1.0_f32,
                         beta: 0.0_f32,
                     };
-                    plan.run(&stream, Workspace::None, args).expect("baracuda f16 gemm");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("baracuda f16 gemm");
                 })
             });
         });
@@ -460,12 +503,13 @@ fn bench_cuda_l2_f16(c: &mut Criterion) {
 fn bench_cuda_l2_f16(_c: &mut Criterion) {
     eprintln!();
     eprintln!("== CUDA-L2 reference measurements (RTX 4070 sm_89, CUDA 13.0) ==");
-    eprintln!(
-        "   Build with `--features cuda_l2,sm89` to time CUDA-L2 live in this bench."
-    );
+    eprintln!("   Build with `--features cuda_l2,sm89` to time CUDA-L2 live in this bench.");
     eprintln!("   Numbers below come from `external/cuda-l2-probes/probe_*.cu`.");
     eprintln!();
-    eprintln!("   {:>16} | {:>14} | {:>14} | {:>8}", "shape", "CUDA-L2 (us)", "cuBLAS (us)", "ratio");
+    eprintln!(
+        "   {:>16} | {:>14} | {:>14} | {:>8}",
+        "shape", "CUDA-L2 (us)", "cuBLAS (us)", "ratio"
+    );
     eprintln!("   {:->16}-+-{:->14}-+-{:->14}-+-{:->8}", "", "", "", "");
     for &(m, kn, l2_us, cublas_us) in REFERENCE_PROBE_NUMBERS {
         let shape = format!("M{m}_N{kn}_K{kn}");
@@ -477,21 +521,11 @@ fn bench_cuda_l2_f16(_c: &mut Criterion) {
     }
     eprintln!();
     eprintln!("== Decision: SKIP vendor. ==");
-    eprintln!(
-        "   CUDA-L2 either ties (M=128: +1.2%) or modestly beats cuBLAS (M=2048: +6.4%)"
-    );
-    eprintln!(
-        "   at the shapes it covers, but ships NO kernels for M ∈ {{1, 8, 32}} — the decode"
-    );
-    eprintln!(
-        "   regime where baracuda's Phase 30 cuBLAS fast-path already won 3× over CUTLASS."
-    );
-    eprintln!(
-        "   Per-shape build.rs compilation + per-shape FFI plumbing is high cost for"
-    );
-    eprintln!(
-        "   ≤6% wins outside the actually-load-bearing decode regime."
-    );
+    eprintln!("   CUDA-L2 either ties (M=128: +1.2%) or modestly beats cuBLAS (M=2048: +6.4%)");
+    eprintln!("   at the shapes it covers, but ships NO kernels for M ∈ {{1, 8, 32}} — the decode");
+    eprintln!("   regime where baracuda's Phase 30 cuBLAS fast-path already won 3× over CUTLASS.");
+    eprintln!("   Per-shape build.rs compilation + per-shape FFI plumbing is high cost for");
+    eprintln!("   ≤6% wins outside the actually-load-bearing decode regime.");
     eprintln!();
     // Also write a CSV row so the standard phase29 CSV companion
     // picks up the documentation-mode reference numbers.

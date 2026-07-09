@@ -957,7 +957,8 @@ pub type PFN_cudnnGetConvolutionBackwardFilterWorkspaceSize = unsafe extern "C" 
     dw_desc: cudnnFilterDescriptor_t,
     algo: cudnnConvolutionBwdFilterAlgo_t,
     size_in_bytes: *mut usize,
-) -> cudnnStatus_t;
+)
+    -> cudnnStatus_t;
 
 // ---- pooling --------------------------------------------------------------
 
@@ -1561,10 +1562,8 @@ pub type PFN_cudnnSpatialTfSamplerForward = unsafe extern "C" fn(
 // ==========================================================================
 
 /// cuDNN: set convolution group count. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
-pub type PFN_cudnnSetConvolutionGroupCount = unsafe extern "C" fn(
-    desc: cudnnConvolutionDescriptor_t,
-    group_count: c_int,
-) -> cudnnStatus_t;
+pub type PFN_cudnnSetConvolutionGroupCount =
+    unsafe extern "C" fn(desc: cudnnConvolutionDescriptor_t, group_count: c_int) -> cudnnStatus_t;
 /// cuDNN: get convolution group count. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionGroupCount = unsafe extern "C" fn(
     desc: cudnnConvolutionDescriptor_t,
@@ -1644,10 +1643,8 @@ pub type PFN_cudnnActivationBackward = unsafe extern "C" fn(
 ) -> cudnnStatus_t;
 
 /// cuDNN: set activation descriptor swish beta. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
-pub type PFN_cudnnSetActivationDescriptorSwishBeta = unsafe extern "C" fn(
-    desc: cudnnActivationDescriptor_t,
-    swish_beta: c_double,
-) -> cudnnStatus_t;
+pub type PFN_cudnnSetActivationDescriptorSwishBeta =
+    unsafe extern "C" fn(desc: cudnnActivationDescriptor_t, swish_beta: c_double) -> cudnnStatus_t;
 /// cuDNN: get activation descriptor swish beta. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetActivationDescriptorSwishBeta = unsafe extern "C" fn(
     desc: cudnnActivationDescriptor_t,
@@ -2040,17 +2037,16 @@ pub type PFN_cudnnGetNormalizationBackwardWorkspaceSize = unsafe extern "C" fn(
 ) -> cudnnStatus_t;
 
 /// cuDNN: get normalization training reserve space size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
-pub type PFN_cudnnGetNormalizationTrainingReserveSpaceSize =
-    unsafe extern "C" fn(
-        handle: cudnnHandle_t,
-        mode: cudnnNormMode_t,
-        norm_ops: cudnnNormOps_t,
-        algo: cudnnNormAlgo_t,
-        activation_desc: cudnnActivationDescriptor_t,
-        x_desc: cudnnTensorDescriptor_t,
-        size_in_bytes: *mut usize,
-        group_count: c_int,
-    ) -> cudnnStatus_t;
+pub type PFN_cudnnGetNormalizationTrainingReserveSpaceSize = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    mode: cudnnNormMode_t,
+    norm_ops: cudnnNormOps_t,
+    algo: cudnnNormAlgo_t,
+    activation_desc: cudnnActivationDescriptor_t,
+    x_desc: cudnnTensorDescriptor_t,
+    size_in_bytes: *mut usize,
+    group_count: c_int,
+) -> cudnnStatus_t;
 
 /// cuDNN: normalization forward training. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnNormalizationForwardTraining = unsafe extern "C" fn(
@@ -2788,9 +2784,7 @@ mod search_dir_tests {
     #[test]
     fn parse_cuda_major_handles_typical_windows_paths() {
         assert_eq!(
-            parse_cuda_major_from_path(
-                r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6"
-            ),
+            parse_cuda_major_from_path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6"),
             Some(12),
         );
         assert_eq!(
@@ -2807,10 +2801,7 @@ mod search_dir_tests {
     fn parse_cuda_major_ignores_unrelated_v_prefixed_words() {
         // No `vN.M` segment — `verbose` happens to start with a `v`
         // but doesn't match the `vN.M` pattern.
-        assert_eq!(
-            parse_cuda_major_from_path("/usr/local/verbose/cuda"),
-            None,
-        );
+        assert_eq!(parse_cuda_major_from_path("/usr/local/verbose/cuda"), None,);
         assert_eq!(parse_cuda_major_from_path(""), None);
         assert_eq!(parse_cuda_major_from_path("/usr/local/cuda"), None);
     }
@@ -2858,10 +2849,7 @@ mod search_dir_tests {
             Some(_pos) => unreachable!("no exact match in this scenario"),
             None => {
                 numbered.sort_by_key(|b| std::cmp::Reverse(b.0));
-                numbered
-                    .iter()
-                    .find(|(n, _)| *n <= target)
-                    .map(|(_, p)| *p)
+                numbered.iter().find(|(n, _)| *n <= target).map(|(_, p)| *p)
             }
         };
         assert_eq!(result, Some("/cudnn/12"));

@@ -3,10 +3,10 @@
 //! Sorted-seg-ids `segment_sum`: `out[s, d] = Σ_{n : seg[n]==s} input[n, d]`.
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SegmentSumArgs, SegmentSumDescriptor,
-    SegmentSumPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SegmentSumArgs, SegmentSumDescriptor, SegmentSumPlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

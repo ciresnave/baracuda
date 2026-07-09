@@ -20,7 +20,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{RopeScaledTableBuilder, RopeScaling};
 
 const ROPE_DEFAULT_BASE: f32 = 10000.0;
@@ -78,20 +78,15 @@ fn rope_apply_linear_builder_matches_kernel() {
         .map(|i| ((i as f32) * 0.13 - 0.7).sin() * 1.2)
         .collect();
 
-    let builder = RopeScaledTableBuilder::new(
-        head_dim,
-        seq,
-        ROPE_DEFAULT_BASE,
-        RopeScaling::Linear,
-    );
+    let builder =
+        RopeScaledTableBuilder::new(head_dim, seq, ROPE_DEFAULT_BASE, RopeScaling::Linear);
     let (cos_t, sin_t) = builder.build_host_tables().expect("build linear tables");
     assert_eq!(cos_t.len(), builder.table_len());
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_cos = DeviceBuffer::from_slice(&ctx, &cos_t).expect("up cos");
     let dev_sin = DeviceBuffer::from_slice(&ctx, &sin_t).expect("up sin");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_run(
@@ -163,8 +158,7 @@ fn rope_apply_yarn_builder_matches_host_ref() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_cos = DeviceBuffer::from_slice(&ctx, &cos_t).expect("up cos");
     let dev_sin = DeviceBuffer::from_slice(&ctx, &sin_t).expect("up sin");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_run(
@@ -226,15 +220,16 @@ fn rope_apply_longrope_builder_matches_host_ref() {
         head_dim,
         seq,
         ROPE_DEFAULT_BASE,
-        RopeScaling::LongRoPE { per_dim_factors: factors },
+        RopeScaling::LongRoPE {
+            per_dim_factors: factors,
+        },
     );
     let (cos_t, sin_t) = builder.build_host_tables().expect("build longrope");
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_cos = DeviceBuffer::from_slice(&ctx, &cos_t).expect("up cos");
     let dev_sin = DeviceBuffer::from_slice(&ctx, &sin_t).expect("up sin");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_rope_apply_f32_run(

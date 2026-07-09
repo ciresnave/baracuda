@@ -22,11 +22,11 @@
 //!
 //! `#[ignore]` by default; run with `--ignored` on a CUDA host.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryKind,
-    UnaryParamArgs, UnaryParamBackwardArgs, UnaryParamBackwardDescriptor, UnaryParamBackwardPlan,
-    UnaryParamDescriptor, UnaryParamPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryKind, UnaryParamArgs,
+    UnaryParamBackwardArgs, UnaryParamBackwardDescriptor, UnaryParamBackwardPlan,
+    UnaryParamDescriptor, UnaryParamPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -81,8 +81,16 @@ fn powi_strided_fw_f32_contig_fastpath() {
     let plan = UnaryParamPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f32, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -90,7 +98,11 @@ fn powi_strided_fw_f32_contig_fastpath() {
     let mut got = vec![0f32; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, (g, e)) in got.iter().zip(host_expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "contig n=2 @ {i}: got {g}, exp {e}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "contig n=2 @ {i}: got {g}, exp {e}"
+        );
     }
 }
 
@@ -121,7 +133,11 @@ fn powi_strided_fw_f32_transposed_input() {
     let plan = UnaryParamPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f32, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape: logical_shape, stride: stride_x_t },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: logical_shape,
+            stride: stride_x_t,
+        },
         y: TensorMut {
             data: dev_y.as_slice_mut(),
             shape: logical_shape,
@@ -166,8 +182,7 @@ fn powi_strided_fw_f32_strided_output() {
     let host_x = make_x_f32(m * n);
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
     // Larger output buffer [M, 2*N] zero-init.
-    let mut dev_y_big: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, m * 2 * n).expect("alloc y");
+    let mut dev_y_big: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, m * 2 * n).expect("alloc y");
     // Strided view: row_stride = 2*N, col_stride = 2. Writes columns
     // 0, 2, 4, …, 2*N-2 of the underlying buffer.
     let stride_y_strided = [(2 * n) as i64, 2i64];
@@ -182,7 +197,11 @@ fn powi_strided_fw_f32_strided_output() {
     let plan = UnaryParamPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f32, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: stride_x_contig },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: stride_x_contig,
+        },
         y: TensorMut {
             data: dev_y_big.as_slice_mut(),
             shape,
@@ -226,8 +245,7 @@ fn powi_strided_fw_f16_transposed() {
         .map(|&v| f16::from_f32(v))
         .collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x_phys).expect("upload x");
-    let mut dev_y: DeviceBuffer<f16> =
-        DeviceBuffer::zeros(&ctx, m * n).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, m * n).expect("alloc y");
     let logical_shape = [N_DIM, M];
     let stride_x_t = [1i64, N_DIM as i64];
     let stride_y_contig = contiguous_stride(logical_shape);
@@ -240,7 +258,11 @@ fn powi_strided_fw_f16_transposed() {
     let plan = UnaryParamPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape: logical_shape, stride: stride_x_t },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: logical_shape,
+            stride: stride_x_t,
+        },
         y: TensorMut {
             data: dev_y.as_slice_mut(),
             shape: logical_shape,
@@ -281,8 +303,7 @@ fn powi_strided_fw_bf16_transposed() {
         .map(|&v| bf16::from_f32(v))
         .collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x_phys).expect("upload x");
-    let mut dev_y: DeviceBuffer<bf16> =
-        DeviceBuffer::zeros(&ctx, m * n).expect("alloc y");
+    let mut dev_y: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, m * n).expect("alloc y");
     let logical_shape = [N_DIM, M];
     let stride_x_t = [1i64, N_DIM as i64];
     let stride_y_contig = contiguous_stride(logical_shape);
@@ -295,7 +316,11 @@ fn powi_strided_fw_bf16_transposed() {
     let plan = UnaryParamPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<bf16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape: logical_shape, stride: stride_x_t },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: logical_shape,
+            stride: stride_x_t,
+        },
         y: TensorMut {
             data: dev_y.as_slice_mut(),
             shape: logical_shape,
@@ -338,8 +363,7 @@ fn powi_strided_fw_f64_transposed() {
         })
         .collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x_phys).expect("upload x");
-    let mut dev_y: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, m * n).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, m * n).expect("alloc y");
     let logical_shape = [N_DIM, M];
     let stride_x_t = [1i64, N_DIM as i64];
     let stride_y_contig = contiguous_stride(logical_shape);
@@ -352,7 +376,11 @@ fn powi_strided_fw_f64_transposed() {
     let plan = UnaryParamPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamArgs::<f64, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape: logical_shape, stride: stride_x_t },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: logical_shape,
+            stride: stride_x_t,
+        },
         y: TensorMut {
             data: dev_y.as_slice_mut(),
             shape: logical_shape,
@@ -409,9 +437,21 @@ fn powi_strided_bw_f32_contig_fastpath() {
     let plan = UnaryParamBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f32, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        dx: TensorMut {
+            data: dev_dx.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -463,8 +503,16 @@ fn powi_strided_bw_f32_transposed() {
     let plan = UnaryParamBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = UnaryParamBackwardArgs::<f32, 2> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape: logical_shape, stride: stride_t },
-        x: TensorRef { data: dev_x.as_slice(), shape: logical_shape, stride: stride_t },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape: logical_shape,
+            stride: stride_t,
+        },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape: logical_shape,
+            stride: stride_t,
+        },
         dx: TensorMut {
             data: dev_dx.as_slice_mut(),
             shape: logical_shape,

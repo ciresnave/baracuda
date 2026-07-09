@@ -8,10 +8,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test gather_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GatherArgs, GatherDescriptor, GatherPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, GatherArgs, GatherDescriptor, GatherPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -31,7 +31,7 @@ fn gather_f32_2d_dim1() {
     let src_numel: usize = 4 * 5;
     let out_numel: usize = 4 * 3;
     let host_src: Vec<f32> = (0..src_numel).map(|i| i as f32 * 0.5 + 1.0).collect();
-    let host_idx: Vec<i32> = vec![0, 4, 2,  1, 0, 3,  2, 4, 4,  3, 3, 1];
+    let host_idx: Vec<i32> = vec![0, 4, 2, 1, 0, 3, 2, 4, 4, 3, 3, 1];
     // CPU reference: out[i, j] = src[i, idx[i, j]]
     let mut expected = vec![0f32; out_numel];
     for i in 0..4usize {
@@ -42,8 +42,7 @@ fn gather_f32_2d_dim1() {
     }
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("up src");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
+    let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
 
     let desc = GatherDescriptor {
         out_shape,
@@ -51,8 +50,8 @@ fn gather_f32_2d_dim1() {
         src_dim_size: 5,
         element: ElementKind::F32,
     };
-    let plan = GatherPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        GatherPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GatherArgs::<f32, 2> {
         src: TensorRef {
             data: dev_src.as_slice(),
@@ -76,7 +75,11 @@ fn gather_f32_2d_dim1() {
     let mut got = vec![0f32; out_numel];
     dev_out.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "gather f32 mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "gather f32 mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -103,8 +106,7 @@ fn gather_f64_3d_dim0() {
     }
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("up src");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
+    let mut dev_out: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
 
     let desc = GatherDescriptor {
         out_shape,
@@ -112,8 +114,8 @@ fn gather_f64_3d_dim0() {
         src_dim_size: 6,
         element: ElementKind::F64,
     };
-    let plan = GatherPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        GatherPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GatherArgs::<f64, 3> {
         src: TensorRef {
             data: dev_src.as_slice(),
@@ -137,7 +139,11 @@ fn gather_f64_3d_dim0() {
     let mut got = vec![0f64; out_numel];
     dev_out.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "gather f64 mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "gather f64 mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }
 
@@ -149,8 +155,10 @@ fn gather_i32_2d_dim1() {
     let out_shape = [3i32, 5];
     let src_numel: usize = 3 * 4;
     let out_numel: usize = 3 * 5;
-    let host_src: Vec<i32> = (0..src_numel as i32).map(|i| i.wrapping_mul(31) - 100).collect();
-    let host_idx: Vec<i32> = vec![0, 1, 2, 3, 0,  3, 2, 1, 0, 2,  1, 1, 1, 2, 3];
+    let host_src: Vec<i32> = (0..src_numel as i32)
+        .map(|i| i.wrapping_mul(31) - 100)
+        .collect();
+    let host_idx: Vec<i32> = vec![0, 1, 2, 3, 0, 3, 2, 1, 0, 2, 1, 1, 1, 2, 3];
     let mut expected = vec![0i32; out_numel];
     for i in 0..3usize {
         for j in 0..5usize {
@@ -160,8 +168,7 @@ fn gather_i32_2d_dim1() {
     }
     let dev_src = DeviceBuffer::from_slice(&ctx, &host_src).expect("up src");
     let dev_idx = DeviceBuffer::from_slice(&ctx, &host_idx).expect("up idx");
-    let mut dev_out: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
+    let mut dev_out: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, out_numel).expect("alloc out");
 
     let desc = GatherDescriptor {
         out_shape,
@@ -169,8 +176,8 @@ fn gather_i32_2d_dim1() {
         src_dim_size: 4,
         element: ElementKind::I32,
     };
-    let plan = GatherPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        GatherPlan::<i32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GatherArgs::<i32, 2> {
         src: TensorRef {
             data: dev_src.as_slice(),

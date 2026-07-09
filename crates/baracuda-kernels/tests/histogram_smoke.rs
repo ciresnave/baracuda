@@ -1,10 +1,11 @@
 //! Real-GPU smoke test for `HistogramPlan<T>` + `BincountPlan<T>`
 //! (Phase 9 Category O). `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BincountArgs, BincountDescriptor, BincountPlan, ElementKind, HistogramArgs,
+    BincountArgs, BincountDescriptor, BincountPlan, ElementKind, HistogramArgs,
     HistogramDescriptor, HistogramPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

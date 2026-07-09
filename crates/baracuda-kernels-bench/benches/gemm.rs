@@ -10,12 +10,12 @@
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
     ElementKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, IntGemmArgs, IntGemmDescriptor,
-    IntGemmPlan, LayoutSku, MatrixMut, MatrixRef, PlanPreference, Workspace, S8,
+    IntGemmPlan, LayoutSku, MatrixMut, MatrixRef, PlanPreference, S8, Workspace,
 };
 use baracuda_kernels_bench::{
-    gemm_flops, setup_device, time_with_events, warmup, GEMM_KN_SWEEP, GEMM_M_SWEEP,
+    GEMM_KN_SWEEP, GEMM_M_SWEEP, gemm_flops, setup_device, time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use half::{bf16, f16};
 
 #[cfg(feature = "sm89")]
@@ -111,7 +111,8 @@ fn bench_float_gemm<T>(
                         alpha,
                         beta,
                     };
-                    plan.run(&stream, Workspace::None, args).expect("gemm warmup run");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("gemm warmup run");
                 });
 
                 bb.iter_custom(|iters| {
@@ -226,7 +227,8 @@ fn bench_int8_gemm(c: &mut Criterion) {
                         alpha: 1.0,
                         beta: 0.0,
                     };
-                    plan.run(&stream, workspace, args).expect("int8 gemm warmup");
+                    plan.run(&stream, workspace, args)
+                        .expect("int8 gemm warmup");
                 });
 
                 bb.iter_custom(|iters| {
@@ -293,11 +295,11 @@ fn bench_fp8_gemm(c: &mut Criterion) {
                 Ok(b) => b,
                 Err(_) => continue,
             };
-            let mut dev_d: DeviceBuffer<Fp8E4M3> =
-                match DeviceBuffer::zeros(&ctx, (m * n) as usize) {
-                    Ok(b) => b,
-                    Err(_) => continue,
-                };
+            let mut dev_d: DeviceBuffer<Fp8E4M3> = match DeviceBuffer::zeros(&ctx, (m * n) as usize)
+            {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
 
             let desc = Fp8GemmDescriptor {
                 m,
@@ -339,7 +341,8 @@ fn bench_fp8_gemm(c: &mut Criterion) {
                         alpha: 1.0,
                         beta: 0.0,
                     };
-                    plan.run(&stream, Workspace::None, args).expect("fp8 gemm warmup");
+                    plan.run(&stream, Workspace::None, args)
+                        .expect("fp8 gemm warmup");
                 });
 
                 bb.iter_custom(|iters| {
@@ -368,7 +371,8 @@ fn bench_fp8_gemm(c: &mut Criterion) {
                             alpha: 1.0,
                             beta: 0.0,
                         };
-                        plan.run(&stream, Workspace::None, args).expect("fp8 gemm run");
+                        plan.run(&stream, Workspace::None, args)
+                            .expect("fp8 gemm run");
                     })
                 });
             });

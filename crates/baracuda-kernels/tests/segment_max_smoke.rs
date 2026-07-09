@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `SegmentMaxPlan<T>` (Phase 7 7.6).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SegmentMaxArgs, SegmentMaxDescriptor,
-    SegmentMaxPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SegmentMaxArgs, SegmentMaxDescriptor, SegmentMaxPlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -24,9 +24,9 @@ fn segment_max_f32_basic() {
     let ns: i32 = 3;
     let seg: Vec<i32> = vec![0, 0, 0, 1, 1, 2, 2];
     let input: Vec<f32> = vec![
-        0.0, 5.0, 3.0, -1.0, 1.0, 4.0,    // seg 0
-        7.0, 2.0, 6.0, 8.0,                // seg 1
-        -2.0, 9.0, 0.5, 0.0,                // seg 2
+        0.0, 5.0, 3.0, -1.0, 1.0, 4.0, // seg 0
+        7.0, 2.0, 6.0, 8.0, // seg 1
+        -2.0, 9.0, 0.5, 0.0, // seg 2
     ];
     let mut expected = vec![f32::NEG_INFINITY; (ns * d) as usize];
     for row in 0..n as usize {

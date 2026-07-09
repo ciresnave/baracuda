@@ -158,7 +158,11 @@ impl<T: Element, const N: usize> PReluBackwardPlan<T, N> {
                 "baracuda-kernels::PReluBackwardPlan: tensor shape mismatch",
             ));
         }
-        let expected_weight = if self.scalar_weight { 1 } else { self.channel_extent };
+        let expected_weight = if self.scalar_weight {
+            1
+        } else {
+            self.channel_extent
+        };
         if args.weight.shape[0] != expected_weight || args.dweight.shape[0] != expected_weight {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PReluBackwardPlan: weight shape mismatch",

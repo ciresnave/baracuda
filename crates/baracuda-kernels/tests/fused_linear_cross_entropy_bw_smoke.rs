@@ -5,12 +5,12 @@
 //! that the gradients are within the analytical expectation for the
 //! combined Linear + CrossEntropy operation.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FusedLinearCrossEntropyArgs,
-    FusedLinearCrossEntropyBackwardArgs, FusedLinearCrossEntropyBackwardDescriptor,
-    FusedLinearCrossEntropyBackwardPlan, FusedLinearCrossEntropyDescriptor,
-    FusedLinearCrossEntropyPlan, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, FusedLinearCrossEntropyArgs, FusedLinearCrossEntropyBackwardArgs,
+    FusedLinearCrossEntropyBackwardDescriptor, FusedLinearCrossEntropyBackwardPlan,
+    FusedLinearCrossEntropyDescriptor, FusedLinearCrossEntropyPlan, LossReduction, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -59,11 +59,7 @@ fn host_loss_mean(
         total += -(logits[t as usize] - log_z);
         n += 1;
     }
-    if n == 0 {
-        0.0
-    } else {
-        total / (n as f64)
-    }
+    if n == 0 { 0.0 } else { total / (n as f64) }
 }
 
 #[test]
@@ -89,12 +85,16 @@ fn flce_bw_f32_grad_input_finite_diff() {
     let dev_weight = DeviceBuffer::from_slice(&ctx, &host_weight).unwrap();
     let dev_target = DeviceBuffer::from_slice(&ctx, &host_target).unwrap();
     let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).unwrap();
-    let mut dev_grad_input: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (bt * h) as usize).unwrap();
-    let mut dev_grad_weight: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (v * h) as usize).unwrap();
+    let mut dev_grad_input: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (bt * h) as usize).unwrap();
+    let mut dev_grad_weight: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (v * h) as usize).unwrap();
 
     let desc = FusedLinearCrossEntropyDescriptor::new(bt, h, v, ElementKind::F32)
         .with_reduction(LossReduction::Mean);
-    let plan = FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let plan =
+        FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
@@ -136,25 +136,31 @@ fn flce_bw_f32_grad_input_finite_diff() {
 
     // BW pass with dy=1.0 (the typical "CE is the last layer" case).
     let bw_desc = FusedLinearCrossEntropyBackwardDescriptor::new(bt, h, v, ElementKind::F32);
-    let bw_plan = FusedLinearCrossEntropyBackwardPlan::<f32>::select(&stream, &bw_desc, PlanPreference::default()).unwrap();
-    bw_plan.run(
+    let bw_plan = FusedLinearCrossEntropyBackwardPlan::<f32>::select(
         &stream,
-        Workspace::None,
-        FusedLinearCrossEntropyBackwardArgs {
-            dy_scalar: 1.0,
-            grad_input: Some(TensorMut {
-                data: dev_grad_input.as_slice_mut(),
-                shape: [bt, h],
-                stride: contiguous_stride([bt, h]),
-            }),
-            grad_weight: Some(TensorMut {
-                data: dev_grad_weight.as_slice_mut(),
-                shape: [v, h],
-                stride: contiguous_stride([v, h]),
-            }),
-        },
+        &bw_desc,
+        PlanPreference::default(),
     )
     .unwrap();
+    bw_plan
+        .run(
+            &stream,
+            Workspace::None,
+            FusedLinearCrossEntropyBackwardArgs {
+                dy_scalar: 1.0,
+                grad_input: Some(TensorMut {
+                    data: dev_grad_input.as_slice_mut(),
+                    shape: [bt, h],
+                    stride: contiguous_stride([bt, h]),
+                }),
+                grad_weight: Some(TensorMut {
+                    data: dev_grad_weight.as_slice_mut(),
+                    shape: [v, h],
+                    stride: contiguous_stride([v, h]),
+                }),
+            },
+        )
+        .unwrap();
     stream.synchronize().unwrap();
 
     let mut got_grad_input = vec![0.0f32; (bt * h) as usize];
@@ -170,9 +176,7 @@ fn flce_bw_f32_grad_input_finite_diff() {
     let eps = 1e-3f64;
 
     // Sample 6 random-ish (i, k) positions for grad_input.
-    let input_samples: [(usize, usize); 6] = [
-        (0, 0), (0, 5), (1, 2), (2, 4), (3, 0), (3, 7),
-    ];
+    let input_samples: [(usize, usize); 6] = [(0, 0), (0, 5), (1, 2), (2, 4), (3, 0), (3, 7)];
     for &(i, k) in input_samples.iter() {
         let idx = i * (h as usize) + k;
         let mut input_p = host_input_f64.clone();
@@ -180,12 +184,20 @@ fn flce_bw_f32_grad_input_finite_diff() {
         input_p[idx] += eps;
         input_m[idx] -= eps;
         let loss_p = host_loss_mean(
-            &input_p, &host_weight_f64, &host_target,
-            bt as usize, h as usize, v as usize,
+            &input_p,
+            &host_weight_f64,
+            &host_target,
+            bt as usize,
+            h as usize,
+            v as usize,
         );
         let loss_m = host_loss_mean(
-            &input_m, &host_weight_f64, &host_target,
-            bt as usize, h as usize, v as usize,
+            &input_m,
+            &host_weight_f64,
+            &host_target,
+            bt as usize,
+            h as usize,
+            v as usize,
         );
         let fd_grad = (loss_p - loss_m) / (2.0 * eps);
         let got = got_grad_input[idx] as f64;
@@ -193,14 +205,16 @@ fn flce_bw_f32_grad_input_finite_diff() {
         assert!(
             (got - fd_grad).abs() <= tol,
             "grad_input[{}, {}]: got={} fd={} tol={}",
-            i, k, got, fd_grad, tol
+            i,
+            k,
+            got,
+            fd_grad,
+            tol
         );
     }
 
     // Sample 6 (j, k) positions for grad_weight.
-    let weight_samples: [(usize, usize); 6] = [
-        (1, 0), (3, 4), (5, 2), (7, 7), (9, 1), (11, 5),
-    ];
+    let weight_samples: [(usize, usize); 6] = [(1, 0), (3, 4), (5, 2), (7, 7), (9, 1), (11, 5)];
     for &(j, k) in weight_samples.iter() {
         let idx = j * (h as usize) + k;
         let mut weight_p = host_weight_f64.clone();
@@ -208,12 +222,20 @@ fn flce_bw_f32_grad_input_finite_diff() {
         weight_p[idx] += eps;
         weight_m[idx] -= eps;
         let loss_p = host_loss_mean(
-            &host_input_f64, &weight_p, &host_target,
-            bt as usize, h as usize, v as usize,
+            &host_input_f64,
+            &weight_p,
+            &host_target,
+            bt as usize,
+            h as usize,
+            v as usize,
         );
         let loss_m = host_loss_mean(
-            &host_input_f64, &weight_m, &host_target,
-            bt as usize, h as usize, v as usize,
+            &host_input_f64,
+            &weight_m,
+            &host_target,
+            bt as usize,
+            h as usize,
+            v as usize,
         );
         let fd_grad = (loss_p - loss_m) / (2.0 * eps);
         let got = got_grad_weight[idx] as f64;
@@ -221,7 +243,11 @@ fn flce_bw_f32_grad_input_finite_diff() {
         assert!(
             (got - fd_grad).abs() <= tol,
             "grad_weight[{}, {}]: got={} fd={} tol={}",
-            j, k, got, fd_grad, tol
+            j,
+            k,
+            got,
+            fd_grad,
+            tol
         );
     }
 }
@@ -252,12 +278,16 @@ fn flce_bw_f32_dy_scalar_2_doubles_gradients() {
 
     // Pass 1: FW, capture grad_input1.
     let mut dev_out_1: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).unwrap();
-    let mut dev_grad_input_1: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (bt * h) as usize).unwrap();
-    let mut dev_grad_weight_1: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (v * h) as usize).unwrap();
+    let mut dev_grad_input_1: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (bt * h) as usize).unwrap();
+    let mut dev_grad_weight_1: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (v * h) as usize).unwrap();
 
     let desc = FusedLinearCrossEntropyDescriptor::new(bt, h, v, ElementKind::F32)
         .with_reduction(LossReduction::Mean);
-    let plan = FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let plan =
+        FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
     plan.run(
         &stream,
         Workspace::None,
@@ -304,66 +334,77 @@ fn flce_bw_f32_dy_scalar_2_doubles_gradients() {
 
     // Pass 2: same FW, then BW with dy=2.0.
     let mut dev_out_2: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).unwrap();
-    let mut dev_grad_input_2: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (bt * h) as usize).unwrap();
-    let mut dev_grad_weight_2: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (v * h) as usize).unwrap();
-    let plan2 = FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default()).unwrap();
-    plan2.run(
-        &stream,
-        Workspace::None,
-        FusedLinearCrossEntropyArgs {
-            input: TensorRef {
-                data: dev_input.as_slice(),
-                shape: [bt, h],
-                stride: contiguous_stride([bt, h]),
+    let mut dev_grad_input_2: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (bt * h) as usize).unwrap();
+    let mut dev_grad_weight_2: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (v * h) as usize).unwrap();
+    let plan2 =
+        FusedLinearCrossEntropyPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .unwrap();
+    plan2
+        .run(
+            &stream,
+            Workspace::None,
+            FusedLinearCrossEntropyArgs {
+                input: TensorRef {
+                    data: dev_input.as_slice(),
+                    shape: [bt, h],
+                    stride: contiguous_stride([bt, h]),
+                },
+                weight: TensorRef {
+                    data: dev_weight.as_slice(),
+                    shape: [v, h],
+                    stride: contiguous_stride([v, h]),
+                },
+                target: TensorRef {
+                    data: dev_target.as_slice(),
+                    shape: [bt],
+                    stride: contiguous_stride([bt]),
+                },
+                out: TensorMut {
+                    data: dev_out_2.as_slice_mut(),
+                    shape: [1],
+                    stride: [1],
+                },
+                grad_input: Some(TensorMut {
+                    data: dev_grad_input_2.as_slice_mut(),
+                    shape: [bt, h],
+                    stride: contiguous_stride([bt, h]),
+                }),
+                grad_weight: Some(TensorMut {
+                    data: dev_grad_weight_2.as_slice_mut(),
+                    shape: [v, h],
+                    stride: contiguous_stride([v, h]),
+                }),
             },
-            weight: TensorRef {
-                data: dev_weight.as_slice(),
-                shape: [v, h],
-                stride: contiguous_stride([v, h]),
-            },
-            target: TensorRef {
-                data: dev_target.as_slice(),
-                shape: [bt],
-                stride: contiguous_stride([bt]),
-            },
-            out: TensorMut {
-                data: dev_out_2.as_slice_mut(),
-                shape: [1],
-                stride: [1],
-            },
-            grad_input: Some(TensorMut {
-                data: dev_grad_input_2.as_slice_mut(),
-                shape: [bt, h],
-                stride: contiguous_stride([bt, h]),
-            }),
-            grad_weight: Some(TensorMut {
-                data: dev_grad_weight_2.as_slice_mut(),
-                shape: [v, h],
-                stride: contiguous_stride([v, h]),
-            }),
-        },
-    )
-    .unwrap();
+        )
+        .unwrap();
     let bw_desc = FusedLinearCrossEntropyBackwardDescriptor::new(bt, h, v, ElementKind::F32);
-    let bw_plan = FusedLinearCrossEntropyBackwardPlan::<f32>::select(&stream, &bw_desc, PlanPreference::default()).unwrap();
-    bw_plan.run(
+    let bw_plan = FusedLinearCrossEntropyBackwardPlan::<f32>::select(
         &stream,
-        Workspace::None,
-        FusedLinearCrossEntropyBackwardArgs {
-            dy_scalar: 2.0,
-            grad_input: Some(TensorMut {
-                data: dev_grad_input_2.as_slice_mut(),
-                shape: [bt, h],
-                stride: contiguous_stride([bt, h]),
-            }),
-            grad_weight: Some(TensorMut {
-                data: dev_grad_weight_2.as_slice_mut(),
-                shape: [v, h],
-                stride: contiguous_stride([v, h]),
-            }),
-        },
+        &bw_desc,
+        PlanPreference::default(),
     )
     .unwrap();
+    bw_plan
+        .run(
+            &stream,
+            Workspace::None,
+            FusedLinearCrossEntropyBackwardArgs {
+                dy_scalar: 2.0,
+                grad_input: Some(TensorMut {
+                    data: dev_grad_input_2.as_slice_mut(),
+                    shape: [bt, h],
+                    stride: contiguous_stride([bt, h]),
+                }),
+                grad_weight: Some(TensorMut {
+                    data: dev_grad_weight_2.as_slice_mut(),
+                    shape: [v, h],
+                    stride: contiguous_stride([v, h]),
+                }),
+            },
+        )
+        .unwrap();
     stream.synchronize().unwrap();
 
     let mut grad_input_2 = vec![0.0f32; (bt * h) as usize];
@@ -378,7 +419,9 @@ fn flce_bw_f32_dy_scalar_2_doubles_gradients() {
         assert!(
             (grad_input_2[i] - want).abs() <= tol,
             "grad_input scaling [{}]: got={} want={}",
-            i, grad_input_2[i], want
+            i,
+            grad_input_2[i],
+            want
         );
     }
     for j in 0..grad_weight_1.len() {
@@ -387,7 +430,9 @@ fn flce_bw_f32_dy_scalar_2_doubles_gradients() {
         assert!(
             (grad_weight_2[j] - want).abs() <= tol,
             "grad_weight scaling [{}]: got={} want={}",
-            j, grad_weight_2[j], want
+            j,
+            grad_weight_2[j],
+            want
         );
     }
 }

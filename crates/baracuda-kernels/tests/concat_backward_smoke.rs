@@ -7,10 +7,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test concat_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -206,10 +206,18 @@ fn concat_backward_f32_3d_dim1() {
     dev_da.copy_to_host(&mut got_da).expect("download da");
     dev_db.copy_to_host(&mut got_db).expect("download db");
     for (i, (g, e)) in got_da.iter().zip(expected_da.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "f32 concat BW 3d da mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "f32 concat BW 3d da mismatch @ {i}"
+        );
     }
     for (i, (g, e)) in got_db.iter().zip(expected_db.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "f32 concat BW 3d db mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "f32 concat BW 3d db mismatch @ {i}"
+        );
     }
 }
 
@@ -480,7 +488,11 @@ fn concat_backward_f32_split_zero_all_to_b() {
     let mut got_db = vec![0f32; db_numel];
     dev_db.copy_to_host(&mut got_db).expect("download db");
     for (i, (g, e)) in got_db.iter().zip(host_dy.iter()).enumerate() {
-        assert_eq!(g.to_bits(), e.to_bits(), "f32 concat BW split=0 db mismatch @ {i}");
+        assert_eq!(
+            g.to_bits(),
+            e.to_bits(),
+            "f32 concat BW split=0 db mismatch @ {i}"
+        );
     }
 }
 

@@ -16,11 +16,11 @@
 
 #![cfg(feature = "sm89")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan,
-    FlashSdpaSm89Args, FlashSdpaSm89Descriptor, FlashSdpaSm89Plan, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, FlashSdpaSm89Args,
+    FlashSdpaSm89Descriptor, FlashSdpaSm89Plan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -99,17 +99,7 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
         DeviceBuffer::zeros(&ctx, (B * H * Q * DV) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
-    let ref_desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        DK,
-        DV,
-        scale,
-        false,
-        ElementKind::F16,
-    );
+    let ref_desc = FlashSdpaDescriptor::new(B, H, Q, K, DK, DV, scale, false, ElementKind::F16);
     let ref_plan = FlashSdpaPlan::<f16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -117,9 +107,21 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
             &stream,
             Workspace::None,
             FlashSdpaArgs {
-                q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: contiguous_stride(sq),
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk,
+                    stride: contiguous_stride(sk),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv,
+                    stride: contiguous_stride(sv),
+                },
                 y: TensorMut {
                     data: dy_ref.as_slice_mut(),
                     shape: sy,
@@ -131,7 +133,7 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("ref run");
@@ -159,9 +161,21 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
         &stream,
         Workspace::None,
         FlashSdpaSm89Args {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
             y: TensorMut {
                 data: dy_sm89.as_slice_mut(),
                 shape: sy,
@@ -258,17 +272,7 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
         DeviceBuffer::zeros(&ctx, (B * H * Q * DV) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
-    let ref_desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        DK,
-        DV,
-        scale,
-        false,
-        ElementKind::F16,
-    );
+    let ref_desc = FlashSdpaDescriptor::new(B, H, Q, K, DK, DV, scale, false, ElementKind::F16);
     let ref_plan = FlashSdpaPlan::<f16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -281,8 +285,16 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
                     shape: sq,
                     stride: contiguous_stride(sq),
                 },
-                k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk,
+                    stride: contiguous_stride(sk),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv,
+                    stride: contiguous_stride(sv),
+                },
                 y: TensorMut {
                     data: dy_ref.as_slice_mut(),
                     shape: sy,
@@ -294,7 +306,7 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("ref run");
@@ -327,8 +339,16 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
                 shape: sq,
                 stride: stride_q,
             },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
             y: TensorMut {
                 data: dy_sm89.as_slice_mut(),
                 shape: sy,
@@ -429,17 +449,7 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
         DeviceBuffer::zeros(&ctx, (B * H * Q * DV) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
-    let ref_desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        DK,
-        DV,
-        scale,
-        false,
-        ElementKind::F16,
-    );
+    let ref_desc = FlashSdpaDescriptor::new(B, H, Q, K, DK, DV, scale, false, ElementKind::F16);
     let ref_plan = FlashSdpaPlan::<f16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -473,7 +483,7 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("ref run");
@@ -490,18 +500,8 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
     //   stride[h] = 0     ← broadcast
     //   stride[k] = DK
     //   stride[d] = 1
-    let stride_k: [i64; 4] = [
-        (K as i64) * (DK as i64),
-        0,
-        DK as i64,
-        1,
-    ];
-    let stride_v: [i64; 4] = [
-        (K as i64) * (DV as i64),
-        0,
-        DV as i64,
-        1,
-    ];
+    let stride_k: [i64; 4] = [(K as i64) * (DK as i64), 0, DK as i64, 1];
+    let stride_v: [i64; 4] = [(K as i64) * (DV as i64), 0, DV as i64, 1];
 
     let desc = FlashSdpaSm89Descriptor {
         batch_size: B,
@@ -520,7 +520,11 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
         &stream,
         Workspace::None,
         FlashSdpaSm89Args {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
             k: TensorRef {
                 data: dk_one.as_slice(),
                 shape: sk,
@@ -617,17 +621,7 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
         DeviceBuffer::zeros(&ctx, (B * H * Q * DV) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
-    let ref_desc = FlashSdpaDescriptor::new(
-        B,
-        H,
-        Q,
-        K,
-        DK,
-        DV,
-        scale,
-        true,
-        ElementKind::Bf16,
-    );
+    let ref_desc = FlashSdpaDescriptor::new(B, H, Q, K, DK, DV, scale, true, ElementKind::Bf16);
     let ref_plan = FlashSdpaPlan::<bf16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -640,8 +634,16 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
                     shape: sq,
                     stride: contiguous_stride(sq),
                 },
-                k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk,
+                    stride: contiguous_stride(sk),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv,
+                    stride: contiguous_stride(sv),
+                },
                 y: TensorMut {
                     data: dy_ref.as_slice_mut(),
                     shape: sy,
@@ -653,7 +655,7 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
-                            alibi_slopes: None,
+                alibi_slopes: None,
             },
         )
         .expect("ref run");
@@ -685,8 +687,16 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
                 shape: sq,
                 stride: stride_q,
             },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
             y: TensorMut {
                 data: dy_sm89.as_slice_mut(),
                 shape: sy,
@@ -777,8 +787,16 @@ fn flash_sdpa_sm89_strided_rejects_non_unit_head_dim_stride() {
                 shape: sq,
                 stride: bad_stride_q,
             },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
             y: TensorMut {
                 data: dy.as_slice_mut(),
                 shape: sy,

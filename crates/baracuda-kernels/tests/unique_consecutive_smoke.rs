@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `UniqueConsecutivePlan<T>` (Phase 9
 //! Category O). `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef,
-    UniqueConsecutiveArgs, UniqueConsecutiveDescriptor, UniqueConsecutivePlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UniqueConsecutiveArgs,
+    UniqueConsecutiveDescriptor, UniqueConsecutivePlan, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -29,8 +29,7 @@ fn unique_consecutive_i32_basic() {
         DeviceBuffer::zeros(&ctx, (batch * max_unique) as usize).expect("alloc v");
     let mut dev_c: DeviceBuffer<i32> =
         DeviceBuffer::zeros(&ctx, (batch * max_unique) as usize).expect("alloc c");
-    let mut dev_n: DeviceBuffer<i32> =
-        DeviceBuffer::zeros(&ctx, batch as usize).expect("alloc n");
+    let mut dev_n: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, batch as usize).expect("alloc n");
 
     let desc = UniqueConsecutiveDescriptor {
         batch,

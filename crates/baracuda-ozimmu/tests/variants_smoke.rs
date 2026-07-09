@@ -39,13 +39,19 @@ fn run_variant_dgemm(
 
     unsafe {
         h.dgemm_with_variant(
-            Op::N, Op::N,
-            m, m, m,
+            Op::N,
+            Op::N,
+            m,
+            m,
+            m,
             1.0,
-            a.as_raw().0 as *const f64, m,
-            b.as_raw().0 as *const f64, m,
+            a.as_raw().0 as *const f64,
+            m,
+            b.as_raw().0 as *const f64,
+            m,
             0.0,
-            c.as_raw().0 as *mut f64, m,
+            c.as_raw().0 as *mut f64,
+            m,
             OzakiSlices::S8,
             variant,
         )
@@ -79,9 +85,12 @@ fn variants_dispatch_and_produce_nonzero_output() {
         let nonfinite = out.iter().filter(|v| !v.is_finite()).count();
         let nz_finite = out.iter().filter(|v| v.is_finite() && **v != 0.0).count();
         assert_eq!(
-            nonfinite, 0,
+            nonfinite,
+            0,
             "variant {:?} produced {} non-finite cells (out of {})",
-            variant, nonfinite, out.len(),
+            variant,
+            nonfinite,
+            out.len(),
         );
         assert!(
             nz_finite > 0,

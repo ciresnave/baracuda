@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `SearchsortedPlan<T>` (Phase 9 Category O).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SearchsortedArgs, SearchsortedDescriptor,
-    SearchsortedPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SearchsortedArgs, SearchsortedDescriptor, SearchsortedPlan,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -32,8 +32,8 @@ fn searchsorted_f32_lower_bound() {
         right: false,
         element: ElementKind::F32,
     };
-    let plan = SearchsortedPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        SearchsortedPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     plan.run(
         &stream,
         Workspace::None,

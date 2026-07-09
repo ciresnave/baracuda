@@ -12,10 +12,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test unary_neg_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs,
-    UnaryDescriptor, UnaryKind, UnaryPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind,
+    UnaryPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -51,10 +51,19 @@ fn neg_f16_3d() {
     let plan = UnaryPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f16, 3>");
     let args = UnaryArgs::<f16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("neg f16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("neg f16 run");
     stream.synchronize().expect("sync");
 
     let mut host_got = vec![f16::from_f32(0.0); numel];
@@ -94,10 +103,19 @@ fn neg_bf16_3d() {
     let plan = UnaryPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<bf16, 3>");
     let args = UnaryArgs::<bf16, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("neg bf16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("neg bf16 run");
     stream.synchronize().expect("sync");
 
     let mut host_got = vec![bf16::from_f32(0.0); numel];
@@ -135,10 +153,19 @@ fn neg_f64_3d() {
     let plan = UnaryPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select UnaryPlan<f64, 3>");
     let args = UnaryArgs::<f64, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
-    plan.run(&stream, Workspace::None, args).expect("neg f64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("neg f64 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f64; numel];

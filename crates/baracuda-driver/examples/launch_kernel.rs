@@ -31,10 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     baracuda_driver::init()?;
     let device = Device::get(0)?;
     let (cc_major, cc_minor) = device.compute_capability()?;
-    println!(
-        "device 0: {} (cc {cc_major}.{cc_minor})",
-        device.name()?
-    );
+    println!("device 0: {} (cc {cc_major}.{cc_minor})", device.name()?);
 
     // Ask NVRTC to compile for this device's compute capability.
     let arch = format!("--gpu-architecture=compute_{cc_major}{cc_minor}");

@@ -8,10 +8,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test concat_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ConcatArgs, ConcatDescriptor, ConcatPlan, ElementKind, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ConcatArgs, ConcatDescriptor, ConcatPlan, ElementKind, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -98,8 +98,8 @@ fn run_case_3d(concat_dim: usize) {
         concat_dim: concat_dim as u8,
         element: ElementKind::F32,
     };
-    let plan = ConcatPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ConcatPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ConcatArgs::<f32, 3> {
         a: TensorRef {
             data: dev_a.as_slice(),
@@ -174,8 +174,8 @@ fn concat_1d() {
         concat_dim: 0,
         element: ElementKind::F32,
     };
-    let plan = ConcatPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ConcatPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ConcatArgs::<f32, 1> {
         a: TensorRef {
             data: dev_a.as_slice(),
@@ -239,8 +239,8 @@ fn concat_2d_feature_dim() {
         concat_dim: 1,
         element: ElementKind::F32,
     };
-    let plan = ConcatPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ConcatPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ConcatArgs::<f32, 2> {
         a: TensorRef {
             data: dev_a.as_slice(),

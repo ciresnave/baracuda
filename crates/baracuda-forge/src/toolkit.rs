@@ -29,9 +29,7 @@ impl CudaToolkit {
     pub fn detect() -> Result<Self> {
         let install = baracuda_build::detect_cuda();
         let nvcc_path = baracuda_build::find_nvcc().ok_or_else(|| {
-            Error::NvccNotFound(
-                "No nvcc found via $NVCC, CUDA install dirs, or $PATH".to_string(),
-            )
+            Error::NvccNotFound("No nvcc found via $NVCC, CUDA install dirs, or $PATH".to_string())
         })?;
 
         if let Some(install) = install {

@@ -5,10 +5,10 @@
 //! composition of [`QuantizePerTensorPlan`] followed by
 //! [`DequantizePerTensorPlan`].
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FakeQuantizeArgs, FakeQuantizeDescriptor, FakeQuantizePlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, FakeQuantizeArgs, FakeQuantizeDescriptor, FakeQuantizePlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -52,8 +52,8 @@ fn fake_quantize_f32_matches_quant_dequant_roundtrip() {
         q_max,
         input_element: ElementKind::F32,
     };
-    let plan = FakeQuantizePlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        FakeQuantizePlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = FakeQuantizeArgs::<f32> {
         input: TensorRef {
             data: dev_x.as_slice(),

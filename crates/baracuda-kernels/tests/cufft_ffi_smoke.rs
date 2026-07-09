@@ -17,7 +17,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels_sys::{
     baracuda_kernels_fft_1d_c32_run, baracuda_kernels_fft_1d_c32_workspace_size,
     baracuda_kernels_fft_nd_c32_run, baracuda_kernels_fft_nd_c32_workspace_size,
@@ -59,9 +59,8 @@ fn fft_1d_c32_roundtrip_ffi() {
     let mut dev_back: DeviceBuffer<C32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc back");
 
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_fft_1d_c32_workspace_size(n, batch, &mut ws_bytes as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_fft_1d_c32_workspace_size(n, batch, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0, "fft_1d_c32 ws status");
     assert_eq!(ws_bytes, 0, "fft_1d_c32 ws is zero per contract");
 
@@ -100,8 +99,18 @@ fn fft_1d_c32_roundtrip_ffi() {
     dev_back.copy_to_host(&mut back_host).expect("dl back");
 
     for (a, b) in x_host.iter().zip(back_host.iter()) {
-        assert!((a.re - b.re).abs() < 1e-4, "re mismatch: {:?} vs {:?}", a, b);
-        assert!((a.im - b.im).abs() < 1e-4, "im mismatch: {:?} vs {:?}", a, b);
+        assert!(
+            (a.re - b.re).abs() < 1e-4,
+            "re mismatch: {:?} vs {:?}",
+            a,
+            b
+        );
+        assert!(
+            (a.im - b.im).abs() < 1e-4,
+            "im mismatch: {:?} vs {:?}",
+            a,
+            b
+        );
     }
 }
 
@@ -124,9 +133,8 @@ fn rfft_irfft_1d_f32_roundtrip_ffi() {
     let mut dev_back: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, n_real).expect("alloc back");
 
     let mut ws_bytes: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_rfft_1d_f32_workspace_size(n, batch, &mut ws_bytes as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_rfft_1d_f32_workspace_size(n, batch, &mut ws_bytes as *mut _) };
     assert_eq!(status, 0);
     assert_eq!(ws_bytes, 0);
 
@@ -145,9 +153,8 @@ fn rfft_irfft_1d_f32_roundtrip_ffi() {
     assert_eq!(status, 0, "rfft_1d_f32 status");
 
     let mut ws_bytes2: usize = 0;
-    let status = unsafe {
-        baracuda_kernels_irfft_1d_f32_workspace_size(n, batch, &mut ws_bytes2 as *mut _)
-    };
+    let status =
+        unsafe { baracuda_kernels_irfft_1d_f32_workspace_size(n, batch, &mut ws_bytes2 as *mut _) };
     assert_eq!(status, 0);
 
     // C2R inverse with 1/n normalization.
@@ -241,8 +248,18 @@ fn fft_nd_c32_2d_roundtrip_ffi() {
     dev_back.copy_to_host(&mut back_host).expect("dl back");
 
     for (a, b) in x_host.iter().zip(back_host.iter()) {
-        assert!((a.re - b.re).abs() < 1e-4, "re mismatch: {:?} vs {:?}", a, b);
-        assert!((a.im - b.im).abs() < 1e-4, "im mismatch: {:?} vs {:?}", a, b);
+        assert!(
+            (a.re - b.re).abs() < 1e-4,
+            "re mismatch: {:?} vs {:?}",
+            a,
+            b
+        );
+        assert!(
+            (a.im - b.im).abs() < 1e-4,
+            "im mismatch: {:?} vs {:?}",
+            a,
+            b
+        );
     }
 }
 

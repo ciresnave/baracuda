@@ -22,7 +22,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 fn setup() -> (Context, Stream) {
@@ -117,14 +117,17 @@ fn layer_norm_f32_inplace_matches_non_aliased() {
     assert_eq!(status, 0, "aliased (in-place) run");
     stream.synchronize().expect("sync aliased");
     let mut aliased_out = vec![0_f32; numel];
-    dev_inplace.copy_to_host(&mut aliased_out).expect("dl aliased");
+    dev_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("dl aliased");
 
     for i in 0..numel {
         assert_eq!(
             aliased_out[i].to_bits(),
             ref_out[i].to_bits(),
             "f32 in-place LayerNorm @ {i}: aliased={} non-aliased={}",
-            aliased_out[i], ref_out[i]
+            aliased_out[i],
+            ref_out[i]
         );
     }
 }
@@ -332,16 +335,23 @@ fn layer_norm_f64_inplace_matches_non_aliased() {
     let mut dev_inv_std_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, outer).expect("inv_std");
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_layer_norm_f64_run(
-            eps, numel as i64, 2,
+            eps,
+            numel as i64,
+            2,
             shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_save.as_ptr(),
-            0b10, inner as i32,
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_save.as_ptr(),
+            0b10,
+            inner as i32,
             dev_x_ref.as_slice().as_raw().0 as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_mean_ref.as_slice_mut().as_raw().0 as *mut c_void,
             dev_inv_std_ref.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -352,20 +362,28 @@ fn layer_norm_f64_inplace_matches_non_aliased() {
 
     let mut dev_inplace = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
     let mut dev_mean_inplace: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, outer).expect("mean");
-    let mut dev_inv_std_inplace: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, outer).expect("inv_std");
+    let mut dev_inv_std_inplace: DeviceBuffer<f64> =
+        DeviceBuffer::zeros(&ctx, outer).expect("inv_std");
     let p = dev_inplace.as_slice_mut().as_raw().0;
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_layer_norm_f64_run(
-            eps, numel as i64, 2,
+            eps,
+            numel as i64,
+            2,
             shape.as_ptr(),
-            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_save.as_ptr(),
-            0b10, inner as i32,
+            stride_contig.as_ptr(),
+            stride_contig.as_ptr(),
+            stride_save.as_ptr(),
+            0b10,
+            inner as i32,
             p as *const c_void,
-            core::ptr::null(), core::ptr::null(),
+            core::ptr::null(),
+            core::ptr::null(),
             p as *mut c_void,
             dev_mean_inplace.as_slice_mut().as_raw().0 as *mut c_void,
             dev_inv_std_inplace.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -375,8 +393,12 @@ fn layer_norm_f64_inplace_matches_non_aliased() {
     dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
             "f64 in-place LayerNorm @ {i}: aliased={} non-aliased={}",
-            aliased_out[i], ref_out[i]);
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }

@@ -53,15 +53,15 @@
 //! indices) and `GroupNorm` / `BatchNorm` (which dispatch to cuDNN in a
 //! later milestone) are also deferred.
 
-pub(crate) mod common;
 pub mod bce;
 pub mod bce_with_logits;
+pub(crate) mod common;
 pub mod cosine_embedding;
 pub mod cross_entropy;
 pub mod ctc;
-pub mod fused_linear_cross_entropy;
 #[cfg(feature = "cudnn")]
 pub mod ctc_loss_cudnn;
+pub mod fused_linear_cross_entropy;
 pub mod gaussian_nll;
 pub mod hinge_embedding;
 pub mod huber;
@@ -85,18 +85,33 @@ pub use bce_with_logits::{
     BceWithLogitsLossArgs, BceWithLogitsLossBackwardArgs, BceWithLogitsLossBackwardDescriptor,
     BceWithLogitsLossBackwardPlan, BceWithLogitsLossDescriptor, BceWithLogitsLossPlan,
 };
+pub use cosine_embedding::{
+    CosineEmbeddingLossArgs, CosineEmbeddingLossBackwardArgs,
+    CosineEmbeddingLossBackwardDescriptor, CosineEmbeddingLossBackwardPlan,
+    CosineEmbeddingLossDescriptor, CosineEmbeddingLossPlan,
+};
 pub use cross_entropy::{
     CrossEntropyLossArgs, CrossEntropyLossBackwardArgs, CrossEntropyLossBackwardDescriptor,
     CrossEntropyLossBackwardPlan, CrossEntropyLossDescriptor, CrossEntropyLossPlan,
 };
+pub use ctc::{
+    CtcLossArgs, CtcLossBackwardArgs, CtcLossBackwardDescriptor, CtcLossBackwardPlan,
+    CtcLossDescriptor, CtcLossPlan,
+};
+#[cfg(feature = "cudnn")]
+pub use ctc_loss_cudnn::{CtcLossCudnnArgs, CtcLossCudnnDescriptor, CtcLossCudnnPlan};
 pub use fused_linear_cross_entropy::{
-    FusedLinearCrossEntropyArgs, FusedLinearCrossEntropyBackwardArgs,
+    FLCE_DEFAULT_IGNORE_INDEX, FusedLinearCrossEntropyArgs, FusedLinearCrossEntropyBackwardArgs,
     FusedLinearCrossEntropyBackwardDescriptor, FusedLinearCrossEntropyBackwardPlan,
-    FusedLinearCrossEntropyDescriptor, FusedLinearCrossEntropyPlan, FLCE_DEFAULT_IGNORE_INDEX,
+    FusedLinearCrossEntropyDescriptor, FusedLinearCrossEntropyPlan,
 };
 pub use gaussian_nll::{
     GaussianNllLossArgs, GaussianNllLossBackwardArgs, GaussianNllLossBackwardDescriptor,
     GaussianNllLossBackwardPlan, GaussianNllLossDescriptor, GaussianNllLossPlan,
+};
+pub use hinge_embedding::{
+    HingeEmbeddingLossArgs, HingeEmbeddingLossBackwardArgs, HingeEmbeddingLossBackwardDescriptor,
+    HingeEmbeddingLossBackwardPlan, HingeEmbeddingLossDescriptor, HingeEmbeddingLossPlan,
 };
 pub use huber::{
     HuberLossArgs, HuberLossBackwardArgs, HuberLossBackwardDescriptor, HuberLossBackwardPlan,
@@ -107,39 +122,16 @@ pub use kl_div::{
     KlDivLossDescriptor, KlDivLossPlan,
 };
 pub use l1::{
-    L1LossArgs, L1LossBackwardArgs, L1LossBackwardDescriptor, L1LossBackwardPlan,
-    L1LossDescriptor, L1LossPlan,
+    L1LossArgs, L1LossBackwardArgs, L1LossBackwardDescriptor, L1LossBackwardPlan, L1LossDescriptor,
+    L1LossPlan,
+};
+pub use margin_ranking::{
+    MarginRankingLossArgs, MarginRankingLossBackwardArgs, MarginRankingLossBackwardDescriptor,
+    MarginRankingLossBackwardPlan, MarginRankingLossDescriptor, MarginRankingLossPlan,
 };
 pub use mse::{
     MseLossArgs, MseLossBackwardArgs, MseLossBackwardDescriptor, MseLossBackwardPlan,
     MseLossDescriptor, MseLossPlan,
-};
-pub use nll::{
-    NllLossArgs, NllLossBackwardArgs, NllLossBackwardDescriptor, NllLossBackwardPlan,
-    NllLossDescriptor, NllLossPlan,
-};
-pub use poisson_nll::{
-    PoissonNllLossArgs, PoissonNllLossBackwardArgs, PoissonNllLossBackwardDescriptor,
-    PoissonNllLossBackwardPlan, PoissonNllLossDescriptor, PoissonNllLossPlan,
-};
-pub use smooth_l1::{
-    SmoothL1LossArgs, SmoothL1LossBackwardArgs, SmoothL1LossBackwardDescriptor,
-    SmoothL1LossBackwardPlan, SmoothL1LossDescriptor, SmoothL1LossPlan,
-};
-pub use cosine_embedding::{
-    CosineEmbeddingLossArgs, CosineEmbeddingLossBackwardArgs,
-    CosineEmbeddingLossBackwardDescriptor, CosineEmbeddingLossBackwardPlan,
-    CosineEmbeddingLossDescriptor, CosineEmbeddingLossPlan,
-};
-pub use hinge_embedding::{
-    HingeEmbeddingLossArgs, HingeEmbeddingLossBackwardArgs,
-    HingeEmbeddingLossBackwardDescriptor, HingeEmbeddingLossBackwardPlan,
-    HingeEmbeddingLossDescriptor, HingeEmbeddingLossPlan,
-};
-pub use margin_ranking::{
-    MarginRankingLossArgs, MarginRankingLossBackwardArgs,
-    MarginRankingLossBackwardDescriptor, MarginRankingLossBackwardPlan,
-    MarginRankingLossDescriptor, MarginRankingLossPlan,
 };
 pub use multi_margin::{
     MultiMarginLossArgs, MultiMarginLossBackwardArgs, MultiMarginLossBackwardDescriptor,
@@ -155,14 +147,19 @@ pub use multilabel_soft_margin::{
     MultilabelSoftMarginLossBackwardDescriptor, MultilabelSoftMarginLossBackwardPlan,
     MultilabelSoftMarginLossDescriptor, MultilabelSoftMarginLossPlan,
 };
+pub use nll::{
+    NllLossArgs, NllLossBackwardArgs, NllLossBackwardDescriptor, NllLossBackwardPlan,
+    NllLossDescriptor, NllLossPlan,
+};
+pub use poisson_nll::{
+    PoissonNllLossArgs, PoissonNllLossBackwardArgs, PoissonNllLossBackwardDescriptor,
+    PoissonNllLossBackwardPlan, PoissonNllLossDescriptor, PoissonNllLossPlan,
+};
+pub use smooth_l1::{
+    SmoothL1LossArgs, SmoothL1LossBackwardArgs, SmoothL1LossBackwardDescriptor,
+    SmoothL1LossBackwardPlan, SmoothL1LossDescriptor, SmoothL1LossPlan,
+};
 pub use triplet_margin::{
-    TripletMarginLossArgs, TripletMarginLossBackwardArgs,
-    TripletMarginLossBackwardDescriptor, TripletMarginLossBackwardPlan,
-    TripletMarginLossDescriptor, TripletMarginLossPlan,
+    TripletMarginLossArgs, TripletMarginLossBackwardArgs, TripletMarginLossBackwardDescriptor,
+    TripletMarginLossBackwardPlan, TripletMarginLossDescriptor, TripletMarginLossPlan,
 };
-pub use ctc::{
-    CtcLossArgs, CtcLossBackwardArgs, CtcLossBackwardDescriptor, CtcLossBackwardPlan,
-    CtcLossDescriptor, CtcLossPlan,
-};
-#[cfg(feature = "cudnn")]
-pub use ctc_loss_cudnn::{CtcLossCudnnArgs, CtcLossCudnnDescriptor, CtcLossCudnnPlan};

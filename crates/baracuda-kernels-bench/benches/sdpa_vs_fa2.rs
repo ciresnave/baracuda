@@ -32,20 +32,18 @@ fn main() {
 mod fa2_bench {
     use baracuda_driver::DeviceBuffer;
     use baracuda_kernels::{
-        contiguous_stride, BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor,
-        FlashSdpaPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+        BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan,
+        PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
     };
-    use baracuda_kernels_bench::{
-        measure_median_ns, setup_device, warmup,
-    };
+    use baracuda_kernels_bench::{measure_median_ns, setup_device, warmup};
     use half::{bf16, f16};
 
     /// (batch, num_heads, seq_q, seq_k, head_dim, label).
     const SHAPES: &[(i32, i32, i32, i32, i32, &str)] = &[
         // Decode — bespoke expected to win.
-        (1, 32, 1,    2048, 128, "decode_Sq1_Sk2k"),
+        (1, 32, 1, 2048, 128, "decode_Sq1_Sk2k"),
         // Small prefill — bespoke expected to win (work < heuristic threshold).
-        (1, 32, 512,  512,  128, "small_prefill_512x512"),
+        (1, 32, 512, 512, 128, "small_prefill_512x512"),
         // Large prefill — FA2 expected to win.
         (1, 32, 2048, 2048, 128, "large_prefill_2kx2k"),
         // Long-context — FA2 expected to dominate.
@@ -66,10 +64,8 @@ mod fa2_bench {
         run_one::<bf16>(b, h, sq, sk, d, label, "bf16", bf16::from_f32(0.123));
     }
 
-    fn run_one<T>(
-        b: i32, h: i32, sq: i32, sk: i32, d: i32,
-        label: &str, dtype_label: &str, fill: T,
-    ) where
+    fn run_one<T>(b: i32, h: i32, sq: i32, sk: i32, d: i32, label: &str, dtype_label: &str, fill: T)
+    where
         T: baracuda_kernels::Element + Copy + 'static,
     {
         let (ctx, stream) = setup_device();
@@ -97,17 +93,7 @@ mod fa2_bench {
         let sl_shape = [b, h, sq];
         let scale = 1.0_f32 / (d as f32).sqrt();
 
-        let desc = FlashSdpaDescriptor::new(
-            b,
-            h,
-            sq,
-            sk,
-            d,
-            d,
-            scale,
-            false,
-            T::KIND,
-        );
+        let desc = FlashSdpaDescriptor::new(b, h, sq, sk, d, d, scale, false, T::KIND);
 
         // Bespoke backend.
         let pref_b = PlanPreference {
@@ -152,27 +138,69 @@ mod fa2_bench {
         // Warm bespoke.
         warmup(&stream, || {
             let args = FlashSdpaArgs::<T> {
-                q: TensorRef { data: dq.as_slice(), shape: sq_shape, stride: st_q },
-                k: TensorRef { data: dk.as_slice(), shape: sk_shape, stride: st_k },
-                v: TensorRef { data: dv.as_slice(), shape: sv_shape, stride: st_v },
-                y: TensorMut { data: dy.as_slice_mut(), shape: sy_shape, stride: st_y },
-                lse: TensorMut { data: dlse.as_slice_mut(), shape: sl_shape, stride: st_l },
-                            mask: None,
-                            alibi_slopes: None,
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq_shape,
+                    stride: st_q,
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk_shape,
+                    stride: st_k,
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv_shape,
+                    stride: st_v,
+                },
+                y: TensorMut {
+                    data: dy.as_slice_mut(),
+                    shape: sy_shape,
+                    stride: st_y,
+                },
+                lse: TensorMut {
+                    data: dlse.as_slice_mut(),
+                    shape: sl_shape,
+                    stride: st_l,
+                },
+                mask: None,
+                alibi_slopes: None,
             };
-            plan_b.run(&stream, Workspace::None, args).expect("bespoke warm");
+            plan_b
+                .run(&stream, Workspace::None, args)
+                .expect("bespoke warm");
         });
 
         if matches!(backend_f, BackendKind::FlashAttentionV2) {
             warmup(&stream, || {
                 let args = FlashSdpaArgs::<T> {
-                    q: TensorRef { data: dq.as_slice(), shape: sq_shape, stride: st_q },
-                    k: TensorRef { data: dk.as_slice(), shape: sk_shape, stride: st_k },
-                    v: TensorRef { data: dv.as_slice(), shape: sv_shape, stride: st_v },
-                    y: TensorMut { data: dy.as_slice_mut(), shape: sy_shape, stride: st_y },
-                    lse: TensorMut { data: dlse.as_slice_mut(), shape: sl_shape, stride: st_l },
-                                    mask: None,
-                                    alibi_slopes: None,
+                    q: TensorRef {
+                        data: dq.as_slice(),
+                        shape: sq_shape,
+                        stride: st_q,
+                    },
+                    k: TensorRef {
+                        data: dk.as_slice(),
+                        shape: sk_shape,
+                        stride: st_k,
+                    },
+                    v: TensorRef {
+                        data: dv.as_slice(),
+                        shape: sv_shape,
+                        stride: st_v,
+                    },
+                    y: TensorMut {
+                        data: dy.as_slice_mut(),
+                        shape: sy_shape,
+                        stride: st_y,
+                    },
+                    lse: TensorMut {
+                        data: dlse.as_slice_mut(),
+                        shape: sl_shape,
+                        stride: st_l,
+                    },
+                    mask: None,
+                    alibi_slopes: None,
                 };
                 plan_f
                     .run(&stream, Workspace::Borrowed(ws_buf.as_slice_mut()), args)
@@ -183,13 +211,33 @@ mod fa2_bench {
         // Measure bespoke.
         let bespoke_ns = measure_median_ns(&ctx, &stream, 9, 20, || {
             let args = FlashSdpaArgs::<T> {
-                q: TensorRef { data: dq.as_slice(), shape: sq_shape, stride: st_q },
-                k: TensorRef { data: dk.as_slice(), shape: sk_shape, stride: st_k },
-                v: TensorRef { data: dv.as_slice(), shape: sv_shape, stride: st_v },
-                y: TensorMut { data: dy.as_slice_mut(), shape: sy_shape, stride: st_y },
-                lse: TensorMut { data: dlse.as_slice_mut(), shape: sl_shape, stride: st_l },
-                            mask: None,
-                            alibi_slopes: None,
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq_shape,
+                    stride: st_q,
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk_shape,
+                    stride: st_k,
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv_shape,
+                    stride: st_v,
+                },
+                y: TensorMut {
+                    data: dy.as_slice_mut(),
+                    shape: sy_shape,
+                    stride: st_y,
+                },
+                lse: TensorMut {
+                    data: dlse.as_slice_mut(),
+                    shape: sl_shape,
+                    stride: st_l,
+                },
+                mask: None,
+                alibi_slopes: None,
             };
             plan_b.run(&stream, Workspace::None, args).expect("bespoke");
         });
@@ -197,13 +245,33 @@ mod fa2_bench {
         let fa2_ns = if matches!(backend_f, BackendKind::FlashAttentionV2) {
             measure_median_ns(&ctx, &stream, 9, 20, || {
                 let args = FlashSdpaArgs::<T> {
-                    q: TensorRef { data: dq.as_slice(), shape: sq_shape, stride: st_q },
-                    k: TensorRef { data: dk.as_slice(), shape: sk_shape, stride: st_k },
-                    v: TensorRef { data: dv.as_slice(), shape: sv_shape, stride: st_v },
-                    y: TensorMut { data: dy.as_slice_mut(), shape: sy_shape, stride: st_y },
-                    lse: TensorMut { data: dlse.as_slice_mut(), shape: sl_shape, stride: st_l },
-                                    mask: None,
-                                    alibi_slopes: None,
+                    q: TensorRef {
+                        data: dq.as_slice(),
+                        shape: sq_shape,
+                        stride: st_q,
+                    },
+                    k: TensorRef {
+                        data: dk.as_slice(),
+                        shape: sk_shape,
+                        stride: st_k,
+                    },
+                    v: TensorRef {
+                        data: dv.as_slice(),
+                        shape: sv_shape,
+                        stride: st_v,
+                    },
+                    y: TensorMut {
+                        data: dy.as_slice_mut(),
+                        shape: sy_shape,
+                        stride: st_y,
+                    },
+                    lse: TensorMut {
+                        data: dlse.as_slice_mut(),
+                        shape: sl_shape,
+                        stride: st_l,
+                    },
+                    mask: None,
+                    alibi_slopes: None,
                 };
                 plan_f
                     .run(&stream, Workspace::Borrowed(ws_buf.as_slice_mut()), args)
@@ -218,14 +286,17 @@ mod fa2_bench {
         } else {
             0.0
         };
-        let heuristic_picks_fa2 =
-            should_use_fa2_check(&desc, T::KIND, sq as i64, sk as i64);
+        let heuristic_picks_fa2 = should_use_fa2_check(&desc, T::KIND, sq as i64, sk as i64);
         println!(
             "[sdpa_vs_fa2] {label:<24} {dtype_label}  bespoke_us={:>7.1}  fa2_us={:>7.1}  speedup_fa2={:.2}x  heuristic={}",
             bespoke_ns / 1000.0,
             fa2_ns / 1000.0,
             speedup,
-            if heuristic_picks_fa2 { "fa2" } else { "bespoke" },
+            if heuristic_picks_fa2 {
+                "fa2"
+            } else {
+                "bespoke"
+            },
         );
     }
 

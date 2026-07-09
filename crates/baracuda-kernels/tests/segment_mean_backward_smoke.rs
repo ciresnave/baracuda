@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `SegmentMeanBackwardPlan<T>` (Phase 7 7.6).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SegmentMeanBackwardArgs,
-    SegmentMeanBackwardDescriptor, SegmentMeanBackwardPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SegmentMeanBackwardArgs, SegmentMeanBackwardDescriptor,
+    SegmentMeanBackwardPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -33,8 +33,7 @@ fn segment_mean_backward_f32_basic() {
     for row in 0..n as usize {
         let s = seg[row] as usize;
         for col in 0..d as usize {
-            expected[row * d as usize + col] =
-                d_out[s * d as usize + col] / counts[s] as f32;
+            expected[row * d as usize + col] = d_out[s * d as usize + col] / counts[s] as f32;
         }
     }
     let dev_dout = DeviceBuffer::from_slice(&ctx, &d_out).expect("up dout");
@@ -42,8 +41,7 @@ fn segment_mean_backward_f32_basic() {
     let mut dev_dinput: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * d) as usize).expect("alloc din");
     let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, (ns as usize) * core::mem::size_of::<i32>())
-            .expect("alloc ws");
+        DeviceBuffer::zeros(&ctx, (ns as usize) * core::mem::size_of::<i32>()).expect("alloc ws");
 
     let desc = SegmentMeanBackwardDescriptor {
         num_inputs: n,

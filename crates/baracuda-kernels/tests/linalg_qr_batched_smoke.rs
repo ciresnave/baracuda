@@ -10,10 +10,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BatchedQrArgs, BatchedQrDescriptor, BatchedQrPlan, Complex32, Complex64,
-    ElementKind, PlanPreference, TensorMut, Workspace,
+    BatchedQrArgs, BatchedQrDescriptor, BatchedQrPlan, Complex32, Complex64, ElementKind,
+    PlanPreference, TensorMut, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -158,13 +158,25 @@ fn qr_batched_complex32_basic() {
     // Two 3×3 complex matrices, column-major. Picked to be well-conditioned.
     let a_host: Vec<Complex32> = vec![
         // batch 0
-        Complex32::new(1.0, 0.5), Complex32::new(4.0, -0.2), Complex32::new(7.0, 0.1),
-        Complex32::new(2.0, -0.3), Complex32::new(5.0, 0.4), Complex32::new(8.0, -0.5),
-        Complex32::new(3.0, 0.2), Complex32::new(6.0, -0.1), Complex32::new(10.0, 0.3),
+        Complex32::new(1.0, 0.5),
+        Complex32::new(4.0, -0.2),
+        Complex32::new(7.0, 0.1),
+        Complex32::new(2.0, -0.3),
+        Complex32::new(5.0, 0.4),
+        Complex32::new(8.0, -0.5),
+        Complex32::new(3.0, 0.2),
+        Complex32::new(6.0, -0.1),
+        Complex32::new(10.0, 0.3),
         // batch 1
-        Complex32::new(2.0, 0.0), Complex32::new(0.0, 1.0), Complex32::new(1.0, 0.0),
-        Complex32::new(1.0, -0.5), Complex32::new(3.0, 0.0), Complex32::new(0.0, 0.5),
-        Complex32::new(0.0, 0.0), Complex32::new(1.0, 0.2), Complex32::new(2.0, -0.1),
+        Complex32::new(2.0, 0.0),
+        Complex32::new(0.0, 1.0),
+        Complex32::new(1.0, 0.0),
+        Complex32::new(1.0, -0.5),
+        Complex32::new(3.0, 0.0),
+        Complex32::new(0.0, 0.5),
+        Complex32::new(0.0, 0.0),
+        Complex32::new(1.0, 0.2),
+        Complex32::new(2.0, -0.1),
     ];
 
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
@@ -205,10 +217,7 @@ fn qr_batched_complex32_basic() {
             let idx = bi * (m as usize) * (n as usize) + i * (m as usize) + i;
             let diag = a_post[idx];
             let mag = (diag.re * diag.re + diag.im * diag.im).sqrt();
-            assert!(
-                mag > 1e-3,
-                "Complex32 R[{bi}][{i},{i}] near-zero: {diag:?}"
-            );
+            assert!(mag > 1e-3, "Complex32 R[{bi}][{i},{i}] near-zero: {diag:?}");
         }
     }
 }
@@ -222,12 +231,24 @@ fn qr_batched_complex64_basic() {
     let n: i32 = 3;
     let k = m.min(n);
     let a_host: Vec<Complex64> = vec![
-        Complex64::new(1.0, 0.5), Complex64::new(4.0, -0.2), Complex64::new(7.0, 0.1),
-        Complex64::new(2.0, -0.3), Complex64::new(5.0, 0.4), Complex64::new(8.0, -0.5),
-        Complex64::new(3.0, 0.2), Complex64::new(6.0, -0.1), Complex64::new(10.0, 0.3),
-        Complex64::new(2.0, 0.0), Complex64::new(0.0, 1.0), Complex64::new(1.0, 0.0),
-        Complex64::new(1.0, -0.5), Complex64::new(3.0, 0.0), Complex64::new(0.0, 0.5),
-        Complex64::new(0.0, 0.0), Complex64::new(1.0, 0.2), Complex64::new(2.0, -0.1),
+        Complex64::new(1.0, 0.5),
+        Complex64::new(4.0, -0.2),
+        Complex64::new(7.0, 0.1),
+        Complex64::new(2.0, -0.3),
+        Complex64::new(5.0, 0.4),
+        Complex64::new(8.0, -0.5),
+        Complex64::new(3.0, 0.2),
+        Complex64::new(6.0, -0.1),
+        Complex64::new(10.0, 0.3),
+        Complex64::new(2.0, 0.0),
+        Complex64::new(0.0, 1.0),
+        Complex64::new(1.0, 0.0),
+        Complex64::new(1.0, -0.5),
+        Complex64::new(3.0, 0.0),
+        Complex64::new(0.0, 0.5),
+        Complex64::new(0.0, 0.0),
+        Complex64::new(1.0, 0.2),
+        Complex64::new(2.0, -0.1),
     ];
 
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
@@ -268,10 +289,7 @@ fn qr_batched_complex64_basic() {
             let idx = bi * (m as usize) * (n as usize) + i * (m as usize) + i;
             let diag = a_post[idx];
             let mag = (diag.re * diag.re + diag.im * diag.im).sqrt();
-            assert!(
-                mag > 1e-6,
-                "Complex64 R[{bi}][{i},{i}] near-zero: {diag:?}"
-            );
+            assert!(mag > 1e-6, "Complex64 R[{bi}][{i},{i}] near-zero: {diag:?}");
         }
     }
 }

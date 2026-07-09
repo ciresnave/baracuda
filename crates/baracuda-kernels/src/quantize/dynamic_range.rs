@@ -318,7 +318,7 @@ impl<TIn: Element, TOut: IntElement> DynamicRangeQuantizePlan<TIn, TOut> {
                 return Err(Error::Unsupported(
                     "DynamicRangeQuantizePlan::run reached unsupported (TIn, TOut) \
                      (select should have caught this)",
-                ))
+                ));
             }
         };
         map_status(status)

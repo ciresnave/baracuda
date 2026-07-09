@@ -6,17 +6,19 @@
 //! `--backend` selector replace the hardcoded pilot next.
 
 use baracuda_kernelgen::{
-    derive_pattern, emit_dispatch_table, generate, generate_variants, input, konst, param,
-    reduced, to_fkc, Cuda, OpDef, ReduceOp, ReduceStage, UnaryOp,
+    Cuda, OpDef, ReduceOp, ReduceStage, UnaryOp, derive_pattern, emit_dispatch_table, generate,
+    generate_variants, input, konst, param, reduced, to_fkc,
 };
 use baracuda_kernels_types::{
-    seed_winner, structure_key, ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind,
-    OpCategory, OperandDesc,
+    ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc,
+    seed_winner, structure_key,
 };
 use std::fs;
 
 fn main() {
-    let out_dir = std::env::args().nth(1).unwrap_or_else(|| "generated".to_string());
+    let out_dir = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "generated".to_string());
     fs::create_dir_all(&out_dir).expect("create out dir");
 
     // v1 pilot op: elementwise add, fanned out over a few dtype cells.
@@ -120,23 +122,65 @@ fn main() {
     // reduced axis) so the store is injective.
     let f32 = ElementKind::F32;
     // (i) Reduce axis 0 of [4096,1024] -> [1024] (Sum, outer axis, collapse).
-    let sum_ax0 =
-        OpDef::reduction_axes("sum", 1, &[f32], input(0), ReduceOp::Sum, AxisMask(0b01), false);
+    let sum_ax0 = OpDef::reduction_axes(
+        "sum",
+        1,
+        &[f32],
+        input(0),
+        ReduceOp::Sum,
+        AxisMask(0b01),
+        false,
+    );
     // (ii) Reduce axes {0,1} of [64,128,256] -> [256] (Mean, multi-axis, collapse).
-    let mean_ax01 =
-        OpDef::reduction_axes("mean", 1, &[f32], input(0), ReduceOp::Mean, AxisMask(0b011), false);
+    let mean_ax01 = OpDef::reduction_axes(
+        "mean",
+        1,
+        &[f32],
+        input(0),
+        ReduceOp::Mean,
+        AxisMask(0b011),
+        false,
+    );
     // (iii) Reduce axis 0 of [4096,1024] -> [1,1024] (Sum, outer axis, keepdim).
-    let sum_ax0_kd =
-        OpDef::reduction_axes("sum", 1, &[f32], input(0), ReduceOp::Sum, AxisMask(0b01), true);
+    let sum_ax0_kd = OpDef::reduction_axes(
+        "sum",
+        1,
+        &[f32],
+        input(0),
+        ReduceOp::Sum,
+        AxisMask(0b01),
+        true,
+    );
     // (iv) Max over axis 0 (the has-flag / NaN-propagating fold).
-    let max_ax0 =
-        OpDef::reduction_axes("amax", 1, &[f32], input(0), ReduceOp::Max, AxisMask(0b01), false);
+    let max_ax0 = OpDef::reduction_axes(
+        "amax",
+        1,
+        &[f32],
+        input(0),
+        ReduceOp::Max,
+        AxisMask(0b01),
+        false,
+    );
     // (v) Middle axis of a rank-3 tensor -> two kept axes (0 and 2).
-    let sum_mid =
-        OpDef::reduction_axes("sum", 1, &[f32], input(0), ReduceOp::Sum, AxisMask(0b010), false);
+    let sum_mid = OpDef::reduction_axes(
+        "sum",
+        1,
+        &[f32],
+        input(0),
+        ReduceOp::Sum,
+        AxisMask(0b010),
+        false,
+    );
     // (vi) Reduce-all of a rank-2 tensor -> scalar (kept axes empty).
-    let sum_all =
-        OpDef::reduction_axes("sum", 1, &[f32], input(0), ReduceOp::Sum, AxisMask(0b011), false);
+    let sum_all = OpDef::reduction_axes(
+        "sum",
+        1,
+        &[f32],
+        input(0),
+        ReduceOp::Sum,
+        AxisMask(0b011),
+        false,
+    );
     let general_reductions = [
         (
             &sum_ax0,
@@ -173,7 +217,11 @@ fn main() {
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
         let k = generate(op, &key, &Cuda);
         fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
-        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+        println!(
+            "generated {out_dir}/{}.cu  (cell {})",
+            k.name,
+            key.to_token()
+        );
     }
 
     // --- Schedule variants (phase 2, ship-top-K): split-K for the outer-axis cell ---
@@ -210,7 +258,11 @@ fn main() {
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
         let k = generate(op, &key, &Cuda);
         fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
-        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+        println!(
+            "generated {out_dir}/{}.cu  (cell {})",
+            k.name,
+            key.to_token()
+        );
     }
 
     // Fused norms: RmsNorm / Softmax (single input), weighted-RmsNorm / LayerNorm
@@ -235,7 +287,10 @@ fn main() {
         1,
         &[dt],
         vec![
-            ReduceStage { pre: input(0).0, op: ReduceOp::Max },
+            ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Max,
+            },
             ReduceStage {
                 pre: (input(0) - reduced(0)).exp().0,
                 op: ReduceOp::Sum,
@@ -258,7 +313,10 @@ fn main() {
         3,
         &[dt],
         vec![
-            ReduceStage { pre: input(0).0, op: ReduceOp::Mean },
+            ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Mean,
+            },
             ReduceStage {
                 pre: (input(0) - reduced(0)).unary(UnaryOp::Sqr).0,
                 op: ReduceOp::Mean,
@@ -275,7 +333,10 @@ fn main() {
         "softmax_bw",
         2,
         &[dt],
-        vec![ReduceStage { pre: (input(0) * input(1)).0, op: ReduceOp::Sum }],
+        vec![ReduceStage {
+            pre: (input(0) * input(1)).0,
+            op: ReduceOp::Sum,
+        }],
         input(0) * (input(1) - reduced(0)),
     );
     let ln_x_hat = (input(0) - input(2)) * input(3);
@@ -284,8 +345,14 @@ fn main() {
         4,
         &[dt],
         vec![
-            ReduceStage { pre: input(1).0, op: ReduceOp::Mean },
-            ReduceStage { pre: (input(1) * ln_x_hat.clone()).0, op: ReduceOp::Mean },
+            ReduceStage {
+                pre: input(1).0,
+                op: ReduceOp::Mean,
+            },
+            ReduceStage {
+                pre: (input(1) * ln_x_hat.clone()).0,
+                op: ReduceOp::Mean,
+            },
         ],
         input(3) * (input(1) - reduced(0) - ln_x_hat * reduced(1)),
     );
@@ -293,9 +360,17 @@ fn main() {
         (rmsnorm, vec![x, full], OpCategory::Normalization),
         (softmax, vec![x, full], OpCategory::Softmax),
         (wrmsnorm, vec![x, col, full], OpCategory::Normalization),
-        (layernorm, vec![x, col, col, full], OpCategory::Normalization),
+        (
+            layernorm,
+            vec![x, col, col, full],
+            OpCategory::Normalization,
+        ),
         (softmax_bw, vec![x, x, full], OpCategory::Softmax),
-        (layer_norm_bw, vec![x, x, rowscalar, rowscalar, full], OpCategory::Normalization),
+        (
+            layer_norm_bw,
+            vec![x, x, rowscalar, rowscalar, full],
+            OpCategory::Normalization,
+        ),
     ] {
         let key = structure_key(cat, &ops, ArchSku::Sm89);
         // Ship-top-K: the base kernel plus every schedule variant (Softmax gets
@@ -304,7 +379,11 @@ fn main() {
             for k in &v.kernels {
                 fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
                 if v.tag == "base" {
-                    println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+                    println!(
+                        "generated {out_dir}/{}.cu  (cell {})",
+                        k.name,
+                        key.to_token()
+                    );
                 } else {
                     println!(
                         "generated {out_dir}/{}.cu  (cell {} | variant {})",
@@ -323,13 +402,22 @@ fn main() {
     // paths: a scalar cell (align 4 ⇒ no vectorize) and a vectorized cell (align
     // 256 ⇒ float4, per-lane `tmp` blocks).
     let g = input(0) * input(1);
-    let diamond = OpDef::elementwise("diamond", 2, &[ElementKind::F32], g.clone() / (g + konst(1.0)));
+    let diamond = OpDef::elementwise(
+        "diamond",
+        2,
+        &[ElementKind::F32],
+        g.clone() / (g + konst(1.0)),
+    );
     for align in [4u32, 256u32] {
         let o = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, align);
         let key = structure_key(OpCategory::BinaryElementwise, &[o, o, o], ArchSku::Sm89);
         let k = generate(&diamond, &key, &Cuda);
         fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
-        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+        println!(
+            "generated {out_dir}/{}.cu  (cell {})",
+            k.name,
+            key.to_token()
+        );
     }
 
     // --- Packed-vs-scalar differential pairs (item 09) --------------------------
@@ -345,7 +433,11 @@ fn main() {
                 let key = structure_key(OpCategory::BinaryElementwise, &[o, o, o], ArchSku::Sm89);
                 let k = generate(op, &key, &Cuda);
                 fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
-                println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+                println!(
+                    "generated {out_dir}/{}.cu  (cell {})",
+                    k.name,
+                    key.to_token()
+                );
             }
         }
         // Tier-A unary pairs: the sign-bit / exact-product intrinsics whose
@@ -362,7 +454,11 @@ fn main() {
                 let key = structure_key(OpCategory::UnaryElementwise, &[o, o], ArchSku::Sm89);
                 let k = generate(&op, &key, &Cuda);
                 fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
-                println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+                println!(
+                    "generated {out_dir}/{}.cu  (cell {})",
+                    k.name,
+                    key.to_token()
+                );
             }
         }
     }
@@ -409,7 +505,11 @@ fn main() {
             for k in &v.kernels {
                 fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
                 if v.tag == "base" {
-                    println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+                    println!(
+                        "generated {out_dir}/{}.cu  (cell {})",
+                        k.name,
+                        key.to_token()
+                    );
                 } else {
                     println!(
                         "generated {out_dir}/{}.cu  (cell {} | variant {})",

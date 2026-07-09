@@ -6,12 +6,12 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
     BatchRaggedPrefillArgs, BatchRaggedPrefillDescriptor, BatchRaggedPrefillPlan,
 };
 use baracuda_flashinfer::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -45,7 +45,9 @@ fn ragged_prefill_plan_select_validates() {
         .expect("valid descriptor should select");
     let mut bad = desc;
     bad.head_dim = 96;
-    assert!(BatchRaggedPrefillPlan::<f16>::select(&stream, &bad, PlanPreference::default()).is_err());
+    assert!(
+        BatchRaggedPrefillPlan::<f16>::select(&stream, &bad, PlanPreference::default()).is_err()
+    );
 }
 
 /// Non-causal, identical keys, 1 request, 2 q rows over 2 KV tokens ⇒ both
@@ -95,13 +97,41 @@ fn ragged_prefill_uniform_key_is_mean() {
         &stream,
         Workspace::None,
         BatchRaggedPrefillArgs {
-            q: TensorRef { data: q_dev.as_slice(), shape: qo_shape, stride: contiguous_stride(qo_shape) },
-            q_indptr: TensorRef { data: q_indptr_dev.as_slice(), shape: [2], stride: [1] },
-            k_data: TensorRef { data: k_dev.as_slice(), shape: kv_shape, stride: contiguous_stride(kv_shape) },
-            v_data: TensorRef { data: v_dev.as_slice(), shape: kv_shape, stride: contiguous_stride(kv_shape) },
-            kv_indptr: TensorRef { data: kv_indptr_dev.as_slice(), shape: [2], stride: [1] },
-            o: TensorMut { data: o_dev.as_slice_mut(), shape: qo_shape, stride: contiguous_stride(qo_shape) },
-            lse: TensorMut { data: lse_dev.as_slice_mut(), shape: [qo_len as i32, 1], stride: contiguous_stride([qo_len as i32, 1]) },
+            q: TensorRef {
+                data: q_dev.as_slice(),
+                shape: qo_shape,
+                stride: contiguous_stride(qo_shape),
+            },
+            q_indptr: TensorRef {
+                data: q_indptr_dev.as_slice(),
+                shape: [2],
+                stride: [1],
+            },
+            k_data: TensorRef {
+                data: k_dev.as_slice(),
+                shape: kv_shape,
+                stride: contiguous_stride(kv_shape),
+            },
+            v_data: TensorRef {
+                data: v_dev.as_slice(),
+                shape: kv_shape,
+                stride: contiguous_stride(kv_shape),
+            },
+            kv_indptr: TensorRef {
+                data: kv_indptr_dev.as_slice(),
+                shape: [2],
+                stride: [1],
+            },
+            o: TensorMut {
+                data: o_dev.as_slice_mut(),
+                shape: qo_shape,
+                stride: contiguous_stride(qo_shape),
+            },
+            lse: TensorMut {
+                data: lse_dev.as_slice_mut(),
+                shape: [qo_len as i32, 1],
+                stride: contiguous_stride([qo_len as i32, 1]),
+            },
         },
     )
     .expect("ragged prefill run");
@@ -111,6 +141,9 @@ fn ragged_prefill_uniform_key_is_mean() {
     o_dev.copy_to_host(&mut o_host).expect("download o");
     for r in 0..qo_len {
         let got = o_host[r * HEAD_DIM].to_f32();
-        assert!((got - mean).abs() < 3e-2, "ragged row {r}: got {got}, expected mean {mean}");
+        assert!(
+            (got - mean).abs() < 3e-2,
+            "ragged row {r}: got {got}, expected mean {mean}"
+        );
     }
 }

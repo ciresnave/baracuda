@@ -10,7 +10,7 @@ use baracuda_cublas_sys::{cublas, cublasStatus_t};
 use baracuda_types::{Complex32, Complex64, DeviceRepr};
 
 use crate::blas_scalar::Op;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Owned cuBLASXt handle.
 #[derive(Debug)]
@@ -112,27 +112,29 @@ macro_rules! real_impl {
                 beta: &$t,
                 c: *mut $t,
                 ldc: usize,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$xt()) {
-                    Ok(f) => f(
-                        h,
-                        transa.raw(),
-                        transb.raw(),
-                        m,
-                        n,
-                        k,
-                        alpha,
-                        a,
-                        lda,
-                        b,
-                        ldb,
-                        beta,
-                        c,
-                        ldc,
-                    ),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$xt()) {
+                        Ok(f) => f(
+                            h,
+                            transa.raw(),
+                            transb.raw(),
+                            m,
+                            n,
+                            k,
+                            alpha,
+                            a,
+                            lda,
+                            b,
+                            ldb,
+                            beta,
+                            c,
+                            ldc,
+                        ),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
         }
     };
 }
@@ -155,27 +157,29 @@ macro_rules! complex_impl {
                 beta: &$t,
                 c: *mut $t,
                 ldc: usize,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$xt()) {
-                    Ok(f) => f(
-                        h,
-                        transa.raw(),
-                        transb.raw(),
-                        m,
-                        n,
-                        k,
-                        alpha as *const _ as *const $raw,
-                        a as *const $raw,
-                        lda,
-                        b as *const $raw,
-                        ldb,
-                        beta as *const _ as *const $raw,
-                        c as *mut $raw,
-                        ldc,
-                    ),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$xt()) {
+                        Ok(f) => f(
+                            h,
+                            transa.raw(),
+                            transb.raw(),
+                            m,
+                            n,
+                            k,
+                            alpha as *const _ as *const $raw,
+                            a as *const $raw,
+                            lda,
+                            b as *const $raw,
+                            ldb,
+                            beta as *const _ as *const $raw,
+                            c as *mut $raw,
+                            ldc,
+                        ),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
         }
     };
 }
@@ -215,23 +219,24 @@ pub unsafe fn gemm<T: XtScalar>(
     beta: T,
     c: *mut T,
     ldc: usize,
-) -> Result<()> { unsafe {
-    let status = T::xt_gemm_raw(
-        handle.as_raw(),
-        transa,
-        transb,
-        m,
-        n,
-        k,
-        &alpha,
-        a,
-        lda,
-        b,
-        ldb,
-        &beta,
-        c,
-        ldc,
-    );
-    check(status)
-}}
-
+) -> Result<()> {
+    unsafe {
+        let status = T::xt_gemm_raw(
+            handle.as_raw(),
+            transa,
+            transb,
+            m,
+            n,
+            k,
+            &alpha,
+            a,
+            lda,
+            b,
+            ldb,
+            &beta,
+            c,
+            ldc,
+        );
+        check(status)
+    }
+}

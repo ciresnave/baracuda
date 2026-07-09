@@ -11,10 +11,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RopeArgs, RopeDescriptor, RopePlan, TensorMut,
-    TensorRef, Workspace, ROPE_DEFAULT_BASE,
+    ElementKind, PlanPreference, ROPE_DEFAULT_BASE, RopeArgs, RopeDescriptor, RopePlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -172,8 +172,7 @@ fn rope_f64_explicit_positions() {
                     let theta = pos * freq;
                     let c = theta.cos();
                     let si = theta.sin();
-                    let off =
-                        ((b * heads as usize + h) * seq as usize + s) * head_dim as usize;
+                    let off = ((b * heads as usize + h) * seq as usize + s) * head_dim as usize;
                     let x_e = host_x[off + d_even];
                     let x_o = host_x[off + d_odd];
                     expected[off + d_even] = x_e * c - x_o * si;
@@ -300,7 +299,11 @@ fn rope_f16_default_positions() {
     for i in 0..numel {
         let t = (expected[i].abs() * tol).max(tol);
         let diff = (got[i].to_f32() - expected[i]).abs();
-        assert!(diff <= t, "f16 rope y @ {i}: diff={diff} want={}", expected[i]);
+        assert!(
+            diff <= t,
+            "f16 rope y @ {i}: diff={diff} want={}",
+            expected[i]
+        );
     }
 }
 

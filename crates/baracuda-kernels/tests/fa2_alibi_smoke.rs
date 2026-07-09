@@ -24,10 +24,10 @@
 
 #![cfg(feature = "fa2")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor,
-    FlashSdpaPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -81,7 +81,7 @@ fn fa2_alibi_per_head_broadcast() {
     let sv = [B, H, K, D];
     let sy = [B, H, Q, D];
     let sl = [B, H, Q];
-    let s_slopes = [1_i32, H];  // shape [1, H] with stride[0]=0 = broadcast over batch
+    let s_slopes = [1_i32, H]; // shape [1, H] with stride[0]=0 = broadcast over batch
 
     let mut dy: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, n_y).expect("alloc y");
     let mut dlse: DeviceBuffer<f16> =
@@ -96,8 +96,7 @@ fn fa2_alibi_per_head_broadcast() {
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, pref).expect("sel fa2");
     assert_eq!(plan.backend(), BackendKind::FlashAttentionV2);
     let ws_bytes = plan.workspace_size();
-    let mut ws_buf: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
+    let mut ws_buf: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     // Per-head broadcast layout: shape [1, H], stride[0] = 0
     let alibi_stride = [0_i64, 1_i64];
@@ -105,11 +104,31 @@ fn fa2_alibi_per_head_broadcast() {
         &stream,
         Workspace::Borrowed(ws_buf.as_slice_mut()),
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: None,
             alibi_slopes: Some(TensorRef {
                 data: dslopes.as_slice(),
@@ -131,7 +150,10 @@ fn fa2_alibi_per_head_broadcast() {
             any_nonzero = true;
         }
     }
-    assert!(any_nonzero, "alibi per-head: all output cells near zero — likely zero ptr taken");
+    assert!(
+        any_nonzero,
+        "alibi per-head: all output cells near zero — likely zero ptr taken"
+    );
 }
 
 #[test]
@@ -151,9 +173,7 @@ fn fa2_alibi_per_batch_per_head() {
     let dv = DeviceBuffer::from_slice(&ctx, &v_h).expect("up v");
 
     // Per-batch-per-head ALiBi slopes (shape [B, H], contiguous).
-    let slopes_h: Vec<f32> = (0..(B * H))
-        .map(|i| -0.05_f32 * (i as f32 + 1.0))
-        .collect();
+    let slopes_h: Vec<f32> = (0..(B * H)).map(|i| -0.05_f32 * (i as f32 + 1.0)).collect();
     let dslopes = DeviceBuffer::from_slice(&ctx, &slopes_h).expect("up slopes");
 
     let sq = [B, H, Q, D];
@@ -175,18 +195,37 @@ fn fa2_alibi_per_batch_per_head() {
     };
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, pref).expect("sel fa2");
     let ws_bytes = plan.workspace_size();
-    let mut ws_buf: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
+    let mut ws_buf: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc ws");
 
     plan.run(
         &stream,
         Workspace::Borrowed(ws_buf.as_slice_mut()),
         FlashSdpaArgs {
-            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-            lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+            q: TensorRef {
+                data: dq.as_slice(),
+                shape: sq,
+                stride: contiguous_stride(sq),
+            },
+            k: TensorRef {
+                data: dk.as_slice(),
+                shape: sk,
+                stride: contiguous_stride(sk),
+            },
+            v: TensorRef {
+                data: dv.as_slice(),
+                shape: sv,
+                stride: contiguous_stride(sv),
+            },
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: sy,
+                stride: contiguous_stride(sy),
+            },
+            lse: TensorMut {
+                data: dlse.as_slice_mut(),
+                shape: sl,
+                stride: contiguous_stride(sl),
+            },
             mask: None,
             alibi_slopes: Some(TensorRef {
                 data: dslopes.as_slice(),
@@ -240,9 +279,7 @@ fn fa2_alibi_rejected_on_bespoke() {
     let sy = [b, h, q, d];
     let sl = [b, h, q];
 
-    let desc = FlashSdpaDescriptor::new(
-        b, h, q, k, d, d, default_scale(), false, ElementKind::F16,
-    );
+    let desc = FlashSdpaDescriptor::new(b, h, q, k, d, d, default_scale(), false, ElementKind::F16);
     let pref = PlanPreference {
         prefer_backend: Some(BackendKind::Bespoke),
         ..Default::default()
@@ -250,11 +287,31 @@ fn fa2_alibi_rejected_on_bespoke() {
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, pref).expect("sel bespoke");
     assert_eq!(plan.backend(), BackendKind::Bespoke);
     let args = FlashSdpaArgs {
-        q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-        k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-        v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-        y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-        lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+        q: TensorRef {
+            data: dq.as_slice(),
+            shape: sq,
+            stride: contiguous_stride(sq),
+        },
+        k: TensorRef {
+            data: dk.as_slice(),
+            shape: sk,
+            stride: contiguous_stride(sk),
+        },
+        v: TensorRef {
+            data: dv.as_slice(),
+            shape: sv,
+            stride: contiguous_stride(sv),
+        },
+        y: TensorMut {
+            data: dy.as_slice_mut(),
+            shape: sy,
+            stride: contiguous_stride(sy),
+        },
+        lse: TensorMut {
+            data: dlse.as_slice_mut(),
+            shape: sl,
+            stride: contiguous_stride(sl),
+        },
         mask: None,
         alibi_slopes: Some(TensorRef {
             data: dslopes.as_slice(),
@@ -263,5 +320,8 @@ fn fa2_alibi_rejected_on_bespoke() {
         }),
     };
     let result = plan.can_implement(&args);
-    assert!(result.is_err(), "expected can_implement to reject ALiBi on bespoke");
+    assert!(
+        result.is_err(),
+        "expected can_implement to reject ALiBi on bespoke"
+    );
 }

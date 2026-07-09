@@ -7,10 +7,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, InstanceNormArgs, InstanceNormDescriptor, InstanceNormPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, InstanceNormArgs, InstanceNormDescriptor, InstanceNormPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -27,8 +27,13 @@ fn setup() -> (Context, Stream) {
 
 /// CPU reference: per-`(n, c)` stats across spatial; per-channel affine.
 fn host_instance_norm_f32(
-    n: usize, c: usize, s: usize, x: &[f32],
-    gamma: Option<&[f32]>, beta: Option<&[f32]>, eps: f32,
+    n: usize,
+    c: usize,
+    s: usize,
+    x: &[f32],
+    gamma: Option<&[f32]>,
+    beta: Option<&[f32]>,
+    eps: f32,
 ) -> Vec<f32> {
     let mut y = vec![0f32; n * c * s];
     for ni in 0..n {
@@ -72,8 +77,13 @@ fn instance_norm_f32_with_affine() {
     let host_beta: Vec<f32> = (0..c).map(|i| 0.2 - 0.05 * i as f32).collect();
     let eps = 1e-5f32;
     let exp_y = host_instance_norm_f32(
-        n as usize, c as usize, s, &host_x,
-        Some(&host_gamma), Some(&host_beta), eps,
+        n as usize,
+        c as usize,
+        s,
+        &host_x,
+        Some(&host_gamma),
+        Some(&host_beta),
+        eps,
     );
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
@@ -91,20 +101,45 @@ fn instance_norm_f32_with_affine() {
         has_affine: true,
         element: ElementKind::F32,
     };
-    let plan = InstanceNormPlan::<f32, 4>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
-    plan.run(&stream, Workspace::None, InstanceNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-        beta: Some(TensorRef { data: dev_b.as_slice(), shape: [c], stride: [1] }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        saved_mean: TensorMut {
-            data: dev_mean.as_slice_mut(), shape: [g_count as i32], stride: [1]
+    let plan =
+        InstanceNormPlan::<f32, 4>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    plan.run(
+        &stream,
+        Workspace::None,
+        InstanceNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            beta: Some(TensorRef {
+                data: dev_b.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            saved_mean: TensorMut {
+                data: dev_mean.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorMut {
+                data: dev_rstd.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
         },
-        saved_rstd: TensorMut {
-            data: dev_rstd.as_slice_mut(), shape: [g_count as i32], stride: [1]
-        },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![0f32; numel];
@@ -112,8 +147,12 @@ fn instance_norm_f32_with_affine() {
     let eps_tol = 32.0 * f32::EPSILON;
     for i in 0..numel {
         let tol = (exp_y[i].abs() * eps_tol).max(eps_tol);
-        assert!((got_y[i] - exp_y[i]).abs() <= tol,
-            "in f32 y @ {i}: got={} want={}", got_y[i], exp_y[i]);
+        assert!(
+            (got_y[i] - exp_y[i]).abs() <= tol,
+            "in f32 y @ {i}: got={} want={}",
+            got_y[i],
+            exp_y[i]
+        );
     }
 }
 
@@ -135,8 +174,13 @@ fn instance_norm_f64_with_affine() {
     let host_beta_f32: Vec<f32> = (0..c).map(|i| 0.2 - 0.05 * i as f32).collect();
     let eps = 1e-5f32;
     let exp_y_f32 = host_instance_norm_f32(
-        n as usize, c as usize, s, &host_x_f32,
-        Some(&host_gamma_f32), Some(&host_beta_f32), eps,
+        n as usize,
+        c as usize,
+        s,
+        &host_x_f32,
+        Some(&host_gamma_f32),
+        Some(&host_beta_f32),
+        eps,
     );
 
     let host_x: Vec<f64> = host_x_f32.iter().map(|&v| v as f64).collect();
@@ -158,20 +202,45 @@ fn instance_norm_f64_with_affine() {
         has_affine: true,
         element: ElementKind::F64,
     };
-    let plan = InstanceNormPlan::<f64, 4>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
-    plan.run(&stream, Workspace::None, InstanceNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-        beta: Some(TensorRef { data: dev_b.as_slice(), shape: [c], stride: [1] }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        saved_mean: TensorMut {
-            data: dev_mean.as_slice_mut(), shape: [g_count as i32], stride: [1]
+    let plan =
+        InstanceNormPlan::<f64, 4>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    plan.run(
+        &stream,
+        Workspace::None,
+        InstanceNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            beta: Some(TensorRef {
+                data: dev_b.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            saved_mean: TensorMut {
+                data: dev_mean.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorMut {
+                data: dev_rstd.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
         },
-        saved_rstd: TensorMut {
-            data: dev_rstd.as_slice_mut(), shape: [g_count as i32], stride: [1]
-        },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![0f64; numel];
@@ -181,8 +250,12 @@ fn instance_norm_f64_with_affine() {
     for i in 0..numel {
         let want = exp_y_f32[i] as f64;
         let tol = (want.abs() * eps_tol).max(eps_tol);
-        assert!((got_y[i] - want).abs() <= tol,
-            "in f64 y @ {i}: got={} want={}", got_y[i], want);
+        assert!(
+            (got_y[i] - want).abs() <= tol,
+            "in f64 y @ {i}: got={} want={}",
+            got_y[i],
+            want
+        );
     }
 }
 
@@ -204,8 +277,13 @@ fn instance_norm_f16_with_affine() {
     let host_beta_f32: Vec<f32> = (0..c).map(|i| 0.2 - 0.05 * i as f32).collect();
     let eps = 1e-5f32;
     let exp_y_f32 = host_instance_norm_f32(
-        n as usize, c as usize, s, &host_x_f32,
-        Some(&host_gamma_f32), Some(&host_beta_f32), eps,
+        n as usize,
+        c as usize,
+        s,
+        &host_x_f32,
+        Some(&host_gamma_f32),
+        Some(&host_beta_f32),
+        eps,
     );
 
     let host_x: Vec<f16> = host_x_f32.iter().map(|&v| f16::from_f32(v)).collect();
@@ -227,20 +305,45 @@ fn instance_norm_f16_with_affine() {
         has_affine: true,
         element: ElementKind::F16,
     };
-    let plan = InstanceNormPlan::<f16, 4>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
-    plan.run(&stream, Workspace::None, InstanceNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-        beta: Some(TensorRef { data: dev_b.as_slice(), shape: [c], stride: [1] }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        saved_mean: TensorMut {
-            data: dev_mean.as_slice_mut(), shape: [g_count as i32], stride: [1]
+    let plan =
+        InstanceNormPlan::<f16, 4>::select(&stream, &desc, PlanPreference::default()).expect("sel");
+    plan.run(
+        &stream,
+        Workspace::None,
+        InstanceNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            beta: Some(TensorRef {
+                data: dev_b.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            saved_mean: TensorMut {
+                data: dev_mean.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorMut {
+                data: dev_rstd.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
         },
-        saved_rstd: TensorMut {
-            data: dev_rstd.as_slice_mut(), shape: [g_count as i32], stride: [1]
-        },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![f16::ZERO; numel];
@@ -249,9 +352,12 @@ fn instance_norm_f16_with_affine() {
     for i in 0..numel {
         let tol = (exp_y_f32[i].abs() * eps_tol).max(eps_tol);
         let diff = (got_y[i].to_f32() - exp_y_f32[i]).abs();
-        assert!(diff <= tol,
+        assert!(
+            diff <= tol,
             "in f16 y @ {i}: diff={diff} got={} want={}",
-            got_y[i].to_f32(), exp_y_f32[i]);
+            got_y[i].to_f32(),
+            exp_y_f32[i]
+        );
     }
 }
 
@@ -273,8 +379,13 @@ fn instance_norm_bf16_with_affine() {
     let host_beta_f32: Vec<f32> = (0..c).map(|i| 0.2 - 0.05 * i as f32).collect();
     let eps = 1e-5f32;
     let exp_y_f32 = host_instance_norm_f32(
-        n as usize, c as usize, s, &host_x_f32,
-        Some(&host_gamma_f32), Some(&host_beta_f32), eps,
+        n as usize,
+        c as usize,
+        s,
+        &host_x_f32,
+        Some(&host_gamma_f32),
+        Some(&host_beta_f32),
+        eps,
     );
 
     let host_x: Vec<bf16> = host_x_f32.iter().map(|&v| bf16::from_f32(v)).collect();
@@ -298,18 +409,43 @@ fn instance_norm_bf16_with_affine() {
     };
     let plan = InstanceNormPlan::<bf16, 4>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
-    plan.run(&stream, Workspace::None, InstanceNormArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        gamma: Some(TensorRef { data: dev_g.as_slice(), shape: [c], stride: [1] }),
-        beta: Some(TensorRef { data: dev_b.as_slice(), shape: [c], stride: [1] }),
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-        saved_mean: TensorMut {
-            data: dev_mean.as_slice_mut(), shape: [g_count as i32], stride: [1]
+    plan.run(
+        &stream,
+        Workspace::None,
+        InstanceNormArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            gamma: Some(TensorRef {
+                data: dev_g.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            beta: Some(TensorRef {
+                data: dev_b.as_slice(),
+                shape: [c],
+                stride: [1],
+            }),
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            saved_mean: TensorMut {
+                data: dev_mean.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
+            saved_rstd: TensorMut {
+                data: dev_rstd.as_slice_mut(),
+                shape: [g_count as i32],
+                stride: [1],
+            },
         },
-        saved_rstd: TensorMut {
-            data: dev_rstd.as_slice_mut(), shape: [g_count as i32], stride: [1]
-        },
-    }).expect("run");
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
 
     let mut got_y = vec![bf16::ZERO; numel];
@@ -318,8 +454,11 @@ fn instance_norm_bf16_with_affine() {
     for i in 0..numel {
         let tol = (exp_y_f32[i].abs() * eps_tol).max(eps_tol);
         let diff = (got_y[i].to_f32() - exp_y_f32[i]).abs();
-        assert!(diff <= tol,
+        assert!(
+            diff <= tol,
             "in bf16 y @ {i}: diff={diff} got={} want={}",
-            got_y[i].to_f32(), exp_y_f32[i]);
+            got_y[i].to_f32(),
+            exp_y_f32[i]
+        );
     }
 }

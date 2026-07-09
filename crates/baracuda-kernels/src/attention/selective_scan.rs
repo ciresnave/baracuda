@@ -199,10 +199,7 @@ impl<T: Element> SelectiveScanPlan<T> {
         let shape_udy = [self.desc.batch_size, self.desc.seq_len, self.desc.dim];
         let shape_a = [self.desc.dim, self.desc.dstate];
         let shape_bc = [self.desc.batch_size, self.desc.seq_len, self.desc.dstate];
-        if args.u.shape != shape_udy
-            || args.delta.shape != shape_udy
-            || args.y.shape != shape_udy
-        {
+        if args.u.shape != shape_udy || args.delta.shape != shape_udy || args.y.shape != shape_udy {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SelectiveScanPlan: u/delta/y shape must be [B, L, D]",
             ));
@@ -314,17 +311,25 @@ impl<T: Element> SelectiveScanPlan<T> {
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let c_ptr = args.c.data.as_raw().0 as *const c_void;
-        let d_ptr = args.d_skip.as_ref()
+        let d_ptr = args
+            .d_skip
+            .as_ref()
             .map(|d| d.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let z_ptr = args.z.as_ref()
+        let z_ptr = args
+            .z
+            .as_ref()
             .map(|z| z.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let db_ptr = args.delta_bias.as_ref()
+        let db_ptr = args
+            .delta_bias
+            .as_ref()
             .map(|db| db.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let ls_ptr = args.last_state.as_mut()
+        let ls_ptr = args
+            .last_state
+            .as_mut()
             .map(|ls| ls.data.as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let dsp = if self.desc.delta_softplus { 1 } else { 0 };
@@ -332,37 +337,75 @@ impl<T: Element> SelectiveScanPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_selective_scan_f32_run(
-                    self.desc.batch_size, self.desc.seq_len,
-                    self.desc.dim, self.desc.dstate, dsp,
-                    u_ptr, delta_ptr, a_ptr, b_ptr, c_ptr,
-                    d_ptr, z_ptr, db_ptr,
-                    y_ptr, ls_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.dim,
+                    self.desc.dstate,
+                    dsp,
+                    u_ptr,
+                    delta_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    d_ptr,
+                    z_ptr,
+                    db_ptr,
+                    y_ptr,
+                    ls_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_selective_scan_f16_run(
-                    self.desc.batch_size, self.desc.seq_len,
-                    self.desc.dim, self.desc.dstate, dsp,
-                    u_ptr, delta_ptr, a_ptr, b_ptr, c_ptr,
-                    d_ptr, z_ptr, db_ptr,
-                    y_ptr, ls_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.dim,
+                    self.desc.dstate,
+                    dsp,
+                    u_ptr,
+                    delta_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    d_ptr,
+                    z_ptr,
+                    db_ptr,
+                    y_ptr,
+                    ls_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_selective_scan_bf16_run(
-                    self.desc.batch_size, self.desc.seq_len,
-                    self.desc.dim, self.desc.dstate, dsp,
-                    u_ptr, delta_ptr, a_ptr, b_ptr, c_ptr,
-                    d_ptr, z_ptr, db_ptr,
-                    y_ptr, ls_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.dim,
+                    self.desc.dstate,
+                    dsp,
+                    u_ptr,
+                    delta_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    d_ptr,
+                    z_ptr,
+                    db_ptr,
+                    y_ptr,
+                    ls_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
-            _ => return Err(Error::Unsupported(
-                "baracuda-kernels::SelectiveScanPlan: dtype not wired",
-            )),
+            _ => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::SelectiveScanPlan: dtype not wired",
+                ));
+            }
         };
         map_status(status)
     }
@@ -520,8 +563,11 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
         };
         unsafe {
             baracuda_kernels_sys::baracuda_kernels_selective_scan_workspace_bytes(
-                self.desc.batch_size, self.desc.seq_len,
-                self.desc.dim, self.desc.dstate, dtype_id,
+                self.desc.batch_size,
+                self.desc.seq_len,
+                self.desc.dim,
+                self.desc.dstate,
+                dtype_id,
             )
         }
     }
@@ -556,7 +602,10 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
         };
         let need = self.workspace_size();
         if ws_bytes < need {
-            return Err(Error::WorkspaceTooSmall { needed: need, got: ws_bytes });
+            return Err(Error::WorkspaceTooSmall {
+                needed: need,
+                got: ws_bytes,
+            });
         }
 
         // Optional-input presence checks must be consistent between
@@ -582,13 +631,19 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let c_ptr = args.c.data.as_raw().0 as *const c_void;
-        let d_in_ptr = args.d_skip.as_ref()
+        let d_in_ptr = args
+            .d_skip
+            .as_ref()
             .map(|d| d.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let z_ptr = args.z.as_ref()
+        let z_ptr = args
+            .z
+            .as_ref()
             .map(|z| z.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
-        let db_ptr = args.delta_bias.as_ref()
+        let db_ptr = args
+            .delta_bias
+            .as_ref()
             .map(|db| db.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
@@ -597,13 +652,19 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
         let dC_ptr = args.d_c.data.as_raw().0 as *mut c_void;
         let ddelta_ptr = args.d_delta.data.as_raw().0 as *mut c_void;
         let dA_ptr = args.d_a.data.as_raw().0 as *mut c_void;
-        let dD_ptr = args.d_d.as_mut()
+        let dD_ptr = args
+            .d_d
+            .as_mut()
             .map(|d| d.data.as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
-        let dz_ptr = args.dz.as_mut()
+        let dz_ptr = args
+            .dz
+            .as_mut()
             .map(|z| z.data.as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
-        let ddb_ptr = args.d_delta_bias.as_mut()
+        let ddb_ptr = args
+            .d_delta_bias
+            .as_mut()
             .map(|db| db.data.as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let dsp = if self.desc.delta_softplus { 1 } else { 0 };
@@ -611,43 +672,96 @@ impl<T: Element> SelectiveScanBackwardPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_selective_scan_f32_backward_run(
-                    self.desc.batch_size, self.desc.seq_len,
-                    self.desc.dim, self.desc.dstate, dsp,
-                    u_ptr, delta_ptr, a_ptr, b_ptr, c_ptr,
-                    d_in_ptr, z_ptr, db_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.dim,
+                    self.desc.dstate,
+                    dsp,
+                    u_ptr,
+                    delta_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    d_in_ptr,
+                    z_ptr,
+                    db_ptr,
                     dy_ptr,
-                    du_ptr, dB_ptr, dC_ptr, ddelta_ptr,
-                    dA_ptr, dD_ptr, dz_ptr, ddb_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    du_ptr,
+                    dB_ptr,
+                    dC_ptr,
+                    ddelta_ptr,
+                    dA_ptr,
+                    dD_ptr,
+                    dz_ptr,
+                    ddb_ptr,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_selective_scan_f16_backward_run(
-                    self.desc.batch_size, self.desc.seq_len,
-                    self.desc.dim, self.desc.dstate, dsp,
-                    u_ptr, delta_ptr, a_ptr, b_ptr, c_ptr,
-                    d_in_ptr, z_ptr, db_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.dim,
+                    self.desc.dstate,
+                    dsp,
+                    u_ptr,
+                    delta_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    d_in_ptr,
+                    z_ptr,
+                    db_ptr,
                     dy_ptr,
-                    du_ptr, dB_ptr, dC_ptr, ddelta_ptr,
-                    dA_ptr, dD_ptr, dz_ptr, ddb_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    du_ptr,
+                    dB_ptr,
+                    dC_ptr,
+                    ddelta_ptr,
+                    dA_ptr,
+                    dD_ptr,
+                    dz_ptr,
+                    ddb_ptr,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_selective_scan_bf16_backward_run(
-                    self.desc.batch_size, self.desc.seq_len,
-                    self.desc.dim, self.desc.dstate, dsp,
-                    u_ptr, delta_ptr, a_ptr, b_ptr, c_ptr,
-                    d_in_ptr, z_ptr, db_ptr,
+                    self.desc.batch_size,
+                    self.desc.seq_len,
+                    self.desc.dim,
+                    self.desc.dstate,
+                    dsp,
+                    u_ptr,
+                    delta_ptr,
+                    a_ptr,
+                    b_ptr,
+                    c_ptr,
+                    d_in_ptr,
+                    z_ptr,
+                    db_ptr,
                     dy_ptr,
-                    du_ptr, dB_ptr, dC_ptr, ddelta_ptr,
-                    dA_ptr, dD_ptr, dz_ptr, ddb_ptr,
-                    ws_ptr, ws_bytes, stream_ptr,
+                    du_ptr,
+                    dB_ptr,
+                    dC_ptr,
+                    ddelta_ptr,
+                    dA_ptr,
+                    dD_ptr,
+                    dz_ptr,
+                    ddb_ptr,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_ptr,
                 )
             },
-            _ => return Err(Error::Unsupported(
-                "baracuda-kernels::SelectiveScanBackwardPlan: dtype not wired",
-            )),
+            _ => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::SelectiveScanBackwardPlan: dtype not wired",
+                ));
+            }
         };
         map_status(status)
     }

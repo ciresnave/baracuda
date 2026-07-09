@@ -21,12 +21,11 @@
 //! The PyTorch bit-exact behavior is the contract this test family
 //! pins.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, AdaptiveAvgPool2dPlan, AdaptiveAvgPool3dPlan, AdaptiveMaxPool2dPlan,
-    AdaptivePool2dBwArgs, AdaptivePool2dDescriptor, AdaptivePool2dFwArgs,
-    AdaptivePool3dDescriptor, AdaptivePool3dFwArgs, ElementKind, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    AdaptiveAvgPool2dPlan, AdaptiveAvgPool3dPlan, AdaptiveMaxPool2dPlan, AdaptivePool2dBwArgs,
+    AdaptivePool2dDescriptor, AdaptivePool2dFwArgs, AdaptivePool3dDescriptor, AdaptivePool3dFwArgs,
+    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -83,17 +82,28 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bitexact() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 9).expect("y");
-    let desc = AdaptivePool2dDescriptor::new(
-        n, c, h_in, w_in, h_out, w_out, ElementKind::F32,
-    );
+    let desc = AdaptivePool2dDescriptor::new(n, c, h_in, w_in, h_out, w_out, ElementKind::F32);
     let plan = AdaptiveAvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, h_in, w_in];
     let y_shape = [n, c, h_out, w_out];
-    plan.run_fw(&stream, Workspace::None, AdaptivePool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        AdaptivePool2dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync fw");
 
     let mut got = vec![0f32; 9];
@@ -101,8 +111,12 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bitexact() {
     let tol = 64.0 * f32::EPSILON;
     for i in 0..9 {
         let t = (exp_y[i].abs() * tol).max(tol);
-        assert!((got[i] - exp_y[i]).abs() <= t,
-            "adaptive_avg_pool2d 5→3 f32 @ {i}: got={} want={}", got[i], exp_y[i]);
+        assert!(
+            (got[i] - exp_y[i]).abs() <= t,
+            "adaptive_avg_pool2d 5→3 f32 @ {i}: got={} want={}",
+            got[i],
+            exp_y[i]
+        );
     }
 }
 
@@ -147,25 +161,40 @@ fn adaptive_max_pool2d_5x5_to_3x3_f32_bitexact() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 9).expect("y");
-    let desc = AdaptivePool2dDescriptor::new(
-        n, c, h_in, w_in, h_out, w_out, ElementKind::F32,
-    );
+    let desc = AdaptivePool2dDescriptor::new(n, c, h_in, w_in, h_out, w_out, ElementKind::F32);
     let plan = AdaptiveMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, h_in, w_in];
     let y_shape = [n, c, h_out, w_out];
-    plan.run_fw(&stream, Workspace::None, AdaptivePool2dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        AdaptivePool2dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync fw");
 
     let mut got = vec![0f32; 9];
     dev_y.copy_to_host(&mut got).expect("dl y");
     for i in 0..9 {
-        assert!((got[i] - exp_y[i]).abs() <= 16.0 * f32::EPSILON,
+        assert!(
+            (got[i] - exp_y[i]).abs() <= 16.0 * f32::EPSILON,
             "adaptive_max_pool2d 5→3 FW @ {i}: got={} want={} (argmax want=x[{}])",
-            got[i], exp_y[i], exp_idx[i]);
+            got[i],
+            exp_y[i],
+            exp_idx[i]
+        );
     }
     // Argmax-indices contract is implicit (BW recomputes them); the
     // values check above + the BW test below pin the convention end-to-end.
@@ -217,16 +246,37 @@ fn adaptive_avg_pool3d_5x7x4_to_3x4x2_f32_bitexact() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, out_numel).expect("y");
     let desc = AdaptivePool3dDescriptor::new(
-        n, c, d_in, h_in, w_in, d_out, h_out, w_out, ElementKind::F32,
+        n,
+        c,
+        d_in,
+        h_in,
+        w_in,
+        d_out,
+        h_out,
+        w_out,
+        ElementKind::F32,
     );
     let plan = AdaptiveAvgPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, d_in, h_in, w_in];
     let y_shape = [n, c, d_out, h_out, w_out];
-    plan.run_fw(&stream, Workspace::None, AdaptivePool3dFwArgs {
-        x: TensorRef { data: dev_x.as_slice(), shape: x_shape, stride: contiguous_stride(x_shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
-    }).expect("fw");
+    plan.run_fw(
+        &stream,
+        Workspace::None,
+        AdaptivePool3dFwArgs {
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+        },
+    )
+    .expect("fw");
     stream.synchronize().expect("sync fw");
 
     let mut got = vec![0f32; out_numel];
@@ -234,8 +284,12 @@ fn adaptive_avg_pool3d_5x7x4_to_3x4x2_f32_bitexact() {
     let tol = 64.0 * f32::EPSILON;
     for i in 0..out_numel {
         let t = (exp_y[i].abs() * tol).max(tol);
-        assert!((got[i] - exp_y[i]).abs() <= t,
-            "adaptive_avg_pool3d @ {i}: got={} want={}", got[i], exp_y[i]);
+        assert!(
+            (got[i] - exp_y[i]).abs() <= t,
+            "adaptive_avg_pool3d @ {i}: got={} want={}",
+            got[i],
+            exp_y[i]
+        );
     }
 }
 
@@ -284,19 +338,38 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bw_bitexact() {
     // y is unused by AvgPool BW but the args require it for symmetry.
     let dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, out_numel).expect("y");
 
-    let desc = AdaptivePool2dDescriptor::new(
-        n, c, h_in, w_in, h_out, w_out, ElementKind::F32,
-    );
+    let desc = AdaptivePool2dDescriptor::new(n, c, h_in, w_in, h_out, w_out, ElementKind::F32);
     let plan = AdaptiveAvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, h_in, w_in];
     let y_shape = [n, c, h_out, w_out];
-    plan.run_bw(&stream, Workspace::None, AdaptivePool2dBwArgs {
-        y:  TensorRef { data: dev_y.as_slice(),  shape: y_shape, stride: contiguous_stride(y_shape) },
-        dy: TensorRef { data: dev_dy.as_slice(), shape: y_shape, stride: contiguous_stride(y_shape) },
-        x:  TensorRef { data: dev_x.as_slice(),  shape: x_shape, stride: contiguous_stride(x_shape) },
-        dx: TensorMut { data: dev_dx.as_slice_mut(), shape: x_shape, stride: contiguous_stride(x_shape) },
-    }).expect("bw");
+    plan.run_bw(
+        &stream,
+        Workspace::None,
+        AdaptivePool2dBwArgs {
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: y_shape,
+                stride: contiguous_stride(y_shape),
+            },
+            x: TensorRef {
+                data: dev_x.as_slice(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape: x_shape,
+                stride: contiguous_stride(x_shape),
+            },
+        },
+    )
+    .expect("bw");
     stream.synchronize().expect("sync bw");
 
     let mut got_dx = vec![0f32; in_numel];
@@ -304,8 +377,12 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bw_bitexact() {
     let tol = 64.0 * f32::EPSILON;
     for i in 0..in_numel {
         let t = (exp_dx[i].abs() as f32 * tol).max(tol);
-        assert!((got_dx[i] - exp_dx[i] as f32).abs() <= t,
-            "adaptive_avg_pool2d BW @ {i}: got={} want={}", got_dx[i], exp_dx[i]);
+        assert!(
+            (got_dx[i] - exp_dx[i] as f32).abs() <= t,
+            "adaptive_avg_pool2d BW @ {i}: got={} want={}",
+            got_dx[i],
+            exp_dx[i]
+        );
     }
 }
 
@@ -317,9 +394,7 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bw_bitexact() {
 
 mod spot_dtypes {
     use super::*;
-    use baracuda_kernels::{
-        AdaptiveAvgPool1dPlan, AdaptivePool1dDescriptor, AdaptivePool1dFwArgs,
-    };
+    use baracuda_kernels::{AdaptiveAvgPool1dPlan, AdaptivePool1dDescriptor, AdaptivePool1dFwArgs};
     use half::{bf16, f16};
 
     #[test]
@@ -332,19 +407,36 @@ mod spot_dtypes {
         let exp = [1.5f64, 3.0, 4.5];
         let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
         let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, 3).expect("y");
-        let desc =
-            AdaptivePool1dDescriptor::new(1, 1, 5, 3, ElementKind::F64);
-        let plan = AdaptiveAvgPool1dPlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-        plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape: [1,1,5], stride: contiguous_stride([1,1,5]) },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape: [1,1,3], stride: contiguous_stride([1,1,3]) },
-        }).expect("fw");
+        let desc = AdaptivePool1dDescriptor::new(1, 1, 5, 3, ElementKind::F64);
+        let plan = AdaptiveAvgPool1dPlan::<f64>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
+        plan.run_fw(
+            &stream,
+            Workspace::None,
+            AdaptivePool1dFwArgs {
+                x: TensorRef {
+                    data: dev_x.as_slice(),
+                    shape: [1, 1, 5],
+                    stride: contiguous_stride([1, 1, 5]),
+                },
+                y: TensorMut {
+                    data: dev_y.as_slice_mut(),
+                    shape: [1, 1, 3],
+                    stride: contiguous_stride([1, 1, 3]),
+                },
+            },
+        )
+        .expect("fw");
         stream.synchronize().expect("sync");
         let mut got = vec![0f64; 3];
         dev_y.copy_to_host(&mut got).expect("dl");
         for i in 0..3 {
-            assert!((got[i] - exp[i]).abs() <= 1e-12,
-                "f64 spot @ {i}: got={} want={}", got[i], exp[i]);
+            assert!(
+                (got[i] - exp[i]).abs() <= 1e-12,
+                "f64 spot @ {i}: got={} want={}",
+                got[i],
+                exp[i]
+            );
         }
     }
 
@@ -353,24 +445,44 @@ mod spot_dtypes {
     fn adaptive_avg_pool1d_5_to_3_f16_spot() {
         let (ctx, stream) = setup();
         let host_x: Vec<f16> = [1.0f32, 2.0, 3.0, 4.0, 5.0]
-            .iter().copied().map(f16::from_f32).collect();
+            .iter()
+            .copied()
+            .map(f16::from_f32)
+            .collect();
         let exp = [1.5f32, 3.0, 4.5];
         let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
         let mut dev_y: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, 3).expect("y");
-        let desc =
-            AdaptivePool1dDescriptor::new(1, 1, 5, 3, ElementKind::F16);
-        let plan = AdaptiveAvgPool1dPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-        plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape: [1,1,5], stride: contiguous_stride([1,1,5]) },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape: [1,1,3], stride: contiguous_stride([1,1,3]) },
-        }).expect("fw");
+        let desc = AdaptivePool1dDescriptor::new(1, 1, 5, 3, ElementKind::F16);
+        let plan = AdaptiveAvgPool1dPlan::<f16>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
+        plan.run_fw(
+            &stream,
+            Workspace::None,
+            AdaptivePool1dFwArgs {
+                x: TensorRef {
+                    data: dev_x.as_slice(),
+                    shape: [1, 1, 5],
+                    stride: contiguous_stride([1, 1, 5]),
+                },
+                y: TensorMut {
+                    data: dev_y.as_slice_mut(),
+                    shape: [1, 1, 3],
+                    stride: contiguous_stride([1, 1, 3]),
+                },
+            },
+        )
+        .expect("fw");
         stream.synchronize().expect("sync");
         let mut got = vec![f16::ZERO; 3];
         dev_y.copy_to_host(&mut got).expect("dl");
         for i in 0..3 {
             let g = got[i].to_f32();
-            assert!((g - exp[i]).abs() <= 1e-2,
-                "f16 spot @ {i}: got={} want={}", g, exp[i]);
+            assert!(
+                (g - exp[i]).abs() <= 1e-2,
+                "f16 spot @ {i}: got={} want={}",
+                g,
+                exp[i]
+            );
         }
     }
 
@@ -379,24 +491,44 @@ mod spot_dtypes {
     fn adaptive_avg_pool1d_5_to_3_bf16_spot() {
         let (ctx, stream) = setup();
         let host_x: Vec<bf16> = [1.0f32, 2.0, 3.0, 4.0, 5.0]
-            .iter().copied().map(bf16::from_f32).collect();
+            .iter()
+            .copied()
+            .map(bf16::from_f32)
+            .collect();
         let exp = [1.5f32, 3.0, 4.5];
         let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
         let mut dev_y: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, 3).expect("y");
-        let desc =
-            AdaptivePool1dDescriptor::new(1, 1, 5, 3, ElementKind::Bf16);
-        let plan = AdaptiveAvgPool1dPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
-        plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
-            x: TensorRef { data: dev_x.as_slice(), shape: [1,1,5], stride: contiguous_stride([1,1,5]) },
-            y: TensorMut { data: dev_y.as_slice_mut(), shape: [1,1,3], stride: contiguous_stride([1,1,3]) },
-        }).expect("fw");
+        let desc = AdaptivePool1dDescriptor::new(1, 1, 5, 3, ElementKind::Bf16);
+        let plan = AdaptiveAvgPool1dPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
+        plan.run_fw(
+            &stream,
+            Workspace::None,
+            AdaptivePool1dFwArgs {
+                x: TensorRef {
+                    data: dev_x.as_slice(),
+                    shape: [1, 1, 5],
+                    stride: contiguous_stride([1, 1, 5]),
+                },
+                y: TensorMut {
+                    data: dev_y.as_slice_mut(),
+                    shape: [1, 1, 3],
+                    stride: contiguous_stride([1, 1, 3]),
+                },
+            },
+        )
+        .expect("fw");
         stream.synchronize().expect("sync");
         let mut got = vec![bf16::ZERO; 3];
         dev_y.copy_to_host(&mut got).expect("dl");
         for i in 0..3 {
             let g = got[i].to_f32();
-            assert!((g - exp[i]).abs() <= 5e-2,
-                "bf16 spot @ {i}: got={} want={}", g, exp[i]);
+            assert!(
+                (g - exp[i]).abs() <= 5e-2,
+                "bf16 spot @ {i}: got={} want={}",
+                g,
+                exp[i]
+            );
         }
     }
 }

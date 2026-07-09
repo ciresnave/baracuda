@@ -10,10 +10,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test unary_neg_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs,
-    UnaryDescriptor, UnaryKind, UnaryPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnaryArgs, UnaryDescriptor, UnaryKind,
+    UnaryPlan, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -29,14 +29,11 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
     assert!(numel > 0, "test shape must have non-zero element count");
 
-    let host_x: Vec<f32> = (0..numel)
-        .map(|i| (i as f32) * 0.5 - 17.25)
-        .collect();
+    let host_x: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.5 - 17.25).collect();
     let expected: Vec<f32> = host_x.iter().map(|x| -x).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
 
     let stride = contiguous_stride(shape);
     let desc = UnaryDescriptor {
@@ -59,7 +56,8 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
             stride,
         },
     };
-    plan.run(&stream, Workspace::None, args).expect("unary neg run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("unary neg run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f32; numel];
@@ -130,9 +128,7 @@ fn neg_f32_strided_transposed() {
 
     // x_buf is N_DIM rows of M cols, contig. We view it as M×N_DIM with
     // swapped strides — so x_logical[i, j] = x_buf[j, i] = x_buf[j*M + i].
-    let x_buf: Vec<f32> = (0..(N_DIM * M))
-        .map(|i| (i as f32) * 0.25 - 1.5)
-        .collect();
+    let x_buf: Vec<f32> = (0..(N_DIM * M)).map(|i| (i as f32) * 0.25 - 1.5).collect();
 
     let x_shape = [m, n];
     let x_stride = [1i64, M as i64]; // transposed
@@ -153,16 +149,15 @@ fn neg_f32_strided_transposed() {
     }
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &x_buf).expect("upload x");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
 
     let desc = UnaryDescriptor {
         kind: UnaryKind::Neg,
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = UnaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        UnaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = UnaryArgs::<f32, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),

@@ -13,11 +13,11 @@
 
 #![cfg(feature = "bnb_nf4")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::quantize::nf4::nf4_pack_weight;
 use baracuda_kernels::{
-    contiguous_stride, Nf4Descriptor, Nf4MmvqArgs, Nf4MmvqPlan, PlanPreference, TensorMut,
-    TensorRef, Workspace, NF4_CODEBOOK, U8,
+    NF4_CODEBOOK, Nf4Descriptor, Nf4MmvqArgs, Nf4MmvqPlan, PlanPreference, TensorMut, TensorRef,
+    U8, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -100,10 +100,8 @@ fn nf4_gemv_m1_f16() {
         k: k as i32,
         block_size: block_size as i32,
     };
-    let plan: Nf4MmvqPlan<f16> = Nf4MmvqPlan::select(
-        &stream, &desc, PlanPreference::default(),
-    )
-    .expect("plan select");
+    let plan: Nf4MmvqPlan<f16> =
+        Nf4MmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("plan select");
 
     let weight_bytes_len = packed_u8.len() as i32;
     let absmax_len = absmax.len() as i32;
@@ -147,12 +145,11 @@ fn nf4_gemv_m1_f16() {
         assert!(
             err < 0.02 * (max_ref.max(1e-3)),
             "row {i}: got {}, expected {}, abs_err={err}",
-            host_out[i], expected[i]
+            host_out[i],
+            expected[i]
         );
     }
-    eprintln!(
-        "nf4 gemv M=1 f16: max_ref={max_ref:.4e}, max_abs_err={max_abs_err:.4e}"
-    );
+    eprintln!("nf4 gemv M=1 f16: max_ref={max_ref:.4e}, max_abs_err={max_abs_err:.4e}");
 }
 
 #[test]
@@ -191,10 +188,8 @@ fn nf4_gemv_m1_bf16() {
         k: k as i32,
         block_size: block_size as i32,
     };
-    let plan: Nf4MmvqPlan<bf16> = Nf4MmvqPlan::select(
-        &stream, &desc, PlanPreference::default(),
-    )
-    .expect("plan select");
+    let plan: Nf4MmvqPlan<bf16> =
+        Nf4MmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("plan select");
 
     let weight_bytes_len = packed_u8.len() as i32;
     let absmax_len = absmax.len() as i32;
@@ -237,10 +232,9 @@ fn nf4_gemv_m1_bf16() {
         assert!(
             err < 0.04 * (max_ref.max(1e-3)),
             "row {i}: got {}, expected {}, abs_err={err}",
-            host_out[i], expected[i]
+            host_out[i],
+            expected[i]
         );
     }
-    eprintln!(
-        "nf4 gemv M=1 bf16: max_ref={max_ref:.4e}, max_abs_err={max_abs_err:.4e}"
-    );
+    eprintln!("nf4 gemv M=1 bf16: max_ref={max_ref:.4e}, max_abs_err={max_abs_err:.4e}");
 }

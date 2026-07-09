@@ -70,11 +70,7 @@ pub struct MsortPlan<T: Element> {
 
 impl<T: Element> MsortPlan<T> {
     /// Pick a kernel for `desc`.
-    pub fn select(
-        _stream: &Stream,
-        desc: &MsortDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &MsortDescriptor, _pref: PlanPreference) -> Result<Self> {
         validate_sort_desc(desc.batch, desc.row_len, desc.element, T::KIND, "MsortPlan")?;
         let sku = build_sku::<T>(SortKind::Msort);
         Ok(Self {
@@ -270,9 +266,7 @@ impl<T: Element> MsortBackwardPlan<T> {
     /// Validate args.
     pub fn can_implement(&self, args: &MsortBackwardArgs<'_, T>) -> Result<()> {
         let expected = [self.desc.batch, self.desc.row_len];
-        if args.dy.shape != expected
-            || args.indices.shape != expected
-            || args.dx.shape != expected
+        if args.dy.shape != expected || args.indices.shape != expected || args.dx.shape != expected
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::MsortBackwardPlan: tensor shapes != [batch, row_len]",

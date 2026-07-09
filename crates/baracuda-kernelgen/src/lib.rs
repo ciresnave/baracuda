@@ -43,19 +43,19 @@ pub use contract::{bundle, contract, front_matter};
 pub use cuda::Cuda;
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
-    coord, input, konst, param, reduced, Access, AccumSpec, AxisRole, ContractionAxes, DagNode,
-    Expr, ExprDag, NodeId, OpDef, ReduceOp, ReduceStage, ScalarExpr, SortOrder, UnaryOp,
-};
-pub use jit::{
-    synthesize, ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe,
-    SynthKernel, StubCompiler,
+    Access, AccumSpec, AxisRole, ContractionAxes, DagNode, Expr, ExprDag, NodeId, OpDef, ReduceOp,
+    ReduceStage, ScalarExpr, SortOrder, UnaryOp, coord, input, konst, param, reduced,
 };
 #[cfg(feature = "nvrtc")]
 pub use jit::NvrtcCompiler;
-pub use link::{emit_link_registry, link_entry, LinkEntry};
+pub use jit::{
+    ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe, StubCompiler,
+    SynthKernel, synthesize,
+};
+pub use link::{LinkEntry, emit_link_registry, link_entry};
 pub use optimize::optimize;
-pub use pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
-pub use plan::{build_plan, KernelPlan, Schedule};
+pub use pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
+pub use plan::{KernelPlan, Schedule, build_plan};
 
 use baracuda_kernels_types::StructureKey;
 

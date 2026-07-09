@@ -3,9 +3,9 @@
 use core::ffi::c_char;
 
 use baracuda_cuda_sys::types::CUdevice_attribute as Attr;
-use baracuda_cuda_sys::{driver, CUdevice};
+use baracuda_cuda_sys::{CUdevice, driver};
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::init::init;
 
 /// A CUDA device (a physical GPU, or a logical slice of one under MIG).
@@ -46,7 +46,7 @@ impl Device {
     /// Raw ordinal (`0`, `1`, ...).
     #[inline]
     pub fn ordinal(&self) -> i32 {
-        self.0 .0
+        self.0.0
     }
 
     /// Human-readable name, e.g. `"NVIDIA GeForce RTX 4090"`.

@@ -8,11 +8,13 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
     BatchPagedDecodeFp8Args, BatchPagedDecodeFp8Descriptor, BatchPagedDecodeFp8Plan, Fp8KvDtype,
 };
-use baracuda_flashinfer::{contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace};
+use baracuda_flashinfer::{
+    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
+};
 use half::f16;
 
 fn setup() -> (Context, Stream) {
@@ -82,7 +84,8 @@ fn fp8_decode_single_token_equals_v() {
     let last_page_len_dev = DeviceBuffer::from_slice(&ctx, &[1i32]).expect("lpl");
     let mut o_dev: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, HEAD_DIM).expect("o");
     let mut lse_dev: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("lse");
-    let mut ws_dev: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, plan.workspace_size()).expect("ws");
+    let mut ws_dev: DeviceBuffer<u8> =
+        DeviceBuffer::zeros(&ctx, plan.workspace_size()).expect("ws");
 
     let q_shape = [1, 1, HEAD_DIM as i32];
     let cache_shape = [1, 1, 1, HEAD_DIM as i32];
@@ -90,14 +93,46 @@ fn fp8_decode_single_token_equals_v() {
         &stream,
         Workspace::Borrowed(ws_dev.as_slice_mut()),
         BatchPagedDecodeFp8Args {
-            q: TensorRef { data: q_dev.as_slice(), shape: q_shape, stride: contiguous_stride(q_shape) },
-            k_data: TensorRef { data: k_dev.as_slice(), shape: cache_shape, stride: contiguous_stride(cache_shape) },
-            v_data: TensorRef { data: v_dev.as_slice(), shape: cache_shape, stride: contiguous_stride(cache_shape) },
-            indices: TensorRef { data: indices_dev.as_slice(), shape: [1], stride: [1] },
-            indptr: TensorRef { data: indptr_dev.as_slice(), shape: [2], stride: [1] },
-            last_page_len: TensorRef { data: last_page_len_dev.as_slice(), shape: [1], stride: [1] },
-            o: TensorMut { data: o_dev.as_slice_mut(), shape: q_shape, stride: contiguous_stride(q_shape) },
-            lse: TensorMut { data: lse_dev.as_slice_mut(), shape: [1, 1], stride: contiguous_stride([1, 1]) },
+            q: TensorRef {
+                data: q_dev.as_slice(),
+                shape: q_shape,
+                stride: contiguous_stride(q_shape),
+            },
+            k_data: TensorRef {
+                data: k_dev.as_slice(),
+                shape: cache_shape,
+                stride: contiguous_stride(cache_shape),
+            },
+            v_data: TensorRef {
+                data: v_dev.as_slice(),
+                shape: cache_shape,
+                stride: contiguous_stride(cache_shape),
+            },
+            indices: TensorRef {
+                data: indices_dev.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            indptr: TensorRef {
+                data: indptr_dev.as_slice(),
+                shape: [2],
+                stride: [1],
+            },
+            last_page_len: TensorRef {
+                data: last_page_len_dev.as_slice(),
+                shape: [1],
+                stride: [1],
+            },
+            o: TensorMut {
+                data: o_dev.as_slice_mut(),
+                shape: q_shape,
+                stride: contiguous_stride(q_shape),
+            },
+            lse: TensorMut {
+                data: lse_dev.as_slice_mut(),
+                shape: [1, 1],
+                stride: contiguous_stride([1, 1]),
+            },
         },
     )
     .expect("fp8 decode run");
@@ -107,6 +142,9 @@ fn fp8_decode_single_token_equals_v() {
     o_dev.copy_to_host(&mut o_host).expect("download o");
     for (i, &got) in o_host.iter().enumerate() {
         let got = got.to_f32();
-        assert!((got - 1.0).abs() < 5e-2, "o[{i}] = {got}, expected dequant(V_fp8)=1.0");
+        assert!(
+            (got - 1.0).abs() < 5e-2,
+            "o[{i}] = {got}, expected dequant(V_fp8)=1.0"
+        );
     }
 }

@@ -122,9 +122,7 @@ impl<T: Element, const N: usize> HingeEmbeddingLossPlan<T, N> {
         workspace: Workspace<'_>,
         args: HingeEmbeddingLossArgs<'_, T, N>,
     ) -> Result<()> {
-        if args.input.shape != self.desc.input_shape
-            || args.target.shape != self.desc.input_shape
-        {
+        if args.input.shape != self.desc.input_shape || args.target.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HingeEmbeddingLossPlan: shape mismatch",
             ));
@@ -304,26 +302,62 @@ impl<T: Element, const N: usize> HingeEmbeddingLossBackwardPlan<T, N> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_hinge_embedding_backward_f32_run(
-                    numel, mode, inv_n_or_one, margin, input_ptr, target_ptr, dy_ptr, dinput_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    margin,
+                    input_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dinput_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_hinge_embedding_backward_f16_run(
-                    numel, mode, inv_n_or_one, margin, input_ptr, target_ptr, dy_ptr, dinput_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    margin,
+                    input_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dinput_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_hinge_embedding_backward_bf16_run(
-                    numel, mode, inv_n_or_one, margin, input_ptr, target_ptr, dy_ptr, dinput_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    margin,
+                    input_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dinput_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_hinge_embedding_backward_f64_run(
-                    numel, mode, inv_n_or_one, margin, input_ptr, target_ptr, dy_ptr, dinput_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    margin,
+                    input_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dinput_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

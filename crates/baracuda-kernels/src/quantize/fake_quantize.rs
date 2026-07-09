@@ -162,8 +162,16 @@ impl<TIn: Element> FakeQuantizePlan<TIn> {
             let scale_f64 = args.scale.to_f64();
             unsafe {
                 baracuda_kernels_sys::baracuda_kernels_fake_quantize_f64_run(
-                    numel, scale_f64, zp, qmin, qmax, x_ptr, y_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    scale_f64,
+                    zp,
+                    qmin,
+                    qmax,
+                    x_ptr,
+                    y_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             }
         } else {
@@ -171,25 +179,51 @@ impl<TIn: Element> FakeQuantizePlan<TIn> {
             match TIn::KIND {
                 ElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fake_quantize_f32_run(
-                        numel, scale_f32, zp, qmin, qmax, x_ptr, y_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fake_quantize_f16_run(
-                        numel, scale_f32, zp, qmin, qmax, x_ptr, y_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_fake_quantize_bf16_run(
-                        numel, scale_f32, zp, qmin, qmax, x_ptr, y_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
-                _ => return Err(Error::Unsupported(
-                    "FakeQuantizePlan: unsupported TIn at run()",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "FakeQuantizePlan: unsupported TIn at run()",
+                    ));
+                }
             }
         };
         map_status(status)

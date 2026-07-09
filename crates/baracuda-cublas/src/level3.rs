@@ -13,7 +13,7 @@ use baracuda_driver::DeviceBuffer;
 use baracuda_types::{Complex32, Complex64, DeviceRepr};
 
 use crate::blas_scalar::Op;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Triangular storage mode.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -160,12 +160,14 @@ macro_rules! l3_real_impl {
                 beta: &$t,
                 c: *mut $t,
                 ldc: i32,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$symm()) {
-                    Ok(f) => f(h, side, uplo, m, n, alpha, a, lda, b, ldb, beta, c, ldc),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$symm()) {
+                        Ok(f) => f(h, side, uplo, m, n, alpha, a, lda, b, ldb, beta, c, ldc),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
             unsafe fn syrk_raw(
                 h: cublasHandle_t,
                 uplo: cublasFillMode_t,
@@ -178,12 +180,14 @@ macro_rules! l3_real_impl {
                 beta: &$t,
                 c: *mut $t,
                 ldc: i32,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$syrk()) {
-                    Ok(f) => f(h, uplo, trans, n, k, alpha, a, lda, beta, c, ldc),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$syrk()) {
+                        Ok(f) => f(h, uplo, trans, n, k, alpha, a, lda, beta, c, ldc),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
             unsafe fn trmm_raw(
                 h: cublasHandle_t,
                 side: cublasSideMode_t,
@@ -199,14 +203,16 @@ macro_rules! l3_real_impl {
                 ldb: i32,
                 c: *mut $t,
                 ldc: i32,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$trmm()) {
-                    Ok(f) => f(
-                        h, side, uplo, trans, diag, m, n, alpha, a, lda, b, ldb, c, ldc,
-                    ),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$trmm()) {
+                        Ok(f) => f(
+                            h, side, uplo, trans, diag, m, n, alpha, a, lda, b, ldb, c, ldc,
+                        ),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
             unsafe fn trsm_raw(
                 h: cublasHandle_t,
                 side: cublasSideMode_t,
@@ -220,12 +226,14 @@ macro_rules! l3_real_impl {
                 lda: i32,
                 b: *mut $t,
                 ldb: i32,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$trsm()) {
-                    Ok(f) => f(h, side, uplo, trans, diag, m, n, alpha, a, lda, b, ldb),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$trsm()) {
+                        Ok(f) => f(h, side, uplo, trans, diag, m, n, alpha, a, lda, b, ldb),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
         }
     };
 }
@@ -247,26 +255,28 @@ macro_rules! l3_complex_impl {
                 beta: &$t,
                 c: *mut $t,
                 ldc: i32,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$symm()) {
-                    Ok(f) => f(
-                        h,
-                        side,
-                        uplo,
-                        m,
-                        n,
-                        alpha as *const _ as *const $raw,
-                        a as *const $raw,
-                        lda,
-                        b as *const $raw,
-                        ldb,
-                        beta as *const _ as *const $raw,
-                        c as *mut $raw,
-                        ldc,
-                    ),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$symm()) {
+                        Ok(f) => f(
+                            h,
+                            side,
+                            uplo,
+                            m,
+                            n,
+                            alpha as *const _ as *const $raw,
+                            a as *const $raw,
+                            lda,
+                            b as *const $raw,
+                            ldb,
+                            beta as *const _ as *const $raw,
+                            c as *mut $raw,
+                            ldc,
+                        ),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
             unsafe fn syrk_raw(
                 h: cublasHandle_t,
                 uplo: cublasFillMode_t,
@@ -279,24 +289,26 @@ macro_rules! l3_complex_impl {
                 beta: &$t,
                 c: *mut $t,
                 ldc: i32,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$syrk()) {
-                    Ok(f) => f(
-                        h,
-                        uplo,
-                        trans,
-                        n,
-                        k,
-                        alpha as *const _ as *const $raw,
-                        a as *const $raw,
-                        lda,
-                        beta as *const _ as *const $raw,
-                        c as *mut $raw,
-                        ldc,
-                    ),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$syrk()) {
+                        Ok(f) => f(
+                            h,
+                            uplo,
+                            trans,
+                            n,
+                            k,
+                            alpha as *const _ as *const $raw,
+                            a as *const $raw,
+                            lda,
+                            beta as *const _ as *const $raw,
+                            c as *mut $raw,
+                            ldc,
+                        ),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
             unsafe fn trmm_raw(
                 h: cublasHandle_t,
                 side: cublasSideMode_t,
@@ -312,27 +324,29 @@ macro_rules! l3_complex_impl {
                 ldb: i32,
                 c: *mut $t,
                 ldc: i32,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$trmm()) {
-                    Ok(f) => f(
-                        h,
-                        side,
-                        uplo,
-                        trans,
-                        diag,
-                        m,
-                        n,
-                        alpha as *const _ as *const $raw,
-                        a as *const $raw,
-                        lda,
-                        b as *const $raw,
-                        ldb,
-                        c as *mut $raw,
-                        ldc,
-                    ),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$trmm()) {
+                        Ok(f) => f(
+                            h,
+                            side,
+                            uplo,
+                            trans,
+                            diag,
+                            m,
+                            n,
+                            alpha as *const _ as *const $raw,
+                            a as *const $raw,
+                            lda,
+                            b as *const $raw,
+                            ldb,
+                            c as *mut $raw,
+                            ldc,
+                        ),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
             unsafe fn trsm_raw(
                 h: cublasHandle_t,
                 side: cublasSideMode_t,
@@ -346,25 +360,27 @@ macro_rules! l3_complex_impl {
                 lda: i32,
                 b: *mut $t,
                 ldb: i32,
-            ) -> cublasStatus_t { unsafe {
-                match cublas().and_then(|c| c.$trsm()) {
-                    Ok(f) => f(
-                        h,
-                        side,
-                        uplo,
-                        trans,
-                        diag,
-                        m,
-                        n,
-                        alpha as *const _ as *const $raw,
-                        a as *const $raw,
-                        lda,
-                        b as *mut $raw,
-                        ldb,
-                    ),
-                    Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            ) -> cublasStatus_t {
+                unsafe {
+                    match cublas().and_then(|c| c.$trsm()) {
+                        Ok(f) => f(
+                            h,
+                            side,
+                            uplo,
+                            trans,
+                            diag,
+                            m,
+                            n,
+                            alpha as *const _ as *const $raw,
+                            a as *const $raw,
+                            lda,
+                            b as *mut $raw,
+                            ldb,
+                        ),
+                        Err(_) => cublasStatus_t::NOT_INITIALIZED,
+                    }
                 }
-            }}
+            }
         }
     };
 }
@@ -445,26 +461,28 @@ impl HermitianScalar for Complex32 {
         beta: &Complex32,
         c: *mut Complex32,
         ldc: i32,
-    ) -> cublasStatus_t { unsafe {
-        match cublas().and_then(|c| c.cublas_chemm()) {
-            Ok(f) => f(
-                h,
-                side,
-                uplo,
-                m,
-                n,
-                alpha as *const _ as *const cuComplex,
-                a as *const cuComplex,
-                lda,
-                b as *const cuComplex,
-                ldb,
-                beta as *const _ as *const cuComplex,
-                c as *mut cuComplex,
-                ldc,
-            ),
-            Err(_) => cublasStatus_t::NOT_INITIALIZED,
+    ) -> cublasStatus_t {
+        unsafe {
+            match cublas().and_then(|c| c.cublas_chemm()) {
+                Ok(f) => f(
+                    h,
+                    side,
+                    uplo,
+                    m,
+                    n,
+                    alpha as *const _ as *const cuComplex,
+                    a as *const cuComplex,
+                    lda,
+                    b as *const cuComplex,
+                    ldb,
+                    beta as *const _ as *const cuComplex,
+                    c as *mut cuComplex,
+                    ldc,
+                ),
+                Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            }
         }
-    }}
+    }
 
     unsafe fn herk_raw(
         h: cublasHandle_t,
@@ -478,24 +496,26 @@ impl HermitianScalar for Complex32 {
         beta: &f32,
         c: *mut Complex32,
         ldc: i32,
-    ) -> cublasStatus_t { unsafe {
-        match cublas().and_then(|c| c.cublas_cherk()) {
-            Ok(f) => f(
-                h,
-                uplo,
-                trans,
-                n,
-                k,
-                alpha,
-                a as *const cuComplex,
-                lda,
-                beta,
-                c as *mut cuComplex,
-                ldc,
-            ),
-            Err(_) => cublasStatus_t::NOT_INITIALIZED,
+    ) -> cublasStatus_t {
+        unsafe {
+            match cublas().and_then(|c| c.cublas_cherk()) {
+                Ok(f) => f(
+                    h,
+                    uplo,
+                    trans,
+                    n,
+                    k,
+                    alpha,
+                    a as *const cuComplex,
+                    lda,
+                    beta,
+                    c as *mut cuComplex,
+                    ldc,
+                ),
+                Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            }
         }
-    }}
+    }
 }
 
 impl HermitianScalar for Complex64 {
@@ -515,26 +535,28 @@ impl HermitianScalar for Complex64 {
         beta: &Complex64,
         c: *mut Complex64,
         ldc: i32,
-    ) -> cublasStatus_t { unsafe {
-        match cublas().and_then(|c| c.cublas_zhemm()) {
-            Ok(f) => f(
-                h,
-                side,
-                uplo,
-                m,
-                n,
-                alpha as *const _ as *const cuDoubleComplex,
-                a as *const cuDoubleComplex,
-                lda,
-                b as *const cuDoubleComplex,
-                ldb,
-                beta as *const _ as *const cuDoubleComplex,
-                c as *mut cuDoubleComplex,
-                ldc,
-            ),
-            Err(_) => cublasStatus_t::NOT_INITIALIZED,
+    ) -> cublasStatus_t {
+        unsafe {
+            match cublas().and_then(|c| c.cublas_zhemm()) {
+                Ok(f) => f(
+                    h,
+                    side,
+                    uplo,
+                    m,
+                    n,
+                    alpha as *const _ as *const cuDoubleComplex,
+                    a as *const cuDoubleComplex,
+                    lda,
+                    b as *const cuDoubleComplex,
+                    ldb,
+                    beta as *const _ as *const cuDoubleComplex,
+                    c as *mut cuDoubleComplex,
+                    ldc,
+                ),
+                Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            }
         }
-    }}
+    }
 
     unsafe fn herk_raw(
         h: cublasHandle_t,
@@ -548,24 +570,26 @@ impl HermitianScalar for Complex64 {
         beta: &f64,
         c: *mut Complex64,
         ldc: i32,
-    ) -> cublasStatus_t { unsafe {
-        match cublas().and_then(|c| c.cublas_zherk()) {
-            Ok(f) => f(
-                h,
-                uplo,
-                trans,
-                n,
-                k,
-                alpha,
-                a as *const cuDoubleComplex,
-                lda,
-                beta,
-                c as *mut cuDoubleComplex,
-                ldc,
-            ),
-            Err(_) => cublasStatus_t::NOT_INITIALIZED,
+    ) -> cublasStatus_t {
+        unsafe {
+            match cublas().and_then(|c| c.cublas_zherk()) {
+                Ok(f) => f(
+                    h,
+                    uplo,
+                    trans,
+                    n,
+                    k,
+                    alpha,
+                    a as *const cuDoubleComplex,
+                    lda,
+                    beta,
+                    c as *mut cuDoubleComplex,
+                    ldc,
+                ),
+                Err(_) => cublasStatus_t::NOT_INITIALIZED,
+            }
         }
-    }}
+    }
 }
 
 mod l3_sealed {
@@ -800,4 +824,3 @@ pub fn herk<T: HermitianScalar>(
     };
     check(status)
 }
-

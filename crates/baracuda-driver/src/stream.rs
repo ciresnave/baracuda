@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use baracuda_cuda_sys::types::CUstream_flags;
-use baracuda_cuda_sys::{driver, CUstream};
+use baracuda_cuda_sys::{CUstream, driver};
 
 use crate::context::Context;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// An asynchronous work queue on a CUDA device.
 ///
@@ -257,15 +257,13 @@ impl Stream {
     ///
     /// `value_out` must be a writable region matching the layout of the
     /// `CUstreamAttrValue` variant for `attr`.
-    pub unsafe fn get_attribute(
-        &self,
-        attr: i32,
-        value_out: *mut core::ffi::c_void,
-    ) -> Result<()> { unsafe {
-        let d = driver()?;
-        let cu = d.cu_stream_get_attribute()?;
-        check(cu(self.inner.handle, attr, value_out))
-    }}
+    pub unsafe fn get_attribute(&self, attr: i32, value_out: *mut core::ffi::c_void) -> Result<()> {
+        unsafe {
+            let d = driver()?;
+            let cu = d.cu_stream_get_attribute()?;
+            check(cu(self.inner.handle, attr, value_out))
+        }
+    }
 
     /// Set a `CUstreamAttrValue` on this stream. See [`Self::get_attribute`]
     /// for the value layout.
@@ -274,15 +272,13 @@ impl Stream {
     ///
     /// `value` must point at a properly-initialized `CUstreamAttrValue`
     /// variant for `attr`.
-    pub unsafe fn set_attribute(
-        &self,
-        attr: i32,
-        value: *const core::ffi::c_void,
-    ) -> Result<()> { unsafe {
-        let d = driver()?;
-        let cu = d.cu_stream_set_attribute()?;
-        check(cu(self.inner.handle, attr, value))
-    }}
+    pub unsafe fn set_attribute(&self, attr: i32, value: *const core::ffi::c_void) -> Result<()> {
+        unsafe {
+            let d = driver()?;
+            let cu = d.cu_stream_set_attribute()?;
+            check(cu(self.inner.handle, attr, value))
+        }
+    }
 
     /// Associate a managed-memory region with this stream. Pass
     /// `flags = 0` for the default ("one thread").

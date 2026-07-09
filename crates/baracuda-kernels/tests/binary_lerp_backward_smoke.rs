@@ -5,10 +5,10 @@
 //! is one mul (the `(1 - weight)` factor for `da` is computed in f32 at
 //! kernel-build time on the f64 path, contributing negligible error).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryKind, BinaryParamBackwardArgs, BinaryParamBackwardDescriptor,
-    BinaryParamBackwardPlan, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryKind, BinaryParamBackwardArgs, BinaryParamBackwardDescriptor, BinaryParamBackwardPlan,
+    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -45,9 +45,21 @@ fn lerp_backward_f32_3d() {
     let plan = BinaryParamBackwardPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryParamBackwardArgs::<f32, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -62,11 +74,17 @@ fn lerp_backward_f32_3d() {
         let tol_b = exp_db.abs().max(1.0) * 4.0 * f32::EPSILON;
         assert!(
             (got_da[i] - exp_da).abs() <= tol_a,
-            "lerp bw da f32 @ {i}: got {} exp {} (diff {})", got_da[i], exp_da, (got_da[i] - exp_da).abs()
+            "lerp bw da f32 @ {i}: got {} exp {} (diff {})",
+            got_da[i],
+            exp_da,
+            (got_da[i] - exp_da).abs()
         );
         assert!(
             (got_db[i] - exp_db).abs() <= tol_b,
-            "lerp bw db f32 @ {i}: got {} exp {} (diff {})", got_db[i], exp_db, (got_db[i] - exp_db).abs()
+            "lerp bw db f32 @ {i}: got {} exp {} (diff {})",
+            got_db[i],
+            exp_db,
+            (got_db[i] - exp_db).abs()
         );
     }
 }
@@ -91,9 +109,21 @@ fn lerp_backward_f64_3d() {
     let plan = BinaryParamBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryParamBackwardArgs::<f64, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -109,11 +139,15 @@ fn lerp_backward_f64_3d() {
         let tol_b = exp_db.abs().max(1.0) * 4.0 * f64::EPSILON;
         assert!(
             (got_da[i] - exp_da).abs() <= tol_a,
-            "lerp bw da f64 @ {i}: got {} exp {}", got_da[i], exp_da
+            "lerp bw da f64 @ {i}: got {} exp {}",
+            got_da[i],
+            exp_da
         );
         assert!(
             (got_db[i] - exp_db).abs() <= tol_b,
-            "lerp bw db f64 @ {i}: got {} exp {}", got_db[i], exp_db
+            "lerp bw db f64 @ {i}: got {} exp {}",
+            got_db[i],
+            exp_db
         );
     }
 }
@@ -140,9 +174,21 @@ fn lerp_backward_f16_3d() {
     let plan = BinaryParamBackwardPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryParamBackwardArgs::<f16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -188,12 +234,25 @@ fn lerp_backward_bf16_3d() {
         element: ElementKind::Bf16,
         param: W,
     };
-    let plan = BinaryParamBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryParamBackwardPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = BinaryParamBackwardArgs::<bf16, 3> {
-        dy: TensorRef { data: dev_dy.as_slice(), shape, stride },
-        da: TensorMut { data: dev_da.as_slice_mut(), shape, stride },
-        db: TensorMut { data: dev_db.as_slice_mut(), shape, stride },
+        dy: TensorRef {
+            data: dev_dy.as_slice(),
+            shape,
+            stride,
+        },
+        da: TensorMut {
+            data: dev_da.as_slice_mut(),
+            shape,
+            stride,
+        },
+        db: TensorMut {
+            data: dev_db.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

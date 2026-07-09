@@ -26,7 +26,7 @@ use baracuda_kernels_types::{
     PlanPreference, PrecisionGuarantee, SortKind, TensorMut, TensorRef, Workspace,
 };
 
-use super::{map_status, SORT_MAX_ROW};
+use super::{SORT_MAX_ROW, map_status};
 
 /// Descriptor for a `sort` op.
 #[derive(Copy, Clone, Debug)]
@@ -84,11 +84,7 @@ pub struct SortPlan<T: Element> {
 
 impl<T: Element> SortPlan<T> {
     /// Pick a kernel for `desc`.
-    pub fn select(
-        _stream: &Stream,
-        desc: &SortDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &SortDescriptor, _pref: PlanPreference) -> Result<Self> {
         validate_sort_desc(desc.batch, desc.row_len, desc.element, T::KIND, "SortPlan")?;
         let sku = build_sku::<T>(SortKind::Sort);
         Ok(Self {

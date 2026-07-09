@@ -3,10 +3,10 @@
 
 use baracuda_cuda_sys::runtime::types::{cudaChannelFormatKind, cudaExtent, cudaTextureDesc};
 
-use baracuda_runtime::array::{channel_desc, Array, MipmappedArray, SurfaceObject, TextureObject};
+use baracuda_runtime::array::{Array, MipmappedArray, SurfaceObject, TextureObject, channel_desc};
 use baracuda_runtime::launch_attr::LaunchExBuilder;
 use baracuda_runtime::memcpy3d::Pitched3dBuffer;
-use baracuda_runtime::{profiler, vmm, Device, Library, Stream};
+use baracuda_runtime::{Device, Library, Stream, profiler, vmm};
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 

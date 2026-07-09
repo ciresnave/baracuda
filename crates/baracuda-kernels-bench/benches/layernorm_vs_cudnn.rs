@@ -19,14 +19,14 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, LayerNormArgs, LayerNormDescriptor, LayerNormPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    LayerNormArgs, LayerNormDescriptor, LayerNormPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
+    CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP, PhaseTwentyNineRow, PytorchBaseline, append_csv_row,
+    measure_median_ns, setup_device, time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::f16;
 
 const BENCH_NAME: &str = "layernorm_vs_cudnn";
@@ -89,14 +89,11 @@ fn bench_baracuda<T>(
                 has_beta: true,
                 element: T::KIND,
             };
-            let plan = match LayerNormPlan::<T, 2>::select(
-                &stream,
-                &desc,
-                PlanPreference::default(),
-            ) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
+            let plan =
+                match LayerNormPlan::<T, 2>::select(&stream, &desc, PlanPreference::default()) {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
 
             let xs = [rows, hidden];
             let stx = contiguous_stride(xs);
@@ -138,7 +135,8 @@ fn bench_baracuda<T>(
                         stride: st_save,
                     },
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda layernorm");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda layernorm");
             });
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = LayerNormArgs::<T, 2> {
@@ -173,7 +171,8 @@ fn bench_baracuda<T>(
                         stride: st_save,
                     },
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda layernorm");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda layernorm");
             });
             append_csv_row(
                 BENCH_NAME,
@@ -222,7 +221,8 @@ fn bench_baracuda<T>(
                                 stride: st_save,
                             },
                         };
-                        plan.run(&stream, Workspace::None, args).expect("baracuda layernorm");
+                        plan.run(&stream, Workspace::None, args)
+                            .expect("baracuda layernorm");
                     })
                 });
             });

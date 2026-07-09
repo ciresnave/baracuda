@@ -14,10 +14,10 @@
 
 #![cfg(feature = "awq")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Int4AwqGemmArgs, Int4AwqGemmDescriptor, Int4AwqGemmPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    Int4AwqGemmArgs, Int4AwqGemmDescriptor, Int4AwqGemmPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use baracuda_kernels_sys::baracuda_kernels_int4_awq_gemm_f16_workspace_bytes;
 use half::f16;
@@ -42,29 +42,21 @@ fn awq_plan_select_rejects_invalid_descriptor() {
 
     // OC not divisible by 64.
     let bad_oc = Int4AwqGemmDescriptor::new(1, 256, 48);
-    assert!(
-        Int4AwqGemmPlan::<f16>::select(&stream, &bad_oc, PlanPreference::default()).is_err()
-    );
+    assert!(Int4AwqGemmPlan::<f16>::select(&stream, &bad_oc, PlanPreference::default()).is_err());
 
     // group_size != 64/128.
     let bad_g = Int4AwqGemmDescriptor::new(1, 256, 64).with_group_size(32);
-    assert!(
-        Int4AwqGemmPlan::<f16>::select(&stream, &bad_g, PlanPreference::default()).is_err()
-    );
+    assert!(Int4AwqGemmPlan::<f16>::select(&stream, &bad_g, PlanPreference::default()).is_err());
 
     // IC not divisible by 32 * split_k_iters.
     let bad_ic = Int4AwqGemmDescriptor::new(1, 96, 64)
         .with_group_size(64)
         .with_split_k_iters(8);
-    assert!(
-        Int4AwqGemmPlan::<f16>::select(&stream, &bad_ic, PlanPreference::default()).is_err()
-    );
+    assert!(Int4AwqGemmPlan::<f16>::select(&stream, &bad_ic, PlanPreference::default()).is_err());
 
     // Minimal valid.
     let ok = Int4AwqGemmDescriptor::new(1, 256, 64).with_group_size(128);
-    assert!(
-        Int4AwqGemmPlan::<f16>::select(&stream, &ok, PlanPreference::default()).is_ok()
-    );
+    assert!(Int4AwqGemmPlan::<f16>::select(&stream, &ok, PlanPreference::default()).is_ok());
 }
 
 /// End-to-end AWQ GEMM smoke test on a real GPU.

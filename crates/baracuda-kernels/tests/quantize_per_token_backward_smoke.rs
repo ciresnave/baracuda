@@ -4,11 +4,10 @@
 //!
 //! `#[ignore]`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, QuantizePerTokenBackwardArgs,
-    QuantizePerTokenBackwardDescriptor, QuantizePerTokenBackwardPlan, TensorMut, TensorRef,
-    Workspace,
+    ElementKind, PlanPreference, QuantizePerTokenBackwardArgs, QuantizePerTokenBackwardDescriptor,
+    QuantizePerTokenBackwardPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -26,8 +25,9 @@ fn quantize_per_token_backward_f32_ste() {
     let n: i32 = 2;
     let d: i32 = 4;
     let host_x: Vec<f32> = vec![
-        0.05, 0.15, -0.07, 0.30,    // row 0 — all in range with scale=0.1, qmin=-20, qmax=20
-        12.5, 1.0, -0.25, 4.0,      // row 1 — first elem will saturate with scale=0.5, qmin=-20, qmax=20
+        0.05, 0.15, -0.07, 0.30, // row 0 — all in range with scale=0.1, qmin=-20, qmax=20
+        12.5, 1.0, -0.25,
+        4.0, // row 1 — first elem will saturate with scale=0.5, qmin=-20, qmax=20
     ];
     let host_dy: Vec<f32> = (0..(n * d) as usize).map(|i| (i as f32) + 1.0).collect();
     let host_scale: Vec<f32> = vec![0.1, 0.5];
@@ -62,8 +62,9 @@ fn quantize_per_token_backward_f32_ste() {
         q_max: qmax,
         input_element: ElementKind::F32,
     };
-    let plan = QuantizePerTokenBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        QuantizePerTokenBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = QuantizePerTokenBackwardArgs::<f32> {
         d_output: TensorRef {
             data: dev_dy.as_slice(),

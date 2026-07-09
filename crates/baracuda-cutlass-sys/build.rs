@@ -78,13 +78,14 @@ fn main() {
 }
 
 fn run_docs_rs_stub() -> Result<(), String> {
-    let out_dir = env::var("OUT_DIR")
-        .map_err(|_| "OUT_DIR must be set by cargo".to_string())?;
+    let out_dir = env::var("OUT_DIR").map_err(|_| "OUT_DIR must be set by cargo".to_string())?;
     let include = PathBuf::from(&out_dir).join("cutlass-stub-include");
     fs::create_dir_all(&include)
         .map_err(|e| format!("create stub include dir {}: {e}", include.display()))?;
 
-    println!("cargo:warning=baracuda-cutlass-sys: DOCS_RS=1 detected; emitting empty include stub (no CUTLASS fetch).");
+    println!(
+        "cargo:warning=baracuda-cutlass-sys: DOCS_RS=1 detected; emitting empty include stub (no CUTLASS fetch)."
+    );
     emit_cargo_keys(&PathBuf::from(&out_dir), &include, "docs.rs-stub");
     Ok(())
 }
@@ -98,7 +99,10 @@ fn run() -> Result<(), String> {
                 "CUTLASS_DIR='{custom}' has no include/ subdirectory"
             ));
         }
-        println!("cargo:warning=baracuda-cutlass-sys: using CUTLASS_DIR={}", root.display());
+        println!(
+            "cargo:warning=baracuda-cutlass-sys: using CUTLASS_DIR={}",
+            root.display()
+        );
         check_cutlass_version(&include)?;
         emit_cargo_keys(&root, &include, "CUTLASS_DIR");
         return Ok(());
@@ -215,9 +219,7 @@ fn current_ref_matches(dep_dir: &Path, target: &Target) -> bool {
         .current_dir(dep_dir)
         .output()
     {
-        Ok(out) if out.status.success() => {
-            String::from_utf8_lossy(&out.stdout).trim().to_string()
-        }
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
         _ => return false,
     };
 
@@ -325,9 +327,7 @@ fn setup_sparse_checkout(dep_dir: &Path) -> Result<(), String> {
 }
 
 fn fetch_commit(dep_dir: &Path, commit: &str) -> Result<(), String> {
-    println!(
-        "cargo:warning=baracuda-cutlass-sys: fetching commit {commit}"
-    );
+    println!("cargo:warning=baracuda-cutlass-sys: fetching commit {commit}");
 
     let status = Command::new("git")
         .args(["fetch", "--no-recurse-submodules", "origin", commit])
@@ -400,10 +400,7 @@ fn emit_cargo_keys(root: &Path, include: &Path, version_label: &str) {
         "cargo:rustc-env=BARACUDA_CUTLASS_INCLUDE_DIR={}",
         include.display()
     );
-    println!(
-        "cargo:rustc-env=BARACUDA_CUTLASS_ROOT={}",
-        root.display()
-    );
+    println!("cargo:rustc-env=BARACUDA_CUTLASS_ROOT={}", root.display());
     println!("cargo:rustc-env=BARACUDA_CUTLASS_VERSION={version_label}");
 }
 

@@ -154,7 +154,12 @@ impl<T: Element> RoiPoolPlan<T> {
                 "baracuda-kernels::RoiPoolPlan: rois must be [num_rois, 5]",
             ));
         }
-        let out_shape = [self.desc.num_rois, self.desc.c, self.desc.pooled_h, self.desc.pooled_w];
+        let out_shape = [
+            self.desc.num_rois,
+            self.desc.c,
+            self.desc.pooled_h,
+            self.desc.pooled_w,
+        ];
         if args.output.shape != out_shape || args.argmax.shape != out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiPoolPlan: output / argmax shape mismatch",
@@ -200,20 +205,40 @@ impl<T: Element> RoiPoolPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_roi_pool_f32_run(
-                    self.desc.n, self.desc.c, self.desc.h, self.desc.w,
-                    self.desc.num_rois, self.desc.pooled_h, self.desc.pooled_w,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.h,
+                    self.desc.w,
+                    self.desc.num_rois,
+                    self.desc.pooled_h,
+                    self.desc.pooled_w,
                     self.desc.spatial_scale,
-                    input_ptr, rois_ptr, out_ptr, arg_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    input_ptr,
+                    rois_ptr,
+                    out_ptr,
+                    arg_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_roi_pool_f64_run(
-                    self.desc.n, self.desc.c, self.desc.h, self.desc.w,
-                    self.desc.num_rois, self.desc.pooled_h, self.desc.pooled_w,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.h,
+                    self.desc.w,
+                    self.desc.num_rois,
+                    self.desc.pooled_h,
+                    self.desc.pooled_w,
                     self.desc.spatial_scale,
-                    input_ptr, rois_ptr, out_ptr, arg_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    input_ptr,
+                    rois_ptr,
+                    out_ptr,
+                    arg_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

@@ -2,11 +2,10 @@
 //!
 //! `dpred[i] = 2 · (pred[i] - target[i]) · dy / N`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, LossReduction, MseLossBackwardArgs,
-    MseLossBackwardDescriptor, MseLossBackwardPlan, PlanPreference, TensorMut, TensorRef,
-    Workspace,
+    ElementKind, LossReduction, MseLossBackwardArgs, MseLossBackwardDescriptor,
+    MseLossBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -61,9 +60,21 @@ fn loss_mse_backward_f32_mean() {
         &stream,
         Workspace::None,
         MseLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -77,8 +88,12 @@ fn loss_mse_backward_f32_mean() {
     dev_dp.copy_to_host(&mut got).unwrap();
     for i in 0..numel {
         let tol = expected[i].abs() * 16.0 * f32::EPSILON + 1e-6;
-        assert!((got[i] - expected[i]).abs() <= tol, "f32 BW @{i}: got={} want={}",
-            got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 BW @{i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -109,9 +124,21 @@ fn loss_mse_backward_f64_mean() {
         &stream,
         Workspace::None,
         MseLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -167,9 +194,21 @@ fn loss_mse_backward_f16_mean() {
         &stream,
         Workspace::None,
         MseLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -184,7 +223,12 @@ fn loss_mse_backward_f16_mean() {
     for i in 0..numel {
         let tol = expected[i].abs() * 16.0 * 9.77e-4_f32 + 1e-3;
         let g = got[i].to_f32();
-        assert!((g - expected[i]).abs() <= tol, "f16 BW @{i}: got={} want={}", g, expected[i]);
+        assert!(
+            (g - expected[i]).abs() <= tol,
+            "f16 BW @{i}: got={} want={}",
+            g,
+            expected[i]
+        );
     }
 }
 
@@ -226,9 +270,21 @@ fn loss_mse_backward_bf16_mean() {
         &stream,
         Workspace::None,
         MseLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,

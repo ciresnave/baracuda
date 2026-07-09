@@ -7,7 +7,7 @@
 
 #![cfg(feature = "sm89")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     EpilogueKind, Fp8E4M3, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan, LayoutSku, MatrixMut,
     MatrixRef, PlanPreference, Workspace,
@@ -90,9 +90,13 @@ fn run_fp8_e4m3_rrr_identity(m: i32, n: i32, k: i32) {
     let mut expected_bits = vec![0u8; mu * nu];
     let mut expected_f32 = vec![0f32; mu * nu];
     cpu_fp8_e4m3_gemm_rrr(
-        mu, nu, ku,
-        &host_a_bits, ku,
-        &host_b_bits, nu, // B is row-major [K, N] with row stride = N
+        mu,
+        nu,
+        ku,
+        &host_a_bits,
+        ku,
+        &host_b_bits,
+        nu, // B is row-major [K, N] with row stride = N
         alpha,
         &mut expected_bits,
         &mut expected_f32,
@@ -103,11 +107,12 @@ fn run_fp8_e4m3_rrr_identity(m: i32, n: i32, k: i32) {
     let dev_b_bytes = DeviceBuffer::from_slice(&ctx, &host_b_bits).expect("upload B");
     let dev_a = dev_a_bytes.view_as::<Fp8E4M3>();
     let dev_b = dev_b_bytes.view_as::<Fp8E4M3>();
-    let mut dev_d: DeviceBuffer<Fp8E4M3> =
-        DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
+    let mut dev_d: DeviceBuffer<Fp8E4M3> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
     let desc = Fp8GemmDescriptor {
-        m, n, k,
+        m,
+        n,
+        k,
         layout: LayoutSku::Rrr,
         epilogue: EpilogueKind::Identity,
     };
@@ -115,11 +120,26 @@ fn run_fp8_e4m3_rrr_identity(m: i32, n: i32, k: i32) {
         .expect("select FP8 E4M3 RRR plan");
 
     let args = Fp8GemmArgs::<Fp8E4M3> {
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
         // RRR: B is row-major [K, N] with row stride = N
-        b: MatrixRef { data: dev_b, rows: k, cols: n, ld: n as i64 },
+        b: MatrixRef {
+            data: dev_b,
+            rows: k,
+            cols: n,
+            ld: n as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         bias: None,
         alpha,
         beta,
@@ -157,22 +177,26 @@ fn run_fp8_e4m3_rrr_identity(m: i32, n: i32, k: i32) {
     }
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn fp8_e4m3_rrr_identity_64_64_32() {
     run_fp8_e4m3_rrr_identity(64, 64, 32);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn fp8_e4m3_rrr_identity_128_128_128() {
     run_fp8_e4m3_rrr_identity(128, 128, 128);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn fp8_e4m3_rrr_identity_256_128_64() {
     run_fp8_e4m3_rrr_identity(256, 128, 64);
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn fp8_e4m3_rrr_identity_100_70_50() {
     run_fp8_e4m3_rrr_identity(100, 70, 50);
 }

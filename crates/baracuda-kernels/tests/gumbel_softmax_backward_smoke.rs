@@ -6,11 +6,10 @@
 //! softmax_backward kernel, so we verify against the analytic softmax
 //! BW formula directly.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GumbelSoftmaxBackwardArgs,
-    GumbelSoftmaxBackwardDescriptor, GumbelSoftmaxBackwardPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, GumbelSoftmaxBackwardArgs, GumbelSoftmaxBackwardDescriptor,
+    GumbelSoftmaxBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -29,7 +28,11 @@ fn host_softmax_bw_f32(shape: [i32; 2], axis: usize, y: &[f32], dy: &[f32]) -> V
     let mut dx = vec![0f32; numel];
     for o in 0..other {
         let idx = |j: usize| -> usize {
-            if axis == 1 { o * shape[1] as usize + j } else { j * shape[1] as usize + o }
+            if axis == 1 {
+                o * shape[1] as usize + j
+            } else {
+                j * shape[1] as usize + o
+            }
         };
         let mut dot = 0f32;
         for j in 0..extent {
@@ -77,15 +80,28 @@ fn gumbel_softmax_bw_f32_2d() {
         temperature: 1.0,
         element: ElementKind::F32,
     };
-    let plan = GumbelSoftmaxBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        GumbelSoftmaxBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
     plan.run(
         &stream,
         Workspace::None,
         GumbelSoftmaxBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            y: TensorRef { data: dev_y.as_slice(), shape, stride: contiguous_stride(shape) },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("run");
@@ -95,8 +111,12 @@ fn gumbel_softmax_bw_f32_2d() {
     let eps = 8.0 * f32::EPSILON;
     for i in 0..numel {
         let tol = (expected[i].abs() * eps).max(eps);
-        assert!((got[i] - expected[i]).abs() <= tol,
-            "f32 gumbel BW @ {i}: got={} want={}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 gumbel BW @ {i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -125,7 +145,9 @@ fn gumbel_softmax_bw_f64_2d() {
     let mut expected = vec![0f64; numel];
     for row in 0..3 {
         let mut dot = 0f64;
-        for j in 0..4 { dot += host_y[row * 4 + j] * host_dy[row * 4 + j]; }
+        for j in 0..4 {
+            dot += host_y[row * 4 + j] * host_dy[row * 4 + j];
+        }
         for j in 0..4 {
             expected[row * 4 + j] = host_y[row * 4 + j] * (host_dy[row * 4 + j] - dot);
         }
@@ -141,15 +163,28 @@ fn gumbel_softmax_bw_f64_2d() {
         temperature: 1.0,
         element: ElementKind::F64,
     };
-    let plan = GumbelSoftmaxBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        GumbelSoftmaxBackwardPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
     plan.run(
         &stream,
         Workspace::None,
         GumbelSoftmaxBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            y: TensorRef { data: dev_y.as_slice(), shape, stride: contiguous_stride(shape) },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("run");
@@ -178,7 +213,9 @@ fn gumbel_softmax_bw_f16_2d() {
                 v[row * 6 + j] = raw;
                 s += raw;
             }
-            for j in 0..6 { v[row * 6 + j] /= s; }
+            for j in 0..6 {
+                v[row * 6 + j] /= s;
+            }
         }
         v
     };
@@ -197,15 +234,28 @@ fn gumbel_softmax_bw_f16_2d() {
         temperature: 1.0,
         element: ElementKind::F16,
     };
-    let plan = GumbelSoftmaxBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        GumbelSoftmaxBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
     plan.run(
         &stream,
         Workspace::None,
         GumbelSoftmaxBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            y: TensorRef { data: dev_y.as_slice(), shape, stride: contiguous_stride(shape) },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("run");
@@ -235,7 +285,9 @@ fn gumbel_softmax_bw_bf16_2d() {
                 v[row * 6 + j] = raw;
                 s += raw;
             }
-            for j in 0..6 { v[row * 6 + j] /= s; }
+            for j in 0..6 {
+                v[row * 6 + j] /= s;
+            }
         }
         v
     };
@@ -254,15 +306,28 @@ fn gumbel_softmax_bw_bf16_2d() {
         temperature: 1.0,
         element: ElementKind::Bf16,
     };
-    let plan = GumbelSoftmaxBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        GumbelSoftmaxBackwardPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default())
+            .expect("sel");
     plan.run(
         &stream,
         Workspace::None,
         GumbelSoftmaxBackwardArgs {
-            dy: TensorRef { data: dev_dy.as_slice(), shape, stride: contiguous_stride(shape) },
-            y: TensorRef { data: dev_y.as_slice(), shape, stride: contiguous_stride(shape) },
-            dx: TensorMut { data: dev_dx.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            y: TensorRef {
+                data: dev_y.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dx: TensorMut {
+                data: dev_dx.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("run");

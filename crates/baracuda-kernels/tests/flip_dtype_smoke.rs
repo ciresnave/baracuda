@@ -9,10 +9,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test flip_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlipArgs, FlipDescriptor, FlipPlan, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    ElementKind, FlipArgs, FlipDescriptor, FlipPlan, PlanPreference, TensorMut, TensorRef,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -48,8 +48,8 @@ fn flip_2d_axis_1_f16() {
         flip_axes: [false, true],
         element: ElementKind::F16,
     };
-    let plan = FlipPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select f16");
+    let plan =
+        FlipPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("select f16");
     let args = FlipArgs::<f16, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -148,8 +148,8 @@ fn flip_2d_axis_1_f64() {
         flip_axes: [false, true],
         element: ElementKind::F64,
     };
-    let plan = FlipPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select f64");
+    let plan =
+        FlipPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("select f64");
     let args = FlipArgs::<f64, 2> {
         x: TensorRef {
             data: dev_x.as_slice(),

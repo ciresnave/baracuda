@@ -1,7 +1,7 @@
 //! GPU-gated integration tests for Wave-11 Driver-API additions:
 //! pinned host memory (`cuMemHostAlloc` + `cuMemHostRegister` paths).
 
-use baracuda_driver::pinned::{flags, PinnedBuffer, PinnedRegistration};
+use baracuda_driver::pinned::{PinnedBuffer, PinnedRegistration, flags};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]

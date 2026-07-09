@@ -44,9 +44,12 @@ pub struct QuantizePerTensorBackwardDescriptor {
     pub output_element: ElementKind,
 }
 
-impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug for QuantizePerTensorBackwardArgs<'a, TIn, TOut> {
+impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug
+    for QuantizePerTensorBackwardArgs<'a, TIn, TOut>
+{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("QuantizePerTensorBackwardArgs").finish_non_exhaustive()
+        f.debug_struct("QuantizePerTensorBackwardArgs")
+            .finish_non_exhaustive()
     }
 }
 
@@ -135,10 +138,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorBackwardPlan<TIn, TOut> {
     }
 
     /// Validate args.
-    pub fn can_implement(
-        &self,
-        args: &QuantizePerTensorBackwardArgs<'_, TIn, TOut>,
-    ) -> Result<()> {
+    pub fn can_implement(&self, args: &QuantizePerTensorBackwardArgs<'_, TIn, TOut>) -> Result<()> {
         let expected = [self.desc.numel];
         if args.input.shape != expected
             || args.d_output.shape != expected
@@ -193,9 +193,17 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorBackwardPlan<TIn, TOut> {
             let scale_f64 = args.scale.to_f64();
             unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_backward_f64_run(
-                    numel, scale_f64, zp, qmin, qmax,
-                    x_ptr, dy_ptr, dx_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    scale_f64,
+                    zp,
+                    qmin,
+                    qmax,
+                    x_ptr,
+                    dy_ptr,
+                    dx_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             }
         } else {
@@ -203,28 +211,54 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorBackwardPlan<TIn, TOut> {
             match TIn::KIND {
                 ElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_backward_f32_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, dy_ptr, dx_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        dy_ptr,
+                        dx_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_backward_f16_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, dy_ptr, dx_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        dy_ptr,
+                        dx_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_backward_bf16_run(
-                        numel, scale_f32, zp, qmin, qmax,
-                        x_ptr, dy_ptr, dx_ptr,
-                        core::ptr::null_mut(), 0, stream_ptr,
+                        numel,
+                        scale_f32,
+                        zp,
+                        qmin,
+                        qmax,
+                        x_ptr,
+                        dy_ptr,
+                        dx_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
                     )
                 },
-                _ => return Err(Error::Unsupported(
-                    "QuantizePerTensorBackwardPlan: unsupported TIn at run()",
-                )),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "QuantizePerTensorBackwardPlan: unsupported TIn at run()",
+                    ));
+                }
             }
         };
         map_status(status)

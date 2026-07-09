@@ -18,10 +18,10 @@
 
 #![cfg(feature = "marlin")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Int4MarlinGemmArgs, Int4MarlinGemmDescriptor, Int4MarlinGemmPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    Int4MarlinGemmArgs, Int4MarlinGemmDescriptor, Int4MarlinGemmPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::f16;
 
@@ -164,7 +164,8 @@ fn marlin_gemm_minimal_smoke() {
         },
     };
 
-    plan.run(&stream, Workspace::None, args).expect("marlin run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("marlin run");
     stream.synchronize().expect("sync");
 
     // Read back output. With the trailblazer packer's identity-permutation
@@ -191,8 +192,14 @@ fn marlin_gemm_minimal_smoke() {
         .map(|v| (v.to_f32() - want).abs())
         .fold(0.0f32, f32::max);
     // Print the observed range for the developer's information.
-    let min = host_c.iter().map(|v| v.to_f32()).fold(f32::INFINITY, f32::min);
-    let max = host_c.iter().map(|v| v.to_f32()).fold(f32::NEG_INFINITY, f32::max);
+    let min = host_c
+        .iter()
+        .map(|v| v.to_f32())
+        .fold(f32::INFINITY, f32::min);
+    let max = host_c
+        .iter()
+        .map(|v| v.to_f32())
+        .fold(f32::NEG_INFINITY, f32::max);
     eprintln!(
         "marlin smoke: M={m} N={n} K={k} → output range [{min:.2}, {max:.2}], expected ~{want:.2}"
     );

@@ -59,7 +59,9 @@ pub enum LoaderError {
     Libloading(#[from] libloading::Error),
 
     /// baracuda does not target this platform (e.g. macOS).
-    #[error("baracuda does not support {platform}; NVIDIA driver is only available on Linux and Windows")]
+    #[error(
+        "baracuda does not support {platform}; NVIDIA driver is only available on Linux and Windows"
+    )]
     UnsupportedPlatform {
         /// Name of the unsupported platform (e.g. "macOS").
         platform: &'static str,

@@ -6,10 +6,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BatchedSvdArgs, BatchedSvdDescriptor, BatchedSvdPlan, ElementKind,
-    PlanPreference, TensorMut, Workspace,
+    BatchedSvdArgs, BatchedSvdDescriptor, BatchedSvdPlan, ElementKind, PlanPreference, TensorMut,
+    Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -122,7 +122,11 @@ fn svd_batched_f32_basic() {
     for bi in 0..b as usize {
         let s_b = &s_host[bi * nu..(bi + 1) * nu];
         for i in 0..nu {
-            assert!(s_b[i] >= 0.0, "f32 σ < 0 at batch {bi}, idx {i}: {}", s_b[i]);
+            assert!(
+                s_b[i] >= 0.0,
+                "f32 σ < 0 at batch {bi}, idx {i}: {}",
+                s_b[i]
+            );
         }
         for i in 1..nu {
             assert!(

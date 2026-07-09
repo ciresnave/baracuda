@@ -4,7 +4,7 @@
 
 use baracuda_runtime::memory::{self, PrefetchTarget};
 use baracuda_runtime::{
-    graph, stream, CaptureMode, Device, DeviceBuffer, Event, Graph, Library, Stream,
+    CaptureMode, Device, DeviceBuffer, Event, Graph, Library, Stream, graph, stream,
 };
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
@@ -135,7 +135,10 @@ fn zeros_async_and_implicit_stream_drop() {
         let mut back = vec![1.0f32; n];
         zeroed.copy_to_host_async(&mut back, &stream).unwrap();
         stream.synchronize().unwrap();
-        assert!(back.iter().all(|&x| x == 0.0), "zeros_async left non-zero bytes");
+        assert!(
+            back.iter().all(|&x| x == 0.0),
+            "zeros_async left non-zero bytes"
+        );
 
         // A second async buffer we DON'T free explicitly: it drops at the end
         // of this scope and must reclaim via cudaFreeAsync on `stream`.

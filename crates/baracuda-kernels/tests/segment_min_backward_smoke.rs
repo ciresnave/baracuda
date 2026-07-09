@@ -1,10 +1,10 @@
 //! Real-GPU smoke test for `SegmentMinBackwardPlan<T>` (Phase 25).
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, SegmentMinBackwardArgs,
-    SegmentMinBackwardDescriptor, SegmentMinBackwardPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, SegmentMinBackwardArgs, SegmentMinBackwardDescriptor,
+    SegmentMinBackwardPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -64,9 +64,8 @@ fn segment_min_backward_f32_basic() {
     let seg: Vec<i32> = vec![0, 0, 0, 1, 1, 1];
     let input: Vec<f32> = vec![5.0, 2.0, 1.0, 7.0, 3.0, -1.0, 4.0, 8.0, 6.0, -2.0, 0.0, 5.0];
     let d_out: Vec<f32> = vec![0.5, -1.0, 1.5, 2.0];
-    let expected = cpu_segment_min_backward_f32(
-        n as usize, d as usize, ns as usize, &d_out, &input, &seg,
-    );
+    let expected =
+        cpu_segment_min_backward_f32(n as usize, d as usize, ns as usize, &d_out, &input, &seg);
 
     let dev_dout = DeviceBuffer::from_slice(&ctx, &d_out).expect("up dout");
     let dev_in = DeviceBuffer::from_slice(&ctx, &input).expect("up in");
@@ -110,6 +109,9 @@ fn segment_min_backward_f32_basic() {
     let mut got = vec![0f32; (n * d) as usize];
     dev_din.copy_to_host(&mut got).expect("dl");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_eq!(g, e, "segment_min_backward f32 mismatch @ {i}: got {g} expected {e}");
+        assert_eq!(
+            g, e,
+            "segment_min_backward f32 mismatch @ {i}: got {g} expected {e}"
+        );
     }
 }

@@ -28,10 +28,10 @@ use baracuda_cuda_sys::types::{
     CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC, CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS,
     CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS,
 };
-use baracuda_cuda_sys::{driver, CUdeviceptr, CUexternalMemory, CUexternalSemaphore};
+use baracuda_cuda_sys::{CUdeviceptr, CUexternalMemory, CUexternalSemaphore, driver};
 
 use crate::context::Context;
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::stream::Stream;
 
 /// An imported external-memory handle (Vulkan VkDeviceMemory, D3D12 heap,
@@ -76,19 +76,21 @@ impl ExternalMemory {
     pub unsafe fn import(
         context: &Context,
         desc: &CUDA_EXTERNAL_MEMORY_HANDLE_DESC,
-    ) -> Result<Self> { unsafe {
-        context.set_current()?;
-        let d = driver()?;
-        let cu = d.cu_import_external_memory()?;
-        let mut handle: CUexternalMemory = core::ptr::null_mut();
-        check(cu(&mut handle, desc))?;
-        Ok(Self {
-            inner: Arc::new(ExternalMemoryInner {
-                handle,
-                context: context.clone(),
-            }),
-        })
-    }}
+    ) -> Result<Self> {
+        unsafe {
+            context.set_current()?;
+            let d = driver()?;
+            let cu = d.cu_import_external_memory()?;
+            let mut handle: CUexternalMemory = core::ptr::null_mut();
+            check(cu(&mut handle, desc))?;
+            Ok(Self {
+                inner: Arc::new(ExternalMemoryInner {
+                    handle,
+                    context: context.clone(),
+                }),
+            })
+        }
+    }
 
     /// Expose a subregion of the external memory as a device pointer.
     /// The returned pointer is valid until this `ExternalMemory` drops.
@@ -167,19 +169,21 @@ impl ExternalSemaphore {
     pub unsafe fn import(
         context: &Context,
         desc: &CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC,
-    ) -> Result<Self> { unsafe {
-        context.set_current()?;
-        let d = driver()?;
-        let cu = d.cu_import_external_semaphore()?;
-        let mut handle: CUexternalSemaphore = core::ptr::null_mut();
-        check(cu(&mut handle, desc))?;
-        Ok(Self {
-            inner: Arc::new(ExternalSemaphoreInner {
-                handle,
-                context: context.clone(),
-            }),
-        })
-    }}
+    ) -> Result<Self> {
+        unsafe {
+            context.set_current()?;
+            let d = driver()?;
+            let cu = d.cu_import_external_semaphore()?;
+            let mut handle: CUexternalSemaphore = core::ptr::null_mut();
+            check(cu(&mut handle, desc))?;
+            Ok(Self {
+                inner: Arc::new(ExternalSemaphoreInner {
+                    handle,
+                    context: context.clone(),
+                }),
+            })
+        }
+    }
 
     /// Enqueue a signal of fence value `value` on `stream` for timeline /
     /// D3D12 fence semaphores.

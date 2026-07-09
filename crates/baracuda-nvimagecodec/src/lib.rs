@@ -43,20 +43,21 @@ use std::path::Path;
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_driver::{DeviceBuffer, Stream};
 use baracuda_nvimagecodec_sys::{
-    nvimgcodec, nvimgcodecCodeStream_t, nvimgcodecDecodeParams_t, nvimgcodecDecoder_t,
-    nvimgcodecFuture_t, nvimgcodecImageBufferKind_t, nvimgcodecImageInfo_t, nvimgcodecImage_t,
-    nvimgcodecInstanceCreateInfo_t, nvimgcodecInstance_t, nvimgcodecProcessingStatus_t,
-    nvimgcodecSampleDataType_t, nvimgcodecStatus_t, NVIMGCODEC_PROCESSING_STATUS_SUCCESS,
+    NVIMGCODEC_PROCESSING_STATUS_SUCCESS, nvimgcodec, nvimgcodecCodeStream_t,
+    nvimgcodecDecodeParams_t, nvimgcodecDecoder_t, nvimgcodecFuture_t, nvimgcodecImage_t,
+    nvimgcodecImageBufferKind_t, nvimgcodecImageInfo_t, nvimgcodecInstance_t,
+    nvimgcodecInstanceCreateInfo_t, nvimgcodecProcessingStatus_t, nvimgcodecSampleDataType_t,
+    nvimgcodecStatus_t,
 };
 
-/// Re-exported sample-layout enum (planar `P_*` / interleaved `I_*`).
-pub use baracuda_nvimagecodec_sys::nvimgcodecSampleFormat_t as SampleFormat;
 /// Re-exported chroma-subsampling enum.
 pub use baracuda_nvimagecodec_sys::nvimgcodecChromaSubsampling_t as ChromaSubsampling;
 /// Re-exported color-spec enum.
 pub use baracuda_nvimagecodec_sys::nvimgcodecColorSpec_t as ColorSpec;
 /// Re-exported raw image-info struct, for advanced callers.
 pub use baracuda_nvimagecodec_sys::nvimgcodecImageInfo_t as RawImageInfo;
+/// Re-exported sample-layout enum (planar `P_*` / interleaved `I_*`).
+pub use baracuda_nvimagecodec_sys::nvimgcodecSampleFormat_t as SampleFormat;
 
 /// Error type for nvImageCodec operations.
 pub type Error = baracuda_core::Error<nvimgcodecStatus_t>;
@@ -205,9 +206,10 @@ impl CodeStream<'static> {
     pub fn from_file(instance: &Instance, path: &Path) -> Result<Self> {
         let n = nvimgcodec()?;
         let create = n.nvimgcodec_code_stream_create_from_file()?;
-        let c_path = CString::new(path.to_string_lossy().as_bytes()).map_err(|_| Error::Status {
-            status: nvimgcodecStatus_t::INVALID_PARAMETER,
-        })?;
+        let c_path =
+            CString::new(path.to_string_lossy().as_bytes()).map_err(|_| Error::Status {
+                status: nvimgcodecStatus_t::INVALID_PARAMETER,
+            })?;
         let mut raw: nvimgcodecCodeStream_t = core::ptr::null_mut();
         check(unsafe {
             create(

@@ -10,7 +10,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -33,8 +33,7 @@ fn ffi_unary_elu_f32_alpha_2_5_matches_cpu() {
     let expected: Vec<f32> = host_x.iter().map(|&x| cpu_elu_f32(x, alpha)).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_unary_elu_f32_run(
@@ -73,13 +72,13 @@ fn ffi_unary_elu_f64_alpha_negative_branch_uses_alpha() {
     let (ctx, stream) = setup();
     let alpha = 3.0_f32;
     let host_x: Vec<f64> = (0..256).map(|i| -1.0 - (i as f64) * 0.001).collect();
-    let expected: Vec<f64> = host_x.iter()
+    let expected: Vec<f64> = host_x
+        .iter()
         .map(|&x| (alpha as f64) * (x.exp() - 1.0))
         .collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f64> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_unary_elu_f64_run(

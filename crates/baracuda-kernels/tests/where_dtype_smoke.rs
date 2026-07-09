@@ -11,10 +11,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test where_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, WhereArgs,
-    WhereDescriptor, WherePlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, WhereArgs, WhereDescriptor, WherePlan,
+    Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -85,7 +85,8 @@ fn where_f16_3d() {
             stride,
         },
     };
-    plan.run(&stream, Workspace::None, args).expect("where f16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("where f16 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![f16::from_f32(0.0); numel];
@@ -156,7 +157,8 @@ fn where_bf16_3d() {
             stride,
         },
     };
-    plan.run(&stream, Workspace::None, args).expect("where bf16 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("where bf16 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![bf16::from_f32(0.0); numel];
@@ -223,7 +225,8 @@ fn where_f64_3d() {
             stride,
         },
     };
-    plan.run(&stream, Workspace::None, args).expect("where f64 run");
+    plan.run(&stream, Workspace::None, args)
+        .expect("where f64 run");
     stream.synchronize().expect("sync");
 
     let mut got = vec![0f64; numel];

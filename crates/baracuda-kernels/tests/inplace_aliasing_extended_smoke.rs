@@ -33,7 +33,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -65,7 +65,8 @@ fn cast_f32_to_i32_aliasing_same_byte_width_safe() {
             numel as i64,
             dev_x.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -83,7 +84,8 @@ fn cast_f32_to_i32_aliasing_same_byte_width_safe() {
             numel as i64,
             p as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -95,7 +97,9 @@ fn cast_f32_to_i32_aliasing_same_byte_width_safe() {
     let dev_inplace_bytes: &baracuda_driver::DeviceBuffer<f32> = &dev_inplace;
     unsafe {
         let dst_slice = core::slice::from_raw_parts_mut(got_bytes.as_mut_ptr() as *mut f32, numel);
-        dev_inplace_bytes.copy_to_host(dst_slice).expect("download bytes");
+        dev_inplace_bytes
+            .copy_to_host(dst_slice)
+            .expect("download bytes");
     }
     let aliased_out: Vec<i32> = (0..numel)
         .map(|i| {
@@ -105,7 +109,10 @@ fn cast_f32_to_i32_aliasing_same_byte_width_safe() {
         })
         .collect();
 
-    assert_eq!(aliased_out, ref_out, "cast f32→i32 in-place must match non-aliased reference");
+    assert_eq!(
+        aliased_out, ref_out,
+        "cast f32→i32 in-place must match non-aliased reference"
+    );
 }
 
 // =========================================================================
@@ -133,7 +140,8 @@ fn where_f32_aliasing_a_eq_y_safe() {
             dev_a.as_slice().as_raw().0 as *const c_void,
             dev_b.as_slice().as_raw().0 as *const c_void,
             dev_y.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -154,7 +162,8 @@ fn where_f32_aliasing_a_eq_y_safe() {
             p as *const c_void,
             dev_b2.as_slice().as_raw().0 as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -164,8 +173,13 @@ fn where_f32_aliasing_a_eq_y_safe() {
     dev_a_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
-            "where f32 in-place @ {i}: aliased {} vs ref {}", aliased_out[i], ref_out[i]);
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
+            "where f32 in-place @ {i}: aliased {} vs ref {}",
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }
 
@@ -217,9 +231,14 @@ fn triu_f32_aliasing_input_eq_output_safe() {
     assert_eq!(status, 0);
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; n * n];
-    dev_inplace.copy_to_host(&mut aliased_out).expect("dl aliased");
+    dev_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("dl aliased");
 
-    assert_eq!(aliased_out, ref_out, "triu in-place must match non-aliased reference");
+    assert_eq!(
+        aliased_out, ref_out,
+        "triu in-place must match non-aliased reference"
+    );
 }
 
 #[test]
@@ -263,9 +282,14 @@ fn tril_f32_aliasing_input_eq_output_safe() {
     assert_eq!(status, 0);
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; n * n];
-    dev_inplace.copy_to_host(&mut aliased_out).expect("dl aliased");
+    dev_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("dl aliased");
 
-    assert_eq!(aliased_out, ref_out, "tril in-place must match non-aliased reference");
+    assert_eq!(
+        aliased_out, ref_out,
+        "tril in-place must match non-aliased reference"
+    );
 }
 
 // =========================================================================
@@ -293,7 +317,8 @@ fn unary_relu_backward_f32_aliasing_dx_eq_saved_safe() {
             dev_dy.as_slice().as_raw().0 as *const c_void,
             dev_x.as_slice().as_raw().0 as *const c_void, // saved-x
             dev_dx.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -312,18 +337,26 @@ fn unary_relu_backward_f32_aliasing_dx_eq_saved_safe() {
             dev_dy2.as_slice().as_raw().0 as *const c_void,
             p as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
     assert_eq!(status, 0);
     stream.synchronize().expect("sync");
     let mut aliased_out = vec![0_f32; numel];
-    dev_saved_inplace.copy_to_host(&mut aliased_out).expect("dl aliased");
+    dev_saved_inplace
+        .copy_to_host(&mut aliased_out)
+        .expect("dl aliased");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
-            "relu BW dx==saved @ {i}: aliased {} vs ref {}", aliased_out[i], ref_out[i]);
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
+            "relu BW dx==saved @ {i}: aliased {} vs ref {}",
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }
 
@@ -345,7 +378,8 @@ fn unary_relu_backward_f32_aliasing_dx_eq_dy_safe() {
             dev_dy.as_slice().as_raw().0 as *const c_void,
             dev_x.as_slice().as_raw().0 as *const c_void,
             dev_dx.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -364,7 +398,8 @@ fn unary_relu_backward_f32_aliasing_dx_eq_dy_safe() {
             p as *const c_void,
             dev_x2.as_slice().as_raw().0 as *const c_void,
             p as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -374,8 +409,13 @@ fn unary_relu_backward_f32_aliasing_dx_eq_dy_safe() {
     dev_dy_inplace.copy_to_host(&mut aliased_out).expect("dl");
 
     for i in 0..numel {
-        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
-            "relu BW dx==dy @ {i}: aliased {} vs ref {}", aliased_out[i], ref_out[i]);
+        assert_eq!(
+            aliased_out[i].to_bits(),
+            ref_out[i].to_bits(),
+            "relu BW dx==dy @ {i}: aliased {} vs ref {}",
+            aliased_out[i],
+            ref_out[i]
+        );
     }
 }
 
@@ -398,7 +438,8 @@ fn fill_f32_writes_constant() {
             numel as i64,
             dev.as_slice_mut().as_raw().0 as *mut c_void,
             value,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -408,6 +449,10 @@ fn fill_f32_writes_constant() {
     dev.copy_to_host(&mut got).expect("dl");
 
     for (i, &x) in got.iter().enumerate() {
-        assert_eq!(x.to_bits(), value.to_bits(), "fill @ {i}: got {x} expected {value}");
+        assert_eq!(
+            x.to_bits(),
+            value.to_bits(),
+            "fill @ {i}: got {x} expected {value}"
+        );
     }
 }

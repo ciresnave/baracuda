@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `BceLossBackwardPlan`. BW × 4 dtypes × Mean.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BceLossBackwardArgs, BceLossBackwardDescriptor, BceLossBackwardPlan,
-    ElementKind, LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    BceLossBackwardArgs, BceLossBackwardDescriptor, BceLossBackwardPlan, ElementKind,
+    LossReduction, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -30,7 +30,9 @@ fn loss_bce_backward_f32_mean() {
     let shape = [3i32, 4];
     let numel = 12usize;
     let host_p: Vec<f32> = (0..numel).map(|i| 0.3 + (i as f32) * 0.04).collect();
-    let host_t: Vec<f32> = (0..numel).map(|i| if i % 2 == 0 { 1.0 } else { 0.0 }).collect();
+    let host_t: Vec<f32> = (0..numel)
+        .map(|i| if i % 2 == 0 { 1.0 } else { 0.0 })
+        .collect();
     let dy_host = [1.0f32];
 
     let expected: Vec<f32> = host_bce_bw_f64(
@@ -59,9 +61,21 @@ fn loss_bce_backward_f32_mean() {
         &stream,
         Workspace::None,
         BceLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -75,8 +89,12 @@ fn loss_bce_backward_f32_mean() {
     dev_dp.copy_to_host(&mut got).unwrap();
     for i in 0..numel {
         let tol = expected[i].abs() * 32.0 * f32::EPSILON + 1e-5;
-        assert!((got[i] - expected[i]).abs() <= tol, "f32 BCE BW @{i}: got={} want={}",
-            got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 BCE BW @{i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -87,7 +105,9 @@ fn loss_bce_backward_f64_mean() {
     let shape = [2i32, 5];
     let numel = 10usize;
     let host_p: Vec<f64> = (0..numel).map(|i| 0.3 + (i as f64) * 0.05).collect();
-    let host_t: Vec<f64> = (0..numel).map(|i| if i % 2 == 0 { 1.0 } else { 0.0 }).collect();
+    let host_t: Vec<f64> = (0..numel)
+        .map(|i| if i % 2 == 0 { 1.0 } else { 0.0 })
+        .collect();
     let dy_host = [1.0f64];
 
     let expected = host_bce_bw_f64(&host_p, &host_t, 1.0, numel);
@@ -108,9 +128,21 @@ fn loss_bce_backward_f64_mean() {
         &stream,
         Workspace::None,
         BceLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -135,7 +167,9 @@ fn loss_bce_backward_f16_mean() {
     let shape = [3i32, 4];
     let numel = 12usize;
     let host_p_f32: Vec<f32> = (0..numel).map(|i| 0.35 + (i as f32) * 0.03).collect();
-    let host_t_f32: Vec<f32> = (0..numel).map(|i| if i % 2 == 0 { 1.0 } else { 0.0 }).collect();
+    let host_t_f32: Vec<f32> = (0..numel)
+        .map(|i| if i % 2 == 0 { 1.0 } else { 0.0 })
+        .collect();
     let host_p: Vec<f16> = host_p_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let host_t: Vec<f16> = host_t_f32.iter().map(|&v| f16::from_f32(v)).collect();
     let dy_host = [f16::from_f32(1.0)];
@@ -166,9 +200,21 @@ fn loss_bce_backward_f16_mean() {
         &stream,
         Workspace::None,
         BceLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,
@@ -183,8 +229,12 @@ fn loss_bce_backward_f16_mean() {
     for i in 0..numel {
         let tol = expected[i].abs() * 32.0 * 9.77e-4_f32 + 5e-3;
         let g = got[i].to_f32();
-        assert!((g - expected[i]).abs() <= tol, "f16 BCE BW @{i}: got={} want={}",
-            g, expected[i]);
+        assert!(
+            (g - expected[i]).abs() <= tol,
+            "f16 BCE BW @{i}: got={} want={}",
+            g,
+            expected[i]
+        );
     }
 }
 
@@ -195,7 +245,9 @@ fn loss_bce_backward_bf16_mean() {
     let shape = [3i32, 4];
     let numel = 12usize;
     let host_p_f32: Vec<f32> = (0..numel).map(|i| 0.3 + (i as f32) * 0.04).collect();
-    let host_t_f32: Vec<f32> = (0..numel).map(|i| if i % 2 == 0 { 1.0 } else { 0.0 }).collect();
+    let host_t_f32: Vec<f32> = (0..numel)
+        .map(|i| if i % 2 == 0 { 1.0 } else { 0.0 })
+        .collect();
     let host_p: Vec<bf16> = host_p_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let host_t: Vec<bf16> = host_t_f32.iter().map(|&v| bf16::from_f32(v)).collect();
     let dy_host = [bf16::from_f32(1.0)];
@@ -226,9 +278,21 @@ fn loss_bce_backward_bf16_mean() {
         &stream,
         Workspace::None,
         BceLossBackwardArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            dy: TensorRef { data: dev_dy.as_slice(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dy: TensorRef {
+                data: dev_dy.as_slice(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
             dpred: TensorMut {
                 data: dev_dp.as_slice_mut(),
                 shape,

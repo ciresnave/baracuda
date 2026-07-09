@@ -5,10 +5,10 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, LuArgs, LuDescriptor, LuPlan, PlanPreference, TensorMut,
-    Workspace,
+    ElementKind, LuArgs, LuDescriptor, LuPlan, PlanPreference, TensorMut, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -37,7 +37,10 @@ fn nonsingular_f32(n: usize, seed: u32) -> Vec<f32> {
 }
 
 fn nonsingular_f64(n: usize, seed: u32) -> Vec<f64> {
-    nonsingular_f32(n, seed).into_iter().map(|v| v as f64).collect()
+    nonsingular_f32(n, seed)
+        .into_iter()
+        .map(|v| v as f64)
+        .collect()
 }
 
 /// Reconstruct `L · U` from cuSOLVER's packed `LU` output (column-
@@ -130,7 +133,8 @@ fn lu_f32_basic() {
     let a_host = nonsingular_f32(n as usize, 0xC0FF_EE12);
 
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
-    let mut dev_pivot: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, n as usize).expect("alloc pivot");
+    let mut dev_pivot: DeviceBuffer<i32> =
+        DeviceBuffer::zeros(&ctx, n as usize).expect("alloc pivot");
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc info");
 
     let desc = LuDescriptor {
@@ -206,7 +210,8 @@ fn lu_f64_basic() {
     let a_host = nonsingular_f64(n as usize, 0xDEAD_C0DE);
 
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
-    let mut dev_pivot: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, n as usize).expect("alloc pivot");
+    let mut dev_pivot: DeviceBuffer<i32> =
+        DeviceBuffer::zeros(&ctx, n as usize).expect("alloc pivot");
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc info");
 
     let desc = LuDescriptor {

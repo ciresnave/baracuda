@@ -4,10 +4,10 @@
 //! Run: `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test roll_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RollBackwardArgs, RollBackwardDescriptor,
-    RollBackwardPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, RollBackwardArgs, RollBackwardDescriptor, RollBackwardPlan,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -22,11 +22,7 @@ fn setup() -> (Context, Stream) {
 // CPU reference: `dx[c] = dy[(c - shifts) mod shape]` per axis — same
 // as forward roll because BW negates shifts and rolling by -(-s) = +s.
 // Apply NEG-shifts here in the ref (mirrors what the plan does).
-fn cpu_roll_ref<const N: usize, T: Copy>(
-    src: &[T],
-    shape: [i32; N],
-    shifts: [i32; N],
-) -> Vec<T> {
+fn cpu_roll_ref<const N: usize, T: Copy>(src: &[T], shape: [i32; N], shifts: [i32; N]) -> Vec<T> {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
     let mut out = Vec::with_capacity(numel);
     let mut src_stride = [1usize; N];
@@ -71,8 +67,8 @@ fn roll_backward_f32_1d() {
         shifts,
         element: ElementKind::F32,
     };
-    let plan = RollBackwardPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        RollBackwardPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = RollBackwardArgs::<f32, 1> {
         dy: TensorRef {
             data: dev_dy.as_slice(),
@@ -111,8 +107,8 @@ fn roll_backward_f32_2d_negative_shift() {
         shifts,
         element: ElementKind::F32,
     };
-    let plan = RollBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        RollBackwardPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = RollBackwardArgs::<f32, 2> {
         dy: TensorRef {
             data: dev_dy.as_slice(),
@@ -153,8 +149,8 @@ fn roll_backward_f16_2d() {
         shifts,
         element: ElementKind::F16,
     };
-    let plan = RollBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        RollBackwardPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = RollBackwardArgs::<f16, 2> {
         dy: TensorRef {
             data: dev_dy.as_slice(),
@@ -235,8 +231,8 @@ fn roll_backward_f64_3d() {
         shifts,
         element: ElementKind::F64,
     };
-    let plan = RollBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        RollBackwardPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = RollBackwardArgs::<f64, 3> {
         dy: TensorRef {
             data: dev_dy.as_slice(),

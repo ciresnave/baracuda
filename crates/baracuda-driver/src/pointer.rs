@@ -1,10 +1,10 @@
 //! Pointer attribute queries (`cuPointerGetAttribute`).
 
+use baracuda_cuda_sys::CUdeviceptr;
 use baracuda_cuda_sys::driver;
 use baracuda_cuda_sys::types::CUpointer_attribute;
-use baracuda_cuda_sys::CUdeviceptr;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Raw pointer-attribute query. `attribute` is one of
 /// [`baracuda_cuda_sys::types::CUpointer_attribute`]; the caller must
@@ -19,11 +19,13 @@ pub unsafe fn raw_attribute(
     attribute: i32,
     ptr: CUdeviceptr,
     out: *mut core::ffi::c_void,
-) -> Result<()> { unsafe {
-    let d = driver()?;
-    let cu = d.cu_pointer_get_attribute()?;
-    check(cu(out, attribute, ptr))
-}}
+) -> Result<()> {
+    unsafe {
+        let d = driver()?;
+        let cu = d.cu_pointer_get_attribute()?;
+        check(cu(out, attribute, ptr))
+    }
+}
 
 /// Memory "kind" returned by `CUpointer_attribute::MEMORY_TYPE`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -121,21 +123,23 @@ pub unsafe fn raw_attributes_batched(
     attributes: &mut [i32],
     data: &mut [*mut core::ffi::c_void],
     ptr: CUdeviceptr,
-) -> Result<()> { unsafe {
-    assert_eq!(
-        attributes.len(),
-        data.len(),
-        "attributes / data length mismatch"
-    );
-    let d = driver()?;
-    let cu = d.cu_pointer_get_attributes()?;
-    check(cu(
-        attributes.len() as core::ffi::c_uint,
-        attributes.as_mut_ptr(),
-        data.as_mut_ptr(),
-        ptr,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        assert_eq!(
+            attributes.len(),
+            data.len(),
+            "attributes / data length mismatch"
+        );
+        let d = driver()?;
+        let cu = d.cu_pointer_get_attributes()?;
+        check(cu(
+            attributes.len() as core::ffi::c_uint,
+            attributes.as_mut_ptr(),
+            data.as_mut_ptr(),
+            ptr,
+        ))
+    }
+}
 
 /// Query a single attribute on a managed-memory range.
 ///
@@ -150,11 +154,13 @@ pub unsafe fn range_attribute_raw(
     count: usize,
     out: *mut core::ffi::c_void,
     data_size: usize,
-) -> Result<()> { unsafe {
-    let d = driver()?;
-    let cu = d.cu_mem_range_get_attribute()?;
-    check(cu(out, data_size, attribute, ptr, count))
-}}
+) -> Result<()> {
+    unsafe {
+        let d = driver()?;
+        let cu = d.cu_mem_range_get_attribute()?;
+        check(cu(out, data_size, attribute, ptr, count))
+    }
+}
 
 /// Batched range-attribute query. `data[i]` has size `data_sizes[i]`.
 ///
@@ -167,20 +173,22 @@ pub unsafe fn range_attributes_batched(
     data_sizes: &mut [usize],
     ptr: CUdeviceptr,
     count: usize,
-) -> Result<()> { unsafe {
-    assert_eq!(attributes.len(), data.len());
-    assert_eq!(attributes.len(), data_sizes.len());
-    let d = driver()?;
-    let cu = d.cu_mem_range_get_attributes()?;
-    check(cu(
-        data.as_mut_ptr(),
-        data_sizes.as_mut_ptr(),
-        attributes.as_mut_ptr(),
-        attributes.len(),
-        ptr,
-        count,
-    ))
-}}
+) -> Result<()> {
+    unsafe {
+        assert_eq!(attributes.len(), data.len());
+        assert_eq!(attributes.len(), data_sizes.len());
+        let d = driver()?;
+        let cu = d.cu_mem_range_get_attributes()?;
+        check(cu(
+            data.as_mut_ptr(),
+            data_sizes.as_mut_ptr(),
+            attributes.as_mut_ptr(),
+            attributes.len(),
+            ptr,
+            count,
+        ))
+    }
+}
 
 /// Set a single pointer attribute (typically `SYNC_MEMOPS`).
 ///
@@ -191,8 +199,10 @@ pub unsafe fn set_attribute_raw(
     value: *const core::ffi::c_void,
     attribute: i32,
     ptr: CUdeviceptr,
-) -> Result<()> { unsafe {
-    let d = driver()?;
-    let cu = d.cu_pointer_set_attribute()?;
-    check(cu(value, attribute, ptr))
-}}
+) -> Result<()> {
+    unsafe {
+        let d = driver()?;
+        let cu = d.cu_pointer_set_attribute()?;
+        check(cu(value, attribute, ptr))
+    }
+}

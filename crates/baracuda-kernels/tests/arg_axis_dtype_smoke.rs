@@ -15,10 +15,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test arg_axis_dtype_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ArgReduceArgs, ArgReduceDescriptor, ArgReduceKind, ArgReducePlan,
-    ElementKind, IndexOutputElement, PlanPreference, TensorMut, TensorRef, Workspace,
+    ArgReduceArgs, ArgReduceDescriptor, ArgReduceKind, ArgReducePlan, ElementKind,
+    IndexOutputElement, PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -89,25 +89,22 @@ fn download_as_i64<I: IndexOutputElement>(buf: &DeviceBuffer<I>, n: usize) -> Ve
     match I::KIND {
         IndexOutputKind::U32 => {
             // SAFETY: I is u32 by tag; the wire format is u32.
-            let typed: &DeviceBuffer<u32> = unsafe {
-                &*(buf as *const DeviceBuffer<I> as *const DeviceBuffer<u32>)
-            };
+            let typed: &DeviceBuffer<u32> =
+                unsafe { &*(buf as *const DeviceBuffer<I> as *const DeviceBuffer<u32>) };
             let mut got = vec![0u32; n];
             typed.copy_to_host(&mut got).expect("download u32");
             got.into_iter().map(|v| v as i64).collect()
         }
         IndexOutputKind::I32 => {
-            let typed: &DeviceBuffer<i32> = unsafe {
-                &*(buf as *const DeviceBuffer<I> as *const DeviceBuffer<i32>)
-            };
+            let typed: &DeviceBuffer<i32> =
+                unsafe { &*(buf as *const DeviceBuffer<I> as *const DeviceBuffer<i32>) };
             let mut got = vec![0i32; n];
             typed.copy_to_host(&mut got).expect("download i32");
             got.into_iter().map(|v| v as i64).collect()
         }
         IndexOutputKind::I64 => {
-            let typed: &DeviceBuffer<i64> = unsafe {
-                &*(buf as *const DeviceBuffer<I> as *const DeviceBuffer<i64>)
-            };
+            let typed: &DeviceBuffer<i64> =
+                unsafe { &*(buf as *const DeviceBuffer<I> as *const DeviceBuffer<i64>) };
             let mut got = vec![0i64; n];
             typed.copy_to_host(&mut got).expect("download i64");
             got

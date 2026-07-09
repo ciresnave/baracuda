@@ -5,10 +5,10 @@
 //! Run with: `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test scan_cumsum_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ScanArgs, ScanDescriptor, ScanKind, ScanPlan,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ScanArgs, ScanDescriptor, ScanKind, ScanPlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -96,8 +96,16 @@ fn cumsum_f32_1d_forward() {
     };
     let plan = ScanPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f32, 1> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -106,8 +114,12 @@ fn cumsum_f32_1d_forward() {
     let eps = 4.0 * f32::EPSILON;
     for i in 0..16 {
         let tol = (expected[i].abs() * eps).max(eps);
-        assert!((got[i] - expected[i]).abs() <= tol,
-            "f32 cumsum @ {i}: got={} want={}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 cumsum @ {i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -130,8 +142,16 @@ fn cumsum_f32_2d_axis_1_reverse() {
     };
     let plan = ScanPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f32, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -140,8 +160,12 @@ fn cumsum_f32_2d_axis_1_reverse() {
     let eps = 4.0 * f32::EPSILON;
     for i in 0..32 {
         let tol = (expected[i].abs() * eps).max(eps);
-        assert!((got[i] - expected[i]).abs() <= tol,
-            "f32 cumsum reverse @ {i}: got={} want={}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 cumsum reverse @ {i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -152,12 +176,20 @@ fn cumsum_f64_3d_axis_1_forward() {
     let shape = [3i32, 5, 4];
     let numel = 60;
     let host_x: Vec<f64> = (0..numel).map(|i| (i as f64) * 0.125 - 2.0).collect();
-    let expected = host_cumsum_f32::<3>(shape, 1, false, &host_x.iter().map(|&v| v as f32).collect::<Vec<_>>())
-        .into_iter().collect::<Vec<f32>>();
+    let expected = host_cumsum_f32::<3>(
+        shape,
+        1,
+        false,
+        &host_x.iter().map(|&v| v as f32).collect::<Vec<_>>(),
+    )
+    .into_iter()
+    .collect::<Vec<f32>>();
     // Build f64 reference directly to avoid double-precision loss
     let mut expected_f64 = vec![0f64; numel];
     let mut stride = [1usize; 3];
-    for d in (0..3).rev().skip(1) { stride[d] = stride[d + 1] * shape[d + 1] as usize; }
+    for d in (0..3).rev().skip(1) {
+        stride[d] = stride[d + 1] * shape[d + 1] as usize;
+    }
     for_each_coord::<3, _>(shape, |coord, linear| {
         let k = coord[1];
         let mut acc = 0f64;
@@ -165,7 +197,9 @@ fn cumsum_f64_3d_axis_1_forward() {
             let mut src_coord = coord;
             src_coord[1] = j;
             let mut idx = 0usize;
-            for d in 0..3 { idx += src_coord[d] as usize * stride[d]; }
+            for d in 0..3 {
+                idx += src_coord[d] as usize * stride[d];
+            }
             acc += host_x[idx];
         }
         expected_f64[linear as usize] = acc;
@@ -183,8 +217,16 @@ fn cumsum_f64_3d_axis_1_forward() {
     };
     let plan = ScanPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f64, 3> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -218,8 +260,16 @@ fn cumsum_f16_2d_axis_0_forward() {
     };
     let plan = ScanPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -230,9 +280,13 @@ fn cumsum_f16_2d_axis_0_forward() {
     for i in 0..numel {
         let tol = (expected_f32[i].abs() * eps).max(eps);
         let diff = (got[i].to_f32() - expected_f32[i]).abs();
-        assert!(diff <= tol,
+        assert!(
+            diff <= tol,
             "f16 cumsum @ {i}: got={} want={} diff={}",
-            got[i].to_f32(), expected_f32[i], diff);
+            got[i].to_f32(),
+            expected_f32[i],
+            diff
+        );
     }
 }
 
@@ -257,8 +311,16 @@ fn cumsum_bf16_2d_axis_1_reverse() {
     };
     let plan = ScanPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<bf16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

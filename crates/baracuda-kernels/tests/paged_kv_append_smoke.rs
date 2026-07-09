@@ -20,11 +20,14 @@
 //! `cargo test -p baracuda-kernels --features sm89,flashinfer \
 //!    --test paged_kv_append_smoke -- --include-ignored`.
 
-#![cfg(all(any(feature = "sm80", feature = "sm89", feature = "sm90a"), feature = "flashinfer"))]
+#![cfg(all(
+    any(feature = "sm80", feature = "sm89", feature = "sm90a"),
+    feature = "flashinfer"
+))]
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 fn setup() -> (Context, Stream) {
@@ -43,7 +46,10 @@ fn paged_kv_append_can_implement_rejects_bad_head_dim() {
             2, 16, 8, 128,
         )
     };
-    assert_eq!(ok, 0, "normal config (B=2 page=16 H=8 D=128) should succeed");
+    assert_eq!(
+        ok, 0,
+        "normal config (B=2 page=16 H=8 D=128) should succeed"
+    );
 
     let bad = unsafe {
         baracuda_kernels_sys::baracuda_kernels_flashinfer_paged_kv_append_decode_can_implement(
@@ -177,7 +183,10 @@ fn paged_kv_append_f16_runs_to_completion() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_flashinfer_paged_kv_append_decode_f16_run(
-            batch, page_size, num_heads, head_dim,
+            batch,
+            page_size,
+            num_heads,
+            head_dim,
             dev_k.as_slice_mut().as_raw().0 as *mut c_void,
             dev_v.as_slice_mut().as_raw().0 as *mut c_void,
             dev_indices.as_slice_mut().as_raw().0 as *mut c_void,
@@ -212,7 +221,9 @@ fn paged_kv_append_bf16_runs_to_completion() {
     let mut dev_last_page_len = DeviceBuffer::from_slice(&ctx, &[7_i32]).expect("last_page_len");
 
     let kv_per_req = (num_heads * head_dim) as usize;
-    let key_host: Vec<bf16> = (0..kv_per_req).map(|i| bf16::from_f32((i as f32) * 0.01)).collect();
+    let key_host: Vec<bf16> = (0..kv_per_req)
+        .map(|i| bf16::from_f32((i as f32) * 0.01))
+        .collect();
     let val_host: Vec<bf16> = vec![bf16::from_f32(0.5); kv_per_req];
 
     let dev_key = DeviceBuffer::from_slice(&ctx, &key_host).expect("key");
@@ -220,7 +231,10 @@ fn paged_kv_append_bf16_runs_to_completion() {
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_flashinfer_paged_kv_append_decode_bf16_run(
-            batch, page_size, num_heads, head_dim,
+            batch,
+            page_size,
+            num_heads,
+            head_dim,
             dev_k.as_slice_mut().as_raw().0 as *mut c_void,
             dev_v.as_slice_mut().as_raw().0 as *mut c_void,
             dev_indices.as_slice_mut().as_raw().0 as *mut c_void,

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use baracuda_cublas_sys::{cublas, cublasHandle_t, cublasMath_t, cublasPointerMode_t};
 use baracuda_driver::Stream;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 
 /// Owned cuBLAS context.
 ///

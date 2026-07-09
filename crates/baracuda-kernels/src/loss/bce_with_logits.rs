@@ -122,8 +122,7 @@ impl<T: Element, const N: usize> BceWithLogitsLossPlan<T, N> {
         workspace: Workspace<'_>,
         args: BceWithLogitsLossArgs<'_, T, N>,
     ) -> Result<()> {
-        if args.logits.shape != self.desc.input_shape
-            || args.target.shape != self.desc.input_shape
+        if args.logits.shape != self.desc.input_shape || args.target.shape != self.desc.input_shape
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BceWithLogitsLossPlan: logits / target shape mismatch",
@@ -298,26 +297,58 @@ impl<T: Element, const N: usize> BceWithLogitsLossBackwardPlan<T, N> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_bce_with_logits_backward_f32_run(
-                    numel, mode, inv_n_or_one, logits_ptr, target_ptr, dy_ptr, dlogits_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    logits_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dlogits_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_bce_with_logits_backward_f16_run(
-                    numel, mode, inv_n_or_one, logits_ptr, target_ptr, dy_ptr, dlogits_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    logits_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dlogits_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_bce_with_logits_backward_bf16_run(
-                    numel, mode, inv_n_or_one, logits_ptr, target_ptr, dy_ptr, dlogits_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    logits_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dlogits_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_loss_bce_with_logits_backward_f64_run(
-                    numel, mode, inv_n_or_one, logits_ptr, target_ptr, dy_ptr, dlogits_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    numel,
+                    mode,
+                    inv_n_or_one,
+                    logits_ptr,
+                    target_ptr,
+                    dy_ptr,
+                    dlogits_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

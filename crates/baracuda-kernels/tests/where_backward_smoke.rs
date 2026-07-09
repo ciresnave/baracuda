@@ -15,10 +15,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test where_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, WhereBackwardArgs,
-    WhereBackwardDescriptor, WhereBackwardPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, WhereBackwardArgs, WhereBackwardDescriptor,
+    WhereBackwardPlan, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 

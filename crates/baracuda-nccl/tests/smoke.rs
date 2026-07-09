@@ -1,7 +1,7 @@
 //! NCCL smoke test. NCCL is Linux-only in practice; on other hosts or when
 //! NCCL isn't installed the test skips gracefully instead of failing.
 
-use baracuda_nccl::{version, Communicator};
+use baracuda_nccl::{Communicator, version};
 
 #[test]
 #[ignore = "requires NCCL installed (typically Linux multi-GPU hosts)"]

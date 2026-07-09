@@ -1,9 +1,9 @@
 //! Real-GPU smoke test for `HuberLossPlan`. FW × 4 dtypes × Mean.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, HuberLossArgs, HuberLossDescriptor, HuberLossPlan,
-    LossReduction, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, HuberLossArgs, HuberLossDescriptor, HuberLossPlan, LossReduction, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -20,7 +20,11 @@ fn host_huber_mean_f64(pred: &[f64], target: &[f64], delta: f64) -> f64 {
     for i in 0..pred.len() {
         let x = pred[i] - target[i];
         let ax = x.abs();
-        s += if ax < delta { 0.5 * x * x } else { delta * (ax - 0.5 * delta) };
+        s += if ax < delta {
+            0.5 * x * x
+        } else {
+            delta * (ax - 0.5 * delta)
+        };
     }
     s / (pred.len() as f64)
 }
@@ -56,9 +60,21 @@ fn loss_huber_f32_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         HuberLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -66,7 +82,12 @@ fn loss_huber_f32_mean() {
     let mut got = [0f32; 1];
     dev_y.copy_to_host(&mut got).unwrap();
     let tol = expected.abs() * 8.0 * f32::EPSILON + 1e-6;
-    assert!((got[0] - expected).abs() <= tol, "f32 Huber: got={} want={}", got[0], expected);
+    assert!(
+        (got[0] - expected).abs() <= tol,
+        "f32 Huber: got={} want={}",
+        got[0],
+        expected
+    );
 }
 
 #[test]
@@ -96,9 +117,21 @@ fn loss_huber_f64_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         HuberLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -140,9 +173,21 @@ fn loss_huber_f16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         HuberLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -151,7 +196,12 @@ fn loss_huber_f16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 16.0 * 9.77e-4_f32 + 5e-3;
-    assert!((got_f32 - expected).abs() <= tol, "f16 Huber: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "f16 Huber: got={} want={}",
+        got_f32,
+        expected
+    );
 }
 
 #[test]
@@ -185,9 +235,21 @@ fn loss_huber_bf16_mean() {
         &stream,
         Workspace::Borrowed(dev_ws.as_slice_mut()),
         HuberLossArgs {
-            pred: TensorRef { data: dev_p.as_slice(), shape, stride: contiguous_stride(shape) },
-            target: TensorRef { data: dev_t.as_slice(), shape, stride: contiguous_stride(shape) },
-            out: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1], stride: [1, 1] },
+            pred: TensorRef {
+                data: dev_p.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: dev_t.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
         },
     )
     .unwrap();
@@ -196,5 +258,10 @@ fn loss_huber_bf16_mean() {
     dev_y.copy_to_host(&mut got).unwrap();
     let got_f32 = got[0].to_f32();
     let tol = expected.abs() * 16.0 * 7.81e-3_f32 + 2e-2;
-    assert!((got_f32 - expected).abs() <= tol, "bf16 Huber: got={} want={}", got_f32, expected);
+    assert!(
+        (got_f32 - expected).abs() <= tol,
+        "bf16 Huber: got={} want={}",
+        got_f32,
+        expected
+    );
 }

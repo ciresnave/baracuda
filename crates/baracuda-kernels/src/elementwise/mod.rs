@@ -38,26 +38,22 @@ pub mod where_op;
 
 pub use affine::{AffineArgs, AffineDescriptor, AffinePlan};
 pub use binary::{BinaryArgs, BinaryDescriptor, BinaryPlan};
-pub use cast::{CastArgs, CastDescriptor, CastPlan};
-pub use cast_subbyte::{CastSubByteArgs, CastSubByteDescriptor, CastSubBytePlan};
 pub use binary_backward::{BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan};
 pub use binary_cmp::{BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpPlan};
 pub use binary_param::{BinaryParamArgs, BinaryParamDescriptor, BinaryParamPlan};
 pub use binary_param_backward::{
     BinaryParamBackwardArgs, BinaryParamBackwardDescriptor, BinaryParamBackwardPlan,
 };
-pub use gated_activation::{
-    GatedActivationArgs, GatedActivationDescriptor, GatedActivationPlan,
-};
+pub use cast::{CastArgs, CastDescriptor, CastPlan};
+pub use cast_subbyte::{CastSubByteArgs, CastSubByteDescriptor, CastSubBytePlan};
+pub use gated_activation::{GatedActivationArgs, GatedActivationDescriptor, GatedActivationPlan};
 pub use gated_activation_backward::{
     GatedActivationBackwardArgs, GatedActivationBackwardDescriptor, GatedActivationBackwardPlan,
 };
 pub use prelu::{PReluArgs, PReluDescriptor, PReluPlan};
 pub use prelu_backward::{PReluBackwardArgs, PReluBackwardDescriptor, PReluBackwardPlan};
 pub use ternary::{TernaryArgs, TernaryDescriptor, TernaryPlan};
-pub use ternary_backward::{
-    TernaryBackwardArgs, TernaryBackwardDescriptor, TernaryBackwardPlan,
-};
+pub use ternary_backward::{TernaryBackwardArgs, TernaryBackwardDescriptor, TernaryBackwardPlan};
 pub use unary::{UnaryArgs, UnaryDescriptor, UnaryPlan};
 pub use unary_backward::{UnaryBackwardArgs, UnaryBackwardDescriptor, UnaryBackwardPlan};
 pub use unary_param::{UnaryParamArgs, UnaryParamDescriptor, UnaryParamPlan};

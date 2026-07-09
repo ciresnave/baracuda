@@ -5,7 +5,7 @@ use core::ffi::c_void;
 use baracuda_cuda_sys::runtime::{cudaStream_t, runtime, types::dim3};
 use baracuda_types::KernelArg;
 
-use crate::error::{check, Result};
+use crate::error::{Result, check};
 use crate::module::Kernel;
 use crate::stream::Stream;
 
@@ -127,24 +127,27 @@ impl<'k> LaunchBuilder<'k> {
     /// types and order must match the kernel's C signature, referenced
     /// device memory must stay valid for the duration of device execution,
     /// and grid/block dims must be within device limits.
-    pub unsafe fn launch(mut self) -> Result<()> { unsafe {
-        let r = runtime()?;
-        let cu = r.cuda_launch_kernel()?;
-        let stream_handle: cudaStream_t = self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
-        let args_ptr = if self.args.is_empty() {
-            core::ptr::null_mut()
-        } else {
-            self.args.as_mut_ptr()
-        };
-        check(cu(
-            self.kernel.as_launch_ptr(),
-            self.grid.to_sys(),
-            self.block.to_sys(),
-            args_ptr,
-            self.shared_mem_bytes,
-            stream_handle,
-        ))
-    }}
+    pub unsafe fn launch(mut self) -> Result<()> {
+        unsafe {
+            let r = runtime()?;
+            let cu = r.cuda_launch_kernel()?;
+            let stream_handle: cudaStream_t =
+                self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
+            let args_ptr = if self.args.is_empty() {
+                core::ptr::null_mut()
+            } else {
+                self.args.as_mut_ptr()
+            };
+            check(cu(
+                self.kernel.as_launch_ptr(),
+                self.grid.to_sys(),
+                self.block.to_sys(),
+                args_ptr,
+                self.shared_mem_bytes,
+                stream_handle,
+            ))
+        }
+    }
 
     /// Launch as a cooperative kernel — grid-wide sync via
     /// `cooperative_groups::this_grid()`. All blocks must fit resident
@@ -156,22 +159,25 @@ impl<'k> LaunchBuilder<'k> {
     ///
     /// Same as [`launch`](Self::launch) plus the kernel must be
     /// compiled with cooperative-groups support.
-    pub unsafe fn launch_cooperative(mut self) -> Result<()> { unsafe {
-        let r = runtime()?;
-        let cu = r.cuda_launch_cooperative_kernel()?;
-        let stream_handle: cudaStream_t = self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
-        let args_ptr = if self.args.is_empty() {
-            core::ptr::null_mut()
-        } else {
-            self.args.as_mut_ptr()
-        };
-        check(cu(
-            self.kernel.as_launch_ptr(),
-            self.grid.to_sys(),
-            self.block.to_sys(),
-            args_ptr,
-            self.shared_mem_bytes,
-            stream_handle,
-        ))
-    }}
+    pub unsafe fn launch_cooperative(mut self) -> Result<()> {
+        unsafe {
+            let r = runtime()?;
+            let cu = r.cuda_launch_cooperative_kernel()?;
+            let stream_handle: cudaStream_t =
+                self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
+            let args_ptr = if self.args.is_empty() {
+                core::ptr::null_mut()
+            } else {
+                self.args.as_mut_ptr()
+            };
+            check(cu(
+                self.kernel.as_launch_ptr(),
+                self.grid.to_sys(),
+                self.block.to_sys(),
+                args_ptr,
+                self.shared_mem_bytes,
+                stream_handle,
+            ))
+        }
+    }
 }

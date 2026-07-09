@@ -30,7 +30,8 @@ fn run_one(format: Fp8Format, max_input_abs: f32) -> (f32, f32, f32) {
     let mut recipe = Fp8Recipe::new(&ctx, &stream, format, 8).expect("recipe");
 
     let plan: Fp8CastPlan<f32> = Fp8CastPlan::select().expect("plan");
-    plan.run(&x, &mut x_fp8, &mut recipe, &stream).expect("cast");
+    plan.run(&x, &mut x_fp8, &mut recipe, &stream)
+        .expect("cast");
     recipe.update_after_pass(&stream).expect("update");
 
     let scale = recipe.scale_host(&stream).expect("scale");
@@ -50,12 +51,15 @@ fn scale_formula_e4m3() {
     assert!(
         rel < 1e-5,
         "E4M3 scale = {} (expected {} = 448/10 = 44.8); rel err = {}",
-        scale, expected, rel,
+        scale,
+        expected,
+        rel,
     );
     let prod = scale * scale_inv;
     assert!(
         (prod - 1.0).abs() < 1e-5,
-        "scale * scale_inv = {} (expected ~1)", prod,
+        "scale * scale_inv = {} (expected ~1)",
+        prod,
     );
 }
 
@@ -68,7 +72,9 @@ fn scale_formula_e5m2() {
     assert!(
         rel < 1e-5,
         "E5M2 scale = {} (expected {} = 57344/100 = 573.44); rel err = {}",
-        scale, expected, rel,
+        scale,
+        expected,
+        rel,
     );
     let prod = scale * scale_inv;
     assert!((prod - 1.0).abs() < 1e-5);

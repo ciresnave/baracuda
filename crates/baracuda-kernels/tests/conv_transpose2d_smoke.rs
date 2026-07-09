@@ -8,11 +8,11 @@
 //!
 //! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ConvTranspose2dArgs, ConvTranspose2dBwArgs, ConvTranspose2dDescriptor,
-    ConvTranspose2dDwArgs, ConvTranspose2dPlan, ElementKind, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    ConvTranspose2dArgs, ConvTranspose2dBwArgs, ConvTranspose2dDescriptor, ConvTranspose2dDwArgs,
+    ConvTranspose2dPlan, ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -119,20 +119,11 @@ fn conv_transpose2d_f32_fw() {
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w_f32).expect("up w");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, y_n).expect("alloc y");
 
-    let desc = ConvTranspose2dDescriptor::new(
-        n,
-        c_in,
-        h_in,
-        w_in,
-        c_out,
-        kh,
-        kw,
-        ElementKind::F32,
-    )
-    .with_padding(pad_h, pad_w)
-    .with_stride(stride_h, stride_w)
-    .with_dilation(dilation_h, dilation_w)
-    .with_output_padding(out_pad_h, out_pad_w);
+    let desc = ConvTranspose2dDescriptor::new(n, c_in, h_in, w_in, c_out, kh, kw, ElementKind::F32)
+        .with_padding(pad_h, pad_w)
+        .with_stride(stride_h, stride_w)
+        .with_dilation(dilation_h, dilation_w)
+        .with_output_padding(out_pad_h, out_pad_w);
     let plan = ConvTranspose2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     assert_eq!(plan.output_dims(), (h_out, w_out));
@@ -180,7 +171,8 @@ fn conv_transpose2d_f32_fw() {
         assert!(
             diff <= t,
             "convT2d FW mismatch @ {i}: got={}, want={}, diff={diff}",
-            got[i], exp_y[i]
+            got[i],
+            exp_y[i]
         );
     }
 }
@@ -215,20 +207,11 @@ fn conv_transpose2d_f32_bw_directions_run() {
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, x_n).expect("alloc dx");
     let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, w_n).expect("alloc dw");
 
-    let desc = ConvTranspose2dDescriptor::new(
-        n,
-        c_in,
-        h_in,
-        w_in,
-        c_out,
-        kh,
-        kw,
-        ElementKind::F32,
-    )
-    .with_padding(pad_h, pad_w)
-    .with_stride(stride_h, stride_w);
-    let plan = ConvTranspose2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let desc = ConvTranspose2dDescriptor::new(n, c_in, h_in, w_in, c_out, kh, kw, ElementKind::F32)
+        .with_padding(pad_h, pad_w)
+        .with_stride(stride_h, stride_w);
+    let plan =
+        ConvTranspose2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
 
     let x_shape = [n, c_in, h_in, w_in];
     let w_shape = [c_in, c_out, kh, kw];
@@ -309,6 +292,9 @@ fn conv_transpose2d_f32_bw_directions_run() {
     let mut got_dw = vec![0f32; w_n];
     dev_dw.copy_to_host(&mut got_dw).expect("dl dw");
     for (i, &v) in got_dw.iter().enumerate() {
-        assert!(v.abs() < 1e-6, "convT2d BW-filter: dw[{i}] = {v}, expected 0");
+        assert!(
+            v.abs() < 1e-6,
+            "convT2d BW-filter: dw[{i}] = {v}, expected 0"
+        );
     }
 }

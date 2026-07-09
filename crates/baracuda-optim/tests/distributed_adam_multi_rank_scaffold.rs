@@ -121,8 +121,15 @@ fn distributed_adam_two_ranks_all_reduce_then_step_then_all_gather() {
         let plan = DistributedAdamStepPlan::<f32>::new(cfg, &comms[rank_idx]);
         let mut pbufs_storage: [&mut DeviceBuffer<f32>; 1] = [p];
         let mut gbufs_storage: [&mut DeviceBuffer<f32>; 1] = [g];
-        plan.step(&mut pbufs_storage, &mut gbufs_storage, &mom, &vel, 1, stream)
-            .expect("multi-rank distributed Adam step");
+        plan.step(
+            &mut pbufs_storage,
+            &mut gbufs_storage,
+            &mom,
+            &vel,
+            1,
+            stream,
+        )
+        .expect("multi-rank distributed Adam step");
         stream.synchronize().unwrap();
         let _ = per_rank; // suppress unused warning under #[ignore]
     }

@@ -62,7 +62,7 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, Workspace, U8,
+    PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, U8, Workspace,
 };
 use half::{bf16, f16};
 
@@ -198,11 +198,7 @@ pub struct Nf4DequantizePlan<T: Nf4Activation> {
 
 impl<T: Nf4Activation> Nf4DequantizePlan<T> {
     /// Pick a kernel for `desc`.
-    pub fn select(
-        _stream: &Stream,
-        desc: &Nf4Descriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &Nf4Descriptor, _pref: PlanPreference) -> Result<Self> {
         validate_desc(desc, "Nf4DequantizePlan")?;
         Ok(Self {
             desc: *desc,
@@ -311,11 +307,7 @@ pub struct Nf4MmvqPlan<T: Nf4Activation> {
 
 impl<T: Nf4Activation> Nf4MmvqPlan<T> {
     /// Pick a kernel for `desc`.
-    pub fn select(
-        _stream: &Stream,
-        desc: &Nf4Descriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &Nf4Descriptor, _pref: PlanPreference) -> Result<Self> {
         validate_desc(desc, "Nf4MmvqPlan")?;
         // M=1 GEMV is only wired for f16/bf16 activations (f32 dequant
         // is a smoke-test path; we don't ship f32 GEMV — caller can
@@ -363,9 +355,7 @@ impl<T: Nf4Activation> Nf4MmvqPlan<T> {
             ));
         }
         if args.output.stride[0] != 1 {
-            return Err(Error::InvalidProblem(
-                "Nf4MmvqPlan: output must be contig",
-            ));
+            return Err(Error::InvalidProblem("Nf4MmvqPlan: output must be contig"));
         }
         Ok(())
     }
@@ -651,7 +641,13 @@ unsafe fn dispatch_dequant<T: Nf4Activation>(
 // signature: call sites use turbofish (`dispatch_dequant::<T>`).
 #[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_dequant<T: Nf4Activation>(
-    _: i32, _: i32, _: i32, _: *const c_void, _: *const c_void, _: *mut c_void, _: *mut c_void,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: *const c_void,
+    _: *const c_void,
+    _: *mut c_void,
+    _: *mut c_void,
 ) -> i32 {
     // bnb_nf4 cargo feature is off; the Rust types compile but launching
     // is a no-op error.
@@ -691,8 +687,14 @@ unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
 // signature: call sites use turbofish (`dispatch_gemv_m1::<T>`).
 #[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
-    _: i32, _: i32, _: i32, _: *const c_void, _: *const c_void, _: *const c_void,
-    _: *mut c_void, _: *mut c_void,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: *const c_void,
+    _: *const c_void,
+    _: *const c_void,
+    _: *mut c_void,
+    _: *mut c_void,
 ) -> i32 {
     3
 }
@@ -713,28 +715,44 @@ unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
     use baracuda_kernels_sys as sys;
     match (T::KIND, m) {
         (ElementKind::F16, 1) => unsafe {
-            sys::baracuda_kernels_nf4_gemv_m1_f16_run(n, k, block_size, w_ptr, absmax, y, out, stream)
+            sys::baracuda_kernels_nf4_gemv_m1_f16_run(
+                n, k, block_size, w_ptr, absmax, y, out, stream,
+            )
         },
         (ElementKind::F16, 2) => unsafe {
-            sys::baracuda_kernels_nf4_gemv_m2_f16_run(n, k, block_size, w_ptr, absmax, y, out, stream)
+            sys::baracuda_kernels_nf4_gemv_m2_f16_run(
+                n, k, block_size, w_ptr, absmax, y, out, stream,
+            )
         },
         (ElementKind::F16, 4) => unsafe {
-            sys::baracuda_kernels_nf4_gemv_m4_f16_run(n, k, block_size, w_ptr, absmax, y, out, stream)
+            sys::baracuda_kernels_nf4_gemv_m4_f16_run(
+                n, k, block_size, w_ptr, absmax, y, out, stream,
+            )
         },
         (ElementKind::F16, 8) => unsafe {
-            sys::baracuda_kernels_nf4_gemv_m8_f16_run(n, k, block_size, w_ptr, absmax, y, out, stream)
+            sys::baracuda_kernels_nf4_gemv_m8_f16_run(
+                n, k, block_size, w_ptr, absmax, y, out, stream,
+            )
         },
         (ElementKind::Bf16, 1) => unsafe {
-            sys::baracuda_kernels_nf4_gemv_m1_bf16_run(n, k, block_size, w_ptr, absmax, y, out, stream)
+            sys::baracuda_kernels_nf4_gemv_m1_bf16_run(
+                n, k, block_size, w_ptr, absmax, y, out, stream,
+            )
         },
         (ElementKind::Bf16, 2) => unsafe {
-            sys::baracuda_kernels_nf4_gemv_m2_bf16_run(n, k, block_size, w_ptr, absmax, y, out, stream)
+            sys::baracuda_kernels_nf4_gemv_m2_bf16_run(
+                n, k, block_size, w_ptr, absmax, y, out, stream,
+            )
         },
         (ElementKind::Bf16, 4) => unsafe {
-            sys::baracuda_kernels_nf4_gemv_m4_bf16_run(n, k, block_size, w_ptr, absmax, y, out, stream)
+            sys::baracuda_kernels_nf4_gemv_m4_bf16_run(
+                n, k, block_size, w_ptr, absmax, y, out, stream,
+            )
         },
         (ElementKind::Bf16, 8) => unsafe {
-            sys::baracuda_kernels_nf4_gemv_m8_bf16_run(n, k, block_size, w_ptr, absmax, y, out, stream)
+            sys::baracuda_kernels_nf4_gemv_m8_bf16_run(
+                n, k, block_size, w_ptr, absmax, y, out, stream,
+            )
         },
         _ => 3,
     }
@@ -746,8 +764,15 @@ unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
 // signature: call sites use turbofish (`dispatch_gemv_multim::<T>`).
 #[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
-    _: i32, _: i32, _: i32, _: i32, _: *const c_void, _: *const c_void, _: *const c_void,
-    _: *mut c_void, _: *mut c_void,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: *const c_void,
+    _: *const c_void,
+    _: *const c_void,
+    _: *mut c_void,
+    _: *mut c_void,
 ) -> i32 {
     3
 }

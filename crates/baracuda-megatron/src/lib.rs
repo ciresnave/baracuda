@@ -70,7 +70,7 @@
 
 use core::marker::PhantomData;
 
-use baracuda_cublas::{gemm, Handle, Op};
+use baracuda_cublas::{Handle, Op, gemm};
 use baracuda_driver::{DeviceBuffer, Stream};
 use baracuda_nccl::{Communicator, NcclScalar, RedOp};
 use thiserror::Error;
@@ -255,9 +255,7 @@ impl<'comm> TensorParallelContext<'comm> {
 /// to `cublasSgemm`, `f16` / `bf16` dispatch to `cublasGemmEx` with a
 /// `Compute32F` accumulator (matching the rest of baracuda's
 /// half-precision GEMM convention; see `baracuda-cutlass` Phase 30).
-pub trait MegatronGemmScalar:
-    NcclScalar + Copy + Send + Sync + sealed::Sealed + 'static
-{
+pub trait MegatronGemmScalar: NcclScalar + Copy + Send + Sync + sealed::Sealed + 'static {
     /// Dispatch a row-major GEMM `D = α · A · B^T + β · D` for this
     /// dtype, using the cuBLAS column-major-from-row-major trick.
     ///
@@ -351,23 +349,7 @@ impl MegatronGemmScalar for f32 {
         //     → need shape (n, k) for the GEMM → Op::T on B
         //   second operand = A (cuBLAS sees [k,m] with lda=k)
         //     → need shape (k, m) for the GEMM → Op::N on A
-        gemm(
-            handle,
-            Op::T,
-            Op::N,
-            n,
-            m,
-            k,
-            alpha,
-            b,
-            k,
-            a,
-            k,
-            beta,
-            d,
-            n,
-        )
-        .map_err(Error::from)
+        gemm(handle, Op::T, Op::N, n, m, k, alpha, b, k, a, k, beta, d, n).map_err(Error::from)
     }
 
     unsafe fn row_major_gemm_nn(
@@ -393,23 +375,7 @@ impl MegatronGemmScalar for f32 {
         // For GEMM (m_blas=n, n_blas=m, k_shared=k):
         //   first  operand = B (cuBLAS [n,k]) → need (n,k) — Op::N
         //   second operand = A (cuBLAS [k,m]) → need (k,m) — Op::N
-        gemm(
-            handle,
-            Op::N,
-            Op::N,
-            n,
-            m,
-            k,
-            alpha,
-            b,
-            n,
-            a,
-            k,
-            beta,
-            d,
-            n,
-        )
-        .map_err(Error::from)
+        gemm(handle, Op::N, Op::N, n, m, k, alpha, b, n, a, k, beta, d, n).map_err(Error::from)
     }
 
     unsafe fn row_major_gemm_tn(
@@ -436,23 +402,7 @@ impl MegatronGemmScalar for f32 {
         // GEMM (m_blas=n, n_blas=m, k_shared=k):
         //   first  operand = B (cuBLAS [n,k]) → (n,k) — Op::N
         //   second operand = A (cuBLAS [m,k]) → (k,m) — Op::T
-        gemm(
-            handle,
-            Op::N,
-            Op::T,
-            n,
-            m,
-            k,
-            alpha,
-            b,
-            n,
-            a,
-            m,
-            beta,
-            d,
-            n,
-        )
-        .map_err(Error::from)
+        gemm(handle, Op::N, Op::T, n, m, k, alpha, b, n, a, m, beta, d, n).map_err(Error::from)
     }
 }
 
@@ -904,11 +854,7 @@ impl<'comm, T: MegatronGemmScalar> ColumnParallelLinearPlan<'comm, T> {
         let world_size = self.tpctx_world_size;
 
         check_len("x", x.len(), (batch as usize) * (in_f as usize))?;
-        check_len(
-            "w_local",
-            w_local.len(),
-            (out_n as usize) * (in_f as usize),
-        )?;
+        check_len("w_local", w_local.len(), (out_n as usize) * (in_f as usize))?;
         check_len(
             "y_local",
             y_local.len(),
@@ -984,11 +930,7 @@ impl<'comm, T: MegatronGemmScalar> ColumnParallelLinearPlan<'comm, T> {
         let out_n = self.out_per_rank;
 
         check_len("x", x.len(), (batch as usize) * (in_f as usize))?;
-        check_len(
-            "w_local",
-            w_local.len(),
-            (out_n as usize) * (in_f as usize),
-        )?;
+        check_len("w_local", w_local.len(), (out_n as usize) * (in_f as usize))?;
         check_len(
             "dy_local",
             dy_local.len(),
@@ -1204,16 +1146,8 @@ impl<'comm, T: MegatronGemmScalar> RowParallelLinearPlan<'comm, T> {
         let in_n = self.in_per_rank;
         let out_f = self.tpctx_out_features;
 
-        check_len(
-            "x_local",
-            x_local.len(),
-            (batch as usize) * (in_n as usize),
-        )?;
-        check_len(
-            "w_local",
-            w_local.len(),
-            (out_f as usize) * (in_n as usize),
-        )?;
+        check_len("x_local", x_local.len(), (batch as usize) * (in_n as usize))?;
+        check_len("w_local", w_local.len(), (out_f as usize) * (in_n as usize))?;
         check_len(
             "y_partial",
             y_partial.len(),
@@ -1283,16 +1217,8 @@ impl<'comm, T: MegatronGemmScalar> RowParallelLinearPlan<'comm, T> {
         let in_n = self.in_per_rank;
         let out_f = self.tpctx_out_features;
 
-        check_len(
-            "x_local",
-            x_local.len(),
-            (batch as usize) * (in_n as usize),
-        )?;
-        check_len(
-            "w_local",
-            w_local.len(),
-            (out_f as usize) * (in_n as usize),
-        )?;
+        check_len("x_local", x_local.len(), (batch as usize) * (in_n as usize))?;
+        check_len("w_local", w_local.len(), (out_f as usize) * (in_n as usize))?;
         check_len("dy", dy.len(), (batch as usize) * (out_f as usize))?;
         check_len(
             "dx_local",

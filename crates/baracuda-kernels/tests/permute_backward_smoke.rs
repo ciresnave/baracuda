@@ -5,10 +5,10 @@
 //! Run: `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test permute_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PermuteBackwardArgs, PermuteBackwardDescriptor,
-    PermuteBackwardPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, PermuteBackwardArgs, PermuteBackwardDescriptor, PermuteBackwardPlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -81,8 +81,8 @@ fn run_case<T, const N: usize>(
         dims,
         element: kind,
     };
-    let plan = PermuteBackwardPlan::<T, N>::select(stream, &desc, PlanPreference::default())
-        .expect("sel");
+    let plan =
+        PermuteBackwardPlan::<T, N>::select(stream, &desc, PlanPreference::default()).expect("sel");
     let args = PermuteBackwardArgs::<T, N> {
         dy: TensorRef {
             data: dev_dy.as_slice(),
@@ -103,16 +103,10 @@ fn run_case<T, const N: usize>(
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         // Bit-exact compare via raw bytes (works for all wired dtypes).
         let g_bytes = unsafe {
-            core::slice::from_raw_parts(
-                (g as *const T) as *const u8,
-                core::mem::size_of::<T>(),
-            )
+            core::slice::from_raw_parts((g as *const T) as *const u8, core::mem::size_of::<T>())
         };
         let e_bytes = unsafe {
-            core::slice::from_raw_parts(
-                (e as *const T) as *const u8,
-                core::mem::size_of::<T>(),
-            )
+            core::slice::from_raw_parts((e as *const T) as *const u8, core::mem::size_of::<T>())
         };
         assert_eq!(g_bytes, e_bytes, "permute BW mismatch @ {i}");
     }
@@ -154,7 +148,9 @@ fn permute_backward_f16_3d_perm_120() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3, 4];
     let dims = [1i32, 2, 0];
-    let host_dy: Vec<f16> = (0..24).map(|i| f16::from_f32((i as f32) * 0.125 - 1.0)).collect();
+    let host_dy: Vec<f16> = (0..24)
+        .map(|i| f16::from_f32((i as f32) * 0.125 - 1.0))
+        .collect();
     run_case::<f16, 3>(&ctx, &stream, input_shape, dims, ElementKind::F16, host_dy);
 }
 

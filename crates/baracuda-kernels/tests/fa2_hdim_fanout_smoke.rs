@@ -13,10 +13,10 @@
 
 #![cfg(feature = "fa2")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor,
-    FlashSdpaPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -72,7 +72,17 @@ fn run_one_f16(d: i32, is_causal: bool) {
     let sy = [B, H, Q, d];
     let sl = [B, H, Q];
 
-    let desc = FlashSdpaDescriptor::new(B, H, Q, K, d, d, default_scale(d), is_causal, ElementKind::F16);
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        d,
+        d,
+        default_scale(d),
+        is_causal,
+        ElementKind::F16,
+    );
 
     // Bespoke reference (only when d_k ≤ 128; for 192/256 we skip
     // the reference and just verify FA2 doesn't crash).
@@ -90,11 +100,31 @@ fn run_one_f16(d: i32, is_causal: bool) {
                 &stream,
                 Workspace::None,
                 FlashSdpaArgs {
-                    q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                    k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                    v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                    y: TensorMut { data: dy_ref.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-                    lse: TensorMut { data: dlse_ref.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                    q: TensorRef {
+                        data: dq.as_slice(),
+                        shape: sq,
+                        stride: contiguous_stride(sq),
+                    },
+                    k: TensorRef {
+                        data: dk.as_slice(),
+                        shape: sk,
+                        stride: contiguous_stride(sk),
+                    },
+                    v: TensorRef {
+                        data: dv.as_slice(),
+                        shape: sv,
+                        stride: contiguous_stride(sv),
+                    },
+                    y: TensorMut {
+                        data: dy_ref.as_slice_mut(),
+                        shape: sy,
+                        stride: contiguous_stride(sy),
+                    },
+                    lse: TensorMut {
+                        data: dlse_ref.as_slice_mut(),
+                        shape: sl,
+                        stride: contiguous_stride(sl),
+                    },
                     mask: None,
                     alibi_slopes: None,
                 },
@@ -119,11 +149,31 @@ fn run_one_f16(d: i32, is_causal: bool) {
                 &stream,
                 Workspace::Borrowed(ws_buf.as_slice_mut()),
                 FlashSdpaArgs {
-                    q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                    k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                    v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                    y: TensorMut { data: dy_fa2.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-                    lse: TensorMut { data: dlse_fa2.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                    q: TensorRef {
+                        data: dq.as_slice(),
+                        shape: sq,
+                        stride: contiguous_stride(sq),
+                    },
+                    k: TensorRef {
+                        data: dk.as_slice(),
+                        shape: sk,
+                        stride: contiguous_stride(sk),
+                    },
+                    v: TensorRef {
+                        data: dv.as_slice(),
+                        shape: sv,
+                        stride: contiguous_stride(sv),
+                    },
+                    y: TensorMut {
+                        data: dy_fa2.as_slice_mut(),
+                        shape: sy,
+                        stride: contiguous_stride(sy),
+                    },
+                    lse: TensorMut {
+                        data: dlse_fa2.as_slice_mut(),
+                        shape: sl,
+                        stride: contiguous_stride(sl),
+                    },
                     mask: None,
                     alibi_slopes: None,
                 },
@@ -167,11 +217,31 @@ fn run_one_f16(d: i32, is_causal: bool) {
                 &stream,
                 Workspace::Borrowed(ws_buf.as_slice_mut()),
                 FlashSdpaArgs {
-                    q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                    k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                    v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                    y: TensorMut { data: dy_fa2.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-                    lse: TensorMut { data: dlse_fa2.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                    q: TensorRef {
+                        data: dq.as_slice(),
+                        shape: sq,
+                        stride: contiguous_stride(sq),
+                    },
+                    k: TensorRef {
+                        data: dk.as_slice(),
+                        shape: sk,
+                        stride: contiguous_stride(sk),
+                    },
+                    v: TensorRef {
+                        data: dv.as_slice(),
+                        shape: sv,
+                        stride: contiguous_stride(sv),
+                    },
+                    y: TensorMut {
+                        data: dy_fa2.as_slice_mut(),
+                        shape: sy,
+                        stride: contiguous_stride(sy),
+                    },
+                    lse: TensorMut {
+                        data: dlse_fa2.as_slice_mut(),
+                        shape: sl,
+                        stride: contiguous_stride(sl),
+                    },
                     mask: None,
                     alibi_slopes: None,
                 },
@@ -213,7 +283,17 @@ fn run_one_bf16(d: i32, is_causal: bool) {
     let sy = [B, H, Q, d];
     let sl = [B, H, Q];
 
-    let desc = FlashSdpaDescriptor::new(B, H, Q, K, d, d, default_scale(d), is_causal, ElementKind::Bf16);
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        d,
+        d,
+        default_scale(d),
+        is_causal,
+        ElementKind::Bf16,
+    );
 
     let pref_f = PlanPreference {
         prefer_backend: Some(BackendKind::FlashAttentionV2),
@@ -222,8 +302,7 @@ fn run_one_bf16(d: i32, is_causal: bool) {
     let plan_f = FlashSdpaPlan::<bf16>::select(&stream, &desc, pref_f).expect("sel fa2");
     assert_eq!(plan_f.backend(), BackendKind::FlashAttentionV2);
     let ws_bytes = plan_f.workspace_size();
-    let mut ws_buf: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc fa2 ws");
+    let mut ws_buf: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes).expect("alloc fa2 ws");
     let mut dy_fa2: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, n_y).expect("alloc y_fa2");
     let mut dlse_fa2: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_fa2");
@@ -232,11 +311,31 @@ fn run_one_bf16(d: i32, is_causal: bool) {
             &stream,
             Workspace::Borrowed(ws_buf.as_slice_mut()),
             FlashSdpaArgs {
-                q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
-                k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
-                v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
-                y: TensorMut { data: dy_fa2.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
-                lse: TensorMut { data: dlse_fa2.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: contiguous_stride(sq),
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk,
+                    stride: contiguous_stride(sk),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv,
+                    stride: contiguous_stride(sv),
+                },
+                y: TensorMut {
+                    data: dy_fa2.as_slice_mut(),
+                    shape: sy,
+                    stride: contiguous_stride(sy),
+                },
+                lse: TensorMut {
+                    data: dlse_fa2.as_slice_mut(),
+                    shape: sl,
+                    stride: contiguous_stride(sl),
+                },
                 mask: None,
                 alibi_slopes: None,
             },
@@ -268,50 +367,50 @@ macro_rules! hdim_test {
 
 // head_dim = 32
 hdim_test!(fa2_fanout_hdim32_f16_noncausal, 32, run_one_f16, false);
-hdim_test!(fa2_fanout_hdim32_f16_causal,    32, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim32_f16_causal, 32, run_one_f16, true);
 hdim_test!(fa2_fanout_hdim32_bf16_noncausal, 32, run_one_bf16, false);
-hdim_test!(fa2_fanout_hdim32_bf16_causal,    32, run_one_bf16, true );
+hdim_test!(fa2_fanout_hdim32_bf16_causal, 32, run_one_bf16, true);
 
 // head_dim = 64
 hdim_test!(fa2_fanout_hdim64_f16_noncausal, 64, run_one_f16, false);
-hdim_test!(fa2_fanout_hdim64_f16_causal,    64, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim64_f16_causal, 64, run_one_f16, true);
 hdim_test!(fa2_fanout_hdim64_bf16_noncausal, 64, run_one_bf16, false);
-hdim_test!(fa2_fanout_hdim64_bf16_causal,    64, run_one_bf16, true );
+hdim_test!(fa2_fanout_hdim64_bf16_causal, 64, run_one_bf16, true);
 
 // head_dim = 96
 hdim_test!(fa2_fanout_hdim96_f16_noncausal, 96, run_one_f16, false);
-hdim_test!(fa2_fanout_hdim96_f16_causal,    96, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim96_f16_causal, 96, run_one_f16, true);
 hdim_test!(fa2_fanout_hdim96_bf16_noncausal, 96, run_one_bf16, false);
-hdim_test!(fa2_fanout_hdim96_bf16_causal,    96, run_one_bf16, true );
+hdim_test!(fa2_fanout_hdim96_bf16_causal, 96, run_one_bf16, true);
 
 // head_dim = 192 (bespoke kernel can't run; FA2-only)
 hdim_test!(fa2_fanout_hdim192_f16_noncausal, 192, run_one_f16, false);
-hdim_test!(fa2_fanout_hdim192_f16_causal,    192, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim192_f16_causal, 192, run_one_f16, true);
 hdim_test!(fa2_fanout_hdim192_bf16_noncausal, 192, run_one_bf16, false);
-hdim_test!(fa2_fanout_hdim192_bf16_causal,    192, run_one_bf16, true );
+hdim_test!(fa2_fanout_hdim192_bf16_causal, 192, run_one_bf16, true);
 
 // head_dim = 160 (Phase 60; vendored from EricLBuehler/candle@main, originally Candle PR #245)
 hdim_test!(fa2_fanout_hdim160_f16_noncausal, 160, run_one_f16, false);
-hdim_test!(fa2_fanout_hdim160_f16_causal,    160, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim160_f16_causal, 160, run_one_f16, true);
 hdim_test!(fa2_fanout_hdim160_bf16_noncausal, 160, run_one_bf16, false);
-hdim_test!(fa2_fanout_hdim160_bf16_causal,    160, run_one_bf16, true );
+hdim_test!(fa2_fanout_hdim160_bf16_causal, 160, run_one_bf16, true);
 
 // head_dim = 224 (Phase 60; vendored from EricLBuehler/candle@main, restored by Candle PR #2688)
 hdim_test!(fa2_fanout_hdim224_f16_noncausal, 224, run_one_f16, false);
-hdim_test!(fa2_fanout_hdim224_f16_causal,    224, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim224_f16_causal, 224, run_one_f16, true);
 hdim_test!(fa2_fanout_hdim224_bf16_noncausal, 224, run_one_bf16, false);
-hdim_test!(fa2_fanout_hdim224_bf16_causal,    224, run_one_bf16, true );
+hdim_test!(fa2_fanout_hdim224_bf16_causal, 224, run_one_bf16, true);
 
 // head_dim = 256 (FA2-only; may exceed sm_89 SMEM in some shapes —
 // FA2's hdim256 launcher picks 64x64 tiles for non-A100/H100 GPUs).
 hdim_test!(fa2_fanout_hdim256_f16_noncausal, 256, run_one_f16, false);
-hdim_test!(fa2_fanout_hdim256_f16_causal,    256, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim256_f16_causal, 256, run_one_f16, true);
 hdim_test!(fa2_fanout_hdim256_bf16_noncausal, 256, run_one_bf16, false);
-hdim_test!(fa2_fanout_hdim256_bf16_causal,    256, run_one_bf16, true );
+hdim_test!(fa2_fanout_hdim256_bf16_causal, 256, run_one_bf16, true);
 
 // head_dim = 512 (Phase 60; vendored from huggingface/candle@5430d32c, Candle PR #3417 by Eric Buehler).
 // SMEM opt-in path: on sm_89 picks 32x32 tiles (~96 KiB); A100+ picks 64x32 (~128 KiB).
 hdim_test!(fa2_fanout_hdim512_f16_noncausal, 512, run_one_f16, false);
-hdim_test!(fa2_fanout_hdim512_f16_causal,    512, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim512_f16_causal, 512, run_one_f16, true);
 hdim_test!(fa2_fanout_hdim512_bf16_noncausal, 512, run_one_bf16, false);
-hdim_test!(fa2_fanout_hdim512_bf16_causal,    512, run_one_bf16, true );
+hdim_test!(fa2_fanout_hdim512_bf16_causal, 512, run_one_bf16, true);

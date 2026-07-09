@@ -13,14 +13,14 @@
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
-    contiguous_stride, PlanPreference, RMSNormArgs, RMSNormDescriptor, RMSNormPlan, TensorMut,
-    TensorRef, Workspace,
+    PlanPreference, RMSNormArgs, RMSNormDescriptor, RMSNormPlan, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, PytorchBaseline, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
+    CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP, PhaseTwentyNineRow, PytorchBaseline, append_csv_row,
+    measure_median_ns, setup_device, time_with_events, warmup,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::{bf16, f16};
 
 const BENCH_NAME: &str = "rmsnorm";
@@ -29,12 +29,8 @@ fn leak_str(s: &str) -> &'static str {
     Box::leak(s.to_owned().into_boxed_str())
 }
 
-fn bench<T>(
-    c: &mut Criterion,
-    dtype_label: &str,
-    fill: T,
-    baseline: Option<&PytorchBaseline>,
-) where
+fn bench<T>(c: &mut Criterion, dtype_label: &str, fill: T, baseline: Option<&PytorchBaseline>)
+where
     T: baracuda_kernels::Element + Copy + 'static,
 {
     let (ctx, stream) = setup_device();
@@ -72,11 +68,8 @@ fn bench<T>(
                 has_gamma: true,
                 element: T::KIND,
             };
-            let plan = match RMSNormPlan::<T, 2>::select(
-                &stream,
-                &desc,
-                PlanPreference::default(),
-            ) {
+            let plan = match RMSNormPlan::<T, 2>::select(&stream, &desc, PlanPreference::default())
+            {
                 Ok(p) => p,
                 Err(_) => continue,
             };
@@ -111,7 +104,8 @@ fn bench<T>(
                         stride: st_rms,
                     },
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda rmsnorm");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda rmsnorm");
             });
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = RMSNormArgs::<T, 2> {
@@ -136,7 +130,8 @@ fn bench<T>(
                         stride: st_rms,
                     },
                 };
-                plan.run(&stream, Workspace::None, args).expect("baracuda rmsnorm");
+                plan.run(&stream, Workspace::None, args)
+                    .expect("baracuda rmsnorm");
             });
             append_csv_row(
                 BENCH_NAME,
@@ -175,7 +170,8 @@ fn bench<T>(
                                 stride: st_rms,
                             },
                         };
-                        plan.run(&stream, Workspace::None, args).expect("baracuda rmsnorm");
+                        plan.run(&stream, Workspace::None, args)
+                            .expect("baracuda rmsnorm");
                     })
                 });
             });

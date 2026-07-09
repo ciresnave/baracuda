@@ -3,12 +3,12 @@
 
 #![cfg(feature = "flashinfer")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::sampling::{
     PerRowSampler, PerRowSamplingArgs, PerRowSamplingDescriptor, PerRowSamplingPlan,
     SpeculativeSamplingArgs, SpeculativeSamplingDescriptor, SpeculativeSamplingPlan,
 };
-use baracuda_flashinfer::{contiguous_stride, PlanPreference, TensorMut, TensorRef, Workspace};
+use baracuda_flashinfer::{PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -41,18 +41,39 @@ fn perrow_top_k_top_p_one_hot() {
         sampler: PerRowSampler::TopKTopP,
         deterministic: false,
     };
-    let plan = PerRowSamplingPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let plan =
+        PerRowSamplingPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let pshape = [2, VOCAB as i32];
     plan.run(
         &stream,
         Workspace::None,
         PerRowSamplingArgs {
-            probs: TensorRef { data: probs_dev.as_slice(), shape: pshape, stride: contiguous_stride(pshape) },
-            top_k_arr: Some(TensorRef { data: top_k_dev.as_slice(), shape: [2], stride: [1] }),
-            top_p_arr: Some(TensorRef { data: top_p_dev.as_slice(), shape: [2], stride: [1] }),
+            probs: TensorRef {
+                data: probs_dev.as_slice(),
+                shape: pshape,
+                stride: contiguous_stride(pshape),
+            },
+            top_k_arr: Some(TensorRef {
+                data: top_k_dev.as_slice(),
+                shape: [2],
+                stride: [1],
+            }),
+            top_p_arr: Some(TensorRef {
+                data: top_p_dev.as_slice(),
+                shape: [2],
+                stride: [1],
+            }),
             min_p_arr: None,
-            output: TensorMut { data: out_dev.as_slice_mut(), shape: [2], stride: [1] },
-            valid: Some(TensorMut { data: valid_dev.as_slice_mut(), shape: [2], stride: [1] }),
+            output: TensorMut {
+                data: out_dev.as_slice_mut(),
+                shape: [2],
+                stride: [1],
+            },
+            valid: Some(TensorMut {
+                data: valid_dev.as_slice_mut(),
+                shape: [2],
+                stride: [1],
+            }),
             seed_val: 7,
             offset_val: 0,
         },
@@ -87,17 +108,30 @@ fn perrow_top_k_one_hot() {
         sampler: PerRowSampler::TopK,
         deterministic: false,
     };
-    let plan = PerRowSamplingPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let plan =
+        PerRowSamplingPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let pshape = [2, VOCAB as i32];
     plan.run(
         &stream,
         Workspace::None,
         PerRowSamplingArgs {
-            probs: TensorRef { data: probs_dev.as_slice(), shape: pshape, stride: contiguous_stride(pshape) },
-            top_k_arr: Some(TensorRef { data: top_k_dev.as_slice(), shape: [2], stride: [1] }),
+            probs: TensorRef {
+                data: probs_dev.as_slice(),
+                shape: pshape,
+                stride: contiguous_stride(pshape),
+            },
+            top_k_arr: Some(TensorRef {
+                data: top_k_dev.as_slice(),
+                shape: [2],
+                stride: [1],
+            }),
             top_p_arr: None,
             min_p_arr: None,
-            output: TensorMut { data: out_dev.as_slice_mut(), shape: [2], stride: [1] },
+            output: TensorMut {
+                data: out_dev.as_slice_mut(),
+                shape: [2],
+                stride: [1],
+            },
             valid: None,
             seed_val: 11,
             offset_val: 0,
@@ -153,12 +187,36 @@ fn speculative_all_accept() {
         &stream,
         Workspace::None,
         SpeculativeSamplingArgs {
-            draft_probs: TensorRef { data: draft_dev.as_slice(), shape: dshape, stride: contiguous_stride(dshape) },
-            draft_token_ids: TensorRef { data: draft_ids_dev.as_slice(), shape: [1, NSPEC as i32], stride: contiguous_stride([1, NSPEC as i32]) },
-            target_probs: TensorRef { data: target_dev.as_slice(), shape: tshape, stride: contiguous_stride(tshape) },
-            output_token_ids: TensorMut { data: out_ids_dev.as_slice_mut(), shape: [1, NSPEC as i32 + 1], stride: contiguous_stride([1, NSPEC as i32 + 1]) },
-            output_accepted_token_num: TensorMut { data: accepted_dev.as_slice_mut(), shape: [1], stride: [1] },
-            output_emitted_draft_token_num: TensorMut { data: emitted_dev.as_slice_mut(), shape: [1], stride: [1] },
+            draft_probs: TensorRef {
+                data: draft_dev.as_slice(),
+                shape: dshape,
+                stride: contiguous_stride(dshape),
+            },
+            draft_token_ids: TensorRef {
+                data: draft_ids_dev.as_slice(),
+                shape: [1, NSPEC as i32],
+                stride: contiguous_stride([1, NSPEC as i32]),
+            },
+            target_probs: TensorRef {
+                data: target_dev.as_slice(),
+                shape: tshape,
+                stride: contiguous_stride(tshape),
+            },
+            output_token_ids: TensorMut {
+                data: out_ids_dev.as_slice_mut(),
+                shape: [1, NSPEC as i32 + 1],
+                stride: contiguous_stride([1, NSPEC as i32 + 1]),
+            },
+            output_accepted_token_num: TensorMut {
+                data: accepted_dev.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
+            output_emitted_draft_token_num: TensorMut {
+                data: emitted_dev.as_slice_mut(),
+                shape: [1],
+                stride: [1],
+            },
             seed_val: 42,
             offset_val: 0,
         },
@@ -167,11 +225,18 @@ fn speculative_all_accept() {
     stream.synchronize().expect("sync");
 
     let mut out_ids = [0i32; NSPEC + 1];
-    out_ids_dev.copy_to_host(&mut out_ids).expect("download ids");
+    out_ids_dev
+        .copy_to_host(&mut out_ids)
+        .expect("download ids");
     let mut accepted = [0i32];
-    accepted_dev.copy_to_host(&mut accepted).expect("download accepted");
+    accepted_dev
+        .copy_to_host(&mut accepted)
+        .expect("download accepted");
 
-    assert_eq!(accepted[0], NSPEC as i32, "all draft tokens should be accepted");
+    assert_eq!(
+        accepted[0], NSPEC as i32,
+        "all draft tokens should be accepted"
+    );
     assert_eq!(out_ids[0], 1, "token 0");
     assert_eq!(out_ids[1], 2, "token 1");
     assert_eq!(out_ids[2], 3, "bonus token from target");

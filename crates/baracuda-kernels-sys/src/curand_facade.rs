@@ -64,11 +64,11 @@ use core::ffi::c_void;
 use core::ptr;
 
 use super::{
-    baracuda_kernels_affine_inplace_f32_run, baracuda_kernels_affine_inplace_f64_run,
-    curandCreateGenerator, curandDestroyGenerator, curandGenerateNormal,
-    curandGenerateNormalDouble, curandGenerateUniform, curandGenerateUniformDouble,
-    curandGenerator_t, curandSetPseudoRandomGeneratorSeed, curandSetStream,
-    CURAND_RNG_PSEUDO_DEFAULT,
+    CURAND_RNG_PSEUDO_DEFAULT, baracuda_kernels_affine_inplace_f32_run,
+    baracuda_kernels_affine_inplace_f64_run, curandCreateGenerator, curandDestroyGenerator,
+    curandGenerateNormal, curandGenerateNormalDouble, curandGenerateUniform,
+    curandGenerateUniformDouble, curandGenerator_t, curandSetPseudoRandomGeneratorSeed,
+    curandSetStream,
 };
 
 // =============================================================================
@@ -361,9 +361,7 @@ pub unsafe extern "C" fn baracuda_kernels_curand_normal_f32_run(
     if s != OK {
         return s;
     }
-    let st = unsafe {
-        curandGenerateNormal(g.g, y as *mut f32, numel as usize, mean, stddev)
-    };
+    let st = unsafe { curandGenerateNormal(g.g, y as *mut f32, numel as usize, mean, stddev) };
     map_curand(st)
 }
 
@@ -396,8 +394,7 @@ pub unsafe extern "C" fn baracuda_kernels_curand_normal_f64_run(
     if s != OK {
         return s;
     }
-    let st = unsafe {
-        curandGenerateNormalDouble(g.g, y as *mut f64, numel as usize, mean, stddev)
-    };
+    let st =
+        unsafe { curandGenerateNormalDouble(g.g, y as *mut f64, numel as usize, mean, stddev) };
     map_curand(st)
 }

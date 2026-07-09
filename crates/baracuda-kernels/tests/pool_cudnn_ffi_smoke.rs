@@ -14,11 +14,11 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, AvgPool2dPlan, AvgPool3dPlan, ElementKind, MaxPool1dPlan, MaxPool2dPlan,
-    PlanPreference, Pool1dDescriptor, Pool1dFwArgs, Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs,
-    Pool3dDescriptor, Pool3dFwArgs, PoolMode, TensorMut, TensorRef, Workspace,
+    AvgPool2dPlan, AvgPool3dPlan, ElementKind, MaxPool1dPlan, MaxPool2dPlan, PlanPreference,
+    Pool1dDescriptor, Pool1dFwArgs, Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs, Pool3dDescriptor,
+    Pool3dFwArgs, PoolMode, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_sys::{
     baracuda_kernels_avg_pool_2d_bw_f32_run, baracuda_kernels_avg_pool_2d_fw_f32_run,
@@ -84,11 +84,9 @@ fn max_pool_2d_f32_ffi_matches_plan() {
 
     // --- Plan run ---
     let mut dev_y_plan: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_y).expect("y_plan");
-    let desc = Pool2dDescriptor::new(
-        n, c, h_in, w_in, kh, kw, PoolMode::Max, ElementKind::F32,
-    )
-    .with_padding(ph, pw)
-    .with_stride(sh, sw);
+    let desc = Pool2dDescriptor::new(n, c, h_in, w_in, kh, kw, PoolMode::Max, ElementKind::F32)
+        .with_padding(ph, pw)
+        .with_stride(sh, sw);
     let plan = MaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
     let x_shape = [n, c, h_in, w_in];
@@ -112,7 +110,9 @@ fn max_pool_2d_f32_ffi_matches_plan() {
     .expect("plan fw");
     stream.synchronize().expect("sync plan fw");
     let mut host_y_plan = vec![0f32; numel_y];
-    dev_y_plan.copy_to_host(&mut host_y_plan).expect("dl plan y");
+    dev_y_plan
+        .copy_to_host(&mut host_y_plan)
+        .expect("dl plan y");
 
     for i in 0..numel_y {
         assert_eq!(
@@ -153,7 +153,9 @@ fn max_pool_2d_f32_ffi_matches_plan() {
     assert_eq!(ffi_bw_status, 0, "ffi max_pool_2d_bw_f32 status");
     stream.synchronize().expect("sync ffi bw");
     let mut host_dx_ffi = vec![0f32; numel_x];
-    dev_dx_ffi.copy_to_host(&mut host_dx_ffi).expect("dl ffi dx");
+    dev_dx_ffi
+        .copy_to_host(&mut host_dx_ffi)
+        .expect("dl ffi dx");
 
     let mut dev_dx_plan: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_x).expect("dx_plan");
     plan.run_bw(
@@ -185,7 +187,9 @@ fn max_pool_2d_f32_ffi_matches_plan() {
     .expect("plan bw");
     stream.synchronize().expect("sync plan bw");
     let mut host_dx_plan = vec![0f32; numel_x];
-    dev_dx_plan.copy_to_host(&mut host_dx_plan).expect("dl plan dx");
+    dev_dx_plan
+        .copy_to_host(&mut host_dx_plan)
+        .expect("dl plan dx");
 
     for i in 0..numel_x {
         assert_eq!(
@@ -275,7 +279,9 @@ fn avg_pool_2d_f32_one_mode(count_include_pad: bool) {
     .expect("plan fw");
     stream.synchronize().expect("sync plan fw");
     let mut host_y_plan = vec![0f32; numel_y];
-    dev_y_plan.copy_to_host(&mut host_y_plan).expect("dl plan y");
+    dev_y_plan
+        .copy_to_host(&mut host_y_plan)
+        .expect("dl plan y");
 
     for i in 0..numel_y {
         assert_eq!(
@@ -317,7 +323,9 @@ fn avg_pool_2d_f32_one_mode(count_include_pad: bool) {
     assert_eq!(ffi_bw_status, 0, "ffi avg_pool_2d_bw_f32 status");
     stream.synchronize().expect("sync ffi bw");
     let mut host_dx_ffi = vec![0f32; numel_x];
-    dev_dx_ffi.copy_to_host(&mut host_dx_ffi).expect("dl ffi dx");
+    dev_dx_ffi
+        .copy_to_host(&mut host_dx_ffi)
+        .expect("dl ffi dx");
 
     let mut dev_dx_plan: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_x).expect("dx_plan");
     plan.run_bw(
@@ -349,7 +357,9 @@ fn avg_pool_2d_f32_one_mode(count_include_pad: bool) {
     .expect("plan bw");
     stream.synchronize().expect("sync plan bw");
     let mut host_dx_plan = vec![0f32; numel_x];
-    dev_dx_plan.copy_to_host(&mut host_dx_plan).expect("dl plan dx");
+    dev_dx_plan
+        .copy_to_host(&mut host_dx_plan)
+        .expect("dl plan dx");
 
     for i in 0..numel_x {
         assert_eq!(
@@ -441,7 +451,9 @@ fn max_pool_1d_f16_fw_ffi_matches_plan() {
     .expect("plan fw");
     stream.synchronize().expect("sync plan fw");
     let mut host_y_plan = vec![f16::ZERO; numel_y];
-    dev_y_plan.copy_to_host(&mut host_y_plan).expect("dl plan y");
+    dev_y_plan
+        .copy_to_host(&mut host_y_plan)
+        .expect("dl plan y");
 
     for i in 0..numel_y {
         assert_eq!(
@@ -547,7 +559,9 @@ fn avg_pool_3d_bf16_fw_ffi_matches_plan() {
     .expect("plan fw");
     stream.synchronize().expect("sync plan fw");
     let mut host_y_plan = vec![bf16::ZERO; numel_y];
-    dev_y_plan.copy_to_host(&mut host_y_plan).expect("dl plan y");
+    dev_y_plan
+        .copy_to_host(&mut host_y_plan)
+        .expect("dl plan y");
 
     for i in 0..numel_y {
         assert_eq!(

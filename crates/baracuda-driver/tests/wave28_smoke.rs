@@ -5,7 +5,7 @@
 use baracuda_cuda_sys::types::{CUcoredumpSettings, CUdevice_P2PAttribute, CUexecAffinityType};
 use baracuda_driver::array::{Array, ArrayFormat};
 use baracuda_driver::library::Library;
-use baracuda_driver::{coredump, Context, Device, Event};
+use baracuda_driver::{Context, Device, Event, coredump};
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 

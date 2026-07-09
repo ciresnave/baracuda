@@ -23,7 +23,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 fn setup() -> (Context, Stream) {
@@ -355,8 +355,8 @@ fn affine_inplace_i8_contig() {
 
 const STRIDED_SHAPE: [i32; 2] = [8, 16];
 const STRIDED_STRIDE_Y: [i64; 2] = [32, 1]; // padded-row layout
-const STRIDED_PHYS_LEN: usize = 8 * 32;     // 256 cells incl. padding
-const STRIDED_NUMEL: usize = 8 * 16;        // 128 addressed cells
+const STRIDED_PHYS_LEN: usize = 8 * 32; // 256 cells incl. padding
+const STRIDED_NUMEL: usize = 8 * 16; // 128 addressed cells
 
 // Compute the linearized physical offset of every addressed cell for
 // the [8, 16] view with stride [32, 1] — used to construct expected
@@ -418,7 +418,9 @@ fn affine_inplace_strided_f32() {
         let tol = expected[i].abs().max(1.0) * tol_eps;
         assert!(
             (got[i] - expected[i]).abs() <= tol,
-            "@{i}: got {} expected {}", got[i], expected[i]
+            "@{i}: got {} expected {}",
+            got[i],
+            expected[i]
         );
     }
     // Explicit padding-untouched check (redundant w/ above but makes
@@ -472,7 +474,12 @@ fn affine_inplace_strided_f64() {
     let tol_eps = 2.0 * f64::EPSILON;
     for i in 0..STRIDED_PHYS_LEN {
         let tol = expected[i].abs().max(1.0) * tol_eps;
-        assert!((got[i] - expected[i]).abs() <= tol, "@{i}: got {} expected {}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "@{i}: got {} expected {}",
+            got[i],
+            expected[i]
+        );
     }
 }
 

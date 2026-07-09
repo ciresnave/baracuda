@@ -1,6 +1,6 @@
 //! Error type for `baracuda-driver`.
 
-use baracuda_cuda_sys::{driver, CUresult};
+use baracuda_cuda_sys::{CUresult, driver};
 
 /// A driver-API error: either a non-success `CUresult`, a loader failure, or
 /// a feature-not-supported-on-this-driver error.

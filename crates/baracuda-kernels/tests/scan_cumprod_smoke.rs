@@ -4,10 +4,10 @@
 //! Run with: `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test scan_cumprod_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, ScanArgs, ScanDescriptor, ScanKind, ScanPlan,
-    TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, ScanArgs, ScanDescriptor, ScanKind, ScanPlan, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -135,8 +135,16 @@ fn cumprod_f32_1d_forward() {
     };
     let plan = ScanPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f32, 1> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -145,8 +153,12 @@ fn cumprod_f32_1d_forward() {
     let eps = 8.0 * f32::EPSILON;
     for i in 0..16 {
         let tol = (expected[i].abs() * eps).max(eps);
-        assert!((got[i] - expected[i]).abs() <= tol,
-            "f32 cumprod @ {i}: got={} want={}", got[i], expected[i]);
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f32 cumprod @ {i}: got={} want={}",
+            got[i],
+            expected[i]
+        );
     }
 }
 
@@ -169,8 +181,16 @@ fn cumprod_f64_2d_axis_1_reverse() {
     };
     let plan = ScanPlan::<f64, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f64, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -179,7 +199,10 @@ fn cumprod_f64_2d_axis_1_reverse() {
     let eps = 8.0 * f64::EPSILON;
     for i in 0..numel {
         let tol = (expected[i].abs() * eps).max(eps);
-        assert!((got[i] - expected[i]).abs() <= tol, "f64 cumprod reverse @ {i}");
+        assert!(
+            (got[i] - expected[i]).abs() <= tol,
+            "f64 cumprod reverse @ {i}"
+        );
     }
 }
 
@@ -203,8 +226,16 @@ fn cumprod_f16_2d_axis_0_forward() {
     };
     let plan = ScanPlan::<f16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<f16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -214,8 +245,13 @@ fn cumprod_f16_2d_axis_0_forward() {
     for i in 0..numel {
         let tol = (expected_f32[i].abs() * eps).max(eps);
         let diff = (got[i].to_f32() - expected_f32[i]).abs();
-        assert!(diff <= tol, "f16 cumprod @ {i}: got={} want={} diff={}",
-            got[i].to_f32(), expected_f32[i], diff);
+        assert!(
+            diff <= tol,
+            "f16 cumprod @ {i}: got={} want={} diff={}",
+            got[i].to_f32(),
+            expected_f32[i],
+            diff
+        );
     }
 }
 
@@ -239,8 +275,16 @@ fn cumprod_bf16_2d_axis_1_forward() {
     };
     let plan = ScanPlan::<bf16, 2>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let args = ScanArgs::<bf16, 2> {
-        x: TensorRef { data: dev_x.as_slice(), shape, stride: contiguous_stride(shape) },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride: contiguous_stride(shape) },
+        x: TensorRef {
+            data: dev_x.as_slice(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride: contiguous_stride(shape),
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");

@@ -92,7 +92,9 @@ pub use fake_quantize::{FakeQuantizeArgs, FakeQuantizeDescriptor, FakeQuantizePl
 pub use fake_quantize_backward::{
     FakeQuantizeBackwardArgs, FakeQuantizeBackwardDescriptor, FakeQuantizeBackwardPlan,
 };
-pub use per_channel::{QuantizePerChannelArgs, QuantizePerChannelDescriptor, QuantizePerChannelPlan};
+pub use per_channel::{
+    QuantizePerChannelArgs, QuantizePerChannelDescriptor, QuantizePerChannelPlan,
+};
 pub use per_channel_backward::{
     QuantizePerChannelBackwardArgs, QuantizePerChannelBackwardDescriptor,
     QuantizePerChannelBackwardPlan,
@@ -103,9 +105,12 @@ pub use per_tensor_backward::{
     QuantizePerTensorBackwardPlan,
 };
 
-pub use per_token::{QuantizePerTokenArgs, QuantizePerTokenDescriptor, QuantizePerTokenPlan};
-pub use per_token_backward::{
-    QuantizePerTokenBackwardArgs, QuantizePerTokenBackwardDescriptor, QuantizePerTokenBackwardPlan,
+pub use dequantize_per_group::{
+    DequantizePerGroupArgs, DequantizePerGroupDescriptor, DequantizePerGroupPlan,
+};
+pub use dequantize_per_group_backward::{
+    DequantizePerGroupBackwardArgs, DequantizePerGroupBackwardDescriptor,
+    DequantizePerGroupBackwardPlan,
 };
 pub use dequantize_per_token::{
     DequantizePerTokenArgs, DequantizePerTokenDescriptor, DequantizePerTokenPlan,
@@ -118,12 +123,9 @@ pub use per_group::{QuantizePerGroupArgs, QuantizePerGroupDescriptor, QuantizePe
 pub use per_group_backward::{
     QuantizePerGroupBackwardArgs, QuantizePerGroupBackwardDescriptor, QuantizePerGroupBackwardPlan,
 };
-pub use dequantize_per_group::{
-    DequantizePerGroupArgs, DequantizePerGroupDescriptor, DequantizePerGroupPlan,
-};
-pub use dequantize_per_group_backward::{
-    DequantizePerGroupBackwardArgs, DequantizePerGroupBackwardDescriptor,
-    DequantizePerGroupBackwardPlan,
+pub use per_token::{QuantizePerTokenArgs, QuantizePerTokenDescriptor, QuantizePerTokenPlan};
+pub use per_token_backward::{
+    QuantizePerTokenBackwardArgs, QuantizePerTokenBackwardDescriptor, QuantizePerTokenBackwardPlan,
 };
 
 // --- Milestone 8.3 exports ---
@@ -131,14 +133,10 @@ pub use dynamic_range::{
     DynamicRangeMode, DynamicRangeQuantizeArgs, DynamicRangeQuantizeDescriptor,
     DynamicRangeQuantizePlan, DynamicRangeScope,
 };
-pub use quantized_linear::{
-    QuantizedLinearArgs, QuantizedLinearDescriptor, QuantizedLinearPlan,
-};
+pub use quantized_linear::{QuantizedLinearArgs, QuantizedLinearDescriptor, QuantizedLinearPlan};
 
 // --- Phase 45 export — SmoothQuant linear (pure Rust composition). ---
-pub use smoothquant::{
-    SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan,
-};
+pub use smoothquant::{SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan};
 
 // --- Milestone 8.4 exports — GGUF block-format dequant + MMVQ ---
 pub use gguf::{
@@ -163,8 +161,8 @@ pub use gguf::{GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan}
 //     always exported; the FFI dispatch is feature-gated inside the
 //     plan's `run()` method. ----
 pub use nf4::{
-    Nf4Activation, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, Nf4MmvqArgs,
-    Nf4MmvqMultiMArgs, Nf4MmvqMultiMDescriptor, Nf4MmvqMultiMPlan, Nf4MmvqPlan, NF4_CODEBOOK,
+    NF4_CODEBOOK, Nf4Activation, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, Nf4MmvqArgs,
+    Nf4MmvqMultiMArgs, Nf4MmvqMultiMDescriptor, Nf4MmvqMultiMPlan, Nf4MmvqPlan,
 };
 
 use baracuda_cutlass::{Error, Result};

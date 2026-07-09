@@ -6,10 +6,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_nextafter_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -57,16 +57,16 @@ fn nextafter_f32_contig() {
     // Mix a < b, a > b, a == b across the buffer.
     let host_a: Vec<f32> = (0..numel)
         .map(|i| match i % 3 {
-            0 => 1.0 + (i as f32) * 0.01,           // a < b
-            1 => 2.0 - (i as f32) * 0.01,           // a > b
-            _ => (i as f32) * 0.5,                  // a == b
+            0 => 1.0 + (i as f32) * 0.01, // a < b
+            1 => 2.0 - (i as f32) * 0.01, // a > b
+            _ => (i as f32) * 0.5,        // a == b
         })
         .collect();
     let host_b: Vec<f32> = (0..numel)
         .map(|i| match i % 3 {
-            0 => 100.0,                              // toward +∞
-            1 => -100.0,                             // toward -∞
-            _ => (i as f32) * 0.5,                   // == a
+            0 => 100.0,            // toward +∞
+            1 => -100.0,           // toward -∞
+            _ => (i as f32) * 0.5, // == a
         })
         .collect();
     let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).expect("upload a");
@@ -76,14 +76,36 @@ fn nextafter_f32_contig() {
 
     let plan = BinaryPlan::<f32, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Nextafter, shape, element: ElementKind::F32 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Nextafter,
+            shape,
+            element: ElementKind::F32,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f32; numel];
     dev_y.copy_to_host(&mut got).expect("download");
@@ -91,8 +113,13 @@ fn nextafter_f32_contig() {
         // Use libm `nextafter` semantics manually: it's bit-exact.
         // f32 has no stdlib nextafter; implement reference via bit math.
         let want = nextafter_f32_ref(a, b);
-        assert_eq!(g.to_bits(), want.to_bits(),
-            "f32 nextafter @ {i}: a={a:e} b={b:e} got_bits={:#x} want_bits={:#x}", g.to_bits(), want.to_bits());
+        assert_eq!(
+            g.to_bits(),
+            want.to_bits(),
+            "f32 nextafter @ {i}: a={a:e} b={b:e} got_bits={:#x} want_bits={:#x}",
+            g.to_bits(),
+            want.to_bits()
+        );
     }
 }
 
@@ -104,7 +131,11 @@ fn nextafter_f32_ref(a: f32, b: f32) -> f32 {
         return b;
     }
     if a == 0.0 {
-        return if b > 0.0 { f32::from_bits(1) } else { f32::from_bits(1 | 0x8000_0000) };
+        return if b > 0.0 {
+            f32::from_bits(1)
+        } else {
+            f32::from_bits(1 | 0x8000_0000)
+        };
     }
     let bits = a.to_bits();
     let away = (a > 0.0) == (b > a);
@@ -123,7 +154,11 @@ fn nextafter_f64_ref(a: f64, b: f64) -> f64 {
         return b;
     }
     if a == 0.0 {
-        return if b > 0.0 { f64::from_bits(1) } else { f64::from_bits(1 | 0x8000_0000_0000_0000) };
+        return if b > 0.0 {
+            f64::from_bits(1)
+        } else {
+            f64::from_bits(1 | 0x8000_0000_0000_0000)
+        };
     }
     let bits = a.to_bits();
     let away = (a > 0.0) == (b > a);
@@ -160,21 +195,48 @@ fn nextafter_f64_contig() {
     let stride = contiguous_stride(shape);
     let plan = BinaryPlan::<f64, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Nextafter, shape, element: ElementKind::F64 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Nextafter,
+            shape,
+            element: ElementKind::F64,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![0f64; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, ((&a, &b), &g)) in host_a.iter().zip(host_b.iter()).zip(got.iter()).enumerate() {
         let want = nextafter_f64_ref(a, b);
-        assert_eq!(g.to_bits(), want.to_bits(),
-            "f64 nextafter @ {i}: a={a:e} b={b:e} got_bits={:#x} want_bits={:#x}", g.to_bits(), want.to_bits());
+        assert_eq!(
+            g.to_bits(),
+            want.to_bits(),
+            "f64 nextafter @ {i}: a={a:e} b={b:e} got_bits={:#x} want_bits={:#x}",
+            g.to_bits(),
+            want.to_bits()
+        );
     }
 }
 
@@ -204,14 +266,36 @@ fn nextafter_f16_contig() {
     let stride = contiguous_stride(shape);
     let plan = BinaryPlan::<f16, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Nextafter, shape, element: ElementKind::F16 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Nextafter,
+            shape,
+            element: ElementKind::F16,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![f16::ZERO; numel];
     dev_y.copy_to_host(&mut got).expect("download");
@@ -220,12 +304,20 @@ fn nextafter_f16_contig() {
         if want_bits == 0xFFFF {
             // NaN path — kernel returns a NaN. (Reference is computed via
             // f32::NAN → f16, which is also a canonical f16 NaN.)
-            assert!(g.to_f32().is_nan(),
-                "f16 nextafter @ {i}: a={a} b={b} got={g} expected NaN");
+            assert!(
+                g.to_f32().is_nan(),
+                "f16 nextafter @ {i}: a={a} b={b} got={g} expected NaN"
+            );
         } else {
-            assert_eq!(g.to_bits(), want_bits,
+            assert_eq!(
+                g.to_bits(),
+                want_bits,
                 "f16 nextafter @ {i}: a_bits={:#06x} b_bits={:#06x} got={:#06x} want={:#06x}",
-                a.to_bits(), b.to_bits(), g.to_bits(), want_bits);
+                a.to_bits(),
+                b.to_bits(),
+                g.to_bits(),
+                want_bits
+            );
         }
     }
 }
@@ -256,26 +348,56 @@ fn nextafter_bf16_contig() {
     let stride = contiguous_stride(shape);
     let plan = BinaryPlan::<bf16, 2>::select(
         &stream,
-        &BinaryDescriptor { kind: BinaryKind::Nextafter, shape, element: ElementKind::Bf16 },
+        &BinaryDescriptor {
+            kind: BinaryKind::Nextafter,
+            shape,
+            element: ElementKind::Bf16,
+        },
         PlanPreference::default(),
-    ).expect("select");
-    plan.run(&stream, Workspace::None, BinaryArgs {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
-    }).expect("run");
+    )
+    .expect("select");
+    plan.run(
+        &stream,
+        Workspace::None,
+        BinaryArgs {
+            a: TensorRef {
+                data: dev_a.as_slice(),
+                shape,
+                stride,
+            },
+            b: TensorRef {
+                data: dev_b.as_slice(),
+                shape,
+                stride,
+            },
+            y: TensorMut {
+                data: dev_y.as_slice_mut(),
+                shape,
+                stride,
+            },
+        },
+    )
+    .expect("run");
     stream.synchronize().expect("sync");
     let mut got = vec![bf16::ZERO; numel];
     dev_y.copy_to_host(&mut got).expect("download");
     for (i, ((&a, &b), &g)) in host_a.iter().zip(host_b.iter()).zip(got.iter()).enumerate() {
         let want_bits = nextafter_half_bits(a.to_bits(), b.to_bits(), a.to_f32(), b.to_f32());
         if want_bits == 0xFFFF {
-            assert!(g.to_f32().is_nan(),
-                "bf16 nextafter @ {i}: a={a} b={b} got={g} expected NaN");
+            assert!(
+                g.to_f32().is_nan(),
+                "bf16 nextafter @ {i}: a={a} b={b} got={g} expected NaN"
+            );
         } else {
-            assert_eq!(g.to_bits(), want_bits,
+            assert_eq!(
+                g.to_bits(),
+                want_bits,
                 "bf16 nextafter @ {i}: a_bits={:#06x} b_bits={:#06x} got={:#06x} want={:#06x}",
-                a.to_bits(), b.to_bits(), g.to_bits(), want_bits);
+                a.to_bits(),
+                b.to_bits(),
+                g.to_bits(),
+                want_bits
+            );
         }
     }
 }

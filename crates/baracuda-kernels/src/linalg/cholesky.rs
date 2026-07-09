@@ -23,10 +23,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
-    cusolverDnCreate, cusolverDnDestroy, cusolverDnDpotrf, cusolverDnDpotrfBatched,
-    cusolverDnDpotrf_bufferSize, cusolverDnHandle_t, cusolverDnSetStream, cusolverDnSpotrf,
-    cusolverDnSpotrfBatched, cusolverDnSpotrf_bufferSize, CUBLAS_FILL_MODE_LOWER,
-    CUBLAS_FILL_MODE_UPPER,
+    CUBLAS_FILL_MODE_LOWER, CUBLAS_FILL_MODE_UPPER, cusolverDnCreate, cusolverDnDestroy,
+    cusolverDnDpotrf, cusolverDnDpotrf_bufferSize, cusolverDnDpotrfBatched, cusolverDnHandle_t,
+    cusolverDnSetStream, cusolverDnSpotrf, cusolverDnSpotrf_bufferSize, cusolverDnSpotrfBatched,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
@@ -275,7 +274,11 @@ impl<T: Element> CholeskyPlan<T> {
     }
 
     fn check_args(&self, args: &CholeskyArgs<'_, T>) -> Result<()> {
-        let expected_shape = [self.desc.batch_size, self.desc.matrix_size, self.desc.matrix_size];
+        let expected_shape = [
+            self.desc.batch_size,
+            self.desc.matrix_size,
+            self.desc.matrix_size,
+        ];
         if args.a.shape != expected_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CholeskyPlan: A shape != [batch, N, N]",
@@ -359,9 +362,18 @@ impl CholeskyPlan<f32> {
             let base = args.a.data.as_raw().0;
             let mut host_ptrs: Vec<u64> = Vec::with_capacity(self.desc.batch_size as usize);
             for b in 0..self.desc.batch_size {
-                host_ptrs.push(base + (b as u64) * (stride as u64) * (core::mem::size_of::<f32>() as u64));
+                host_ptrs.push(
+                    base + (b as u64) * (stride as u64) * (core::mem::size_of::<f32>() as u64),
+                );
             }
-            unsafe { copy_h2d(ws_ptr, host_ptrs.as_ptr() as *const c_void, ptr_bytes, stream)?; }
+            unsafe {
+                copy_h2d(
+                    ws_ptr,
+                    host_ptrs.as_ptr() as *const c_void,
+                    ptr_bytes,
+                    stream,
+                )?;
+            }
             let status = unsafe {
                 cusolverDnSpotrfBatched(
                     h,
@@ -427,9 +439,18 @@ impl CholeskyPlan<f64> {
             let base = args.a.data.as_raw().0;
             let mut host_ptrs: Vec<u64> = Vec::with_capacity(self.desc.batch_size as usize);
             for b in 0..self.desc.batch_size {
-                host_ptrs.push(base + (b as u64) * (stride as u64) * (core::mem::size_of::<f64>() as u64));
+                host_ptrs.push(
+                    base + (b as u64) * (stride as u64) * (core::mem::size_of::<f64>() as u64),
+                );
             }
-            unsafe { copy_h2d(ws_ptr, host_ptrs.as_ptr() as *const c_void, ptr_bytes, stream)?; }
+            unsafe {
+                copy_h2d(
+                    ws_ptr,
+                    host_ptrs.as_ptr() as *const c_void,
+                    ptr_bytes,
+                    stream,
+                )?;
+            }
             let status = unsafe {
                 cusolverDnDpotrfBatched(
                     h,
@@ -521,17 +542,13 @@ pub(crate) unsafe fn copy_h2d(
             h_stream: *mut c_void,
         ) -> CUresult;
     }
-    let status = unsafe {
-        cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw())
-    };
+    let status = unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }
     // Sync so the host buffer can be safely freed when this function
     // returns. The batched cuSOLVER call that follows expects the
     // device array to be populated.
-    stream
-        .synchronize()
-        .map_err(Error::Driver)?;
+    stream.synchronize().map_err(Error::Driver)?;
     Ok(())
 }

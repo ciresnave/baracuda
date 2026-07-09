@@ -403,10 +403,7 @@ impl OperandDesc {
     /// # Panics
     /// Panics if `N > MAX_RANK`.
     #[must_use]
-    pub fn from_tensor_ref<T, const N: usize>(
-        view: &TensorRef<'_, T, N>,
-        align_bytes: u32,
-    ) -> Self
+    pub fn from_tensor_ref<T, const N: usize>(view: &TensorRef<'_, T, N>, align_bytes: u32) -> Self
     where
         T: KernelDtype + DeviceRepr + Copy + 'static,
     {
@@ -497,7 +494,12 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
     let (k2, n) = (rhs.shape[0], rhs.shape[1]);
     // Shapes must agree and every operand must be dense row-major.
     let dense = |o: &OperandDesc| o.strides[0] == o.shape[1] && o.strides[1] == 1;
-    if k != k2 || out.shape[0] != m || out.shape[1] != n || !dense(lhs) || !dense(rhs) || !dense(out)
+    if k != k2
+        || out.shape[0] != m
+        || out.shape[1] != n
+        || !dense(lhs)
+        || !dense(rhs)
+        || !dense(out)
     {
         return None;
     }
@@ -704,7 +706,7 @@ fn work_class(od: &OperandDesc) -> WorkClass {
 /// are treated as non-vectorizable in v1).
 fn dtype_size_bytes(dt: ElementKind) -> Option<u32> {
     use ElementKind::{
-        Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
+        Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
         I64, S4, S8, U4, U8, U32,
     };
     Some(match dt {
@@ -732,7 +734,12 @@ impl StructureKey {
     #[must_use]
     pub fn to_token(&self) -> String {
         let mut ops = String::new();
-        for (i, o) in self.operands.iter().take(self.n_operands as usize).enumerate() {
+        for (i, o) in self
+            .operands
+            .iter()
+            .take(self.n_operands as usize)
+            .enumerate()
+        {
             if i > 0 {
                 ops.push(';');
             }
@@ -1033,7 +1040,7 @@ fn arch_from_code(s: &str) -> Option<ArchSku> {
 
 const fn dtype_code(v: ElementKind) -> &'static str {
     use ElementKind::{
-        Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
+        Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
         I64, S4, S8, U4, U8, U32,
     };
     match v {
@@ -1062,7 +1069,7 @@ const fn dtype_code(v: ElementKind) -> &'static str {
 
 fn dtype_from_code(s: &str) -> Option<ElementKind> {
     use ElementKind::{
-        Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
+        Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
         I64, S4, S8, U4, U8, U32,
     };
     Some(match s {
@@ -1240,7 +1247,10 @@ mod tests {
         // the codec is spelling-keyed, not discriminant-keyed — adding a variant
         // shifts no existing dtype's code). Pin a known pre-existing f32 token
         // verbatim so a future reshuffle that perturbs it is caught.
-        assert_eq!(STRUCTURE_KEY_VERSION, 1, "the u32 addition must NOT bump the version");
+        assert_eq!(
+            STRUCTURE_KEY_VERSION, 1,
+            "the u32 addition must NOT bump the version"
+        );
         let a = od(&[128, 256], &[256, 1], ElementKind::F32, 256);
         let k = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         assert_eq!(
@@ -1261,9 +1271,16 @@ mod tests {
         let a = od(&[128, 64], &[64, 1], ElementKind::U32, 256);
         let k = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
         assert_eq!(k.dtype, ElementKind::U32);
-        assert_eq!(k.operands[0].vec_width, VecWidth::V4, "u32 is a 4-byte dtype");
+        assert_eq!(
+            k.operands[0].vec_width,
+            VecWidth::V4,
+            "u32 is a 4-byte dtype"
+        );
         let token = k.to_token();
-        assert!(token.starts_with("sk1|une|u32|"), "the token spells u32: {token}");
+        assert!(
+            token.starts_with("sk1|une|u32|"),
+            "the token spells u32: {token}"
+        );
         let parsed = StructureKey::from_token(&token).expect("u32 token round-trips");
         assert_eq!(k, parsed, "a u32 key round-trips byte-identically");
     }
@@ -1285,8 +1302,11 @@ mod tests {
         let k_col = structure_key(OpCategory::Reduction, &[x, out_collapse], ArchSku::Sm89);
         assert_eq!(k_col.reduce_axes, AxisMask::EMPTY);
         // Non-reduction op stays empty even with a size-1 axis present.
-        let k_ew =
-            structure_key(OpCategory::BinaryElementwise, &[out_last, out_last, out_last], ArchSku::Sm89);
+        let k_ew = structure_key(
+            OpCategory::BinaryElementwise,
+            &[out_last, out_last, out_last],
+            ArchSku::Sm89,
+        );
         assert_eq!(k_ew.reduce_axes, AxisMask::EMPTY);
         // A non-empty reduce_axes round-trips through the token.
         let parsed = StructureKey::from_token(&k_ax0.to_token()).expect("round-trip");

@@ -15,7 +15,7 @@
 
 #![cfg(feature = "sm89")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     EpilogueKind, Fp8E4M3, Fp8E5M2, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan, FpElement,
     LayoutSku, MatrixMut, MatrixRef, PlanPreference, VectorRef, Workspace,
@@ -79,8 +79,12 @@ trait Fp8Shim: FpElement + Default {
 }
 
 impl Fp8Shim for Fp8E4M3 {
-    fn quantize(x: f32) -> u8 { F8E4M3::from_f32(x).to_bits() }
-    fn dequantize(bits: u8) -> f32 { F8E4M3::from_bits(bits).to_f32() }
+    fn quantize(x: f32) -> u8 {
+        F8E4M3::from_f32(x).to_bits()
+    }
+    fn dequantize(bits: u8) -> f32 {
+        F8E4M3::from_bits(bits).to_f32()
+    }
     fn grid_spacing(v: f32) -> f32 {
         let a = v.abs();
         if a == 0.0 || a < 1.0 / 64.0 {
@@ -89,12 +93,18 @@ impl Fp8Shim for Fp8E4M3 {
         let e_unb = a.log2().floor() as i32;
         2f32.powi(e_unb - 3)
     }
-    fn to_bits(self) -> u8 { self.0 }
+    fn to_bits(self) -> u8 {
+        self.0
+    }
 }
 
 impl Fp8Shim for Fp8E5M2 {
-    fn quantize(x: f32) -> u8 { F8E5M2::from_f32(x).to_bits() }
-    fn dequantize(bits: u8) -> f32 { F8E5M2::from_bits(bits).to_f32() }
+    fn quantize(x: f32) -> u8 {
+        F8E5M2::from_f32(x).to_bits()
+    }
+    fn dequantize(bits: u8) -> f32 {
+        F8E5M2::from_bits(bits).to_f32()
+    }
     fn grid_spacing(v: f32) -> f32 {
         let a = v.abs();
         if a == 0.0 || a < (1.0_f32 / (1u32 << 14) as f32) {
@@ -103,7 +113,9 @@ impl Fp8Shim for Fp8E5M2 {
         let e_unb = a.log2().floor() as i32;
         2f32.powi(e_unb - 2)
     }
-    fn to_bits(self) -> u8 { self.0 }
+    fn to_bits(self) -> u8 {
+        self.0
+    }
 }
 
 // ============================================================================
@@ -159,13 +171,7 @@ fn mk_bias_f32(n: usize) -> Vec<f32> {
 // Generic harness.
 // ============================================================================
 
-fn run_fp8_bias<T: Fp8Shim>(
-    m: i32,
-    n: i32,
-    k: i32,
-    layout: LayoutSku,
-    ep: EpilogueKind,
-) {
+fn run_fp8_bias<T: Fp8Shim>(m: i32, n: i32, k: i32, layout: LayoutSku, ep: EpilogueKind) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
     let ctx = Context::new(&device).expect("context");
@@ -203,9 +209,13 @@ fn run_fp8_bias<T: Fp8Shim>(
     let mut expected_bits = vec![0u8; mu * nu];
     let mut expected_f32 = vec![0f32; mu * nu];
     cpu_fp8_gemm::<T>(
-        mu, nu, ku,
-        &host_a_bits, ku,
-        &host_b_bits, ldb,
+        mu,
+        nu,
+        ku,
+        &host_a_bits,
+        ku,
+        &host_b_bits,
+        ldb,
         layout,
         &host_bias,
         alpha,
@@ -222,15 +232,36 @@ fn run_fp8_bias<T: Fp8Shim>(
     let dev_b = dev_b_bytes.view_as::<T>();
     let mut dev_d: DeviceBuffer<T> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
-    let desc = Fp8GemmDescriptor { m, n, k, layout, epilogue: ep };
+    let desc = Fp8GemmDescriptor {
+        m,
+        n,
+        k,
+        layout,
+        epilogue: ep,
+    };
     let plan = Fp8GemmPlan::<T>::select(&stream, &desc, PlanPreference::default())
         .expect("select FP8 plan");
 
     let args = Fp8GemmArgs::<T> {
-        a: MatrixRef { data: dev_a, rows: m, cols: k, ld: k as i64 },
-        b: MatrixRef { data: dev_b, rows: k, cols: n, ld: ldb as i64 },
+        a: MatrixRef {
+            data: dev_a,
+            rows: m,
+            cols: k,
+            ld: k as i64,
+        },
+        b: MatrixRef {
+            data: dev_b,
+            rows: k,
+            cols: n,
+            ld: ldb as i64,
+        },
         c: None,
-        d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        d: MatrixMut {
+            data: dev_d.as_slice_mut(),
+            rows: m,
+            cols: n,
+            ld: n as i64,
+        },
         bias: Some(VectorRef {
             data: dev_bias.as_slice(),
             len: n,
@@ -274,7 +305,8 @@ fn run_fp8_bias<T: Fp8Shim>(
              got bits=0x{gb:02x} ({gf}) expected bits=0x{eb:02x} ({ef}); \
              pre-quant f32 ref = {raw}",
             host_d_bits.len(),
-            layout, ep,
+            layout,
+            ep,
         );
     }
 }
@@ -289,44 +321,92 @@ const K: i32 = 128;
 
 // ---- E4M3 × RCR ----
 
-#[test] #[ignore]
-fn fp8_e4m3_rcr_bias()      { run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias); }
-#[test] #[ignore]
-fn fp8_e4m3_rcr_bias_relu() { run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu); }
-#[test] #[ignore]
-fn fp8_e4m3_rcr_bias_gelu() { run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu); }
-#[test] #[ignore]
-fn fp8_e4m3_rcr_bias_silu() { run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu); }
+#[test]
+#[ignore]
+fn fp8_e4m3_rcr_bias() {
+    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias);
+}
+#[test]
+#[ignore]
+fn fp8_e4m3_rcr_bias_relu() {
+    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu);
+}
+#[test]
+#[ignore]
+fn fp8_e4m3_rcr_bias_gelu() {
+    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu);
+}
+#[test]
+#[ignore]
+fn fp8_e4m3_rcr_bias_silu() {
+    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu);
+}
 
 // ---- E4M3 × RRR ----
 
-#[test] #[ignore]
-fn fp8_e4m3_rrr_bias()      { run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias); }
-#[test] #[ignore]
-fn fp8_e4m3_rrr_bias_relu() { run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu); }
-#[test] #[ignore]
-fn fp8_e4m3_rrr_bias_gelu() { run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu); }
-#[test] #[ignore]
-fn fp8_e4m3_rrr_bias_silu() { run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu); }
+#[test]
+#[ignore]
+fn fp8_e4m3_rrr_bias() {
+    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias);
+}
+#[test]
+#[ignore]
+fn fp8_e4m3_rrr_bias_relu() {
+    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu);
+}
+#[test]
+#[ignore]
+fn fp8_e4m3_rrr_bias_gelu() {
+    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu);
+}
+#[test]
+#[ignore]
+fn fp8_e4m3_rrr_bias_silu() {
+    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu);
+}
 
 // ---- E5M2 × RCR ----
 
-#[test] #[ignore]
-fn fp8_e5m2_rcr_bias()      { run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias); }
-#[test] #[ignore]
-fn fp8_e5m2_rcr_bias_relu() { run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu); }
-#[test] #[ignore]
-fn fp8_e5m2_rcr_bias_gelu() { run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu); }
-#[test] #[ignore]
-fn fp8_e5m2_rcr_bias_silu() { run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu); }
+#[test]
+#[ignore]
+fn fp8_e5m2_rcr_bias() {
+    run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias);
+}
+#[test]
+#[ignore]
+fn fp8_e5m2_rcr_bias_relu() {
+    run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu);
+}
+#[test]
+#[ignore]
+fn fp8_e5m2_rcr_bias_gelu() {
+    run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu);
+}
+#[test]
+#[ignore]
+fn fp8_e5m2_rcr_bias_silu() {
+    run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu);
+}
 
 // ---- E5M2 × RRR ----
 
-#[test] #[ignore]
-fn fp8_e5m2_rrr_bias()      { run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias); }
-#[test] #[ignore]
-fn fp8_e5m2_rrr_bias_relu() { run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu); }
-#[test] #[ignore]
-fn fp8_e5m2_rrr_bias_gelu() { run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu); }
-#[test] #[ignore]
-fn fp8_e5m2_rrr_bias_silu() { run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu); }
+#[test]
+#[ignore]
+fn fp8_e5m2_rrr_bias() {
+    run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias);
+}
+#[test]
+#[ignore]
+fn fp8_e5m2_rrr_bias_relu() {
+    run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu);
+}
+#[test]
+#[ignore]
+fn fp8_e5m2_rrr_bias_gelu() {
+    run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu);
+}
+#[test]
+#[ignore]
+fn fp8_e5m2_rrr_bias_silu() {
+    run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu);
+}

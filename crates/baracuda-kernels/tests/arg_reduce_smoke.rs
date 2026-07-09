@@ -2,10 +2,10 @@
 //! Output dtype is i64 (PyTorch convention). Ties broken by first
 //! occurrence.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ArgReduceArgs, ArgReduceDescriptor, ArgReduceKind, ArgReducePlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    ArgReduceArgs, ArgReduceDescriptor, ArgReduceKind, ArgReducePlan, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -37,8 +37,8 @@ fn argmax_1d() {
         reduce_axis: 0,
         element: ElementKind::F32,
     };
-    let plan = ArgReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ArgReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let output_shape = [1i32];
     let args = ArgReduceArgs::<f32, 1> {
         x: TensorRef {
@@ -80,8 +80,8 @@ fn argmin_1d() {
         reduce_axis: 0,
         element: ElementKind::F32,
     };
-    let plan = ArgReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ArgReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let output_shape = [1i32];
     let args = ArgReduceArgs::<f32, 1> {
         x: TensorRef {
@@ -115,8 +115,7 @@ fn argmax_3d_axis_1() {
     for i in 0..3 {
         for j in 0..16 {
             for k in 0..5 {
-                let off =
-                    (i * in_strides[0] + j * in_strides[1] + k * in_strides[2]) as usize;
+                let off = (i * in_strides[0] + j * in_strides[1] + k * in_strides[2]) as usize;
                 // Max at j = i * 4 + k mod 16 (deterministic per (i, k)).
                 let max_j = (i * 4 + k) % 16;
                 host_x[off] = if j == max_j { 100.0 } else { (j as f32) * 0.1 };
@@ -131,8 +130,7 @@ fn argmax_3d_axis_1() {
     for i in 0..3 {
         for k in 0..5 {
             let max_j = (i * 4 + k) % 16;
-            let out_off =
-                (i * out_strides[0] + 0 * out_strides[1] + k * out_strides[2]) as usize;
+            let out_off = (i * out_strides[0] + 0 * out_strides[1] + k * out_strides[2]) as usize;
             expected[out_off] = max_j as i64;
         }
     }
@@ -146,8 +144,8 @@ fn argmax_3d_axis_1() {
         reduce_axis: 1,
         element: ElementKind::F32,
     };
-    let plan = ArgReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ArgReducePlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = ArgReduceArgs::<f32, 3> {
         x: TensorRef {
             data: dev_x.as_slice(),
@@ -187,8 +185,8 @@ fn argmax_ties_pick_first() {
         reduce_axis: 0,
         element: ElementKind::F32,
     };
-    let plan = ArgReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        ArgReducePlan::<f32, 1>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let output_shape = [1i32];
     let args = ArgReduceArgs::<f32, 1> {
         x: TensorRef {
@@ -207,5 +205,9 @@ fn argmax_ties_pick_first() {
 
     let mut got = vec![0i64; 1];
     dev_y.copy_to_host(&mut got).expect("download");
-    assert_eq!(got[0], 0, "argmax tie: expected first index (0), got {}", got[0]);
+    assert_eq!(
+        got[0], 0,
+        "argmax tie: expected first index (0), got {}",
+        got[0]
+    );
 }

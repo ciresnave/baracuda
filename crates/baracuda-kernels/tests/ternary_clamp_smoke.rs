@@ -12,10 +12,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test ternary_clamp_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef, TernaryArgs,
-    TernaryDescriptor, TernaryKind, TernaryPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, TernaryArgs, TernaryDescriptor, TernaryKind,
+    TernaryPlan, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -32,9 +32,7 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
 
     // x ranges over [-20, +20]; some below lo=-5, some above hi=+5,
     // some in range. lo and hi are per-element (full contig tensors).
-    let host_x: Vec<f32> = (0..numel)
-        .map(|i| (i as f32) * 0.05 - 20.0)
-        .collect();
+    let host_x: Vec<f32> = (0..numel).map(|i| (i as f32) * 0.05 - 20.0).collect();
     let host_lo: Vec<f32> = (0..numel).map(|_| -5.0_f32).collect();
     let host_hi: Vec<f32> = (0..numel).map(|_| 5.0_f32).collect();
     let expected: Vec<f32> = host_x
@@ -56,8 +54,8 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
         element: ElementKind::F32,
         scale: 1.0,
     };
-    let plan = TernaryPlan::<f32, N>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        TernaryPlan::<f32, N>::select(&stream, &desc, PlanPreference::default()).expect("select");
 
     let args = TernaryArgs::<f32, N> {
         a: TensorRef {
@@ -151,8 +149,8 @@ fn clamp_f32_scalar_broadcast() {
         element: ElementKind::F32,
         scale: 1.0,
     };
-    let plan = TernaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        TernaryPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = TernaryArgs::<f32, 2> {
         a: TensorRef {
             data: dev_x.as_slice(),

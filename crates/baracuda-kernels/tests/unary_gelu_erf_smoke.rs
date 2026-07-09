@@ -7,7 +7,7 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -30,8 +30,7 @@ fn ffi_unary_gelu_erf_f32_matches_cpu() {
     let expected: Vec<f32> = host_x.iter().map(|&x| cpu_gelu_erf_f32(x)).collect();
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload x");
-    let mut dev_y: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
+    let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, host_x.len()).expect("alloc y");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_unary_gelu_erf_f32_run(
@@ -79,14 +78,16 @@ fn ffi_unary_gelu_erf_matches_unary_gelu_bit_identical() {
             host_x.len() as i64,
             dev_x.as_slice().as_raw().0 as *const c_void,
             dev_y_erf.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         );
         let st2 = baracuda_kernels_sys::baracuda_kernels_unary_gelu_f32_run(
             host_x.len() as i64,
             dev_x.as_slice().as_raw().0 as *const c_void,
             dev_y_gelu.as_slice_mut().as_raw().0 as *mut c_void,
-            core::ptr::null_mut(), 0,
+            core::ptr::null_mut(),
+            0,
             stream.as_raw() as *mut c_void,
         );
         assert_eq!(st1, 0);
@@ -101,7 +102,8 @@ fn ffi_unary_gelu_erf_matches_unary_gelu_bit_identical() {
 
     for (i, (a, b)) in y_erf.iter().zip(y_gelu.iter()).enumerate() {
         assert_eq!(
-            a.to_bits(), b.to_bits(),
+            a.to_bits(),
+            b.to_bits(),
             "gelu_erf vs gelu f32 mismatch @ {i}: erf={a} gelu={b} (must be bit-identical)",
         );
     }

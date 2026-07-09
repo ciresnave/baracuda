@@ -13,10 +13,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test repeat_backward_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, RepeatBackwardArgs,
-    RepeatBackwardDescriptor, RepeatBackwardPlan, TensorMut, TensorRef, Workspace,
+    ElementKind, PlanPreference, RepeatBackwardArgs, RepeatBackwardDescriptor, RepeatBackwardPlan,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -87,8 +87,7 @@ fn repeat_backward_f32_2d() {
     let dy_shape = [input_shape[0] * repeats[0], input_shape[1] * repeats[1]];
     let dy_numel: usize = dy_shape.iter().map(|&d| d as usize).product();
     let host_dy: Vec<f32> = (0..dy_numel).map(|i| (i as f32) * 0.5 - 10.0).collect();
-    let (exp_values, sum_abs) =
-        cpu_ref(input_shape, repeats, dy_shape, |i| host_dy[i] as f64);
+    let (exp_values, sum_abs) = cpu_ref(input_shape, repeats, dy_shape, |i| host_dy[i] as f64);
 
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload");
     let dx_numel: usize = input_shape.iter().map(|&d| d as usize).product();
@@ -118,7 +117,11 @@ fn repeat_backward_f32_2d() {
     let mut got = vec![0f32; dx_numel];
     dev_dx.copy_to_host(&mut got).expect("download");
     let k: f64 = (repeats[0] as f64) * (repeats[1] as f64);
-    for (i, (&g, (&exp, &sabs))) in got.iter().zip(exp_values.iter().zip(sum_abs.iter())).enumerate() {
+    for (i, (&g, (&exp, &sabs))) in got
+        .iter()
+        .zip(exp_values.iter().zip(sum_abs.iter()))
+        .enumerate()
+    {
         let tol = (k * (f32::EPSILON as f64) * sabs.max(1.0)) as f32;
         let diff = (g - exp as f32).abs();
         assert!(
@@ -145,8 +148,9 @@ fn repeat_backward_f16_3d() {
     let host_dy: Vec<f16> = (0..dy_numel)
         .map(|i| f16::from_f32(((i as f32) * 0.25 - 5.0) * 0.1))
         .collect();
-    let (exp_values, sum_abs) =
-        cpu_ref(input_shape, repeats, dy_shape, |i| host_dy[i].to_f32() as f64);
+    let (exp_values, sum_abs) = cpu_ref(input_shape, repeats, dy_shape, |i| {
+        host_dy[i].to_f32() as f64
+    });
 
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload");
     let dx_numel: usize = input_shape.iter().map(|&d| d as usize).product();
@@ -178,7 +182,11 @@ fn repeat_backward_f16_3d() {
     // f16 eps ~= 9.77e-4. K * eps * sum_abs, rounded once at store.
     let k: f64 = repeats.iter().map(|&r| r as f64).product();
     let f16_eps: f64 = 9.765625e-4;
-    for (i, (&g, (&exp, &sabs))) in got.iter().zip(exp_values.iter().zip(sum_abs.iter())).enumerate() {
+    for (i, (&g, (&exp, &sabs))) in got
+        .iter()
+        .zip(exp_values.iter().zip(sum_abs.iter()))
+        .enumerate()
+    {
         let g32 = g.to_f32() as f64;
         // Allow at least one ULP at the magnitude of |exp| (half ULP at
         // store), plus the in-kernel accumulation error scaled by K.
@@ -204,8 +212,9 @@ fn repeat_backward_bf16_2d() {
     let host_dy: Vec<bf16> = (0..dy_numel)
         .map(|i| bf16::from_f32(((i as f32) * 0.5 - 3.0) * 0.05))
         .collect();
-    let (exp_values, sum_abs) =
-        cpu_ref(input_shape, repeats, dy_shape, |i| host_dy[i].to_f32() as f64);
+    let (exp_values, sum_abs) = cpu_ref(input_shape, repeats, dy_shape, |i| {
+        host_dy[i].to_f32() as f64
+    });
 
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload");
     let dx_numel: usize = input_shape.iter().map(|&d| d as usize).product();
@@ -237,7 +246,11 @@ fn repeat_backward_bf16_2d() {
     // bf16 eps ~= 7.81e-3.
     let k: f64 = repeats.iter().map(|&r| r as f64).product();
     let bf16_eps: f64 = 7.8125e-3;
-    for (i, (&g, (&exp, &sabs))) in got.iter().zip(exp_values.iter().zip(sum_abs.iter())).enumerate() {
+    for (i, (&g, (&exp, &sabs))) in got
+        .iter()
+        .zip(exp_values.iter().zip(sum_abs.iter()))
+        .enumerate()
+    {
         let g32 = g.to_f32() as f64;
         let tol = (k * bf16_eps * sabs.max(1.0)).max(bf16_eps * exp.abs().max(1.0));
         let diff = (g32 - exp).abs();
@@ -263,8 +276,7 @@ fn repeat_backward_f64_3d() {
     ];
     let dy_numel: usize = dy_shape.iter().map(|&d| d as usize).product();
     let host_dy: Vec<f64> = (0..dy_numel).map(|i| (i as f64) * 0.125 - 1.0).collect();
-    let (exp_values, sum_abs) =
-        cpu_ref(input_shape, repeats, dy_shape, |i| host_dy[i]);
+    let (exp_values, sum_abs) = cpu_ref(input_shape, repeats, dy_shape, |i| host_dy[i]);
 
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("upload");
     let dx_numel: usize = input_shape.iter().map(|&d| d as usize).product();
@@ -294,7 +306,11 @@ fn repeat_backward_f64_3d() {
     let mut got = vec![0f64; dx_numel];
     dev_dx.copy_to_host(&mut got).expect("download");
     let k: f64 = repeats.iter().map(|&r| r as f64).product();
-    for (i, (&g, (&exp, &sabs))) in got.iter().zip(exp_values.iter().zip(sum_abs.iter())).enumerate() {
+    for (i, (&g, (&exp, &sabs))) in got
+        .iter()
+        .zip(exp_values.iter().zip(sum_abs.iter()))
+        .enumerate()
+    {
         let tol = k * f64::EPSILON * sabs.max(1.0);
         let diff = (g - exp).abs();
         assert!(

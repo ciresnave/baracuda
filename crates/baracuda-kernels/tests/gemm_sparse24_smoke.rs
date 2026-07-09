@@ -14,10 +14,10 @@
 
 #![cfg(feature = "xformers_sparse24")]
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, GemmSparse24Args, GemmSparse24Descriptor, GemmSparse24Plan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    ElementKind, GemmSparse24Args, GemmSparse24Descriptor, GemmSparse24Plan, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -85,8 +85,7 @@ fn run_sparse24_gemm(
     let dx = DeviceBuffer::from_slice(ctx, x).expect("up x");
     let dwc = DeviceBuffer::from_slice(ctx, compressed).expect("up wc");
     let dwm = DeviceBuffer::from_slice(ctx, metadata).expect("up wm");
-    let mut dy: DeviceBuffer<f32> =
-        DeviceBuffer::zeros(ctx, (N * M) as usize).expect("alloc y");
+    let mut dy: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, (N * M) as usize).expect("alloc y");
 
     let desc = GemmSparse24Descriptor {
         n: N,
@@ -99,7 +98,10 @@ fn run_sparse24_gemm(
 
     // Workspace: M * K * sizeof(f32) bytes.
     let ws_bytes = plan.workspace_size();
-    assert_eq!(ws_bytes, (M as usize) * (K as usize) * core::mem::size_of::<f32>());
+    assert_eq!(
+        ws_bytes,
+        (M as usize) * (K as usize) * core::mem::size_of::<f32>()
+    );
     let mut dws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes).expect("alloc ws");
 
     plan.run(

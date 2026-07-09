@@ -1,11 +1,11 @@
 //! Real-GPU smoke test for `UnsortedSegmentMeanBackwardPlan<T>`
 //! (Phase 7 7.6). `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, PlanPreference, TensorMut, TensorRef,
-    UnsortedSegmentMeanBackwardArgs, UnsortedSegmentMeanBackwardDescriptor,
-    UnsortedSegmentMeanBackwardPlan, Workspace,
+    ElementKind, PlanPreference, TensorMut, TensorRef, UnsortedSegmentMeanBackwardArgs,
+    UnsortedSegmentMeanBackwardDescriptor, UnsortedSegmentMeanBackwardPlan, Workspace,
+    contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {
@@ -33,8 +33,7 @@ fn unsorted_segment_mean_backward_f32_scrambled() {
     for row in 0..n as usize {
         let s = seg[row] as usize;
         for col in 0..d as usize {
-            expected[row * d as usize + col] =
-                d_out[s * d as usize + col] / counts[s] as f32;
+            expected[row * d as usize + col] = d_out[s * d as usize + col] / counts[s] as f32;
         }
     }
     let dev_dout = DeviceBuffer::from_slice(&ctx, &d_out).expect("up dout");
@@ -42,8 +41,7 @@ fn unsorted_segment_mean_backward_f32_scrambled() {
     let mut dev_dinput: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * d) as usize).expect("alloc din");
     let mut dev_ws: DeviceBuffer<u8> =
-        DeviceBuffer::zeros(&ctx, (ns as usize) * core::mem::size_of::<i32>())
-            .expect("alloc ws");
+        DeviceBuffer::zeros(&ctx, (ns as usize) * core::mem::size_of::<i32>()).expect("alloc ws");
 
     let desc = UnsortedSegmentMeanBackwardDescriptor {
         num_inputs: n,
@@ -51,12 +49,9 @@ fn unsorted_segment_mean_backward_f32_scrambled() {
         num_segments: ns,
         element: ElementKind::F32,
     };
-    let plan = UnsortedSegmentMeanBackwardPlan::<f32>::select(
-        &stream,
-        &desc,
-        PlanPreference::default(),
-    )
-    .expect("select");
+    let plan =
+        UnsortedSegmentMeanBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
     let args = UnsortedSegmentMeanBackwardArgs::<f32> {
         d_output: TensorRef {
             data: dev_dout.as_slice(),

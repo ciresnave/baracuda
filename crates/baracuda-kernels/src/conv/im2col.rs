@@ -205,34 +205,86 @@ impl<T: Element> Im2ColPlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_im2col_2d_f32_run(
-                    d.batch, d.channels, d.h_in, d.w_in, self.h_out, self.w_out,
-                    d.kh, d.kw, d.stride_h, d.stride_w, d.pad_h, d.pad_w,
-                    d.dilation_h, d.dilation_w,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.h_in,
+                    d.w_in,
+                    self.h_out,
+                    self.w_out,
+                    d.kh,
+                    d.kw,
+                    d.stride_h,
+                    d.stride_w,
+                    d.pad_h,
+                    d.pad_w,
+                    d.dilation_h,
+                    d.dilation_w,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_im2col_2d_f64_run(
-                    d.batch, d.channels, d.h_in, d.w_in, self.h_out, self.w_out,
-                    d.kh, d.kw, d.stride_h, d.stride_w, d.pad_h, d.pad_w,
-                    d.dilation_h, d.dilation_w,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.h_in,
+                    d.w_in,
+                    self.h_out,
+                    self.w_out,
+                    d.kh,
+                    d.kw,
+                    d.stride_h,
+                    d.stride_w,
+                    d.pad_h,
+                    d.pad_w,
+                    d.dilation_h,
+                    d.dilation_w,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_im2col_2d_f16_run(
-                    d.batch, d.channels, d.h_in, d.w_in, self.h_out, self.w_out,
-                    d.kh, d.kw, d.stride_h, d.stride_w, d.pad_h, d.pad_w,
-                    d.dilation_h, d.dilation_w,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.h_in,
+                    d.w_in,
+                    self.h_out,
+                    self.w_out,
+                    d.kh,
+                    d.kw,
+                    d.stride_h,
+                    d.stride_w,
+                    d.pad_h,
+                    d.pad_w,
+                    d.dilation_h,
+                    d.dilation_w,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_im2col_2d_bf16_run(
-                    d.batch, d.channels, d.h_in, d.w_in, self.h_out, self.w_out,
-                    d.kh, d.kw, d.stride_h, d.stride_w, d.pad_h, d.pad_w,
-                    d.dilation_h, d.dilation_w,
-                    input_ptr, output_ptr, stream_ptr,
+                    d.batch,
+                    d.channels,
+                    d.h_in,
+                    d.w_in,
+                    self.h_out,
+                    self.w_out,
+                    d.kh,
+                    d.kw,
+                    d.stride_h,
+                    d.stride_w,
+                    d.pad_h,
+                    d.pad_w,
+                    d.dilation_h,
+                    d.dilation_w,
+                    input_ptr,
+                    output_ptr,
+                    stream_ptr,
                 )
             },
             _ => {
@@ -245,7 +297,12 @@ impl<T: Element> Im2ColPlan<T> {
     }
 
     fn check_args(&self, args: &Im2ColArgs<'_, T>) -> Result<()> {
-        let in_shape = [self.desc.batch, self.desc.channels, self.desc.h_in, self.desc.w_in];
+        let in_shape = [
+            self.desc.batch,
+            self.desc.channels,
+            self.desc.h_in,
+            self.desc.w_in,
+        ];
         let col_rows = self.desc.channels * self.desc.kh * self.desc.kw;
         let spatial = self.h_out * self.w_out;
         let out_shape = [self.desc.batch, col_rows, spatial];

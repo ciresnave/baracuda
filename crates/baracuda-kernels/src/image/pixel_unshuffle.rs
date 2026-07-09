@@ -179,22 +179,58 @@ impl<T: Element> PixelUnshufflePlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_pixel_unshuffle_f32_run(
-                    n, c, h, w, r, input_ptr, out_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    n,
+                    c,
+                    h,
+                    w,
+                    r,
+                    input_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_pixel_unshuffle_f64_run(
-                    n, c, h, w, r, input_ptr, out_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    n,
+                    c,
+                    h,
+                    w,
+                    r,
+                    input_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_pixel_unshuffle_f16_run(
-                    n, c, h, w, r, input_ptr, out_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    n,
+                    c,
+                    h,
+                    w,
+                    r,
+                    input_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::Bf16 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_pixel_unshuffle_bf16_run(
-                    n, c, h, w, r, input_ptr, out_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    n,
+                    c,
+                    h,
+                    w,
+                    r,
+                    input_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

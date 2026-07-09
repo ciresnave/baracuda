@@ -180,18 +180,34 @@ impl<T: Element> GridSamplePlan<T> {
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_grid_sample_2d_f32_run(
-                    self.desc.n, self.desc.c, self.desc.ih, self.desc.iw,
-                    self.desc.oh, self.desc.ow,
-                    input_ptr, grid_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.ih,
+                    self.desc.iw,
+                    self.desc.oh,
+                    self.desc.ow,
+                    input_ptr,
+                    grid_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_grid_sample_2d_f64_run(
-                    self.desc.n, self.desc.c, self.desc.ih, self.desc.iw,
-                    self.desc.oh, self.desc.ow,
-                    input_ptr, grid_ptr, out_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    self.desc.n,
+                    self.desc.c,
+                    self.desc.ih,
+                    self.desc.iw,
+                    self.desc.oh,
+                    self.desc.ow,
+                    input_ptr,
+                    grid_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
                 )
             },
             _ => {

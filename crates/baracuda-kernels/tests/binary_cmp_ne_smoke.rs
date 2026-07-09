@@ -11,10 +11,10 @@
 //! `cargo test -p baracuda-kernels --release --features sm89 \
 //!   --test binary_cmp_ne_smoke -- --ignored`.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpKind, BinaryCmpPlan,
-    ElementKind, PlanPreference, TensorMut, TensorRef, Workspace,
+    BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpKind, BinaryCmpPlan, ElementKind, PlanPreference,
+    TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -37,9 +37,7 @@ fn cmp_ne_f32_3d() {
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
     // Inputs in [-10, 10]. Every 3rd cell is deliberately equal.
-    let host_a: Vec<f32> = (0..numel)
-        .map(|i| ((i % 41) as f32) * 0.5 - 10.0)
-        .collect();
+    let host_a: Vec<f32> = (0..numel).map(|i| ((i % 41) as f32) * 0.5 - 10.0).collect();
     let host_b: Vec<f32> = (0..numel)
         .map(|i| {
             if i % 3 == 0 {
@@ -65,12 +63,24 @@ fn cmp_ne_f32_3d() {
         shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryCmpPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryCmpPlan::<f32, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f32, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -82,7 +92,10 @@ fn cmp_ne_f32_3d() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed 0s and 1s, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed 0s and 1s, got zeros={zeros} ones={ones}"
+    );
 }
 
 // =========================================================================
@@ -123,12 +136,24 @@ fn cmp_ne_f16_3d() {
         shape,
         element: ElementKind::F16,
     };
-    let plan = BinaryCmpPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryCmpPlan::<f16, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -140,7 +165,10 @@ fn cmp_ne_f16_3d() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed 0s and 1s, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed 0s and 1s, got zeros={zeros} ones={ones}"
+    );
 }
 
 // =========================================================================
@@ -184,9 +212,21 @@ fn cmp_ne_bf16_3d() {
     let plan = BinaryCmpPlan::<bf16, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = BinaryCmpArgs::<bf16, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -198,7 +238,10 @@ fn cmp_ne_bf16_3d() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed 0s and 1s, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed 0s and 1s, got zeros={zeros} ones={ones}"
+    );
 }
 
 // =========================================================================
@@ -211,9 +254,7 @@ fn cmp_ne_f64_3d() {
     let shape = [8i32, 128, 128];
     let numel: usize = shape.iter().map(|&d| d as usize).product();
 
-    let host_a: Vec<f64> = (0..numel)
-        .map(|i| ((i % 41) as f64) * 0.5 - 10.0)
-        .collect();
+    let host_a: Vec<f64> = (0..numel).map(|i| ((i % 41) as f64) * 0.5 - 10.0).collect();
     let host_b: Vec<f64> = (0..numel)
         .map(|i| {
             if i % 3 == 0 {
@@ -239,12 +280,24 @@ fn cmp_ne_f64_3d() {
         shape,
         element: ElementKind::F64,
     };
-    let plan = BinaryCmpPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryCmpPlan::<f64, 3>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f64, 3> {
-        a: TensorRef { data: dev_a.as_slice(), shape, stride },
-        b: TensorRef { data: dev_b.as_slice(), shape, stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape, stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape,
+            stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape,
+            stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape,
+            stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -256,7 +309,10 @@ fn cmp_ne_f64_3d() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed 0s and 1s, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed 0s and 1s, got zeros={zeros} ones={ones}"
+    );
 }
 
 // =========================================================================
@@ -321,12 +377,24 @@ fn cmp_ne_f32_strided_transposed() {
         shape: y_shape,
         element: ElementKind::F32,
     };
-    let plan = BinaryCmpPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default())
-        .expect("select");
+    let plan =
+        BinaryCmpPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = BinaryCmpArgs::<f32, 2> {
-        a: TensorRef { data: dev_a.as_slice(), shape: a_shape, stride: a_stride },
-        b: TensorRef { data: dev_b.as_slice(), shape: b_shape, stride: b_stride },
-        y: TensorMut { data: dev_y.as_slice_mut(), shape: y_shape, stride: y_stride },
+        a: TensorRef {
+            data: dev_a.as_slice(),
+            shape: a_shape,
+            stride: a_stride,
+        },
+        b: TensorRef {
+            data: dev_b.as_slice(),
+            shape: b_shape,
+            stride: b_stride,
+        },
+        y: TensorMut {
+            data: dev_y.as_slice_mut(),
+            shape: y_shape,
+            stride: y_stride,
+        },
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
@@ -338,5 +406,8 @@ fn cmp_ne_f32_strided_transposed() {
     }
     let zeros = got.iter().filter(|&&x| x == 0).count();
     let ones = got.iter().filter(|&&x| x == 1).count();
-    assert!(zeros > 0 && ones > 0, "expected mixed 0s and 1s, got zeros={zeros} ones={ones}");
+    assert!(
+        zeros > 0 && ones > 0,
+        "expected mixed 0s and 1s, got zeros={zeros} ones={ones}"
+    );
 }

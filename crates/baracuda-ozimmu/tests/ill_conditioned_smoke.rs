@@ -6,7 +6,7 @@
 //! Not a strict accuracy claim — just a "did the algorithm respond
 //! to the precision dial?" sanity check.
 
-use baracuda_cublas::{gemm as cublas_gemm, Handle as CublasHandle, Op as CublasOp};
+use baracuda_cublas::{Handle as CublasHandle, Op as CublasOp, gemm as cublas_gemm};
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_ozimmu::{Handle as OzimmuHandle, Op as OzimmuOp, OzakiSlices};
 
@@ -54,13 +54,19 @@ fn run_hilbert(n: usize, slices: OzakiSlices) -> f64 {
     let mut c_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, n * n).expect("alloc c_ref");
     cublas_gemm(
         &cublas_handle,
-        CublasOp::N, CublasOp::N,
-        n as i32, n as i32, n as i32,
+        CublasOp::N,
+        CublasOp::N,
+        n as i32,
+        n as i32,
+        n as i32,
         1.0,
-        &a, n as i32,
-        &b, n as i32,
+        &a,
+        n as i32,
+        &b,
+        n as i32,
         0.0,
-        &mut c_ref, n as i32,
+        &mut c_ref,
+        n as i32,
     )
     .expect("cublas dgemm");
 
@@ -70,13 +76,19 @@ fn run_hilbert(n: usize, slices: OzakiSlices) -> f64 {
     unsafe {
         oz_handle
             .dgemm(
-                OzimmuOp::N, OzimmuOp::N,
-                n, n, n,
+                OzimmuOp::N,
+                OzimmuOp::N,
+                n,
+                n,
+                n,
                 1.0,
-                a.as_raw().0 as *const f64, n,
-                b.as_raw().0 as *const f64, n,
+                a.as_raw().0 as *const f64,
+                n,
+                b.as_raw().0 as *const f64,
+                n,
                 0.0,
-                c_oz.as_raw().0 as *mut f64, n,
+                c_oz.as_raw().0 as *mut f64,
+                n,
                 slices,
             )
             .expect("ozimmu dgemm");
@@ -95,7 +107,7 @@ fn run_hilbert(n: usize, slices: OzakiSlices) -> f64 {
 #[ignore = "requires an NVIDIA GPU"]
 fn slice_count_dial_responds_to_ill_conditioned_input() {
     let n = 128;
-    let err_s6  = run_hilbert(n, OzakiSlices::S6);
+    let err_s6 = run_hilbert(n, OzakiSlices::S6);
     let err_s18 = run_hilbert(n, OzakiSlices::S18);
 
     // We don't pin absolute numbers (Hilbert is famously
@@ -104,6 +116,7 @@ fn slice_count_dial_responds_to_ill_conditioned_input() {
     assert!(
         err_s18 < err_s6 / 10.0,
         "slice-count dial inactive: S=6 err={:e}, S=18 err={:e} (expected S=18 < S=6/10)",
-        err_s6, err_s18
+        err_s6,
+        err_s18
     );
 }

@@ -5,10 +5,10 @@
 //!
 //! `#[ignore]` by default.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    contiguous_stride, Bool, MaskedFillArgs, MaskedFillDescriptor, MaskedFillPlan,
-    PlanPreference, TensorMut, TensorRef, Workspace,
+    Bool, MaskedFillArgs, MaskedFillDescriptor, MaskedFillPlan, PlanPreference, TensorMut,
+    TensorRef, Workspace, contiguous_stride,
 };
 
 fn setup() -> (Context, Stream) {

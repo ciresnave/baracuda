@@ -52,13 +52,13 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
+    CUBLAS_DIAG_NON_UNIT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_OP_T, CUBLAS_SIDE_LEFT,
     cublasCreate_v2, cublasDestroy_v2, cublasDtrsm, cublasHandle_t, cublasSetStream_v2,
     cublasStrsm, cusolverDnCreate, cusolverDnDDgels, cusolverDnDDgels_bufferSize,
     cusolverDnDestroy, cusolverDnDgeqrf, cusolverDnDgeqrf_bufferSize, cusolverDnDormqr,
-    cusolverDnDormqr_bufferSize, cusolverDnHandle_t, cusolverDnSSgels,
-    cusolverDnSSgels_bufferSize, cusolverDnSetStream, cusolverDnSgeqrf,
-    cusolverDnSgeqrf_bufferSize, cusolverDnSormqr, cusolverDnSormqr_bufferSize,
-    CUBLAS_DIAG_NON_UNIT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_OP_T, CUBLAS_SIDE_LEFT,
+    cusolverDnDormqr_bufferSize, cusolverDnHandle_t, cusolverDnSSgels, cusolverDnSSgels_bufferSize,
+    cusolverDnSetStream, cusolverDnSgeqrf, cusolverDnSgeqrf_bufferSize, cusolverDnSormqr,
+    cusolverDnSormqr_bufferSize,
 };
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
@@ -159,11 +159,7 @@ pub struct LstSqPlan<T: Element> {
 
 impl<T: Element> LstSqPlan<T> {
     /// Pick a kernel + validate the descriptor.
-    pub fn select(
-        _stream: &Stream,
-        desc: &LstSqDescriptor,
-        _pref: PlanPreference,
-    ) -> Result<Self> {
+    pub fn select(_stream: &Stream, desc: &LstSqDescriptor, _pref: PlanPreference) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
                 "baracuda-kernels::LstSqPlan: descriptor.element != T::KIND",
@@ -583,9 +579,8 @@ macro_rules! impl_lstsq_run {
                 }
 
                 // 2. geqrf — A := packed(Q, R), tau := householder scalars.
-                let status = unsafe {
-                    $geqrf(h, m, n, a_ptr, m, tau_ptr, tail_ptr, lwork, info_ptr)
-                };
+                let status =
+                    unsafe { $geqrf(h, m, n, a_ptr, m, tau_ptr, tail_ptr, lwork, info_ptr) };
                 if status != 0 {
                     return Err(Error::CutlassInternal(-status));
                 }
@@ -652,9 +647,8 @@ macro_rules! impl_lstsq_run {
                     let src = unsafe {
                         (b_ptr as *const u8).add(col * b_col_stride_bytes) as *const c_void
                     };
-                    let dst = unsafe {
-                        (x_ptr as *mut u8).add(col * x_col_stride_bytes) as *mut c_void
-                    };
+                    let dst =
+                        unsafe { (x_ptr as *mut u8).add(col * x_col_stride_bytes) as *mut c_void };
                     unsafe {
                         copy_d2d(dst, src, col_bytes, stream)?;
                     }
@@ -666,8 +660,20 @@ macro_rules! impl_lstsq_run {
     };
 }
 
-impl_lstsq_run!(f32, cusolverDnSSgels, cusolverDnSgeqrf, cusolverDnSormqr, cublasStrsm);
-impl_lstsq_run!(f64, cusolverDnDDgels, cusolverDnDgeqrf, cusolverDnDormqr, cublasDtrsm);
+impl_lstsq_run!(
+    f32,
+    cusolverDnSSgels,
+    cusolverDnSgeqrf,
+    cusolverDnSormqr,
+    cublasStrsm
+);
+impl_lstsq_run!(
+    f64,
+    cusolverDnDDgels,
+    cusolverDnDgeqrf,
+    cusolverDnDormqr,
+    cublasDtrsm
+);
 
 impl<T: Element> Drop for LstSqPlan<T> {
     fn drop(&mut self) {
@@ -706,9 +712,7 @@ unsafe fn copy_d2d(
             h_stream: *mut c_void,
         ) -> CUresult;
     }
-    let status = unsafe {
-        cuMemcpyDtoDAsync_v2(dst as u64, src as u64, bytes, stream.as_raw())
-    };
+    let status = unsafe { cuMemcpyDtoDAsync_v2(dst as u64, src as u64, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }

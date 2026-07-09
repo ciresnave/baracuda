@@ -3,9 +3,9 @@
 //!
 //! `#[ignore]` by default — requires a real CUDA device.
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::sampling::{TokenPenaltyArgs, TokenPenaltyDescriptor, TokenPenaltyPlan};
-use baracuda_flashinfer::{contiguous_stride, PlanPreference, TensorMut, TensorRef, Workspace};
+use baracuda_flashinfer::{PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride};
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
@@ -46,8 +46,16 @@ fn token_penalty_closed_form() {
         &stream,
         Workspace::None,
         TokenPenaltyArgs {
-            logits: TensorMut { data: logits_dev.as_slice_mut(), shape, stride: contiguous_stride(shape) },
-            counts: TensorRef { data: counts_dev.as_slice(), shape, stride: contiguous_stride(shape) },
+            logits: TensorMut {
+                data: logits_dev.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            counts: TensorRef {
+                data: counts_dev.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
         },
     )
     .expect("token penalty run");

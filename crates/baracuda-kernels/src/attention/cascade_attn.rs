@@ -48,7 +48,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-
 /// Descriptor for a cascade-attention LSE merge.
 #[derive(Copy, Clone, Debug)]
 pub struct CascadeAttentionDescriptor {
@@ -117,7 +116,10 @@ impl<T: Element> CascadeAttentionPlan<T> {
                 "CascadeAttentionPlan: head_dim must be 64, 128, or 256",
             ));
         }
-        if !matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32) {
+        if !matches!(
+            T::KIND,
+            ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32
+        ) {
             return Err(Error::Unsupported(
                 "CascadeAttentionPlan: element type must be f16, bf16, or f32",
             ));
@@ -220,20 +222,38 @@ impl<T: Element> CascadeAttentionPlan<T> {
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_merge_state_in_place_f16_run(
-                        self.desc.seq_len, self.desc.num_heads, self.desc.head_dim,
-                        v_ptr, s_ptr, v_other_ptr, s_other_ptr, stream_ptr,
+                        self.desc.seq_len,
+                        self.desc.num_heads,
+                        self.desc.head_dim,
+                        v_ptr,
+                        s_ptr,
+                        v_other_ptr,
+                        s_other_ptr,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_merge_state_in_place_bf16_run(
-                        self.desc.seq_len, self.desc.num_heads, self.desc.head_dim,
-                        v_ptr, s_ptr, v_other_ptr, s_other_ptr, stream_ptr,
+                        self.desc.seq_len,
+                        self.desc.num_heads,
+                        self.desc.head_dim,
+                        v_ptr,
+                        s_ptr,
+                        v_other_ptr,
+                        s_other_ptr,
+                        stream_ptr,
                     )
                 },
                 ElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_merge_state_in_place_f32_run(
-                        self.desc.seq_len, self.desc.num_heads, self.desc.head_dim,
-                        v_ptr, s_ptr, v_other_ptr, s_other_ptr, stream_ptr,
+                        self.desc.seq_len,
+                        self.desc.num_heads,
+                        self.desc.head_dim,
+                        v_ptr,
+                        s_ptr,
+                        v_other_ptr,
+                        s_other_ptr,
+                        stream_ptr,
                     )
                 },
                 _ => {
@@ -328,7 +348,10 @@ impl<T: Element> CascadeMergeStatesPlan<T> {
                 "CascadeMergeStatesPlan: head_dim must be 64, 128, or 256",
             ));
         }
-        if !matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32) {
+        if !matches!(
+            T::KIND,
+            ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32
+        ) {
             return Err(Error::Unsupported(
                 "CascadeMergeStatesPlan: element type must be f16, bf16, or f32",
             ));
@@ -365,14 +388,22 @@ impl<T: Element> CascadeMergeStatesPlan<T> {
             self.desc.num_heads,
             self.desc.head_dim,
         ];
-        let s_shape = [self.desc.seq_len, self.desc.num_index_sets, self.desc.num_heads];
+        let s_shape = [
+            self.desc.seq_len,
+            self.desc.num_index_sets,
+            self.desc.num_heads,
+        ];
         let v_merged_shape = [self.desc.seq_len, self.desc.num_heads, self.desc.head_dim];
         let s_merged_shape = [self.desc.seq_len, self.desc.num_heads];
         if args.v.shape != v_shape {
-            return Err(Error::InvalidProblem("CascadeMergeStatesPlan: v shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "CascadeMergeStatesPlan: v shape mismatch",
+            ));
         }
         if args.s.shape != s_shape {
-            return Err(Error::InvalidProblem("CascadeMergeStatesPlan: s shape mismatch"));
+            return Err(Error::InvalidProblem(
+                "CascadeMergeStatesPlan: s shape mismatch",
+            ));
         }
         if args.v_merged.shape != v_merged_shape {
             return Err(Error::InvalidProblem(
@@ -440,20 +471,41 @@ impl<T: Element> CascadeMergeStatesPlan<T> {
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_merge_states_f16_run(
-                        self.desc.num_index_sets, self.desc.seq_len, self.desc.num_heads,
-                        self.desc.head_dim, v_ptr, s_ptr, v_merged_ptr, s_merged_ptr, stream_ptr,
+                        self.desc.num_index_sets,
+                        self.desc.seq_len,
+                        self.desc.num_heads,
+                        self.desc.head_dim,
+                        v_ptr,
+                        s_ptr,
+                        v_merged_ptr,
+                        s_merged_ptr,
+                        stream_ptr,
                     )
                 },
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_merge_states_bf16_run(
-                        self.desc.num_index_sets, self.desc.seq_len, self.desc.num_heads,
-                        self.desc.head_dim, v_ptr, s_ptr, v_merged_ptr, s_merged_ptr, stream_ptr,
+                        self.desc.num_index_sets,
+                        self.desc.seq_len,
+                        self.desc.num_heads,
+                        self.desc.head_dim,
+                        v_ptr,
+                        s_ptr,
+                        v_merged_ptr,
+                        s_merged_ptr,
+                        stream_ptr,
                     )
                 },
                 ElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_merge_states_f32_run(
-                        self.desc.num_index_sets, self.desc.seq_len, self.desc.num_heads,
-                        self.desc.head_dim, v_ptr, s_ptr, v_merged_ptr, s_merged_ptr, stream_ptr,
+                        self.desc.num_index_sets,
+                        self.desc.seq_len,
+                        self.desc.num_heads,
+                        self.desc.head_dim,
+                        v_ptr,
+                        s_ptr,
+                        v_merged_ptr,
+                        s_merged_ptr,
+                        stream_ptr,
                     )
                 },
                 _ => {
