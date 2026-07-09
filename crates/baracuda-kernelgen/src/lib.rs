@@ -39,7 +39,7 @@ pub mod pattern;
 pub mod plan;
 
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
-pub use contract::{contract, front_matter};
+pub use contract::{bundle, contract, front_matter};
 pub use cuda::Cuda;
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{

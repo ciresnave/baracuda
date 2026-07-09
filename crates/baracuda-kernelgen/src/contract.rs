@@ -34,25 +34,173 @@ use crate::ir::{BinaryOp, ExprDag, NodeId, OobPolicy, OpDef, ScalarExpr, UnaryOp
 use crate::pattern::{derive_pattern, to_fkc, PatternNode};
 use baracuda_kernels_types::{Contiguity, ElementKind, StructureKey, VecWidth};
 
+/// Canonicalize a caller's backend token to the exact capitalized spelling
+/// Fuel's FKC importer accepts (fuel-dispatch `fkc/lower.rs` `lower_backend`,
+/// verified 2026-07-08: the explicit table maps `Cpu`/`Cuda`/`Vulkan`/`Metal`
+/// and errors [`UnknownBackend`] on anything else). Baracuda's callers pass the
+/// lowercase provider token (`backend.name()` → `"cuda"`); the FKC wire form is
+/// `Cuda`. Applied at every emission site ([`front_matter`] + [`contract`]) so
+/// callers stay unchanged. An unrecognized token passes through verbatim — the
+/// emitter never fabricates a backend name; an unknown one is a caller bug that
+/// surfaces honestly as Fuel's `UnknownBackend` at import rather than being
+/// silently rewritten.
+fn fkc_backend_token(backend: &str) -> &str {
+    match backend {
+        "cpu" | "Cpu" => "Cpu",
+        "cuda" | "Cuda" => "Cuda",
+        "vulkan" | "Vulkan" => "Vulkan",
+        "metal" | "Metal" => "Metal",
+        other => other,
+    }
+}
+
 /// Provider-wide FKC bundle front-matter (FKC §0/§3.1) — emitted once per bundle
 /// file, above the per-kernel [`contract`] blocks. `revision_base` is the
 /// provider source-tree revision the kernels were built from (the
 /// `ImplId.kernel_revision_hash` base). Carries `seam_profiles: [1]` so an
 /// importer can reject a contract outside the negotiated seam profile (§3.5).
+/// The `backend` token is canonicalized to Fuel's capitalized spelling via
+/// [`fkc_backend_token`] (`"cuda"` → `Cuda`).
 #[must_use]
 pub fn front_matter(backend_name: &str, revision_base: &str) -> String {
+    let backend = fkc_backend_token(backend_name);
     format!(
         "---\n\
          fkc_version: 1\n\
          provider:\n  \
          name: baracuda\n  \
-         backend: {backend_name}\n  \
+         backend: {backend}\n  \
          kernel_source: baracuda\n  \
          link_registry: baracuda_link_registry\n  \
          revision_base: \"{revision_base}\"\n\
          seam_profiles: [1]\n\
          ---\n"
     )
+}
+
+/// Assemble a complete importable FKC bundle: the provider [`front_matter`]
+/// followed by every `contract` under its own `## ` heading.
+///
+/// **Why the `## ` framing is load-bearing (not cosmetic).** Fuel's FKC parser
+/// (fuel-dispatch `fkc/parse.rs` `split_sections`, verified 2026-07-08) collects
+/// a fenced ```` ```fkc ```` block ONLY when it sits under a `## ` heading and
+/// SILENTLY DROPS a headingless block (prose before the first `## ` is ignored).
+/// A bundle that merely concatenates [`contract`] outputs therefore imports
+/// `Ok`-but-EMPTY — a no-op adopt that looks like success. This assembler is the
+/// single source of the framing every emission site (bin, examples, tests,
+/// proofs) shares, so no caller can reintroduce that hazard by hand.
+///
+/// The heading title is the contract's own `kernel:` name (matching Fuel's
+/// corpus, docs/kernel-contracts/cpu/elementwise-binary.fkc.md, where each
+/// `## <section>` names its kernel). The title is diagnostic only — the true
+/// kernel identity is the `kernel:`/`entry_point:` fields inside the block — so
+/// the exact heading text is not parsed; it need only exist and start `## `.
+///
+/// NOTE the JIT seam (`crate::jit`) deliberately does NOT use this: Fuel wraps
+/// `art.contract` with the provider identity + heading at adopt time (their
+/// 2026-07-08 answer (a)), so the seam ships the bare [`contract`] block.
+#[must_use]
+pub fn bundle(backend_name: &str, revision_base: &str, contracts: &[String]) -> String {
+    let mut s = front_matter(backend_name, revision_base);
+    for c in contracts {
+        // Withhold a fused contract whose `fused_op:` name is NOT one of Fuel's
+        // FusedOps SCREAMING_SNAKE constants — an unknown fused_op is BUNDLE-FATAL
+        // (fuel-dispatch: `lower_fused_op` → `UnknownFusedOp`; `validate_file`
+        // runs it for every registrable section and propagates with `?`;
+        // `import_bundle_str` runs `validate_file(&file)?` over the WHOLE file), so
+        // one free-form fused name poisons every correct primitive beside it. None
+        // of Baracuda's elementwise fusions (`relu_add`, `affine_silu`, a bare
+        // `copy`, …) matches a Fuel FusedOp (those are big structured kernels —
+        // softmax / norms / attention / conv / matmul), so they are all withheld
+        // HERE, from the importable bundle. The kernel still generates + runs AOT
+        // and rides the JIT seam as a BARE block (`crate::jit`; Fuel's adopt stores
+        // that contract text UNPARSED — 2026-07-08 answer (a) — so it never reaches
+        // this whole-file import path). A fusion that genuinely maps to a Fuel
+        // FusedOp is emitted by `contract` with the SCREAMING_SNAKE constant as its
+        // `fused_op:` value (see `fuel_fused_op_name`), which this filter admits.
+        // Verified 2026-07-08 against Fuel's real `import_bundle_str`.
+        if let Some(name) = fused_op_of(c) {
+            if !FUEL_FUSED_OPS.contains(&name) {
+                continue;
+            }
+        }
+        // The heading title = the contract's `kernel:` name (diagnostic; the
+        // block's own fields carry the real identity). A malformed contract
+        // with no `kernel:` line falls back to a generic title rather than
+        // panicking — it would fail import on its own merits, not the framing.
+        let title = kernel_name_of(c).unwrap_or("kernel");
+        s.push_str(&format!("\n## {title}\n\n"));
+        s.push_str(c);
+    }
+    s
+}
+
+/// The `fused_op:` name declared inside a [`contract`] block, or `None` for a
+/// primitive (`op_kind:`) contract. Used by [`bundle`] to withhold a fused
+/// contract Fuel cannot import.
+fn fused_op_of(contract: &str) -> Option<&str> {
+    contract
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("fused_op: "))
+        .map(str::trim)
+}
+
+/// The exhaustive `FusedOps::*` SCREAMING_SNAKE constant names Fuel's
+/// `fkc/lower.rs` `fused_op_id_for_const_name` table accepts (verified verbatim
+/// 2026-07-08). A `fused_op:` value NOT in this set is bundle-fatal, so [`bundle`]
+/// withholds it. Mirrors the [`fuel_primitive_op_kind`] honest-miss posture for
+/// the fused surface.
+const FUEL_FUSED_OPS: &[&str] = &[
+    "SOFTMAX_LAST_DIM",
+    "FUSED_LINEAR",
+    "RMS_NORM_LAST_DIM",
+    "LAYER_NORM_LAST_DIM",
+    "ROPE",
+    "CONV2D",
+    "SOFTMAX_LAST_DIM_BACKWARD",
+    "LAYER_NORM_LAST_DIM_BACKWARD",
+    "RMS_NORM_LAST_DIM_BACKWARD",
+    "REDUCE_MAX_TO_BACKWARD",
+    "CONV_TRANSPOSE2D",
+    "FLASH_ATTN",
+    "PAGED_ATTN",
+    "QMATMUL",
+    "POWI_BACKWARD",
+    "INPLACE_AFFINE",
+    "FUSED_SOFTMAX_CROSS_ENTROPY",
+    "CAUSAL_CONV1D",
+    "SELECTIVE_SCAN",
+    "SSD_CHUNK_SCAN",
+    "NF4_MATMUL",
+    "FLASH_ATTN_BACKWARD_Q",
+    "FLASH_ATTN_BACKWARD_K",
+    "FLASH_ATTN_BACKWARD_V",
+];
+
+/// Map a Baracuda fusion's stable `op.name` to the Fuel FusedOps SCREAMING_SNAKE
+/// constant it genuinely IS (name-AND-semantics match only), or `None` for a
+/// fusion with no Fuel FusedOp identity. NONE of Baracuda's current elementwise
+/// fusions map (Fuel's FusedOps are big structured kernels — softmax / norms /
+/// attention / conv / matmul — not generic elementwise compositions), so this is
+/// `None` for everything today; it is the conservative extension point (mirroring
+/// [`fuel_primitive_op_kind`]) so a genuinely-matching fusion emits the exact Fuel
+/// constant as its `fused_op:` value (which [`bundle`] then admits) instead of a
+/// bundle-fatal free-form name.
+fn fuel_fused_op_name(_baracuda_name: &str) -> Option<&'static str> {
+    // No Baracuda fusion maps to a Fuel FusedOps constant yet. Add an arm here
+    // (returning a `FUEL_FUSED_OPS` member) only for a genuine name+semantics
+    // match, documented against Fuel's FusedOps table.
+    None
+}
+
+/// The `kernel:` name declared inside a [`contract`] block (the `## ` heading
+/// title [`bundle`] frames it under), or `None` for a block with no `kernel:`
+/// line.
+fn kernel_name_of(contract: &str) -> Option<&str> {
+    contract
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("kernel: "))
+        .map(str::trim)
 }
 
 /// Emit the per-kernel FKC contract block (a ```` ```fkc ```` fenced section) for
@@ -232,6 +380,52 @@ pub fn contract(
         return None;
     }
 
+    // Item-01 / Item-03 LAYOUT-HONESTY honest miss (typed, no contract; the
+    // kernel still generates + runs AOT — the multi-output / view / gather
+    // precedent). Two per-operand memory-layout facts the emitted five-flag
+    // `LayoutSpec` (Fuel `fkc/schema.rs`) CANNOT state truthfully, so the cell is
+    // WITHHELD rather than advertised with a layout LIE (the one-directional
+    // safety rule: understating is safe, overstating is not):
+    //
+    //   1. FLIPPED (reverse-stride) operand. The Elementwise schedule has NO
+    //      flipped gate (`crate::plan`, unlike the RowReduce/Scan/Window/RowSort
+    //      emitters which assert `!flipped`), so the generated kernel reads the
+    //      axis FORWARD (`in{k}[i]`) — it does NOT implement the reversed cell its
+    //      structure key names. `reverse_strides` is a single accepted|rejected
+    //      flag with no "reads-reversed" spelling, and the kernel does not read
+    //      reversed anyway, so the only honest posture is to withhold. (Every
+    //      EMITTED contract therefore truthfully carries `reverse_strides:
+    //      rejected`, and the `accept.structure_key` token no longer contradicts
+    //      the layout block.)
+    //
+    //   2. BAKED-BROADCAST operand. A `Contiguity::Broadcast` operand's stride-0
+    //      mask is BAKED into the kernel (fully-broadcast → hoisted `in{k}[0]`,
+    //      cuda.rs; partial → its bcast-axis stride terms are compile-time dropped
+    //      by `offset_expr`), so the kernel CANNOT walk a contiguous/strided
+    //      tensor in that slot. Fuel's tri-state has no `broadcast_stride0:
+    //      required` spelling, so the baked-broadcast fact is UNSPEAKABLE — an
+    //      honest miss (e.g. a broadcast bias-add cell yields `None`). EXCEPTION:
+    //      the ONE Broadcast-class operand we DO advertise (Model-A's deliverable)
+    //      is the U32 gather / index_select INDEX operand — its layout is emitted
+    //      truthfully by `layout_spec` (`contiguous: required`), not withheld,
+    //      because the "broadcast" over the non-gathered axes is the DEFINITION of
+    //      index_select, not a caller-varying tensor layout.
+    //
+    // Verified against the real emitter (cuda.rs `offset_expr` / the fully-
+    // broadcast hoist) + `classify_contiguity` (structure_key.rs), 2026-07-08.
+    {
+        let gather_index = gather_advert.as_ref().map(|g| g.index_operand);
+        for i in 0..key.n_operands as usize {
+            let o = key.operands[i];
+            if o.flipped {
+                return None;
+            }
+            if o.contig == Contiguity::Broadcast && Some(i) != gather_index {
+                return None;
+            }
+        }
+    }
+
     // Increment 0b honesty gate (tightened by the adversarial review): a body
     // containing a Cmp* ANYWHERE emits a contract only as the u8-out
     // single-op primitive.
@@ -304,8 +498,17 @@ pub fn contract(
                 // + lowers AOT.
                 None => return None,
             },
-            // ≥2 graph ops → a fused identity carried by the op's stable name.
-            Some(_) => format!("fused_op: {}", op.name),
+            // ≥2 graph ops (or a bare n_ops==0 copy) → a fused identity. A fusion
+            // that genuinely maps to a Fuel FusedOp emits the exact SCREAMING_SNAKE
+            // constant (so it imports through `bundle()`); otherwise it carries the
+            // op's free-form stable name, which `bundle()` WITHHOLDS from an
+            // importable bundle (an unknown `fused_op:` is bundle-fatal) while the
+            // JIT seam still ships it as a bare, unparsed block. See `bundle` /
+            // `fuel_fused_op_name`.
+            Some(_) => match fuel_fused_op_name(&op.name) {
+                Some(fuel_const) => format!("fused_op: {fuel_const}"),
+                None => format!("fused_op: {}", op.name),
+            },
             // body not expressible as a pattern (Const / non-elementwise / bind
             // mismatch) → not advertisable; skip rather than fake an op_kind from
             // the op's free-form name (which is not an OpKind dispatch key).
@@ -322,8 +525,10 @@ pub fn contract(
     s.push_str(&op_line);
     s.push('\n');
     s.push_str(&format!("blurb: \"{}\"\n", blurb(op, key, dtype, is_fusion)));
-    // ImplId tuple (FKC §4.11), kept as five separable fields.
-    s.push_str(&format!("backend: {backend_name}\n"));
+    // ImplId tuple (FKC §4.11), kept as five separable fields. The backend
+    // token is canonicalized to Fuel's capitalized spelling (`cuda` → `Cuda`;
+    // see `fkc_backend_token`) so the block imports through `lower_backend`.
+    s.push_str(&format!("backend: {}\n", fkc_backend_token(backend_name)));
     s.push_str("kernel_source: baracuda\n");
     s.push_str(&format!("dtypes: [{dtype}]\n"));
     s.push_str(&format!("entry_point: {}\n", kernel.name));
@@ -364,13 +569,31 @@ pub fn contract(
         // `assemble_dtype_variants` actually key on it (the Model-A per-operand
         // dtype is only conveyed this way). Review-confirmed against Fuel's real
         // `import_bundle_str` (singular → BadScalarType; plural → Ok).
+        //
+        // `name: in{i}` — a stable, index-based operand role (Fuel's
+        // `TensorDesc.name`; `assemble_dtype_variants` reads it, and the output
+        // `passthrough(in0)` rule references it by name). Index-based, not
+        // lhs/rhs: the emitter does not invent operand semantics. `layout:` is
+        // the five-flag `LayoutSpec` inline map (see `layout_spec`), the form
+        // Fuel's `TensorDesc.layout: Option<LayoutSpec>` deserializes — a bare
+        // `layout: contiguous` string is a serde type error at import.
         s.push_str(&format!(
-            "    - dtypes: [{in_dtype}]\n      layout: {}\n",
-            layout_token(key, i)
+            "    - name: in{i}\n      dtypes: [{in_dtype}]\n      layout: {}\n",
+            layout_spec(key, i)
         ));
     }
 
     if !params.is_empty() {
+        // A non-empty `params` set ONLY ever occurs on a scalar-param body, which
+        // is either a standalone `AddScalar`/`MulScalar` (n_ops==1, an unmapped
+        // honest miss → no contract) or a fusion carrying `param(i)` (n_ops≥2 →
+        // `fused_op:`, which `bundle()` WITHHOLDS from importable bundles, as no
+        // Baracuda fusion maps to a Fuel FusedOp). So this top-level `op_params:`
+        // sequence — which is NOT Fuel's schema shape (Fuel nests op params under
+        // `accept.op_params: { variant, fields }`) — never reaches Fuel's parser
+        // through a bundle; it rides only the JIT seam, where the contract text is
+        // stored UNPARSED. It is retained as human-readable documentation of the
+        // fusion's scalar `extract:` carriers.
         s.push_str("op_params:\n");
         for p in &params {
             // v1 scalar params are f32 launch arguments (the `extract:` carrier).
@@ -381,25 +604,71 @@ pub fn contract(
     s.push_str("return:\n  outputs:\n");
     // A u8-predicate op returns the mask dtype, not the input dtype:
     // `fixed(U8)` per FKC §5.1 ("a constant … comparisons → U8"), the exact
-    // rule Fuel's own CPU compare contracts carry. Everything else keeps the
-    // uniform-dtype passthrough.
-    let dtype_rule = if out_u8 { "fixed(U8)" } else { "same_as_input(0)" };
+    // rule Fuel's own CPU compare contracts carry. Everything else is an
+    // `passthrough(in0)` of input 0's dtype: Fuel's `parse_dtype_rule`
+    // (`fkc/lower.rs`) maps `passthrough(role)` → `DtypeRule::Passthrough` and
+    // `resolve_output_slot_dtype` then APPENDS the output dtype to the binding
+    // key — whereas the old `same_as_input(0)` parsed to `DtypeRule::Other`,
+    // which is SILENTLY DROPPED (no output slot in the key). `in0` is the item-4
+    // name of input 0 (verified 2026-07-08 against Fuel's real importer: the
+    // resolved primitive's `dtypes` then carries inputs + the output slot).
+    let dtype_rule = if out_u8 { "fixed(U8)" } else { "passthrough(in0)" };
+    // shape_rule: `same_as(in0)` — Fuel's §5.2 grammar spells it `same_as(<role>)`
+    // (fuel-dispatch `fkc/schema.rs` OutputDesc; the `same_as_input(0)` form is
+    // OUTSIDE the grammar — `same_as_input` has zero occurrences in Fuel, and `0`
+    // is not an operand role). `in0` is the item-4 name of input 0, matching the
+    // sibling `dtype_rule: passthrough(in0)` role system.
+    //
+    // layout_guarantee: the OUTPUT descriptor has NO five-flag `layout:` field —
+    // Fuel's `OutputDesc` (`fkc/schema.rs`) carries `layout_guarantee:` with the
+    // §5.3 token values `contiguous` / `preallocated` / `same_as(<input>)` (the
+    // five-flag `LayoutSpec` map is the ACCEPT-input `TensorDesc.layout` form
+    // only; emitting it on an output is a silently-dropped unknown key). A
+    // contiguous output cell guarantees a packed contiguous buffer; anything else
+    // is the always-true `preallocated` (the executor pre-allocates it). Verified
+    // 2026-07-08 against Fuel's real parser (`layout:` → None; `layout_guarantee:
+    // contiguous` → Some).
+    let layout_guarantee = match key.operands[out_idx].contig {
+        Contiguity::Contig => "contiguous",
+        _ => "preallocated",
+    };
     s.push_str(&format!(
         "    - dtype_rule: {dtype_rule}\n      \
-         shape_rule: same_as_input(0)\n      \
-         layout: {}\n      \
-         aliasing: none\n",
-        layout_token(key, out_idx)
+         shape_rule: same_as(in0)\n      \
+         layout_guarantee: {layout_guarantee}\n      \
+         aliasing: none\n"
     ));
 
     s.push_str("caps:\n");
-    // A u8 output can never alias a wider input buffer (a 1-byte store into a
-    // 4-byte element corrupts neighbors under the grid-stride order), so the
-    // predicate cells forbid in-place; uniform-dtype cells keep the existing
-    // declaration.
-    s.push_str(if out_u8 { "  in_place: forbidden\n" } else { "  in_place: allowed\n" });
+    // in_place: ALWAYS `false`. Two Fuel-side facts, both verified 2026-07-08:
+    //   (1) SCHEMA. `CapsBlock.in_place` is `Option<bool>` (fuel-dispatch
+    //       `fkc/schema.rs`, "Booleans are literal true/false") — the
+    //       pre-reconcile `allowed`/`forbidden` STRINGS were a serde type error
+    //       that failed the whole bundle.
+    //   (2) SEMANTICS (the inversion the review caught). Fuel spec §4.6:
+    //       `caps.in_place: true` declares the kernel WRITES ITS OUTPUT INTO AN
+    //       INPUT BUFFER (output aliases input N), and the planner then treats it
+    //       as consuming-and-producing the SAME Storage — no separate output
+    //       alloc. Baracuda's generated elementwise kernels are OUT-OF-PLACE:
+    //       every input AND the output pointer carry `__restrict__` (cuda.rs), so
+    //       an actual out==in invocation — exactly what §4.6's planner behavior
+    //       produces — is formally UB, NOT merely tolerated. The same contract
+    //       emits `aliasing: none` ("fresh output buffer", §5.4), which §5.4 pairs
+    //       with `in_place: false`. So `true` LIED about a kernel fact (and would
+    //       clobber a fan-out>1 input once Fuel wires the §4.6 consumer). FKC has
+    //       no "aliasing merely tolerated" flag, so nothing is lost. This is
+    //       exactly Fuel's corpus-wide `in_place: false` posture for out-of-place
+    //       kernels (the only corpus `true` is the genuinely destructive
+    //       Clamp/PowI-inplace / linear-quant surface).
+    s.push_str("  in_place: false\n");
     s.push_str(&format!("  alignment_bytes: {}\n", required_align(key)));
-    s.push_str(&format!("  awkward_layout: {}\n", awkward_layout(key)));
+    // The awkward-layout strategy. Fuel's schema field is
+    // `caps.awkward_layout_strategy` (`fkc/schema.rs` `CapsBlock`); the
+    // pre-reconcile `awkward_layout:` key was an UNKNOWN field silently dropped
+    // (`deny_unknown_fields` is off), so Baracuda's strategy never reached Fuel.
+    // The value strings (`requires_contiguous`/`handles_strided`) are already
+    // Fuel-exact — only the key name was wrong.
+    s.push_str(&format!("  awkward_layout_strategy: {}\n", awkward_layout(key)));
     // The unit of the kernel's `n` launch argument: a vectorized/packed cell
     // counts w-element VECTORS (n/width), everything else elements. Pinned on
     // the wire per the 2026-07-03 Fuel exchange (documentation-only for Fuel
@@ -415,14 +684,42 @@ pub fn contract(
     s.push_str("cost:\n");
     s.push_str("  provenance: declared\n");
     s.push_str("  class: elementwise\n");
-    s.push_str(&format!("  flops_per_elem: {}\n", count_flops(&op.body)));
-    s.push_str(&format!("  bytes_per_elem: {}\n", bytes_per_elem(op, key)));
+    // Fuel's `CostBlock` (fuel-dispatch `fkc/schema.rs`) carries `flops` /
+    // `bytes_moved` as EXPRESSION STRINGS over the §4.4 symbol vocabulary — NOT
+    // the pre-reconcile `flops_per_elem` / `bytes_per_elem` scalars, which are
+    // unknown keys silently dropped (both → `CompiledCostExpr::Unknown`, the
+    // declared cost never reaches dispatch). `n` is the §4.4 output-element count
+    // (`fkc/cost_expr.rs` `bind_cost_symbols` binds it); an elementwise cell does
+    // `flops_per_elem` flops and moves `bytes_per_elem` bytes per element, so the
+    // shape-parameterized expression is `<coeff> * n`. Parse-validated by Fuel's
+    // `compile_cost` (verified 2026-07-08: `"1 * n"` / `"12 * n"` → Expr, imports
+    // Ok). `class: elementwise` keeps the block above the §8a placeholder gate.
+    s.push_str(&format!("  flops: \"{} * n\"\n", count_flops(&op.body)));
+    s.push_str(&format!("  bytes_moved: \"{} * n\"\n", bytes_per_elem(op, key)));
 
+    // Precision → Fuel's `PrecisionBlock` vocabulary ONLY (fuel-dispatch
+    // `fkc/schema.rs`: bit_stable_on_same_hardware / max_ulp / max_relative /
+    // max_absolute / audited / notes). The pre-reconcile `mode:` key was NON-
+    // SCHEMA — silently dropped, and (for the unbounded floored-`Rem` case, whose
+    // block was `mode:`-ONLY) a whole-bundle-FATAL `PlaceholderPrecision` (an
+    // all-null block has nothing to lower; `fkc/precision.rs`). Re-expressed:
+    //   - bit_stable_on_same_hardware: DERIVED from the `determinism: bitwise`
+    //     fact below — deterministic vendor math is, a fortiori, bit-stable on the
+    //     SAME hardware (the weaker of the two claims). True for every cell here.
+    //   - max_ulp: the declared ULP upper bound when finite (0 ⇒ correctly
+    //     rounded / bit-reproducible); OMITTED for the unbounded floored-`Rem`
+    //     case (no finite result-ULP number bounds a boundary flip).
+    //   - audited: true — the bounds are declared against CUDA vendor ULP tiers.
+    //   - notes: carries the old `mode:` semantics (and, for the unbounded case,
+    //     the reason the bound is absent — Fuel lowers audited+bit_stable+no-bound
+    //     to a populated guarantee, not the fatal placeholder).
     s.push_str("precision:\n");
-    s.push_str(&format!("  mode: {prec_mode}\n"));
+    s.push_str("  bit_stable_on_same_hardware: true\n");
     if let Some(u) = prec_ulp {
         s.push_str(&format!("  max_ulp: {u}\n"));
     }
+    s.push_str("  audited: true\n");
+    s.push_str(&format!("  notes: \"{}\"\n", precision_notes(prec_mode, prec_ulp)));
     s.push_str("determinism: bitwise\n");
 
     if let (Some(p), true) = (&pattern, is_fusion) {
@@ -554,6 +851,14 @@ fn root_op_name(node: &PatternNode) -> String {
 ///   (the tanh approximation). Baracuda's `UnaryOp::Gelu` lowers to exact erf
 ///   (`cuda.rs`, aec3bf7 provenance) and `pattern.rs` `unary_name` emits the
 ///   `GeluErf` root, so the exact flavor is carried end to end.
+/// - `Relu` → `ReluElementwise`: mapping RESTORED per Fuel's 2026-07-08 DECISION
+///   (`ReluElementwise` = NaN-PROPAGATING, torch parity). Baracuda's synthesized
+///   relu is already NaN-propagating; Fuel's CPU + CUDA rebind to the propagating
+///   convention is QUEUED, not yet landed (as of 2026-07-08 their incumbent slot
+///   still scrubs — CPU `x.max(0.0)`, CUDA `fmaxf`). Once it lands both slots
+///   agree on NaN and an adopt is behaviorally identical; until then an adopt
+///   yields the DECIDED (propagating) semantics early where Fuel still scrubs (see
+///   the arm below). The mapping restore itself follows the coordinated decision.
 ///
 /// `AddScalar`/`MulScalar` are deliberately absent: Fuel has no scalar-param
 /// primitive `OpKind` (see the branch note in [`contract`]) — they are honest
@@ -582,19 +887,24 @@ fn fuel_primitive_op_kind(root: &str) -> Option<&'static str> {
         "Log" => "LogElementwise",
         "Tanh" => "TanhElementwise",
         "Sigmoid" => "SigmoidElementwise",
-        // `Relu` is WITHHELD (review-caught, 2026-07-08): our synthesized relu is
-        // deliberately NaN-PROPAGATING (`x < 0 ? 0 : x`, torch.relu semantics —
-        // cuda.rs pins it), but Fuel's `ReluElementwise` slot is NaN-AS-MISSING in
-        // all three of its authorities (CPU reference `x.max(0.0)`, the FKC doc
-        // "NaN-as-missing (f32::max)", and the incumbent CUDA binding — bespoke
-        // `unary_relu_fp.cu` `fmaxf(x, 0)`). Advertising it would let a JIT adopt
-        // silently flip NaN elements between 0.0 and NaN on the SAME backend.
-        // Honest miss until the NaN convention is reconciled with Fuel (their
-        // scrub disagrees with torch.relu — proposed Fuel-side; channel note).
-        // NOTE Maximum/Minimum stay mapped: Fuel's incumbent CUDA binding for
-        // them IS our NaN-propagating bespoke kernel, so the adopt is
-        // behaviorally identical on the advertised backend.
-        "Relu" => return None,
+        // `Relu` → `ReluElementwise`: the withhold is LIFTED (Fuel's 2026-07-08
+        // consolidated answer). The earlier hold was a real semantic divergence
+        // — our synthesized relu is NaN-PROPAGATING (`x < 0 ? 0 : x`, torch.relu;
+        // cuda.rs pins it) while Fuel's `ReluElementwise` slot then NaN-SCRUBBED
+        // in all three of its authorities (CPU `x.max(0.0)`, the FKC doc
+        // "NaN-as-missing", the incumbent CUDA `fmaxf` kernel). Fuel has now
+        // DECIDED `ReluElementwise` = NaN-propagating (torch parity; their
+        // written norm "external convention over internal consistency") and its
+        // CPU-core + FKC-doc move to propagating and CUDA rebind to the bespoke
+        // NaN-propagating kernel (crates/baracuda-kernels-sys
+        // `unary_relu_propagating_fp.cu`; the incumbent `fmaxf` one stays as the
+        // Fmax family) are QUEUED — NOT yet landed as of 2026-07-08 (Fuel's CPU
+        // `dyn_impl.rs` still computes `x.max(0.0)` and its CUDA slot still binds
+        // the incumbent `unary_relu_*` fmaxf family). Once the rebind lands both
+        // slots agree on NaN and a JIT adopt is behaviorally identical; UNTIL then
+        // an adopt yields the DECIDED propagating semantics early where Fuel's
+        // incumbent slot still scrubs. The mapping restore follows the decision.
+        "Relu" => "ReluElementwise",
         "Erf" => "ErfElementwise",
         "GeluErf" => "GeluErfElementwise",
         "Silu" => "SiluElementwise",
@@ -850,6 +1160,22 @@ fn precision_of(body: &ScalarExpr) -> (&'static str, Option<u32>) {
     }
 }
 
+/// Free-text precision `notes` (Fuel `PrecisionBlock.notes`) carrying the old
+/// `mode:` semantics in Fuel's schema vocabulary. For the unbounded (`prec_ulp ==
+/// None`, floored `Rem`) case it names the reason the ULP bound is absent, so the
+/// block lowers to a populated audited/bit-stable guarantee rather than the fatal
+/// placeholder.
+fn precision_notes(prec_mode: &str, prec_ulp: Option<u32>) -> &'static str {
+    match (prec_mode, prec_ulp) {
+        ("correctly_rounded", _) => "correctly_rounded; bit-reproducible",
+        ("approximate", None) => {
+            "approximate; floored-mod boundary flip — no finite result-ULP bound"
+        }
+        // finite-ULP approximate (transcendentals): max_ulp is a declared bound.
+        _ => "approximate; max_ulp is a declared vendor upper bound",
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Structure-cell projections
 // ---------------------------------------------------------------------------
@@ -861,6 +1187,67 @@ fn layout_token(key: &StructureKey, i: usize) -> &'static str {
         Contiguity::Strided => "strided",
         Contiguity::Broadcast => "broadcast",
     }
+}
+
+/// The five-flag `LayoutSpec` (Fuel `fkc/schema.rs` `LayoutSpec`, §4.1) for
+/// operand `i`, rendered as the inline-map form Fuel's corpus uses (verified
+/// against docs/kernel-contracts/cpu/elementwise-binary.fkc.md line 90). Fuel's
+/// `TensorDesc.layout` is `Option<LayoutSpec>` (a struct of optional
+/// `required`/`accepted`/`rejected` string tri-states), so the pre-reconcile
+/// bare `layout: contiguous` string was a serde type error at import.
+///
+/// Driven by the operand's structure-key contiguity:
+///
+/// - **Contiguous** cell: compiled for the packed layout it REQUIRES (contiguous
+///   required, everything else rejected — byte-for-byte Fuel's own
+///   contiguous-only corpus kernels).
+/// - **InnerContig / Strided** cell: the emitter walks this operand with FULL
+///   runtime strides — `offset_expr` (cuda.rs) keeps every iteration-axis term
+///   `c{d}·stride{d}` with the operand's runtime stride, and (verified) an
+///   InnerContig/Strided operand always has an EMPTY broadcast mask
+///   (`classify_contiguity` routes any stride-0 axis to `Broadcast` first,
+///   structure_key.rs), so NO axis term is compile-time dropped. A runtime
+///   stride-0 axis is therefore handled correctly by that same walk (its term
+///   contributes 0), which is exactly what `broadcast_stride0: accepted` means —
+///   so it is emitted `accepted`, truthfully. This is how Fuel's own strided
+///   corpus spells it (strided + broadcast accepted → projects
+///   `KernelCaps.strided_input = true` and `is_generic_contract = true`;
+///   fuel-dispatch `fkc/caps_map.rs` §6, verified 2026-07-08); the previous
+///   `broadcast_stride0: rejected` was an UNDER-claim that silently collapsed
+///   every strided cell to `strided_input = false` (identical caps to a
+///   contiguous cell) and corrupted the miss-telemetry genericity bit.
+/// - **Broadcast** operand: reachable here ONLY for the U32 gather / index_select
+///   INDEX operand — every OTHER Broadcast-class operand causes the whole
+///   contract to be WITHHELD up front (`contract`, item-01 layout-honesty guard):
+///   its stride-0 mask is BAKED into the kernel (a fully-broadcast operand is
+///   hoisted `in[k][0]`, a partial one has its bcast-axis terms compile-time
+///   dropped by `offset_expr`), so the kernel cannot walk a contiguous/strided
+///   tensor in that slot and Fuel's tri-state has no `broadcast_stride0:
+///   required` spelling to say so. The gather index is a 1-D index read along the
+///   gathered axis; the honest, safe posture for its PHYSICAL index buffer is
+///   `contiguous: required` (the conservative, Fuel-corpus `[T, U32, T]` shape —
+///   a safe understatement; the kernel also handles a strided index via its
+///   runtime stride, but `contiguous: required` never overstates).
+///
+/// `start_offset` / `reverse_strides` (negative strides) are rejected everywhere
+/// — no EMITTED cell reads a non-zero base offset or a reversed axis (a flipped
+/// operand is withheld up front, so `reverse_strides: rejected` stays truthful by
+/// construction). Understating a capability is safe (the planner just contiguizes
+/// more than strictly needed, `caps.awkward_layout`); overstating is not — the
+/// same one-directional-safety rule as the ULP bound.
+fn layout_spec(key: &StructureKey, i: usize) -> String {
+    let (contiguous, strided, broadcast_stride0) = match key.operands[i].contig {
+        Contiguity::Contig => ("required", "rejected", "rejected"),
+        Contiguity::InnerContig | Contiguity::Strided => ("accepted", "accepted", "accepted"),
+        // Gather/index_select U32 index only (all other Broadcast operands are
+        // withheld up front). Conservative, truthful understatement.
+        Contiguity::Broadcast => ("required", "rejected", "rejected"),
+    };
+    format!(
+        "{{ contiguous: {contiguous}, strided: {strided}, \
+         broadcast_stride0: {broadcast_stride0}, start_offset: rejected, \
+         reverse_strides: rejected }}"
+    )
 }
 
 /// A kernel specialized for a strided/broadcast cell handles awkward layouts;
@@ -1260,8 +1647,9 @@ mod tests {
         // Per-operand accept dtypes: data F32 + index U32 (order = [data, index]).
         // PLURAL `dtypes: [..]` — the field Fuel's importer actually reads
         // (review-confirmed: singular `dtype:` is silently dropped → BadScalarType).
-        assert!(c.contains("    - dtypes: [F32]\n"), "data slot F32: {c}");
-        assert!(c.contains("    - dtypes: [U32]\n"), "index slot U32: {c}");
+        // Each operand now carries a `name: in{i}` role (item 4) above its dtypes.
+        assert!(c.contains("    - name: in0\n      dtypes: [F32]\n"), "data slot in0 F32: {c}");
+        assert!(c.contains("    - name: in1\n      dtypes: [U32]\n"), "index slot in1 U32: {c}");
         // The ImplId dtype channel stays the DATA (cell) dtype.
         assert!(c.contains("dtypes: [F32]"));
         // entry_point carries the u32 index infix.
@@ -1281,7 +1669,7 @@ mod tests {
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
         assert!(c.contains("op_kind: IndexSelect"), "{c}");
         assert!(c.contains("oob_policy: skip"), "{c}");
-        assert!(c.contains("    - dtypes: [U32]\n"), "{c}");
+        assert!(c.contains("    - name: in1\n      dtypes: [U32]\n"), "{c}");
     }
 
     #[test]
@@ -1344,15 +1732,17 @@ mod tests {
     fn uniform_op_accept_block_is_unchanged_by_the_model_a_fix() {
         // The per-operand-dtype accept fix must be NEUTRAL for a non-gather op:
         // every input stays the uniform key dtype and NO oob_policy field appears
-        // (byte-identical to the pre-Model-A emission).
+        // (only the shared bundle-schema framing — named inputs + layout map —
+        // differs, never a gather's U32/oob channel).
         let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
         assert!(!c.contains("oob_policy"), "no oob_policy on a uniform op: {c}");
         assert!(!c.contains("U32"), "no U32 slot on a uniform op: {c}");
-        // Both inputs are F32 — plural `dtypes: [F32]` (the Fuel-readable form).
-        assert_eq!(c.matches("    - dtypes: [F32]\n").count(), 2, "both inputs F32: {c}");
+        // Both inputs are F32 — named plural `dtypes: [F32]` (the Fuel-readable
+        // form; 6-space indent under the `- name:` line).
+        assert_eq!(c.matches("      dtypes: [F32]\n").count(), 2, "both inputs F32: {c}");
     }
 
     #[test]
@@ -1386,6 +1776,119 @@ mod tests {
         assert!(
             contract(&op, &key, &kernel, "cuda").is_some(),
             "an all-Identity view must not suppress the contract"
+        );
+    }
+
+    // === Item-01 / Item-02 / Item-03 layout-honesty (findings 1/2/3) ===========
+
+    /// An add cell with in0 dense and in1 FULLY broadcast (strides [0,0]). The
+    /// kernel hoists `in1[0]` (bakes the broadcast), so no truthful layout exists.
+    fn bias_add_key(in1_strides: &[i64]) -> (OpDef, StructureKey) {
+        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let in0 = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let in1 = OperandDesc::new(2, &[128, 256], in1_strides, ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[in0, in1, out], ArchSku::Sm89);
+        (op, key)
+    }
+
+    #[test]
+    fn broadcast_bias_add_cell_is_withheld() {
+        // NEGATIVE PIN (finding 1): a Broadcast-class operand's stride-0 mask is
+        // BAKED into the kernel (fully-broadcast → `in1[0]`), unspeakable in Fuel's
+        // tri-state ⇒ the contract is WITHHELD. The kernel still generates.
+        for strides in [&[0i64, 0][..], &[0, 1][..]] {
+            let (op, key) = bias_add_key(strides);
+            let kernel = generate(&op, &key, &Cuda);
+            assert_eq!(
+                key.operands[1].contig,
+                Contiguity::Broadcast,
+                "in1 strides {strides:?} must key Broadcast"
+            );
+            assert!(!kernel.source.is_empty(), "the kernel still lowers (AOT)");
+            assert!(
+                contract(&op, &key, &kernel, "cuda").is_none(),
+                "a baked-broadcast bias-add cell must emit NO contract (strides {strides:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn flipped_operand_cell_is_withheld() {
+        // NEGATIVE PIN (finding 3): a reverse-stride (flipped) operand keys the
+        // reversed cell, but the Elementwise schedule reads it FORWARD — the kernel
+        // does not implement the cell it is keyed to, and Fuel has no truthful
+        // spelling ⇒ WITHHELD (so `reverse_strides: rejected` stays honest).
+        let op = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu());
+        let rev = OperandDesc::new(2, &[128, 256], &[-256, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[rev, out], ArchSku::Sm89);
+        assert!(key.operands[0].flipped, "in0 must key flipped");
+        let kernel = generate(&op, &key, &Cuda);
+        assert!(!kernel.source.is_empty(), "the kernel still lowers (AOT)");
+        assert!(
+            contract(&op, &key, &kernel, "cuda").is_none(),
+            "a flipped-operand cell must emit NO contract"
+        );
+    }
+
+    #[test]
+    fn strided_cell_layout_spec_accepts_strided_and_broadcast_stride0() {
+        // FINDING 2 + 17: for an InnerContig/Strided operand the kernel walks full
+        // runtime strides, so a stride-0 axis is handled → `strided: accepted,
+        // broadcast_stride0: accepted` (projects Fuel `strided_input = true`). Pin
+        // the exact inline map + negative-pin the old `broadcast_stride0: rejected`.
+        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        // [8,4] strides [1,8] ⇒ inner axis 0 stride 1, not row-major ⇒ InnerContig.
+        let t = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[t, t, t], ArchSku::Sm89);
+        assert!(matches!(
+            key.operands[0].contig,
+            Contiguity::InnerContig | Contiguity::Strided
+        ));
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        assert!(
+            c.contains(
+                "layout: { contiguous: accepted, strided: accepted, \
+                 broadcast_stride0: accepted, start_offset: rejected, \
+                 reverse_strides: rejected }"
+            ),
+            "strided operand accepts strided + broadcast_stride0: {c}"
+        );
+        assert!(
+            !c.contains("strided: accepted, broadcast_stride0: rejected"),
+            "the old under-claim must not leak: {c}"
+        );
+        // Fuel Rule-4 coherence: broadcast accepted ⇒ strided accepted (holds).
+        // caps.awkward_layout_strategy for a strided operand-0 stays handles_strided.
+        assert!(c.contains("awkward_layout_strategy: handles_strided"), "{c}");
+    }
+
+    #[test]
+    fn gather_index_operand_layout_is_contiguous_required_not_baked_broadcast() {
+        // FINDING 1 EXCEPTION + 17: the ONE Broadcast-class operand we advertise is
+        // the u32 index_select INDEX. Its physical index buffer is emitted
+        // truthfully as `contiguous: required` (conservative, Fuel `[T,U32,T]`),
+        // NEVER the old over-accepting `broadcast_stride0: accepted`.
+        use crate::ir::OobPolicy;
+        let op = OpDef::index_select("isel", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::U32);
+        let key = gather_key(ElementKind::U32, true);
+        assert_eq!(key.operands[1].contig, Contiguity::Broadcast, "index keys Broadcast");
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        // The index (in1) slot: U32 dtype, contiguous-required layout.
+        assert!(
+            c.contains(
+                "- name: in1\n      dtypes: [U32]\n      layout: { contiguous: required, \
+                 strided: rejected, broadcast_stride0: rejected, start_offset: rejected, \
+                 reverse_strides: rejected }"
+            ),
+            "index operand layout is contiguous-required: {c}"
+        );
+        assert!(
+            !c.contains("dtypes: [U32]\n      layout: { contiguous: accepted"),
+            "the index must not over-accept a baked broadcast: {c}"
         );
     }
 
@@ -1500,6 +2003,31 @@ mod tests {
         assert!(fm.contains("link_registry: baracuda_link_registry"));
         assert!(fm.contains("seam_profiles: [1]"));
         assert!(fm.contains("revision_base: \"abc123\""));
+        // Item-1 casing: the lowercase provider token is canonicalized to Fuel's
+        // capitalized wire spelling (`lower_backend` accepts `Cuda`, not `cuda`).
+        assert!(fm.contains("backend: Cuda\n"), "{fm}");
+        assert!(!fm.contains("backend: cuda"), "lowercase backend must not leak: {fm}");
+    }
+
+    #[test]
+    fn bundle_frames_each_contract_under_a_heading() {
+        // Fuel's parser SILENTLY drops a headingless ```fkc block (a zero-kernel
+        // file imports Ok-but-empty). `bundle()` frames every contract under its
+        // own `## <kernel>` heading so the shared assembler can't reintroduce
+        // that hazard. The heading title is the contract's `kernel:` name.
+        let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let key = key_for(3, OpCategory::BinaryElementwise);
+        let kernel = generate(&add, &key, &Cuda);
+        let c = contract(&add, &key, &kernel, "cuda").unwrap();
+        let b = bundle("cuda", "rev0", std::slice::from_ref(&c));
+        // Front matter first, then a `## <kernel>` heading, then the block.
+        assert!(b.starts_with("---\n"), "front matter leads: {b}");
+        let kname = format!("add_{}", cell_suffix(&key));
+        assert!(b.contains(&format!("\n## {kname}\n")), "heading names the kernel: {b}");
+        // The heading precedes the fenced block it frames.
+        let h = b.find(&format!("## {kname}")).unwrap();
+        let fence = b.find("```fkc").unwrap();
+        assert!(h < fence, "heading must precede the fkc block: {b}");
     }
 
     #[test]
@@ -1516,12 +2044,60 @@ mod tests {
         assert!(!c.contains("op_kind: Add\n"), "internal spelling must not leak: {c}");
         assert!(!c.contains("fused_op:"));
         assert!(!c.contains("pattern:"));
-        // ImplId five fields all present + separable.
-        assert!(c.contains("backend: cuda"));
+        // ImplId five fields all present + separable. The backend is Fuel's
+        // capitalized wire spelling (`Cuda`), NOT the lowercase provider token
+        // (`cuda` fails `lower_backend` with UnknownBackend) — item-1 casing.
+        assert!(c.contains("backend: Cuda"), "{c}");
+        assert!(!c.contains("backend: cuda\n"), "lowercase backend must not leak: {c}");
         assert!(c.contains("kernel_source: baracuda"));
         assert!(c.contains("dtypes: [F32]"));
         assert!(c.contains("entry_point: "));
         assert!(c.contains("kernel_revision_hash: \""));
+        // Bundle-schema reconciliation pins (items 3/4/5), so a representative
+        // contract's changed lines are asserted, not assumed:
+        //  - item 4: named, index-based accept inputs.
+        assert!(c.contains("    - name: in0\n"), "named input in0: {c}");
+        assert!(c.contains("    - name: in1\n"), "named input in1: {c}");
+        //  - item 3: the five-flag LayoutSpec inline map on the ACCEPT inputs
+        //    (not a bare string). A contiguous cell requires contiguous input.
+        assert!(
+            c.contains(
+                "layout: { contiguous: required, strided: rejected, \
+                 broadcast_stride0: rejected, start_offset: rejected, \
+                 reverse_strides: rejected }"
+            ),
+            "input layout is the inline LayoutSpec map: {c}"
+        );
+        assert!(!c.contains("layout: contiguous\n"), "bare layout string must not leak: {c}");
+        //  - item 5: passthrough(in0) output dtype rule (Fuel keys the output),
+        //    NOT same_as_input(0) (parses to DtypeRule::Other, output dropped).
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        assert!(!c.contains("dtype_rule: same_as_input(0)"), "{c}");
+        //  - item 9: shape_rule spells the §5.2 grammar `same_as(<role>)`, NOT the
+        //    out-of-grammar `same_as_input(0)` (negative pin).
+        assert!(c.contains("shape_rule: same_as(in0)"), "{c}");
+        assert!(!c.contains("same_as_input(0)"), "old out-of-grammar shape_rule must not leak: {c}");
+        //  - item 7: the OUTPUT descriptor carries `layout_guarantee:` (Fuel's
+        //    OutputDesc field), never the five-flag `layout:` map (which lives on
+        //    accept-inputs only). A contiguous output guarantees contiguous.
+        assert!(c.contains("layout_guarantee: contiguous"), "{c}");
+        // The `layout:` map appears ONLY under accept.inputs, never in `return:`.
+        let ret = &c[c.find("return:").unwrap()..c.find("caps:").unwrap()];
+        assert!(!ret.contains("layout:"), "no five-flag layout: map under return: {ret}");
+        //  - item 4: in_place is the Fuel-schema boolean `false` for EVERY cell
+        //    (out-of-place kernels; `aliasing: none`), never `true` (the §4.6
+        //    inversion) nor the pre-reconcile string.
+        assert!(c.contains("  in_place: false\n"), "in_place is false: {c}");
+        assert!(!c.contains("in_place: true"), "no in_place: true (§4.6 inversion): {c}");
+        assert!(!c.contains("in_place: allowed"), "no string in_place: {c}");
+        assert!(c.contains("awkward_layout_strategy: requires_contiguous"), "{c}");
+        assert!(!c.contains("  awkward_layout: "), "old awkward_layout key must not leak: {c}");
+        //  - item 6: cost carries Fuel's `flops` / `bytes_moved` EXPRESSION keys,
+        //    never the silently-dropped `flops_per_elem` / `bytes_per_elem`.
+        assert!(c.contains("  flops: \"1 * n\"\n"), "flops expression: {c}");
+        assert!(c.contains("  bytes_moved: \"12 * n\"\n"), "bytes_moved expression: {c}");
+        assert!(!c.contains("flops_per_elem"), "old scalar cost key must not leak: {c}");
+        assert!(!c.contains("bytes_per_elem"), "old scalar cost key must not leak: {c}");
         // required §4.3 blocks.
         for block in [
             "accept:", "structure_key: \"sk1|", "return:", "caps:", "cost:", "precision:",
@@ -1529,8 +2105,12 @@ mod tests {
         ] {
             assert!(c.contains(block), "missing block: {block}");
         }
-        // correctly-rounded arithmetic.
-        assert!(c.contains("mode: correctly_rounded"));
+        //  - item 5: precision uses ONLY Fuel PrecisionBlock keys — never `mode:`.
+        //    Correctly-rounded arithmetic ⇒ bit-stable + max_ulp 0.
+        assert!(!c.contains("mode:"), "non-schema mode: key must not leak: {c}");
+        assert!(c.contains("  bit_stable_on_same_hardware: true\n"), "{c}");
+        assert!(c.contains("  max_ulp: 0\n"), "correctly-rounded ⇒ max_ulp 0: {c}");
+        assert!(c.contains("  audited: true\n"), "{c}");
     }
 
     #[test]
@@ -1545,10 +2125,22 @@ mod tests {
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        // The BARE contract still names the fusion (`relu_add` has no Fuel FusedOp
+        // constant) — it rides the JIT seam, where Fuel stores the text unparsed.
         assert!(c.contains("fused_op: relu_add"));
         assert!(!c.contains("op_kind:"));
         assert!(c.contains("pattern:"));
         assert!(c.contains("op: Relu"));
+        // …but `bundle()` WITHHOLDS it (item 8): an unknown `fused_op:` name is
+        // bundle-FATAL, so a bundle carrying a correct primitive BESIDE this fusion
+        // must contain only the primitive (never fail import).
+        let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let ka = key_for(3, OpCategory::BinaryElementwise);
+        let ca = contract(&add, &ka, &generate(&add, &ka, &Cuda), "cuda").unwrap();
+        let b = bundle("cuda", "rev0", &[ca.clone(), c.clone()]);
+        assert!(b.contains("op_kind: AddElementwise"), "primitive survives: {b}");
+        assert!(!b.contains("fused_op: relu_add"), "fused advert withheld from bundle: {b}");
+        assert!(!b.contains("relu_add_"), "no relu_add section framed in the bundle: {b}");
     }
 
     #[test]
@@ -1566,9 +2158,13 @@ mod tests {
         assert!(c.contains("op_params:"));
         assert!(c.contains("name: param0"));
         assert!(c.contains("name: param1"));
-        assert!(c.contains("mode: approximate"));
+        // Precision uses Fuel's PrecisionBlock vocabulary (never `mode:`): a
+        // transcendental is bit-stable with a finite declared ULP bound.
+        assert!(!c.contains("mode:"), "non-schema mode: key must not leak: {c}");
+        assert!(c.contains("  bit_stable_on_same_hardware: true\n"), "{c}");
         // silu(x*p0 + p1): the silu composite (~3 ulp); arithmetic is exact.
-        assert!(c.contains("max_ulp: 3"));
+        assert!(c.contains("  max_ulp: 3\n"), "{c}");
+        assert!(c.contains("  audited: true\n"), "{c}");
     }
 
     #[test]
@@ -1705,10 +2301,12 @@ mod tests {
         let c = contract(&addu, &ku, &k, "cuda").unwrap();
         assert!(c.contains("op_kind: AddElementwise"), "{c}");
         assert!(c.contains("dtypes: [U8]"));
-        assert!(c.contains("mode: correctly_rounded"));
+        // correctly-rounded wrapping ⇒ bit-stable + max_ulp 0 (Fuel PrecisionBlock).
+        assert!(c.contains("  bit_stable_on_same_hardware: true\n"), "{c}");
+        assert!(c.contains("  max_ulp: 0\n"), "{c}");
         assert!(c.contains("count_unit: elements"));
-        // 2 u8 reads + 1 u8 write.
-        assert!(c.contains("bytes_per_elem: 3"));
+        // 2 u8 reads + 1 u8 write ⇒ bytes_moved expression "3 * n".
+        assert!(c.contains("  bytes_moved: \"3 * n\"\n"), "{c}");
         let adds = OpDef::elementwise("add", 2, &[ElementKind::S8], input(0) + input(1));
         let ks = key_dtype(ElementKind::S8, 3);
         let k8 = generate(&adds, &ks, &Cuda);
@@ -1773,14 +2371,18 @@ mod tests {
         assert!(!c.contains("dtype_rule: same_as_input(0)"));
         // The ImplId dtype channel stays the key (input) dtype.
         assert!(c.contains("dtypes: [F32]"));
-        // A 1-byte store can't alias a 4-byte input buffer.
-        assert!(c.contains("in_place: forbidden"));
+        // A 1-byte store can't alias a 4-byte input buffer — in_place is the
+        // Fuel-schema boolean `false` (never the pre-reconcile string).
+        assert!(c.contains("in_place: false"));
+        assert!(!c.contains("in_place: forbidden"), "in_place must be a bool, not a string: {c}");
         // Scalar path (no packed u8 store) => n counts elements…
         assert!(c.contains("count_unit: elements"));
         // …and the traffic estimate is 2 f32 reads + 1 u8 write = 9 B/elem.
-        assert!(c.contains("bytes_per_elem: 9"));
-        // The predicate is exact.
-        assert!(c.contains("mode: correctly_rounded"));
+        assert!(c.contains("  bytes_moved: \"9 * n\"\n"), "{c}");
+        // The predicate is exact ⇒ bit-stable + max_ulp 0 (Fuel PrecisionBlock).
+        assert!(!c.contains("mode:"), "non-schema mode: key must not leak: {c}");
+        assert!(c.contains("  bit_stable_on_same_hardware: true\n"), "{c}");
+        assert!(c.contains("  max_ulp: 0\n"), "{c}");
         assert!(c.contains("determinism: bitwise"));
     }
 
@@ -1931,13 +2533,13 @@ mod tests {
         "SsdChunkScan", "Nf4Matmul",
     ];
 
-    /// The 28 internal single-op roots (`root_op_name` outputs) that MUST map to
+    /// The 29 internal single-op roots (`root_op_name` outputs) that MUST map to
     /// an importable Fuel spelling, with the exact expected spelling. Mirrors
     /// `pattern.rs` `binary_name`/`unary_name` + the infix `Add`/`Sub`/`Mul`/`Div`.
-    /// `Relu` is deliberately ABSENT: it is a semantic honest miss (our relu is
-    /// NaN-propagating; Fuel's ReluElementwise slot is NaN-as-missing in its CPU
-    /// reference, FKC doc, and incumbent CUDA binding) — see
-    /// `fuel_primitive_op_kind` and `relu_is_a_semantic_honest_miss` below.
+    /// `Relu` is MAPPED again (2026-07-08): Fuel pinned `ReluElementwise` =
+    /// NaN-propagating (torch parity) and rebinds it to the bespoke propagating
+    /// CUDA kernel, so the semantic divergence that held it out is resolved — see
+    /// `fuel_primitive_op_kind` and `relu_maps_to_relu_elementwise` below.
     const MAPPED_ROOTS: &[(&str, &str)] = &[
         ("Add", "AddElementwise"),
         ("Sub", "SubElementwise"),
@@ -1957,6 +2559,7 @@ mod tests {
         ("Log", "LogElementwise"),
         ("Tanh", "TanhElementwise"),
         ("Sigmoid", "SigmoidElementwise"),
+        ("Relu", "ReluElementwise"),
         ("Erf", "ErfElementwise"),
         ("GeluErf", "GeluErfElementwise"),
         ("Silu", "SiluElementwise"),
@@ -1970,17 +2573,19 @@ mod tests {
     ];
 
     #[test]
-    fn relu_is_a_semantic_honest_miss() {
-        // Review-caught (2026-07-08): the spelling exists in Fuel's table, but the
-        // SEMANTICS diverge — our synthesized relu NaN-propagates (torch.relu)
-        // while Fuel's ReluElementwise slot NaN-scrubs (CPU `x.max(0.0)`, the FKC
-        // doc's "NaN-as-missing", and the incumbent CUDA `fmaxf` kernel). A mapped
-        // Relu would let a JIT adopt silently flip NaN elements between 0.0 and
-        // NaN on the same backend. Withheld until reconciled with Fuel.
-        assert_eq!(fuel_primitive_op_kind("Relu"), None);
-        // The spelling itself IS importable — the miss is semantic, not lexical
-        // (pinning this so a future "just map it, the string is in the table"
-        // change has to confront the NaN question).
+    fn relu_maps_to_relu_elementwise() {
+        // Withhold LIFTED (Fuel's 2026-07-08 consolidated answer). The earlier
+        // hold was a genuine semantic divergence — our synthesized relu
+        // NaN-propagates (torch.relu) while Fuel's ReluElementwise slot then
+        // NaN-scrubbed (CPU `x.max(0.0)`, the FKC doc's "NaN-as-missing", the
+        // incumbent CUDA `fmaxf` kernel). Fuel has now DECIDED ReluElementwise =
+        // NaN-propagating (torch parity; "external convention over internal
+        // consistency"); its CPU + CUDA rebind to the bespoke propagating kernel
+        // is QUEUED (not yet landed as of 2026-07-08 — the incumbent slot still
+        // scrubs). Once it lands both slots agree on NaN; the mapping restore
+        // itself follows the coordinated decision.
+        assert_eq!(fuel_primitive_op_kind("Relu"), Some("ReluElementwise"));
+        // And the spelling is one Fuel's importer accepts (verbatim cross-check).
         assert!(FUEL_LOWER_OP_KIND_ACCEPTED.contains(&"ReluElementwise"));
     }
 
@@ -2042,8 +2647,8 @@ mod tests {
             (UnaryOp::Log, "LogElementwise"),
             (UnaryOp::Tanh, "TanhElementwise"),
             (UnaryOp::Sigmoid, "SigmoidElementwise"),
-            // Relu deliberately absent — semantic honest miss (NaN convention
-            // divergence; see relu_is_a_semantic_honest_miss). Emitter-checked below.
+            // Relu maps again (2026-07-08): both sides pin NaN-propagating relu.
+            (UnaryOp::Relu, "ReluElementwise"),
             (UnaryOp::Erf, "ErfElementwise"),
             (UnaryOp::Gelu, "GeluErfElementwise"), // exact-erf flavor, NOT tanh Gelu
             (UnaryOp::Silu, "SiluElementwise"),
@@ -2088,17 +2693,6 @@ mod tests {
                 "want op_kind: {want}, got:\n{c}"
             );
         }
-        // Relu: the SEMANTIC honest miss, end-to-end through the real emitter —
-        // the kernel lowers, the contract is withheld (never an op_kind line
-        // whose slot semantics diverge on NaN).
-        let relu = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Relu));
-        let key = key_for(2, OpCategory::UnaryElementwise);
-        let kernel = generate(&relu, &key, &Cuda);
-        assert!(!kernel.source.is_empty(), "the relu kernel still lowers");
-        assert!(
-            contract(&relu, &key, &kernel, "cuda").is_none(),
-            "relu must be a semantic honest miss (NaN divergence vs Fuel's slot)"
-        );
     }
 
     #[test]

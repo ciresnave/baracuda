@@ -31335,6 +31335,237 @@ unsafe extern "C" {
 }
 
 // ----------------------------------------------------------------------------
+// Unary NaN-PROPAGATING `relu` — `y = (x < 0 ? 0 : x)` across f32/f16/bf16/f64.
+//
+// The torch.relu convention: a NaN input PASSES THROUGH (NaN < 0 is false) and
+// `-0.0` stays `-0.0`. Sibling of `unary_relu_*` above (which is the
+// NaN-SCRUBBING `fmaxf(x, 0)` Fmax-family semantics and STAYS). Fuel rebinds
+// `OpKind::ReluElementwise` to THIS family (their 2026-07-08 NaN-convention
+// decision); it is bit-identical to the baracuda-kernelgen generated relu.
+// Same device-pointer / stream ABI as `unary_relu_*_run`.
+// ----------------------------------------------------------------------------
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// NaN-propagating `relu`, f32, contiguous fast path.
+    ///
+    /// # Safety
+    /// Same device-pointer / stream contract as `unary_relu_f32_run`.
+    pub fn baracuda_kernels_unary_relu_propagating_f32_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `unary_relu_propagating_f32`.
+    ///
+    /// # Safety
+    /// Host-side checks only.
+    pub fn baracuda_kernels_unary_relu_propagating_f32_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// NaN-propagating `relu`, f32, strided path.
+    ///
+    /// # Safety
+    /// Same contract as `unary_relu_f32_strided_run`.
+    pub fn baracuda_kernels_unary_relu_propagating_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `unary_relu_propagating_f32_strided`.
+    ///
+    /// # Safety
+    /// Host-side checks only.
+    pub fn baracuda_kernels_unary_relu_propagating_f32_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// NaN-propagating `relu`, f16, contiguous fast path.
+    ///
+    /// # Safety
+    /// Same contract as `unary_relu_f16_run`. `x` / `y` point to `__half` storage.
+    pub fn baracuda_kernels_unary_relu_propagating_f16_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `unary_relu_propagating_f16`.
+    ///
+    /// # Safety
+    /// Host-side checks only.
+    pub fn baracuda_kernels_unary_relu_propagating_f16_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// NaN-propagating `relu`, f16, strided path.
+    ///
+    /// # Safety
+    /// Same contract as `unary_relu_f16_strided_run`. `x` / `y` point to `__half` storage.
+    pub fn baracuda_kernels_unary_relu_propagating_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `unary_relu_propagating_f16_strided`.
+    ///
+    /// # Safety
+    /// Host-side checks only.
+    pub fn baracuda_kernels_unary_relu_propagating_f16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// NaN-propagating `relu`, bf16, contiguous fast path.
+    ///
+    /// # Safety
+    /// Same contract as `unary_relu_bf16_run`. `x` / `y` point to `__nv_bfloat16` storage.
+    pub fn baracuda_kernels_unary_relu_propagating_bf16_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `unary_relu_propagating_bf16`.
+    ///
+    /// # Safety
+    /// Host-side checks only.
+    pub fn baracuda_kernels_unary_relu_propagating_bf16_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// NaN-propagating `relu`, bf16, strided path.
+    ///
+    /// # Safety
+    /// Same contract as `unary_relu_bf16_strided_run`. `x` / `y` point to `__nv_bfloat16` storage.
+    pub fn baracuda_kernels_unary_relu_propagating_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `unary_relu_propagating_bf16_strided`.
+    ///
+    /// # Safety
+    /// Host-side checks only.
+    pub fn baracuda_kernels_unary_relu_propagating_bf16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// NaN-propagating `relu`, f64, contiguous fast path.
+    ///
+    /// # Safety
+    /// Same contract as `unary_relu_f64_run`. `x` / `y` point to `double` storage.
+    pub fn baracuda_kernels_unary_relu_propagating_f64_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `unary_relu_propagating_f64`.
+    ///
+    /// # Safety
+    /// Host-side checks only.
+    pub fn baracuda_kernels_unary_relu_propagating_f64_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// NaN-propagating `relu`, f64, strided path.
+    ///
+    /// # Safety
+    /// Same contract as `unary_relu_f64_strided_run`. `x` / `y` point to `double` storage.
+    pub fn baracuda_kernels_unary_relu_propagating_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `unary_relu_propagating_f64_strided`.
+    ///
+    /// # Safety
+    /// Host-side checks only.
+    pub fn baracuda_kernels_unary_relu_propagating_f64_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+}
+
+// ----------------------------------------------------------------------------
 // Unary `gelu` — `y = gelu(x)` across f32 / f16 / bf16 / f64.
 //
 // ERF-EXACT gelu (`0.5·x·(1+erf(x/√2))`) — NOT the tanh approximation.

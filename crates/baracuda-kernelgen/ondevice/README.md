@@ -1347,3 +1347,95 @@ multi-axis sort, `sparsemax` fusion, and S8/U8 dtypes. The bitonic `k ≤ 1024` 
 a **runtime-launch precondition** (the structure key abstracts numeric extents away —
 the same trust level as smemrow/blockscan), harness-enforced + on-device-validated,
 with NO emitted guard beyond `k == 0`.
+
+## `relu_propagating_validate.cu` — bespoke NaN-propagating relu vs the generated relu (alpha.76)
+
+Validates the **bespoke NaN-PROPAGATING relu** kernel family
+(`crates/baracuda-kernels-sys/kernels/elementwise/unary_relu_propagating_fp.cu`)
+that Fuel rebinds `OpKind::ReluElementwise` to (their 2026-07-08 consolidated
+NaN-convention decision: `ReluElementwise` = NaN-propagating, torch parity). It
+is the sibling of the incumbent `unary_relu_fp.cu` (which STAYS as the
+NaN-SCRUBBING `fmaxf(x, 0)` Fmax-family semantics). The bespoke form is
+`y = (x < 0 ? 0 : x)` — a NaN input passes through (`NaN < 0` is false) and a
+`-0.0` input stays `-0.0` — computed natively in f32/f64 and via the f32-detour
+(`widen → compare-select → narrow`) in f16/bf16.
+
+The **acceptance requirement** is BIT-IDENTITY to the baracuda-kernelgen
+**generated** relu (the semantics oracle — `cuda.rs` `UnaryOp::Relu` lowers to
+exactly `x < 0.0f ? 0.0f : x` for f32/f64 and the per-lane f32-detour for
+f16/bf16). The harness `#include`s the bespoke `.cu` (its extern-C
+`baracuda_kernels_unary_relu_propagating_*_run` launchers) AND the generated
+relu `.cu` (both the SCALAR per-element oracle and the VECTORIZED contig form
+Fuel would adopt), feeds identical sweep inputs to all three, and requires the
+raw output bytes to be **memcmp-identical**.
+
+**Regeneration:** the generated relu `.cu` oracles — `{f32,f64,f16,bf16}` ×
+`{scalar, contig}` — are dumped by the in-tree `#[ignore]`d test
+`cuda::tests::dump_relu_sources` (the `dump_*_sources` house pattern), then the
+committed harness is built beside them:
+
+```sh
+RELU_OUT=<outdir> cargo test -p baracuda-kernelgen dump_relu_sources -- --ignored --nocapture
+cp crates/baracuda-kernelgen/ondevice/relu_propagating_validate.cu <outdir>/
+nvcc -O3 -arch=sm_89 -std=c++17 \
+     -I <kernels-sys>/kernels/include <outdir>/relu_propagating_validate.cu -o relu_propagating_validate
+./relu_propagating_validate
+compute-sanitizer --tool memcheck ./relu_propagating_validate
+```
+
+**Coverage** (`x < 0 ? 0 : x` has no rounding, so bit-identity is the whole
+claim — every case below is **device-launched**, not equivalence-covered):
+
+- **f16 / bf16 — FULL 16-bit sweep** (all 65 536 patterns: every NaN payload,
+  ±Inf, ±0, every subnormal, max-finite) — the `packed_validate` precedent.
+- **f32 — targeted probe set + 64M pseudo-random bit patterns.** Probes (25
+  encodings): +0/−0, ±1, ±Inf, qNaN/−qNaN, three qNaN payloads, two sNaN
+  payloads, two negative-NaN payloads, ±min-subnormal, ±max-subnormal,
+  ±min-normal, ±max-finite, ±π. The 64M random `u32` patterns cover the full
+  exponent/mantissa/sign space (a large fraction land on NaN/Inf/subnormal
+  naturally).
+- **f64 — the MATCHED probe set (25 u64 encodings, class-for-class identical to
+  f32: three qNaN payloads, two sNaN payloads, two negative-NaN payloads) + 32M
+  pseudo-random patterns.**
+- **Strided path — a transposed 2-D view per dtype** (`[1024, 768]`, non-square)
+  fed through the bespoke `*_strided_run` launcher (transposed read, contiguous
+  write) and diffed against the contig bespoke output (itself oracle-validated) —
+  so the 4 `*_strided_run` symbols are **device-launched**, not covered only by
+  shared-template construction.
+- **can_implement gates — all 8** (`*_can_implement` / `*_strided_can_implement`,
+  per dtype) are **called** and required to accept a well-formed request (`rc == 0`).
+
+For each dtype the bespoke contig launcher output is diffed against BOTH the
+generated **scalar** kernel and the generated **vectorized** contig kernel
+(`f32` → float4; `f16`/`bf16` → the `__half2 ×4` v8 struct; `f64` → double2).
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc — **RESULT: ALL PASSED**
+(20/20 device checks: 8 contig bit-identity + 4 strided-transpose bit-identity +
+8 can_implement gates); `compute-sanitizer --tool memcheck`
+**ERROR SUMMARY: 0 errors** (still ALL PASSED under memcheck):
+
+| case | sweep | bespoke == gen_scalar | bespoke == gen_vec |
+| --- | --- | --- | --- |
+| f16 | full 16-bit (65 536) | bit-identical | bit-identical (v8) |
+| bf16 | full 16-bit (65 536) | bit-identical | bit-identical (v8) |
+| f32 | probe + 64M random (67 108 892) | bit-identical | bit-identical (v4) |
+| f64 | probe + 32M random (33 554 458) | bit-identical | bit-identical (v2) |
+
+| strided (transpose `[1024, 768]`) | bespoke `*_strided_run` == contig bespoke |
+| --- | --- |
+| f16 / bf16 / f32 / f64 | bit-identical (786 432 elems each) |
+
+**Bit-identity is by construction and confirmed empirically.** The bespoke `.cu`
+and the generated `.cu` compute the identical per-element expression (`x < 0 ?
+0 : x`, and the identical `__float2half(__half2float(x) < 0 ? 0 : …)` detour for
+halves), so the only risk was an nvcc-vs-nvcc codegen difference across the two
+translation units — the sweep rules that out over every f16/bf16 pattern and the
+f32/f64 special-value classes. A JIT adopt that swaps the generated cell for the
+bespoke kernel is therefore behaviorally identical on the advertised backend,
+which is exactly what Fuel's `OpKind::ReluElementwise` rebind requires.
+
+**NaN / signed-zero semantics confirmed on device** (via the probe set, both the
+bespoke and the generated form agreeing): a NaN input reproduces its **exact
+payload bits** on output (it is returned unchanged — `NaN < 0` is false), and a
+`-0.0` input yields `-0.0` (torch.relu(-0.) == -0.), never the `+0.0` /
+NaN-scrub the incumbent `fmaxf(x, 0)` Fmax kernel would produce.

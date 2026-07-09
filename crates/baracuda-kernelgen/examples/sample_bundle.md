@@ -2,18 +2,20 @@
 fkc_version: 1
 provider:
   name: baracuda
-  backend: cuda
+  backend: Cuda
   kernel_source: baracuda
   link_registry: baracuda_link_registry
   revision_base: "feat/kernel-specialization@e3907f6"
 seam_profiles: [1]
 ---
 
+## add_f32_co_v4
+
 ```fkc
 kernel: add_f32_co_v4
 op_kind: AddElementwise
 blurb: "elementwise add (F32, contiguous layout)."
-backend: cuda
+backend: Cuda
 kernel_source: baracuda
 dtypes: [F32]
 entry_point: baracuda_gen_add_f32_co_v4
@@ -21,127 +23,34 @@ kernel_revision_hash: "4b5b337c13997f67"
 accept:
   structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-"
   inputs:
-    - dtypes: [F32]
-      layout: contiguous
-    - dtypes: [F32]
-      layout: contiguous
+    - name: in0
+      dtypes: [F32]
+      layout: { contiguous: required, strided: rejected, broadcast_stride0: rejected, start_offset: rejected, reverse_strides: rejected }
+    - name: in1
+      dtypes: [F32]
+      layout: { contiguous: required, strided: rejected, broadcast_stride0: rejected, start_offset: rejected, reverse_strides: rejected }
 return:
   outputs:
-    - dtype_rule: same_as_input(0)
-      shape_rule: same_as_input(0)
-      layout: contiguous
+    - dtype_rule: passthrough(in0)
+      shape_rule: same_as(in0)
+      layout_guarantee: contiguous
       aliasing: none
 caps:
-  in_place: allowed
+  in_place: false
   alignment_bytes: 16
-  awkward_layout: requires_contiguous
+  awkward_layout_strategy: requires_contiguous
+  count_unit: vectors_x4
 cost:
   provenance: declared
   class: elementwise
-  flops_per_elem: 1
-  bytes_per_elem: 12
+  flops: "1 * n"
+  bytes_moved: "12 * n"
 precision:
-  mode: correctly_rounded
+  bit_stable_on_same_hardware: true
   max_ulp: 0
+  audited: true
+  notes: "correctly_rounded; bit-reproducible"
 determinism: bitwise
-```
-
-```fkc
-kernel: relu_add_f32_co_v4
-fused_op: relu_add
-blurb: "fused relu_add (F32, contiguous layout)."
-backend: cuda
-kernel_source: baracuda
-dtypes: [F32]
-entry_point: baracuda_gen_relu_add_f32_co_v4
-kernel_revision_hash: "b6c275409f9d8497"
-accept:
-  structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-"
-  inputs:
-    - dtypes: [F32]
-      layout: contiguous
-    - dtypes: [F32]
-      layout: contiguous
-return:
-  outputs:
-    - dtype_rule: same_as_input(0)
-      shape_rule: same_as_input(0)
-      layout: contiguous
-      aliasing: none
-caps:
-  in_place: allowed
-  alignment_bytes: 16
-  awkward_layout: requires_contiguous
-cost:
-  provenance: declared
-  class: elementwise
-  flops_per_elem: 2
-  bytes_per_elem: 12
-precision:
-  mode: correctly_rounded
-  max_ulp: 0
-determinism: bitwise
-pattern:
-  root:
-    op: Relu
-    operands:
-      - op: Add
-        consumers: 1
-        operands:
-          - bind: 0
-          - bind: 1
-```
-
-```fkc
-kernel: affine_silu_f32_co_v4
-fused_op: affine_silu
-blurb: "fused affine_silu (F32, contiguous layout)."
-backend: cuda
-kernel_source: baracuda
-dtypes: [F32]
-entry_point: baracuda_gen_affine_silu_f32_co_v4
-kernel_revision_hash: "78de344453860aed"
-accept:
-  structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f|-"
-  inputs:
-    - dtypes: [F32]
-      layout: contiguous
-op_params:
-  - name: param0
-    dtype: F32
-  - name: param1
-    dtype: F32
-return:
-  outputs:
-    - dtype_rule: same_as_input(0)
-      shape_rule: same_as_input(0)
-      layout: contiguous
-      aliasing: none
-caps:
-  in_place: allowed
-  alignment_bytes: 16
-  awkward_layout: requires_contiguous
-cost:
-  provenance: declared
-  class: elementwise
-  flops_per_elem: 3
-  bytes_per_elem: 8
-precision:
-  mode: approximate
-  max_ulp: 2
-determinism: bitwise
-pattern:
-  root:
-    op: Silu
-    extract: { param0: "operand(0).operand(0).value", param1: "operand(0).value" }
-    operands:
-      - op: AddScalar
-        consumers: 1
-        operands:
-          - op: MulScalar
-            consumers: 1
-            operands:
-              - bind: 0
 ```
 
 <!-- generated link_registry.rs -->

@@ -8784,6 +8784,41 @@ mod scan_tests {
         assert!(matches!(plan.access, Access::Scan { .. }));
     }
 
+    /// Manual dump tool (not a wired assertion): regenerate the GENERATED relu
+    /// `.cu` oracle sources the on-device validator `ondevice/relu_propagating_validate.cu`
+    /// `#include`s (the semantics oracle — `UnaryOp::Relu`). Emits, per dtype
+    /// {f32,f64,f16,bf16}: a SCALAR cell (align = dtype size ⇒ no vectorization ⇒
+    /// the clean per-element `(const T*, T*, long long)` oracle) and a CONTIG cell
+    /// (256-align ⇒ the vectorized path Fuel would adopt). Run with:
+    ///   `RELU_OUT=<outdir> cargo test -p baracuda-kernelgen dump_relu_sources -- --ignored --nocapture`
+    /// then copy `ondevice/relu_propagating_validate.cu` beside the emitted files
+    /// and `nvcc` it (this replaces the old scratchpad `dump_relu` bin).
+    #[test]
+    #[ignore = "manual regeneration tool for ondevice/relu_propagating_validate.cu"]
+    fn dump_relu_sources() {
+        use crate::ir::input;
+        use baracuda_kernels_types::{structure_key, ArchSku, OpCategory, OperandDesc};
+        let out = std::env::var("RELU_OUT").unwrap_or_else(|_| ".".to_string());
+        for dt in [ElementKind::F32, ElementKind::F64, ElementKind::F16, ElementKind::Bf16] {
+            let relu = OpDef::elementwise("relu", 1, &[dt], input(0).relu());
+            let esz = match dt {
+                ElementKind::F16 | ElementKind::Bf16 => 2,
+                ElementKind::F32 => 4,
+                ElementKind::F64 => 8,
+                _ => unreachable!(),
+            };
+            // Scalar cell (align = element size ⇒ no vectorization).
+            for align in [esz, 256] {
+                let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
+                let o = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
+                let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+                let k = generate(&relu, &key, &Cuda);
+                std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+                println!("wrote {out}/{}.cu", k.name);
+            }
+        }
+    }
+
     /// Manual dump tool (not a wired assertion): regenerate the scan `.cu` sources
     /// the on-device validator `#include`s. Run with:
     ///   `cargo test -p baracuda-kernelgen dump_scan_sources -- --ignored --nocapture`

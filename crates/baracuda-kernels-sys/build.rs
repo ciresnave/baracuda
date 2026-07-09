@@ -975,6 +975,11 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // hardsigmoid / hardtanh) bypass the detour's transcendental
             // cost but use it for uniform dispatch.
             "elementwise/unary_relu_fp.cu",
+            // NaN-PROPAGATING relu (torch.relu; `x < 0 ? 0 : x`) — the family
+            // Fuel rebinds `OpKind::ReluElementwise` to (2026-07-08 NaN decision).
+            // Sibling of the NaN-scrubbing `unary_relu_fp.cu` (Fmax family), which
+            // stays. Bit-identical to the baracuda-kernelgen generated relu.
+            "elementwise/unary_relu_propagating_fp.cu",
             "elementwise/unary_gelu_fp.cu",
             "elementwise/unary_gelu_tanh_fp.cu",
             "elementwise/unary_silu_fp.cu",
