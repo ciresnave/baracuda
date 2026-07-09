@@ -633,8 +633,11 @@ pub fn contract(
         // fusion's scalar `extract:` carriers.
         s.push_str("op_params:\n");
         for p in &params {
-            // v1 scalar params are f32 launch arguments (the `extract:` carrier).
-            s.push_str(&format!("  - name: param{p}\n    dtype: F32\n"));
+            // Scalar params are launch arguments in the op's SCALAR COMPUTE dtype
+            // (the `extract:` carrier): `F32` for an f32 op (byte-identical to the
+            // pre-F64 hardcode), `F64` for an f64 op (the F64-param increment). This
+            // reuses the same FKC `dtype` token the accept block spells at `dtypes:`.
+            s.push_str(&format!("  - name: param{p}\n    dtype: {dtype}\n"));
         }
     }
 
@@ -2632,6 +2635,39 @@ mod tests {
         // silu(x*p0 + p1): the silu composite (~3 ulp); arithmetic is exact.
         assert!(c.contains("  max_ulp: 3\n"), "{c}");
         assert!(c.contains("  audited: true\n"), "{c}");
+        // F32 op_params carry the `F32` token (byte-identical to the pre-F64
+        // hardcode) — the regression pin for the honesty-only dtype-token change.
+        assert!(
+            c.contains("  - name: param0\n    dtype: F32\n"),
+            "f32 param carries the F32 token: {c}"
+        );
+    }
+
+    #[test]
+    fn f64_scalar_param_op_params_carry_the_f64_token() {
+        // M6: the honesty-only op_params dtype-token change. A single-output f64
+        // param op emits a contract whose op_params carry `dtype: F64` (the real
+        // scalar COMPUTE dtype, reusing the accept block's `dtype` token), not the
+        // stale hardcoded `F32`.
+        let op = OpDef::elementwise(
+            "affine_f64",
+            1,
+            &[ElementKind::F64],
+            input(0) * param(0) + param(1),
+        );
+        let key = key_dtype(ElementKind::F64, 2);
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        assert!(c.contains("op_params:"), "{c}");
+        assert!(
+            c.contains("  - name: param0\n    dtype: F64\n"),
+            "f64 param carries the F64 token: {c}"
+        );
+        assert!(
+            c.contains("  - name: param1\n    dtype: F64\n"),
+            "second f64 param also F64: {c}"
+        );
+        assert!(!c.contains("dtype: F32"), "no stale F32 token: {c}");
     }
 
     #[test]

@@ -1983,6 +1983,110 @@ be Fuel's first mixed-dtype bundle producer), filed in
 `docs/fuel-ask-heteromulti-dropout-2026-07-09.md`; the v1 AOT kernel needs none of
 it.
 
+## `dropout_f64_validate.cu` — F64 dropout / the F64-PARAM-CHANNEL increment (increment 12)
+
+The scalar-param launch channel goes **dtype-aware**: the param DECLARATION ctype
+now follows the SCALAR COMPUTE dtype (`scalar_ctype(plan.dtype)`) — `"float"` for
+F32/F32Strict (byte-identical to before, by construction) and `"double"` for F64.
+F64 dropout is the vehicle: a two-char dtype flip (`&[F32]` → `&[F64]`) on the
+`dropout_fw` op reuses the ENTIRE hetero-multi U8-mask machinery — the value output
+is uniform F64, only the mask stays U8. The generated kernel declares
+`, double p0, double p1)` (keep_prob/scale) and computes in IEEE double
+(`binary_f64` CmpLt, `select_f64`, one lone double multiply). A launch param is
+**always scalar** — even under `double2` vectorized operands it stays `double p0`,
+never `double2 p0` (pinned by the Rust golden `f64_affine_vectorized_param_golden`).
+`f16`/`bf16` params stay REJECTED behind the emitter assert (their correct param
+ctype is `"float"`, a deferred numerics decision with no oracle — §7 of the brief).
+
+**THE ACCEPTANCE ORACLE — PRIMARY = a CPU f64 CLOSED-FORM reference** (exact IEEE
+double, kernel-independent): `mask = rand < keep_prob`, `y = x * (mask ? scale : 0)`
+in double, same host-filled `double` rand + `double` keep_prob/scale as the kernel.
+The kernel's `x * mult` is a LONE multiply (no add ⇒ no FMA contraction), correctly
+rounded, so host↔device is **bit-identical** — whole-buffer `bit_diff(y) == 0 AND
+bit_diff(mask) == 0` across the probe classes (±0, ±1, ±inf, qNaN/sNaN payloads,
+subnormals, min-normal, max-finite, ±pi) × the keep_prob sweep. Notably this passes
+EXACT even for NaN inputs and `inf*0` NaN results — the GPU **preserves f64 NaN
+payloads** (matching x86), which is precisely why the CPU f64 oracle is exact and is
+the PRIMARY gate.
+
+**SECONDARY cross-check = the bespoke `baracuda_kernels_dropout_f64_run` under a
+documented WIDENING PROTOCOL** (`-DWITH_BESPOKE`). The bespoke device kernel
+(`baracuda_random.cuh` `dropout_fw_kernel<double,double>`) hardwires `rand` as
+`const float*` and `keep_prob` as `float` (`= 1.0f - p`) EVEN at T=double, while the
+generator loads `rand` as `double` and compares double<double — so a naive memcmp
+would diverge near threshold (the parallel to topk's bespoke NaN/tie carve-out). To
+make the memcmp EXACT: fill the generator's f64 `rand` with the **exact widening** of
+the bespoke's float rand (float→double is exact and order-preserving, so
+`(double)a < (double)b ⟺ a < b`), and pass the generator keep_prob as
+`(double)(1.0f - p)` — widen the FLOAT keep_prob, **NOT** `1.0 - (double)p` (which can
+flip mask bits near threshold). `scale` is a pure double passthrough in the bespoke
+ABI (both sides get the identical double). Then `bit_diff(y) == 0 AND bit_diff(mask)
+== 0`.
+
+**Byte-identical-f32-dropout regression (cell 6):** the shipped f32 kernel source is
+UNCHANGED by this increment, so its device behavior is unchanged — checked against a
+CPU f32 oracle. HONEST caveat: for f32, a NaN result of a multiply (a NaN input, or
+`±inf * 0.0` on a dropped ±inf) is **canonicalized by the GPU** to qNaN while x86
+preserves the operand payload — a known platform difference, NOT a regression — so the
+f32 value check is payload-agnostic on NaN results (finite/inf/zero/subnormal compared
+bit-exact). This asymmetry (f32 canonicalized, f64 preserved) is exactly why the f32
+acceptance historically uses device-to-device bespoke and the f64 primary oracle is
+the CPU reference.
+
+Generate the kernels with the extended `dump_dropout_sources` test (now emits the
+f64 `_mo2_scalar` + `_mo2_strided_r2` alongside the f32 pair), then copy the harness
+beside them and `nvcc`:
+
+```
+DROPOUT_OUT=<outdir> cargo test -p baracuda-kernelgen dump_dropout_sources -- --ignored --nocapture
+cp crates/baracuda-kernelgen/ondevice/dropout_f64_validate.cu <outdir>/
+# CPU-oracle build (headerless; PRIMARY gate + strided/determinism/f32-regression):
+nvcc -O3 -arch=sm_89 -std=c++17 -I <outdir> <outdir>/dropout_f64_validate.cu -o <outdir>/dropout_f64_validate
+# SECONDARY (adds the bespoke f64 widening cross-check + bench):
+nvcc -O3 -arch=sm_89 -std=c++17 -DWITH_BESPOKE -I <outdir> -I crates/baracuda-kernels-sys/kernels/include \
+     -Xcompiler "/Zc:preprocessor /std:c++17" <outdir>/dropout_f64_validate.cu -o <outdir>/dropout_f64_validate_bes
+compute-sanitizer --tool memcheck <outdir>/dropout_f64_validate san   # + racecheck/synccheck/initcheck
+```
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **RESULT: ALL PASSED**
+(both the CPU-oracle and `-DWITH_BESPOKE` builds):
+
+- **Cell 1 (ACCEPTANCE GATE, PRIMARY CPU f64 oracle):** all 16 cells (shapes {1,
+  37x53, 4096, 1000003-prime} × keep_prob sweep) `bit_diff(y) = 0` AND `bit_diff(mask)
+  = 0` (dropped-negative `-0.0` class 0) — bit-exact for the F64 value and the U8
+  mask, including all NaN classes (f64 payloads preserved host↔device).
+- **Cell 2 (strided):** both shapes (128x96, 37x53) `bit_diff(y) = 0`, `bit_diff(mask)
+  = 0`, mask-vs-def 0 — the transposed-output offset math (`oo0`/`oo1`) exact for both
+  outputs at double.
+- **Cell 3 (SECONDARY, bespoke widening protocol):** 9 cells (3 shapes × 3 keep_prob)
+  `bit_diff(y) = 0` AND `bit_diff(mask) = 0` vs `baracuda_kernels_dropout_f64_run`.
+- **Cell 4 (determinism):** `y` AND `mask` memcmp-identical across two launches (1e6+).
+- **Cell 5 (sanitizers):** memcheck / synccheck / **initcheck** `ERROR SUMMARY: 0
+  errors`, racecheck **0 hazards** (every f64-value AND U8-mask slot fully written —
+  no uninitialized read, no over-read; stores race-free and in-bounds).
+- **Cell 6 (byte-identical-f32 regression):** the shipped f32 kernel `bit_diff(y) = 0`
+  (NaN-payload-agnostic per the caveat above) AND `bit_diff(mask) = 0` — the f32
+  vehicle unperturbed.
+- **Cell 7 (bench):** 4096x4096, generated fused **1.854 ms** (9.05 Gelem/s, 226.3
+  GB/s) vs bespoke **1.567 ms** (10.71 Gelem/s, 267.7 GB/s) — **0.85x bespoke**: the
+  generated fused kernel reads `rand` as an 8-byte `double` while the bespoke reads it
+  as a 4-byte `float`, so it moves ~4 B/elem more traffic (25 vs 21 B/elem) — the ratio
+  is the extra rand bandwidth, both memory-bound.
+
+**Device-launched vs host-side tally:** cells 1, 2, 3, 4, 5, 7 are device-launched
+(the generated f64 `_mo2_scalar` + `_mo2_strided_r2` kernels, the f32 `_mo2_scalar`
+regression kernel, and the bespoke f64 launcher); the cross-body-CSE source shape is
+the host-side Rust golden `cuda::dropout_hetero_tests::dropout_scalar_hetero_golden_f64`.
+
+**Fuel contract (honest miss — AOT-ONLY):** dropout is a multi-output honest miss at
+ANY dtype (no contract, `contract.rs` `n_outputs > 1` guard), so f64 does not change
+the dropout Fuel story — and Fuel dropout is F32-only today (no f64 consumer), so this
+is an AOT/parity increment. The scalar-param JIT seam stays `c.f32_only` UNTOUCHED (an
+f64 param region is an honest miss, AOT-first); widening it to JIT f64 param regions
+live is a separate follow-on that must be paired with the Fuel-side f64 launch-arg
+marshalling propose-first. The **f64-param channel note is promoted from queued to
+SHIPPED** by this increment; `f16`/`bf16` params remain a named de-scope.
+
 ## `im2col_validate.cu` — 2-D im2col / unfold (increment 11, IM2COL)
 
 Validates `Access::Im2Col` — a pure EXPANDING structured gather (the conv-lowering

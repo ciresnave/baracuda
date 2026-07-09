@@ -99,8 +99,11 @@ impl Backend for Cuda {
             plan.output_bodies()
                 .iter()
                 .all(|b| params_used(b).is_empty())
-                || matches!(plan.dtype, ElementKind::F32 | ElementKind::F32Strict),
-            "cuda backend v1: scalar params are f32-only for now (dtype {:?})",
+                || matches!(
+                    plan.dtype,
+                    ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
+                ),
+            "cuda backend v1: scalar params are f32/f64-only for now (dtype {:?})",
             plan.dtype
         );
         // Increment 0c: infix `Div` and `Const` are spelled by shared,
@@ -589,7 +592,10 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
         s.push_str(&format!("    const {vty}* __restrict__ in{i},\n"));
     }
     s.push_str(&format!("    {vty}* __restrict__ out,\n"));
-    s.push_str(&format!("    long long nv{})\n{{\n", param_args(plan.body)));
+    s.push_str(&format!(
+        "    long long nv{})\n{{\n",
+        param_args(plan.body, param_ctype(plan))
+    ));
     s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
     s.push_str("    for (; i < nv; i += step) {\n");
@@ -788,7 +794,10 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
     }
     s.push_str(&format!("    {octype}* __restrict__ out,\n"));
-    s.push_str(&format!("    long long n{})\n{{\n", param_args(plan.body)));
+    s.push_str(&format!(
+        "    long long n{})\n{{\n",
+        param_args(plan.body, param_ctype(plan))
+    ));
     s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
     let acc = |idx: u8| format!("in{idx}[i]");
@@ -925,7 +934,10 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     if out_off {
         s.push_str("    long long offo,\n");
     }
-    s.push_str(&format!("    long long n{})\n{{\n", param_args(plan.body)));
+    s.push_str(&format!(
+        "    long long n{})\n{{\n",
+        param_args(plan.body, param_ctype(plan))
+    ));
     // BASE_OFFSET SLICE: bump each Runtime operand's base pointer by its launch arg
     // as the FIRST body statements — BEFORE the fully-broadcast hoist (so a hoisted
     // operand's `h{k} = in{k}[0]` reads element off{k}, not element 0) and BEFORE
@@ -1796,7 +1808,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     }
     s.push_str(&format!(
         "    long long n{})\n{{\n",
-        param_args_multi(&plan.output_bodies())
+        param_args_multi(&plan.output_bodies(), param_ctype(plan))
     ));
     s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
@@ -1878,7 +1890,7 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     }
     s.push_str(&format!(
         "    long long n{})\n{{\n",
-        param_args_multi(&plan.output_bodies())
+        param_args_multi(&plan.output_bodies(), param_ctype(plan))
     ));
     for k in 0..n_in {
         if is_fully_broadcast(plan.key.operands[k], rank) {
@@ -1994,7 +2006,7 @@ fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Ge
     }
     s.push_str(&format!(
         "    long long nv{})\n{{\n",
-        param_args_multi(&plan.output_bodies())
+        param_args_multi(&plan.output_bodies(), param_ctype(plan))
     ));
     s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
@@ -2401,7 +2413,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         s.push_str(&format!("    {octype}* __restrict__ out,\n"));
         s.push_str(&format!(
             "    long long n_out,\n    long long k{})\n{{\n",
-            param_args_multi(&[plan.body, post])
+            param_args_multi(&[plan.body, post], param_ctype(plan))
         ));
         s.push_str(
             "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
@@ -2530,7 +2542,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     }
     s.push_str(&format!(
         "    long long n_out{})\n{{\n",
-        param_args_multi(&[plan.body, post])
+        param_args_multi(&[plan.body, post], param_ctype(plan))
     ));
     s.push_str("    long long o = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long gstride = (long long)gridDim.x * blockDim.x;\n");
@@ -3541,7 +3553,7 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
     s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
     s.push_str(&format!(
         "    long long n_out,\n    long long k{})\n{{\n",
-        param_args(plan.body)
+        param_args(plan.body, param_ctype(plan))
     ));
     // Uniform empty-axis guard (k is a single kernel arg): never skips a barrier
     // divergently, and defends the Max/Min seed against an OOB load.
@@ -4122,7 +4134,7 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
     s.push_str(&format!(
         "    long long n_out,\n    long long k{})\n{{\n",
-        param_args_multi(&[pre, post])
+        param_args_multi(&[pre, post], param_ctype(plan))
     ));
     s.push_str("    if (k == 0) return;\n");
 
@@ -4647,7 +4659,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
     s.push_str(&format!(
         "    long long n_out,\n    long long k_in,\n    long long k_out{})\n{{\n",
-        param_args_multi(&[pre, post])
+        param_args_multi(&[pre, post], param_ctype(plan))
     ));
     s.push_str("    if (k_out == 0) return;\n");
     s.push_str("    long long total = n_out * k_out;\n");
@@ -6110,12 +6122,31 @@ fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) {
     }
 }
 
-/// The trailing `, float p0, float p1, …` kernel-signature suffix for the op's
-/// runtime scalar params (empty when the op has none).
-fn param_args(e: &ScalarExpr) -> String {
+/// The SCALAR COMPUTE ctype for an op's runtime launch params — `scalar_ctype(
+/// plan.dtype)`, i.e. `"float"` for F32/F32Strict (byte-identical to the pre-F64
+/// hardcode) and `"double"` for F64. A launch param is ALWAYS a scalar arg, never
+/// vectorized, so this is the declaration ctype at EVERY emitter (including the
+/// vectorized ones, whose OPERANDS are `float4`/`double2` but whose param stays
+/// `double p0`) — the F64-param increment's load-bearing distinction: pass THIS,
+/// never `vty`/`octype`. The `Cuda::lower` param assert (see the `matches!` on
+/// `plan.dtype` above) guarantees a param-bearing plan has a spellable scalar
+/// ctype, so the `expect` is unreachable for any op that actually declares a param.
+fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
+    scalar_ctype(plan.dtype).expect("param dtype checked by the Cuda::lower param assert")
+}
+
+/// The trailing `, <ctype> p0, <ctype> p1, …` kernel-signature suffix for the
+/// op's runtime scalar params (empty when the op has none). `param_ctype` is the
+/// SCALAR COMPUTE ctype `scalar_ctype(plan.dtype)` — `"float"` for F32/F32Strict
+/// (byte-identical to the pre-F64 hardcode by construction), `"double"` for F64.
+/// A launch param is ALWAYS scalar: even on the vectorized emitter (operands are
+/// `float4`/`double2`) the declaration stays `double p0`, NOT `double2 p0` — so
+/// callers pass the SCALAR compute ctype, never `vty`/`octype` (the F64-param
+/// increment's load-bearing distinction).
+fn param_args(e: &ScalarExpr, param_ctype: &str) -> String {
     params_used(e)
         .iter()
-        .map(|i| format!(", float p{i}"))
+        .map(|i| format!(", {param_ctype} p{i}"))
         .collect()
 }
 
@@ -6123,13 +6154,15 @@ fn param_args(e: &ScalarExpr) -> String {
 /// expressions (increment 0e: a reduction's launch signature must declare params
 /// referenced by the fold body OR the post-expr). Deduped + ascending via the
 /// `BTreeSet` in [`params_used`]. For a body-only op (identity post) this is
-/// byte-identical to `param_args(body)`.
-fn param_args_multi(exprs: &[&ScalarExpr]) -> String {
+/// byte-identical to `param_args(body, param_ctype)`.
+fn param_args_multi(exprs: &[&ScalarExpr], param_ctype: &str) -> String {
     let mut set = std::collections::BTreeSet::new();
     for e in exprs {
         set.extend(params_used(e));
     }
-    set.iter().map(|i| format!(", float p{i}")).collect()
+    set.iter()
+        .map(|i| format!(", {param_ctype} p{i}"))
+        .collect()
 }
 
 #[cfg(test)]
@@ -11033,20 +11066,24 @@ mod dropout_hetero_tests {
     use crate::backend::Backend;
     use crate::ir::{Access, BaseOffset, BinaryOp, OpDef, WriteIndex, input, konst, param};
     use crate::plan::{KernelPlan, Schedule};
-    use crate::{Cuda, generate};
+    use crate::{Cuda, build_plan, generate};
     use baracuda_kernels_types::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
     // dropout_fw: inputs x=in0, rand=in1; params keep_prob=p0, scale=p1.
-    //   output 0 (value, F32): x·(rand<keep_prob ? scale : 0)
-    //   output 1 (mask,  U8 ): rand<keep_prob   (the SAME Cmp node, shared)
-    fn dropout_fw() -> OpDef {
+    //   output 0 (value, `dt`): x·(rand<keep_prob ? scale : 0)
+    //   output 1 (mask,  U8  ): rand<keep_prob   (the SAME Cmp node, shared)
+    // Parametric on the value/compute dtype `dt` (F32 today, F64 the F64-param
+    // increment vehicle): the U8 mask is hetero-uniform across both, and the
+    // scalar params (keep_prob/scale) declare in `dt`'s scalar ctype. An F32 call
+    // builds the byte-identical pre-F64 OpDef.
+    fn dropout_fw(dt: ElementKind) -> OpDef {
         let cond = || input(1).binary(BinaryOp::CmpLt, param(0));
         OpDef::elementwise_multi_hetero(
             "dropout",
             2,
-            &[ElementKind::F32],
+            &[dt],
             vec![
                 (input(0) * cond().select(param(1), konst(0.0)), None),
                 (cond(), Some(ElementKind::U8)),
@@ -11054,22 +11091,29 @@ mod dropout_hetero_tests {
         )
     }
 
-    // inputs x,rand (F32) then outputs value (F32), mask (U8). `even` ⇒ V4-eligible.
-    fn dropout_contig_key(even: bool) -> StructureKey {
+    // inputs x,rand (`dt`) then outputs value (`dt`), mask (U8). `even` ⇒
+    // vector-eligible ON THE VALUE OPERANDS, but the U8 mask forces Scalar/Strided
+    // regardless (dropout never vectorizes — `dropout_hetero_never_vectorizes`).
+    // Parametric on `dt`: an F32 call builds the byte-identical pre-F64 key.
+    fn dropout_contig_key(even: bool, dt: ElementKind) -> StructureKey {
         let ext: i64 = if even { 1 << 20 } else { 1_000_003 };
-        let f = OperandDesc::new(1, &[ext], &[1], ElementKind::F32, 256);
+        let f = OperandDesc::new(1, &[ext], &[1], dt, 256);
         let u = OperandDesc::new(1, &[ext], &[1], ElementKind::U8, 256);
         structure_key(OpCategory::BinaryElementwise, &[f, f, f, u], ArchSku::Sm89)
     }
-    fn dropout_strided_key() -> StructureKey {
-        let f = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256);
+    fn dropout_strided_key(dt: ElementKind) -> StructureKey {
+        let f = OperandDesc::new(2, &[8, 4], &[1, 8], dt, 256);
         let u = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::U8, 256);
         structure_key(OpCategory::BinaryElementwise, &[f, f, f, u], ArchSku::Sm89)
     }
 
     #[test]
     fn dropout_scalar_hetero_golden_f32() {
-        let k = generate(&dropout_fw(), &dropout_contig_key(false), &Cuda);
+        let k = generate(
+            &dropout_fw(ElementKind::F32),
+            &dropout_contig_key(false, ElementKind::F32),
+            &Cuda,
+        );
         assert_eq!(
             k.name, "baracuda_gen_dropout_f32_mo2_scalar",
             "{}",
@@ -11120,7 +11164,11 @@ mod dropout_hetero_tests {
 
     #[test]
     fn dropout_strided_hetero_golden_f32() {
-        let k = generate(&dropout_fw(), &dropout_strided_key(), &Cuda);
+        let k = generate(
+            &dropout_fw(ElementKind::F32),
+            &dropout_strided_key(ElementKind::F32),
+            &Cuda,
+        );
         assert_eq!(
             k.name, "baracuda_gen_dropout_f32_mo2_strided_r2",
             "{}",
@@ -11158,13 +11206,239 @@ mod dropout_hetero_tests {
     fn dropout_hetero_never_vectorizes() {
         // G4: a contig V4-eligible dropout key STILL emits the `_scalar` entry (the
         // u8 mask has no packed vector store) — never a `_co_v4` kernel.
-        let k = generate(&dropout_fw(), &dropout_contig_key(true), &Cuda);
+        let k = generate(
+            &dropout_fw(ElementKind::F32),
+            &dropout_contig_key(true, ElementKind::F32),
+            &Cuda,
+        );
         assert_eq!(
             k.name, "baracuda_gen_dropout_f32_mo2_scalar",
             "{}",
             k.source
         );
         assert!(!k.name.contains("_co_v"), "not vectorized: {}", k.name);
+    }
+
+    // ==================== F64-PARAM-CHANNEL (increment 12) ====================
+    // The scalar-param launch channel goes dtype-aware: the param DECLARATION
+    // ctype follows the SCALAR COMPUTE dtype (`scalar_ctype(plan.dtype)`) —
+    // `"double"` for F64. F64 dropout is the vehicle (reuses the whole hetero-multi
+    // U8-mask store; the value output is uniform F64). The #1 regression invariant
+    // (byte-identical f32 param emission) is pinned by the UNCHANGED f32 goldens
+    // above; these add the new f64 pins.
+
+    #[test]
+    fn dropout_scalar_hetero_golden_f64() {
+        // The F64 sibling of `dropout_scalar_hetero_golden_f32`: symbol carries the
+        // `f64` tag; the two scalar launch params are `double p0, double p1` (NOT
+        // `float`); the value output is `double*` (uniform F64) and the mask output
+        // is still `unsigned char*` (the hetero-multi U8 store is dtype-blind).
+        let k = generate(
+            &dropout_fw(ElementKind::F64),
+            &dropout_contig_key(false, ElementKind::F64),
+            &Cuda,
+        );
+        assert_eq!(
+            k.name, "baracuda_gen_dropout_f64_mo2_scalar",
+            "{}",
+            k.source
+        );
+        // Per-output pointer TYPES: value F64 (double), mask u8 — unchanged store.
+        assert!(
+            k.source.contains("double* __restrict__ out0,"),
+            "value ptr f64:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("unsigned char* __restrict__ out1,"),
+            "mask ptr u8 (dtype-blind):\n{}",
+            k.source
+        );
+        // The shared comparison hoists ONCE (cross-body CSE) in the F64 COMPUTE
+        // dtype: `binary_f64`'s CmpLt has no operand casts (unlike the f32 speller,
+        // whose compare casts to `(float)`), and the hoisted temp is `double`.
+        assert_eq!(
+            k.source
+                .matches("double tmp0 = (in1[i] < p0 ? 1.0 : 0.0);")
+                .count(),
+            1,
+            "shared cond hoisted once in double:\n{}",
+            k.source
+        );
+        // Value store: the select arms + cond cast are `(double)`, one double
+        // multiply of x by the selected multiplier (`select_f64`).
+        assert!(
+            k.source.contains(
+                "out0[i] = (in0[i] * (((double)(tmp0)) != 0.0 ? (double)(p1) : (double)(0.0)));"
+            ),
+            "value store reads tmp0 raw in double:\n{}",
+            k.source
+        );
+        // Mask store: the u8 conversion at the STORE SITE, unchanged from f32.
+        assert!(
+            k.source.contains("out1[i] = (unsigned char)tmp0;"),
+            "mask store (unsigned char)tmp0:\n{}",
+            k.source
+        );
+        // Both params SCALAR `double` (keep_prob p0 across both bodies, scale p1).
+        assert!(
+            k.source.contains(", double p0, double p1)"),
+            "param signature is scalar double:\n{}",
+            k.source
+        );
+        assert!(
+            !k.source.contains("double2 p"),
+            "a launch param is NEVER vectorized (no `double2 p`):\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn dropout_f64_emits() {
+        // G-pos-f64: an f64 param op now EMITS (no panic); the U8 mask forces the
+        // scalar/strided path, so the symbol is `_f64_mo2_scalar`.
+        let k = generate(
+            &dropout_fw(ElementKind::F64),
+            &dropout_contig_key(false, ElementKind::F64),
+            &Cuda,
+        );
+        assert_eq!(k.name, "baracuda_gen_dropout_f64_mo2_scalar");
+        assert!(k.source.contains(", double p0, double p1)"), "{}", k.source);
+    }
+
+    #[test]
+    fn mul_scalar_f64_emits() {
+        // G-pos-f64: a single-output f64 `x * p0` op emits a scalar `double p0`
+        // launch param — the non-dropout channel path (no panic).
+        let op = OpDef::elementwise("mul_scalar", 1, &[ElementKind::F64], input(0) * param(0));
+        let a = OperandDesc::new(1, &[1_000_003], &[1], ElementKind::F64, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_mul_scalar_f64_scalar", "{}", k.source);
+        assert!(k.source.contains(", double p0)"), "{}", k.source);
+    }
+
+    #[test]
+    fn f64_affine_scalar_param_golden() {
+        // A single-output f64 `a*x + b` through the SCALAR elementwise emitter (odd
+        // extent ⇒ VecWidth::Scalar): pins `, double p0, double p1)` on the
+        // `param_args` (single-body) path, `double*` operands, and the double body.
+        let op = OpDef::elementwise(
+            "affine",
+            1,
+            &[ElementKind::F64],
+            input(0) * param(0) + param(1),
+        );
+        let a = OperandDesc::new(1, &[1_000_003], &[1], ElementKind::F64, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_affine_f64_scalar", "{}", k.source);
+        assert!(
+            k.source.contains("const double* __restrict__ in0,"),
+            "f64 operand ptr:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("long long n, double p0, double p1)"),
+            "scalar double params:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out[i] = ((in0[i] * p0) + p1);"),
+            "double affine body:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn f64_affine_vectorized_param_golden() {
+        // THE M2 PIN: the SAME f64 affine op forced onto the VECTORIZED path (even
+        // extent ⇒ double2). Operands are `double2` but the launch params STAY
+        // SCALAR `double p0, double p1` — proving the param ctype is the scalar
+        // COMPUTE ctype, never `vty`. (An f32 vectorized golden — `scalar_param_kernel`
+        // — pins the same for float by coincidence; this is the load-bearing f64 pin.)
+        let op = OpDef::elementwise(
+            "affine",
+            1,
+            &[ElementKind::F64],
+            input(0) * param(0) + param(1),
+        );
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F64, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_affine_f64_co_v2", "{}", k.source);
+        // Operands vectorized to double2.
+        assert!(
+            k.source.contains("const double2* __restrict__ in0,"),
+            "double2 operand ptr:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("double2 v0 = in0[i];"),
+            "double2 operand load:\n{}",
+            k.source
+        );
+        // Params SCALAR double, NOT double2 — the whole point.
+        assert!(
+            k.source.contains("long long nv, double p0, double p1)"),
+            "scalar double params under double2 operands:\n{}",
+            k.source
+        );
+        assert!(
+            !k.source.contains("double2 p0") && !k.source.contains("double2 p1"),
+            "a launch param is NEVER vectorized:\n{}",
+            k.source
+        );
+        // Per-lane body: scalar-typed lanes, scalar params.
+        assert!(
+            k.source.contains("vo.x = ((v0.x * p0) + p1);"),
+            "lane-x body:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("vo.y = ((v0.y * p0) + p1);"),
+            "lane-y body:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn f64_param_cell_builds() {
+        // G-build: build_plan ADMITS an f64 param cell — the plan layer is NOT the
+        // gate (only INT params are plan-gated); the f32/f64-only wall is the
+        // EMITTER assert. Documents that f64 rides the plan through unchanged, then
+        // emits without panic.
+        let op = OpDef::elementwise("mul_scalar", 1, &[ElementKind::F64], input(0) * param(0));
+        let a = OperandDesc::new(1, &[1_000_003], &[1], ElementKind::F64, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let plan = build_plan(&op, &key);
+        assert_eq!(plan.dtype, ElementKind::F64);
+        let k = Cuda.lower(&plan); // emits (no panic) — the plan layer passed f64 through
+        assert!(k.source.contains(", double p0)"), "{}", k.source);
+    }
+
+    #[test]
+    #[should_panic(expected = "f32/f64-only")]
+    fn f16_param_still_rejected() {
+        // G-neg-half (de-scope backstop): the assert allowlist is EXACTLY
+        // {F32, F32Strict, F64} — NOT an open `is_float`. An f16 param op STILL
+        // panics (its correct param ctype would be "float", a deferred numerics
+        // decision with no oracle — §7).
+        let op = OpDef::elementwise("mul_scalar", 1, &[ElementKind::F16], input(0) * param(0));
+        let a = OperandDesc::new(1, &[1_000_003], &[1], ElementKind::F16, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let _ = generate(&op, &key, &Cuda);
+    }
+
+    #[test]
+    #[should_panic(expected = "f32/f64-only")]
+    fn bf16_param_still_rejected() {
+        // G-neg-half sibling: a bf16 param op STILL panics — the allowlist did not
+        // over-broaden to `is_float`.
+        let op = OpDef::elementwise("mul_scalar", 1, &[ElementKind::Bf16], input(0) * param(0));
+        let a = OperandDesc::new(1, &[1_000_003], &[1], ElementKind::Bf16, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let _ = generate(&op, &key, &Cuda);
     }
 
     #[test]
@@ -11239,7 +11513,7 @@ mod dropout_hetero_tests {
         // A non-U8 hetero EXTRA output (I32) handed to `Cuda::lower` must panic in
         // `assert_multi_output_lowerable` (G5) — NOT emit C. build_plan would reject
         // it (G1); the backstop holds independently.
-        let key = dropout_contig_key(false);
+        let key = dropout_contig_key(false, ElementKind::F32);
         let body0 = input(0).0;
         let extra = [input(0).binary(BinaryOp::CmpLt, input(1)).0];
         let extra_dt = [Some(ElementKind::I32)];
@@ -11252,7 +11526,7 @@ mod dropout_hetero_tests {
     fn hetero_plan_tagged_vectorized_refused_by_emitter_backstop() {
         // A LEGAL U8 hetero output but tagged Vectorized (which G4 never produces)
         // must panic in the backstop — a u8 mask has no packed vector store.
-        let key = dropout_contig_key(true);
+        let key = dropout_contig_key(true, ElementKind::F32);
         let body0 = input(0).0;
         let extra = [input(1).binary(BinaryOp::CmpLt, param(0)).0];
         let extra_dt = [Some(ElementKind::U8)];
@@ -11268,8 +11542,8 @@ mod dropout_hetero_tests {
 
     // ---- source dump for ondevice/dropout_validate.cu ----
 
-    /// Regenerate the generated kernels `ondevice/dropout_validate.cu` includes.
-    /// Run with:
+    /// Regenerate the generated kernels `ondevice/dropout_validate.cu` and
+    /// `ondevice/dropout_f64_validate.cu` include. Run with:
     ///   `DROPOUT_OUT=<outdir> cargo test -p baracuda-kernelgen dump_dropout_sources -- --ignored --nocapture`
     #[test]
     #[ignore = "writes generated sources for the on-device dropout harness"]
@@ -11280,9 +11554,30 @@ mod dropout_hetero_tests {
             std::fs::write(&path, &k.source).unwrap();
             println!("wrote {path}");
         };
-        // Contiguous scalar (the acceptance-gate + bench kernel) and a strided cell.
-        write(generate(&dropout_fw(), &dropout_contig_key(false), &Cuda));
-        write(generate(&dropout_fw(), &dropout_strided_key(), &Cuda));
+        // F32: contiguous scalar (the acceptance-gate + bench kernel) and a strided cell.
+        write(generate(
+            &dropout_fw(ElementKind::F32),
+            &dropout_contig_key(false, ElementKind::F32),
+            &Cuda,
+        ));
+        write(generate(
+            &dropout_fw(ElementKind::F32),
+            &dropout_strided_key(ElementKind::F32),
+            &Cuda,
+        ));
+        // F64 (the F64-param increment vehicle): the same two cells at `double`.
+        // The U8 mask still forces Scalar/Strided, so these are `_f64_mo2_scalar`
+        // and `_f64_mo2_strided_r2` with `double p0, double p1` launch params.
+        write(generate(
+            &dropout_fw(ElementKind::F64),
+            &dropout_contig_key(false, ElementKind::F64),
+            &Cuda,
+        ));
+        write(generate(
+            &dropout_fw(ElementKind::F64),
+            &dropout_strided_key(ElementKind::F64),
+            &Cuda,
+        ));
     }
 }
 
