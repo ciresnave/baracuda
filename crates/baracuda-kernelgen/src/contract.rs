@@ -903,12 +903,13 @@ fn root_op_name(node: &PatternNode) -> String {
 ///   `GeluErf` root, so the exact flavor is carried end to end.
 /// - `Relu` → `ReluElementwise`: mapping RESTORED per Fuel's 2026-07-08 DECISION
 ///   (`ReluElementwise` = NaN-PROPAGATING, torch parity). Baracuda's synthesized
-///   relu is already NaN-propagating; Fuel's CPU + CUDA rebind to the propagating
-///   convention is QUEUED, not yet landed (as of 2026-07-08 their incumbent slot
-///   still scrubs — CPU `x.max(0.0)`, CUDA `fmaxf`). Once it lands both slots
-///   agree on NaN and an adopt is behaviorally identical; until then an adopt
-///   yields the DECIDED (propagating) semantics early where Fuel still scrubs (see
-///   the arm below). The mapping restore itself follows the coordinated decision.
+///   relu is NaN-propagating; Fuel's CPU + CUDA rebind to the propagating
+///   convention has now LANDED (2026-07-09, Fuel `main`: `772e27a0` CPU
+///   relu/max/min, `00b25dc0` CUDA `ReluElementwise`, `5d52ee82` CUDA
+///   `ReluInplace` — all rebound to our alpha.76 `unary_relu_propagating_*`
+///   family, verified additive-only FFI). Both slots now agree on NaN, so a JIT
+///   adopt is behaviorally identical — the convention is fully reconciled
+///   (forward + in-place, CPU + CUDA); no transient divergence remains.
 ///
 /// `AddScalar`/`MulScalar` are deliberately absent: Fuel has no scalar-param
 /// primitive `OpKind` (see the branch note in [`contract`]) — they are honest
@@ -938,22 +939,22 @@ fn fuel_primitive_op_kind(root: &str) -> Option<&'static str> {
         "Tanh" => "TanhElementwise",
         "Sigmoid" => "SigmoidElementwise",
         // `Relu` → `ReluElementwise`: the withhold is LIFTED (Fuel's 2026-07-08
-        // consolidated answer). The earlier hold was a real semantic divergence
-        // — our synthesized relu is NaN-PROPAGATING (`x < 0 ? 0 : x`, torch.relu;
-        // cuda.rs pins it) while Fuel's `ReluElementwise` slot then NaN-SCRUBBED
-        // in all three of its authorities (CPU `x.max(0.0)`, the FKC doc
-        // "NaN-as-missing", the incumbent CUDA `fmaxf` kernel). Fuel has now
-        // DECIDED `ReluElementwise` = NaN-propagating (torch parity; their
-        // written norm "external convention over internal consistency") and its
-        // CPU-core + FKC-doc move to propagating and CUDA rebind to the bespoke
+        // consolidated answer) and the reconciliation is now FULLY CLOSED. The
+        // earlier hold was a real semantic divergence — our synthesized relu is
+        // NaN-PROPAGATING (`x < 0 ? 0 : x`, torch.relu; cuda.rs pins it) while
+        // Fuel's `ReluElementwise` slot then NaN-SCRUBBED in all three of its
+        // authorities (CPU `x.max(0.0)`, the FKC doc "NaN-as-missing", the
+        // incumbent CUDA `fmaxf` kernel). Fuel DECIDED `ReluElementwise` =
+        // NaN-propagating (torch parity; "external convention over internal
+        // consistency") and its CPU-core + FKC-doc + CUDA rebind to our bespoke
         // NaN-propagating kernel (crates/baracuda-kernels-sys
-        // `unary_relu_propagating_fp.cu`; the incumbent `fmaxf` one stays as the
-        // Fmax family) are QUEUED — NOT yet landed as of 2026-07-08 (Fuel's CPU
-        // `dyn_impl.rs` still computes `x.max(0.0)` and its CUDA slot still binds
-        // the incumbent `unary_relu_*` fmaxf family). Once the rebind lands both
-        // slots agree on NaN and a JIT adopt is behaviorally identical; UNTIL then
-        // an adopt yields the DECIDED propagating semantics early where Fuel's
-        // incumbent slot still scrubs. The mapping restore follows the decision.
+        // `unary_relu_propagating_fp.cu`) have now LANDED on Fuel `main`
+        // (2026-07-09: `772e27a0` CPU relu/max/min, `00b25dc0` CUDA
+        // `ReluElementwise`, `5d52ee82` CUDA `ReluInplace`; the incumbent `fmaxf`
+        // one stays as the separate Fmax family). Both slots now agree on NaN, so
+        // a JIT adopt is behaviorally identical — no transient scrub divergence
+        // remains (verified Fuel-side by dispatch-level pins born red against a
+        // live-sabotaged binding: cuda_relu_propagates_nan_*, live suite 173/173).
         "Relu" => "ReluElementwise",
         "Erf" => "ErfElementwise",
         "GeluErf" => "GeluErfElementwise",
@@ -3145,16 +3146,16 @@ mod tests {
 
     #[test]
     fn relu_maps_to_relu_elementwise() {
-        // Withhold LIFTED (Fuel's 2026-07-08 consolidated answer). The earlier
-        // hold was a genuine semantic divergence — our synthesized relu
-        // NaN-propagates (torch.relu) while Fuel's ReluElementwise slot then
-        // NaN-scrubbed (CPU `x.max(0.0)`, the FKC doc's "NaN-as-missing", the
-        // incumbent CUDA `fmaxf` kernel). Fuel has now DECIDED ReluElementwise =
-        // NaN-propagating (torch parity; "external convention over internal
-        // consistency"); its CPU + CUDA rebind to the bespoke propagating kernel
-        // is QUEUED (not yet landed as of 2026-07-08 — the incumbent slot still
-        // scrubs). Once it lands both slots agree on NaN; the mapping restore
-        // itself follows the coordinated decision.
+        // Withhold LIFTED (Fuel's 2026-07-08 consolidated answer), reconciliation
+        // now FULLY CLOSED. The earlier hold was a genuine semantic divergence —
+        // our synthesized relu NaN-propagates (torch.relu) while Fuel's
+        // ReluElementwise slot then NaN-scrubbed (CPU `x.max(0.0)`, the FKC doc's
+        // "NaN-as-missing", the incumbent CUDA `fmaxf` kernel). Fuel DECIDED
+        // ReluElementwise = NaN-propagating (torch parity) and its CPU + CUDA
+        // rebind to our bespoke propagating kernel has now LANDED on Fuel `main`
+        // (2026-07-09: 772e27a0 CPU, 00b25dc0 CUDA ReluElementwise, 5d52ee82 CUDA
+        // ReluInplace, vs our alpha.76 unary_relu_propagating_* family). Both
+        // slots agree on NaN — a JIT adopt is behaviorally identical, no divergence.
         assert_eq!(fuel_primitive_op_kind("Relu"), Some("ReluElementwise"));
         // And the spelling is one Fuel's importer accepts (verbatim cross-check).
         assert!(FUEL_LOWER_OP_KIND_ACCEPTED.contains(&"ReluElementwise"));
