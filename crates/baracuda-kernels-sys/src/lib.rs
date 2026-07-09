@@ -74138,6 +74138,174 @@ unsafe extern "C" {
         range_start: *const i32,
     ) -> i32;
 
+    // ----- WriteSlice `_doff` — device-resident dynamic-axis start ---------
+    //
+    // form-B variant of the WriteSlice launchers: the range-start of ONE axis
+    // (`dyn_axis`) is read from a DEVICE pointer (`dyn_start_dev`, a single
+    // `i64`) at kernel entry instead of being host-baked into the by-value
+    // `range_start`. This lets a captured CUDA-graph node replay at the
+    // host-updated sequence position (KV-cache decode) — the host bumps
+    // `*dyn_start_dev` per token via a fixed-address H2D memcpy, which is
+    // capture-tolerant, where the host-baked `_run` freezes at the captured
+    // position. `dyn_axis` + `dyn_start_dev` are inserted immediately after
+    // `range_start`; the trailing `workspace`/`workspace_bytes`/`stream`
+    // params match `_run`. Scoped to Fuel's KV decode dtype set
+    // (b1/b2/b4/b8); b16 + nibble have no `_doff` variant.
+    //
+    // Bound caveat: under `_doff` the true start (`cached_len`) is device-only,
+    // so `_can_implement` CANNOT validate `cached_len + seq <= max_seq`. The
+    // kernel deliberately does NOT clamp (clamping would perturb the index
+    // math vs `_run`); guaranteeing the in-bounds write is the CALLER's
+    // contract (Fuel/DecodeSession sizes `max_seq`).
+
+    /// WriteSlice `_doff`, 1-byte element (i8 / u8 / S8 / U8 / Bool / Fp8E4M3
+    /// / Fp8E5M2). See the module note above for the device-start semantics.
+    ///
+    /// # Safety
+    /// Same buffer / stream contract as `baracuda_kernels_write_slice_b1_run`.
+    /// `range_start` is a host `int32_t` array of length `rank`; its
+    /// `dyn_axis` slot is a placeholder (ignored — the start for that axis is
+    /// read from the device). `dyn_axis` must satisfy `0 <= dyn_axis < rank`.
+    /// `dyn_start_dev` must be a live DEVICE pointer to at least one `i64`.
+    pub fn baracuda_kernels_write_slice_b1_doff_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        dyn_axis: i32,
+        dyn_start_dev: *const i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `baracuda_kernels_write_slice_b1_doff`.
+    /// Host-side only — no device dereference of `dyn_start_dev`.
+    ///
+    /// # Safety
+    /// No device dereferences; same pointer-validity contract as the matching `_doff_run`.
+    pub fn baracuda_kernels_write_slice_b1_doff_can_implement(
+        dest: *const c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        dyn_axis: i32,
+        dyn_start_dev: *const i64,
+    ) -> i32;
+
+    /// WriteSlice `_doff`, 2-byte element (f16 / bf16 — the KV decode
+    /// default). See the module note above for the device-start semantics.
+    ///
+    /// # Safety
+    /// Same contract as `baracuda_kernels_write_slice_b1_doff_run`.
+    pub fn baracuda_kernels_write_slice_b2_doff_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        dyn_axis: i32,
+        dyn_start_dev: *const i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `baracuda_kernels_write_slice_b2_doff`.
+    /// Host-side only — no device dereference of `dyn_start_dev`.
+    ///
+    /// # Safety
+    /// No device dereferences; same pointer-validity contract as the matching `_doff_run`.
+    pub fn baracuda_kernels_write_slice_b2_doff_can_implement(
+        dest: *const c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        dyn_axis: i32,
+        dyn_start_dev: *const i64,
+    ) -> i32;
+
+    /// WriteSlice `_doff`, 4-byte element (f32 / F32Strict / i32). See the
+    /// module note above for the device-start semantics.
+    ///
+    /// # Safety
+    /// Same contract as `baracuda_kernels_write_slice_b1_doff_run`.
+    pub fn baracuda_kernels_write_slice_b4_doff_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        dyn_axis: i32,
+        dyn_start_dev: *const i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `baracuda_kernels_write_slice_b4_doff`.
+    /// Host-side only — no device dereference of `dyn_start_dev`.
+    ///
+    /// # Safety
+    /// No device dereferences; same pointer-validity contract as the matching `_doff_run`.
+    pub fn baracuda_kernels_write_slice_b4_doff_can_implement(
+        dest: *const c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        dyn_axis: i32,
+        dyn_start_dev: *const i64,
+    ) -> i32;
+
+    /// WriteSlice `_doff`, 8-byte element (f64 / i64 / Complex32). See the
+    /// module note above for the device-start semantics.
+    ///
+    /// # Safety
+    /// Same contract as `baracuda_kernels_write_slice_b1_doff_run`.
+    pub fn baracuda_kernels_write_slice_b8_doff_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        dyn_axis: i32,
+        dyn_start_dev: *const i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `baracuda_kernels_write_slice_b8_doff`.
+    /// Host-side only — no device dereference of `dyn_start_dev`.
+    ///
+    /// # Safety
+    /// No device dereferences; same pointer-validity contract as the matching `_doff_run`.
+    pub fn baracuda_kernels_write_slice_b8_doff_can_implement(
+        dest: *const c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        dyn_axis: i32,
+        dyn_start_dev: *const i64,
+    ) -> i32;
+
     /// WriteSlice, nibble-packed (S4 / U4 — two elements per byte).
     /// Constraint: `range_start[rank-1]` and `range_end[rank-1]` must
     /// both be even so no read-modify-write straddles a byte boundary.

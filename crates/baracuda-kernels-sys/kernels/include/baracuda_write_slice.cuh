@@ -119,6 +119,102 @@ __host__ inline int32_t launch_write_slice_byte(
     return (err == cudaSuccess) ? 0 : 5;
 }
 
+// ---------------------------------------------------------------------------
+// form-B `_doff` variant — device-resident dynamic-axis range-start.
+//
+// A SEPARATE instantiation of the byte kernel (NOT a template<bool> flag,
+// NOT a runtime branch in `write_slice_byte_kernel`) so the `_run` kernel's
+// PTX is provably untouched. It is a clone of `write_slice_byte_kernel`
+// plus exactly two behavioral lines: it reads ONE i64 from a device pointer
+// at entry and, in the dest-offset loop, overrides the range-start of a
+// single axis (`dyn_axis`) with that device value. All static axes keep
+// their host-supplied `range_start.v[d]` (i32). The `dyn_axis` slot of the
+// host `range_start` array is a placeholder (ignored).
+//
+// WHY: Fuel's KV-cache decode wants CUDA-graph replay. The by-value
+// `DimsI32 range_start` is marshaled into the captured graph node's param
+// space, so the host-baked seq position freezes at the captured token. This
+// variant reads the position from `dyn_start_dev[0]` instead, which the host
+// updates per token via a fixed-address H2D memcpy (capture-tolerant).
+//
+// The destination-offset accumulation stays `int64_t` exactly as in `_run`
+// (`n_kv_heads * max_seq * head_dim` and `cached_len * head_dim` are already
+// overflow-safe). The device start is carried as i64 (ABI-conformant
+// headroom); `range_start` stays i32 for the static axes.
+template <typename Blob>
+__global__ void write_slice_byte_doff_kernel(
+    Blob* __restrict__ dest,
+    const Blob* __restrict__ source,
+    int64_t source_numel,
+    int32_t rank,
+    DimsI32 dest_shape,
+    DimsI32 source_shape,
+    DimsI32 range_start,                        // static axes; dyn slot ignored
+    int32_t dyn_axis,
+    const long long* __restrict__ dyn_start_dev)
+{
+    const long long dyn_start = dyn_start_dev[0];   // one device read at entry
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t i = tid; i < source_numel; i += step) {
+        // Unravel `i` into the per-axis coord under `source_shape`.
+        int64_t linear = i;
+        int64_t coord[MAX_RANK] = {0};
+        for (int d = rank - 1; d >= 0; --d) {
+            int32_t s = source_shape.v[d];
+            int64_t c = (s == 0) ? 0 : (linear % (int64_t)s);
+            if (s != 0) linear /= (int64_t)s;
+            coord[d] = c;
+        }
+        // Compute dest linear offset (contig row-major, coord shifted by
+        // range_start) and source linear offset (== i since contig). The
+        // ONLY difference vs `_run`: the dyn axis reads its start from the
+        // device i64 instead of the by-value host `range_start`.
+        int64_t dest_off = 0;
+        int64_t mul = 1;
+        for (int d = rank - 1; d >= 0; --d) {
+            int64_t rs_d = (d == dyn_axis) ? (int64_t)dyn_start : (int64_t)range_start.v[d];
+            dest_off += (coord[d] + rs_d) * mul;
+            mul *= (int64_t)dest_shape.v[d];
+        }
+        dest[dest_off] = source[i];
+    }
+}
+
+template <typename Blob>
+__host__ inline int32_t launch_write_slice_byte_doff(
+    void* dest, const void* source,
+    int64_t source_numel,
+    int32_t rank,
+    const int32_t* dest_shape_host,
+    const int32_t* source_shape_host,
+    const int32_t* range_start_host,
+    int32_t dyn_axis,
+    const long long* dyn_start_dev,
+    cudaStream_t stream)
+{
+    if (rank < 1 || rank > MAX_RANK) return 2;
+    if (dyn_axis < 0 || dyn_axis >= rank) return 2;
+    if (dyn_start_dev == nullptr) return 2;
+    DimsI32 ds = {}, ss = {}, rs = {};
+    for (int i = 0; i < rank; ++i) {
+        ds.v[i] = dest_shape_host[i];
+        ss.v[i] = source_shape_host[i];
+        rs.v[i] = range_start_host[i];
+    }
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (source_numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    write_slice_byte_doff_kernel<Blob><<<blocks, kBlock, 0, stream>>>(
+        static_cast<Blob*>(dest),
+        static_cast<const Blob*>(source),
+        source_numel, rank, ds, ss, rs, dyn_axis, dyn_start_dev);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
 // Nibble-packed kernel (S4 / U4).
 //
 // The Rust safe layer constrains `range_start[rank-1]` and
@@ -222,6 +318,56 @@ __host__ inline int32_t launch_write_slice_nibble(
     {                                                                                                  \
         if (source_numel < 0) return 2;                                                                \
         if (rank < 1 || rank > baracuda::write_slice::MAX_RANK) return 2;                              \
+        if (source_numel > 0 && (dest_shape == nullptr || source_shape == nullptr ||                   \
+                                  range_start == nullptr)) return 2;                                   \
+        return 0;                                                                                      \
+    }
+
+// Emit one `_doff_run` launcher per byte-width — the form-B variant that
+// reads the dynamic-axis range-start from a DEVICE pointer at kernel entry
+// (capture-tolerant CUDA-graph replay). Additive: the `_run` symbols above
+// are untouched. `dyn_axis`/`dyn_start_dev` are inserted immediately after
+// `range_start`; `workspace`/`workspace_bytes`/`stream_ptr` stay trailing.
+// Symbol: `baracuda_kernels_write_slice_##SUFFIX##_doff_run`.
+#define BARACUDA_KERNELS_WRITE_SLICE_INSTANTIATE_DOFF(SUFFIX, BLOB)                                   \
+    extern "C" int32_t baracuda_kernels_write_slice_##SUFFIX##_doff_run(                              \
+        void* dest, const void* source,                                                               \
+        int64_t source_numel,                                                                          \
+        int32_t rank,                                                                                  \
+        const int32_t* dest_shape,                                                                     \
+        const int32_t* source_shape,                                                                   \
+        const int32_t* range_start,                                                                    \
+        int32_t dyn_axis,                                                                              \
+        const long long* dyn_start_dev,                                                                \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                              \
+        void* stream_ptr)                                                                              \
+    {                                                                                                  \
+        if (rank < 1 || rank > baracuda::write_slice::MAX_RANK) return 2;                              \
+        if (source_numel < 0) return 2;                                                                \
+        if (source_numel == 0) return 0;                                                               \
+        if (dest == nullptr || source == nullptr) return 2;                                            \
+        if (dyn_axis < 0 || dyn_axis >= rank) return 2;                                                \
+        if (dyn_start_dev == nullptr) return 2;                                                        \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                   \
+        return baracuda::write_slice::launch_write_slice_byte_doff<BLOB>(                              \
+            dest, source, source_numel, rank,                                                          \
+            dest_shape, source_shape, range_start,                                                     \
+            dyn_axis, dyn_start_dev, stream);                                                          \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_write_slice_##SUFFIX##_doff_can_implement(                    \
+        const void* /*dest*/, const void* /*source*/,                                                  \
+        int64_t source_numel,                                                                          \
+        int32_t rank,                                                                                  \
+        const int32_t* dest_shape,                                                                     \
+        const int32_t* source_shape,                                                                   \
+        const int32_t* range_start,                                                                    \
+        int32_t dyn_axis,                                                                              \
+        const long long* dyn_start_dev)                                                                \
+    {                                                                                                  \
+        if (source_numel < 0) return 2;                                                                \
+        if (rank < 1 || rank > baracuda::write_slice::MAX_RANK) return 2;                              \
+        if (dyn_axis < 0 || dyn_axis >= rank) return 2;                                                \
+        if (dyn_start_dev == nullptr) return 2;                                                        \
         if (source_numel > 0 && (dest_shape == nullptr || source_shape == nullptr ||                   \
                                   range_start == nullptr)) return 2;                                   \
         return 0;                                                                                      \

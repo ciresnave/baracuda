@@ -18,6 +18,16 @@ BARACUDA_KERNELS_WRITE_SLICE_INSTANTIATE(b4,  baracuda::write_slice::Blob4)
 BARACUDA_KERNELS_WRITE_SLICE_INSTANTIATE(b8,  baracuda::write_slice::Blob8)
 BARACUDA_KERNELS_WRITE_SLICE_INSTANTIATE(b16, baracuda::write_slice::Blob16)
 
+// form-B `_doff` variant — device-resident dynamic-axis range-start (the
+// dyn slot is read from `dyn_start_dev[0]` at kernel entry so a captured
+// CUDA-graph node replays at the host-updated seq position). Additive: the
+// `_run` symbols above are byte-identical. Scoped to Fuel's KV decode dtype
+// set (b1/b2/b4/b8); b16 + nibble have no `_doff` variant (out of v1).
+BARACUDA_KERNELS_WRITE_SLICE_INSTANTIATE_DOFF(b1, baracuda::write_slice::Blob1)
+BARACUDA_KERNELS_WRITE_SLICE_INSTANTIATE_DOFF(b2, baracuda::write_slice::Blob2)
+BARACUDA_KERNELS_WRITE_SLICE_INSTANTIATE_DOFF(b4, baracuda::write_slice::Blob4)
+BARACUDA_KERNELS_WRITE_SLICE_INSTANTIATE_DOFF(b8, baracuda::write_slice::Blob8)
+
 // Nibble-packed (S4 / U4) — bypasses the macro because its shape arrays
 // are byte-counted on the innermost axis (Rust side halves them) and
 // the launch helper is a separate symbol. Constraint: range_start and
