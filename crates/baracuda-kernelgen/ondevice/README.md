@@ -1349,9 +1349,11 @@ tokens ride the `OpDef` + the `_rowsort_{asc,desc}_stable[_idx][_bitonic]` entry
 never the structure-key token).
 
 **De-scoped from v1** (queued follow-ups, documented in `Access::RowSort`): `topk`
-(needs a k-select parameter + truncated writeback; bespoke covers it), single-kernel
-`(values, indices)` dual output (blocked on hetero multi-out — a permutation is not a
-`ScalarExpr` body), `argsort` I64 indices (bespoke pegs i32), a >1024 fast path
+(needs a k-select parameter + truncated writeback; bespoke covers it), ~~single-kernel
+`(values, indices)` dual output~~ **(SHIPPED — increment 9 `SortOut::Both`, see above;
+NOT via hetero multi-out — a permutation is not a `ScalarExpr` body — but via the
+RowSort-local three-state + a 3-operand key)**, `argsort` I64 indices (bespoke pegs i32),
+a >1024 fast path
 (multi-block merge / CUB — CUB needs headers + a workspace, violating the header-light
 + fixed-ABI envelope; the rank base is the honest any-k answer), `stable=false` (the
 pair-sort makes stability free — an unstable variant would be dead keying), non-inner /
@@ -1359,6 +1361,77 @@ multi-axis sort, `sparsemax` fusion, and S8/U8 dtypes. The bitonic `k ≤ 1024` 
 a **runtime-launch precondition** (the structure key abstracts numeric extents away —
 the same trust level as smemrow/blockscan), harness-enforced + on-device-validated,
 with NO emitted guard beyond `k == 0`.
+
+### Increment 9 FUSED_ARGSORT — the two-output `Both` kernel (op `fused`)
+
+`OpDef::row_sort_indices` writes **BOTH** projections in ONE launch —
+`out_val[base+r] = in0[base+i]` AND `out_idx[base+r] = (int)i` at the same store site,
+driven by ONE shared `pair_lt` rank scan (base) / one bitonic network (variant) —
+recovering bespoke's native one-kernel shape (`sort_block_kernel` writes `y_vals` AND
+`y_idx` together). Signature `(const T* in0, T* out_val, int* out_idx, long long n_out,
+long long k)`; the `_both` entry-point + `__device__` comparator stem keep it
+collision-free from the `_stable` (Values) and `_stable_idx` (Indices) kernels in the
+validator TU. `Both` inherits argsort's `k ≤ 2³¹−1` cap (the I32 `out_idx`); `out_val`
+is the dtype-preserving raw-bit permutation. The **source-level fusion proof** (one
+`pair_lt` scan, both stores) is pinned host-side by the Rust golden
+`cuda::sort_tests::sort_both_base_golden_f32`.
+
+**THE ACCEPTANCE GATE (device-launched):** for every cell the fused `(out_val, out_idx)`
+is **dual whole-buffer `memcmp`-equal** to the two shipped #8 kernels on the SAME input
+— `memcmp(out_val, row_sort.out) == 0` **AND** `memcmp(out_idx, row_argsort.out) == 0`.
+Both references are already bit-exact vs the CPU `pair_lt` oracle in this harness, so
+this transitively proves the fused kernel against the oracle AND directly proves the
+fusion introduced **no permutation drift** between the two projections. (Precision note:
+the `row_sort` VALUE reference is oracle-checked for every dtype; the `row_argsort` INDEX
+reference is oracle-checked directly on i32/f32/f64/i64 — for f16/bf16/f32-strict the
+`out_idx` correctness rides the value oracle plus the **dtype-independent** integer
+tie-break `ia < ib`, which is emitted byte-identically for every dtype and is
+oracle-checked on the integer cells, so a wrong index there cannot escape: it would have
+to reorder either distinct values → caught by the value oracle, or equal-value ties →
+governed by that shared, oracle-checked tie-break.) Cells (all device-launched):
+
+- **random rows, k = 1000** — f32 / f64 / i32 × asc+desc, plus i64 / f16 / bf16 /
+  f32-strict asc: dual memcmp on base AND bitonic, plus **base ≡ bitonic on both
+  buffers** and **run-to-run determinism on both buffers**.
+- **probe-seeded f32** (asc+desc, base+bitonic): planted qNaN payloads + negative-NaN;
+  mixed ±0.0; real ±inf (pad-tie invariant) — each dual-memcmp-exact (NaN payloads and
+  signed zeros land identically in `out_val`/`ref_val` and their positions in
+  `out_idx`/`ref_idx`).
+- **edge k = 1, 33, exactly 1024** (f32 asc) and **k = 1500 base-only** (> 1024 bitonic
+  contract) — dual memcmp, base ≡ bitonic where applicable.
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3, 2026-07-09 — **RESULT: ALL
+PASSED** (**330** device-launched checks total; **+117 new `Both` checks** over the #8
+tally). `compute-sanitizer` **memcheck / racecheck / synccheck / initcheck all 0 errors**
+(racecheck 0 hazards) on the `san` shapes — **initcheck covers the global `out_val`
+AND `out_idx` buffers** (both output buffers, not just the #8 single output); as noted
+in the sanitizer section above, initcheck does **not** see dynamic shared memory, so the
+smem pad cells stay protected by the poison-memcmp oracle + the pad-tie invariant cells,
+not by initcheck. `-DWITH_BESPOKE` secondary build green (the fused Both is transitively
+cross-checked against bespoke `msort` via the acceptance gate against the decomposed
+kernels).
+
+**Bandwidth (f32, 4096 × 1024, sm_89) — fused vs the two decomposed #8 kernels summed:**
+
+| path | base | bitonic |
+| --- | --- | --- |
+| **fused `Both`** (one sort, two writes) | 15.3 ms | **1.43 ms** |
+| decomposed `row_sort` + `row_argsort` (two full sorts) | 26.7 ms | 2.85 ms |
+| **fused speedup** | **1.74×** | **1.99×** |
+
+The fusion **~halves** the sort work (it sorts once and writes two buffers vs #8's two
+full sorts): **1.99× on the bitonic path** where the sort dominates, 1.74× on the O(k²)
+base. This is the increment payoff — the same permutation, both projections, one launch.
+
+**Fuel contract (honest miss, AOT-only) — unchanged from #8.** `Both` is still
+`Access::RowSort` (non-Elementwise), so `derive_pattern` rejects it as `NotElementwise`
+before any body walk and `contract()` returns `None` — the SAME withhold path as
+`row_sort`/`row_argsort`, `ZERO` `contract.rs`/`pattern.rs` change (pinned by
+`cuda::sort_tests::sort_both_is_an_honest_miss_no_contract`). `n_outputs()` stays
+body-derived `= 1`; the second buffer is owned locally by the `SortOut::Both` state + the
+3-operand key, so the elementwise-multi dispatch never fires for RowSort.
+`baracuda-kernels-types` **UNTOUCHED** — no `STRUCTURE_KEY_VERSION` bump; the `_both`
+suffix rides the entry-point symbol, not the structure-key token.
 
 ## `relu_propagating_validate.cu` — bespoke NaN-propagating relu vs the generated relu (alpha.76)
 

@@ -838,6 +838,38 @@ pub enum SortOrder {
     Desc,
 }
 
+/// Which buffers a row sort writes (increment 9 FUSED_ARGSORT). All three share
+/// the SAME total order on `(key, original-index)` pairs, so the three outputs
+/// are mutually consistent by construction; only the STORE differs.
+///
+/// - `Values` — a dtype-preserving RAW-BIT value permutation (today's
+///   [`OpDef::row_sort`]); `out_dtype == None`, one output buffer.
+/// - `Indices` — the `I32` sort permutation (today's [`OpDef::row_argsort`]);
+///   `out_dtype == Some(I32)`, one output buffer. Caller precondition
+///   `k <= 2^31 - 1` (the index cannot represent a position past it).
+/// - `Both` — one kernel writes the value permutation to `out_val` AND the `I32`
+///   index permutation to `out_idx` in a single launch (the fused
+///   `(values, indices)` sort — bespoke's native one-kernel shape). `out_dtype ==
+///   None` (output 0 = values, dtype-preserving; the I32 index is emitter-
+///   hardwired off the entry-point symbol, not a per-operand dtype channel), the
+///   key carries THREE operands `[in0, out_val, out_idx]`. Inherits argsort's
+///   `k <= 2^31 - 1` cap (the I32 index output).
+///
+/// `body` stays `Input(0)` for all three; the index is a STRUCTURAL output (not a
+/// [`ScalarExpr`] body), so it never rides `extra_out_bodies`, and `n_outputs()`
+/// stays body-derived = 1 even for `Both` (the second buffer is owned locally by
+/// this state + the 3-operand key, exactly as the emitter owns "argsort writes
+/// index vs value" today).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SortOut {
+    /// Values output (raw-bit permutation, dtype-preserving) — today's `row_sort`.
+    Values,
+    /// `I32` index output (the sort permutation) — today's `row_argsort`.
+    Indices,
+    /// Fused two-output: values to `out_val` AND `I32` indices to `out_idx`.
+    Both,
+}
+
 /// Ergonomic builder handle wrapping a [`ScalarExpr`]. Overloads arithmetic so
 /// op bodies read like math: `input(0) + input(1) * input(2)`.
 #[derive(Clone, Debug)]
@@ -1189,13 +1221,14 @@ pub enum Access {
     /// data-dependent, not a fixed coordinate remap) and NOT a [`Access::Scan`]
     /// (no running prefix; the whole row is reordered).
     ///
-    /// Two single-output ops share this variant (a hetero-dtype dual output is
-    /// impossible today — a permutation is not a `ScalarExpr` body):
-    /// [`OpDef::row_sort`] (`argsort = false`, values output, dtype-preserving)
-    /// and [`OpDef::row_argsort`] (`argsort = true`, `I32` index output via the
-    /// single-output `out_dtype` precedent). A caller wanting `(values, indices)`
-    /// launches both; the pair order is identical, so the outputs are mutually
-    /// consistent by construction.
+    /// The [`SortOut`] state selects which buffer(s) this variant writes — all
+    /// three share the same total order, so the outputs are mutually consistent by
+    /// construction: [`OpDef::row_sort`] (`out = Values`, dtype-preserving values)
+    /// and [`OpDef::row_argsort`] (`out = Indices`, `I32` index output via the
+    /// single-output `out_dtype` precedent) are the two single-output ops;
+    /// [`OpDef::row_sort_indices`] (`out = Both`) is the fused increment-9 kernel
+    /// that writes BOTH the value permutation AND the `I32` index permutation in
+    /// one launch (bespoke's native one-kernel shape — no double-sort).
     ///
     /// NaN convention (PINNED, PyTorch): NaN compares GREATER than every non-NaN
     /// (asc ⇒ NaN block last, desc ⇒ NaN block first). NaN-vs-NaN and
@@ -1216,9 +1249,12 @@ pub enum Access {
         /// emitter always pair-sorts `(key, original-index)`, which is stable by
         /// construction. The field exists for a future faster unstable network.
         stable: bool,
-        /// `false` = values output (dtype-preserving raw-bit permutation);
-        /// `true` = index output (the sort permutation, `out_dtype = Some(I32)`).
-        argsort: bool,
+        /// Which buffer(s) the sort writes: `Values` (raw-bit value permutation,
+        /// `out_dtype = None`), `Indices` (the `I32` sort permutation, `out_dtype
+        /// = Some(I32)`), or `Both` (the fused two-output kernel — values to
+        /// `out_val`, `I32` indices to `out_idx`, `out_dtype = None`, a 3-operand
+        /// key). See [`SortOut`].
+        out: SortOut,
     },
 }
 
@@ -2273,7 +2309,7 @@ impl OpDef {
             access: Access::RowSort {
                 order,
                 stable: true,
-                argsort: false,
+                out: SortOut::Values,
             },
             views: Vec::new(),
             read_index: Vec::new(),
@@ -2308,7 +2344,7 @@ impl OpDef {
             access: Access::RowSort {
                 order,
                 stable: true,
-                argsort: true,
+                out: SortOut::Indices,
             },
             views: Vec::new(),
             read_index: Vec::new(),
@@ -2316,6 +2352,48 @@ impl OpDef {
             base_offsets: Vec::new(),
             out_base_offset: BaseOffset::Zero,
             out_dtype: Some(ElementKind::I32),
+            extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
+        }
+    }
+
+    /// Build a **fused row sort + argsort** op (increment 9 FUSED_ARGSORT): ONE
+    /// kernel writes BOTH the values permutation (to `out_val`, dtype-preserving
+    /// raw bits) AND the `I32` index permutation (to `out_idx`) in a single launch
+    /// — bespoke's native one-kernel shape (`sort_block_kernel` writes `y_vals`
+    /// AND `y_idx` together), eliminating the double-sort of launching
+    /// [`OpDef::row_sort`] and [`OpDef::row_argsort`] separately. The two projections
+    /// share the identical total order, so they are mutually consistent by
+    /// construction (`memcmp`-exact vs the two single-output kernels).
+    ///
+    /// `out_dtype = None` (output 0 = values, dtype-preserving; the I32 index
+    /// output is emitter-hardwired off the entry-point symbol, NOT a per-operand
+    /// dtype channel — the same `(int)i` / `int* out` precedent as `row_argsort`).
+    /// The structure key must carry THREE operands `[in0, out_val, out_idx]`.
+    ///
+    /// **Caller precondition:** `k <= 2^31 - 1` — like [`OpDef::row_argsort`] (not
+    /// like the values-only [`OpDef::row_sort`], which has no cap): the `I32`
+    /// `out_idx` cannot represent a position past it. A runtime launch fact (the
+    /// structure key carries no extents). Validated at `plan::validate_row_sort`.
+    /// See [`Access::RowSort`] and [`SortOut::Both`].
+    #[must_use]
+    pub fn row_sort_indices(name: &str, dtype: ElementKind, order: SortOrder) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs: 1,
+            body: ScalarExpr::Input(0),
+            dtypes: vec![dtype],
+            access: Access::RowSort {
+                order,
+                stable: true,
+                out: SortOut::Both,
+            },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
+            out_dtype: None,
             extra_out_bodies: Vec::new(),
             extra_out_dtypes: Vec::new(),
         }

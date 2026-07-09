@@ -1,4 +1,5 @@
-// On-device validation of the increment-8 SORT_PERM kernels (row sort / argsort):
+// On-device validation of the increment-8 SORT_PERM kernels (row sort / argsort)
+// AND the increment-9 FUSED_ARGSORT two-output `Both` kernel (op "fused"):
 //   * the per-output RANK-sort BASE (VariantFidelity::BitIdentical, any k) — bit-exact
 //     (raw-byte memcmp) vs a CPU oracle that implements pair_lt EXACTLY (order-adjusted
 //     keys, NaN-greatest, ascending-index tie-break);
@@ -67,6 +68,35 @@
 #include "baracuda_gen_sort_bf16_rowsort_asc_stable_bitonic.cu"
 #include "baracuda_gen_sort_f32s_rowsort_asc_stable.cu"
 #include "baracuda_gen_sort_f32s_rowsort_asc_stable_bitonic.cu"
+
+// ---- Increment 9 FUSED_ARGSORT: the two-output `Both` kernels (op "fused"), and
+// the row_argsort oracle for f16/bf16/f32s (absent in #8 — the Both dual memcmp
+// needs the index oracle for these dtypes too). Signature:
+//   (const T* in0, T* out_val, int* out_idx, long long n_out, long long k). ----
+#include "baracuda_gen_fused_f32_rowsort_asc_stable_both.cu"
+#include "baracuda_gen_fused_f32_rowsort_asc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_f32_rowsort_desc_stable_both.cu"
+#include "baracuda_gen_fused_f32_rowsort_desc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_f64_rowsort_asc_stable_both.cu"
+#include "baracuda_gen_fused_f64_rowsort_asc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_f64_rowsort_desc_stable_both.cu"
+#include "baracuda_gen_fused_f64_rowsort_desc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_i32_rowsort_asc_stable_both.cu"
+#include "baracuda_gen_fused_i32_rowsort_asc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_i32_rowsort_desc_stable_both.cu"
+#include "baracuda_gen_fused_i32_rowsort_desc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_i64_rowsort_asc_stable_both.cu"
+#include "baracuda_gen_fused_i64_rowsort_asc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_f16_rowsort_asc_stable_both.cu"
+#include "baracuda_gen_fused_f16_rowsort_asc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_bf16_rowsort_asc_stable_both.cu"
+#include "baracuda_gen_fused_bf16_rowsort_asc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_f32s_rowsort_asc_stable_both.cu"
+#include "baracuda_gen_fused_f32s_rowsort_asc_stable_both_bitonic.cu"
+// row_argsort oracle for the half/f32s Both cells (base is the canonical oracle).
+#include "baracuda_gen_argsort_f16_rowsort_asc_stable_idx.cu"
+#include "baracuda_gen_argsort_bf16_rowsort_asc_stable_idx.cu"
+#include "baracuda_gen_argsort_f32s_rowsort_asc_stable_idx.cu"
 
 #ifdef WITH_BESPOKE
 #include "C:/Projects/baracuda/crates/baracuda-kernels-sys/kernels/sort/sort.cu" // bespoke stable msort
@@ -241,6 +271,128 @@ static Cell<long long, long long> cell_i64() {
         (void*)baracuda_gen_argsort_i64_rowsort_asc_stable_idx, (void*)baracuda_gen_argsort_i64_rowsort_asc_stable_idx_bitonic, k_i64};
 }
 
+// ===================== Increment 9 FUSED_ARGSORT: `Both` ====================
+// The fused kernel writes TWO output buffers in one launch:
+//   (const T* in0, T* out_val, int* out_idx, long long n_out, long long k).
+// THE ACCEPTANCE GATE (brief §6): for every cell, dual whole-buffer memcmp of the
+// fused (out_val, out_idx) vs the shipped row_sort (values) AND row_argsort
+// (indices) on the SAME input — both #8 references are already bit-exact vs the CPU
+// pair_lt oracle in run_cell above, so this transitively proves the fused kernel
+// against the oracle AND directly proves the fusion introduced no permutation drift
+// between the two projections. Base ≡ bitonic for Both is also pinned (BitIdentical).
+template <typename T>
+static void launch_both(void* kern, const T* in, T* out_val, int* out_idx,
+                        long long n_out, long long k, int grid, int block, size_t smem) {
+    const T* pin = in; T* pv = out_val; int* pi = out_idx;
+    void* args[] = { (void*)&pin, (void*)&pv, (void*)&pi, (void*)&n_out, (void*)&k };
+    CHECK(cudaLaunchKernel(kern, dim3(grid), dim3(block), args, smem, 0));
+}
+
+template <typename T>
+struct BothCell {
+    const char* dtag; bool asc; size_t acc_sz;
+    void* fused_base; void* fused_bt;      // the fused two-output kernel
+    void* sort_base;  void* argsort_base;  // the #8 oracles (base is canonical; #8 proved base==bitonic)
+};
+
+template <typename T>
+static void run_both_cell(const BothCell<T>& c, const std::vector<T>& in, long long n_out,
+                          long long k, const char* tag, bool do_bitonic, int block) {
+    const size_t N = (size_t)n_out * (size_t)k;
+    T* d_in = (T*)dev_bytes(in.data(), N * sizeof(T));
+    T* d_rv = nullptr; cudaMalloc(&d_rv, N * sizeof(T));       // ref values (row_sort)
+    int* d_ri = nullptr; cudaMalloc(&d_ri, N * sizeof(int));   // ref indices (row_argsort)
+    T* d_fv = nullptr; cudaMalloc(&d_fv, N * sizeof(T));       // fused out_val
+    int* d_fi = nullptr; cudaMalloc(&d_fi, N * sizeof(int));   // fused out_idx
+    T* d_fv2 = nullptr; cudaMalloc(&d_fv2, N * sizeof(T));     // second launch / bitonic
+    int* d_fi2 = nullptr; cudaMalloc(&d_fi2, N * sizeof(int));
+    int grid = (int)(n_out < 65535 ? n_out : 65535); if (grid < 1) grid = 1;
+    size_t smem = (size_t)next_pow2(k) * (c.acc_sz + sizeof(int));
+
+    auto report = [&](const char* what, bool ok) {
+        char nm[128]; snprintf(nm, sizeof nm, "%s %s both %s %s", c.dtag, c.asc ? "asc" : "desc", what, tag);
+        printf(ok ? "PASS %-52s\n" : "FAIL %-52s\n", nm); if (!ok) fails++;
+    };
+
+    // Oracles: row_sort (values) + row_argsort (indices), base kernels.
+    cudaMemset(d_rv, 0x5A, N * sizeof(T));
+    launch<T, T>(c.sort_base, d_in, d_rv, n_out, k, grid, 256, 0);
+    cudaMemset(d_ri, 0xFF, N * sizeof(int));
+    launch<T, int>(c.argsort_base, d_in, d_ri, n_out, k, grid, 256, 0);
+    cudaDeviceSynchronize();
+    std::vector<T> rv(N); std::vector<int> ri(N);
+    cudaMemcpy(rv.data(), d_rv, N * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(ri.data(), d_ri, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Fused base — THE acceptance gate: both projections vs both oracles.
+    cudaMemset(d_fv, 0x3C, N * sizeof(T)); cudaMemset(d_fi, 0x11, N * sizeof(int));
+    launch_both<T>(c.fused_base, d_in, d_fv, d_fi, n_out, k, grid, 256, 0);
+    cudaDeviceSynchronize();
+    std::vector<T> fv(N); std::vector<int> fi(N);
+    cudaMemcpy(fv.data(), d_fv, N * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(fi.data(), d_fi, N * sizeof(int), cudaMemcpyDeviceToHost);
+    report("base out_val==row_sort", memcmp(fv.data(), rv.data(), N * sizeof(T)) == 0);
+    report("base out_idx==row_argsort", memcmp(fi.data(), ri.data(), N * sizeof(int)) == 0);
+
+    // Determinism: a second base launch is bit-identical on BOTH buffers.
+    cudaMemset(d_fv2, 0xA5, N * sizeof(T)); cudaMemset(d_fi2, 0x22, N * sizeof(int));
+    launch_both<T>(c.fused_base, d_in, d_fv2, d_fi2, n_out, k, grid, 256, 0);
+    cudaDeviceSynchronize();
+    std::vector<T> fv_b(N); std::vector<int> fi_b(N);
+    cudaMemcpy(fv_b.data(), d_fv2, N * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(fi_b.data(), d_fi2, N * sizeof(int), cudaMemcpyDeviceToHost);
+    report("base determinism", memcmp(fv.data(), fv_b.data(), N * sizeof(T)) == 0
+                            && memcmp(fi.data(), fi_b.data(), N * sizeof(int)) == 0);
+
+    if (do_bitonic) {
+        cudaMemset(d_fv2, 0x77, N * sizeof(T)); cudaMemset(d_fi2, 0x33, N * sizeof(int));
+        launch_both<T>(c.fused_bt, d_in, d_fv2, d_fi2, n_out, k, grid, block, smem);
+        cudaDeviceSynchronize();
+        std::vector<T> bv(N); std::vector<int> bi(N);
+        cudaMemcpy(bv.data(), d_fv2, N * sizeof(T), cudaMemcpyDeviceToHost);
+        cudaMemcpy(bi.data(), d_fi2, N * sizeof(int), cudaMemcpyDeviceToHost);
+        report("bitonic out_val==row_sort", memcmp(bv.data(), rv.data(), N * sizeof(T)) == 0);
+        report("bitonic out_idx==row_argsort", memcmp(bi.data(), ri.data(), N * sizeof(int)) == 0);
+        report("base==bitonic (both buffers)", memcmp(bv.data(), fv.data(), N * sizeof(T)) == 0
+                                            && memcmp(bi.data(), fi.data(), N * sizeof(int)) == 0);
+    }
+    cudaFree(d_in); cudaFree(d_rv); cudaFree(d_ri);
+    cudaFree(d_fv); cudaFree(d_fi); cudaFree(d_fv2); cudaFree(d_fi2);
+}
+
+static BothCell<float> both_cell_f32(bool asc) {
+    return asc
+        ? BothCell<float>{"f32", true, 4,
+            (void*)baracuda_gen_fused_f32_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f32_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_sort_f32_rowsort_asc_stable, (void*)baracuda_gen_argsort_f32_rowsort_asc_stable_idx}
+        : BothCell<float>{"f32", false, 4,
+            (void*)baracuda_gen_fused_f32_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f32_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_sort_f32_rowsort_desc_stable, (void*)baracuda_gen_argsort_f32_rowsort_desc_stable_idx};
+}
+static BothCell<double> both_cell_f64(bool asc) {
+    return asc
+        ? BothCell<double>{"f64", true, 8,
+            (void*)baracuda_gen_fused_f64_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f64_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_sort_f64_rowsort_asc_stable, (void*)baracuda_gen_argsort_f64_rowsort_asc_stable_idx}
+        : BothCell<double>{"f64", false, 8,
+            (void*)baracuda_gen_fused_f64_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f64_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_sort_f64_rowsort_desc_stable, (void*)baracuda_gen_argsort_f64_rowsort_desc_stable_idx};
+}
+static BothCell<int> both_cell_i32(bool asc) {
+    return asc
+        ? BothCell<int>{"i32", true, 4,
+            (void*)baracuda_gen_fused_i32_rowsort_asc_stable_both, (void*)baracuda_gen_fused_i32_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_sort_i32_rowsort_asc_stable, (void*)baracuda_gen_argsort_i32_rowsort_asc_stable_idx}
+        : BothCell<int>{"i32", false, 4,
+            (void*)baracuda_gen_fused_i32_rowsort_desc_stable_both, (void*)baracuda_gen_fused_i32_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_sort_i32_rowsort_desc_stable, (void*)baracuda_gen_argsort_i32_rowsort_desc_stable_idx};
+}
+static BothCell<long long> both_cell_i64() {
+    return BothCell<long long>{"i64", true, 8,
+        (void*)baracuda_gen_fused_i64_rowsort_asc_stable_both, (void*)baracuda_gen_fused_i64_rowsort_asc_stable_both_bitonic,
+        (void*)baracuda_gen_sort_i64_rowsort_asc_stable, (void*)baracuda_gen_argsort_i64_rowsort_asc_stable_idx};
+}
+
 static uint32_t rng_state = 0x12345678u;
 static uint32_t xrand() { rng_state ^= rng_state << 13; rng_state ^= rng_state >> 17; rng_state ^= rng_state << 5; return rng_state; }
 
@@ -351,6 +503,117 @@ static void half_and_f32s_cells() {
             nullptr, nullptr, k_f32s};
         run_cell<float, double>(c, in, 2, 300, "rand", true, 256);
     }
+}
+
+// ============ FUSED Both acceptance matrix + bandwidth bench ================
+static void both_acceptance() {
+    printf("- FUSED Both acceptance: memcmp(out_val, row_sort) && memcmp(out_idx, row_argsort) + base==bitonic -\n");
+    // random rows near cap (k=1000): f32/f64/i32 asc+desc.
+    for (bool asc : {true, false}) {
+        { std::vector<float> in((size_t)3 * 1000); for (auto& x : in) x = (float)((int)(xrand() % 20001) - 10000) * 0.001f;
+          run_both_cell<float>(both_cell_f32(asc), in, 3, 1000, "rand", true, 256); }
+        { std::vector<double> in((size_t)3 * 1000); for (auto& x : in) x = (double)((int)(xrand() % 20001) - 10000) * 0.001;
+          run_both_cell<double>(both_cell_f64(asc), in, 3, 1000, "rand", true, 256); }
+        { std::vector<int> in((size_t)3 * 1000); for (auto& x : in) x = (int)((xrand() % 20001) - 10000);
+          run_both_cell<int>(both_cell_i32(asc), in, 3, 1000, "rand", true, 256); }
+    }
+    // i64 asc (wide integer).
+    { std::vector<long long> in((size_t)2 * 300); for (auto& x : in) x = (long long)((int)(xrand() % 20001) - 10000);
+      run_both_cell<long long>(both_cell_i64(), in, 2, 300, "rand", true, 256); }
+    // f16 / bf16 / f32s asc (acc/convert coverage — reuse the argsort oracle).
+    {
+        std::vector<__half> in((size_t)2 * 300);
+        for (auto& x : in) x = __float2half((float)((int)(xrand() % 2001) - 1000) * 0.03125f);
+        BothCell<__half> c{"f16", true, 4,
+            (void*)baracuda_gen_fused_f16_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f16_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_sort_f16_rowsort_asc_stable, (void*)baracuda_gen_argsort_f16_rowsort_asc_stable_idx};
+        run_both_cell<__half>(c, in, 2, 300, "rand", true, 256);
+    }
+    {
+        std::vector<__nv_bfloat16> in((size_t)2 * 300);
+        for (auto& x : in) x = __float2bfloat16((float)((int)(xrand() % 2001) - 1000) * 0.03125f);
+        BothCell<__nv_bfloat16> c{"bf16", true, 4,
+            (void*)baracuda_gen_fused_bf16_rowsort_asc_stable_both, (void*)baracuda_gen_fused_bf16_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_sort_bf16_rowsort_asc_stable, (void*)baracuda_gen_argsort_bf16_rowsort_asc_stable_idx};
+        run_both_cell<__nv_bfloat16>(c, in, 2, 300, "rand", true, 256);
+    }
+    {
+        std::vector<float> in((size_t)2 * 300);
+        for (auto& x : in) x = (float)((int)(xrand() % 20001) - 10000) * 0.001f;
+        BothCell<float> c{"f32s", true, 8,
+            (void*)baracuda_gen_fused_f32s_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f32s_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_sort_f32s_rowsort_asc_stable, (void*)baracuda_gen_argsort_f32s_rowsort_asc_stable_idx};
+        run_both_cell<float>(c, in, 2, 300, "rand", true, 256);
+    }
+    // Probe-seeded f32: qNaN payloads + negative-NaN (both directions).
+    {
+        const long long n = 3, k = 13; std::vector<float> in((size_t)n * k);
+        for (size_t i = 0; i < in.size(); ++i) in[i] = (float)((int)(i % 11) - 5) * 0.5f;
+        uint32_t nq[3] = {0x7fc00001u, 0x7fc0abcdu, 0xffc00042u};
+        for (int t = 0; t < 3; ++t) memcpy(&in[(size_t)(1 * k + 2 + t * 3)], &nq[t], 4);
+        for (bool asc : {true, false}) run_both_cell<float>(both_cell_f32(asc), in, n, k, "nan", true, 32);
+    }
+    // Probe-seeded f32: signed zeros + ±1 (both directions).
+    {
+        const long long n = 1, k = 8; std::vector<float> in((size_t)k);
+        uint32_t pat[8] = {0x00000000u, 0x80000000u, 0x3f800000u, 0x00000000u,
+                           0x80000000u, 0xbf800000u, 0x80000000u, 0x00000000u};
+        for (int i = 0; i < 8; ++i) memcpy(&in[(size_t)i], &pat[i], 4);
+        for (bool asc : {true, false}) run_both_cell<float>(both_cell_f32(asc), in, n, k, "signed0", true, 32);
+    }
+    // Extreme values: ±inf + INT_MAX/MIN pad-tie invariant.
+    {
+        const long long n = 1, k = 100; std::vector<float> in((size_t)k);
+        for (long long j = 0; j < k; ++j) in[(size_t)j] = (float)((int)(xrand() % 201) - 100) * 0.1f;
+        uint32_t ninf = 0xff800000u, pinf = 0x7f800000u;
+        memcpy(&in[5], &ninf, 4); memcpy(&in[6], &ninf, 4); memcpy(&in[7], &pinf, 4);
+        for (bool asc : {true, false}) run_both_cell<float>(both_cell_f32(asc), in, n, k, "extreme(inf)", true, 128);
+    }
+    // Edge k: 1, 33, exactly 1024.
+    for (long long k : {(long long)1, (long long)33, (long long)1024}) {
+        std::vector<float> in((size_t)4 * k); for (auto& x : in) x = (float)((int)(xrand() % 4001) - 2000) * 0.01f;
+        run_both_cell<float>(both_cell_f32(true), in, 4, k, "edge", true, k >= 64 ? 256 : 32);
+    }
+    // k > 1024: base only (bitonic contract requires k <= 1024).
+    {
+        const long long n = 2, k = 1500; std::vector<float> in((size_t)n * k);
+        for (auto& x : in) x = (float)((int)(xrand() % 4001) - 2000) * 0.01f;
+        run_both_cell<float>(both_cell_f32(true), in, n, k, "k1500 (base only)", false, 0);
+    }
+}
+
+// Bandwidth: the fused Both (one sort, two writes) vs the two decomposed #8
+// kernels summed (row_sort + row_argsort = TWO full sorts). k=1024.
+static void both_bench() {
+    const long long R = 4096, K = 1024; const long long tot = R * K;
+    std::vector<float> big((size_t)tot);
+    for (size_t i = 0; i < (size_t)tot; ++i) big[i] = (float)((int)(xrand() % 4001) - 2000) * 0.01f;
+    float* dx = (float*)dev_bytes(big.data(), (size_t)tot * 4);
+    float* dv = nullptr; cudaMalloc(&dv, (size_t)tot * 4);
+    int* di = nullptr; cudaMalloc(&di, (size_t)tot * 4);
+    BothCell<float> c = both_cell_f32(true);
+    size_t smem = (size_t)K * (4 + 4);
+    auto timeit = [&](auto fn) {
+        cudaEvent_t a, e; cudaEventCreate(&a); cudaEventCreate(&e);
+        for (int i = 0; i < 3; ++i) fn(); cudaDeviceSynchronize(); cudaEventRecord(a);
+        for (int i = 0; i < 20; ++i) fn(); cudaEventRecord(e); cudaEventSynchronize(e);
+        float ms = 0; cudaEventElapsedTime(&ms, a, e); return ms / 20;
+    };
+    double es = (double)tot / 1e9;
+    float t_fb = timeit([&] { launch_both<float>(c.fused_base, dx, dv, di, R, K, (int)R, 256, 0); });
+    float t_ft = timeit([&] { launch_both<float>(c.fused_bt, dx, dv, di, R, K, (int)R, 256, smem); });
+    float t_db = timeit([&] {
+        launch<float, float>(c.sort_base, dx, dv, R, K, (int)R, 256, 0);
+        launch<float, int>(c.argsort_base, dx, di, R, K, (int)R, 256, 0);
+    });
+    float t_dt = timeit([&] {
+        launch<float, float>((void*)baracuda_gen_sort_f32_rowsort_asc_stable_bitonic, dx, dv, R, K, (int)R, 256, smem);
+        launch<float, int>((void*)baracuda_gen_argsort_f32_rowsort_asc_stable_idx_bitonic, dx, di, R, K, (int)R, 256, smem);
+    });
+    printf("[bench] fused Both f32 %lldx%lld: base %.3f ms (%.2f Gelem/s) | bitonic %.3f ms (%.2f Gelem/s) || "
+           "decomposed row_sort+row_argsort: base %.3f ms | bitonic %.3f ms || fused speedup %.2fx (base) %.2fx (bitonic)\n",
+           R, K, t_fb, es / (t_fb / 1000), t_ft, es / (t_ft / 1000), t_db, t_dt, t_db / t_fb, t_dt / t_ft);
+    cudaFree(dx); cudaFree(dv); cudaFree(di);
 }
 
 #ifdef WITH_BESPOKE
@@ -515,7 +778,7 @@ static void bespoke_audit() {
 
 int main(int argc, char** argv) {
     bool san = (argc > 1 && strcmp(argv[1], "san") == 0);
-    printf("== sort_validate (increment 8 SORT_PERM) ==\n");
+    printf("== sort_validate (increment 8 SORT_PERM + increment 9 FUSED_ARGSORT) ==\n");
 
     if (san) {
         {   const long long n = 4, k = 13; std::vector<float> in((size_t)n * k);
@@ -528,6 +791,14 @@ int main(int argc, char** argv) {
         nan_case_f32();
         signed_zero_case();
         { Cell<int, int> a = cell_i32(true), d = cell_i32(false); stability_witness<int, int>(a, d, 0, 1, 2); }
+        // FUSED Both on small shapes — initcheck load-bearing on BOTH output buffers.
+        {   const long long n = 4, k = 13; std::vector<float> in((size_t)n * k);
+            for (size_t i = 0; i < in.size(); ++i) in[i] = (float)((int)(xrand() % 201) - 100) * 0.1f;
+            run_both_cell<float>(both_cell_f32(true), in, n, k, "san", true, 32);
+            run_both_cell<float>(both_cell_f32(false), in, n, k, "san", true, 32); }
+        {   const long long n = 3, k = 32; std::vector<int> in((size_t)n * k);
+            for (size_t i = 0; i < in.size(); ++i) in[i] = (int)((xrand() % 201) - 100);
+            run_both_cell<int>(both_cell_i32(true), in, n, k, "san", true, 32); }
         printf(fails ? "\n%d case(s) FAILED\nRESULT: FAIL\n" : "\nRESULT: ALL PASSED\n", fails);
         return fails ? 1 : 0;
     }
@@ -565,6 +836,10 @@ int main(int argc, char** argv) {
     { Cell<int, int> a = cell_i32(true), d = cell_i32(false); stability_witness<int, int>(a, d, 0, 1, 2); }
     extreme_values();
     long_row_base_only();
+
+    printf("- increment 9 FUSED_ARGSORT: two-output Both acceptance + bandwidth -\n");
+    both_acceptance();
+    both_bench();
 
 #ifdef WITH_BESPOKE
     printf("- extract-the-delta audit vs bespoke stable msort (NaN-free) -\n");

@@ -54,7 +54,7 @@ pub use cuda::Cuda;
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
     Access, AccumSpec, AxisRole, ContractionAxes, DagNode, Expr, ExprDag, NodeId, OpDef, ReduceOp,
-    ReduceStage, ScalarExpr, SortOrder, UnaryOp, coord, input, konst, param, reduced,
+    ReduceStage, ScalarExpr, SortOrder, SortOut, UnaryOp, coord, input, konst, param, reduced,
 };
 #[cfg(feature = "nvrtc")]
 pub use jit::NvrtcCompiler;

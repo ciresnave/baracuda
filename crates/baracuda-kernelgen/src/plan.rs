@@ -7,8 +7,8 @@
 //! the backend, keeps the decision shared across every backend.
 
 use crate::ir::{
-    Access, BaseOffset, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortOrder, View,
-    WriteCombine, WriteIndex,
+    Access, BaseOffset, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortOrder, SortOut,
+    View, WriteCombine, WriteIndex,
 };
 use baracuda_kernels_types::{
     AxisMask, Contiguity, ElementKind, MAX_OPERANDS, OperandKey, StructureKey, VecWidth,
@@ -117,16 +117,18 @@ pub enum Schedule {
     /// construction. The cooperative smem **bitonic** pair-sort is a
     /// `cuda::row_sort_bitonic_variant` VARIANT (also `BitIdentical` — a pair
     /// sort is a pure permutation), contract-bounded to `k <= 1024` via
-    /// `launch_note`. The policy (`order`/`stable`/`argsort`) rides here (this
+    /// `launch_note`. The policy (`order`/`stable`/`out`) rides here (this
     /// enum is `Copy`); `build_plan` always derives the base.
     RowSort {
         /// Ascending / descending (NaN orders greatest either way).
         order: crate::ir::SortOrder,
         /// Always `true` in v1 (`validate_row_sort` enforces the pair-sort).
         stable: bool,
-        /// `false` = values output (raw-bit permutation); `true` = `I32` index
-        /// output (the sort permutation).
-        argsort: bool,
+        /// Which buffer(s) the sort writes: `Values` (raw-bit permutation),
+        /// `Indices` (the `I32` sort permutation), or `Both` (the fused
+        /// two-output kernel — values to `out_val`, `I32` indices to `out_idx`).
+        /// See [`crate::ir::SortOut`].
+        out: SortOut,
     },
 }
 
@@ -405,17 +407,9 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         // cooperative smem bitonic pair-sort is produced separately by
         // `cuda::row_sort_bitonic_variant` (a `lower_variants` filter), never
         // here. All payload fields are Copy — no `ref` borrow.
-        Access::RowSort {
-            order,
-            stable,
-            argsort,
-        } => {
-            validate_row_sort(op, key, order, stable, argsort);
-            Schedule::RowSort {
-                order,
-                stable,
-                argsort,
-            }
+        Access::RowSort { order, stable, out } => {
+            validate_row_sort(op, key, order, stable, out);
+            Schedule::RowSort { order, stable, out }
         }
         Access::Elementwise => {
             let n = key.n_operands as usize;
@@ -1993,17 +1987,19 @@ fn assert_valid_out_dtype(op: &OpDef) {
              dtype), so there is no hetero store; use out_dtype = None",
             op.name
         ),
-        // Increment 8 SORT_PERM: the ONLY hetero output under RowSort is the
-        // ARGSORT index output — `Some(I32)` (the sort permutation, riding the
-        // single-output out_dtype precedent). A values-sort is dtype-preserving
-        // (out_dtype None ⇒ this fn returned early). Reject any other Some(_), and
-        // reject Some(I32) on a values-sort (argsort=false). Double-gated: also
-        // enforced (argsort ⇔ Some(I32)) in `validate_row_sort`.
-        Access::RowSort { argsort, .. } => assert!(
-            *argsort && od == ElementKind::I32,
+        // Increment 8/9 SORT_PERM: the ONLY hetero output under RowSort is the
+        // ARGSORT index output — `SortOut::Indices` with `Some(I32)` (the sort
+        // permutation, riding the single-output out_dtype precedent). A values-sort
+        // (`Values`) and the fused two-output (`Both`) are dtype-preserving on
+        // output 0 (out_dtype None ⇒ this fn returned early; for `Both` the I32
+        // out_idx is emitter-hardwired, NOT off out_dtype). Reject any other
+        // Some(_), and reject Some(I32) on a Values/Both sort. Double-gated: also
+        // enforced (state ⇔ out_dtype) in `validate_row_sort`.
+        Access::RowSort { out, .. } => assert!(
+            matches!(out, SortOut::Indices) && od == ElementKind::I32,
             "OpDef '{}': out_dtype Some({od:?}) under RowSort is admitted only as \
-             the argsort index output (argsort=true requires Some(I32)); a \
-             values-sort is dtype-preserving (out_dtype None)",
+             the argsort index output (SortOut::Indices requires Some(I32)); a \
+             values-sort and the fused Both are dtype-preserving (out_dtype None)",
             op.name
         ),
     }
@@ -2642,16 +2638,22 @@ fn validate_window(
 /// - **dtype** — admit `F32|F32Strict|F64|F16|Bf16|I32|I64`; reject `U32`
 ///   (index-only, no value dtype) and `S8|U8` (v1 de-scope; the bespoke argsort
 ///   covers small ints; liftable by widening this gate + the validator cells).
-/// - **out_dtype ↔ argsort coupling** — `argsort ⇒ out_dtype == Some(I32)`;
-///   `!argsort ⇒ out_dtype == None`. Double-gated (also `assert_valid_out_dtype`).
+/// - **out_dtype ↔ [`SortOut`] state coupling** — `Indices ⇒ out_dtype ==
+///   Some(I32)`; `Values | Both ⇒ out_dtype == None` (Both's I32 out_idx is
+///   emitter-hardwired, off the symbol, not out_dtype). Double-gated (also
+///   `assert_valid_out_dtype`).
 /// - **`body` must be exactly `Input(0)`** — v1 has no pre/post; this single
 ///   equality replaces the recursive `check` machinery of validate_scan/window
 ///   (it rejects Param/Coord/Reduced/Const/composed bodies in one stroke).
 /// - **`extra_out_bodies` empty** — multi-output does not ride RowSort (also
-///   caught by `assert_valid_multi_output`; double-gated).
+///   caught by `assert_valid_multi_output`; double-gated). `Both` carries its
+///   second buffer via the `SortOut` state + the 3-operand key, NEVER a body.
+/// - **operand count** — `Values | Indices` carry `n_inputs + 1` operands
+///   (`[in0, out]`); `Both` carries `n_inputs + 2` (`[in0, out_val, out_idx]`).
 /// - **Input 0 layout** — `RowStreamed` + `Contig` + `!flipped` (the emitters
 ///   read `in0[base+j]` stride-free; a flipped/strided input reads mirrored/OOB).
-/// - **Output layout** — empty bcast + `Contig` + `!flipped`.
+/// - **Output layout** — every output (out / out_val AND out_idx for `Both`) is
+///   empty bcast + `Contig` + `!flipped`.
 ///
 /// There is no axis field: RowSort is innermost-axis by definition (matching
 /// Scan/Window's `axis == rank-1` posture). The bitonic variant's `k <= 1024`
@@ -2663,7 +2665,7 @@ fn validate_row_sort(
     key: &StructureKey,
     _order: SortOrder,
     stable: bool,
-    argsort: bool,
+    out: SortOut,
 ) {
     let name = &op.name;
 
@@ -2695,21 +2697,23 @@ fn validate_row_sort(
         key.dtype
     );
 
-    // out_dtype ↔ argsort coupling (double-gated with assert_valid_out_dtype).
-    if argsort {
-        assert!(
+    // out_dtype ↔ SortOut state coupling (double-gated with assert_valid_out_dtype).
+    // G1: Indices ⇒ Some(I32); Values | Both ⇒ None (Both's I32 out_idx is
+    // emitter-hardwired off the symbol, not carried by out_dtype).
+    match out {
+        SortOut::Indices => assert!(
             op.out_dtype == Some(ElementKind::I32),
-            "OpDef '{name}': a row argsort produces an I32 index output — out_dtype \
-             must be Some(I32), got {:?}",
+            "OpDef '{name}': a row argsort (SortOut::Indices) produces an I32 index \
+             output — out_dtype must be Some(I32), got {:?}",
             op.out_dtype
-        );
-    } else {
-        assert!(
+        ),
+        SortOut::Values | SortOut::Both => assert!(
             op.out_dtype.is_none(),
-            "OpDef '{name}': a values-sort is dtype-preserving — out_dtype must be \
-             None, got {:?}",
+            "OpDef '{name}': a values-sort (Values) / fused two-output (Both) is \
+             dtype-preserving on output 0 — out_dtype must be None (Both's I32 \
+             out_idx is emitter-hardwired), got {:?}",
             op.out_dtype
-        );
+        ),
     }
 
     // body must be exactly Input(0): v1 has no pre/post, so a single equality check
@@ -2728,15 +2732,18 @@ fn validate_row_sort(
          body) — extra_out_bodies must be empty"
     );
 
-    // Operand count + rank.
+    // Operand count + rank. G2: Values/Indices write one output ([in0, out]);
+    // Both writes two ([in0, out_val, out_idx]).
     let n = op.n_inputs as usize;
     assert!(
         n == 1,
         "OpDef '{name}': row_sort streams exactly one row operand (n_inputs=1), got {n}"
     );
+    let n_outputs = if matches!(out, SortOut::Both) { 2 } else { 1 };
     assert!(
-        key.n_operands as usize == n + 1,
-        "row_sort expects n_inputs+1 operands (input then output); got {}",
+        key.n_operands as usize == n + n_outputs,
+        "row_sort expects n_inputs+{n_outputs} operands (input then {n_outputs} \
+         output buffer(s)); got {}",
         key.n_operands
     );
     let rank = key.rank as usize;
@@ -2764,13 +2771,23 @@ fn validate_row_sort(
          Desc order, not a flipped operand)"
     );
 
-    // Output layout: full-width forward-dense contiguous.
-    let out = key.operands[n];
+    // Output layout: full-width forward-dense contiguous. G3: output 0 (out for
+    // Values/Indices, out_val for Both) always; and for Both, operand 2 (out_idx)
+    // too — it is written forward-dense out_idx[base + r/p].
+    let out0 = key.operands[n];
     assert!(
-        out.bcast.is_empty() && out.contig == Contiguity::Contig && !out.flipped,
+        out0.bcast.is_empty() && out0.contig == Contiguity::Contig && !out0.flipped,
         "OpDef '{name}': row_sort output must be full-width forward-dense contiguous \
          (empty bcast, not flipped)"
     );
+    if matches!(out, SortOut::Both) {
+        let out_idx = key.operands[n + 1];
+        assert!(
+            out_idx.bcast.is_empty() && out_idx.contig == Contiguity::Contig && !out_idx.flipped,
+            "OpDef '{name}': row_sort Both out_idx (operand 2) must be full-width \
+             forward-dense contiguous (empty bcast, not flipped)"
+        );
+    }
 }
 
 /// Vector width in elements for a [`VecWidth`] bucket.
@@ -4418,7 +4435,7 @@ mod sort_gate_validate {
     //! sort-specific gate is mutation-checked both directions by a targeted
     //! reverse-edit.
     use super::{Schedule, access_tag, build_plan};
-    use crate::ir::{Access, OpDef, ScalarExpr, SortOrder, input};
+    use crate::ir::{Access, OpDef, ScalarExpr, SortOrder, SortOut, input};
     use baracuda_kernels_types::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -4435,6 +4452,18 @@ mod sort_gate_validate {
         let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::I32, 256);
         structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
     }
+    // Increment 9 FUSED_ARGSORT: the three-operand `Both` key — input, values
+    // output (same dtype), I32 index output. `oi` overrides the index operand so
+    // the layout-rejection tests can hand a broadcast/flipped out_idx.
+    fn both_key_with(dt: ElementKind, oi: OperandDesc) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let ov = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89)
+    }
+    fn both_key(dt: ElementKind) -> StructureKey {
+        let oi = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::I32, 256);
+        both_key_with(dt, oi)
+    }
 
     // ---- positive gate tests ----
 
@@ -4449,7 +4478,7 @@ mod sort_gate_validate {
                 Schedule::RowSort {
                     order,
                     stable: true,
-                    argsort: false
+                    out: SortOut::Values
                 }
             );
             assert_eq!(access_tag(&sc.access), "RowSort");
@@ -4467,7 +4496,7 @@ mod sort_gate_validate {
             Schedule::RowSort {
                 order: SortOrder::Desc,
                 stable: true,
-                argsort: true
+                out: SortOut::Indices
             }
         );
     }
@@ -4490,7 +4519,7 @@ mod sort_gate_validate {
         sc.access = Access::RowSort {
             order: SortOrder::Asc,
             stable: false,
-            argsort: false,
+            out: SortOut::Values,
         };
         let _ = build_plan(&sc, &sort_key(ElementKind::F32));
     }
@@ -4666,6 +4695,149 @@ mod sort_gate_validate {
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
         let _ = build_plan(&sc, &key);
+    }
+
+    // ---- Increment 9 FUSED_ARGSORT: the `Both` two-output gates (G1-G3, G5) ----
+
+    #[test]
+    fn valid_both_builds_asc_and_desc() {
+        // Positive: a fused two-output sort builds with the 3-operand key and the
+        // Both schedule; out_dtype stays None (values output 0 is dtype-preserving,
+        // the I32 out_idx is emitter-hardwired). Also the M2 kill (G2 relaxed to
+        // n+1 for Both would reject this valid 3-operand build).
+        for order in [SortOrder::Asc, SortOrder::Desc] {
+            let sc = OpDef::row_sort_indices("sort_both", ElementKind::F32, order);
+            assert_eq!(sc.out_dtype, None);
+            let key = both_key(ElementKind::F32);
+            let plan = build_plan(&sc, &key);
+            assert_eq!(
+                plan.schedule,
+                Schedule::RowSort {
+                    order,
+                    stable: true,
+                    out: SortOut::Both
+                }
+            );
+            // n_outputs() stays body-derived = 1 for Both (the corollary decision);
+            // the second buffer is owned by the SortOut state + the 3-operand key.
+            assert_eq!(sc.n_outputs(), 1);
+        }
+    }
+
+    #[test]
+    fn both_builds_for_all_v1_dtypes() {
+        for dt in [
+            ElementKind::F32,
+            ElementKind::F32Strict,
+            ElementKind::F64,
+            ElementKind::F16,
+            ElementKind::Bf16,
+            ElementKind::I32,
+            ElementKind::I64,
+        ] {
+            let sc = OpDef::row_sort_indices("sort_both", dt, SortOrder::Asc);
+            let _ = build_plan(&sc, &both_key(dt));
+        }
+    }
+
+    #[test]
+    fn values_key_still_two_operands() {
+        // Regression: a Values sort still requires exactly n_inputs+1 operands (the
+        // n_outputs computation must stay 1 for non-Both). Positive build with the
+        // 2-operand key; a 3-operand Values key is rejected by
+        // `wrong_operand_count_rejected` above.
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let key = sort_key(ElementKind::F32);
+        let plan = build_plan(&sc, &key);
+        assert_eq!(
+            plan.schedule,
+            Schedule::RowSort {
+                order: SortOrder::Asc,
+                stable: true,
+                out: SortOut::Values
+            }
+        );
+    }
+
+    // G1 — out_dtype ↔ state coupling. The `Both ⇒ None` arm lives in
+    // `validate_row_sort`, but `assert_valid_out_dtype` (G5) rejects any `Some(_)`
+    // for Both FIRST in `build_plan` (it runs before the schedule match). So this
+    // test calls `validate_row_sort` DIRECTLY to isolate G1 (the mutation M1
+    // target) — the build_plan-direct house rule guards against EMITTER masking,
+    // which does not apply to a plan-gate-vs-plan-gate shadow; the G5 front gate is
+    // pinned separately by `both_with_some_out_dtype_rejected_at_out_dtype_gate`.
+    #[test]
+    #[should_panic(expected = "dtype-preserving on output 0")]
+    fn both_requires_out_dtype_none() {
+        let mut sc = OpDef::row_sort_indices("sort_both", ElementKind::F32, SortOrder::Asc);
+        sc.out_dtype = Some(ElementKind::I32);
+        super::validate_row_sort(
+            &sc,
+            &both_key(ElementKind::F32),
+            SortOrder::Asc,
+            true,
+            SortOut::Both,
+        );
+    }
+
+    // G5 — the `assert_valid_out_dtype` RowSort arm rejects a Both carrying any
+    // Some(_) out_dtype (build_plan-direct: this is the reachable front gate).
+    #[test]
+    #[should_panic(expected = "admitted only as the argsort index output")]
+    fn both_with_some_out_dtype_rejected_at_out_dtype_gate() {
+        let mut sc = OpDef::row_sort_indices("sort_both", ElementKind::F32, SortOrder::Asc);
+        sc.out_dtype = Some(ElementKind::I32);
+        let _ = build_plan(&sc, &both_key(ElementKind::F32));
+    }
+
+    // G2 — Both needs a 3-operand key ([in0, out_val, out_idx]).
+    #[test]
+    #[should_panic(expected = "expects n_inputs+2 operands")]
+    fn both_key_needs_three_operands() {
+        // A 2-operand key against a Both op — the emitter's two-pointer signature
+        // and the accept predicate would describe different arities.
+        let sc = OpDef::row_sort_indices("sort_both", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &sort_key(ElementKind::F32)); // 2-operand key
+    }
+
+    // G3 — the out_idx (operand 2) layout: full-width forward-dense contiguous.
+    #[test]
+    #[should_panic(expected = "out_idx (operand 2) must be full-width")]
+    fn both_out_idx_broadcast_rejected() {
+        // A stride-0 (broadcast) out_idx inner axis is not a full-width store target.
+        let oi = OperandDesc::new(2, &[256, 128], &[0, 1], ElementKind::I32, 256);
+        let key = both_key_with(ElementKind::F32, oi);
+        let sc = OpDef::row_sort_indices("sort_both", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "out_idx (operand 2) must be full-width")]
+    fn both_out_idx_flipped_rejected() {
+        // A reversed out_idx keys |stride|-Contig + flipped; out_idx[base+r] writes
+        // forward-dense, so a flipped index output would write mirrored.
+        let oi = OperandDesc::new(2, &[256, 128], &[128, -1], ElementKind::I32, 256);
+        let key = both_key_with(ElementKind::F32, oi);
+        let sc = OpDef::row_sort_indices("sort_both", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &key);
+    }
+
+    // G4 — extra_out_bodies empty (a permutation is not a body). `build_plan`
+    // rejects a Both+body at `assert_valid_multi_output` (Elementwise-only) FIRST,
+    // so this calls `validate_row_sort` DIRECTLY to isolate G4 (the M4 target); the
+    // front gate is the same one the existing `extra_out_bodies_rejected` pins.
+    #[test]
+    #[should_panic(expected = "extra_out_bodies must be empty")]
+    fn both_rejects_extra_out_bodies() {
+        let mut sc = OpDef::row_sort_indices("sort_both", ElementKind::F32, SortOrder::Asc);
+        sc.extra_out_bodies = vec![input(0).0];
+        super::validate_row_sort(
+            &sc,
+            &both_key(ElementKind::F32),
+            SortOrder::Asc,
+            true,
+            SortOut::Both,
+        );
     }
 }
 

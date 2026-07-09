@@ -10,7 +10,7 @@ use crate::backend::{
     Backend, GeneratedKernel, Lowering, Variant, VariantFidelity, lower_dag, lower_dag_all,
     lower_dag_multi, lower_expr,
 };
-use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, UnaryOp};
+use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp};
 use crate::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
 
@@ -4792,8 +4792,8 @@ fn emit_row_sort(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 /// a RAW-BIT permutation of the original `ctype` storage (no round-trip), so NaN
 /// payloads and `-0.0` signs are preserved bit-exactly.
 fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> GeneratedKernel {
-    let (order, argsort) = match plan.schedule {
-        Schedule::RowSort { order, argsort, .. } => (order, argsort),
+    let (order, out) = match plan.schedule {
+        Schedule::RowSort { order, out, .. } => (order, out),
         _ => unreachable!("emit_row_sort on a non-RowSort schedule"),
     };
 
@@ -4829,6 +4829,24 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         "cuda backend: RowSort dtype {:?} is out of the v1 set",
         plan.dtype
     );
+    // Increment 9 FUSED_ARGSORT backstop: the two-output `Both` kernel writes
+    // [in0, out_val, out_idx] (n_inputs+2 operands), and out_idx (operand 2) is a
+    // forward-dense contiguous I32 store. Re-assert both here — the two-pointer
+    // signature below assumes them (belt-and-suspenders for validate_row_sort's G2/G3).
+    if matches!(out, SortOut::Both) {
+        let n_inputs = plan.n_inputs as usize;
+        assert!(
+            plan.key.n_operands as usize == n_inputs + 2,
+            "cuda backend: RowSort Both writes two outputs — key must carry \
+             n_inputs+2 operands (in0, out_val, out_idx)"
+        );
+        let oi = plan.key.operands[n_inputs + 1];
+        assert!(
+            oi.bcast.is_empty() && oi.contig == Contiguity::Contig && !oi.flipped,
+            "cuda backend: RowSort Both out_idx (operand 2) must be full-width \
+             forward-dense contiguous"
+        );
+    }
 
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let int_acc = crate::plan::is_int_dtype(plan.dtype);
@@ -4861,15 +4879,23 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         SortOrder::Asc => "asc",
         SortOrder::Desc => "desc",
     };
-    let idx_suf = if argsort { "_idx" } else { "" };
+    // Three-way output suffix (increment 9): Values ⇒ "", Indices ⇒ "_idx", Both
+    // ⇒ "_both" — on BOTH the `__device__` stem and the exported `name`, so the
+    // fused kernel's comparators never collide with the two single-output kernels
+    // in the validator TU. Values/Indices reproduce today's suffixes byte-for-byte.
+    let out_suf = match out {
+        SortOut::Values => "",
+        SortOut::Indices => "_idx",
+        SortOut::Both => "_both",
+    };
     let bt_suf = if bitonic { "_bt" } else { "" };
-    // Device-helper stem: base+variant + every dtype/order/argsort cell of one op
-    // get a distinct `__device__` comparator symbol (no collision in the validator TU).
-    let stem = format!("{}_{dtag}_{ord}{idx_suf}{bt_suf}", plan.op_name);
+    // Device-helper stem: base+variant + every dtype/order/out cell of one op get a
+    // distinct `__device__` comparator symbol (no collision in the validator TU).
+    let stem = format!("{}_{dtag}_{ord}{out_suf}{bt_suf}", plan.op_name);
     let name = format!(
         "baracuda_gen_{}_{dtag}_rowsort_{ord}_stable{}{}",
         plan.op_name,
-        if argsort { "_idx" } else { "" },
+        out_suf,
         if bitonic { "_bitonic" } else { "" }
     );
 
@@ -4923,19 +4949,28 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
          }}\n\n"
     ));
 
-    // Value writeback expression (raw ctype bits, no up/down convert); argsort
-    // writes the original index instead — narrowed to the I32 output dtype, so
-    // k <= 2^31 - 1 is an INHERENT argsort precondition (the index cannot be
-    // represented past it; the values-sort has no such cap).
-    let write_base = if argsort {
-        "(int)i".to_string()
-    } else {
-        "in0[base + i]".to_string()
-    };
+    // The value writeback is the raw ctype bits (no up/down convert); an index
+    // writeback is the original index narrowed to the I32 output dtype, so
+    // k <= 2^31 - 1 is an INHERENT precondition of any index-writing state
+    // (`Indices` and `Both`) — the values-only sort has no such cap. Both stores
+    // are hand-emitted at the two store sites below (both quantities are already
+    // in scope there — no new computation for the fused `Both`).
 
     s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
     s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
-    s.push_str(&format!("    {octype}* __restrict__ out,\n"));
+    match out {
+        // Fused two-output (increment 9): values (input ctype) to out_val AND the
+        // I32 index to out_idx. out_val's ctype == octype here (Both ⇒ out_dtype
+        // None ⇒ key.dtype); out_idx is the hardwired `int` (the argsort precedent).
+        SortOut::Both => {
+            s.push_str(&format!("    {ctype}* __restrict__ out_val,\n"));
+            s.push_str("    int* __restrict__ out_idx,\n");
+        }
+        // Values ⇒ input ctype; Indices ⇒ int (octype = scalar_ctype(out_dtype)).
+        SortOut::Values | SortOut::Indices => {
+            s.push_str(&format!("    {octype}* __restrict__ out,\n"));
+        }
+    }
     s.push_str("    long long n_out,\n    long long k)\n{\n");
     s.push_str("    if (k == 0) return;\n");
 
@@ -4964,7 +4999,16 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
             "            if ({stem}_pair_lt(kj, j, ki, i)) r++;\n"
         ));
         s.push_str("        }\n");
-        s.push_str(&format!("        out[base + r] = {write_base};\n"));
+        // Store: Values writes the raw value, Indices the I32 index, Both writes
+        // BOTH (both quantities in scope — no recomputation, the fusion payoff).
+        match out {
+            SortOut::Values => s.push_str("        out[base + r] = in0[base + i];\n"),
+            SortOut::Indices => s.push_str("        out[base + r] = (int)i;\n"),
+            SortOut::Both => {
+                s.push_str("        out_val[base + r] = in0[base + i];\n");
+                s.push_str("        out_idx[base + r] = (int)i;\n");
+            }
+        }
         s.push_str("    }\n");
     } else {
         // -------------------- BITONIC PAIR-SORT VARIANT (one block per row) --------------------
@@ -5026,10 +5070,13 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         s.push_str("        }\n");
         // Writeback: the first k cells are exactly the real elements (pad invariant).
         s.push_str("        for (long long p = threadIdx.x; p < k; p += blockDim.x) {\n");
-        if argsort {
-            s.push_str("            out[base + p] = sidx[p];\n");
-        } else {
-            s.push_str("            out[base + p] = in0[base + sidx[p]];\n");
+        match out {
+            SortOut::Values => s.push_str("            out[base + p] = in0[base + sidx[p]];\n"),
+            SortOut::Indices => s.push_str("            out[base + p] = sidx[p];\n"),
+            SortOut::Both => {
+                s.push_str("            out_val[base + p] = in0[base + sidx[p]];\n");
+                s.push_str("            out_idx[base + p] = sidx[p];\n");
+            }
         }
         s.push_str("        }\n");
         s.push_str("        __syncthreads();\n"); // before the next row reuses smem
@@ -11853,6 +11900,14 @@ mod sort_tests {
         let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::I32, 256);
         structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
     }
+    // Increment 9 FUSED_ARGSORT: the 3-operand `Both` key — input, values output
+    // (same dtype), I32 index output.
+    fn both_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let ov = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let oi = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::I32, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89)
+    }
 
     #[test]
     fn base_asc_values_signature_and_rank_loop() {
@@ -12049,16 +12104,14 @@ mod sort_tests {
             ElementKind::I64,
         ] {
             for order in [SortOrder::Asc, SortOrder::Desc] {
-                for sc in [
-                    OpDef::row_sort("sort", dt, order),
-                    OpDef::row_argsort("argsort", dt, order),
-                ] {
-                    let key = if sc.out_dtype.is_some() {
-                        argsort_key(dt)
-                    } else {
-                        sort_key(dt)
-                    };
-                    for v in generate_variants(&sc, &key, &Cuda) {
+                // Values, Indices, AND the fused Both — every cell must stay header-light.
+                let cases = [
+                    (OpDef::row_sort("sort", dt, order), sort_key(dt)),
+                    (OpDef::row_argsort("argsort", dt, order), argsort_key(dt)),
+                    (OpDef::row_sort_indices("fused", dt, order), both_key(dt)),
+                ];
+                for (sc, key) in &cases {
+                    for v in generate_variants(sc, key, &Cuda) {
                         for kern in &v.kernels {
                             assert!(
                                 !kern.source.contains("INFINITY"),
@@ -12080,6 +12133,293 @@ mod sort_tests {
         let tags: Vec<&str> = vs.iter().map(|v| v.tag).collect();
         assert_eq!(tags, vec!["base", "bitonic"]);
         assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
+    }
+
+    // ---- Increment 9 FUSED_ARGSORT: the two-output `Both` goldens ----
+
+    #[test]
+    fn sort_both_base_golden_f32() {
+        // The fused base kernel: a two-pointer signature (values float, I32 index),
+        // BOTH stores driven by ONE shared pair_lt rank scan (the fusion payoff —
+        // one sort, two outputs, not two full sorts).
+        let sc = OpDef::row_sort_indices("fused", ElementKind::F32, SortOrder::Asc);
+        let k = generate(&sc, &both_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_fused_f32_rowsort_asc_stable_both");
+        // Two-pointer signature: values (input ctype) then I32 indices.
+        assert!(
+            k.source.contains("float* __restrict__ out_val,"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("int* __restrict__ out_idx,"),
+            "{}",
+            k.source
+        );
+        // NO single `out` pointer (byte-distinct from the Values/Indices signature).
+        assert!(
+            !k.source.contains("__restrict__ out,"),
+            "Both must not emit the single-output `out` pointer:\n{}",
+            k.source
+        );
+        // Both stores at the base site (M5/M9 pins: index store present; correct targets).
+        assert!(
+            k.source.contains("out_val[base + r] = in0[base + i];"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out_idx[base + r] = (int)i;"),
+            "{}",
+            k.source
+        );
+        // ONE shared rank scan + ONE rank accumulator (proves single sort, not two).
+        assert_eq!(
+            k.source
+                .matches("if (fused_f32_asc_both_pair_lt(kj, j, ki, i)) r++;")
+                .count(),
+            1,
+            "{}",
+            k.source
+        );
+        assert_eq!(
+            k.source.matches("long long r = 0;").count(),
+            1,
+            "{}",
+            k.source
+        );
+        // out_idx is `int*` (M8 pin) — NOT float*; there is no `float* ... out_idx`.
+        assert!(
+            !k.source.contains("float* __restrict__ out_idx"),
+            "{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn sort_both_bitonic_golden_f32() {
+        // The fused smem bitonic variant: two-pointer signature, both writeback
+        // stores gather through the final permutation, same staging/network as #8.
+        let sc = OpDef::row_sort_indices("fused", ElementKind::F32, SortOrder::Asc);
+        let vs = generate_variants(&sc, &both_key(ElementKind::F32), &Cuda);
+        let bt = vs
+            .iter()
+            .find(|v| v.tag == "bitonic")
+            .expect("bitonic variant");
+        let src = &bt.kernels[0].source;
+        assert_eq!(
+            bt.kernels[0].name,
+            "baracuda_gen_fused_f32_rowsort_asc_stable_both_bitonic"
+        );
+        assert!(src.contains("float* __restrict__ out_val,"), "{}", src);
+        assert!(src.contains("int* __restrict__ out_idx,"), "{}", src);
+        // Both writeback stores (M6/M9 pins): value gathers raw bits; index writes sidx.
+        assert!(
+            src.contains("out_val[base + p] = in0[base + sidx[p]];"),
+            "{}",
+            src
+        );
+        assert!(src.contains("out_idx[base + p] = sidx[p];"), "{}", src);
+        // Same smem staging as #8 (unchanged comparator/network/pad).
+        assert!(
+            src.contains("extern __shared__ unsigned char baracuda_sort_smem[];"),
+            "{}",
+            src
+        );
+        assert_eq!(bt.fidelity, crate::VariantFidelity::BitIdentical);
+    }
+
+    #[test]
+    fn sort_both_symbol_is_distinct() {
+        // The fused `_both` entry-point AND its `__device__` comparator stem collide
+        // with neither the Values ("") nor the Indices ("_idx") symbols — critical
+        // for the validator TU that #includes all three (M7: reverting the suffix to
+        // "" makes the entry name AND the stem duplicate-link).
+        let both = generate(
+            &OpDef::row_sort_indices("fused", ElementKind::F32, SortOrder::Asc),
+            &both_key(ElementKind::F32),
+            &Cuda,
+        );
+        let val = generate(
+            &OpDef::row_sort("fused", ElementKind::F32, SortOrder::Asc),
+            &sort_key(ElementKind::F32),
+            &Cuda,
+        );
+        let idx = generate(
+            &OpDef::row_argsort("fused", ElementKind::F32, SortOrder::Asc),
+            &argsort_key(ElementKind::F32),
+            &Cuda,
+        );
+        assert_eq!(both.name, "baracuda_gen_fused_f32_rowsort_asc_stable_both");
+        assert_ne!(both.name, val.name);
+        assert_ne!(both.name, idx.name);
+        assert_ne!(val.name, idx.name);
+        // The comparator stems are distinct too (no ODR clash on include).
+        assert!(
+            both.source.contains("fused_f32_asc_both_pair_lt"),
+            "{}",
+            both.source
+        );
+        assert!(
+            val.source.contains("fused_f32_asc_pair_lt"),
+            "{}",
+            val.source
+        );
+        assert!(
+            idx.source.contains("fused_f32_asc_idx_pair_lt"),
+            "{}",
+            idx.source
+        );
+        // The Both stem is NOT a substring collision of the Values stem.
+        assert!(
+            !both.source.contains("fused_f32_asc_pair_lt"),
+            "{}",
+            both.source
+        );
+    }
+
+    #[test]
+    fn sort_values_golden_byte_identical() {
+        // Regression (M11): the Values sort emits today's exact source — the single
+        // `out` pointer, the raw-value store — and NEVER leaks out_val/out_idx/_both.
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let k = generate(&sc, &sort_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_sort_f32_rowsort_asc_stable");
+        assert!(
+            k.source.contains("float* __restrict__ out,"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out[base + r] = in0[base + i];"),
+            "{}",
+            k.source
+        );
+        assert!(!k.source.contains("out_val"), "{}", k.source);
+        assert!(!k.source.contains("out_idx"), "{}", k.source);
+        assert!(!k.source.contains("_both"), "{}", k.source);
+    }
+
+    #[test]
+    fn argsort_indices_golden_byte_identical() {
+        // Regression (M11): the Indices sort emits today's exact source — the single
+        // `int* out` pointer, the index store — and NEVER leaks out_val/out_idx/_both.
+        let sc = OpDef::row_argsort("argsort", ElementKind::F32, SortOrder::Asc);
+        let k = generate(&sc, &argsort_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_argsort_f32_rowsort_asc_stable_idx");
+        assert!(k.source.contains("int* __restrict__ out,"), "{}", k.source);
+        assert!(k.source.contains("out[base + r] = (int)i;"), "{}", k.source);
+        assert!(!k.source.contains("out_val"), "{}", k.source);
+        assert!(!k.source.contains("out_idx"), "{}", k.source);
+        assert!(!k.source.contains("_both"), "{}", k.source);
+    }
+
+    #[test]
+    fn sort_both_is_an_honest_miss_no_contract() {
+        // AOT-only, exactly like row_sort/row_argsort: `Both` is still
+        // Access::RowSort (non-Elementwise), so `derive_pattern` rejects it as
+        // NotElementwise BEFORE any body walk and `contract()` returns None. (This
+        // lives here, not in contract.rs, to keep that file's diff empty — the
+        // withhold path is a property of the RowSort access, unchanged by the state.)
+        use crate::pattern::PatternError;
+        let sc = OpDef::row_sort_indices("fused", ElementKind::F32, SortOrder::Asc);
+        let k = generate(&sc, &both_key(ElementKind::F32), &Cuda);
+        assert!(
+            crate::contract(&sc, &both_key(ElementKind::F32), &k, "cuda").is_none(),
+            "a fused two-output sort must emit NO contract (no Fuel Sort OpTag; AOT-only)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&sc),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "key must carry n_inputs+2 operands")]
+    fn both_emitter_backstop_rejects_two_operand_key() {
+        // Tier-2 independent emitter backstop (M10): a hand-built `Both` KernelPlan
+        // with a 2-operand key (missing out_idx) — build_plan's G2 would reject it,
+        // but the emitter must ALSO refuse it (the two-pointer signature assumes the
+        // third operand). Bypass build_plan and hand it straight to Cuda::lower.
+        use crate::backend::Backend;
+        use crate::ir::{Access, BaseOffset, SortOut, WriteIndex};
+        use crate::plan::{KernelPlan, Schedule};
+        let key = sort_key(ElementKind::F32); // only [in0, out_val] — 2 operands
+        let body = crate::ir::input(0).0;
+        let access = Access::RowSort {
+            order: SortOrder::Asc,
+            stable: true,
+            out: SortOut::Both,
+        };
+        let plan = KernelPlan {
+            op_name: "fused_bad",
+            n_inputs: 1,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::RowSort {
+                order: SortOrder::Asc,
+                stable: true,
+                out: SortOut::Both,
+            },
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            extra_out_dtypes: &[],
+            access: &access,
+            views: &[],
+            read_index: &[],
+            write_index: &WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: BaseOffset::Zero,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "out_idx (operand 2) must be full-width")]
+    fn both_emitter_backstop_rejects_broadcast_out_idx() {
+        // Tier-2 independent emitter backstop: a hand-built `Both` KernelPlan whose
+        // out_idx (operand 2) is broadcast (stride 0) — the plan gate G3 would reject
+        // it, but the emitter must ALSO refuse it (the forward-dense out_idx[base+r]
+        // store assumes a full-width contiguous target). Pins the emitter's out_idx
+        // LAYOUT re-check independently of the plan gate.
+        use crate::backend::Backend;
+        use crate::ir::{Access, BaseOffset, SortOut, WriteIndex};
+        use crate::plan::{KernelPlan, Schedule};
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let ov = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let oi = OperandDesc::new(2, &[256, 128], &[0, 1], ElementKind::I32, 256); // broadcast
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89);
+        let body = crate::ir::input(0).0;
+        let access = Access::RowSort {
+            order: SortOrder::Asc,
+            stable: true,
+            out: SortOut::Both,
+        };
+        let plan = KernelPlan {
+            op_name: "fused_bad",
+            n_inputs: 1,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::RowSort {
+                order: SortOrder::Asc,
+                stable: true,
+                out: SortOut::Both,
+            },
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            extra_out_dtypes: &[],
+            access: &access,
+            views: &[],
+            read_index: &[],
+            write_index: &WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: BaseOffset::Zero,
+        };
+        let _ = Cuda.lower(&plan);
     }
 
     #[test]
@@ -12113,7 +12453,10 @@ mod sort_tests {
             println!("wrote {out}/{}.cu", k.name);
         };
         // Every base + bitonic cell the validator exercises: {f32,f64,i32} ×
-        // {asc,desc} × {sort,argsort}, plus f16/bf16/i64/f32s asc sort (one each).
+        // {asc,desc} × {sort,argsort,fused-Both}, plus f16/bf16/i64/f32s asc (each).
+        // Increment 9 FUSED_ARGSORT adds the `fused` (row_sort_indices) cell to each
+        // dtype/order the validator's dual memcmp uses row_sort + row_argsort as the
+        // oracle for; the fused key is the 3-operand `both_key`.
         let full = [ElementKind::F32, ElementKind::F64, ElementKind::I32];
         for dt in full {
             for order in [SortOrder::Asc, SortOrder::Desc] {
@@ -12129,9 +12472,15 @@ mod sort_tests {
                         write(kern);
                     }
                 }
+                let fv = OpDef::row_sort_indices("fused", dt, order);
+                for v in generate_variants(&fv, &both_key(dt), &Cuda) {
+                    for kern in v.kernels {
+                        write(kern);
+                    }
+                }
             }
         }
-        // i64 asc sort + argsort (base + bitonic each) — the wide-integer cell.
+        // i64 asc sort + argsort + fused (base + bitonic each) — the wide-integer cell.
         {
             let sv = OpDef::row_sort("sort", ElementKind::I64, SortOrder::Asc);
             for v in generate_variants(&sv, &sort_key(ElementKind::I64), &Cuda) {
@@ -12145,12 +12494,32 @@ mod sort_tests {
                     write(kern);
                 }
             }
+            let fv = OpDef::row_sort_indices("fused", ElementKind::I64, SortOrder::Asc);
+            for v in generate_variants(&fv, &both_key(ElementKind::I64), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
         }
-        // Half-precision + f32-strict asc sort (base + bitonic each) — the acc/
-        // convert-primitive coverage cells (values sort only).
+        // Half-precision + f32-strict asc (base + bitonic each) — the acc/convert
+        // coverage cells. #8 dumped only the values sort here; increment 9 adds the
+        // fused-Both cell AND the row_argsort oracle (the Both dual memcmp needs the
+        // index oracle for these dtypes too).
         for dt in [ElementKind::F16, ElementKind::Bf16, ElementKind::F32Strict] {
             let sv = OpDef::row_sort("sort", dt, SortOrder::Asc);
             for v in generate_variants(&sv, &sort_key(dt), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
+            let av = OpDef::row_argsort("argsort", dt, SortOrder::Asc);
+            for v in generate_variants(&av, &argsort_key(dt), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
+            let fv = OpDef::row_sort_indices("fused", dt, SortOrder::Asc);
+            for v in generate_variants(&fv, &both_key(dt), &Cuda) {
                 for kern in v.kernels {
                     write(kern);
                 }
