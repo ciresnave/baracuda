@@ -110,6 +110,25 @@ fn main() {
         .expect("baracuda-transformer-engine-sys: nvcc build failed");
 
     println!("cargo:rustc-link-search=native={out_dir}");
+
+    // The archive imports cudart symbols at LINK time; a plain shell lacks the
+    // CUDA toolkit's import-lib dir on `LIB` (a VS DevShell provides it), so
+    // emit it explicitly — the same fix as baracuda-ozimmu-sys, reusing the
+    // toolkit baracuda-forge already detected for the nvcc build.
+    match baracuda_forge::CudaToolkit::detect() {
+        Ok(toolkit) => {
+            println!(
+                "cargo:rustc-link-search=native={}",
+                toolkit.lib_dir.display()
+            );
+        }
+        Err(e) => {
+            println!(
+                "cargo:warning=could not re-detect the CUDA toolkit for the cudart link                  search path ({e}); a plain-shell link may fail to find cudart.lib."
+            );
+        }
+    }
+
     println!("cargo:rustc-link-lib=static={lib_name}");
 
     // CUDA Runtime — the shim TU calls into `cudaMalloc` /

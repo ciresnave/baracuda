@@ -4,6 +4,12 @@
 //! verifies the published scale matches the analytic formula to f32
 //! precision.
 
+// Gated on an arch feature: each of `sm80`/`sm89`/`sm90a` forwards `build-vendor`
+// to transformer-engine-sys, whose build.rs is what compiles the FP8 cast/recipe
+// static archive. Without an arch feature the -sys build is a no-op stub, so the
+// FFI these tests exercise would not resolve at link time. No arch => empty file.
+#![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_transformer_engine::{Fp8CastPlan, Fp8Format, Fp8Recipe};
 

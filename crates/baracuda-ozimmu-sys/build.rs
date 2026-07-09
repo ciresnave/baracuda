@@ -112,6 +112,34 @@ fn main() {
     println!("cargo:rustc-link-search=native={out_dir}");
     println!("cargo:rustc-link-lib=static={lib_name}");
 
+    // The static archive imports cudart / cublas symbols at LINK time — unlike
+    // the rest of the baracuda stack, which dlopen()s the CUDA runtime via
+    // libloading and so needs no link-time search path. link.exe therefore
+    // needs the CUDA toolkit's import-lib directory (`lib/x64`) on its search
+    // path to resolve `cudart.lib` / `cublas.lib`. A VS DevShell exposes it via
+    // the `LIB` env var, but a plain shell does not — so emit it explicitly,
+    // reusing the same toolkit `baracuda-forge` detected for the nvcc build.
+    // Without this, `cargo test` links fine in a DevShell but dies with
+    // `LNK1181: cannot open input file 'cudart.lib'` in a plain shell.
+    match baracuda_forge::CudaToolkit::detect() {
+        Ok(toolkit) => {
+            println!(
+                "cargo:rustc-link-search=native={}",
+                toolkit.lib_dir.display()
+            );
+        }
+        Err(e) => {
+            // build_lib already succeeded above, so detection cannot really
+            // fail here; surface a warning rather than panicking if it somehow
+            // does, so the (still-correct) OUT_DIR archive link isn't lost.
+            println!(
+                "cargo:warning=baracuda-ozimmu-sys: could not re-detect CUDA toolkit for the \
+                 cudart/cublas link search path ({e}); a plain-shell link may fail to find \
+                 cudart.lib. Build from a VS DevShell or set the CUDA lib dir on `LIB`."
+            );
+        }
+    }
+
     // Runtime libraries the static archive references.
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=cublas");

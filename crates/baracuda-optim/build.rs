@@ -6,8 +6,13 @@
 //! (`.cuh` files, instantiated through the shim TU). The build set
 //! is therefore one single .cu file: `csrc/baracuda_optim_shim.cu`.
 //!
-//! Architecture coverage: matches baracuda-kernels-sys conventions —
-//! sm_80 default, sm_89 / sm_90a as optional fanout.
+//! Architecture coverage: NO default arch. The manifest's `default = []`
+//! is a deliberate off-by-default no-op-stub posture — with no arch feature
+//! on, the no-arch branch in `main` skips the nvcc build and emits no link
+//! directives (so a bare `cargo check/test --workspace` stays cheap and
+//! nvcc-free). Enable exactly one of `sm_80` / `sm_89` / `sm_90a` to compile
+//! the static archive: `sm_80` is the Ampere/Ada baseline, `sm_89` / `sm_90a`
+//! target Ada / Hopper specifically.
 //!
 //! Docs.rs short-circuit: same pattern as the other vendored sys
 //! crates (`DOCS_RS=1` skips the nvcc invocation).
@@ -76,6 +81,25 @@ fn main() {
         .expect("baracuda-optim: nvcc build failed");
 
     println!("cargo:rustc-link-search=native={out_dir}");
+
+    // The archive imports cudart symbols at LINK time; a plain shell lacks the
+    // CUDA toolkit's import-lib dir on `LIB` (a VS DevShell provides it), so
+    // emit it explicitly — the same fix as baracuda-ozimmu-sys, reusing the
+    // toolkit baracuda-forge already detected for the nvcc build.
+    match baracuda_forge::CudaToolkit::detect() {
+        Ok(toolkit) => {
+            println!(
+                "cargo:rustc-link-search=native={}",
+                toolkit.lib_dir.display()
+            );
+        }
+        Err(e) => {
+            println!(
+                "cargo:warning=could not re-detect the CUDA toolkit for the cudart link                  search path ({e}); a plain-shell link may fail to find cudart.lib."
+            );
+        }
+    }
+
     println!("cargo:rustc-link-lib=static={lib_name}");
 
     // CUDA Runtime — the shim TU references cudaGetLastError,

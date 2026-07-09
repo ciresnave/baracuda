@@ -27,7 +27,13 @@
 //!    rank match what a single-rank Adam would produce when fed the
 //!    pre-summed gradient.
 
-#![cfg(feature = "distributed_optim")]
+// Also requires an arch feature: the plan calls the same optimizer FFI as the
+// non-distributed path, which only links when `sm80`/`sm89`/`sm90a` triggers
+// baracuda-optim's nvcc build. `distributed_optim` alone (no arch) => empty file.
+#![cfg(all(
+    feature = "distributed_optim",
+    any(feature = "sm80", feature = "sm89", feature = "sm90a")
+))]
 
 use baracuda_driver::{Context, Device, DeviceBuffer};
 use baracuda_nccl::Communicator;

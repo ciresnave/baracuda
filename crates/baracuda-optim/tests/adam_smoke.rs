@@ -10,6 +10,12 @@
 //! 3. The classic Adam vs AdamW mode flag is honored.
 //! 4. Weight decay is applied in both modes.
 
+// Gated on an arch feature: without `sm80`/`sm89`/`sm90a`, baracuda-optim's
+// build.rs skips the nvcc build and emits no link directives (the deliberate
+// off-by-default no-op-stub posture), so the optimizer FFI these tests exercise
+// would not resolve at link time. No arch feature => this file compiles empty.
+#![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+
 use baracuda_driver::{Context, Device, DeviceBuffer};
 use baracuda_optim::{AdamConfig, AdamMode, AdamStepPlan, TensorList};
 
