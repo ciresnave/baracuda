@@ -8,6 +8,56 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.76 — 2026-07-08 (FKC contracts import through Fuel end-to-end; `baracuda-kernelgen` published — live JIT unblocked)
+
+The release both Fuel sessions are waiting on: `baracuda-kernelgen` is now **on
+crates.io** (so Fuel constructs `BaracudaSynthesizer` behind its `jit` feature —
+the last gate on live end-to-end JIT), and a raw Baracuda-generated FKC bundle
+now **imports through Fuel's real `import_bundle_str` end-to-end** (proven by a
+two-repo acceptance harness against Fuel's actual importer, residual-divergence
+list empty).
+
+### Added
+
+- **`baracuda-kernelgen` published** (was `publish = false`). The supported
+  surface is the `seam` feature (the frozen `Synthesizer` impl); the generator
+  internals are alpha-fluid — pin exact versions.
+- **Bespoke NaN-propagating relu kernel family**
+  (`unary_relu_propagating_fp.cu`, f32/f64/f16/bf16 + 16 launchers) for Fuel to
+  rebind `OpKind::ReluElementwise` to, per Fuel's 2026-07-08 decision (relu =
+  NaN-propagating, torch parity). On-device: bit-identical to the generated
+  kernelgen relu across full 16-bit sweeps and 64M/32M f32/f64 sweeps,
+  contiguous and strided, memcheck clean.
+
+### Fixed
+
+- **op_kind spellings** now match Fuel's dispatch table verbatim (29 mapped
+  primitives; unmapped roots are honest misses — one unknown `op_kind` fails a
+  WHOLE Fuel bundle). All 29 proven through Fuel's live importer. The Relu
+  withhold (a NaN-semantics divergence caught by adversarial review) was lifted
+  after Fuel pinned the propagating convention.
+- **Bundle schema**: backend token casing; `## <kernel>` section headings via a
+  shared `bundle()` assembler (Fuel silently drops headingless blocks);
+  named accept inputs with truthful five-flag `LayoutSpec` maps;
+  `dtype_rule: passthrough(in0)` (the old spelling silently dropped the output
+  dtype from Fuel's binding key); `in_place: false` (the old value inverted
+  Fuel's §4.6 semantics); the precision block re-emitted with only Fuel schema
+  keys; cost as Fuel expression keys; `layout_guarantee` on outputs;
+  `shape_rule: same_as(in0)`; `awkward_layout_strategy`.
+- **Contracts can no longer lie** (adversarial review, 18 findings, 3 critical):
+  cells with baked-broadcast or flipped operands are withheld (honest miss —
+  the kernel facts are unspeakable in the current schema); strided cells now
+  truthfully advertise `broadcast_stride0: accepted` (projecting Fuel
+  `strided_input=true`); fused contracts are withheld from bundles (Fuel's
+  `FusedOps` table has no matching names and an unknown name is bundle-fatal)
+  while the JIT seam keeps shipping them as bare blocks (Fuel stores unparsed).
+
+### Build
+
+- CI: feature-gated surfaces (cuvs, kernelgen seam/nvrtc) now compiled + tested;
+  workspace-wide `clippy -D warnings` green (~180 warnings swept); the fmt check
+  pins `--style-edition 2024` explicitly with a one-time strict-2024 sweep.
+
 ## 0.0.1-alpha.75 — 2026-07-08 (window pooling + row sort — the IR-expansion ramp is COMPLETE)
 
 The final two increments of the `baracuda-kernelgen` IR-expansion ramp (0a–#8). The

@@ -2,7 +2,17 @@
 //!
 //! Build-time generator that turns an op's **abstract IR** (the algorithm) plus
 //! a [`baracuda_kernels_types::StructureKey`] cell (the schedule) into a
-//! specialized kernel — and, next, its FKC contract.
+//! specialized kernel — and its FKC contract.
+//!
+//! ## Stability posture (published as of alpha.76)
+//!
+//! This crate is published so Fuel can construct the live JIT synthesizer from
+//! crates.io. The **supported surface is the `seam` feature** — the
+//! `fuel_kernel_seam::Synthesizer` impl (`BaracudaSynthesizer`) with its
+//! two-step `synthesize`/`take_kernel` handover, frozen with Fuel (2026-07-04).
+//! Everything else (the IR, plan, emitters, contracts, dispatch artifacts) is
+//! **alpha-fluid generator internals**: the `0.0.1-alpha.N` lockstep implies no
+//! cross-version API stability anywhere — pin exact versions.
 //!
 //! The crate is **language-agnostic except for the lowering backend**:
 //!

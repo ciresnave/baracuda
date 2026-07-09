@@ -1,14 +1,16 @@
 [package]
 name = "baracuda-kernelgen"
-version = "0.0.1-alpha.75"
-description = "Build-time generator that emits specialized CUDA kernels (and, next, their FKC contracts) from an op's abstract IR fanned out across StructureKey cells. Dev/build tool — not published; its artifacts ship inside baracuda-kernels-sys."
+version = "0.0.1-alpha.76"
+description = "Kernel generator + the live JIT synthesizer for the Fuel kernel seam. The SUPPORTED surface is the `seam` feature (BaracudaSynthesizer, the fuel-kernel-seam Synthesizer impl); the generator internals (IR, emitters, contracts, dispatch artifacts) are alpha-fluid — pin exact versions."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-publish = false
+# Published as of alpha.76 so Fuel can construct BaracudaSynthesizer from
+# crates.io (their build discipline forbids path deps). The alpha exact-pin
+# lockstep means no cross-version API stability is implied anywhere.
 
 [features]
 # Pull in the real on-demand nvrtc compiler (NvrtcCompiler). Off by default so the
