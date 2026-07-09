@@ -279,6 +279,24 @@ pub fn contract(
         return None;
     }
 
+    // BASE_OFFSET honest miss (typed, no contract; the kernel still generates +
+    // runs AOT — the views/gather/scatter precedent). An offsetted kernel's
+    // entry point carries the `_off…` suffix and its ABI REQUIRES the trailing
+    // `long long off{i}` launch scalars, but the FKC accept block has no channel
+    // to say so (`layout_spec`'s `start_offset` stays a truthful always-
+    // `rejected`, and the frozen JIT envelope has no `off` dispatch slot) — any
+    // emitted contract would advertise an ABI Fuel launches WITHOUT the off
+    // args: the kernel bumps its base pointers by garbage and reads OOB under a
+    // contract that promised no start offset. `derive_pattern`'s
+    // `OffsetUnsupported` already misses the plain-elementwise path, but the
+    // Model-A gather advert below derives `op_kind` STRUCTURALLY (it never
+    // consults the pattern), so an offsetted U32-index gather would sail past
+    // that guard — this up-front check is the contract-level gate for EVERY
+    // offsetted op (dual-gated with the pattern miss, like the other classes).
+    if crate::plan::op_has_offset(op) {
+        return None;
+    }
+
     // Increment-4 GATHER honest miss (typed, no contract; the kernel still
     // generates + runs AOT — the Contraction-node precedent). A data-dependent
     // `ReadIndex::Indexed` read cannot be advertised honestly against Fuel's
@@ -1657,6 +1675,84 @@ mod tests {
                 Err(PatternError::ScatterUnsupported)
             ));
         }
+    }
+
+    #[test]
+    fn offsetted_op_is_an_honest_miss_no_contract() {
+        use crate::ir::BaseOffset;
+        use crate::pattern::PatternError;
+        // A runtime-offsetted op's kernel ABI requires the trailing `long long
+        // off{i}` scalars the FKC accept block cannot convey (`start_offset`
+        // stays truthful `rejected`; the frozen envelope has no off slot) —
+        // emitting a contract would advertise an ABI Fuel launches without the
+        // off args (OOB base-pointer bump). Honest miss, dual-gated: the
+        // pattern's `OffsetUnsupported` AND `contract()`'s own up-front
+        // `op_has_offset` guard (load-bearing for the gather-advert path below,
+        // which never consults the pattern).
+        let op = OpDef::elementwise("addoff", 2, &[ElementKind::F32], input(0) + input(1))
+            .with_base_offsets(
+                vec![BaseOffset::Runtime, BaseOffset::Zero],
+                BaseOffset::Zero,
+            );
+        let key = key_for(3, OpCategory::BinaryElementwise);
+        let kernel = generate(&op, &key, &Cuda);
+        assert!(
+            kernel.name.contains("_off0"),
+            "precondition: the lowered kernel really is the offsetted ABI: {}",
+            kernel.name
+        );
+        assert!(
+            contract(&op, &key, &kernel, "cuda").is_none(),
+            "an offsetted op must emit NO contract (the off-arg ABI is inexpressible)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&op),
+            Err(PatternError::OffsetUnsupported)
+        ));
+    }
+
+    #[test]
+    fn offsetted_u32_gather_is_an_honest_miss_no_contract() {
+        use crate::ir::{BaseOffset, OobPolicy};
+        use crate::pattern::PatternError;
+        // THE bypass this guard exists for: a u32-index gather is advertisable
+        // (Model A, structural op_kind — `derive_pattern` is never consulted),
+        // so without `contract()`'s own `op_has_offset` guard an offsetted u32
+        // gather would emit a FULL contract — `op_kind: Gather`, the `_off0`
+        // entry point, `start_offset: rejected` — for a kernel whose ABI needs
+        // a `long long off0` Fuel will never pass. The offset-free twin (see
+        // `u32_gather_emits_a_keyed_contract…`) proves the advert path is
+        // otherwise green, so THIS op reaches the offset guard and dies there.
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::U32,
+        )
+        .with_base_offsets(
+            vec![BaseOffset::Runtime, BaseOffset::Zero],
+            BaseOffset::Zero,
+        );
+        let key = gather_key(ElementKind::U32, false);
+        let kernel = generate(&op, &key, &Cuda);
+        assert!(
+            kernel.name.contains("_off0"),
+            "precondition: the lowered kernel really is the offsetted ABI: {}",
+            kernel.name
+        );
+        assert!(
+            contract(&op, &key, &kernel, "cuda").is_none(),
+            "an offsetted u32 gather must emit NO contract (the gather advert \
+             must not bypass the offset guard)"
+        );
+        // The pattern side misses too — as GatherUnsupported (gather precedes
+        // offset in `derive_pattern`'s check order), which is exactly why the
+        // pattern miss alone could never guard this path.
+        assert!(matches!(
+            crate::derive_pattern(&op),
+            Err(PatternError::GatherUnsupported)
+        ));
     }
 
     // ---- Increment-6 Model-A gather contract wiring ----

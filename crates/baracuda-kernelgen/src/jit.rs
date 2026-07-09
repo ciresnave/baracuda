@@ -472,6 +472,12 @@ fn region_to_op(
         // unkeyable-index-dtype reason (see `PatternError::ScatterUnsupported`) plus
         // the determinism flip — a seam region never synthesizes one.
         write_index: crate::ir::WriteIndex::Direct,
+        // Offset-free: a BASE_OFFSET SLICE (runtime pointer bump) is AOT-only — the
+        // frozen JIT envelope has no slot to transport the runtime `off` scalar at
+        // dispatch (see `PatternError::OffsetUnsupported`), so a seam region never
+        // synthesizes one.
+        base_offsets: Vec::new(),
+        out_base_offset: crate::ir::BaseOffset::Zero,
     };
     // Reuse the AOT bind-set / elementwise validation, and keep the canonical
     // pattern (so synthesize derives it exactly once).

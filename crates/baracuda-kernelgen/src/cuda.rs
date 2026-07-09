@@ -246,6 +246,16 @@ impl Backend for Cuda {
         // Elementwise + single-output + Strided + a legal combine/dtype pair. A
         // write-Direct plan returns immediately (byte-identical).
         assert_scatter_lowerable(plan);
+        // BASE_OFFSET SLICE: independent OFFSET backstop, beside the plan gate
+        // `plan::assert_valid_offsets` (the 0a lesson: gate every layer). A runtime
+        // base offset bumps the operand base pointer at kernel entry, which ONLY the
+        // strided emitter does; the vectorized/scalar/packed + multi-out + every
+        // non-elementwise emitter iterate a bare linear index that would silently
+        // ignore the bump. Pins: a real offset ⇒ Elementwise + single-output +
+        // Strided + not-an-FP-atomic-scatter. An offset-free plan returns immediately
+        // (byte-identical). Runs BEFORE the multi-output dispatch so an offsetted
+        // multi-output plan trips here, not in `emit_strided_multi`.
+        assert_offsets_lowerable(plan);
         // Increment 1: a MULTI-OUTPUT plan routes to the dedicated N-store
         // emitters BEFORE the single-output dispatch below — so the single-output
         // emitters stay byte-for-byte untouched (extra_out_bodies is empty ⇒
@@ -804,12 +814,18 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // `scatter_f32_i64`) — it cannot ride the structure key (single operand-0
     // dtype). Index-free/write-Direct ⇒ no infix ⇒ byte-identical name.
     let idx_infix = index_slot.map_or(String::new(), |(_, idt)| format!("_{}", dtype_tag(idt)));
+    // BASE_OFFSET SLICE: presence mask (ascending Runtime input indices + whether
+    // the output is Runtime), the single source for the name suffix, the launch
+    // args, and the entry pointer bumps below (so they can never disagree).
+    let (off_inputs, out_off) = offset_operands(plan);
+    let off_suffix = offset_suffix(&off_inputs, out_off);
     let name = format!(
-        "baracuda_gen_{}_{}{}_strided_r{}",
+        "baracuda_gen_{}_{}{}_strided_r{}{}",
         plan.op_name,
         dtype_tag(plan.dtype),
         idx_infix,
-        rank
+        rank,
+        off_suffix
     );
     let octype = out_ctype(plan, ctype);
     let mut s = header(plan, &name);
@@ -861,7 +877,32 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     if scatter.is_some() {
         s.push_str("    long long sext,\n");
     }
+    // BASE_OFFSET SLICE: a `long long off{i}` per Runtime input (ascending `i`),
+    // then `long long offo` if the output is Runtime — the FROZEN ABI slot AFTER
+    // gext/sext and BEFORE `n`. Element units, added to the operand base at kernel
+    // entry (the bumps below). Offset-free ⇒ no args ⇒ byte-identical signature.
+    for i in &off_inputs {
+        s.push_str(&format!("    long long off{i},\n"));
+    }
+    if out_off {
+        s.push_str("    long long offo,\n");
+    }
     s.push_str(&format!("    long long n{})\n{{\n", param_args(plan.body)));
+    // BASE_OFFSET SLICE: bump each Runtime operand's base pointer by its launch arg
+    // as the FIRST body statements — BEFORE the fully-broadcast hoist (so a hoisted
+    // operand's `h{k} = in{k}[0]` reads element off{k}, not element 0) and BEFORE
+    // the gather/scatter pre-passes (every composed address, including the index
+    // buffer and the gathered/scattered data, is then formed relative to the bumped
+    // base). Parameter pointers are local copies (`const T*`/`T*` are reassignable).
+    // OOB is a CALLER PRECONDITION (the k/n_out trust model): off + max declared-
+    // extent address must land in-bounds — no bound is emitted, no address is formed
+    // before the bump. Offset-free ⇒ no bumps ⇒ byte-identical body.
+    for i in &off_inputs {
+        s.push_str(&format!("    in{i} += off{i};\n"));
+    }
+    if out_off {
+        s.push_str("    out += offo;\n");
+    }
     // Hoist fully-broadcast inputs: their offset is loop-invariant, load once.
     // The INDEX operand (gather OR scatter) is never hoisted here (it is handled
     // specially in the index pre-pass, with the correct integer ctype) — skip it.
@@ -1257,6 +1298,96 @@ fn assert_scatter_lowerable(plan: &KernelPlan<'_>) {
          dtype {:?}",
         plan.out_dtype
     );
+}
+
+/// The BASE_OFFSET SLICE presence + operand list for a plan: the ascending input
+/// indices carrying a [`crate::ir::BaseOffset::Runtime`] offset, and whether the
+/// output does. Empty vec + `false` for an offset-free plan (byte-identical). THE
+/// single place the emitter derives the entry-point name suffix, the launch args,
+/// and the pointer bumps from — so they can never disagree; the backstop reads
+/// presence off it too (presence == `!ins.is_empty() || out`).
+fn offset_operands(plan: &KernelPlan<'_>) -> (Vec<usize>, bool) {
+    let ins: Vec<usize> = plan
+        .base_offsets
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| !b.is_zero())
+        .map(|(i, _)| i)
+        .collect();
+    (ins, !plan.out_base_offset.is_zero())
+}
+
+/// The `_off<indices>[o]` entry-point suffix for a plan (BASE_OFFSET SLICE): the
+/// ascending `Runtime` input indices, then a trailing `o` if the output is
+/// `Runtime`. Empty for an offset-free plan ⇒ the name is byte-identical to today.
+/// Examples: `_off1` (input 1 only), `_off1o` (input 1 + output), `_offo` (output
+/// only).
+fn offset_suffix(off_inputs: &[usize], out_off: bool) -> String {
+    if off_inputs.is_empty() && !out_off {
+        return String::new();
+    }
+    let mut sfx = String::from("_off");
+    for i in off_inputs {
+        sfx.push_str(&i.to_string());
+    }
+    if out_off {
+        sfx.push('o');
+    }
+    sfx
+}
+
+/// Independent emitter backstop for an OFFSETTED plan (BASE_OFFSET SLICE), beside
+/// the plan gate `plan::assert_valid_offsets` (the 0a lesson: gate every layer). An
+/// offset-free plan (empty `base_offsets` + a `Zero` output) returns immediately —
+/// byte-identical. For a plan carrying a real `Runtime` offset this pins the facts
+/// the single per-pointer entry-bump lowering relies on, so a future schedule change
+/// (or the FP-atomic-scatter gather-sum reroute) can't route an offsetted operand
+/// through an emitter that never bumps the base:
+///
+/// - **Elementwise + single-output** — the only access/arity BASE_OFFSET emits.
+/// - **`Schedule::Strided`** — the sole schedule whose emitter bumps the base
+///   pointer; `emit_vectorized`/`emit_scalar`/the packed + multi-out variants and
+///   every non-elementwise emitter iterate a bare linear index that would silently
+///   ignore the bump.
+/// - **not an FP-atomicAdd scatter** — that combine reroutes to
+///   `emit_scatter_gathersum` (a DIFFERENT emitter under the Strided schedule, which
+///   does not bump); an offset + FP-atomic-scatter is out of scope. An `Assign`
+///   scatter + offset lowers in `emit_strided` and IS supported.
+fn assert_offsets_lowerable(plan: &KernelPlan<'_>) {
+    let (off_inputs, out_off) = offset_operands(plan);
+    if off_inputs.is_empty() && !out_off {
+        return; // offset-free — the established path, unchanged.
+    }
+    let name = plan.op_name;
+    assert!(
+        matches!(plan.access, Access::Elementwise),
+        "cuda backend: offsetted op '{name}' must be Access::Elementwise (BASE_OFFSET \
+         is Elementwise-only)"
+    );
+    assert!(
+        plan.n_outputs == 1,
+        "cuda backend: offsetted op '{name}' must be single-output ({} outputs) — a \
+         runtime offset on a multi-output op is a deferred composition",
+        plan.n_outputs
+    );
+    assert!(
+        matches!(plan.schedule, Schedule::Strided),
+        "cuda backend: offsetted op '{name}' must lower on the Strided schedule (only \
+         the strided emitter bumps the operand base pointer; the vectorized/scalar/ \
+         packed emitters iterate a bare linear index that ignores the bump), got {:?}",
+        plan.schedule
+    );
+    // An FP-atomicAdd scatter reroutes to emit_scatter_gathersum (a different Strided
+    // emitter that never bumps) — reject an offset there rather than mis-emit.
+    if let Some((_, _, combine, _, _)) = plan.write_index.scatter() {
+        assert!(
+            !combine.is_fp_atomic_add(plan.out_dtype),
+            "cuda backend: offsetted op '{name}' is an FP-atomicAdd scatter, which \
+             reroutes to the gather-sum base (no pointer bump) — an offset + \
+             nondeterministic-FP-scatter is out of v1 scope (Assign scatter + offset \
+             is supported)"
+        );
+    }
 }
 
 /// The **`Nondeterministic` FP-atomic-add scatter** variant (increment 5). Only
@@ -5879,6 +6010,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &wi,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5916,6 +6049,8 @@ mod tests {
             views: &[],
             read_index: &ri,
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6533,6 +6668,8 @@ mod tests {
             views: &views,
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -8211,6 +8348,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -8871,6 +9010,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -8896,6 +9037,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -8921,6 +9064,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -8950,6 +9095,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -8978,6 +9125,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -9249,6 +9398,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -9286,6 +9437,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -9311,6 +9464,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -9340,6 +9495,8 @@ mod tests {
             views: &[],
             read_index: &[],
             write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -9365,6 +9522,529 @@ mod tests {
         );
         assert!(k.source.contains("float tmp0 = ((float)c1 - (float)c0);"));
         assert!(k.source.contains("out[oo] = (in0[o0] * (tmp0 * tmp0));"));
+    }
+
+    // ---- BASE_OFFSET SLICE: emission goldens, gate forcing, identity, and the
+    // independent gate/backstop rejections (each test names the hazard it pins). ----
+
+    /// A contiguous rank-1 unary cell (1 input + 1 output) that VECTORIZES to
+    /// float4 offset-free — used to prove an offset both forces Strided and bumps
+    /// the OUTPUT pointer.
+    fn unary_contig_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+        let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn offset_input_forces_strided_and_emits_suffix_arg_and_bump() {
+        use crate::ir::BaseOffset;
+        // add op, input 0 Runtime-offsetted, on a cell that would float4-vectorize.
+        // The runtime offset invalidates the keyed alignment fact ⇒ forced Strided;
+        // the emitter appends `_off0`, a `long long off0` launch arg (after so_,
+        // before n), and an entry pointer bump `in0 += off0;` as the FIRST body stmt.
+        let op = add_op(&[ElementKind::F32]).with_base_offsets(
+            vec![BaseOffset::Runtime, BaseOffset::Zero],
+            BaseOffset::Zero,
+        );
+        let k = generate(&op, &binary_key(ElementKind::F32), &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_add_f32_strided_r1_off0",
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("    long long off0,\n"),
+            "off0 launch arg missing:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("    long long n)"),
+            "n must follow the offset arg:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("    in0 += off0;\n"),
+            "in0 entry pointer bump missing:\n{}",
+            k.source
+        );
+        // in1 is Zero (no bump) and the output is Zero (no `out += `).
+        assert!(
+            !k.source.contains("in1 +="),
+            "in1 is Zero — no bump:\n{}",
+            k.source
+        );
+        assert!(
+            !k.source.contains("out += "),
+            "output is Zero — no bump:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn offset_output_emits_offo_suffix_arg_and_bumps_out() {
+        use crate::ir::BaseOffset;
+        // Output-only offset: name `_offo`, `long long offo` arg, `out += offo;`.
+        let op = OpDef::elementwise("copy", 1, &[ElementKind::F32], input(0))
+            .with_base_offsets(vec![BaseOffset::Zero], BaseOffset::Runtime);
+        let k = generate(&op, &unary_contig_key(ElementKind::F32), &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_copy_f32_strided_r1_offo",
+            "{}",
+            k.source
+        );
+        assert!(k.source.contains("    long long offo,\n"), "{}", k.source);
+        assert!(k.source.contains("    out += offo;\n"), "{}", k.source);
+        assert!(
+            !k.source.contains("in0 += "),
+            "input is Zero — no bump:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn offset_input1_and_output_emits_off1o_in_frozen_arg_order() {
+        use crate::ir::BaseOffset;
+        // in1 Runtime + output Runtime — the rope ODD-lane kernel's offset shape.
+        // Frozen ABI: `long long off1,` (ascending Runtime input) then `long long
+        // offo,` then `long long n)`; bumps `in1 += off1;` then `out += offo;`.
+        let op = add_op(&[ElementKind::F32]).with_base_offsets(
+            vec![BaseOffset::Zero, BaseOffset::Runtime],
+            BaseOffset::Runtime,
+        );
+        let k = generate(&op, &binary_key(ElementKind::F32), &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_add_f32_strided_r1_off1o",
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source
+                .contains("    long long off1,\n    long long offo,\n    long long n)"),
+            "frozen arg order off1,offo,n:\n{}",
+            k.source
+        );
+        assert!(k.source.contains("    in1 += off1;\n"), "{}", k.source);
+        assert!(k.source.contains("    out += offo;\n"), "{}", k.source);
+        assert!(
+            !k.source.contains("in0 += "),
+            "in0 is Zero — no bump:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn all_zero_offsets_are_byte_identical_to_offset_free() {
+        use crate::ir::BaseOffset;
+        // G6 identity: a NON-EMPTY all-Zero base_offsets (+ Zero output) normalizes
+        // to offset-free — no suffix, no args, no bumps, no forcing. The additive
+        // guarantee at the SOURCE level (memcmp of emitted source).
+        let key = binary_key(ElementKind::F32);
+        let free = generate(&add_op(&[ElementKind::F32]), &key, &Cuda);
+        let zeroed = add_op(&[ElementKind::F32])
+            .with_base_offsets(vec![BaseOffset::Zero, BaseOffset::Zero], BaseOffset::Zero);
+        let z = generate(&zeroed, &key, &Cuda);
+        assert_eq!(free.name, z.name, "all-Zero name unchanged");
+        assert_eq!(free.source, z.source, "all-Zero source byte-identical");
+        assert!(!z.source.contains("off0"), "no off token:\n{}", z.source);
+        assert!(!z.source.contains("offo"), "no off token:\n{}", z.source);
+    }
+
+    #[test]
+    fn multi_offset_inputs_emit_ascending_frozen_abi_off02o() {
+        use crate::ir::BaseOffset;
+        // TWO Runtime inputs (0 and 2) + Runtime output on a ternary fma — THE
+        // multi-offset ABI pin (review: previously a fully surviving-mutant
+        // surface — no artifact anywhere carried two Runtime inputs, so a
+        // descending reorder of `offset_operands` stayed internally consistent
+        // and passed every test). One CONTIGUOUS golden pins the ascending
+        // `off0, off2, offo` adjacency AND `n`-adjacency AND the bumps as the
+        // first body statements in the same ascending order — a reorder, an
+        // insertion between the off args, or a bump drifting below the hoist/
+        // loop all break it.
+        let op = OpDef::elementwise(
+            "fmaoff",
+            3,
+            &[ElementKind::F32],
+            input(0) * input(1) + input(2),
+        )
+        .with_base_offsets(
+            vec![BaseOffset::Runtime, BaseOffset::Zero, BaseOffset::Runtime],
+            BaseOffset::Runtime,
+        );
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::TernaryElementwise, &[a, a, a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_fmaoff_f32_strided_r1_off02o",
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains(
+                "    long long off0,\n    long long off2,\n    long long offo,\n    \
+                 long long n)\n{\n    in0 += off0;\n    in2 += off2;\n    out += offo;\n"
+            ),
+            "frozen multi-offset ABI (ascending off args adjacent to n; ascending \
+             bumps as the first body stmts):\n{}",
+            k.source
+        );
+        assert!(
+            !k.source.contains("in1 +="),
+            "in1 is Zero — no bump:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn offset_bump_precedes_broadcast_hoist_and_loop() {
+        use crate::ir::BaseOffset;
+        // THE load-bearing ordering (review: previously pinned only by the
+        // manual GPU harness's bcastoff cell): a fully-broadcast (stride-0)
+        // operand's hoist `h0 = in0[0]` must read element off0, so the entry
+        // bump must come FIRST. One contiguous golden pins body-start → bump →
+        // hoist → loop head with NOTHING in between; moving the bump after the
+        // hoist (h0 reads element 0) or into the loop body (re-bumps every
+        // grid-stride pass) breaks it.
+        let op = add_op(&[ElementKind::F32]).with_base_offsets(
+            vec![BaseOffset::Runtime, BaseOffset::Zero],
+            BaseOffset::Zero,
+        );
+        let b = OperandDesc::new(1, &[1 << 20], &[0], ElementKind::F32, 256);
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[b, a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_add_f32_strided_r1_off0",
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains(
+                ")\n{\n    in0 += off0;\n    float h0 = in0[0];\n    \
+                 long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n"
+            ),
+            "entry bump must be the FIRST body stmt, immediately before the \
+             broadcast hoist, immediately before the loop head:\n{}",
+            k.source
+        );
+        assert_eq!(
+            k.source.matches("in0[").count(),
+            1,
+            "in0 read exactly once — via the hoist of the BUMPED base:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn offset_composes_with_gather_bump_before_index_pre_pass() {
+        use crate::ir::{BaseOffset, OobPolicy};
+        // Offset on the gathered DATA operand (in0): the entry bump `in0 += off0;`
+        // precedes the gather pre-pass, so `o0 = gidx_clamped*s0_0` is relative to
+        // the bumped base — the gather window shifts by off0 (caller precondition).
+        let op = OpDef::gather(
+            "gathoff",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Clamp,
+            ElementKind::I32,
+        )
+        .with_base_offsets(
+            vec![BaseOffset::Runtime, BaseOffset::Zero],
+            BaseOffset::Zero,
+        );
+        let k = generate(&op, &gather_2d_key(), &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_gathoff_f32_i32_strided_r2_off0",
+            "{}",
+            k.source
+        );
+        // Frozen ABI: gext BEFORE the offset args, offset args BEFORE n.
+        assert!(
+            k.source
+                .contains("    long long gext,\n    long long off0,\n    long long n)"),
+            "gext,off0,n order:\n{}",
+            k.source
+        );
+        let bump = k.source.find("    in0 += off0;\n").expect("bump present");
+        let prepass = k.source.find("gidx_off").expect("gather pre-pass present");
+        assert!(
+            bump < prepass,
+            "bump must precede the gather pre-pass:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn offset_composes_with_scatter_bump_before_index_pre_pass() {
+        use crate::ir::BaseOffset;
+        // Offsets on the scatter VALUE input (in0) and the OUTPUT: bumps precede the
+        // scatter pre-pass; `out[oo]` (oo = sidx_clamped*so_0) is relative to the
+        // bumped out base. Assign combine (deterministic) — the FP-atomicAdd scatter
+        // reroutes to gather-sum and REJECTS offsets (backstop-pinned).
+        let op = OpDef::scatter("scatoff", &[ElementKind::F32], 0, ElementKind::I32)
+            .with_base_offsets(
+                vec![BaseOffset::Runtime, BaseOffset::Zero],
+                BaseOffset::Runtime,
+            );
+        let k = generate(&op, &gather_2d_key(), &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_scatoff_f32_i32_strided_r2_off0o",
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains(
+                "    long long sext,\n    long long off0,\n    long long offo,\n    long long n)"
+            ),
+            "sext,off0,offo,n order:\n{}",
+            k.source
+        );
+        let bump_in = k.source.find("    in0 += off0;\n").expect("in bump");
+        let bump_out = k.source.find("    out += offo;\n").expect("out bump");
+        let prepass = k.source.find("sidx_off").expect("scatter pre-pass");
+        assert!(bump_in < prepass && bump_out < prepass, "{}", k.source);
+    }
+
+    #[test]
+    fn offset_composes_with_permute_view() {
+        use crate::ir::{BaseOffset, View};
+        // Offset + Permute on the same input: the bump precedes the loop, and the
+        // per-element offset uses the SWAPPED strides relative to the bumped base
+        // (the offset is the view ORIGIN — applied before the remapped stride walk).
+        let op = OpDef::elementwise("permoff", 1, &[ElementKind::F32], input(0))
+            .with_views(vec![View::Permute { perm: vec![1, 0] }])
+            .with_base_offsets(vec![BaseOffset::Runtime], BaseOffset::Zero);
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_permoff_f32_strided_r2_off0",
+            "{}",
+            k.source
+        );
+        assert!(k.source.contains("    in0 += off0;\n"), "{}", k.source);
+        assert!(
+            k.source.contains("long long o0 = c0*s0_1 + c1*s0_0;"),
+            "permuted (swapped) strides after the bump:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "FP-atomicAdd scatter")]
+    fn offset_on_an_fp_atomic_scatter_is_refused_by_the_backstop() {
+        use crate::ir::BaseOffset;
+        // An FP `atomicAdd` scatter's BASE lowering reroutes to the deterministic
+        // gather-sum (`emit_scatter_gathersum`) — a different Strided emitter that
+        // never bumps the base pointer. An offset there would be silently dropped;
+        // the backstop refuses it (Assign scatter + offset IS supported).
+        let op = OpDef::scatter_add("scatoff_fp", &[ElementKind::F32], 0, ElementKind::I32)
+            .with_base_offsets(
+                vec![BaseOffset::Runtime, BaseOffset::Zero],
+                BaseOffset::Zero,
+            );
+        let _ = generate(&op, &gather_2d_key(), &Cuda);
+    }
+
+    #[test]
+    fn offset_base_variant_carries_the_oob_launch_note() {
+        use crate::ir::BaseOffset;
+        // The OOB story is a CALLER PRECONDITION (k/n_out trust model): the base
+        // variant's launch_note must state it for an offsetted op, and stay EMPTY
+        // for an offset-free op (byte-stable pre-increment behavior).
+        let key = binary_key(ElementKind::F32);
+        let free = crate::generate_variants(&add_op(&[ElementKind::F32]), &key, &Cuda);
+        assert!(
+            free[0].launch_note.is_empty(),
+            "offset-free note stays empty"
+        );
+        let op = add_op(&[ElementKind::F32]).with_base_offsets(
+            vec![BaseOffset::Runtime, BaseOffset::Zero],
+            BaseOffset::Zero,
+        );
+        let vs = crate::generate_variants(&op, &key, &Cuda);
+        assert!(
+            vs[0].launch_note.contains("offset launch contract")
+                && vs[0].launch_note.contains("off >= 0"),
+            "offset base variant must carry the OOB precondition, got: {}",
+            vs[0].launch_note
+        );
+    }
+
+    // -- Tier-1: plan-gate rejections via build_plan DIRECTLY (a gate mutation must
+    // turn into a should_panic failure). --
+
+    #[test]
+    #[should_panic(expected = "base_offsets.len()")]
+    fn offset_arity_mismatch_is_rejected_at_the_plan_gate() {
+        use crate::ir::BaseOffset;
+        // G1: a non-empty base_offsets whose length != n_inputs. Built as a struct
+        // literal to bypass `with_base_offsets`' debug_assert — the plan gate is the
+        // release-build (author-error) backstop.
+        let op = OpDef {
+            base_offsets: vec![BaseOffset::Runtime],
+            ..add_op(&[ElementKind::F32])
+        };
+        let _ = crate::build_plan(&op, &binary_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only")]
+    fn offset_on_a_reduction_is_rejected_at_the_plan_gate() {
+        use crate::ir::{BaseOffset, ReduceOp};
+        // G2: a runtime offset on a non-Elementwise (Reduction) op — role-aware
+        // addressing needs per-role offset semantics (de-scoped).
+        let op = OpDef::reduction("rsum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum)
+            .with_base_offsets(vec![BaseOffset::Runtime], BaseOffset::Zero);
+        let _ = crate::build_plan(&op, &reduce_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "multi-output")]
+    fn offset_on_a_multi_output_op_is_rejected_at_the_plan_gate() {
+        use crate::ir::BaseOffset;
+        // G3: a runtime offset on a multi-output op (the multi-store DAG × the bump
+        // is unproven). The op is otherwise a valid multi-output elementwise op, so
+        // it passes `assert_valid_multi_output` and reaches `assert_valid_offsets`.
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+        let ops: Vec<_> = std::iter::repeat_n(a, 5).collect();
+        let key = structure_key(OpCategory::BinaryElementwise, &ops, ArchSku::Sm89);
+        let op = OpDef::elementwise_multi(
+            "mo_off",
+            3,
+            &[ElementKind::F32],
+            vec![input(0) * input(2), input(0) * input(1)],
+        )
+        .with_base_offsets(
+            vec![BaseOffset::Runtime, BaseOffset::Zero, BaseOffset::Zero],
+            BaseOffset::Zero,
+        );
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    fn runtime_offset_forces_strided_on_a_would_be_vectorized_cell() {
+        use crate::ir::BaseOffset;
+        use crate::plan::{Schedule, build_plan};
+        // G4 (positive): the SAME contiguous vec-width-4 cell is Vectorized{4}
+        // offset-free but MUST be Strided under a runtime offset — even a
+        // width-multiple offset value (the gate keys on presence, not value).
+        let key = binary_key(ElementKind::F32);
+        assert!(
+            matches!(
+                build_plan(&add_op(&[ElementKind::F32]), &key).schedule,
+                Schedule::Vectorized { width: 4 }
+            ),
+            "sanity: offset-free vectorizes"
+        );
+        let op = add_op(&[ElementKind::F32]).with_base_offsets(
+            vec![BaseOffset::Runtime, BaseOffset::Zero],
+            BaseOffset::Zero,
+        );
+        assert!(
+            matches!(build_plan(&op, &key).schedule, Schedule::Strided),
+            "a runtime offset must force Strided"
+        );
+    }
+
+    // -- Tier-2: emitter backstop, independent of the plan gate (hand-built plans:
+    // a future schedule-selection change must trip HERE, not silently emit a kernel
+    // that never bumps the base). --
+
+    #[test]
+    #[should_panic(expected = "must lower on the Strided schedule")]
+    fn offset_on_a_non_strided_schedule_is_refused_by_the_backstop() {
+        use crate::backend::Backend;
+        use crate::ir::BaseOffset;
+        use crate::plan::{KernelPlan, Schedule};
+        let key = binary_key(ElementKind::F32);
+        let body = (input(0) + input(1)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 2,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Scalar, // WRONG: an offset needs Strided.
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            access: &crate::ir::Access::Elementwise,
+            views: &[],
+            read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[BaseOffset::Runtime, BaseOffset::Zero],
+            out_base_offset: BaseOffset::Zero,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "single-output")]
+    fn offset_on_a_multi_output_plan_is_refused_by_the_backstop() {
+        use crate::backend::Backend;
+        use crate::ir::BaseOffset;
+        use crate::plan::{KernelPlan, Schedule};
+        let key = binary_key(ElementKind::F32);
+        let body = (input(0) + input(1)).0;
+        let extra = [(input(0) * input(1)).0];
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 2,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Strided,
+            key: &key,
+            body: &body,
+            n_outputs: 2, // WRONG: an offset needs single-output.
+            extra_out_bodies: &extra,
+            access: &crate::ir::Access::Elementwise,
+            views: &[],
+            read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[BaseOffset::Runtime, BaseOffset::Zero],
+            out_base_offset: BaseOffset::Zero,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only")]
+    fn offset_under_a_non_elementwise_access_is_refused_by_the_backstop() {
+        use crate::backend::Backend;
+        use crate::ir::{BaseOffset, ReduceOp};
+        use crate::plan::{KernelPlan, ReduceAxisClass, Schedule};
+        use baracuda_kernels_types::AxisMask;
+        let key = reduce_key(ElementKind::F32);
+        let body = input(0).0;
+        let access = crate::ir::Access::Reduction {
+            op: ReduceOp::Sum,
+            axes: AxisMask::EMPTY,
+            keepdim: false,
+            post: crate::ir::ScalarExpr::Reduced(0),
+        };
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 1,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Reduction {
+                op: ReduceOp::Sum,
+                class: ReduceAxisClass::InnerContig,
+                keepdim: false,
+            },
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            access: &access,
+            views: &[],
+            read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[BaseOffset::Runtime], // WRONG: offset is Elementwise-only.
+            out_base_offset: BaseOffset::Zero,
+        };
+        let _ = Cuda.lower(&plan);
     }
 }
 
@@ -9932,6 +10612,226 @@ mod scan_tests {
                 println!("wrote {out}/{}.cu", k.name);
             }
         }
+    }
+
+    /// Manual dump tool (not a wired assertion): regenerate the GENERATED offset
+    /// `.cu` sources the on-device validator `ondevice/offset_validate.cu`
+    /// `#include`s (BASE_OFFSET SLICE). Run with:
+    ///   `OFFSET_OUT=<outdir> cargo test -p baracuda-kernelgen dump_offset_sources -- --ignored --nocapture`
+    /// then copy `ondevice/offset_validate.cu` beside the emitted files and `nvcc` it.
+    #[test]
+    #[ignore = "manual regeneration tool for ondevice/offset_validate.cu"]
+    fn dump_offset_sources() {
+        use crate::ir::{BaseOffset, input};
+        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
+        let write = |k: crate::GeneratedKernel| {
+            std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+            println!("wrote {out}/{}.cu", k.name);
+        };
+        // --- addoff: out[i] = in0[off0 + i] + in1[i] (rank-1, offset forces Strided
+        // even on a contiguous cell — the CPU-oracle + offset-0-identity + high-edge
+        // memcheck kernel). f32 and f64. ---
+        for dt in [ElementKind::F32, ElementKind::F64] {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
+            let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+            // With offset on input 0.
+            let off = OpDef::elementwise("addoff", 2, &[dt], input(0) + input(1))
+                .with_base_offsets(
+                    vec![BaseOffset::Runtime, BaseOffset::Zero],
+                    BaseOffset::Zero,
+                );
+            write(generate(&off, &key, &Cuda));
+            // No-offset sibling on the SAME strided addressing (built via a strided
+            // cell so it is also Strided) — the offset-0 identity baseline.
+            let t = OperandDesc::new(2, &[8, 4], &[1, 8], dt, 256);
+            let skey = structure_key(OpCategory::BinaryElementwise, &[t, t, t], ArchSku::Sm89);
+            let base = OpDef::elementwise("addoff", 2, &[dt], input(0) + input(1));
+            write(generate(&base, &skey, &Cuda));
+            let soff = OpDef::elementwise("addoff", 2, &[dt], input(0) + input(1))
+                .with_base_offsets(
+                    vec![BaseOffset::Runtime, BaseOffset::Zero],
+                    BaseOffset::Zero,
+                );
+            write(generate(&soff, &skey, &Cuda));
+        }
+        // --- add3off (case 11): out[offo+i] = in0[off0+i] + in1[i] + in2[off2+i] —
+        // MULTIPLE Runtime inputs (0 and 2) + a Runtime output, the `_off02o`
+        // multi-offset frozen-ABI cell (ascending off args; three bumps). Chained
+        // ADDs (no mul) so the CPU oracle is bit-deterministic — FADD chains are
+        // never FMA-contracted, unlike a*b+c. ---
+        {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+            let key = structure_key(OpCategory::TernaryElementwise, &[a, a, a, a], ArchSku::Sm89);
+            let op = OpDef::elementwise(
+                "add3off",
+                3,
+                &[ElementKind::F32],
+                input(0) + input(1) + input(2),
+            )
+            .with_base_offsets(
+                vec![BaseOffset::Runtime, BaseOffset::Zero, BaseOffset::Runtime],
+                BaseOffset::Runtime,
+            );
+            write(generate(&op, &key, &Cuda));
+        }
+        // --- bcastoff: out[i] = in0[off0] + in1[i], in0 FULLY BROADCAST (all strides
+        // 0) + Runtime offset — proves the entry bump lands on the hoisted `in0[0]`
+        // (reading element off0, not 0). ---
+        {
+            let b = OperandDesc::new(1, &[1 << 20], &[0], ElementKind::F32, 256); // fully broadcast
+            let n = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+            let key = structure_key(OpCategory::BinaryElementwise, &[b, n, n], ArchSku::Sm89);
+            let op = OpDef::elementwise("bcastoff", 2, &[ElementKind::F32], input(0) + input(1))
+                .with_base_offsets(
+                    vec![BaseOffset::Runtime, BaseOffset::Zero],
+                    BaseOffset::Zero,
+                );
+            write(generate(&op, &key, &Cuda));
+        }
+        // --- permoff (case 4): out[r,c] = x[off0 + <transposed read>] — offset +
+        // Permute view on the same input (the offset is the view ORIGIN, applied
+        // before the swapped-stride walk). ---
+        {
+            use crate::ir::View;
+            let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+            let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+            let op = OpDef::elementwise("permoff", 1, &[ElementKind::F32], input(0))
+                .with_views(vec![View::Permute { perm: vec![1, 0] }])
+                .with_base_offsets(vec![BaseOffset::Runtime], BaseOffset::Zero);
+            write(generate(&op, &key, &Cuda));
+        }
+        // --- gathoff / gathoffi (case 5): gather (Clamp) with the offset on the
+        // gathered DATA operand (off0) and, separately, on the INDEX operand (off1)
+        // — the dual-pointer independence proof. rank-1, i32 index. ---
+        {
+            use crate::ir::OobPolicy;
+            let d = OperandDesc::new(1, &[1 << 12], &[1], ElementKind::F32, 256);
+            let ix = OperandDesc::new(1, &[1 << 12], &[1], ElementKind::I32, 256);
+            let key = structure_key(OpCategory::BinaryElementwise, &[d, ix, d], ArchSku::Sm89);
+            let goff = OpDef::gather(
+                "gathoff",
+                &[ElementKind::F32],
+                0,
+                OobPolicy::Clamp,
+                ElementKind::I32,
+            )
+            .with_base_offsets(
+                vec![BaseOffset::Runtime, BaseOffset::Zero],
+                BaseOffset::Zero,
+            );
+            write(generate(&goff, &key, &Cuda));
+            let gioff = OpDef::gather(
+                "gathoffi",
+                &[ElementKind::F32],
+                0,
+                OobPolicy::Clamp,
+                ElementKind::I32,
+            )
+            .with_base_offsets(
+                vec![BaseOffset::Zero, BaseOffset::Runtime],
+                BaseOffset::Zero,
+            );
+            write(generate(&gioff, &key, &Cuda));
+        }
+        // --- scatoff (case 6): Assign scatter with offsets on the VALUE input
+        // (off0) and the OUTPUT (offo). rank-1, i32 index, Skip OOB. ---
+        {
+            let u = OperandDesc::new(1, &[1 << 12], &[1], ElementKind::F32, 256);
+            let ix = OperandDesc::new(1, &[1 << 12], &[1], ElementKind::I32, 256);
+            let key = structure_key(OpCategory::BinaryElementwise, &[u, ix, u], ArchSku::Sm89);
+            let op = OpDef::scatter("scatoff", &[ElementKind::F32], 0, ElementKind::I32)
+                .with_base_offsets(
+                    vec![BaseOffset::Runtime, BaseOffset::Zero],
+                    BaseOffset::Runtime,
+                );
+            write(generate(&op, &key, &Cuda));
+        }
+    }
+
+    /// Manual dump tool (not a wired assertion): regenerate the GENERATED rope
+    /// pair-decomposition `.cu` sources the on-device validator `#include`s for the
+    /// BASE_OFFSET SLICE acceptance gate (rope E2E vs `launch_rope_apply_fp<float>`).
+    /// Two single-output launches over the pair axis `[BH,S,P]` (P=D/2), stride-2
+    /// innermost; the odd-lane cross-read is the `+1` view origin (a Runtime offset
+    /// on `x_o`), the odd output is the stride-2 write at origin `+1`. Run with:
+    ///   `OFFSET_OUT=<outdir> cargo test -p baracuda-kernelgen dump_rope_pair_sources -- --ignored --nocapture`
+    #[test]
+    #[ignore = "manual regeneration tool for ondevice/offset_validate.cu (rope E2E)"]
+    fn dump_rope_pair_sources() {
+        use crate::ir::{BaseOffset, input};
+        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
+        let write = |k: crate::GeneratedKernel| {
+            std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+            println!("wrote {out}/{}.cu", k.name);
+        };
+        // Rank-3 [BH,S,P] cell (placeholder extents — the KEY carries only rank/
+        // contiguity/broadcast; the harness passes the true shape/strides at launch).
+        // x_e/x_o: stride-2 innermost (strided); cos/sin: broadcast axis 0 (shared
+        // table, stride_b=0); out: stride-2 innermost.
+        let dt = ElementKind::F32;
+        // BH=2, S=4, D=16 => P=8, S*D=64.
+        let xstr = OperandDesc::new(3, &[2, 4, 8], &[64, 16, 2], dt, 256);
+        let cs = OperandDesc::new(3, &[2, 4, 8], &[0, 8, 1], dt, 256); // broadcast axis 0
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[xstr, xstr, cs, cs, xstr],
+            ArchSku::Sm89,
+        );
+        // even: y_e = x_e*cos - x_o*sin = Sub(Mul(in0,in2), Mul(in1,in3)); x_o (in1)
+        // is read at the pair-partner +1 (Runtime offset), output at the even origin.
+        let even = OpDef::elementwise(
+            "rope_even",
+            4,
+            &[dt],
+            input(0) * input(2) - input(1) * input(3),
+        )
+        .with_base_offsets(
+            vec![
+                BaseOffset::Zero,
+                BaseOffset::Runtime,
+                BaseOffset::Zero,
+                BaseOffset::Zero,
+            ],
+            BaseOffset::Zero,
+        );
+        write(generate(&even, &key, &Cuda));
+        // The no-offset even sibling (all-Zero) — the offset-0 identity baseline
+        // (case 1): launching the `_off1` kernel with off1=0 must byte-match this.
+        let even_base = OpDef::elementwise(
+            "rope_even",
+            4,
+            &[dt],
+            input(0) * input(2) - input(1) * input(3),
+        );
+        write(generate(&even_base, &key, &Cuda));
+        // odd: y_o = x_o*cos + x_e*sin, AUTHORED as Add(Mul(in0,in3), Mul(in1,in2))
+        // = `in0[o0]*in3[o3] + in1[o1]*in2[o2]` — commutatively identical, but the
+        // operand ORDER pins nvcc's FMA contraction to the bespoke's: the PTX audit
+        // (bespoke_inst.ptx vs gen_odd.ptx, 2026-07-08) showed nvcc front-end
+        // contracts the FIRST product of an Add in this TU while the bespoke
+        // `x_o*c + x_e*si` TU contracted the SECOND (fma(si,x_e, round(c*x_o))) —
+        // authoring x_e*si first makes both sides fma(x_e,si)+round(x_o*c) ⇒
+        // bit-exact odd lanes (even lanes contract identically via ptxas either
+        // way). x_o (in1) reads at +1 (Runtime), output writes at the odd origin
+        // +1 (Runtime).
+        let odd = OpDef::elementwise(
+            "rope_odd",
+            4,
+            &[dt],
+            input(0) * input(3) + input(1) * input(2),
+        )
+        .with_base_offsets(
+            vec![
+                BaseOffset::Zero,
+                BaseOffset::Runtime,
+                BaseOffset::Zero,
+                BaseOffset::Zero,
+            ],
+            BaseOffset::Runtime,
+        );
+        write(generate(&odd, &key, &Cuda));
     }
 
     /// Manual dump tool (not a wired assertion): regenerate the scan `.cu` sources

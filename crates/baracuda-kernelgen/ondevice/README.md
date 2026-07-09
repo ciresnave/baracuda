@@ -922,17 +922,21 @@ Baracuda does not yet author. The determinism flip is spelled + ready
 per-operand-dtype key extension lands (a `STRUCTURE_KEY_VERSION` bump = a Fuel
 propose-first, the same gate as gather).
 
-**rope — RE-EVALUATED with scatter in hand, 2 of 3 blockers now CLOSED (STILL
-DEFERRED on the third).** #4 closed the cos/sin cache read (an `Indexed` gather);
-**#5 closes the interleaved output** — `y[2i]`, `y[2i+1]` writing into ONE buffer at
-stride 2 is now expressible as a `ScatterIndexed` write (a stride-2 destination
-address is exactly the write-side substitution this increment adds). The **one
-remaining blocker** is the pair-partner cross-read `(2i ↔ 2i+1)`: each output reads
-BOTH lanes of its pair, i.e. the "odd" stream is the "even" stream at a **+1
-*element* base offset** — a slice, needing a `base_offset` operand field that no
-increment provides yet (it is a runtime launch-arg slice, not a stride view or an
-index gather). So rope is now 2/3 closed; the last third is a small base-offset/slice
-operand (NOT another access-pattern increment). Not forced.
+**rope — 3 of 3 blockers CLOSED (BASE_OFFSET SLICE increment; see
+`offset_validate.cu` below).** #4 closed the cos/sin cache read (an `Indexed`
+gather — though the shipped decomposition reads the shared table as a
+coordinate-linear broadcast view, `gather`-machinery-covered without a literal
+index tensor); **#5 closed the interleaved output** (a stride-2 destination is a
+static strided write); and the **BASE_OFFSET SLICE** increment closed the final
+pair-partner cross-read `(2i ↔ 2i+1)` — the "odd" stream is the "even" stream at
+a **+1 element runtime base offset** (`OpDef::base_offsets` /
+`OpDef::out_base_offset`, a `long long off{i}` launch arg bumped onto the operand
+base at kernel entry). The E2E proof: the two-launch generated pair decomposition
+(`rope_even` `_off1` + `rope_odd` `_off1o`, shape `[BH,S,P]`, stride-2 innermost)
+is **memcmp BIT-EXACT vs the bespoke `launch_rope_apply_fp<float>`** on
+`B4·H8·S1024·D128` (4.2M elems) and the non-power `B3·H5·S257·D64`, at 191 GB/s
+vs the bespoke's 249 GB/s (0.77×, the honest two-launch + strided-machinery
+overhead) — RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc.
 
 ## `scan_validate.cu` — prefix scan (increment 6)
 
@@ -1439,3 +1443,161 @@ bespoke and the generated form agreeing): a NaN input reproduces its **exact
 payload bits** on output (it is returned unchanged — `NaN < 0` is false), and a
 `-0.0` input yields `-0.0` (torch.relu(-0.) == -0.), never the `+0.0` /
 NaN-scrub the incumbent `fmaxf(x, 0)` Fmax kernel would produce.
+
+## `offset_validate.cu` — BASE_OFFSET SLICE (post-ramp increment; rope 3/3 closure)
+
+Validates the **runtime base element offset** operand: `OpDef::base_offsets:
+Vec<BaseOffset>` (+ `out_base_offset`) — the parallel-Vec sibling of
+`views`/`read_index` — where a `BaseOffset::Runtime` entry adds a **`long long
+off{i}` launch argument** (element units) bumped onto that operand's base pointer
+at kernel ENTRY (`in{i} += off{i};` / `out += offo;` as the first body
+statements, before the fully-broadcast hoist and the gather/scatter pre-passes).
+Per the item-01 frozen boundary this is a **runtime launch-arg slice — NOT a
+stride `View`, NOT an index gather**. Presence (never the value) rides the
+`entry_point` suffix `_off<ascending input indices>[o]` (`_off1`, `_off1o`,
+`_offo`); the value is a per-launch scalar in the gext/sext address-arg family,
+placed **after** `gext`/`sext` and **before** `n` (the frozen ABI order). A
+`Runtime` offset **forces `Schedule::Strided`** — the keyed `align_bytes →
+VecWidth` fact is a lie under any runtime base shift, even a width-multiple one
+(plan gate + independent `assert_offsets_lowerable` emitter backstop, both
+mutation-checked). Offset-free ops are **byte-identical** (no suffix, no args,
+no bumps — golden-pinned at the source level and the full pre-existing suite is
+byte-stable).
+
+**OOB story — the k/n_out trust model** (gather/scatter `gext`/`sext`, RowSort
+`k <= 1024` class): no per-element bounds branch is emitted. The **caller
+precondition** — `off + <maximal element address reachable via the declared
+shape/strides (and gext/sext window, if composed)>` lies within the buffer; only
+`off >= 0` is validated — rides the base variant's `launch_note` and the harness
+ABI comment. The proof is the high-edge memcheck cell (case 8).
+
+**Regeneration:**
+
+```sh
+OFFSET_OUT=<outdir> cargo test -p baracuda-kernelgen dump_offset_sources -- --ignored --nocapture
+OFFSET_OUT=<outdir> cargo test -p baracuda-kernelgen dump_rope_pair_sources -- --ignored --nocapture
+cp crates/baracuda-kernelgen/ondevice/offset_validate.cu <outdir>/
+nvcc -O3 -arch=sm_89 -std=c++17 \
+     -I <kernels-sys>/kernels/include \
+     -Xcompiler "/Zc:preprocessor /std:c++17" \
+     <outdir>/offset_validate.cu -o offset_validate
+./offset_validate          # full        | ./offset_validate san   # sanitizer shapes
+compute-sanitizer --tool memcheck  ./offset_validate san   # + racecheck/initcheck/synccheck
+```
+
+**Coverage** (every case below is **device-launched** except case 7, which is
+labeled **equivalence-covered** by case 10 — the two stride-2 launches with out
+origins 0/1 fully cover a zero-initialized buffer memcmp'd whole-buffer against
+the bespoke's fully-written output, so a gap or overlap cannot pass — and case
+9, which is a **host-side, compile-time-backed** symbol assertion counted
+separately in the tally, the `sort_validate` labeling precedent):
+
+1. **offset-0 byte-identity** — the rope-even `_off1` kernel at `off1 = 0`
+   memcmp'd vs the no-offset sibling kernel (the additive guarantee, on-device
+   half; the source-level half is the `all_zero_offsets_are_byte_identical_to_offset_free`
+   golden).
+2. **strided + offset vs CPU oracle** — `addoff` (`out[i] = in0[off0+i] + in1[i]`)
+   f32 + f64, offsets {0, 1, 3, 17} at 1M elems.
+3. **offset on a fully-broadcast (hoisted) operand** — `bcastoff` proves the
+   entry bump lands BEFORE the `h0 = in0[0]` hoist (reads element `off0`, not 0).
+4. **offset + Permute view** — `permoff`: the offset is the view ORIGIN, applied
+   before the swapped-stride walk (`o0 = c0*s0_1 + c1*s0_0` off the bumped base).
+5. **offset + gather (Clamp)** — `gathoff` (offset on the gathered DATA operand:
+   the gather window shifts) and `gathoffi` (offset on the INDEX operand: the
+   index-buffer read shifts) — dual-pointer independence, OOB indices included.
+6. **offset + scatter (Assign/Skip)** — `scatoff`: offsets on the VALUE input and
+   the OUTPUT; unique target indices + OOB stubs (skipped); full-destination CPU
+   oracle. (An offset on an **FP-atomicAdd** scatter is REFUSED by the backstop —
+   its base reroutes to the gather-sum emitter, which never bumps.)
+7. **interleave pair** — *equivalence-covered* by case 10 (see above).
+8. **high-edge memcheck** — `off + extent == buffer end` (`addoff` at
+   `off = 12345`, in0 sized exactly `N + off`); the load-bearing OOB proof under
+   compute-sanitizer.
+9. **gate-accept** — **HOST-SIDE, compile-time-backed (not a device cell)**: the
+   `_strided_r1_off0` `addoff` symbol string is STRINGIFIED from the same token
+   whose function address must link in the TU, so compiling the harness at all
+   proves the schedule gate chose Strided+offset for a cell that would
+   otherwise be `_co_v4`. The runtime strstr cannot fail unless the naming
+   scheme changes — the load-bearing gate pin is the Rust-side G4 test
+   (`runtime_offset_forces_strided_on_a_would_be_vectorized_cell`).
+10. **rope E2E — the acceptance gate.** The generated two-launch pair
+    decomposition ("Option B": one single-output kernel per lane parity over the
+    pair axis `[BH, S, P]`, `P = D/2`) vs the bespoke
+    `launch_rope_apply_fp<float>` (`baracuda_attention.cuh:1105`): four shared
+    inputs `x_e`/`x_o` (same buffer, strides `(S·D, D, 2)`; `x_o` = `x_e` +
+    **runtime offset 1** — `off_o = off_e + 1` on the unit-stride innermost
+    axis), `cos`/`sin` (shared `[S,P]` table, broadcast axis 0, `stride_b = 0`);
+    even body `Sub(Mul(in0,in2), Mul(in1,in3))`, odd body
+    `Add(Mul(in0,in3), Mul(in1,in2))`; odd output at origin `+1` (`offo = 1`).
+11. **multi-offset frozen ABI** — `add3off` (`_off02o`: Runtime inputs 0 AND 2
+    plus a Runtime output; `out[offo+i] = in0[off0+i] + in1[i] + in2[off2+i]`)
+    vs a CPU oracle at 1M elems with three large distinct offsets
+    (`off0=12345, off2=777, offo=4097`): ascending off args, three entry bumps,
+    and the untouched out head `[0, offo)` stays zero (the output-bump proof).
+    Chained ADDs — never FMA-contracted, so the oracle is bit-deterministic.
+    The host-side twin is the `multi_offset_inputs_emit_ascending_frozen_abi_off02o`
+    contiguous-signature golden (mutation-checked: a descending reorder of
+    `offset_operands` is killed by that test alone).
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc — **RESULT: ALL PASSED**
+(**18 device-launched cells + 1 host-side gate-accept assertion**); sanitizers
+on the `san` shapes: **memcheck 0 errors, racecheck 0 hazards, initcheck 0
+errors, synccheck 0 errors**.
+
+**Rope bit-exactness: memcmp-IDENTICAL** (raw `y` bytes) on `B4·H8·S1024·D128`
+(4 194 304 elems) and the non-power `B3·H5·S257·D64` — x seeded with the house
+**25-encoding probe head** (`kProbeU32`: signed zeros, ±1, ±Inf, qNaN/sNaN
+payloads incl. negative-NaN, subnormal + normal extremes, ±pi — the
+`relu_propagating_validate.cu` list) followed by uniform random, against real
+`theta = pos·10000^(-2p/D)` tables — so non-finite propagation through the
+contraction-audited FMA path is memcmp-covered, not just the finite range.
+Getting there required a **PTX/SASS contraction
+audit** (the brief's protocol): the first run mismatched by 1 LSB on ODD lanes
+only — `cuobjdump`/PTX showed both TUs contract one `mul` of `a*b + c*d` into an
+FFMA, but the bespoke TU contracts the SECOND product (`fma(x_e, si,
+round(x_o·c))`) while the generated TU contracts the FIRST; even lanes contract
+identically (ptxas, `sub(mul,mul)`) which is why they matched. Fix: author the
+odd body as `Add(Mul(in0,in3), Mul(in1,in2))` — commutatively identical, same
+mul/add C source (no `fmaf`, no `-fmad` changes), but the operand order pins
+nvcc's front-end contraction to the bespoke's. Both harness TUs compile with the
+standard `nvcc -O3 -arch=sm_89 -std=c++17` line (`-fmad=true` default on both).
+
+**GB/s (house bench: 3 warm-up, 20 timed, cudaEvent; bytes = elems·4·2):**
+
+| kernel | ms | Gelem/s | GB/s |
+| --- | --- | --- | --- |
+| generated pair (2 launches, summed) | 0.175 | 24.0 | 191.6 |
+| bespoke `rope_apply_f32_run` (1 launch) | 0.134 | 31.3 | 250.1 |
+
+The generated form is **0.77× the bespoke** — honestly: it pays two kernel
+launches and reads each pair's four values once per launch (the bespoke reads
+both lanes in one launch), plus the general strided-unravel address math. The
+increment's claim is EXPRESSIBILITY with bit-exactness, not a perf win; a fused
+single-launch rope needs the multi-output + offset composition (G3-deferred).
+
+**Contract story — honest miss, DUAL-GATED; `start_offset` now *speakable*.**
+Fuel's `LayoutSpec` carries a `start_offset` tri-state and
+`contract::layout_spec` keeps it a truthful always-`rejected` (understating is
+safe; no offsetted kernel is ever advertised). Two independent gates enforce
+that: `derive_pattern` returns `PatternError::OffsetUnsupported` for a plain
+offsetted elementwise op (composed offset+gather/scatter/view ops miss as the
+class error that precedes it in the check order — offsets live OUTSIDE the value
+walk, so this early-out is a correctness gate, not an error-message nicety), AND
+`contract()` carries its own up-front `op_has_offset` guard — load-bearing for
+the Model-A u32-gather advert path, which derives `op_kind` structurally and
+never consults the pattern (adversarial-review catch; both gates
+mutation-checked via `offsetted_op_is_an_honest_miss_no_contract` +
+`offsetted_u32_gather_is_an_honest_miss_no_contract`). The cell is now
+**speakable** — `start_offset: accepted` is the honest spelling for a kernel
+that actually composes the offset — but flipping it is DEFERRED until the seam
+pattern grammar + dispatch ABI can carry the offset attr + scalar (recorded via
+the Baracuda↔Fuel channel: `docs/fuel-ask-baseoffset-slice-2026-07-08.md`).
+
+**De-scopes** (each REJECTED by a mutation-checked gate, not silently emitted):
+non-Elementwise schedules (role-aware addressing needs per-role offset
+semantics); multi-output; vectorized offset kernels (no "aligned-offset fast
+path" — presence forces Strided); compile-time-constant offset folding; seam
+exposure; f16/bf16/f64 rope E2E (mixed-dtype operands are inexpressible under
+the single-operand-0-dtype key; f64 apply promotes f32 tables at load); rope
+base/backward/THD variants; negative offsets (not forbidden by the emitted
+code, but unvalidated — `off >= 0` only).

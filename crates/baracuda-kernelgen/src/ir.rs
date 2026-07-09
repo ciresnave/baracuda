@@ -1380,6 +1380,42 @@ impl ReadIndex {
     }
 }
 
+/// Runtime base element offset for one operand (BASE_OFFSET SLICE — the post-ramp
+/// increment that closes rope's pair-partner cross-read). [`Self::Zero`] (the
+/// default) emits nothing and is byte-identical to today's kernels;
+/// [`Self::Runtime`] adds a `long long off{i}` launch argument to the operand's
+/// base pointer at kernel ENTRY — a per-launch value in **element units**, applied
+/// BEFORE all per-element address math (so on a strided pair-split view it is the
+/// view ORIGIN, never multiplied by any stride). This is a runtime launch-arg
+/// slice: NOT a compile-time [`View`] layout remap (`View::is_valid` has no slot
+/// for a runtime value) and NOT a [`ReadIndex`] data-dependent gather (there is no
+/// index tensor) — it rides its own parallel [`OpDef::base_offsets`] Vec for the
+/// identical reason those do (a per-operand *address-through* the value-math
+/// walkers — optimizer/e-graph, `contract`, `pattern` — must not see, so it is
+/// NOT a [`ScalarExpr`] node and NOT an [`Access`] variant, forcing zero new
+/// exhaustive-match arms). Only the PRESENCE mask (which operands carry a
+/// `Runtime` offset) is compile-time; the offset VALUE never enters the IR or the
+/// structure key.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BaseOffset {
+    /// No offset — the operand's base pointer is unchanged (byte-identical
+    /// emission; every pre-increment operand).
+    #[default]
+    Zero,
+    /// A runtime `long long off` launch argument added to the operand base at
+    /// kernel entry (element units, applied before all address math).
+    Runtime,
+}
+
+impl BaseOffset {
+    /// `true` for [`BaseOffset::Zero`] — the byte-identical default (no launch
+    /// arg, no pointer bump, no symbol suffix).
+    #[must_use]
+    pub fn is_zero(self) -> bool {
+        matches!(self, BaseOffset::Zero)
+    }
+}
+
 /// How a [`WriteIndex::ScatterIndexed`] output combines the scattered value into
 /// its (data-dependent) destination cell (increment 5, SCATTER). Duplicate
 /// indices name the same output cell from multiple threads, so the combine op's
@@ -1603,6 +1639,24 @@ pub struct OpDef {
     /// `plan::build_plan` (`assert_valid_scatter`) with an independent emitter
     /// backstop in [`crate::cuda::Cuda::lower`].
     pub write_index: WriteIndex,
+    /// Per-input **runtime base element offset** (BASE_OFFSET SLICE) — index `i` ↔
+    /// `Input(i)`, the parallel-Vec mirror of [`Self::views`]/[`Self::read_index`].
+    /// **Empty ⇒ every input is [`BaseOffset::Zero`]** (byte-identical back-compat:
+    /// every pre-increment op is offset-free, so address math stays byte-identical).
+    /// When non-empty, length **must** equal `n_inputs` (same rule as `views`/
+    /// `read_index`). A [`BaseOffset::Runtime`] entry adds a `long long off{i}`
+    /// launch arg bumped onto the operand's base pointer at kernel entry (element
+    /// units, applied before all per-element address math). Set via
+    /// [`OpDef::with_base_offsets`]. A non-empty all-`Zero` vec is semantically
+    /// identical to empty — presence is `any(Runtime)` (`plan::op_has_offset`).
+    /// Validated at the TOP of `plan::build_plan` (`assert_valid_offsets`) with an
+    /// independent emitter backstop in [`crate::cuda::assert_offsets_lowerable`].
+    pub base_offsets: Vec<BaseOffset>,
+    /// The **single output's** runtime base element offset — the output-side mirror
+    /// of [`Self::write_index`] (default [`BaseOffset::Zero`], byte-identical). A
+    /// [`BaseOffset::Runtime`] output adds a `long long offo` launch arg bumped onto
+    /// the output base pointer at kernel entry (element units).
+    pub out_base_offset: BaseOffset,
 }
 
 impl OpDef {
@@ -1619,6 +1673,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1643,6 +1699,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: Some(ElementKind::U8),
             extra_out_bodies: Vec::new(),
         }
@@ -1693,6 +1751,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies,
         }
@@ -1765,6 +1825,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1803,6 +1865,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1834,6 +1898,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1864,6 +1930,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1906,6 +1974,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1982,6 +2052,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -2045,6 +2117,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -2077,6 +2151,8 @@ impl OpDef {
             views: Vec::new(),
             read_index: Vec::new(),
             write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
             out_dtype: Some(ElementKind::I32),
             extra_out_bodies: Vec::new(),
         }
@@ -2113,6 +2189,30 @@ impl OpDef {
             "OpDef::with_indexed: read_index.len() must equal n_inputs"
         );
         self.read_index = read_index;
+        self
+    }
+
+    /// Attach per-input **runtime base element offsets** ([`BaseOffset`], the
+    /// BASE_OFFSET SLICE increment). `base_offsets[i]` applies to `Input(i)`;
+    /// `base_offsets.len()` must equal `n_inputs`. `out_base_offset` is the single
+    /// output's offset. An offset-free op (the common case) never calls this and
+    /// keeps `base_offsets` empty + `out_base_offset == Zero` (byte-identical). The
+    /// debug assert catches a generator bug at catalog-build time; the full v1 rule
+    /// set (Elementwise-only, single-output, force-Strided) is enforced at plan
+    /// time by `assert_valid_offsets` and backstopped in `cuda`.
+    #[must_use]
+    pub fn with_base_offsets(
+        mut self,
+        base_offsets: Vec<BaseOffset>,
+        out_base_offset: BaseOffset,
+    ) -> Self {
+        debug_assert_eq!(
+            base_offsets.len(),
+            self.n_inputs as usize,
+            "OpDef::with_base_offsets: base_offsets.len() must equal n_inputs"
+        );
+        self.base_offsets = base_offsets;
+        self.out_base_offset = out_base_offset;
         self
     }
 
@@ -2303,6 +2403,60 @@ mod view_tests {
         assert!(ew.views.is_empty());
         let red = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
         assert!(red.views.is_empty());
+    }
+
+    #[test]
+    fn base_offset_default_is_zero() {
+        assert_eq!(BaseOffset::default(), BaseOffset::Zero);
+        assert!(BaseOffset::Zero.is_zero());
+        assert!(!BaseOffset::Runtime.is_zero());
+    }
+
+    #[test]
+    fn existing_constructors_are_offset_free() {
+        // Back-compat (BASE_OFFSET SLICE): every current OpDef builds with empty
+        // `base_offsets` + `out_base_offset == Zero` — byte-identical emission.
+        let ew = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu());
+        assert!(ew.base_offsets.is_empty());
+        assert_eq!(ew.out_base_offset, BaseOffset::Zero);
+        let red = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        assert!(red.base_offsets.is_empty());
+        assert_eq!(red.out_base_offset, BaseOffset::Zero);
+        let g = OpDef::gather(
+            "g",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        );
+        assert!(g.base_offsets.is_empty());
+        assert_eq!(g.out_base_offset, BaseOffset::Zero);
+    }
+
+    #[test]
+    fn with_base_offsets_sets_per_operand_offsets() {
+        // A two-input op with a Runtime input offset + a Runtime output offset —
+        // the rope odd-lane shape.
+        let op = OpDef::elementwise("rope_odd", 2, &[ElementKind::F32], input(0))
+            .with_base_offsets(
+                vec![BaseOffset::Runtime, BaseOffset::Zero],
+                BaseOffset::Runtime,
+            );
+        assert_eq!(op.base_offsets, vec![BaseOffset::Runtime, BaseOffset::Zero]);
+        assert_eq!(op.out_base_offset, BaseOffset::Runtime);
+    }
+
+    // cfg-gated: the debug_assert compiles OUT under --release — ungated,
+    // `cargo test --release` would red on "test did not panic". The
+    // release-safe G1 arity cover is `assert_valid_offsets`'s own assert_eq!
+    // (plan gate), tested via the struct-literal bypass in cuda.rs.
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "base_offsets.len() must equal n_inputs")]
+    fn with_base_offsets_arity_mismatch_panics_in_debug() {
+        // Debug-assert catches a generator bug at catalog-build time (len != n_inputs).
+        let _ = OpDef::elementwise("bad", 2, &[ElementKind::F32], input(0))
+            .with_base_offsets(vec![BaseOffset::Runtime], BaseOffset::Zero);
     }
 
     #[test]

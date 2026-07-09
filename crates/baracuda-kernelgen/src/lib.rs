@@ -84,11 +84,29 @@ pub fn generate(op: &OpDef, key: &StructureKey, backend: &dyn Backend) -> Genera
 #[must_use]
 pub fn generate_variants(op: &OpDef, key: &StructureKey, backend: &dyn Backend) -> Vec<Variant> {
     let plan = build_plan(op, key);
+    // BASE_OFFSET SLICE: an offsetted kernel's OOB guarantee is a CALLER
+    // PRECONDITION (the k/n_out trust model, the gext/sext + RowSort-k<=1024
+    // class) — no per-element bounds branch is emitted, so the base variant's
+    // launch_note carries the contract. Offset-free plans keep the empty note
+    // (byte-stable for every pre-increment op).
+    let has_offset =
+        plan.base_offsets.iter().any(|b| !b.is_zero()) || !plan.out_base_offset.is_zero();
+    let launch_note = if has_offset {
+        "offset launch contract: each `long long off*` argument is a runtime base \
+         ELEMENT offset added to its operand's base pointer at kernel entry. Caller \
+         precondition (no per-element bounds check is emitted): for every offsetted \
+         operand, off + <maximal element address reachable via the declared \
+         shape/strides (and gext/sext window, if composed)> must lie within the \
+         allocated buffer; only off >= 0 is validated."
+            .to_string()
+    } else {
+        String::new()
+    };
     let mut vs = vec![Variant {
         tag: "base",
         kernels: vec![backend.lower(&plan)],
         fidelity: VariantFidelity::BitIdentical,
-        launch_note: String::new(),
+        launch_note,
     }];
     vs.extend(backend.lower_variants(&plan));
     vs

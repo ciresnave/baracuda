@@ -174,6 +174,28 @@ pub enum PatternError {
     /// nondeterministic precision block, and closing it is the queued Baracuda-only
     /// scatter contract wiring, NOT a Fuel propose-first.
     ScatterUnsupported,
+    /// The op carries a runtime [`crate::ir::BaseOffset::Runtime`] base offset (a
+    /// BASE_OFFSET SLICE — the runtime per-operand pointer bump). No honest v1
+    /// contract, on two blockers verified against Fuel's actual sources:
+    ///   1. **No attrs channel for the offset.** The emitted `PatternNode` grammar
+    ///      (`Op` + `Bind`, no layout node, no attrs channel) can only describe
+    ///      reading `Input(i)` at the iteration coordinate — it cannot carry which
+    ///      operands slice nor transport the runtime `off` value. This is the same
+    ///      blocker as views/gather/scatter honest-miss on.
+    ///   2. **The frozen JIT envelope has no dispatch slot for the runtime `off`
+    ///      scalar.** `derive_pattern`'s Op+Bind grammar and the seam dispatch ABI
+    ///      cannot deliver the per-launch `long long off{i}` a slice kernel needs.
+    ///
+    /// So: no pattern, no contract — an AOT-only honest miss (the kernels still
+    /// generate + lower). Fuel's `LayoutSpec` DOES carry a `start_offset` tri-state
+    /// (`contract::layout_spec`), currently a truthful always-`rejected` — the cell
+    /// is now *speakable* (`start_offset: accepted` is the honest spelling for a
+    /// kernel that actually composes the offset), but advertising `accepted` on the
+    /// kernels we contract (which lack the `off` arg) would be an overstatement the
+    /// `contract` module forbids. Flipping it is deferred until the seam pattern
+    /// grammar + dispatch ABI can carry the offset attr + scalar (recorded via the
+    /// Baracuda↔Fuel propose-first channel).
+    OffsetUnsupported,
 }
 
 /// Derive the FKC pattern tree for `op`, or a [`PatternError`] if the body isn't
@@ -219,6 +241,22 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
     // and `contract()`'s scatter guard for the full Fuel-source rationale.
     if crate::plan::op_has_scatter(op) {
         return Err(PatternError::ScatterUnsupported);
+    }
+    // A runtime BaseOffset (BASE_OFFSET SLICE — a per-operand pointer bump) has no
+    // honest v1 contract: the Op+Bind grammar has no attrs channel for the offset,
+    // and the frozen JIT envelope has no dispatch slot for the runtime `off` scalar
+    // (the same class of blocker as views/gather/scatter). UNLIKE those classes the
+    // failure mode here is NOT a misleading error: offsets live on parallel OpDef
+    // fields OUTSIDE the value walk, so without this early-out the body derives a
+    // pattern that simply DROPS them — `derive_pattern` returns Ok and `contract()`
+    // would advertise the `_off…` kernel (whose ABI needs `long long off` launch
+    // args) under `start_offset: rejected`, a lying contract. This check is a
+    // load-bearing correctness gate (dual-gated with `contract()`'s own up-front
+    // `op_has_offset` guard). See `PatternError::OffsetUnsupported`; the contract's
+    // `start_offset` cell stays a truthful always-`rejected` (now speakable, flip
+    // deferred).
+    if crate::plan::op_has_offset(op) {
+        return Err(PatternError::OffsetUnsupported);
     }
     // Canonicalize commutative operands first so two authorings of one body
     // produce byte-identical paths/extracts/YAML (internal determinism); per
@@ -622,6 +660,28 @@ mod tests {
             to_fkc(&pat),
             "pattern:\n  root:\n    op: Add\n    operands:\n      - bind: 0\n      - bind: 1\n"
         );
+    }
+
+    #[test]
+    fn runtime_base_offset_is_an_honest_pattern_miss() {
+        use crate::ir::BaseOffset;
+        // A BASE_OFFSET SLICE (runtime per-operand pointer bump) has no honest v1
+        // contract: the Op+Bind grammar has no attrs channel for the offset and the
+        // frozen JIT envelope has no dispatch slot for the runtime `off` scalar. The
+        // early-out is a load-bearing CORRECTNESS gate, not an error-message nicety:
+        // offsets live outside the value walk, so without it the body derives a
+        // pattern that DROPS them — Ok, not BindSetMismatch (the all-Zero twin below
+        // proves the identical body patterns fine) — and the `_off…` kernel would be
+        // advertised under `start_offset: rejected`. The kernel still generates +
+        // lowers (AOT-only); only the contract is withheld.
+        let op = OpDef::elementwise("copy", 1, &[ElementKind::F32], input(0))
+            .with_base_offsets(vec![BaseOffset::Runtime], BaseOffset::Zero);
+        assert_eq!(derive_pattern(&op), Err(PatternError::OffsetUnsupported));
+        // An all-Zero (normalized offset-free) op is NOT a miss — it patterns
+        // normally (presence is any(Runtime), so this is byte-identical to no offset).
+        let zeroed = OpDef::elementwise("copy", 1, &[ElementKind::F32], input(0))
+            .with_base_offsets(vec![BaseOffset::Zero], BaseOffset::Zero);
+        assert!(derive_pattern(&zeroed).is_ok());
     }
 
     #[test]

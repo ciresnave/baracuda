@@ -7,8 +7,8 @@
 //! the backend, keeps the decision shared across every backend.
 
 use crate::ir::{
-    Access, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortOrder, View, WriteCombine,
-    WriteIndex,
+    Access, BaseOffset, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortOrder, View,
+    WriteCombine, WriteIndex,
 };
 use baracuda_kernels_types::{
     AxisMask, Contiguity, ElementKind, MAX_OPERANDS, OperandKey, StructureKey, VecWidth,
@@ -215,6 +215,23 @@ pub struct KernelPlan<'a> {
     /// [`build_plan`] ([`assert_valid_scatter`]) with an independent emitter
     /// backstop in [`crate::cuda::Cuda::lower`].
     pub write_index: &'a crate::ir::WriteIndex,
+    /// Per-input **runtime base element offsets** ([`crate::ir::BaseOffset`], the
+    /// BASE_OFFSET SLICE increment) — index `i` ↔ `Input(i)`. **Empty for every
+    /// offset-free op** (every pre-increment constructor), so the strided emitter's
+    /// per-operand address math is byte-identical; a non-empty slice has length
+    /// `n_inputs`. Only a [`crate::ir::BaseOffset::Runtime`] entry changes emission
+    /// (a `long long off{i}` launch arg bumped onto the operand base at kernel
+    /// entry). Presence forces [`Schedule::Strided`] (a runtime offset invalidates
+    /// the keyed alignment fact the vectorized path relies on). Validated at the top
+    /// of [`build_plan`] ([`assert_valid_offsets`]) with an independent emitter
+    /// backstop in [`crate::cuda::assert_offsets_lowerable`].
+    pub base_offsets: &'a [BaseOffset],
+    /// The **single output's** runtime base element offset
+    /// ([`crate::ir::BaseOffset`]) — the output-side mirror of [`Self::write_index`].
+    /// [`crate::ir::BaseOffset::Zero`] for every non-offset op (byte-identical
+    /// output address); [`crate::ir::BaseOffset::Runtime`] adds a `long long offo`
+    /// launch arg bumped onto the output base at kernel entry.
+    pub out_base_offset: BaseOffset,
 }
 
 impl KernelPlan<'_> {
@@ -247,6 +264,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     assert_valid_views(op, key);
     assert_valid_gather(op, key);
     assert_valid_scatter(op, key);
+    assert_valid_offsets(op, key);
     let schedule = match op.access {
         Access::Reduction {
             op: rop,
@@ -390,6 +408,19 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 // Index-free / write-Direct ops never reach here, so emission stays
                 // byte-identical.
                 Schedule::Strided
+            } else if op_has_offset(op) {
+                // BASE_OFFSET SLICE (G4): a Runtime base offset shifts the effective
+                // base pointer at kernel entry, so the keyed `align_bytes → VecWidth`
+                // fact the float4/ld.128 vectorized path relies on becomes a LIE —
+                // even for a width-multiple offset VALUE (the gate keys on PRESENCE, a
+                // compile-time mask, never the runtime value). Force Strided: only its
+                // single per-pointer entry-bump lowering is proven, and `emit_vectorized`
+                // indexes width-element vectors that would silently ignore the bump.
+                // This cannot be patched in the emitter alone. An offset-free op never
+                // reaches here (op_has_offset false), so emission stays byte-identical.
+                // Pinned by the force-strided positive test + the independent
+                // `assert_offsets_lowerable` backstop.
+                Schedule::Strided
             } else if op_has_addressing_view(op) {
                 // Item 01: a viewed INPUT (a `Permute`/transpose or a `Broadcast`
                 // read-through) reads the producer through a layout change, which
@@ -443,6 +474,8 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         views: &op.views,
         read_index: &op.read_index,
         write_index: &op.write_index,
+        base_offsets: &op.base_offsets,
+        out_base_offset: op.out_base_offset,
     }
 }
 
@@ -928,6 +961,18 @@ pub(crate) fn op_has_gather(op: &OpDef) -> bool {
     op.read_index.iter().any(|r| !r.is_direct())
 }
 
+/// `true` if `op` carries any **runtime base offset** (a [`BaseOffset::Runtime`]
+/// input OR a `Runtime` output; BASE_OFFSET SLICE). `false` for an offset-free op
+/// (empty `base_offsets` + `Zero` output) and for a non-empty all-`Zero` op — the
+/// byte-identical cases (presence is defined as `any(Runtime)`, so a normalized
+/// all-`Zero` vec is identical to empty). THE single presence oracle: the plan
+/// schedule gate, the `assert_valid_offsets` validator, the emitter's name suffix/
+/// launch args/pointer bumps, and the `pattern` honest-miss all read it, so they
+/// can never disagree about whether an op is offsetted.
+pub(crate) fn op_has_offset(op: &OpDef) -> bool {
+    op.base_offsets.iter().any(|b| !b.is_zero()) || !op.out_base_offset.is_zero()
+}
+
 /// Increment-4 **GATHER** admissibility gate — runs at the TOP of [`build_plan`]
 /// (the house pattern), with an independent emitter backstop in
 /// [`crate::cuda::assert_gather_lowerable`]. An index-free op (empty
@@ -1213,6 +1258,76 @@ fn assert_valid_scatter(op: &OpDef, key: &StructureKey) {
          or a constant (bincount), got a composed body — a fused scatter transform is a \
          deferred v1 composition (the deterministic gather-sum base sums the value operand \
          directly and would silently drop it)"
+    );
+}
+
+/// BASE_OFFSET SLICE admissibility gate — runs at the TOP of [`build_plan`] (the
+/// house pattern), with an independent emitter backstop in
+/// [`crate::cuda::assert_offsets_lowerable`]. An offset-free op (empty
+/// `base_offsets` + a `Zero` output) returns immediately, and a non-empty all-`Zero`
+/// op returns after the length check — so the established path is unchanged and
+/// emission stays byte-identical. For an op carrying a real `Runtime` offset the v1
+/// rules, all honest AOT panics (an author/generator error — the offset value is a
+/// per-launch scalar that never crosses the JIT trust boundary, so a panic is the
+/// backstop, not a silent wrong-emit):
+///
+/// 1. **Shape (G1)**: a non-empty `base_offsets` ⇒ `len == n_inputs` (index `i` ↔
+///    `Input(i)`; the same rule as `views`/`read_index`). Checked even for an
+///    all-`Zero` non-empty vec — a malformed length is an author bug either way.
+/// 2. **Access (G2)**: any `Runtime` ⇒ [`Access::Elementwise`] only. A
+///    reduction/row-reduce/contraction/scan/window/sort op has role-aware
+///    addressing (RowStreamed/ColBroadcast/RowScalar) that needs per-role offset
+///    semantics — a single entry-bump is unsound there, so it is de-scoped.
+/// 3. **Single-output (G3)**: any `Runtime` ⇒ `extra_out_bodies` empty. A runtime
+///    offset on a multi-output op is a deferred composition (the multi-store DAG ×
+///    the pointer bump is unproven) — rope uses Option B (one single-output launch
+///    per lane parity).
+///
+/// The schedule-forcing rule (**G4**: any `Runtime` ⇒ [`Schedule::Strided`]) lives
+/// in the `Access::Elementwise` arm of [`build_plan`] — a runtime offset shifts the
+/// effective base pointer, so the keyed `align_bytes → VecWidth` fact the
+/// `float4`/`ld.128` path relies on becomes a lie even for a width-multiple value.
+/// **OOB is a caller precondition** (the k/n_out trust model, like gather/scatter's
+/// `gext`/`sext` and RowSort's `k<=1024`): `off + <maximal declared-extent address>`
+/// must land in-bounds; the emitted code forms no address before the bump and clamps
+/// no offset — it is a `launch_note` + on-device-validated contract, not a checked
+/// bound.
+fn assert_valid_offsets(op: &OpDef, _key: &StructureKey) {
+    if op.base_offsets.is_empty() && op.out_base_offset.is_zero() {
+        return; // offset-free — every pre-increment op, unchanged.
+    }
+    let name = &op.name;
+    // G1 arity: a non-empty vec must be length-matched (an all-Zero non-empty vec
+    // is still a length claim the author must get right — checked before the
+    // all-Zero early-out below).
+    if !op.base_offsets.is_empty() {
+        assert_eq!(
+            op.base_offsets.len(),
+            op.n_inputs as usize,
+            "OpDef '{name}': base_offsets.len() ({}) must equal n_inputs ({})",
+            op.base_offsets.len(),
+            op.n_inputs
+        );
+    }
+    if !op_has_offset(op) {
+        return; // all-Zero == offset-free: byte-identical emission, no gate.
+    }
+    // G2 access: a runtime offset is Elementwise-only in v1.
+    assert!(
+        matches!(op.access, Access::Elementwise),
+        "OpDef '{name}': a runtime BaseOffset is Access::Elementwise-only in v1 — a \
+         {}-class op has role-aware addressing (RowStreamed/ColBroadcast/RowScalar) \
+         that needs per-role offset semantics (a later increment)",
+        access_tag(&op.access)
+    );
+    // G3 single-output: a runtime offset on a multi-output op is a deferred
+    // composition (the multi-store DAG × the pointer bump is unproven).
+    assert!(
+        op.n_outputs() == 1,
+        "OpDef '{name}': a runtime BaseOffset on a multi-output op ({} outputs) is a \
+         deferred composition in v1 — rope uses Option B (one single-output launch \
+         per lane parity)",
+        op.n_outputs()
     );
 }
 
