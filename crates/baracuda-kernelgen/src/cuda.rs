@@ -149,6 +149,10 @@ impl Backend for Cuda {
                 // `exprs`); an int sort permutes storage bits (no int Div/Const
                 // arithmetic), so nothing extra to gate — the arm keeps the walk total.
                 Access::RowSort { .. } => {}
+                // Increment 11 IM2COL: `body` is pinned `Input(0)` (already in
+                // `exprs`); a raw-bit gather permutes storage bits (no int Div/Const
+                // arithmetic), so nothing extra to gate — the arm keeps the walk total.
+                Access::Im2Col { .. } => {}
                 Access::Elementwise => {}
             }
             for e in exprs {
@@ -189,6 +193,10 @@ impl Backend for Cuda {
                 // RowSort is non-elementwise, so a Coord would be rejected upstream —
                 // nothing extra to walk here.
                 Access::RowSort { .. } => {}
+                // Increment 11 IM2COL: `body` is pinned `Input(0)` (no Coord); im2col
+                // is non-elementwise, so a Coord would be rejected upstream — nothing
+                // extra to walk here.
+                Access::Im2Col { .. } => {}
                 Access::Elementwise => {}
             }
             for e in exprs {
@@ -335,6 +343,11 @@ impl Backend for Cuda {
             // no barriers). The cooperative smem bitonic pair-sort is produced
             // separately by `row_sort_bitonic_variant`, never routed through `lower()`.
             Schedule::RowSort { .. } => emit_row_sort(plan, ctype),
+            // Increment 11 IM2COL: one thread per output cell (grid-stride) computes
+            // the closed-form source coord and RAW-BIT copies it (or stores the typed
+            // zero for an OOB tap) — no fold, no variant (each output is an
+            // independent read-or-zero + store, BitIdentical).
+            Schedule::Im2Col { .. } => emit_im2col(plan, ctype),
         }
     }
 }
@@ -4732,6 +4745,148 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         ReduceOp::Prod => unreachable!("Window rejects Prod"),
     }
 
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+// ============================================================================
+// Increment 11 IM2COL — 2-D im2col / unfold (expanding structured gather).
+// ============================================================================
+
+/// The 2-D im2col emitter (`Schedule::Im2Col`) —
+/// [`crate::backend::VariantFidelity::BitIdentical`]. One thread per OUTPUT cell
+/// (grid-stride over `N*C*kh*kw*oH*oW`): each thread unravels its linear
+/// column-matrix index into `(n, c, ki, kj, oh, ow)`, computes the closed-form
+/// source coord (`in_h = oh*stride_h - pad_h + ki*dilation_h`, `in_w` symmetric),
+/// bounds-checks BOTH spatial axes, and RAW-BIT copies the in-bounds NCHW input
+/// element `in0[(((n*C+c)*H_in+in_h)*W_in+in_w)]` — or stores the op's typed ZERO
+/// for an out-of-bounds (zero-pad) tap. NO fold, NO accumulator, NO up-convert
+/// wrapper: f16/bf16 copy `__half`/`__nv_bfloat16` verbatim so NaN payloads /
+/// `-0` signs survive; the only typed value is the OOB zero (matching the bespoke
+/// `zero_of<T>()`). Independent per-output copies ⇒ naturally parallel and
+/// bit-reproducible; byte-identical to the bespoke `im2col_2d_fw_kernel`.
+///
+/// The conv geometry `(kh,kw,stride,pad,dilation)` is baked as compile-time
+/// literals; the six runtime extents `(N, C, H_in, W_in, oH, oW)` are `long long`
+/// launch args (Window's 3-scalar ABI generalized to 6). The
+/// `(H_in,W_in) -> (oH,oW)` relationship is the caller's conv-arithmetic
+/// precondition (the structure key carries no extents; see `plan::validate_im2col`).
+fn emit_im2col(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    let (kernel, stride, pad, dilation) = match plan.schedule {
+        Schedule::Im2Col {
+            kernel,
+            stride,
+            pad,
+            dilation,
+        } => (kernel, stride, pad, dilation),
+        _ => unreachable!("emit_im2col on a non-Im2Col schedule"),
+    };
+
+    // ---- Independent emitter backstops (belt-and-suspenders; validate_im2col
+    // validates the same — the 0a lesson: gate every layer). cuda-prefixed messages
+    // distinct from the plan gate's. The rank-4 NCHW input is the widest operand, so
+    // the shared key.rank pins the input rank; the output rank-3 is not per-operand
+    // keyed, so only its LAYOUT is re-checkable here. ----
+    assert!(
+        plan.key.rank == 4,
+        "cuda backend: Im2Col v1 emits a rank-4 NCHW input (key.rank {} != 4)",
+        plan.key.rank
+    );
+    assert!(
+        plan.n_inputs == 1 && plan.key.n_operands == 2,
+        "cuda backend: Im2Col takes a single input + single output (n_inputs {}, n_operands {})",
+        plan.n_inputs,
+        plan.key.n_operands
+    );
+    {
+        let i0 = plan.key.operands[0];
+        assert!(
+            i0.contig == Contiguity::Contig && !i0.flipped && i0.bcast.is_empty(),
+            "cuda backend: Im2Col input 0 must be dense forward-contiguous NCHW (the \
+             (((n*C+c)*H_in+in_h)*W_in+in_w) address math assumes row-major, no flip/bcast)"
+        );
+        let o = plan.key.operands[1];
+        assert!(
+            o.contig == Contiguity::Contig && !o.flipped && o.bcast.is_empty(),
+            "cuda backend: Im2Col output must be forward-dense contiguous (empty bcast, not flipped)"
+        );
+    }
+    let (kh, kw) = (i64::from(kernel.0), i64::from(kernel.1));
+    let (sh, sw) = (i64::from(stride.0), i64::from(stride.1));
+    let (ph, pw) = (i64::from(pad.0), i64::from(pad.1));
+    let (dh, dw) = (i64::from(dilation.0), i64::from(dilation.1));
+    assert!(
+        kh >= 1 && kw >= 1 && sh >= 1 && sw >= 1 && dh >= 1 && dw >= 1,
+        "cuda backend: Im2Col kernel/stride/dilation must be >= 1 on each axis"
+    );
+
+    let dtag = dtype_tag(plan.dtype);
+    let name = format!("baracuda_gen_{}_{dtag}_im2col", plan.op_name);
+
+    // The OOB typed zero — the bespoke `zero_of<T>()`: f16/bf16 need the explicit
+    // `__float2half`/`__float2bfloat16` construction; the rest are the plain zero
+    // literal (`0` / `0.0` / `0.0f`) from `scan_identity(Sum, dtype)`. The IN-bounds
+    // store is a RAW-BIT copy (`out[t] = in0[src]`, same ctype) — NEVER wrapped in an
+    // up/down-convert, so NaN payloads survive on f16/bf16.
+    let typed_zero = match plan.dtype {
+        ElementKind::F16 => "__float2half(0.0f)".to_string(),
+        ElementKind::Bf16 => "__float2bfloat16(0.0f)".to_string(),
+        _ => scan_identity(ReduceOp::Sum, plan.dtype),
+    };
+
+    // ---- Preamble + signature. ----
+    let mut s = format!(
+        "// Generated by baracuda-kernelgen — do not edit.\n// op: {} | cell: {}\n",
+        plan.op_name,
+        plan.key.to_token()
+    );
+    if let Some(inc) = extra_include(plan.dtype) {
+        s.push_str(inc);
+    }
+    s.push('\n');
+    s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
+    s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
+    s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    // Six runtime extents (Window's 3-scalar ABI generalized): N, C, H_in, W_in, oH, oW.
+    s.push_str("    long long N,\n    long long C,\n    long long H_in,\n    long long W_in,\n    long long oH,\n    long long oW)\n{\n");
+    // total = N*C*kh*kw*oH*oW output cells; kh/kw baked as literals.
+    s.push_str(&format!(
+        "    long long total = N * C * {kh} * {kw} * oH * oW;\n"
+    ));
+    s.push_str("    if (total == 0) return;\n");
+    s.push_str("    for (long long t = (long long)blockIdx.x * (long long)blockDim.x + (long long)threadIdx.x;\n");
+    s.push_str("         t < total; t += (long long)gridDim.x * (long long)blockDim.x) {\n");
+    // 6-way unravel: tid -> (n, c, ki, kj, oh, ow). Layout A (channel-major then tap,
+    // spatial row-major): row = c*kh*kw + ki*kw + kj, col = oh*oW + ow.
+    s.push_str("        long long col = t % (oH * oW);\n");
+    s.push_str("        long long row_full = t / (oH * oW);\n");
+    s.push_str("        long long oh = col / oW;\n");
+    s.push_str("        long long ow = col - oh * oW;\n");
+    s.push_str(&format!(
+        "        long long patch = row_full % (C * {kh} * {kw});\n"
+    ));
+    s.push_str(&format!(
+        "        long long n = row_full / (C * {kh} * {kw});\n"
+    ));
+    s.push_str(&format!("        long long c = patch / ({kh} * {kw});\n"));
+    s.push_str(&format!(
+        "        long long kij = patch - c * ({kh} * {kw});\n"
+    ));
+    s.push_str(&format!("        long long ki = kij / {kw};\n"));
+    s.push_str(&format!("        long long kj = kij - ki * {kw};\n"));
+    // Source spatial coord — signed (long long), can go negative under pad.
+    s.push_str(&format!(
+        "        long long in_h = oh * {sh} - {ph} + ki * {dh};\n"
+    ));
+    s.push_str(&format!(
+        "        long long in_w = ow * {sw} - {pw} + kj * {dw};\n"
+    ));
+    // Two spatial bounds checks: raw-bit copy the in-bounds source, else typed zero.
+    s.push_str("        if (in_h >= 0 && in_h < H_in && in_w >= 0 && in_w < W_in) {\n");
+    s.push_str("            out[t] = in0[(((n * C + c) * H_in + in_h) * W_in + in_w)];\n");
+    s.push_str("        } else {\n");
+    s.push_str(&format!("            out[t] = {typed_zero};\n"));
+    s.push_str("        }\n");
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -11991,6 +12146,246 @@ mod window_tests {
         for &(name, dt, op, size, stride, dil, plo, phi, cip) in cases {
             let p = OpDef::window_simple(name, &[dt], op, 1, size, stride, dil, plo, phi, cip);
             write(generate(&p, &window_key(dt, 64, 32), &Cuda));
+        }
+    }
+}
+
+#[cfg(test)]
+mod im2col_tests {
+    //! Increment-11 IM2COL emitter tests: the one-thread-per-output-cell expanding
+    //! gather generates valid, structurally-correct CUDA. On-device numeric proof
+    //! (whole-buffer memcmp vs the bespoke `im2col_2d_fw_kernel` + a CPU closed-form
+    //! oracle) is `ondevice/im2col_validate.cu`; these are source-shape + closed-form
+    //! index-map + raw-bit-copy pins. Goldens call `generate` (the full pipeline);
+    //! gate mutations are covered `build_plan`-DIRECT in `plan::im2col_gate_validate`.
+    use crate::plan::{KernelPlan, Schedule};
+    use crate::{Cuda, generate};
+    use baracuda_kernels_types::{
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
+    };
+
+    // rank-4 NCHW input [2,3,4,4] dense + rank-3 output [2,8,8] dense (the extent is
+    // a runtime precondition — only rank + layout are keyed).
+    fn im2col_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 4, 1], dt, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[64, 8, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn im2col_base_golden_f32() {
+        // 3x3, stride 1, pad 1, dilation 1 — the canonical conv geometry.
+        let p =
+            crate::ir::OpDef::im2col_2d("unfold", ElementKind::F32, (3, 3), (1, 1), (1, 1), (1, 1));
+        let k = generate(&p, &im2col_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_unfold_f32_im2col");
+        let s = &k.source;
+        // The 6-scalar signature in EXACT order N,C,H_in,W_in,oH,oW (a swapped
+        // H/W or oH/oW would be silently wrong on non-square inputs).
+        assert!(s.contains("const float* __restrict__ in0,"), "{s}");
+        assert!(s.contains("float* __restrict__ out,"), "{s}");
+        assert!(
+            s.contains(
+                "    long long N,\n    long long C,\n    long long H_in,\n    long long W_in,\n    long long oH,\n    long long oW)"
+            ),
+            "{s}"
+        );
+        // total = N*C*kh*kw*oH*oW (the full kh*kw expansion; kh/kw baked as literals).
+        assert!(
+            s.contains("long long total = N * C * 3 * 3 * oH * oW;"),
+            "{s}"
+        );
+        // The 6-way unravel, Layout A: spatial col = oh*oW+ow, row = c*kh*kw+ki*kw+kj.
+        assert!(s.contains("long long col = t % (oH * oW);"), "{s}");
+        assert!(s.contains("long long row_full = t / (oH * oW);"), "{s}");
+        assert!(s.contains("long long oh = col / oW;"), "{s}");
+        assert!(s.contains("long long ow = col - oh * oW;"), "{s}");
+        assert!(
+            s.contains("long long patch = row_full % (C * 3 * 3);"),
+            "{s}"
+        );
+        assert!(s.contains("long long n = row_full / (C * 3 * 3);"), "{s}");
+        assert!(s.contains("long long c = patch / (3 * 3);"), "{s}");
+        assert!(s.contains("long long kij = patch - c * (3 * 3);"), "{s}");
+        assert!(s.contains("long long ki = kij / 3;"), "{s}");
+        assert!(s.contains("long long kj = kij - ki * 3;"), "{s}");
+        // Source coord with stride/pad/dilation baked (s1 p1 d1): oh*1 - 1 + ki*1.
+        assert!(s.contains("long long in_h = oh * 1 - 1 + ki * 1;"), "{s}");
+        assert!(s.contains("long long in_w = ow * 1 - 1 + kj * 1;"), "{s}");
+        // BOTH spatial guards (a dropped in_w guard OOB-reads at the W-edges).
+        assert!(
+            s.contains("if (in_h >= 0 && in_h < H_in && in_w >= 0 && in_w < W_in) {"),
+            "{s}"
+        );
+        // Raw-bit copy of the closed-form NCHW source offset.
+        assert!(
+            s.contains("out[t] = in0[(((n * C + c) * H_in + in_h) * W_in + in_w)];"),
+            "{s}"
+        );
+        // OOB store is the exact typed zero (zero-pad).
+        assert!(s.contains("out[t] = 0.0f;"), "{s}");
+    }
+
+    #[test]
+    fn im2col_golden_f16() {
+        // f16: the copied value is a RAW-BIT __half move (NO __float2half round-trip on
+        // the copy — that would change NaN payloads); only the OOB zero is constructed.
+        let p =
+            crate::ir::OpDef::im2col_2d("unfold", ElementKind::F16, (2, 2), (1, 1), (0, 0), (1, 1));
+        let k = generate(&p, &im2col_key(ElementKind::F16), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_unfold_f16_im2col");
+        let s = &k.source;
+        assert!(s.contains("#include <cuda_fp16.h>"), "{s}");
+        assert!(s.contains("const __half* __restrict__ in0,"), "{s}");
+        // Raw __half copy — NO conversion wrapper on the gathered value.
+        assert!(
+            s.contains("out[t] = in0[(((n * C + c) * H_in + in_h) * W_in + in_w)];"),
+            "{s}"
+        );
+        assert!(
+            !s.contains("__half2float(in0"),
+            "the gather must NOT round-trip f16 through float:\n{s}"
+        );
+        // The OOB zero is the exact typed __float2half(0.0f) — matches bespoke zero_of.
+        assert!(s.contains("out[t] = __float2half(0.0f);"), "{s}");
+    }
+
+    #[test]
+    fn im2col_bf16_oob_zero_is_typed() {
+        let p = crate::ir::OpDef::im2col_2d(
+            "unfold",
+            ElementKind::Bf16,
+            (2, 2),
+            (1, 1),
+            (1, 1),
+            (1, 1),
+        );
+        let k = generate(&p, &im2col_key(ElementKind::Bf16), &Cuda);
+        let s = &k.source;
+        assert!(s.contains("out[t] = __float2bfloat16(0.0f);"), "{s}");
+        assert!(!s.contains("__bfloat162float(in0"), "{s}");
+    }
+
+    #[test]
+    fn im2col_dilated_golden() {
+        // dilation != 1 bakes + ki*dh / + kj*dw; non-square kernel (kh != kw) + stride
+        // + pad all baked as distinct literals (a ki/kj or H/W swap fails the memcmp
+        // on the on-device non-square cells; here it fails the baked literals).
+        let p =
+            crate::ir::OpDef::im2col_2d("unfold", ElementKind::F32, (3, 5), (2, 1), (2, 0), (2, 3));
+        let k = generate(&p, &im2col_key(ElementKind::F32), &Cuda);
+        let s = &k.source;
+        assert!(
+            s.contains("long long total = N * C * 3 * 5 * oH * oW;"),
+            "{s}"
+        );
+        assert!(
+            s.contains("long long patch = row_full % (C * 3 * 5);"),
+            "{s}"
+        );
+        assert!(s.contains("long long c = patch / (3 * 5);"), "{s}");
+        assert!(s.contains("long long ki = kij / 5;"), "{s}");
+        assert!(s.contains("long long kj = kij - ki * 5;"), "{s}");
+        // in_h uses (sh=2, ph=2, dh=2); in_w uses (sw=1, pw=0, dw=3) — distinct axes.
+        assert!(s.contains("long long in_h = oh * 2 - 2 + ki * 2;"), "{s}");
+        assert!(s.contains("long long in_w = ow * 1 - 0 + kj * 3;"), "{s}");
+    }
+
+    #[test]
+    fn im2col_symbol_is_distinct() {
+        // The _im2col symbol collides with no other family (window/sort/scan).
+        let p =
+            crate::ir::OpDef::im2col_2d("conv", ElementKind::F32, (3, 3), (1, 1), (1, 1), (1, 1));
+        let k = generate(&p, &im2col_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_conv_f32_im2col");
+        assert!(!k.source.contains("_window_"), "{}", k.source);
+        assert!(!k.source.contains("_rowsort_"), "{}", k.source);
+        assert!(!k.source.contains("_scan_"), "{}", k.source);
+    }
+
+    #[test]
+    #[should_panic(expected = "Im2Col output must be forward-dense contiguous")]
+    fn im2col_flipped_output_refused_by_backstop() {
+        // Tier-2: a hand-built Im2Col plan with a FLIPPED output (build_plan never
+        // produces this — validate_im2col rejects it) must be refused independently by
+        // the emitter backstop.
+        use crate::backend::Backend;
+        let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 4, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[64, 8, -1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let body = crate::ir::input(0).0;
+        let plan = KernelPlan {
+            op_name: "sneaky",
+            n_inputs: 1,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Im2Col {
+                kernel: (3, 3),
+                stride: (1, 1),
+                pad: (1, 1),
+                dilation: (1, 1),
+            },
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            extra_out_dtypes: &[],
+            access: &crate::ir::Access::Im2Col {
+                kernel: (3, 3),
+                stride: (1, 1),
+                pad: (1, 1),
+                dilation: (1, 1),
+            },
+            views: &[],
+            read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    /// Manual dump tool (not a wired assertion): regenerate the im2col `.cu` sources
+    /// the on-device validator `#include`s. Run with:
+    ///   `IM2COL_OUT=<outdir> cargo test -p baracuda-kernelgen dump_im2col_sources -- --ignored --nocapture`
+    #[test]
+    #[ignore = "manual regeneration tool for ondevice/im2col_validate.cu"]
+    fn dump_im2col_sources() {
+        let out = std::env::var("IM2COL_OUT").unwrap_or_else(|_| ".".to_string());
+        let write = |k: crate::GeneratedKernel| {
+            std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+            println!("wrote {out}/{}.cu", k.name);
+        };
+        // Geometry-encoded op_names so distinct (dtype, geometry) cells emit distinct
+        // entry symbols (the kernel name encodes op/dtype but NOT geometry — two
+        // geometries would otherwise collide). The harness `im2col_validate.cu`
+        // mirrors this matrix. Fields: (op_name, dtype, (kh,kw),(sh,sw),(ph,pw),(dh,dw)).
+        type Geo = ((u8, u8), (u8, u8), (u8, u8), (u8, u8));
+        // The geometry spread (shared across dtypes): 1x1 identity, 3x3 s1 p1 (OOB
+        // every edge), kh!=kw non-square, stride>kernel holes, dilation>1.
+        let geos: &[(&str, Geo)] = &[
+            ("k1", ((1, 1), (1, 1), (0, 0), (1, 1))), // 1x1 identity-ish
+            ("k3p1", ((3, 3), (1, 1), (1, 1), (1, 1))), // 3x3 s1 p1 (OOB edges)
+            ("k3s2", ((3, 3), (2, 2), (1, 1), (1, 1))), // 3x3 stride 2 pad 1
+            ("k35", ((3, 5), (1, 1), (1, 2), (1, 1))), // kh!=kw non-square
+            ("s3k2", ((2, 2), (3, 3), (0, 0), (1, 1))), // stride>kernel (holes)
+            ("d2", ((3, 3), (1, 1), (2, 2), (2, 2))), // dilation>1
+        ];
+        for &dt in &[
+            ElementKind::F32,
+            ElementKind::F64,
+            ElementKind::F16,
+            ElementKind::Bf16,
+            ElementKind::I32,
+            ElementKind::I64,
+        ] {
+            // The symbol is `baracuda_gen_{gname}_{dtag}_im2col` — dtag distinguishes
+            // dtypes, gname distinguishes geometries, so each (dtype, geometry) cell is
+            // a unique entry point (no redefinition when all are #included together).
+            for &(gname, (kernel, stride, pad, dilation)) in geos {
+                let p = crate::ir::OpDef::im2col_2d(gname, dt, kernel, stride, pad, dilation);
+                write(generate(&p, &im2col_key(dt), &Cuda));
+            }
         }
     }
 }

@@ -1284,6 +1284,43 @@ pub enum Access {
         /// `out`. See [`SortLimit`].
         limit: SortLimit,
     },
+    /// **2-D im2col / unfold (increment 11)** — the conv-lowering workhorse
+    /// (`Conv2d` = im2col then GEMM then reshape). A pure EXPANDING structured
+    /// gather: each of the `kh*kw` window taps over a rank-4 `[N,C,H_in,W_in]` NCHW
+    /// input becomes its OWN output cell, producing the column matrix
+    /// `[N, C*kh*kw, oH*oW]` (Layout A — channel-major then tap, spatial row-major).
+    /// The extent-INVERSE of [`Access::Window`] (which folds taps into one
+    /// downsampled output); this expands them. NOT a [`View`] (1:1 remap) and NOT a
+    /// data-dependent [`ReadIndex::Indexed`] gather — the source index is
+    /// CLOSED-FORM from the loop coords.
+    ///
+    /// For output cell `(n, c, ki, kj, oh, ow)` (row = `c*kh*kw + ki*kw + kj`,
+    /// col = `oh*oW + ow`) the source coord is
+    /// `in_h = oh*stride.0 - pad.0 + ki*dilation.0`,
+    /// `in_w = ow*stride.1 - pad.1 + kj*dilation.1`. A tap with
+    /// `in_h` outside `[0,H_in)` or `in_w` outside `[0,W_in)` is OUT OF BOUNDS: it
+    /// stores the op's typed ZERO (zero-pad convention, matching the bespoke
+    /// `zero_of<T>()`). The copied value is RAW-BIT verbatim (no arithmetic) — every
+    /// dtype is bit-exact, NaN payloads / -0 signs preserved.
+    ///
+    /// v1 scope (`plan::validate_im2col`): single input, rank-4 forward-dense
+    /// contiguous NCHW; `groups == 1` (dense); output rank-3 `[N, C*kh*kw, oH*oW]`
+    /// forward-dense contiguous; `kh,kw,stride.*,dilation.* >= 1`. The
+    /// `(H_in,W_in) -> (oH,oW)` conv arithmetic is a **runtime-launch-arg caller
+    /// precondition** (the key carries no extents — same tier as Window's
+    /// `k_in`->`k_out`). Deferred: col2im/backward, 1-D/3-D, grouped conv, a per-tap
+    /// `pre` map, and the im2col->GEMM->reshape `Conv2D` FUSION (the only
+    /// advertisable path). See the increment-11 brief §7.
+    Im2Col {
+        /// `(kh, kw)` — window taps per spatial axis (compile-time literals).
+        kernel: (u8, u8),
+        /// `(stride_h, stride_w)` — output downsampling stride per axis (`>= 1`).
+        stride: (u8, u8),
+        /// `(pad_h, pad_w)` — zero-padding per axis (low == high, symmetric v1).
+        pad: (u8, u8),
+        /// `(dilation_h, dilation_w)` — inter-tap dilation per axis (`>= 1`).
+        dilation: (u8, u8),
+    },
 }
 
 /// Per-axis role in a contraction — the `{Batch, FreeM, FreeN, ContractedK}`
@@ -2418,6 +2455,49 @@ impl OpDef {
                 stable: true,
                 out: SortOut::Both,
                 limit: SortLimit::Full,
+            },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
+            out_dtype: None,
+            extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
+        }
+    }
+
+    /// Build a **2-D im2col / unfold** op (increment 11): the pure expanding
+    /// structured gather that lowers `Conv2d`. A single rank-4 NCHW input
+    /// `[N,C,H_in,W_in]` unfolds into the column matrix `[N, C*kh*kw, oH*oW]`
+    /// (Layout A — channel-major then tap, spatial row-major), the exact bespoke
+    /// `im2col_2d` + PyTorch `F.unfold` order. `body == Input(0)` (a RAW-BIT copy),
+    /// mirroring [`OpDef::window_simple`]/[`OpDef::row_sort`], so every body-walker
+    /// (params/flops/ulp/DAG/`derive_pattern`) operates on a well-formed expr
+    /// unchanged. The conv geometry `(kernel, stride, pad, dilation)` rides the
+    /// [`Access::Im2Col`] node as compile-time literals; the six runtime extents
+    /// `(N,C,H_in,W_in,oH,oW)` ride `long long` launch args. `out_dtype = None` (a
+    /// pure gather preserves dtype). Validated at `plan::validate_im2col`. See
+    /// [`Access::Im2Col`].
+    #[must_use]
+    pub fn im2col_2d(
+        name: &str,
+        dtype: ElementKind,
+        kernel: (u8, u8),
+        stride: (u8, u8),
+        pad: (u8, u8),
+        dilation: (u8, u8),
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs: 1,
+            body: ScalarExpr::Input(0),
+            dtypes: vec![dtype],
+            access: Access::Im2Col {
+                kernel,
+                stride,
+                pad,
+                dilation,
             },
             views: Vec::new(),
             read_index: Vec::new(),

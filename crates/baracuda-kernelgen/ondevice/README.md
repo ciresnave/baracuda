@@ -1172,7 +1172,8 @@ returns `None` (the Reduction/Scan/Contraction precedent — pinned by
 `_window_<combine>[_cip]` entry_point, never the token).
 
 **De-scoped from v1** (queued follow-ups, documented in `Access::Window`): im2col
-(dimension EXPANSION, not reduction), causal_conv1d (needs a weight operand → windowed
+(dimension EXPANSION, not reduction) **— SHIPPED as increment 11, see
+`im2col_validate.cu` below**; causal_conv1d (needs a weight operand → windowed
 contraction), interpolate/bilinear (Coord-computed weights, 2-D window), N-D /
 multi-axis windows, overlap-backward (rides atomics / gather-sum), and the non-inner
 window axis. The `in_len → out_len` window arithmetic is a **runtime-launch-arg caller
@@ -1981,3 +1982,128 @@ op + registering Baracuda's FKC as a hetero `return.bundle` FusedOp — Baracuda
 be Fuel's first mixed-dtype bundle producer), filed in
 `docs/fuel-ask-heteromulti-dropout-2026-07-09.md`; the v1 AOT kernel needs none of
 it.
+
+## `im2col_validate.cu` — 2-D im2col / unfold (increment 11, IM2COL)
+
+Validates `Access::Im2Col` — a pure EXPANDING structured gather (the conv-lowering
+workhorse, `Conv2d ≡ im2col → GEMM → reshape`). Each of the `kh·kw` window taps over
+a rank-4 `[N,C,H_in,W_in]` NCHW input becomes its OWN output cell, producing the
+column matrix `[N, C·kh·kw, oH·oW]` (**Layout A** — channel-major then tap, spatial
+row-major: `y[n, c·kh·kw + ki·kw + kj, oh·oW + ow]` — the exact bespoke `im2col_2d` +
+PyTorch `F.unfold` order). The extent-INVERSE of `Access::Window` (which folds taps
+into one downsampled output; this expands them).
+
+One thread per OUTPUT cell (grid-stride over `N·C·kh·kw·oH·oW`) unravels its linear
+index into `(n,c,ki,kj,oh,ow)`, computes the closed-form source coord
+`in_h = oh·stride_h − pad_h + ki·dilation_h` / `in_w` symmetric, bounds-checks BOTH
+spatial axes, and **RAW-BIT** copies `in0[(((n·C+c)·H_in+in_h)·W_in+in_w)]` or stores
+the typed ZERO for an out-of-bounds (zero-pad) tap. NO fold, NO accumulator, NO
+up/down-convert wrapper — f16/bf16 copy `__half`/`__nv_bfloat16` verbatim so NaN
+payloads and −0 signs survive; the only typed value is the OOB zero (matching the
+bespoke `zero_of<T>()`, all-zero bits for every dtype). So EVERY dtype is a bit-exact
+move and acceptance is whole-buffer `memcmp`, `bit_diff == 0`, across the ENTIRE probe
+space with **no NaN/tie carve-out** — a stronger backstop than any prior increment
+(topk had to exclude NaN/tie rows; im2col has no comparator to diverge on).
+
+The conv geometry `(kh,kw,stride,pad,dilation)` is baked into each kernel as
+**compile-time literals**; the six runtime extents `(N, C, H_in, W_in, oH, oW)` are
+`long long` launch args (Window's 3-scalar ABI generalized to 6). The kernel signature
+is uniform:
+`(const T* in0, T* out, long long N, long long C, long long H_in, long long W_in, long long oH, long long oW)`.
+
+Regenerate + build + run:
+```
+IM2COL_OUT=<outdir> cargo test -p baracuda-kernelgen dump_im2col_sources -- --ignored --nocapture
+cp crates/baracuda-kernelgen/ondevice/im2col_validate.cu <outdir>/
+nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor" \
+     -I crates/baracuda-kernels-sys/kernels/include \
+     <outdir>/im2col_validate.cu -o <outdir>/im2col_validate && <outdir>/im2col_validate
+```
+The dump tool (`cuda::im2col_tests::dump_im2col_sources`) writes the **36** cells
+(`{f32,f64,f16,bf16,i32,i64} × 6 geometries`) the harness `#include`s by name; the
+harness also `#include`s the bespoke `baracuda_im2col.cuh` and calls the template
+launcher `baracuda::im2col::launch_im2col_2d<T>` (extends to i32/i64, which the FFI
+`_run` does not instantiate).
+
+Sanitizers (small non-square shape via the `san` argv):
+```
+compute-sanitizer --tool memcheck  ./im2col_validate san
+compute-sanitizer --tool racecheck ./im2col_validate san
+compute-sanitizer --tool synccheck ./im2col_validate san
+compute-sanitizer --tool initcheck ./im2col_validate san
+```
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3, 2026-07-09 — **RESULT:
+ALL PASSED (41 cells)**:
+
+- **THE ACCEPTANCE GATE — whole-buffer `bit_diff == 0` vs BOTH the bespoke
+  `im2col_2d_fw_kernel` AND an independent CPU closed-form byte oracle** — across the
+  full `{f32,f64,f16,bf16,i32,i64} × {geometry}` matrix. Geometries:
+  `k1` (1×1 identity-ish, no tap expansion), `k3p1` (3×3 s1 p1 — OOB at every edge),
+  `k3s2` (3×3 stride 2 — downsampled), `k35` (kh≠kw non-square 3×5 — catches ki/kj and
+  H/W swaps), `s3k2` (2×2 stride 3 > kernel — coverage holes), `d2` (3×3 dilation 2 pad
+  2 — the `+ki·dh`/`+kj·dw` term + edge overhang). All over a **non-square batched**
+  base shape `N=2, C=3, H=5, W=7` (`H≠W` and `oH≠oW` catch axis swaps; `N>1` catches
+  the `n·(C·kh·kw)` batch stride).
+- **Extra ABI-order shape cells** (a swapped H/W or oH/oW is silently wrong on
+  non-square inputs): minimal `1×1×1×1`, square `3×4×8×8` in-bounds no-pad,
+  non-square `3×4×9×11` (f32), transposed `2×3×11×9` (f64), `2×3×13×7` (f16) — all
+  `bit_diff bespoke=0 cpu=0`. The **independent CPU oracle** is load-bearing: it
+  catches a self-consistent WRONG column order / axis swap that a bespoke restatement
+  alone could not (mutation M3/M4).
+- **Probe space:** inputs are byte-LCG-seeded (every element an arbitrary bit pattern
+  — NaN payloads / ±inf / ±0 / subnormals all appear) with explicit qNaN/sNaN
+  payloads, ±inf, ±0, and subnormals planted up front. Because the gather is raw-bit,
+  every bit pattern is preserved verbatim — **NO carve-out**.
+- **Sanitizers** (36 cells, small shape): memcheck / synccheck / racecheck / initcheck
+  `ERROR SUMMARY: 0 errors` / **0 hazards**. Which layer catches what (honest
+  attribution): the **0xAA-poison + memcmp** is what proves write-completeness — an
+  unwritten `N·C·kh·kw·oH·oW` slot stays `0xAA`, which ≠ the raw-bit gather/zero, so
+  M6/M7 diverge from the oracle (initcheck can NOT flag an under-written slot — it is
+  poison-*initialized*, not uninitialized). **memcheck** catches a true out-of-allocation
+  source read (a corner tap that indexes past the whole input buffer — mutation M1).
+  **initcheck** guards any read of genuinely-uninitialized global memory (0 here). So the
+  `(H_in,W_in)→(oH,oW)` precondition the plan gate cannot express (the key carries no
+  extents, same tier as Window's `k_in→k_out`) is enforced on-device by the poison-memcmp
+  + memcheck ensemble, not by initcheck alone.
+- **Determinism:** two launches on the same input `bit_diff = 0`.
+- **Bench** (`N=8, C=64, 56×56`, 3×3): generated **0.61 ms / 105 GB/s**, bespoke
+  **0.50 ms / 129 GB/s** — **~0.81× bespoke** (both memory-bound; the generated kernel
+  carries `long long` index math where the bespoke uses `int32`, a minor overhead on a
+  pure-traffic gather).
+
+**Device-launched vs host-side tally:** all 41 numeric cells + determinism + bench are
+**device-launched** (the generated `baracuda_gen_*_im2col` kernels vs the bespoke
+`launch_im2col_2d<T>`); the CPU closed-form oracle is a host cross-check that runs
+beside every device cell. The emitter goldens + gate tests are host-side Rust
+(`cuda::im2col_tests`, `plan::im2col_gate_validate`).
+
+**AOT-only, byte-identical-to-bespoke on the FULL probe space (no NaN carve-out),
+Layout A pinned.** im2col is a pure raw-bit gather-or-`zero_of<T>()` with the identical
+closed-form index map and Layout A column order as the bespoke — so the memcmp is exact
+across NaN/inf/−0/subnormal probes with NO exclusion (unlike topk, which was
+torch-faithful and had to exclude NaN/tie rows from its bespoke cross-check).
+
+**Fuel contract (honest miss — AOT-ONLY):** an im2col emits **no FKC contract**.
+`derive_pattern` rejects it as `NotElementwise` at `pattern.rs:229` BEFORE any body
+walk (`Access::Im2Col` is non-Elementwise), so `pattern = None` and `contract()`
+withholds — the same wall that withholds Window/Scan/RowSort (pinned by
+`contract::tests::im2col_is_an_honest_miss_no_contract`). The AOT-only posture is
+**correct, not a limitation**: Fuel treats convolution as a first-class PRIMITIVE (the
+FKC whitelist has `Conv2D`/`ConvTranspose2D`, NO `Im2Col`/`Unfold`/`Pool`) and im2col
+is only an internal lowering helper, never an advertised OpKind — so it has no
+importable FKC shape. Keying stays **additive** (`baracuda-kernels-types` UNTOUCHED —
+the conv params ride the `OpDef` + the `_im2col` entry_point, never the token; no
+`STRUCTURE_KEY_VERSION` bump). See `docs/fuel-ask-im2col-2026-07-09.md`.
+
+**De-scoped from v1** (family follow-ons, each a named future increment): col2im /
+im2col-backward (`F.fold` — scatter-ADD with `atomicAdd`, non-deterministic so it
+breaks the bit-exact memcmp acceptance), 1-D / 3-D im2col (additive rank variants),
+grouped conv (`groups > 1` — needs the grouped bespoke as oracle), a per-tap `pre` map
+(the Window `pre` bridge, additive), non-zero / reflect / replicate padding (no bespoke
+parity target), Layout B `[N,oH,oW,C,kh,kw]` (candle order — no bespoke byte-parity
+target), and **the im2col→GEMM→reshape `Conv2D` FUSION — the ONLY path that could be
+ADVERTISED** (ride an existing Fuel `Conv2D` OpKind), a much larger fused-op story that
+would flip im2col from AOT-only to contract-carrying (needs the Fuel propose-first). The
+`(H_in,W_in)→(oH,oW)` conv arithmetic is a **runtime-launch-arg caller precondition**
+(the key carries no numeric extents — on-device-validated via initcheck).

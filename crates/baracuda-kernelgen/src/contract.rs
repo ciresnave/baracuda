@@ -1669,6 +1669,33 @@ mod tests {
     }
 
     #[test]
+    fn im2col_is_an_honest_miss_no_contract() {
+        use crate::pattern::PatternError;
+        // Increment 11 IM2COL is an AOT-only honest miss: Fuel treats convolution as a
+        // first-class PRIMITIVE (the FKC whitelist has Conv2D/ConvTranspose2D, NO
+        // Im2Col/Unfold/Pool) and im2col is only an internal lowering helper, never an
+        // advertised OpKind — so it withholds via the same NotElementwise wall as
+        // window/scan/sort. The kernel still generates + runs AOT; `derive_pattern`
+        // rejects it as NotElementwise BEFORE any body walk; `contract()` then returns
+        // None. `body == Input(0)` keeps n_outputs == 1, so the multi-output gate never
+        // fires — NotElementwise withholds one step earlier regardless.
+        let sc = OpDef::im2col_2d("unfold", ElementKind::F32, (3, 3), (1, 1), (1, 1), (1, 1));
+        let a = OperandDesc::new(4, &[2, 3, 8, 8], &[192, 64, 8, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(3, &[2, 27, 64], &[27 * 64, 64, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let kernel = generate(&sc, &key, &Cuda);
+        assert!(
+            contract(&sc, &key, &kernel, "cuda").is_none(),
+            "an im2col must emit NO contract (no Fuel Im2Col/Unfold OpKind — conv is a \
+             first-class primitive; AOT-only honest miss)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&sc),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
     fn viewed_op_is_an_honest_miss_no_contract() {
         use crate::ir::View;
         use crate::pattern::PatternError;

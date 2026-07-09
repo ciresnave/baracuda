@@ -135,6 +135,26 @@ pub enum Schedule {
         /// arg. ORTHOGONAL to `out`. See [`crate::ir::SortLimit`].
         limit: SortLimit,
     },
+    /// **2-D im2col / unfold** along the two spatial axes (increment 11) — the
+    /// conv-lowering expanding gather. One thread per OUTPUT cell (grid-stride over
+    /// `N*C*kh*kw*oH*oW`) unravels its linear index into `(n,c,ki,kj,oh,ow)`,
+    /// computes the source coord (`in_h = oh*stride_h - pad_h + ki*dilation_h`,
+    /// `in_w` symmetric), and RAW-BIT copies the in-bounds input element or stores
+    /// the typed zero for an out-of-bounds tap —
+    /// [`crate::backend::VariantFidelity::BitIdentical`] (each output is an
+    /// independent read-or-zero + store; no fold, no cross-output dependence). The
+    /// conv geometry rides here (this enum is `Copy`); `body == Input(0)` (no
+    /// pre/post). Never routed to a variant.
+    Im2Col {
+        /// `(kh, kw)` — window taps per spatial axis.
+        kernel: (u8, u8),
+        /// `(stride_h, stride_w)` — output downsampling stride per axis.
+        stride: (u8, u8),
+        /// `(pad_h, pad_w)` — zero-padding per axis (symmetric).
+        pad: (u8, u8),
+        /// `(dilation_h, dilation_w)` — inter-tap dilation per axis.
+        dilation: (u8, u8),
+    },
 }
 
 /// Reduce-axis geometry (design-doc predicate #9). All classes lower to the same
@@ -424,6 +444,24 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 stable,
                 out,
                 limit,
+            }
+        }
+        // Increment 11 IM2COL: validate admissibility (mirrors the Scan/Window/Sort
+        // arms), then thread the conv geometry into the one-thread-per-output-cell
+        // expanding-gather schedule. All geometry fields are Copy — no `ref` borrow;
+        // `body == Input(0)` (no pre/post), and im2col has no vectorize/variant gate.
+        Access::Im2Col {
+            kernel,
+            stride,
+            pad,
+            dilation,
+        } => {
+            validate_im2col(op, key, kernel, stride, pad, dilation);
+            Schedule::Im2Col {
+                kernel,
+                stride,
+                pad,
+                dilation,
             }
         }
         Access::Elementwise => {
@@ -917,6 +955,7 @@ fn access_tag(a: &Access) -> &'static str {
         Access::Scan { .. } => "Scan",
         Access::Window { .. } => "Window",
         Access::RowSort { .. } => "RowSort",
+        Access::Im2Col { .. } => "Im2Col",
     }
 }
 
@@ -1506,6 +1545,11 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
         // and RowSort has no pre/post, so there is nothing extra to walk — the arm
         // is forced only to keep the honest-miss walk exhaustive/total.
         Access::RowSort { .. } => {}
+        // Increment 11 IM2COL: `body` is pinned `Input(0)` (already in `exprs`) and
+        // im2col has no pre/post — a pure raw-bit gather has no arithmetic to hide a
+        // half `Nextafter` in, so there is nothing extra to walk; the arm is forced
+        // only to keep the honest-miss walk exhaustive/total.
+        Access::Im2Col { .. } => {}
         // Review-caught gate asymmetry (increment 1): a multi-output op's EXTRA
         // output bodies must be walked too — else a half `Nextafter` hidden in an
         // extra body bypasses this honest-miss gate. Non-elementwise multi-output
@@ -1738,6 +1782,10 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
         // trivially int-clean) and RowSort has no pre/post; an int sort just
         // permutes storage bits (no int arithmetic), so nothing extra to gate.
         Access::RowSort { .. } => {}
+        // Increment 11 IM2COL: `body` is pinned `Input(0)` (already in `exprs`,
+        // trivially int-clean) and im2col has no pre/post; a raw-bit gather does no
+        // int arithmetic (no Div/Const/unary), so nothing extra to gate.
+        Access::Im2Col { .. } => {}
         // Review-caught gate asymmetry (increment 1): walk the EXTRA output bodies
         // too. Without this, an int-only op with a COMPOSED operand hides in a
         // multi-output extra body at U8/S8 and bypasses the 8-bit leaf-operand pin
@@ -1877,6 +1925,10 @@ fn assert_coord_admissibility(op: &OpDef, key: &StructureKey) {
         // RowSort is non-elementwise (`elementwise == false`), so any Coord that
         // ever appeared would be rejected by the Coord arm; nothing extra to walk.
         Access::RowSort { .. } => {}
+        // Increment 11 IM2COL: `body` is pinned `Input(0)` (no Coord), and im2col is
+        // non-elementwise (`elementwise == false`), so any Coord would be rejected by
+        // the Coord arm; im2col has no pre/post — nothing extra to walk.
+        Access::Im2Col { .. } => {}
         Access::Elementwise => {}
     }
     for e in exprs {
@@ -2015,6 +2067,15 @@ fn assert_valid_out_dtype(op: &OpDef) {
             "OpDef '{}': out_dtype Some({od:?}) under RowSort is admitted only as \
              the argsort index output (SortOut::Indices requires Some(I32)); a \
              values-sort and the fused Both are dtype-preserving (out_dtype None)",
+            op.name
+        ),
+        // Increment 11 IM2COL: a pure gather preserves the input dtype (the column
+        // matrix is same-dtype as the NCHW input), so a hetero out_dtype has no exact
+        // store — reject it, exactly like Scan/Window/RowReduce/Contraction.
+        Access::Im2Col { .. } => panic!(
+            "OpDef '{}': out_dtype = Some({od:?}) is rejected under Im2Col — a 2-D \
+             im2col is a dtype-preserving raw-bit gather (the column matrix keeps the \
+             input dtype), so there is no hetero store; use out_dtype = None",
             op.name
         ),
     }
@@ -2638,6 +2699,137 @@ fn validate_window(
     }
     check(pre, op.n_inputs, false, "pre-map", name);
     check(post, op.n_inputs, true, "post-epilogue", name);
+}
+
+/// Validate an [`Access::Im2Col`] op at build time (increment 11; AOT — an im2col
+/// never crosses the JIT trust boundary, so a panic here is an author-error
+/// backstop). Unlike the rank-agnostic-innermost emitters (Scan/Window/RowSort
+/// pin `axis == rank-1`), im2col has a FIXED rank-4 -> rank-3 conv layout, so this
+/// gate PINS the operand ranks + layout the way `validate_window` pins the pooled
+/// axis:
+///
+/// - **single input** (`n_inputs == 1`, no weight operand — a weighted window is
+///   the deferred windowed-contraction), `n_operands == 2` (input then output).
+/// - **input rank-4 forward-dense NCHW** — `key.rank == 4` (the input is also the
+///   widest operand, so the shared `key.rank` is the input rank); input0 `Contig`,
+///   `!flipped`, empty broadcast. The emitter's `(((n*C+c)*H_in+in_h)*W_in+in_w)`
+///   address math assumes a dense row-major NCHW input.
+/// - **output rank-3 forward-dense** — `Contig`, `!flipped`, empty broadcast. The
+///   EXPANDED extent `[N, C*kh*kw, oH*oW]` is a runtime caller precondition (only
+///   LAYOUT is keyed — the layout-only gate admits the expansion).
+/// - **geometry legality** — `kh,kw >= 1`, `stride.* >= 1`, `dilation.* >= 1`
+///   (`pad.*` is a `u8`, always `>= 0`). A zero kernel/stride/dilation is a
+///   degenerate config.
+/// - **`out_dtype == None`** (a pure gather preserves dtype;
+///   `assert_valid_out_dtype` double-gates this) and **`body == Input(0)`** (a pure
+///   raw-bit copy — no pre/post in v1).
+///
+/// The `(H_in,W_in) -> (oH,oW)` conv arithmetic
+/// (`oH = (H_in + 2*pad_h - dilation_h*(kh-1) - 1)/stride_h + 1`, `oW` symmetric)
+/// is a **runtime-launch-arg caller precondition**, NOT a plan-time check:
+/// [`StructureKey`] deliberately abstracts numeric extents away (it carries
+/// per-operand contiguity/broadcast/flip, never shapes), so the plan gate cannot
+/// see `H_in`/`oH` — the same trust level as Window's `k_in -> k_out` and RowReduce's
+/// `k`/`n_out`. It is on-device-validated via `initcheck` (full write + in-bounds
+/// source reads); see the increment-11 brief §3/§6.
+fn validate_im2col(
+    op: &OpDef,
+    key: &StructureKey,
+    kernel: (u8, u8),
+    stride: (u8, u8),
+    pad: (u8, u8),
+    dilation: (u8, u8),
+) {
+    let Access::Im2Col { .. } = &op.access else {
+        unreachable!("validate_im2col on a non-Im2Col op");
+    };
+    let name = &op.name;
+    let _ = pad; // pad.* is u8 (>= 0); baked into the caller's oH/oW, checked on-device.
+
+    // G1 — single input (no weight operand), input + output operands only.
+    assert!(
+        op.n_inputs == 1,
+        "Im2Col '{name}': v1 takes a SINGLE input (n_inputs {} != 1) — a weighted \
+         window is the deferred windowed-contraction, not an im2col",
+        op.n_inputs
+    );
+    assert!(
+        key.n_operands == 2,
+        "Im2Col '{name}': expects n_inputs+1 = 2 operands (input then output); got {}",
+        key.n_operands
+    );
+
+    // G2 — input rank-4 forward-dense NCHW. The shared `key.rank` is the widest
+    // operand rank; the rank-4 NCHW input is the widest (output is rank-3), so
+    // `key.rank == 4` pins the input rank. A rank-3 (or other) input drives the max
+    // below 4 and rejects here (the miss is honest, not silently wrong).
+    assert!(
+        key.rank == 4,
+        "Im2Col '{name}': v1 pins a rank-4 NCHW input [N,C,H_in,W_in] (key.rank {} \
+         != 4) — 1-D/3-D im2col are deferred rank variants",
+        key.rank
+    );
+    let in0 = key.operands[0];
+    assert!(
+        in0.contig == Contiguity::Contig,
+        "Im2Col '{name}': input 0 must be dense contiguous NCHW (the \
+         (((n*C+c)*H_in+in_h)*W_in+in_w) address math assumes row-major)"
+    );
+    assert!(
+        !in0.flipped,
+        "Im2Col '{name}': input 0 must not be reversed along an axis (a flipped view \
+         reads mirrored/OOB source coords)"
+    );
+    assert!(
+        in0.bcast.is_empty(),
+        "Im2Col '{name}': input 0 must be a full dense tensor (no broadcast axis — \
+         every NCHW coordinate is read at a real stride)"
+    );
+
+    // G3 — output rank-3 forward-dense. Only LAYOUT is keyed (the expanded extent
+    // [N, C*kh*kw, oH*oW] is a runtime precondition), so the gate admits the
+    // expansion so long as the output is empty-bcast forward-dense contiguous.
+    let out = key.operands[1];
+    assert!(
+        out.bcast.is_empty() && out.contig == Contiguity::Contig && !out.flipped,
+        "Im2Col '{name}': output must be forward-dense contiguous (empty broadcast, \
+         not flipped) — the [N, C*kh*kw, oH*oW] column matrix is written densely"
+    );
+
+    // G4 — geometry legality (a zero kernel/stride/dilation is degenerate).
+    assert!(
+        kernel.0 >= 1 && kernel.1 >= 1,
+        "Im2Col '{name}': kernel (kh,kw) = ({},{}) must be >= 1 on each axis",
+        kernel.0,
+        kernel.1
+    );
+    assert!(
+        stride.0 >= 1 && stride.1 >= 1,
+        "Im2Col '{name}': stride (sh,sw) = ({},{}) must be >= 1 on each axis",
+        stride.0,
+        stride.1
+    );
+    assert!(
+        dilation.0 >= 1 && dilation.1 >= 1,
+        "Im2Col '{name}': dilation (dh,dw) = ({},{}) must be >= 1 on each axis",
+        dilation.0,
+        dilation.1
+    );
+
+    // G5 — dtype-preserving pure gather: out_dtype None (double-gated in
+    // assert_valid_out_dtype) and body pinned to a raw Input(0) (no pre/post — a
+    // composed body would need arithmetic the raw-bit copy does not emit).
+    assert!(
+        op.out_dtype.is_none(),
+        "Im2Col '{name}': a pure gather preserves dtype — out_dtype must be None, got \
+         {:?}",
+        op.out_dtype
+    );
+    assert!(
+        matches!(op.body, ScalarExpr::Input(0)),
+        "Im2Col '{name}': body must be exactly Input(0) (a raw-bit copy) — v1 has no \
+         pre/post map"
+    );
 }
 
 /// Validate an [`Access::RowSort`] op at build time (increment 8; AOT — a sort
@@ -4451,6 +4643,232 @@ mod window_gate_validate {
         let s = OperandDesc::new(2, &[256, 128], &[-1, 0], ElementKind::F32, 256);
         let (p, key) = two_input_pool(s);
         let _ = build_plan(&p, &key);
+    }
+}
+
+#[cfg(test)]
+mod im2col_gate_validate {
+    //! Increment-11 IM2COL gate-rejection tests. Per the house rule these call
+    //! `build_plan` DIRECTLY — an emitter panic would mask a gate mutation (the 0c
+    //! lesson). Every `validate_im2col` (and `assert_valid_out_dtype`) rejection has
+    //! a test here; each gate is mutation-checked both directions by a targeted
+    //! reverse-edit.
+    use super::{Schedule, build_plan};
+    use crate::ir::{Access, OpDef};
+    use baracuda_kernels_types::{
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
+    };
+
+    // A canonical im2col cell: rank-4 NCHW input [2,3,4,4] dense + rank-3 output
+    // [2,8,8] dense. Extents are NOT keyed (only rank + layout), so any dense shapes
+    // stand in; the (H,W)->(oH,oW) conv arithmetic is a runtime precondition.
+    fn im2col_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 4, 1], dt, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[64, 8, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    fn im2col(kernel: (u8, u8), stride: (u8, u8), pad: (u8, u8), dilation: (u8, u8)) -> OpDef {
+        OpDef::im2col_2d("unfold", ElementKind::F32, kernel, stride, pad, dilation)
+    }
+
+    // ---- G0: schedule threading ----
+
+    #[test]
+    fn im2col_cell_builds() {
+        // A rank-4-in / rank-3-out Im2Col cell builds and threads the geometry into
+        // Schedule::Im2Col (3x3, stride 1, pad 1, dilation 1 — the canonical conv).
+        let p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        let key = im2col_key(ElementKind::F32);
+        let plan = build_plan(&p, &key);
+        assert_eq!(
+            plan.schedule,
+            Schedule::Im2Col {
+                kernel: (3, 3),
+                stride: (1, 1),
+                pad: (1, 1),
+                dilation: (1, 1),
+            }
+        );
+        assert!(matches!(plan.access, Access::Im2Col { .. }));
+    }
+
+    #[test]
+    fn im2col_dilated_cell_builds() {
+        // A dilated, non-square (kh != kw), strided cell builds — the geometry rides
+        // the schedule verbatim.
+        let p = im2col((3, 5), (2, 1), (2, 0), (2, 3));
+        let key = im2col_key(ElementKind::F32);
+        let plan = build_plan(&p, &key);
+        assert_eq!(
+            plan.schedule,
+            Schedule::Im2Col {
+                kernel: (3, 5),
+                stride: (2, 1),
+                pad: (2, 0),
+                dilation: (2, 3),
+            }
+        );
+    }
+
+    #[test]
+    fn im2col_builds_every_dtype() {
+        // A pure raw-bit gather is dtype-agnostic — f32/f64/f16/bf16/i32/i64 all build.
+        for dt in [
+            ElementKind::F32,
+            ElementKind::F64,
+            ElementKind::F16,
+            ElementKind::Bf16,
+            ElementKind::I32,
+            ElementKind::I64,
+        ] {
+            let p = OpDef::im2col_2d("unfold", dt, (3, 3), (1, 1), (1, 1), (1, 1));
+            let _ = build_plan(&p, &im2col_key(dt));
+        }
+    }
+
+    // ---- G1: operand count + single input ----
+
+    #[test]
+    #[should_panic(expected = "expects n_inputs+1 = 2 operands")]
+    fn im2col_key_needs_two_operands() {
+        // A 3-operand key (input + two outputs) is not an im2col shape — reject.
+        let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 4, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[64, 8, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o, o], ArchSku::Sm89);
+        let p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "takes a SINGLE input")]
+    fn im2col_rejects_second_input() {
+        // A weight operand (n_inputs == 2) is the deferred windowed-contraction, not
+        // an im2col — reject.
+        let mut p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        p.n_inputs = 2;
+        let _ = build_plan(&p, &im2col_key(ElementKind::F32));
+    }
+
+    // ---- G2: input rank / layout (FIXED 4 -> 3) ----
+
+    #[test]
+    #[should_panic(expected = "pins a rank-4 NCHW input")]
+    fn im2col_rejects_rank3_input() {
+        // A rank-3 input drops key.rank below 4 (the input is the widest operand).
+        let a = OperandDesc::new(3, &[2, 3, 16], &[48, 16, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[64, 8, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "input 0 must be dense contiguous NCHW")]
+    fn im2col_rejects_noncontig_input() {
+        // Last-two-axes-swapped strides ([..,1,4] instead of [..,4,1]) — non-contig.
+        let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 1, 4], ElementKind::F32, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[64, 8, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "input 0 must not be reversed")]
+    fn im2col_rejects_flipped_input() {
+        // A dense-magnitude but inner-axis-reversed input (stride -1) keys Contig but
+        // flipped — the source read would be mirrored.
+        let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 4, -1], ElementKind::F32, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[64, 8, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        let _ = build_plan(&p, &key);
+    }
+
+    // ---- G3: output rank / layout ----
+
+    #[test]
+    #[should_panic(expected = "output must be forward-dense contiguous")]
+    fn im2col_rejects_broadcast_output() {
+        let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 4, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[0, 8, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "output must be forward-dense contiguous")]
+    fn im2col_rejects_flipped_output() {
+        let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 4, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[64, 8, -1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "output must be forward-dense contiguous")]
+    fn im2col_rejects_strided_output() {
+        // Last-two-axes-swapped output strides ([64,1,8]): the inner axis stride is
+        // 8 != 1, so classify_contiguity keys it Strided/InnerContig (not Contig) —
+        // but with NO broadcast (no 0 stride) and NO flip (all positive). This
+        // ISOLATES the G3 `contig == Contig` clause: the broadcast test trips
+        // `bcast.is_empty()` and the flipped test trips `!flipped`, so only a pure
+        // strided output pins the middle clause (a strided output would gather into
+        // the wrong slabs — the emitter assumes a dense row-major write).
+        let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 4, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(3, &[2, 8, 8], &[64, 1, 8], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        let _ = build_plan(&p, &key);
+    }
+
+    // ---- G4: geometry legality ----
+
+    #[test]
+    #[should_panic(expected = "kernel (kh,kw) = (0,3) must be >= 1")]
+    fn im2col_rejects_zero_kernel() {
+        let p = im2col((0, 3), (1, 1), (1, 1), (1, 1));
+        let _ = build_plan(&p, &im2col_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "stride (sh,sw) = (1,0) must be >= 1")]
+    fn im2col_rejects_zero_stride() {
+        let p = im2col((3, 3), (1, 0), (1, 1), (1, 1));
+        let _ = build_plan(&p, &im2col_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "dilation (dh,dw) = (0,1) must be >= 1")]
+    fn im2col_rejects_zero_dilation() {
+        let p = im2col((3, 3), (1, 1), (1, 1), (0, 1));
+        let _ = build_plan(&p, &im2col_key(ElementKind::F32));
+    }
+
+    // ---- G5: out_dtype None + body == Input(0) ----
+
+    #[test]
+    #[should_panic(expected = "rejected under Im2Col")]
+    fn im2col_rejects_out_dtype_some() {
+        // A pure gather preserves dtype — a hetero out_dtype has no exact store
+        // (double-gated: assert_valid_out_dtype fires first, then validate_im2col).
+        let mut p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        p.out_dtype = Some(ElementKind::I32);
+        let _ = build_plan(&p, &im2col_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "body must be exactly Input(0)")]
+    fn im2col_rejects_composed_body() {
+        // v1 has no pre/post — the body must be exactly Input(0); a composed body
+        // (Input(0)+Input(0)) has arithmetic the raw-bit copy does not emit.
+        use crate::ir::input;
+        let mut p = im2col((3, 3), (1, 1), (1, 1), (1, 1));
+        p.body = (input(0) + input(0)).0;
+        let _ = build_plan(&p, &im2col_key(ElementKind::F32));
     }
 }
 
