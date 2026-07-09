@@ -440,7 +440,20 @@ fn region_to_op(
     // therefore never produce this region from a real graph either — the
     // decline costs zero live coverage and avoids advertising an unmatchable
     // pattern. Revisit when Cast joins the pattern vocabulary.
-    if crate::contract::expr_contains_cmp(&body) {
+    //
+    // WHERE/SELECT carve-out: a cmp IS permitted iff it is the COND CHILD of
+    // a Select (only that position — see `expr_contains_cmp_outside_select_cond`).
+    // The decline above exists because real Fuel graphs interpose
+    // Cast(U8→float) before a FLOAT op consumes a mask — but `Where` consumes
+    // the mask DIRECTLY (its cond edge is the compare's U8 output, no Cast),
+    // so a region like `[Gt, Where]` with all-float binds is a constructible
+    // Fuel shape: the interior U8 edge projects to Baracuda's interior
+    // 1.0/0.0 cond tested `!= 0` — value-equivalent, arms bit-untouched.
+    // Without the carve-out every Where region would keep declining for the
+    // WRONG (Cast) reason; with it, the region reaches `derive_pattern`,
+    // whose v1 `SelectUnsupported` typed miss names the REAL blocker (the
+    // withheld Where advert — see `PatternError::SelectUnsupported`).
+    if expr_contains_cmp_outside_select_cond(&body) {
         return Err(JitError::UnsupportedOp(
             "interior comparison under float ops (the fused pattern needs Cast \
              in the §4.1 vocabulary — awaiting the mixed-dtype/Cast follow-up)"
@@ -492,6 +505,52 @@ fn node_to_expr(n: &PatternNode, next_param: &mut u8) -> Result<ScalarExpr, JitE
     }
 }
 
+/// [`crate::contract::expr_contains_cmp`] with the WHERE/SELECT carve-out: a
+/// `Cmp*` node does NOT count when it is the direct **cond child of a
+/// Select** — only that position (Fuel's `Where` consumes the compare's U8
+/// mask edge directly, no interposed `Cast`, so `[Gt, Where]` is a
+/// constructible Fuel region). Everywhere else — a cmp under a float op, a
+/// cmp inside a select ARM, a cmp nested deeper inside a composed cond, or
+/// the cond-root cmp's own operands — the interior-cmp decline keeps its full
+/// reach (those edges still need `Cast` in the §4.1 vocabulary). JIT-only:
+/// the contract-side `expr_contains_cmp` walk deliberately has NO carve-out
+/// (select bodies are withheld wholesale there).
+fn expr_contains_cmp_outside_select_cond(e: &ScalarExpr) -> bool {
+    match e {
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_)
+        | ScalarExpr::Coord(_) => false,
+        ScalarExpr::Add(a, b)
+        | ScalarExpr::Sub(a, b)
+        | ScalarExpr::Mul(a, b)
+        | ScalarExpr::Div(a, b) => {
+            expr_contains_cmp_outside_select_cond(a) || expr_contains_cmp_outside_select_cond(b)
+        }
+        ScalarExpr::Unary(_, a) => expr_contains_cmp_outside_select_cond(a),
+        ScalarExpr::Binary(bop, a, b) => {
+            bop.is_cmp()
+                || expr_contains_cmp_outside_select_cond(a)
+                || expr_contains_cmp_outside_select_cond(b)
+        }
+        ScalarExpr::Select(c, a, b) => {
+            let cond_interior = match &**c {
+                // The permitted position: a cmp ROOTING the cond child. Its own
+                // operands must still be cmp-free.
+                ScalarExpr::Binary(bop, x, y) if bop.is_cmp() => {
+                    expr_contains_cmp_outside_select_cond(x)
+                        || expr_contains_cmp_outside_select_cond(y)
+                }
+                other => expr_contains_cmp_outside_select_cond(other),
+            };
+            cond_interior
+                || expr_contains_cmp_outside_select_cond(a)
+                || expr_contains_cmp_outside_select_cond(b)
+        }
+    }
+}
+
 fn synth_op(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<ScalarExpr, JitError> {
     // Scalar-param ops: one tensor operand; the scalar becomes a runtime Param
     // (the AOT emitter's `extract:` pulls it back out — round-trip stable).
@@ -504,6 +563,28 @@ fn synth_op(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<ScalarExp
         } else {
             ScalarExpr::Mul(Box::new(t), Box::new(p))
         });
+    }
+    // `Where` (OpTag::Where, dispatch spelling bare "Where"): the ternary
+    // select, operand order (cond, a, b) — the first arity-3 region op.
+    if op == "Where" {
+        // BOUND-COND decline (typed, before recursion): Fuel's `Where` cond is
+        // strictly a U8 TENSOR, so a cond that is a bare region input (`bind`)
+        // means the honest operand tuple is `[U8, T, T, T]` — inexpressible
+        // under uniform-dtype keying (the honest Fuel projection also carries
+        // a U8 cond OperandDesc and already declines MixedDtype upstream; this
+        // gate closes the uniform all-T projection too, which would otherwise
+        // synthesize a key-dtype `!= 0` kernel misdescribing Fuel's U8-cond
+        // op). A cond that is an INTERIOR cmp is the carve-out shape and
+        // recurses normally. Mirrors the root-cmp decline's rationale.
+        if matches!(operands.first(), Some(PatternNode::Bind(_))) {
+            return Err(JitError::UnsupportedOp(
+                "bound cond operand on Where (a U8 cond tensor — [U8,T,T] operand \
+                 tuple; uniform-dtype JIT keying cannot express it)"
+                    .to_string(),
+            ));
+        }
+        let (c, a, b) = ternary_operands(op, operands, np)?;
+        return Ok(ScalarExpr::Select(Box::new(c), Box::new(a), Box::new(b)));
     }
     if let Some(u) = region_unary(op) {
         let x = unary_operand(op, operands, np)?;
@@ -524,6 +605,26 @@ fn synth_op(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<ScalarExp
     };
     let (a, b) = binary_operands(op, operands, np)?;
     Ok(ctor(Box::new(a), Box::new(b)))
+}
+
+/// Resolve the exactly-three operands of a ternary op (`Where`), recursing
+/// into each — beside [`binary_operands`], same arity discipline.
+fn ternary_operands(
+    op: &str,
+    operands: &[PatternNode],
+    np: &mut u8,
+) -> Result<(ScalarExpr, ScalarExpr, ScalarExpr), JitError> {
+    if operands.len() != 3 {
+        return Err(JitError::Arity {
+            op: op.to_string(),
+            expected: 3,
+            got: operands.len(),
+        });
+    }
+    let c = node_to_expr(&operands[0], np)?;
+    let a = node_to_expr(&operands[1], np)?;
+    let b = node_to_expr(&operands[2], np)?;
+    Ok((c, a, b))
 }
 
 /// Resolve the exactly-two operands of a binary op, recursing into each.
@@ -618,6 +719,14 @@ fn dtype_compatible(body: &ScalarExpr, dtype: ElementKind) -> bool {
             ScalarExpr::Div(a, b) => !c.is_int && walk(a, c) && walk(b, c),
             ScalarExpr::Add(a, b) | ScalarExpr::Sub(a, b) | ScalarExpr::Mul(a, b) => {
                 walk(a, c) && walk(b, c)
+            }
+            // Select is float-only in v1 (f32/f32s/f64/f16/bf16) — mirrors the
+            // AOT plan gate (`assert_int_op_admissibility`'s Select arm): an
+            // int select would raise the 0c cond-observer question, so it
+            // declines typed here rather than panicking `build_plan` across
+            // the JIT trust boundary.
+            ScalarExpr::Select(cond, a, b) => {
+                c.is_float && walk(cond, c) && walk(a, c) && walk(b, c)
             }
         }
     }
@@ -842,7 +951,17 @@ pub mod seam {
             OpTag::Le => "Le",
             OpTag::Gt => "Gt",
             OpTag::Ge => "Ge",
-            // Op::Gelu (tanh), PowI/Clamp, Where/MaskedFill, reductions,
+            // Where (select/mask; dispatch spelling is bare "Where", NOT
+            // Elementwise-suffixed): maps to the ternary Select — operand
+            // order (cond, a, b) matches Fuel's. A cmp-cond region ([Gt,
+            // Where]) passes the interior-cmp carve-out and reaches
+            // `derive_pattern`, whose v1 SelectUnsupported typed miss is the
+            // decline (the Where advert is withheld — see pattern.rs); a
+            // bound-cond region declines typed in `synth_op` under BOTH
+            // projections (U8 cond → MixedDtype upstream; uniform all-T →
+            // the bound-cond gate).
+            OpTag::Where => "Where",
+            // Op::Gelu (tanh), PowI/Clamp, MaskedFill, reductions,
             // MatMul, shape/layout, indexing, LogSoftmaxLastDim — not
             // synthesized. OpTag::Iota (0.10.2 "value source") is ALSO
             // declined here even though the IR now has `ScalarExpr::Coord`
@@ -1259,6 +1378,123 @@ pub mod seam {
                 &region,
                 &ops,
                 OpCategory::BinaryElementwise,
+                ArchSku::Sm89,
+                "x",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert_eq!(err, JitError::MixedDtype);
+            // And the live envelope path is a typed Declined, never a panic.
+            let synth = BaracudaSynthesizer::new(1000);
+            let req = SeamRequest {
+                region,
+                operands: ops,
+                arch: ArchSku::Sm89,
+                budget: JitBudget {
+                    max_compile_ms: 1000,
+                },
+            };
+            assert!(matches!(
+                synth.synthesize(&req),
+                SeamResponse::Declined { .. }
+            ));
+        }
+
+        #[test]
+        fn seam_where_region_declines_at_the_typed_pattern_miss() {
+            // Fuel's fused-select shape through the seam grammar:
+            // Where(Gt(a, b), x, y), all-float binds — genuinely uniform-dtype.
+            // The interior-cmp carve-out lets it past the Cast decline (Where
+            // consumes the mask edge DIRECTLY); the v1 decline is the typed
+            // pattern miss (the withheld Where advert), and the envelope path
+            // is a typed Declined, never a panic.
+            let region = op(
+                OpTag::Where,
+                vec![
+                    op(
+                        OpTag::Gt,
+                        vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
+                    ),
+                    SeamNode::Bind { index: 2 },
+                    SeamNode::Bind { index: 3 },
+                ],
+            );
+            let err = synthesize(
+                &region,
+                &operands(ElementKind::F32, 5),
+                OpCategory::TernaryElementwise,
+                ArchSku::Sm89,
+                "jit_where",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert_eq!(
+                err,
+                JitError::Pattern(crate::pattern::PatternError::SelectUnsupported),
+                "the decline must name the withheld Where advert"
+            );
+            let synth = BaracudaSynthesizer::new(1000);
+            let req = SeamRequest {
+                region,
+                operands: operands(ElementKind::F32, 5),
+                arch: ArchSku::Sm89,
+                budget: JitBudget {
+                    max_compile_ms: 1000,
+                },
+            };
+            let SeamResponse::Declined { reason } = synth.synthesize(&req) else {
+                panic!("expected Declined");
+            };
+            assert!(
+                reason.contains("SelectUnsupported"),
+                "reason should name the typed miss: {reason}"
+            );
+        }
+
+        #[test]
+        fn seam_bound_cond_where_region_declines_typed_under_both_projections() {
+            // M11's pin, mirroring seam_root_cmp_region_declines_typed_under_
+            // both_projections: a BOUND cond is a U8 tensor → the [U8,T,T]
+            // operand tuple — inexpressible under uniform keying.
+            let region = op(
+                OpTag::Where,
+                vec![
+                    SeamNode::Bind { index: 0 },
+                    SeamNode::Bind { index: 1 },
+                    SeamNode::Bind { index: 2 },
+                ],
+            );
+            // Uniform-dtype projection (all T incl. the cond): the bound-cond
+            // gate declines typed — synthesizing would misdescribe Fuel's
+            // U8-cond op as a key-dtype `!= 0` kernel.
+            let err = synthesize(
+                &region,
+                &operands(ElementKind::F32, 4),
+                OpCategory::TernaryElementwise,
+                ArchSku::Sm89,
+                "x",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(&err, JitError::UnsupportedOp(m) if m.contains("bound cond")),
+                "got {err:?}"
+            );
+            // HONEST projection (U8 cond OperandDesc, float arms/out — the
+            // shape Fuel would really send): the uniform-dtype gate declines
+            // as MixedDtype before synthesis.
+            let mut ops = operands(ElementKind::F32, 4);
+            ops[0] = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::U8, 256);
+            let err = synthesize(
+                &region,
+                &ops,
+                OpCategory::TernaryElementwise,
                 ArchSku::Sm89,
                 "x",
                 1000,
@@ -1774,6 +2010,203 @@ mod tests {
     }
 
     #[test]
+    fn where_region_passes_the_cmp_carve_out_and_declines_at_the_typed_pattern_miss() {
+        // The [Gt, Where] region — Fuel's fused-select shape, cond consumed
+        // DIRECTLY (no Cast). The interior-cmp carve-out must let it PAST the
+        // "interior comparison" decline (the cmp is the cond child of the
+        // Select); the v1 decline is then the TYPED pattern miss
+        // (SelectUnsupported — the withheld Where advert), naming the real
+        // blocker. Without the carve-out this would mis-decline as an
+        // unreachable Cast problem.
+        let region = op_node(
+            "Where",
+            vec![
+                op_node("Gt", vec![PatternNode::Bind(0), PatternNode::Bind(1)]),
+                PatternNode::Bind(2),
+                PatternNode::Bind(3),
+            ],
+        );
+        let err = synthesize(
+            &req(region, 4, ElementKind::F32, "jit_where"),
+            &Cuda,
+            &StubCompiler,
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            JitError::Pattern(PatternError::SelectUnsupported),
+            "the decline must be the withheld Where advert, not the interior-cmp gate"
+        );
+        // A cmp in an ARM position keeps the interior-cmp decline (the
+        // carve-out is the cond child ONLY).
+        let cmp_in_arm = op_node(
+            "Where",
+            vec![
+                op_node("Gt", vec![PatternNode::Bind(0), PatternNode::Bind(1)]),
+                op_node("Ge", vec![PatternNode::Bind(2), PatternNode::Bind(3)]),
+                PatternNode::Bind(2),
+            ],
+        );
+        let err = synthesize(
+            &req(cmp_in_arm, 4, ElementKind::F32, "x"),
+            &Cuda,
+            &StubCompiler,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&err, JitError::UnsupportedOp(m) if m.contains("interior comparison")),
+            "a cmp ARM must keep the interior-cmp decline, got {err:?}"
+        );
+        // A cmp nested DEEPER inside a composed cond declines too (only the
+        // cond-ROOT position is carved out).
+        let deep_cond = op_node(
+            "Where",
+            vec![
+                op_node(
+                    "Mul",
+                    vec![
+                        op_node("Gt", vec![PatternNode::Bind(0), PatternNode::Bind(1)]),
+                        PatternNode::Bind(2),
+                    ],
+                ),
+                PatternNode::Bind(2),
+                PatternNode::Bind(3),
+            ],
+        );
+        let err = synthesize(
+            &req(deep_cond, 4, ElementKind::F32, "x"),
+            &Cuda,
+            &StubCompiler,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&err, JitError::UnsupportedOp(m) if m.contains("interior comparison")),
+            "a composed-cond interior cmp must keep the decline, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn where_bound_cond_region_declines_typed() {
+        // A Where whose cond is a bare BIND is Fuel's bound-cond shape — a U8
+        // tensor operand ([U8,T,T] tuple), inexpressible under uniform-dtype
+        // keying. The uniform all-T projection must decline TYPED at the
+        // bound-cond gate (M11's target), never synthesize a key-dtype `!= 0`
+        // kernel misdescribing the U8-cond op.
+        let region = op_node(
+            "Where",
+            vec![
+                PatternNode::Bind(0),
+                PatternNode::Bind(1),
+                PatternNode::Bind(2),
+            ],
+        );
+        let err = synthesize(
+            &req(region, 3, ElementKind::F32, "jit_where_bound"),
+            &Cuda,
+            &StubCompiler,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&err, JitError::UnsupportedOp(m) if m.contains("bound cond")),
+            "expected the bound-cond typed decline, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn where_arity_mismatch_is_rejected() {
+        // Where is strictly ternary — a 2-operand region is an arity error,
+        // through the new ternary_operands helper.
+        let region = op_node(
+            "Where",
+            vec![
+                op_node("Gt", vec![PatternNode::Bind(0), PatternNode::Bind(1)]),
+                PatternNode::Bind(2),
+            ],
+        );
+        let err =
+            synthesize(&req(region, 3, ElementKind::F32, "x"), &Cuda, &StubCompiler).unwrap_err();
+        assert_eq!(
+            err,
+            JitError::Arity {
+                op: "Where".to_string(),
+                expected: 3,
+                got: 2
+            }
+        );
+    }
+
+    #[test]
+    fn where_synth_preserves_cond_a_b_arm_order() {
+        // The brief-mandated (cond, a, b) order at the synth site (jit.rs synth_op
+        // Where arm). In v1 EVERY Where region declines downstream (bound-cond /
+        // interior-cmp / Pattern(SelectUnsupported)), and all those decline reasons
+        // are symmetric in the two arms — so an a<->b swap at the Select
+        // construction is otherwise a surviving mutant that would silently flip
+        // Fuel's `Where` (pick `b` where Fuel means `a`) the moment a follow-up
+        // lifts the SelectUnsupported withhold. Observe the synthesized expr
+        // DIRECTLY at `node_to_expr` (before any decline): cond = the interior
+        // cmp, arm a = Bind(2) -> Input(2), arm b = Bind(3) -> Input(3).
+        let region = op_node(
+            "Where",
+            vec![
+                op_node("Gt", vec![PatternNode::Bind(0), PatternNode::Bind(1)]),
+                PatternNode::Bind(2),
+                PatternNode::Bind(3),
+            ],
+        );
+        let mut np = 0u8;
+        let expr = node_to_expr(&region, &mut np).expect("carve-out Where synthesizes a Select");
+        match expr {
+            ScalarExpr::Select(c, a, b) => {
+                assert!(
+                    matches!(*c, ScalarExpr::Binary(BinaryOp::CmpGt, _, _)),
+                    "cond must be the interior cmp (position 0), got {c:?}"
+                );
+                assert_eq!(
+                    *a,
+                    ScalarExpr::Input(2),
+                    "arm a must be Bind(2) -> Input(2)"
+                );
+                assert_eq!(
+                    *b,
+                    ScalarExpr::Input(3),
+                    "arm b must be Bind(3) -> Input(3)"
+                );
+            }
+            other => panic!("expected Select(cond, a, b), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn select_dtype_compatible_is_float_only() {
+        use crate::ir::input;
+        // Mirrors the AOT plan gate: select is legal at every float dtype and
+        // declines typed at every int dtype (never a build_plan panic across
+        // the trust boundary).
+        let body = input(0).select(input(1), input(2)).0;
+        for dt in [
+            ElementKind::F32,
+            ElementKind::F32Strict,
+            ElementKind::F64,
+            ElementKind::F16,
+            ElementKind::Bf16,
+        ] {
+            assert!(dtype_compatible(&body, dt), "select legal at {dt:?}");
+        }
+        for dt in [
+            ElementKind::I32,
+            ElementKind::I64,
+            ElementKind::S8,
+            ElementKind::U8,
+        ] {
+            assert!(!dtype_compatible(&body, dt), "select illegal at {dt:?}");
+        }
+        // …and buried under other ops it still gates.
+        let nested = input(0).select(input(1), input(2)).relu().0;
+        assert!(!dtype_compatible(&nested, ElementKind::I32));
+    }
+
+    #[test]
     fn root_cmp_region_is_a_typed_decline() {
         // A region ROOTED at a comparison produces a U8 mask — hetero output
         // the increment-1 uniform-dtype keying can't express. Typed decline
@@ -2124,6 +2557,62 @@ mod tests {
             .compile(&ku.source, &ku.name, 5000)
             .expect("u8 add compiles headerless");
         assert!(String::from_utf8(ptxu).unwrap().contains(".entry"));
+    }
+
+    /// The WHERE/SELECT kernels compile headerless under nvrtc: the f32/f64
+    /// select is a plain identity-cast ternary (zero includes — no INFINITY
+    /// macro, no headers), the triu select composes the Coord cast + cmp cond
+    /// + pick in one strided body, and the f16 raw-pick form (cond promote +
+    /// `(__half)` arm casts, incl. the double-literal Const arm through the
+    /// half converting ctor) rides the fp16 header nvrtc bundles. Numeric
+    /// correctness is the nvcc host harness (`ondevice/select_validate.cu`);
+    /// this guards headerless portability. Ignored (needs nvrtc + CUDA).
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_select_kernels() {
+        use crate::generate;
+        use crate::ir::{BinaryOp, coord, input, konst};
+        let cc = NvrtcCompiler::new(ArchSku::Sm89);
+        let skey = |dt: ElementKind, n: usize, align: u32| {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
+            let ops: Vec<_> = std::iter::repeat_n(a, n).collect();
+            structure_key(OpCategory::TernaryElementwise, &ops, ArchSku::Sm89)
+        };
+        // f32 + f64 select with a Const arm (the identity-cast pin) — headerless.
+        for (dt, align) in [(ElementKind::F32, 4u32), (ElementKind::F64, 8)] {
+            let op = OpDef::elementwise("selz", 2, &[dt], input(0).select(input(1), konst(0.0)));
+            let k = generate(&op, &skey(dt, 3, align), &Cuda);
+            let ptx = cc
+                .compile(&k.source, &k.name, 5000)
+                .unwrap_or_else(|e| panic!("{dt:?} select failed headerless nvrtc: {e}"));
+            assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        }
+        // The triu select (Coord cond, strided).
+        let triu = OpDef::elementwise(
+            "triu_sel",
+            1,
+            &[ElementKind::F32],
+            coord(1)
+                .binary(BinaryOp::CmpGe, coord(0) + konst(0.0))
+                .select(input(0), konst(0.0)),
+        );
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let tkey = structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89);
+        let kt = generate(&triu, &tkey, &Cuda);
+        let ptxt = cc
+            .compile(&kt.source, &kt.name, 5000)
+            .expect("triu select compiles headerless");
+        assert!(String::from_utf8(ptxt).unwrap().contains(".entry"));
+        // f16/bf16 raw-pick (incl. the `(__half)(0.0)` Const-arm ctor).
+        for dt in [ElementKind::F16, ElementKind::Bf16] {
+            let op = OpDef::elementwise("selz", 2, &[dt], input(0).select(input(1), konst(0.0)));
+            let k = generate(&op, &skey(dt, 3, 2), &Cuda);
+            let ptx = cc
+                .compile(&k.source, &k.name, 5000)
+                .unwrap_or_else(|e| panic!("{dt:?} select failed nvrtc: {e}"));
+            assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        }
     }
 
     /// The increment-0d Coord kernels compile headerless under nvrtc: the

@@ -174,6 +174,28 @@ pub enum PatternError {
     /// nondeterministic precision block, and closing it is the queued Baracuda-only
     /// scatter contract wiring, NOT a Fuel propose-first.
     ScatterUnsupported,
+    /// The body contains a [`crate::ir::ScalarExpr::Select`] (the WHERE/SELECT
+    /// increment). This is NOT a `NoFkcName` miss: fuel-kernel-seam-types DOES
+    /// name the op — `OpTag::Where`, under "select / mask", dispatch spelling
+    /// bare `"Where"` — and an arity-3 `PatternNode::Op` is expressible. The
+    /// advert is withheld deliberately (v1), on two blockers:
+    ///   1. **The single-op `Where` operand tuple is inexpressible.** Fuel's
+    ///      `Where` binds `[U8, T, T, T]` — the cond is strictly a U8 tensor
+    ///      operand — while Baracuda's uniform-dtype keying carries one dtype;
+    ///      the honest advert needs the Model-A per-operand dtype tuple with
+    ///      the cond keyed U8 (the gather-U32 precedent), a follow-up.
+    ///   2. **The fused-cmp form (`select(cmp(x,y), a, b)`) has no advert
+    ///      precedent.** 0b withheld ALL fused cmp; Fuel's matcher behavior on
+    ///      a fused intermediate U8 edge is structurally plausible but
+    ///      unexercised, and per the propose-first Baracuda↔Fuel channel a new
+    ///      advert class deserves its own increment with fuel-side matcher
+    ///      validation. (The triu acceptance vehicle has a Coord cond — a
+    ///      `CoordUnsupported` miss regardless.)
+    ///
+    /// So: no pattern, no contract (`contract` additionally withholds any
+    /// select-containing body via its own `expr_contains_select` guard — its
+    /// own layer). The kernels still generate and lower normally.
+    SelectUnsupported,
     /// The op carries a runtime [`crate::ir::BaseOffset::Runtime`] base offset (a
     /// BASE_OFFSET SLICE — the runtime per-operand pointer bump). No honest v1
     /// contract, on two blockers verified against Fuel's actual sources:
@@ -327,6 +349,14 @@ fn canonicalize(e: &ScalarExpr) -> ScalarExpr {
             }
         }
         ScalarExpr::Unary(op, x) => ScalarExpr::Unary(*op, Box::new(canonicalize(x))),
+        // Select is NOT commutative in ANY operand — strictly positional, like
+        // Sub/Div and the Cmp* pin above ((cond, a, b) each mean different
+        // things; a swap changes the value). Children canonicalize, order stays.
+        ScalarExpr::Select(c, a, b) => ScalarExpr::Select(
+            Box::new(canonicalize(c)),
+            Box::new(canonicalize(a)),
+            Box::new(canonicalize(b)),
+        ),
         ScalarExpr::Input(_)
         | ScalarExpr::Const(_)
         | ScalarExpr::Param(_)
@@ -353,6 +383,7 @@ fn sig(e: &ScalarExpr) -> String {
         ScalarExpr::Div(a, b) => format!("0Div({},{})", sig(a), sig(b)),
         ScalarExpr::Binary(op, a, b) => format!("0B{op:?}({},{})", sig(a), sig(b)),
         ScalarExpr::Unary(op, x) => format!("0U{op:?}({})", sig(x)),
+        ScalarExpr::Select(c, a, b) => format!("0Sel({},{},{})", sig(c), sig(a), sig(b)),
         ScalarExpr::Input(i) => format!("1I{i:03}"),
         ScalarExpr::Param(i) => format!("1P{i:03}"),
         ScalarExpr::Const(v) => format!("1C{v:?}"),
@@ -383,6 +414,12 @@ fn walk(
         // correspondence is unreconciled, so emitting `op: Iota` would
         // advertise a wrong-bind matcher. No pattern, no contract.
         ScalarExpr::Coord(d) => Err(PatternError::CoordUnsupported { axis: *d }),
+        // Select is a typed miss too — `OpTag::Where` exists and arity-3 is
+        // expressible, but the single-op advert needs the Model-A per-operand
+        // dtype tuple (cond is U8) and the fused-cmp form needs fuel-side
+        // matcher validation first; see the variant docs. NO `op: Where` is
+        // ever emitted in v1.
+        ScalarExpr::Select(..) => Err(PatternError::SelectUnsupported),
         ScalarExpr::Add(a, b) => scalar_binop("Add", "AddScalar", a, b, path, consumers, extracts),
         ScalarExpr::Mul(a, b) => scalar_binop("Mul", "MulScalar", a, b, path, consumers, extracts),
         ScalarExpr::Sub(a, b) => plain_binop("Sub", a, b, path, consumers, extracts),
@@ -992,6 +1029,105 @@ pattern:
             derive_pattern(&alibi),
             Err(PatternError::CoordUnsupported { .. })
         ));
+    }
+
+    #[test]
+    fn select_bodies_are_rejected_typed_not_advertised() {
+        use crate::ir::{BinaryOp, coord};
+        // OpTag::Where EXISTS (fuel-kernel-seam-types, "select / mask"; bare
+        // "Where" dispatch spelling) and arity-3 PatternNode::Op is expressible
+        // — but the advert is withheld in v1 (the [U8,T,T,T] operand tuple
+        // needs the Model-A per-operand keying; the fused-cmp form needs
+        // fuel-side matcher validation). A select body must miss TYPED
+        // (SelectUnsupported), never emit an `op: Where` pattern and never
+        // panic. The kernels still generate (pinned in cuda's goldens).
+        let bare = OpDef::elementwise(
+            "sel",
+            3,
+            &[ElementKind::F32],
+            input(0).select(input(1), input(2)),
+        );
+        assert_eq!(derive_pattern(&bare), Err(PatternError::SelectUnsupported));
+        // …the fused-cmp form (the bespoke-where shape)…
+        let fused = OpDef::elementwise(
+            "sel_cmp",
+            4,
+            &[ElementKind::F32],
+            input(0)
+                .binary(BinaryOp::CmpGe, input(1))
+                .select(input(2), input(3)),
+        );
+        assert_eq!(derive_pattern(&fused), Err(PatternError::SelectUnsupported));
+        // …and buried under ops that DO have names.
+        let nested = OpDef::elementwise(
+            "sel_relu",
+            3,
+            &[ElementKind::F32],
+            input(0).select(input(1), input(2)).relu(),
+        );
+        assert_eq!(
+            derive_pattern(&nested),
+            Err(PatternError::SelectUnsupported)
+        );
+        // The triu select body misses as SELECT (the walk hits Select before
+        // the Coord leaves — either typed miss is honest; pin the actual one).
+        let triu = OpDef::elementwise(
+            "triu_sel",
+            1,
+            &[ElementKind::F32],
+            coord(1)
+                .binary(BinaryOp::CmpGe, coord(0) + konst(0.0))
+                .select(input(0), konst(0.0)),
+        );
+        assert_eq!(derive_pattern(&triu), Err(PatternError::SelectUnsupported));
+    }
+
+    #[test]
+    fn select_stays_positional_under_canonicalize() {
+        use super::canonicalize;
+        use crate::ir::ScalarExpr;
+        // Select is NOT commutative in ANY operand — (cond, a, b) each mean
+        // different things, so canonicalize must keep the authored order
+        // (M8's target; the Cmp* positional pin precedent). Children still
+        // canonicalize (the commutative Add inside the cond reorders), the
+        // select operands never do.
+        let sel = ScalarExpr::Select(
+            Box::new(ScalarExpr::Input(2)),
+            Box::new(ScalarExpr::Input(1)),
+            Box::new(ScalarExpr::Input(0)),
+        );
+        assert_eq!(
+            canonicalize(&sel),
+            sel,
+            "select operands must stay positional"
+        );
+        // A "sorted-looking" swap would reorder if any commutative rule leaked in.
+        let sel2 = ScalarExpr::Select(
+            Box::new(ScalarExpr::Input(0)),
+            Box::new(ScalarExpr::Input(2)),
+            Box::new(ScalarExpr::Input(1)),
+        );
+        assert_eq!(canonicalize(&sel2), sel2);
+        // Children canonicalize THROUGH the select: Add(b, a) -> Add(a, b)
+        // inside the cond while the select's own order is untouched.
+        let cond = ScalarExpr::Add(
+            Box::new(ScalarExpr::Input(1)),
+            Box::new(ScalarExpr::Input(0)),
+        );
+        let sel3 = ScalarExpr::Select(
+            Box::new(cond),
+            Box::new(ScalarExpr::Input(2)),
+            Box::new(ScalarExpr::Input(3)),
+        );
+        let want = ScalarExpr::Select(
+            Box::new(ScalarExpr::Add(
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Input(1)),
+            )),
+            Box::new(ScalarExpr::Input(2)),
+            Box::new(ScalarExpr::Input(3)),
+        );
+        assert_eq!(canonicalize(&sel3), want);
     }
 
     #[test]

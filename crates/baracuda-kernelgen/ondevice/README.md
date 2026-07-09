@@ -351,6 +351,14 @@ preprocessor flags): `nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler
   increment); the mask-multiply idiom is value-correct modulo signed zero.
   **Route implication for the eventual triu audit:** value-equal with `-0` on
   masked negatives — a consumer needing exact `+0` requires the select op.
+  **CLOSED by the WHERE/SELECT increment** — see the
+  `select_validate.cu` section below: `ScalarExpr::Select` re-authors triu as
+  a bitwise pick and the whole-buffer memcmp vs bespoke is now
+  `bit_diff == 0` across this exact shape/k matrix (the `signed_zero_diff`
+  accounting **collapses to zero**), with the masked-NaN value gap — the
+  "NaN aside; none here" latent case this harness never seeded — now
+  probe-tested too. This mask-multiply harness stays as-is: it documents the
+  mask-multiply idiom's (still-true) `-0.0` behavior.
 
 ## `reduction_upgrades_validate.cu` — reduction upgrades (increment 0e)
 
@@ -1601,3 +1609,95 @@ exposure; f16/bf16/f64 rope E2E (mixed-dtype operands are inexpressible under
 the single-operand-0-dtype key; f64 apply promotes f32 tables at load); rope
 base/backward/THD variants; negative offsets (not forbidden by the emitted
 code, but unvalidated — `off >= 0` only).
+
+## `select_validate.cu` — WHERE/SELECT bitwise ternary (post-ramp increment)
+
+Validates `ScalarExpr::Select(cond, a, b)` — the IR's first 3-child node, a
+bitwise ternary whose chosen arm's **exact bits move untouched** (no
+arithmetic, no conversion). Closes the 0d finding above: the mask-multiply
+triu stored `-0.0` on masked negatives (84,489 accounted bit-diffs at
+5000×33) and would store `NaN` for a masked NaN; the select triu is
+**bit-identical to bespoke**.
+
+**Coverage** (honest tally, the sort/offset convention — every case below is
+**device-launched** unless labeled otherwise):
+
+1. **THE ACCEPTANCE GATE — bit-identical triu/tril.** Generated
+   `coord(1).binary(CmpGe, coord(0) + konst(k)).select(input(0), konst(0.0))`
+   (tril: `CmpLe`) vs bespoke `baracuda_kernels_{triu,tril}_{f32,f64}_run`:
+   **whole-buffer memcmp, `bit_diff == 0` required**, across the full 0d
+   matrix — shapes {128×128, 37×53, 1×1 degenerate, 5000×33, 33×5000 (both
+   coordinate axes > 2¹¹)} × k ∈ {0, −1, 2} × triu/tril × f32/f64 = **60
+   device-launched cells**. Inputs are probe-seeded (±0, ±1, ±inf, qNaN +
+   payload classes, **sNaN payloads**, negative-NaN payloads, subnormals,
+   min normal, max finite, ±π — tiled across the whole matrix, so every
+   class lands in BOTH kept and masked positions — plus an xorshift random
+   bit sweep). The 0d `signed_zero_diff` accounting is retained and
+   **collapses to zero**, and each cell is independently memcmp'd against
+   the raw-bit mathematical definition (`keep ? in : +0.0`), so a
+   both-wrong-the-same-way regression cannot pass. This also closes the 0d
+   latent masked-NaN gap ("NaN aside; none here") — masked NaNs now store
+   literal `+0.0`, and kept sNaN payloads move bit-intact.
+2. **Fused-cmp select vs a CPU raw-bit oracle** — f32 + f64
+   `select(a >= b, x, y)` and the composed cond
+   `select((a>=b) * (a≠0), x, y)` (the float-side conjunction the
+   any-expression-cond decision exists for), probe + 4M-random sweep, zero
+   diffs (a NaN compare *operand* → unordered `>=` → cond value `0.0` → `y`;
+   NOT to be confused with a cond whose VALUE is NaN, which is nonzero-TRUE and
+   picks `x` — that path is exercised by cell 4's `(c & 0x7fff) != 0` oracle).
+3. **Cross-check vs bespoke `where`** — the u8 mask is **device-computed**
+   by the generated 0b pred kernel (`mask_ge`, u8-out), fed to bespoke
+   `where_f32_strided_run(mask, x, y)`, and memcmp'd against the generated
+   one-kernel fused `select(cmp(a,b), x, y)`: zero diffs over 4M lanes.
+   *Honest scope note:* bespoke where's U8 cond **operand** is the
+   `[U8,T,T]` tuple — inexpressible under v1 uniform-dtype keying, so the
+   v1 proof vehicle is the fused/Coord cond form; this cell proves bit
+   **equivalence** of the two routes, not a bespoke-where bind.
+4. **f16/bf16 raw-pick** — leaf-arm select with the cond sweeping **every
+   16-bit pattern** and NaN payloads (incl. signaling-class) seeded into
+   both arms; memcmp vs a CPU oracle picking **raw u16 lanes**
+   (`(cond & 0x7fff) != 0`) — proves only the cond promotes to f32 and no
+   promote-demote pair ever touches an arm (mutation M7's on-device dual).
+5. **Vectorized per-lane** — all-Input select on the V4 cell vs its scalar
+   sibling, 16M elements, memcmp-equal.
+6. **Run-to-run determinism** — two triu_sel launches, memcmp.
+7. **compute-sanitizer** — `san` mode (small shapes, every kernel family):
+   memcheck / synccheck / initcheck `ERROR SUMMARY: 0 errors`, racecheck
+   `0 hazards`.
+8. **Bench** — house convention (3 warm-up + 20 timed via cudaEvent),
+   generated select-triu vs bespoke `triu_f32_run` at 4096×4096.
+
+**Regeneration:** the generated kernels come from the committed
+`dump_select_sources` test (not the `bin/kernelgen.rs` catalog):
+
+```text
+SELECT_OUT=<outdir> cargo test -p baracuda-kernelgen dump_select_sources -- --ignored --nocapture
+```
+
+then copy `select_validate.cu` beside them and compile like
+`coord_validate.cu` (the bespoke headers want the preprocessor flags):
+`nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17"
+-I <kernels/include> select_validate.cu`.
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc, 2026-07-08 —
+**ALL PASSED** (68 device-launched checks + the bench):
+
+- **Cell 1 (the gate): `bit_diff == 0` on all 60 triu/tril cells** — f32 AND
+  f64, every shape, every k, probe-seeded. The `signed_zero_diff` class the
+  0d audit accounted (84,489 at 5000×33 under mask-multiply) is **0**, and
+  `def_bit_bad == 0` (raw-bit-equal to the definition, masked NaNs → `+0.0`,
+  kept sNaN payloads intact).
+- Cells 2–6: zero diffs everywhere (4M fused-cmp f32/f64 + composed cond;
+  4M vs bespoke where; full 16-bit f16/bf16 cond sweeps with payload arms;
+  16M vectorized-vs-scalar; determinism).
+- Sanitizers (cell 7): memcheck/synccheck/initcheck **0 errors**, racecheck
+  **0 hazards**.
+- Bench (cell 8): generated select-triu **0.469 ms** (35.8 Gelem/s,
+  286 GB/s) vs bespoke **0.465 ms** (36.1 Gelem/s, 289 GB/s) — **0.99×
+  bespoke** (parity; both memory-bound).
+- **Headerless nvrtc compile** (`nvrtc_compiles_select_kernels`, the sole
+  gate on the f16/bf16 `(__half)(0.0)` / `(__nv_bfloat16)(0.0)` Const-arm
+  converting-ctor spelling — the device harness's half kernels are
+  Input-arm only): run with `--features nvrtc -- --ignored` against the real
+  nvrtc runtime (CUDA 13.3) — **PASS** (f32/f64/triu + both half Const-arm
+  ctors compile headerless).

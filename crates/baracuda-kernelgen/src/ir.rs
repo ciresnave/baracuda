@@ -82,6 +82,37 @@ pub enum ScalarExpr {
     /// A non-infix binary op (`max`/`min`/`pow`/`rem`/`atan2`/…) — a backend
     /// function call.
     Binary(BinaryOp, Box<ScalarExpr>, Box<ScalarExpr>),
+    /// Bitwise ternary select: `out = if cond != 0 { a } else { b }` — the
+    /// WHERE/SELECT increment, and the IR's first 3-child node.
+    ///
+    /// Operand order is `(cond, a, b)` — Fuel's `Where` order. `cond` is any
+    /// expression in the compute dtype, tested `!= 0` at lowering
+    /// (nonzero-true; `-0.0` is false — both zero signs are `!= 0`-false in
+    /// every width; NaN is true — numpy truthiness. torch never sees a float
+    /// cond: `torch.where` requires bool; Fuel never does either: its `Where`
+    /// cond is a U8 tensor, IEEE-unordered handling lives upstream in the
+    /// compare family).
+    ///
+    /// The chosen arm's bits move **UNTOUCHED**: no arithmetic, no conversion
+    /// ever touches an arm — the C ternary with both arms typed in the
+    /// compute dtype is data movement only (setp+selp), so the sign of zero
+    /// and NaN payloads (quiet AND signaling) survive the pick. This is what
+    /// distinguishes `select(cond, x, 0)` from the mask-multiply `x * cond`:
+    /// the multiply stores `-0.0` for a masked negative and `NaN` for a
+    /// masked NaN, and `x * 1.0` quiets a kept sNaN — the exact bespoke-triu
+    /// bit gap the 0d on-device audit measured. The two forms are NEVER
+    /// rewritten into each other (see `crate::optimize`).
+    ///
+    /// NOT commutative in any operand; never folded or rewritten (zero
+    /// optimizer rules — `select_is_never_folded_or_rewritten` pins it).
+    /// Legality (enforced at the top of `plan::build_plan` with independent
+    /// emitter backstops in `cuda`): float compute dtypes only in v1
+    /// (f32/f32s/f64/f16/bf16 — int select would raise the 0c U8/I8
+    /// cond-observer question, rejected outright with zero bespoke-parity
+    /// loss); legal in every `Access` arm at those dtypes (a select inside a
+    /// Reduction pre-expr is the masked-sum shape). At f16/bf16 only the
+    /// *cond* promotes to f32 (exact); arms are picked as raw half bits.
+    Select(Box<ScalarExpr>, Box<ScalarExpr>, Box<ScalarExpr>),
 }
 
 /// A unary math / activation op. Variant names line up with the FKC §4.1
@@ -451,6 +482,11 @@ pub enum DagNode {
     Unary(UnaryOp, NodeId),
     /// A non-infix binary op over two nodes.
     Binary(BinaryOp, NodeId, NodeId),
+    /// Bitwise ternary select over three nodes — `(cond, a, b)`, the first
+    /// 3-child node ([`ScalarExpr::Select`]). Non-leaf: a shared select hoists
+    /// to a `tmp` like any interior (both arms then evaluate eagerly —
+    /// value-identical for the pure IR expressions arms are, no GPU traps).
+    Select(NodeId, NodeId, NodeId),
 }
 
 impl DagNode {
@@ -629,6 +665,11 @@ impl ExprDag {
             DagNode::Binary(op, a, b) => {
                 ScalarExpr::Binary(op, Box::new(self.rebuild(a)), Box::new(self.rebuild(b)))
             }
+            DagNode::Select(c, a, b) => ScalarExpr::Select(
+                Box::new(self.rebuild(c)),
+                Box::new(self.rebuild(a)),
+                Box::new(self.rebuild(b)),
+            ),
         }
     }
 }
@@ -648,6 +689,9 @@ enum DagKey {
     Div(NodeId, NodeId),
     Unary(UnaryOp, NodeId),
     Binary(BinaryOp, NodeId, NodeId),
+    /// 3-child select key — hash-conses like any node (strictly positional:
+    /// `(cond, a, b)` is never reordered, so no two orderings ever merge).
+    Select(NodeId, NodeId, NodeId),
 }
 
 impl DagKey {
@@ -664,6 +708,7 @@ impl DagKey {
             DagNode::Div(a, b) => DagKey::Div(a, b),
             DagNode::Unary(op, x) => DagKey::Unary(op, x),
             DagNode::Binary(op, a, b) => DagKey::Binary(op, a, b),
+            DagNode::Select(c, a, b) => DagKey::Select(c, a, b),
         }
     }
 }
@@ -706,6 +751,10 @@ impl DagBuilder {
                 let (a, b) = (self.intern(a), self.intern(b));
                 DagNode::Binary(*op, a, b)
             }
+            ScalarExpr::Select(c, a, b) => {
+                let (c, a, b) = (self.intern(c), self.intern(a), self.intern(b));
+                DagNode::Select(c, a, b)
+            }
         };
         self.hashcons(node)
     }
@@ -745,6 +794,7 @@ fn node_children(n: &DagNode) -> Vec<NodeId> {
         | DagNode::Mul(a, b)
         | DagNode::Div(a, b)
         | DagNode::Binary(_, a, b) => vec![a, b],
+        DagNode::Select(c, a, b) => vec![c, a, b],
     }
 }
 
@@ -927,6 +977,23 @@ impl Expr {
     #[must_use]
     pub fn pow(self, rhs: Expr) -> Expr {
         self.binary(BinaryOp::Pow, rhs)
+    }
+
+    /// Bitwise ternary select with `self` as the condition:
+    /// `cond.select(a, b)` = `if cond != 0 { a } else { b }` — operand order
+    /// `(cond, a, b)`, Fuel's `Where` order ([`ScalarExpr::Select`]). The
+    /// chosen arm's bits move untouched (a pick, not arithmetic) — e.g. the
+    /// bit-exact triu is
+    /// `coord(1).binary(BinaryOp::CmpGe, coord(0) + konst(k)).select(input(0), konst(0.0))`,
+    /// NOT the mask-multiply `input(0) * cond` (which stores `-0.0` for a
+    /// masked negative).
+    #[must_use]
+    pub fn select(self, a: Expr, b: Expr) -> Expr {
+        Expr(ScalarExpr::Select(
+            Box::new(self.0),
+            Box::new(a.0),
+            Box::new(b.0),
+        ))
     }
 }
 

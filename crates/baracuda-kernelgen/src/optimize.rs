@@ -61,6 +61,16 @@ enum ENode {
     Div(Id, Id),
     Binary(BinaryOp, Id, Id),
     Unary(UnaryOp, Id),
+    /// Bitwise ternary select `(cond, a, b)` ([`ScalarExpr::Select`]) — ZERO
+    /// rewrite/fold rules, deliberately (the 0b cmp posture: when-in-doubt-
+    /// add-no-rule). In particular: no const-cond fold, no `select(c, x, x) →
+    /// x` (both shown bit-sound but deferred), NO mask-multiply equation in
+    /// either direction (`x*cond ⇎ select(cond, x, 0)` — that rewrite IS the
+    /// triu signed-zero/NaN bug; triu must be *authored* as select), no
+    /// distribution through ops, no cond simplification, and never a
+    /// NaN-cond fold (NaN cond is TRUE). Pinned by
+    /// `select_is_never_folded_or_rewritten`.
+    Select(Id, Id, Id),
 }
 
 /// An e-graph: union-find over e-classes + per-class e-node sets + a hashcons.
@@ -97,6 +107,7 @@ impl EGraph {
             ENode::Div(a, b) => ENode::Div(self.find(a), self.find(b)),
             ENode::Binary(op, a, b) => ENode::Binary(op, self.find(a), self.find(b)),
             ENode::Unary(op, a) => ENode::Unary(op, self.find(a)),
+            ENode::Select(c, a, b) => ENode::Select(self.find(c), self.find(a), self.find(b)),
             ref leaf => leaf.clone(),
         }
     }
@@ -189,6 +200,10 @@ fn add_expr(eg: &mut EGraph, e: &ScalarExpr) -> Id {
         ScalarExpr::Unary(op, x) => {
             let x = add_expr(eg, x);
             eg.add(ENode::Unary(*op, x))
+        }
+        ScalarExpr::Select(c, a, b) => {
+            let (c, a, b) = (add_expr(eg, c), add_expr(eg, a), add_expr(eg, b));
+            eg.add(ENode::Select(c, a, b))
         }
     }
 }
@@ -514,6 +529,8 @@ fn weight(n: &ENode) -> u64 {
             BinaryOp::Rem | BinaryOp::RemTrunc => 8, // division-class
             BinaryOp::Pow | BinaryOp::Atan2 => 16,   // transcendental
         },
+        // Select is compare-select class (one setp+selp) — the Max/Min/Cmp* tier.
+        ENode::Select(..) => 2,
         ENode::Unary(op, _) => match op {
             UnaryOp::Neg | UnaryOp::Abs | UnaryOp::Relu => 1,
             UnaryOp::Sqr
@@ -556,6 +573,9 @@ fn weight(n: &ENode) -> u64 {
 
 fn children(n: &ENode) -> Vec<Id> {
     match *n {
+        // The first 3-child arm — before the 2-child or-pattern so a future
+        // reorder can't shadow it.
+        ENode::Select(c, a, b) => vec![c, a, b],
         ENode::Add(a, b)
         | ENode::Sub(a, b)
         | ENode::Mul(a, b)
@@ -616,6 +636,11 @@ fn build(eg: &EGraph, c: Id, best: &HashMap<Id, (u64, ENode)>) -> ScalarExpr {
             ScalarExpr::Binary(op, bx(build(eg, a, best)), bx(build(eg, b, best)))
         }
         ENode::Unary(op, x) => ScalarExpr::Unary(op, bx(build(eg, x, best))),
+        ENode::Select(c, a, b) => ScalarExpr::Select(
+            bx(build(eg, c, best)),
+            bx(build(eg, a, best)),
+            bx(build(eg, b, best)),
+        ),
     }
 }
 
@@ -1039,6 +1064,108 @@ mod tests {
         // operand (they are proofs about every value, not about Coord):
         // c1 * 1.0 -> c1. This is hash-cons/extraction, not a Coord rule.
         assert_eq!(optimize(&(coord(1) * konst(1.0)).0), ScalarExpr::Coord(1));
+    }
+
+    #[test]
+    fn select_is_never_folded_or_rewritten() {
+        use crate::ir::{BinaryOp, coord, input, konst};
+        let sel = |c: ScalarExpr, a: ScalarExpr, b: ScalarExpr| {
+            ScalarExpr::Select(Box::new(c), Box::new(a), Box::new(b))
+        };
+        // ZERO select rules in v1 (the 0b cmp posture: when-in-doubt-add-no-
+        // rule, pinned per shape). (1) No const-cond fold — not even the
+        // "obviously" decidable ones (1.0 / 0.0 / -0.0 / NaN conds all stay;
+        // a NaN cond is TRUE, a fold bug magnet):
+        for c in [1.0, 0.0, -0.0, f64::NAN] {
+            let e = sel(
+                ScalarExpr::Const(c),
+                ScalarExpr::Input(0),
+                ScalarExpr::Input(1),
+            );
+            let o = optimize(&e);
+            assert!(
+                matches!(&o, ScalarExpr::Select(cc, _, _)
+                    if matches!(**cc, ScalarExpr::Const(v) if v == c || (v.is_nan() && c.is_nan()))),
+                "select(Const({c}), a, b) must stay as authored, got {o:?}"
+            );
+        }
+        // (2) No select(c, x, x) -> x (bit-sound under the sNaN carve-out but
+        // deferred — recorded as a deferred candidate, not a rule):
+        let same = sel(
+            ScalarExpr::Input(0),
+            ScalarExpr::Input(1),
+            ScalarExpr::Input(1),
+        );
+        assert_eq!(
+            optimize(&same),
+            same,
+            "select(c, x, x) must stay as authored"
+        );
+        // (3) NO mask-multiply equation in EITHER direction — that rewrite IS
+        // the triu signed-zero/NaN bug. x * cond stays a Mul…
+        let cond = input(0).binary(BinaryOp::CmpGt, konst(0.0));
+        let mask_mul = (input(1) * cond.clone()).0;
+        assert!(
+            matches!(optimize(&mask_mul), ScalarExpr::Mul(_, _)),
+            "x * cond must NEVER become a select"
+        );
+        // …and select(cond, x, 0) stays a Select (never a multiply).
+        let sel_zero = cond.select(input(1), konst(0.0)).0;
+        assert_eq!(
+            optimize(&sel_zero),
+            sel_zero,
+            "select(cond, x, 0) must NEVER become a mask-multiply"
+        );
+        // (4) No distribution through ops: f(select(c, a, b)) stays as authored.
+        let distributed = ScalarExpr::Unary(
+            UnaryOp::Relu,
+            Box::new(sel(
+                ScalarExpr::Input(0),
+                ScalarExpr::Input(1),
+                ScalarExpr::Input(2),
+            )),
+        );
+        assert_eq!(optimize(&distributed), distributed);
+        // (5) No cond simplification: a reflexive-compare cond stays symbolic
+        // (CmpEq(x, x) is FALSE for NaN x — same honesty pin as the cmp set),
+        // and a Coord cond round-trips (the triu authoring).
+        let refl = sel(
+            ScalarExpr::Binary(
+                BinaryOp::CmpEq,
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Input(0)),
+            ),
+            ScalarExpr::Input(1),
+            ScalarExpr::Input(2),
+        );
+        assert_eq!(optimize(&refl), refl);
+        let triu = coord(1)
+            .binary(BinaryOp::CmpGe, coord(0) + konst(0.0))
+            .select(input(0), konst(0.0))
+            .0;
+        assert_eq!(
+            optimize(&triu),
+            triu,
+            "the triu select body must round-trip"
+        );
+        // (6) The VALUE-GENERIC bit-exact identities still apply INSIDE a
+        // select operand (proofs about every value, not select rules):
+        // select(c, x*1, b) -> select(c, x, b) via extraction, order intact.
+        let inner = sel(
+            ScalarExpr::Input(0),
+            (input(1) * konst(1.0)).0,
+            ScalarExpr::Input(2),
+        );
+        assert_eq!(
+            optimize(&inner),
+            sel(
+                ScalarExpr::Input(0),
+                ScalarExpr::Input(1),
+                ScalarExpr::Input(2)
+            )
+        );
+        // (7) Weight pin: select sits in the compare-select tier (one selp).
+        assert_eq!(weight(&ENode::Select(0, 1, 2)), 2);
     }
 
     #[test]

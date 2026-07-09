@@ -140,6 +140,15 @@ pub struct Lowering<'a> {
     pub unary: &'a dyn Fn(UnaryOp, String) -> String,
     /// Binary-function-op spelling.
     pub binary: &'a dyn Fn(BinaryOp, String, String) -> String,
+    /// Ternary select spelling ([`ScalarExpr::Select`]) over the three
+    /// already-lowered operand strings `(cond, a, b)`. Its own seam — the
+    /// 2-operand `binary` closure cannot carry three operands, and the select
+    /// spelling has its own bitwise contract (the arms must move raw bits, so
+    /// it must NEVER route through a promote-demote wrapper; see
+    /// `cuda::cuda_select`). Emitters whose bodies can never contain a Select
+    /// (the packed f16/bf16 pair path — `body_packs` excludes it) pass a
+    /// panicking closure, the `coord` precedent.
+    pub select: &'a dyn Fn(String, String, String) -> String,
 }
 
 impl std::fmt::Debug for Lowering<'_> {
@@ -188,6 +197,9 @@ pub fn lower_expr(e: &ScalarExpr, lo: &Lowering<'_>) -> String {
         ScalarExpr::Const(v) => const_lit(*v),
         ScalarExpr::Unary(op, x) => (lo.unary)(*op, lower_expr(x, lo)),
         ScalarExpr::Binary(op, a, b) => (lo.binary)(*op, lower_expr(a, lo), lower_expr(b, lo)),
+        ScalarExpr::Select(c, a, b) => {
+            (lo.select)(lower_expr(c, lo), lower_expr(a, lo), lower_expr(b, lo))
+        }
         ScalarExpr::Add(a, b) => format!("({} + {})", lower_expr(a, lo), lower_expr(b, lo)),
         ScalarExpr::Sub(a, b) => format!("({} - {})", lower_expr(a, lo), lower_expr(b, lo)),
         ScalarExpr::Mul(a, b) => format!("({} * {})", lower_expr(a, lo), lower_expr(b, lo)),
@@ -340,6 +352,12 @@ fn lower_node(
             let a = lower_node(dag, a, ctype, lo, refs, prelude, policy);
             let b = lower_node(dag, b, ctype, lo, refs, prelude, policy);
             (lo.binary)(op, a, b)
+        }
+        DagNode::Select(c, a, b) => {
+            let c = lower_node(dag, c, ctype, lo, refs, prelude, policy);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, policy);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, policy);
+            (lo.select)(c, a, b)
         }
         DagNode::Add(a, b) => {
             let a = lower_node(dag, a, ctype, lo, refs, prelude, policy);

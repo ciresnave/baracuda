@@ -555,6 +555,11 @@ fn epilogue_reads_only_reduced0(e: &crate::ir::ScalarExpr) -> bool {
         E::Add(a, b) | E::Sub(a, b) | E::Mul(a, b) | E::Div(a, b) | E::Binary(_, a, b) => {
             epilogue_reads_only_reduced0(a) && epilogue_reads_only_reduced0(b)
         }
+        E::Select(c, a, b) => {
+            epilogue_reads_only_reduced0(c)
+                && epilogue_reads_only_reduced0(a)
+                && epilogue_reads_only_reduced0(b)
+        }
     }
 }
 
@@ -756,6 +761,11 @@ fn assert_valid_multi_output(op: &OpDef, key: &StructureKey) {
             | ScalarExpr::Mul(a, b)
             | ScalarExpr::Div(a, b)
             | ScalarExpr::Binary(_, a, b) => {
+                check_body(a, n_inputs, name);
+                check_body(b, n_inputs, name);
+            }
+            ScalarExpr::Select(c, a, b) => {
+                check_body(c, n_inputs, name);
                 check_body(a, n_inputs, name);
                 check_body(b, n_inputs, name);
             }
@@ -1351,6 +1361,7 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
             ScalarExpr::Binary(bop, a, b) => {
                 matches!(bop, BinaryOp::Nextafter) || walk(a) || walk(b)
             }
+            ScalarExpr::Select(c, a, b) => walk(c) || walk(a) || walk(b),
         }
     }
     let mut exprs: Vec<&ScalarExpr> = vec![&op.body];
@@ -1559,6 +1570,31 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                 walk(a, op_name, dtype, int_dt, elementwise);
                 walk(b, op_name, dtype, int_dt, elementwise);
             }
+            ScalarExpr::Select(c, a, b) => {
+                // G1 (WHERE/SELECT): select is rejected OUTRIGHT at every int
+                // dtype — v1 select is float-only (f32/f32s/f64/f16/bf16).
+                // Rationale: bespoke cmp is `_fp`-only already, so a cmp-cond
+                // select is float-only by transitivity, and admitting an int
+                // select would drag in the 0c U8/I8 observer problem — the
+                // cond's `!= 0` test OBSERVES the un-truncated promoted-int
+                // value of a composed cond (value 256: nonzero inlined, 0 when
+                // hoisted to an 8-bit tmp — one body, two results) while the
+                // arms are value-transparent. Rejecting outright sidesteps it
+                // with zero bespoke-parity loss (`where_dtype_fanout` int
+                // coverage is a later increment). Legal in EVERY Access arm at
+                // float dtypes (a select in a Reduction pre-expr is the
+                // masked-sum shape), so no elementwise-only assert here.
+                assert!(
+                    !int_dt,
+                    "op '{op_name}': Select has no integer lowering — v1 select is \
+                     float-only (f32/f32s/f64/f16/bf16), so int dtype {dtype:?} must \
+                     miss honestly (the 0c U8/I8 cond-observer question is unresolved \
+                     and bespoke where int coverage is a later increment)"
+                );
+                walk(c, op_name, dtype, int_dt, elementwise);
+                walk(a, op_name, dtype, int_dt, elementwise);
+                walk(b, op_name, dtype, int_dt, elementwise);
+            }
         }
     }
     let mut exprs: Vec<&ScalarExpr> = vec![&op.body];
@@ -1621,6 +1657,9 @@ pub(crate) fn expr_contains_coord(e: &ScalarExpr) -> bool {
         | ScalarExpr::Mul(a, b)
         | ScalarExpr::Div(a, b)
         | ScalarExpr::Binary(_, a, b) => expr_contains_coord(a) || expr_contains_coord(b),
+        ScalarExpr::Select(c, a, b) => {
+            expr_contains_coord(c) || expr_contains_coord(a) || expr_contains_coord(b)
+        }
     }
 }
 
@@ -1685,6 +1724,11 @@ fn assert_coord_admissibility(op: &OpDef, key: &StructureKey) {
             | ScalarExpr::Mul(a, b)
             | ScalarExpr::Div(a, b)
             | ScalarExpr::Binary(_, a, b) => {
+                walk(a, op_name, dtype, rank, elementwise);
+                walk(b, op_name, dtype, rank, elementwise);
+            }
+            ScalarExpr::Select(c, a, b) => {
+                walk(c, op_name, dtype, rank, elementwise);
                 walk(a, op_name, dtype, rank, elementwise);
                 walk(b, op_name, dtype, rank, elementwise);
             }
@@ -1902,6 +1946,11 @@ fn assert_valid_reduction_post(op: &OpDef) {
                 walk(a, name);
                 walk(b, name);
             }
+            ScalarExpr::Select(c, a, b) => {
+                walk(c, name);
+                walk(a, name);
+                walk(b, name);
+            }
         }
     }
     walk(post, &op.name);
@@ -2076,6 +2125,11 @@ fn validate_row_reduce(
                 check(a, n_inputs, max_reduced, in_stage, is_col);
                 check(b, n_inputs, max_reduced, in_stage, is_col);
             }
+            ScalarExpr::Select(c, a, b) => {
+                check(c, n_inputs, max_reduced, in_stage, is_col);
+                check(a, n_inputs, max_reduced, in_stage, is_col);
+                check(b, n_inputs, max_reduced, in_stage, is_col);
+            }
         }
     }
     for (i, st) in stages.iter().enumerate() {
@@ -2239,6 +2293,11 @@ fn validate_scan(op: &OpDef, key: &StructureKey, axis: u8, reverse: bool, exclus
             | ScalarExpr::Mul(a, b)
             | ScalarExpr::Div(a, b)
             | ScalarExpr::Binary(_, a, b) => {
+                check(a, n_inputs, allow_reduced, ctx, name);
+                check(b, n_inputs, allow_reduced, ctx, name);
+            }
+            ScalarExpr::Select(c, a, b) => {
+                check(c, n_inputs, allow_reduced, ctx, name);
                 check(a, n_inputs, allow_reduced, ctx, name);
                 check(b, n_inputs, allow_reduced, ctx, name);
             }
@@ -2452,6 +2511,11 @@ fn validate_window(
             | ScalarExpr::Mul(a, b)
             | ScalarExpr::Div(a, b)
             | ScalarExpr::Binary(_, a, b) => {
+                check(a, n_inputs, allow_reduced, ctx, name);
+                check(b, n_inputs, allow_reduced, ctx, name);
+            }
+            ScalarExpr::Select(c, a, b) => {
+                check(c, n_inputs, allow_reduced, ctx, name);
                 check(a, n_inputs, allow_reduced, ctx, name);
                 check(b, n_inputs, allow_reduced, ctx, name);
             }
@@ -4362,5 +4426,140 @@ mod sort_gate_validate {
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
         let _ = build_plan(&sc, &key);
+    }
+}
+
+#[cfg(test)]
+mod select_gate_validate {
+    //! WHERE/SELECT plan-gate tests (G1-G4). Per the house rule these call
+    //! `build_plan` DIRECTLY (an emitter panic would mask a gate mutation);
+    //! the emitter backstops are independent Tier-2 tests in `cuda`.
+    use super::{Schedule, build_plan};
+    use crate::ir::{BinaryOp, OpDef, ReduceOp, coord, input, konst};
+    use baracuda_kernels_types::{
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
+    };
+
+    // n_operands contiguous 1D operands of `dtype` (V4-eligible at f32).
+    fn key_dt(dtype: ElementKind, n_operands: usize) -> StructureKey {
+        let a = OperandDesc::new(1, &[1024], &[1], dtype, 256);
+        let ops: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
+        structure_key(OpCategory::TernaryElementwise, &ops, ArchSku::Sm89)
+    }
+
+    // G1: select is rejected OUTRIGHT at every int dtype (v1 float-only) —
+    // the int-reject arm in `assert_int_op_admissibility`.
+    #[test]
+    #[should_panic(expected = "Select has no integer lowering")]
+    fn select_at_i32_is_rejected_at_the_plan_gate() {
+        let op = OpDef::elementwise(
+            "sel",
+            3,
+            &[ElementKind::I32],
+            input(0).select(input(1), input(2)),
+        );
+        let _ = build_plan(&op, &key_dt(ElementKind::I32, 4));
+    }
+
+    #[test]
+    #[should_panic(expected = "Select has no integer lowering")]
+    fn select_at_i64_is_rejected_at_the_plan_gate() {
+        let op = OpDef::elementwise(
+            "sel",
+            3,
+            &[ElementKind::I64],
+            input(0).select(input(1), input(2)),
+        );
+        let _ = build_plan(&op, &key_dt(ElementKind::I64, 4));
+    }
+
+    #[test]
+    #[should_panic(expected = "Select has no integer lowering")]
+    fn select_at_u8_is_rejected_at_the_plan_gate() {
+        // U8 is exactly the 0c cond-observer dtype the outright reject sidesteps.
+        let op = OpDef::elementwise(
+            "sel",
+            3,
+            &[ElementKind::U8],
+            input(0).select(input(1), input(2)),
+        );
+        let _ = build_plan(&op, &key_dt(ElementKind::U8, 4));
+    }
+
+    // G2: a Select ROOT never gets u8-out powers — `assert_valid_out_dtype`
+    // admits only a `Binary(is_cmp)` root for `Some(U8)`, and a select stores
+    // the ARM dtype. Already true without a code change; pinned here.
+    #[test]
+    #[should_panic(expected = "requires the body ROOT to be a comparison")]
+    fn select_root_with_u8_out_is_rejected_at_the_plan_gate() {
+        let mut op = OpDef::elementwise(
+            "sel_mask",
+            3,
+            &[ElementKind::F32],
+            input(0).select(input(1), input(2)),
+        );
+        op.out_dtype = Some(ElementKind::U8);
+        let _ = build_plan(&op, &key_dt(ElementKind::F32, 4));
+    }
+
+    // G3: select is legal in every Access arm at float dtypes — the masked-sum
+    // reduction (a select in the pre-fold body) builds a plan.
+    #[test]
+    fn masked_sum_reduction_with_a_select_body_builds() {
+        let masked = OpDef::reduction(
+            "masked_sum",
+            1,
+            &[ElementKind::F32],
+            input(0)
+                .binary(BinaryOp::CmpGt, konst(0.5))
+                .select(input(0), konst(0.0)),
+            ReduceOp::Sum,
+        );
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let plan = build_plan(&masked, &key);
+        assert!(matches!(plan.schedule, Schedule::Reduction { .. }));
+    }
+
+    // G4 (no new schedule machinery): a Coord-bearing cond rides the existing
+    // Strided force — the triu body's route…
+    #[test]
+    fn triu_select_body_takes_the_strided_schedule() {
+        let triu = OpDef::elementwise(
+            "triu_sel",
+            1,
+            &[ElementKind::F32],
+            coord(1)
+                .binary(BinaryOp::CmpGe, coord(0) + konst(0.0))
+                .select(input(0), konst(0.0)),
+        );
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89);
+        let plan = build_plan(&triu, &key);
+        assert!(
+            matches!(plan.schedule, Schedule::Strided),
+            "Coord cond must force Strided, got {:?}",
+            plan.schedule
+        );
+    }
+
+    // …and an all-Input select on a vec-width-4 key vectorizes per-lane
+    // (uniform-dtype select needs no schedule change).
+    #[test]
+    fn all_input_select_vectorizes_at_a_v4_cell() {
+        let op = OpDef::elementwise(
+            "sel",
+            3,
+            &[ElementKind::F32],
+            input(0).select(input(1), input(2)),
+        );
+        let key = key_dt(ElementKind::F32, 4);
+        let plan = build_plan(&op, &key);
+        assert!(
+            matches!(plan.schedule, Schedule::Vectorized { width: 4 }),
+            "all-Input select at a V4 cell must vectorize, got {:?}",
+            plan.schedule
+        );
     }
 }

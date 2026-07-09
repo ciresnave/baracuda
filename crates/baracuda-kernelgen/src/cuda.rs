@@ -469,6 +469,11 @@ fn body_packs(e: &ScalarExpr) -> bool {
         | ScalarExpr::Mul(a, b)
         | ScalarExpr::Div(a, b)
         | ScalarExpr::Binary(_, a, b) => body_packs(a) && body_packs(b),
+        // Select never packs (G7): the packed pair path has no bit-audited
+        // pair-split select (a Tier-B split would work but is mostly moot —
+        // any select with a konst/cmp already falls to scalar via the leaf
+        // rule above), so a select body declines to the scalar/strided path.
+        ScalarExpr::Select(..) => false,
     }
 }
 
@@ -600,6 +605,7 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
                 },
                 unary: &|op, x| cuda_unary(op, x, plan.dtype),
                 binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+                select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
             },
         );
         if prelude.is_empty() {
@@ -689,6 +695,14 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
                 },
                 unary: &|op, x| packed_unary(op, x, plan.dtype),
                 binary: &|op, a, b| packed_binary(op, a, b, plan.dtype),
+                // Unreachable: `body_packs` excludes Select (G7), so a select
+                // body never reaches the packed pair path — panic backstop.
+                select: &|_, _, _| {
+                    panic!(
+                        "cuda backend: Select reached the packed emitter — body_packs \
+                         excludes select bodies (they decline to the scalar path)"
+                    )
+                },
             },
         );
         if prelude.is_empty() {
@@ -770,6 +784,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             },
             unary: &|op, x| cuda_unary(op, x, plan.dtype),
             binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
         },
     );
     let store = store_expr(plan, root);
@@ -1064,6 +1079,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             coord: &coord,
             unary: &|op, x| cuda_unary(op, x, plan.dtype),
             binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
         },
     );
     for decl in &prelude {
@@ -1738,6 +1754,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             coord: &multi_coord_panic(plan.op_name),
             unary: &|op, x| cuda_unary(op, x, plan.dtype),
             binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
         },
         false,
     );
@@ -1843,6 +1860,7 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             coord: &multi_coord_panic(plan.op_name),
             unary: &|op, x| cuda_unary(op, x, plan.dtype),
             binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
         },
         false,
     );
@@ -1903,6 +1921,7 @@ fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Ge
                 coord: &multi_coord_panic(plan.op_name),
                 unary: &|op, x| cuda_unary(op, x, plan.dtype),
                 binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+                select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
             },
             false,
         );
@@ -1989,6 +2008,15 @@ fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> Gener
                 coord: &multi_coord_panic(plan.op_name),
                 unary: &|op, x| packed_unary(op, x, plan.dtype),
                 binary: &|op, a, b| packed_binary(op, a, b, plan.dtype),
+                // Unreachable: `bodies_pack` (all-`body_packs`) excludes any
+                // select body from the packed multi path — panic backstop.
+                select: &|_, _, _| {
+                    panic!(
+                        "cuda backend: Select reached the packed multi-output emitter — \
+                         body_packs excludes select bodies (they decline to the scalar \
+                         path)"
+                    )
+                },
             },
             true,
         );
@@ -2149,6 +2177,13 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                     binary_f32(op, a, b)
                 }
             },
+            select: &|c, a, b| {
+                if dbl {
+                    select_f64(c, a, b)
+                } else {
+                    select_f32(c, a, b)
+                }
+            },
         },
     );
     // Convert an accumulator-width value to the output store. Uniform-dtype is
@@ -2216,6 +2251,13 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                         binary_f64(op, a, b)
                     } else {
                         binary_f32(op, a, b)
+                    }
+                },
+                select: &|c, a, b| {
+                    if dbl {
+                        select_f64(c, a, b)
+                    } else {
+                        select_f32(c, a, b)
                     }
                 },
             },
@@ -2688,6 +2730,13 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
                     binary_f32(op, a, b)
                 }
             },
+            select: &|c, a, b| {
+                if dbl {
+                    select_f64(c, a, b)
+                } else {
+                    select_f32(c, a, b)
+                }
+            },
         },
     );
     let store = |finalized: String| -> String {
@@ -2869,6 +2918,13 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
                     binary_f32(op, a, b)
                 }
             },
+            select: &|c, a, b| {
+                if dbl {
+                    select_f64(c, a, b)
+                } else {
+                    select_f32(c, a, b)
+                }
+            },
         },
     );
     let stored = match plan.dtype {
@@ -3029,6 +3085,13 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
                     binary_f32(op, a, b)
                 }
             },
+            select: &|c, a, b| {
+                if dbl {
+                    select_f64(c, a, b)
+                } else {
+                    select_f32(c, a, b)
+                }
+            },
         },
     );
     let stored = match plan.dtype {
@@ -3186,6 +3249,9 @@ fn contains_subexpr(e: &ScalarExpr, t: &ScalarExpr) -> bool {
         | ScalarExpr::Mul(a, b)
         | ScalarExpr::Div(a, b)
         | ScalarExpr::Binary(_, a, b) => contains_subexpr(a, t) || contains_subexpr(b, t),
+        ScalarExpr::Select(c, a, b) => {
+            contains_subexpr(c, t) || contains_subexpr(a, t) || contains_subexpr(b, t)
+        }
     }
 }
 
@@ -3208,6 +3274,7 @@ fn substitute_subexpr(e: &ScalarExpr, t: &ScalarExpr, marker: u8) -> ScalarExpr 
         ScalarExpr::Mul(a, b) => ScalarExpr::Mul(bx(a), bx(b)),
         ScalarExpr::Div(a, b) => ScalarExpr::Div(bx(a), bx(b)),
         ScalarExpr::Binary(op, a, b) => ScalarExpr::Binary(*op, bx(a), bx(b)),
+        ScalarExpr::Select(c, a, b) => ScalarExpr::Select(bx(c), bx(a), bx(b)),
     }
 }
 
@@ -3339,6 +3406,13 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                         binary_f64(op, a, b)
                     } else {
                         binary_f32(op, a, b)
+                    }
+                },
+                select: &|c, a, b| {
+                    if dbl {
+                        select_f64(c, a, b)
+                    } else {
+                        select_f32(c, a, b)
                     }
                 },
             },
@@ -3874,6 +3948,13 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
                     binary_f32(op, a, b)
                 }
             },
+            select: &|c, a, b| {
+                if dbl {
+                    select_f64(c, a, b)
+                } else {
+                    select_f32(c, a, b)
+                }
+            },
         },
     );
     // `post` (the per-element epilogue) lowers over the running-prefix register,
@@ -3903,6 +3984,13 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
+                }
+            },
+            select: &|c, a, b| {
+                if dbl {
+                    select_f64(c, a, b)
+                } else {
+                    select_f32(c, a, b)
                 }
             },
         },
@@ -4389,6 +4477,13 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
                     binary_f32(op, a, b)
                 }
             },
+            select: &|c, a, b| {
+                if dbl {
+                    select_f64(c, a, b)
+                } else {
+                    select_f32(c, a, b)
+                }
+            },
         },
     );
     // `post` (per-output epilogue) lowers over the finalized window result, bound to
@@ -4417,6 +4512,13 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
+                }
+            },
+            select: &|c, a, b| {
+                if dbl {
+                    select_f64(c, a, b)
+                } else {
+                    select_f32(c, a, b)
                 }
             },
         },
@@ -5398,6 +5500,70 @@ fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String
     }
 }
 
+/// Ternary select in f32 math: `cond != 0.0f` picks arm `a`, else `b`
+/// ([`ScalarExpr::Select`] — nonzero-true, `-0.0` false, NaN true).
+///
+/// The `(float)` casts are MANDATORY, not cosmetic (the 0b double-promotion
+/// lesson): they are identity no-ops on already-float operands but pin the
+/// compare AND the ternary's type against a suffix-less double `Const`
+/// literal from `const_lit` — without the arm casts, a double-literal arm
+/// (`select(c, x, 0.0)`) promotes the whole ternary to double and the
+/// double→float round-trip at the store QUIETS an f32 sNaN arm payload (a
+/// bit diff vs the bespoke select). The cond cast makes the `!= 0` decision
+/// happen in the compute dtype (the cmp-operand precedent, `binary_f32`).
+/// No arithmetic ever touches an arm: the ternary is data movement
+/// (setp+selp), so ±0 signs and NaN payloads (quiet and signaling) move
+/// intact — byte-for-byte the bespoke `keep ? input[k] : zero_of<T>()`.
+fn select_f32(c: String, a: String, b: String) -> String {
+    format!("(((float)({c})) != 0.0f ? (float)({a}) : (float)({b}))")
+}
+
+/// [`select_f32`] with double literals/casts (the `binary_f64` cmp precedent).
+fn select_f64(c: String, a: String, b: String) -> String {
+    format!("(((double)({c})) != 0.0 ? (double)({a}) : (double)({b}))")
+}
+
+/// Lower a ternary select for `dtype` — the DEDICATED speller, never routed
+/// through [`cuda_binary`]: its blanket f16/bf16 promote→f32→demote wrapper
+/// would convert the ARMS, and a select's arms must move raw bits.
+///
+/// - **f32/f64**: [`select_f32`]/[`select_f64`] (identity-cast-pinned ternary).
+/// - **f16/bf16**: promote ONLY the cond to f32 (`__half2float` — exact, the
+///   same lossless embedding the cmp operands use) and test `!= 0.0f`; the
+///   ARMS are picked as raw `__half`/`__nv_bfloat16` operand strings — the
+///   ternary is typed in the storage dtype, a pure register pick, no
+///   conversion pair, NaN payloads intact. The `(__half)`/`(__nv_bfloat16)`
+///   arm casts are the half analog of the mandatory `(float)` casts above:
+///   an IDENTITY no-op on an already-half operand (same-type functional cast
+///   — no float bridge, bits untouched) that pins the ternary's type when an
+///   arm is a suffix-less double `Const` literal (`select(c, x, 0.0)` — the
+///   converting constructor rounds the literal to half once, `+0.0` bits,
+///   matching bespoke `zero_of<T>`; without the cast the half arm would
+///   convert THROUGH float/double to find a common ternary type, quieting
+///   sNaN payloads). A composed arm is already a `__float2half(...)` string
+///   (it crosses that bridge exactly once — the same bridge it would cross
+///   at store), so the cast is a no-op there too.
+/// - **int dtypes**: PANIC — the independent emitter backstop behind the plan
+///   gate (`assert_int_op_admissibility`): v1 select is float-only (an int
+///   select would raise the 0c U8/I8 cond-observer question).
+fn cuda_select(c: String, a: String, b: String, dtype: ElementKind) -> String {
+    match dtype {
+        ElementKind::F32 | ElementKind::F32Strict => select_f32(c, a, b),
+        ElementKind::F64 => select_f64(c, a, b),
+        ElementKind::F16 => {
+            format!("(__half2float({c}) != 0.0f ? (__half)({a}) : (__half)({b}))")
+        }
+        ElementKind::Bf16 => {
+            format!("(__bfloat162float({c}) != 0.0f ? (__nv_bfloat16)({a}) : (__nv_bfloat16)({b}))")
+        }
+        other => panic!(
+            "cuda backend: Select has no {other:?} lowering — v1 select is float-only \
+             (f32/f32s/f64/f16/bf16); an integer select must miss honestly at the plan \
+             gate (the 0c cond-observer question is unresolved)"
+        ),
+    }
+}
+
 /// Runtime scalar-param indices used by `e`, ascending + unique.
 fn params_used(e: &ScalarExpr) -> Vec<u8> {
     fn rec(e: &ScalarExpr, out: &mut std::collections::BTreeSet<u8>) {
@@ -5411,6 +5577,11 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
             | ScalarExpr::Mul(a, b)
             | ScalarExpr::Div(a, b)
             | ScalarExpr::Binary(_, a, b) => {
+                rec(a, out);
+                rec(b, out);
+            }
+            ScalarExpr::Select(c, a, b) => {
+                rec(c, out);
                 rec(a, out);
                 rec(b, out);
             }
@@ -5454,6 +5625,17 @@ fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
             "cuda backend: infix Div has no integer lowering ({dtype:?}) — the \
              bespoke elementwise surface has no int div and C `/` by zero is \
              device-UB; the plan gate rejects this"
+        ),
+        // Select at an integer dtype is validate-rejected at the plan gate
+        // (v1 select is float-only); this walk — which only runs for int
+        // dtypes — is its independent emitter backstop (G5), beside the
+        // per-speller panic in `cuda_select` (which only the elementwise
+        // paths route through; the reduction-class accumulator closures
+        // don't, so the walk is the layer that covers them).
+        ScalarExpr::Select(_, _, _) => panic!(
+            "cuda backend: Select at an integer dtype ({dtype:?}) — v1 select is \
+             float-only (the 0c U8/I8 cond-observer question is unresolved); the \
+             plan gate rejects this"
         ),
         ScalarExpr::Unary(_, x) => assert_no_int_div_or_const(x, dtype),
         ScalarExpr::Add(a, b)
@@ -5513,6 +5695,11 @@ fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) {
         | ScalarExpr::Mul(a, b)
         | ScalarExpr::Div(a, b)
         | ScalarExpr::Binary(_, a, b) => {
+            assert_coord_lowerable(a, plan);
+            assert_coord_lowerable(b, plan);
+        }
+        ScalarExpr::Select(c, a, b) => {
+            assert_coord_lowerable(c, plan);
             assert_coord_lowerable(a, plan);
             assert_coord_lowerable(b, plan);
         }
@@ -11602,5 +11789,688 @@ mod sort_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod select_tests {
+    //! WHERE/SELECT emitter tests: emission goldens (the exact bitwise-pick
+    //! spellings), the packed fallback (G7), the Tier-2 int backstop (G5),
+    //! and the `#[ignore]`d source dump for `ondevice/select_validate.cu`.
+    //! On-device numeric proof (triu/tril memcmp vs bespoke, NaN payloads,
+    //! signed zeros) lives in that harness; these pin the source text.
+    use crate::ir::{BinaryOp, OpDef, coord, input, konst, reduced};
+    use crate::{Cuda, generate};
+    use baracuda_kernels_types::{
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
+    };
+
+    /// `n_operands` contiguous rank-1 operands of `dt` at `align` (align 4/2/8
+    /// defeats vectorization ⇒ the scalar golden; 256 keys V4/V8).
+    fn sel_key(dt: ElementKind, n_operands: usize, align: u32) -> StructureKey {
+        let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
+        let ops: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
+        structure_key(OpCategory::TernaryElementwise, &ops, ArchSku::Sm89)
+    }
+
+    /// [256,128] contiguous input → [256] output — reduce/row-reduce the last axis.
+    fn red_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let o = OperandDesc::new(1, &[256], &[1], dt, 256);
+        structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89)
+    }
+
+    /// [256,128] in/out — a last-axis scan cell (same-shape output).
+    fn scn_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
+    }
+
+    /// [8,k_in] → [8,k_out] — a window/pool cell.
+    fn win_key(dt: ElementKind, k_in: i64, k_out: i64) -> StructureKey {
+        let a = OperandDesc::new(2, &[8, k_in], &[k_in, 1], dt, 256);
+        let o = OperandDesc::new(2, &[8, k_out], &[k_out, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    /// `n_operands` odd-extent rank-1 operands (defeats V4 ⇒ the scalar-multi
+    /// emitter) — a 3-in/2-out multi-output cell keys `n_operands = 5`.
+    fn mo_key(dt: ElementKind, n_operands: usize) -> StructureKey {
+        let a = OperandDesc::new(1, &[1_000_003], &[1], dt, 256);
+        let ops: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
+        structure_key(OpCategory::BinaryElementwise, &ops, ArchSku::Sm89)
+    }
+
+    /// `cond.select(a, b)` over three inputs — the raw-pick shape.
+    fn sel_op(dt: ElementKind) -> OpDef {
+        OpDef::elementwise("sel", 3, &[dt], input(0).select(input(1), input(2)))
+    }
+
+    #[test]
+    fn select_emission_golden_f32() {
+        // The exact f32 ternary: cond decided `!= 0.0f` IN f32, both arms
+        // `(float)`-pinned (identity on same-type operands; mandatory against
+        // suffix-less double Const literals — M6's target), result f32.
+        let k = generate(
+            &sel_op(ElementKind::F32),
+            &sel_key(ElementKind::F32, 4, 4),
+            &Cuda,
+        );
+        assert_eq!(k.name, "baracuda_gen_sel_f32_scalar");
+        assert!(k.source.contains("const float* __restrict__ in2,"));
+        assert!(
+            k.source.contains(
+                "out[i] = (((float)(in0[i])) != 0.0f ? (float)(in1[i]) : (float)(in2[i]));"
+            ),
+            "f32 select golden missing in:\n{}",
+            k.source
+        );
+        // A Const arm stays inside the (float) pin: select(c, x, 0).
+        let z = OpDef::elementwise(
+            "selz",
+            2,
+            &[ElementKind::F32],
+            input(0).select(input(1), konst(0.0)),
+        );
+        let kz = generate(&z, &sel_key(ElementKind::F32, 3, 4), &Cuda);
+        assert!(
+            kz.source
+                .contains("out[i] = (((float)(in0[i])) != 0.0f ? (float)(in1[i]) : (float)(0.0));"),
+            "f32 const-arm select golden missing in:\n{}",
+            kz.source
+        );
+    }
+
+    #[test]
+    fn select_f64_golden_uses_double_literals() {
+        let k = generate(
+            &sel_op(ElementKind::F64),
+            &sel_key(ElementKind::F64, 4, 8),
+            &Cuda,
+        );
+        assert_eq!(k.name, "baracuda_gen_sel_f64_scalar");
+        assert!(
+            k.source.contains(
+                "out[i] = (((double)(in0[i])) != 0.0 ? (double)(in1[i]) : (double)(in2[i]));"
+            ),
+            "f64 select golden missing in:\n{}",
+            k.source
+        );
+        assert!(!k.source.contains("0.0f"), "no float literals at f64");
+    }
+
+    #[test]
+    fn select_f16_arms_are_raw_half_picks() {
+        // Promote ONLY the cond (exact, the cmp-operand precedent); the ARMS
+        // move as raw __half — never through the promote-demote wrapper (M7's
+        // target). The `(__half)` arm cast is a same-type identity (no float
+        // bridge, bits intact) that pins the ternary's type; a Const arm
+        // converts once (double literal → half, +0.0 bits).
+        let k = generate(
+            &sel_op(ElementKind::F16),
+            &sel_key(ElementKind::F16, 4, 2),
+            &Cuda,
+        );
+        assert_eq!(k.name, "baracuda_gen_sel_f16_scalar");
+        assert!(
+            k.source.contains(
+                "out[i] = (__half2float(in0[i]) != 0.0f ? (__half)(in1[i]) : (__half)(in2[i]));"
+            ),
+            "f16 raw-pick select golden missing in:\n{}",
+            k.source
+        );
+        // NO promote on either arm, NO demote wrapper around the pick.
+        assert!(!k.source.contains("__half2float(in1[i])"), "{}", k.source);
+        assert!(!k.source.contains("__half2float(in2[i])"), "{}", k.source);
+        assert!(!k.source.contains("__float2half"), "{}", k.source);
+        // Const arm at f16: converts ONCE via the half ctor (+0.0 bits), no
+        // float bridge on the Input arm.
+        let z = OpDef::elementwise(
+            "selz",
+            2,
+            &[ElementKind::F16],
+            input(0).select(input(1), konst(0.0)),
+        );
+        let kz = generate(&z, &sel_key(ElementKind::F16, 3, 2), &Cuda);
+        assert!(
+            kz.source.contains(
+                "out[i] = (__half2float(in0[i]) != 0.0f ? (__half)(in1[i]) : (__half)(0.0));"
+            ),
+            "f16 const-arm select golden missing in:\n{}",
+            kz.source
+        );
+    }
+
+    #[test]
+    fn select_bf16_arms_are_raw_picks() {
+        let k = generate(
+            &sel_op(ElementKind::Bf16),
+            &sel_key(ElementKind::Bf16, 4, 2),
+            &Cuda,
+        );
+        assert!(
+            k.source.contains(
+                "out[i] = (__bfloat162float(in0[i]) != 0.0f ? (__nv_bfloat16)(in1[i]) : \
+                 (__nv_bfloat16)(in2[i]));"
+            ),
+            "bf16 raw-pick select golden missing in:\n{}",
+            k.source
+        );
+        assert!(
+            !k.source.contains("__bfloat162float(in1[i])"),
+            "{}",
+            k.source
+        );
+        assert!(
+            !k.source.contains("__bfloat162float(in2[i])"),
+            "{}",
+            k.source
+        );
+        assert!(!k.source.contains("__float2bfloat16"), "{}", k.source);
+    }
+
+    #[test]
+    fn select_vectorizes_per_lane_f32() {
+        // All-Input select on a V4 cell: the whole body lowers once per lane
+        // through the same select closure — per-lane ternary, bit-safe.
+        let k = generate(
+            &sel_op(ElementKind::F32),
+            &sel_key(ElementKind::F32, 4, 256),
+            &Cuda,
+        );
+        assert_eq!(k.name, "baracuda_gen_sel_f32_co_v4");
+        for lane in ["x", "y", "z", "w"] {
+            assert!(
+                k.source.contains(&format!(
+                    "vo.{lane} = (((float)(v0.{lane})) != 0.0f ? (float)(v1.{lane}) : \
+                     (float)(v2.{lane}));"
+                )),
+                "lane {lane} select golden missing in:\n{}",
+                k.source
+            );
+        }
+    }
+
+    #[test]
+    fn select_with_nonleaf_body_falls_to_scalar_at_packed_cells() {
+        // G7 (M12's target): `body_packs` returns false for Select, so a
+        // packed-eligible f16 V8 cell with a select body takes the SCALAR
+        // path — no packed pair struct, no pair splitting.
+        let k = generate(
+            &sel_op(ElementKind::F16),
+            &sel_key(ElementKind::F16, 4, 256),
+            &Cuda,
+        );
+        assert!(k.name.ends_with("_scalar"), "got {}", k.name);
+        assert!(!k.source.contains("_vec"), "no packed vector struct");
+        assert!(!k.source.contains("__halves2half2"), "no pair re-join");
+        // The bf16 sibling too.
+        let kb = generate(
+            &sel_op(ElementKind::Bf16),
+            &sel_key(ElementKind::Bf16, 4, 256),
+            &Cuda,
+        );
+        assert!(kb.name.ends_with("_scalar"), "got {}", kb.name);
+    }
+
+    #[test]
+    fn triu_select_strided_golden() {
+        // The §6 acceptance-gate authoring: select(coord(1) >= coord(0) + k,
+        // input(0), konst(0.0)) — the Coord cond forces Strided, the pick
+        // stores bespoke-exact +0.0 on masked lanes (bit-proof on device).
+        let triu = OpDef::elementwise(
+            "triu_sel",
+            1,
+            &[ElementKind::F32],
+            coord(1)
+                .binary(BinaryOp::CmpGe, coord(0) + konst(0.0))
+                .select(input(0), konst(0.0)),
+        );
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89);
+        let k = generate(&triu, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_triu_sel_f32_strided_r2");
+        assert!(
+            k.source.contains(
+                "out[oo] = (((float)(((float)(float)c1 >= (float)((float)c0 + 0.0) ? 1.0f : \
+                 0.0f))) != 0.0f ? (float)(in0[o0]) : (float)(0.0));"
+            ),
+            "triu select strided golden missing in:\n{}",
+            k.source
+        );
+        // The select pick replaces the 0d mask-MULTIPLY: no `*` touches the arm.
+        assert!(
+            !k.source.contains("in0[o0] *") && !k.source.contains("* in0[o0]"),
+            "no mask-multiply on the data arm:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn shared_select_hoists_once_through_the_dag() {
+        // DAG/CSE: a select value consumed twice hoists to ONE tmp (text stays
+        // linear; the hoisted arm evaluates eagerly — value-neutral, §2).
+        let sel = input(0).select(input(1), input(2));
+        let body = sel.clone() + sel;
+        let op = OpDef::elementwise("selshared", 3, &[ElementKind::F32], body);
+        let k = generate(&op, &sel_key(ElementKind::F32, 4, 4), &Cuda);
+        assert!(
+            k.source.contains(
+                "float tmp0 = (((float)(in0[i])) != 0.0f ? (float)(in1[i]) : (float)(in2[i]));"
+            ),
+            "shared select must hoist to tmp0:\n{}",
+            k.source
+        );
+        assert!(k.source.contains("out[i] = (tmp0 + tmp0);"), "{}", k.source);
+    }
+
+    // ---- Non-elementwise select-closure emission goldens (review follow-up) ----
+    //
+    // The 3 elementwise select closures (emit_scalar/emit_strided/emit_vectorized)
+    // are golden-pinned above, but Select is legal in EVERY Access arm at float
+    // dtypes (G3) and 10 further `Lowering.select` closures emit it — reduction
+    // pre/post, row-reduce epilogue, scan pre/post, window pre/post, and the three
+    // multi-output emitters. G3's `masked_sum_reduction_with_a_select_body_builds`
+    // proves only the PLAN builds (build_plan-direct); it never lowers. Without an
+    // emission golden per family a SITE-LOCAL closure mutation — an `a`/`b` arm
+    // swap (`select_f64(c, a, b)` → `(c, b, a)`) or a flipped `dbl` branch (f32
+    // spelling truncating f64 arms) — silently inverts every masked
+    // reduction/scan/window/multi-output kernel while the whole suite stays green
+    // (the house dual-gate rule: every load-bearing emission decision gets a kill).
+    //
+    // Each golden uses distinguishable const arms `7.5`/`9.25` so the canonical
+    // fragment `!= 0.0f ? (float)(7.5) : (float)(9.25)` pins BOTH the arm order
+    // (a swap makes it `9.25 : 7.5`) AND the f32 speller (a `dbl`-flip makes it
+    // `(double)`); one f64 sibling pins the double branch directly. Every kill is
+    // mutation-checked (a site-local `select_f{32,64}(c, b, a)` swap or `dbl`-flip
+    // fails ONLY its family's golden).
+    //
+    // These cover 10 of the 13 non-elementwise closures (reduction pre/post,
+    // row-reduce, scan pre/post, window pre/post, and all three multi-output
+    // emitters). The remaining THREE — reduction_splitk, contraction, and
+    // contraction_splitk — are variant (`generate_variants` only, on specific
+    // outer-axis/contraction cells) and contraction-epilogue (`Reduced(0)`-only)
+    // paths that share the IDENTICAL `if dbl { select_f64 } else { select_f32 }`
+    // closure body pinned here; a select reaching them is exotic (a masked
+    // split-K reduction or a select in a matmul epilogue) and is a follow-up if
+    // ever generated. The shared speller means any dtype-routing or arm-order bug
+    // in `select_f32`/`select_f64`/`cuda_select` themselves is already killed by
+    // the elementwise + these goldens.
+
+    /// The canonical ordered f32 select fragment — arm order + f32 speller.
+    fn assert_ordered_select_f32(src: &str, ctx: &str) {
+        assert!(
+            src.contains("!= 0.0f ? (float)(7.5) : (float)(9.25)"),
+            "{ctx}: ordered f32 select fragment missing (arm swap or dbl-flip?):\n{src}"
+        );
+    }
+
+    #[test]
+    fn select_in_reduction_pre_body_emits_ordered_f32_and_f64() {
+        use crate::ir::ReduceOp;
+        // A masked pre-fold select (emit_reduction pre closure): the fold
+        // accumulates `select(in0 > 0.5, 7.5, 9.25)` per element.
+        let cond = input(0).binary(BinaryOp::CmpGt, konst(0.5));
+        let op = OpDef::reduction(
+            "mred",
+            1,
+            &[ElementKind::F32],
+            cond.clone().select(konst(7.5), konst(9.25)),
+            ReduceOp::Sum,
+        );
+        let k = generate(&op, &red_key(ElementKind::F32), &Cuda);
+        assert_ordered_select_f32(&k.source, "reduction-pre f32");
+        // f64 sibling pins the `dbl` branch (double literals, no float speller).
+        let op64 = OpDef::reduction(
+            "mred",
+            1,
+            &[ElementKind::F64],
+            cond.select(konst(7.5), konst(9.25)),
+            ReduceOp::Sum,
+        );
+        let k64 = generate(&op64, &red_key(ElementKind::F64), &Cuda);
+        assert!(
+            k64.source
+                .contains("!= 0.0 ? (double)(7.5) : (double)(9.25)"),
+            "reduction-pre f64 double-branch fragment missing:\n{}",
+            k64.source
+        );
+        assert!(
+            !k64.source.contains("(float)(7.5)"),
+            "f64 reduction must not emit the f32 speller:\n{}",
+            k64.source
+        );
+    }
+
+    #[test]
+    fn select_in_reduction_post_body_emits_ordered_f32() {
+        use crate::ir::ReduceOp;
+        // A masked epilogue select (emit_reduction post closure): the post reads
+        // Reduced(0), so the cond derives from the fold result; arms are Const.
+        let post = reduced(0)
+            .binary(BinaryOp::CmpGt, konst(0.5))
+            .select(konst(7.5), konst(9.25));
+        let op = OpDef::reduction_post(
+            "mredpost",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            post,
+        );
+        let k = generate(&op, &red_key(ElementKind::F32), &Cuda);
+        assert_ordered_select_f32(&k.source, "reduction-post f32");
+    }
+
+    #[test]
+    fn select_in_row_reduce_epilogue_emits_ordered_f32() {
+        use crate::ir::{ReduceOp, ReduceStage};
+        // A masked row-reduce epilogue select (emit_row_reduce_impl closure): one
+        // Sum stage, epilogue `select(in0 > 0.5, 7.5, 9.25)` (reads Input(0)).
+        let op = OpDef::row_reduce(
+            "mrr",
+            1,
+            &[ElementKind::F32],
+            vec![ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Sum,
+            }],
+            input(0)
+                .binary(BinaryOp::CmpGt, konst(0.5))
+                .select(konst(7.5), konst(9.25)),
+        );
+        let k = generate(&op, &red_key(ElementKind::F32), &Cuda);
+        assert_ordered_select_f32(&k.source, "row-reduce epilogue f32");
+    }
+
+    #[test]
+    fn select_in_scan_pre_and_post_emits_ordered_f32() {
+        use crate::ir::ReduceOp;
+        // Scan PRE closure (emit_scan_impl pre): masked cumulative sum, pre =
+        // select(in0 > 0.5, 7.5, 9.25), post = reduced(0).
+        let pre = OpDef::scan(
+            "mscanpre",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+            input(0)
+                .binary(BinaryOp::CmpGt, konst(0.5))
+                .select(konst(7.5), konst(9.25)),
+            reduced(0),
+        );
+        let kp = generate(&pre, &scn_key(ElementKind::F32), &Cuda);
+        assert_ordered_select_f32(&kp.source, "scan-pre f32");
+        // Scan POST closure (emit_scan_impl post): pre = input(0), post =
+        // select(reduced(0) > 0.5, 7.5, 9.25).
+        let post = OpDef::scan(
+            "mscanpost",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+            input(0),
+            reduced(0)
+                .binary(BinaryOp::CmpGt, konst(0.5))
+                .select(konst(7.5), konst(9.25)),
+        );
+        let ks = generate(&post, &scn_key(ElementKind::F32), &Cuda);
+        assert_ordered_select_f32(&ks.source, "scan-post f32");
+    }
+
+    #[test]
+    fn select_in_window_pre_and_post_emits_ordered_f32() {
+        use crate::ir::ReduceOp;
+        // Window PRE closure (emit_window pre): masked pooling, pre =
+        // select(in0 > 0.5, 7.5, 9.25), post = reduced(0).
+        let pre = OpDef::window(
+            "mpoolpre",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            3,
+            2,
+            1,
+            1,
+            1,
+            false,
+            input(0)
+                .binary(BinaryOp::CmpGt, konst(0.5))
+                .select(konst(7.5), konst(9.25)),
+            reduced(0),
+        );
+        let kp = generate(&pre, &win_key(ElementKind::F32, 128, 64), &Cuda);
+        assert_ordered_select_f32(&kp.source, "window-pre f32");
+        // Window POST closure (emit_window post): pre = input(0), post =
+        // select(reduced(0) > 0.5, 7.5, 9.25).
+        let post = OpDef::window(
+            "mpoolpost",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            3,
+            2,
+            1,
+            1,
+            1,
+            false,
+            input(0),
+            reduced(0)
+                .binary(BinaryOp::CmpGt, konst(0.5))
+                .select(konst(7.5), konst(9.25)),
+        );
+        let ks = generate(&post, &win_key(ElementKind::F32, 128, 64), &Cuda);
+        assert_ordered_select_f32(&ks.source, "window-post f32");
+    }
+
+    #[test]
+    fn select_in_multi_output_body_emits_ordered_f32_all_three_emitters() {
+        // A select in a SECOND output body reaches all three multi-output
+        // `cuda_select` sites (emit_scalar_multi / emit_strided_multi /
+        // emit_vectorized_multi) — each a distinct closure that a site-local arm
+        // swap could survive. body0 = in0 + in1, body1 = select(in2 > 0.5, 7.5,
+        // 9.25); routed by key to Scalar, Strided, and V4 respectively.
+        let op = || {
+            OpDef::elementwise_multi(
+                "mosel",
+                3,
+                &[ElementKind::F32],
+                vec![
+                    input(0) + input(1),
+                    input(2)
+                        .binary(BinaryOp::CmpGt, konst(0.5))
+                        .select(konst(7.5), konst(9.25)),
+                ],
+            )
+        };
+        // Scalar-multi (odd extent defeats V4).
+        let ks = generate(&op(), &mo_key(ElementKind::F32, 5), &Cuda);
+        assert_eq!(ks.name, "baracuda_gen_mosel_f32_mo2_scalar");
+        assert_ordered_select_f32(&ks.source, "multi-output scalar f32");
+        // Strided-multi (transposed operands force Strided).
+        let t = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256);
+        let strided_key = structure_key(
+            OpCategory::BinaryElementwise,
+            &std::iter::repeat_n(t, 5).collect::<Vec<_>>(),
+            ArchSku::Sm89,
+        );
+        let kt = generate(&op(), &strided_key, &Cuda);
+        assert!(kt.name.contains("_mo2_strided"), "{}", kt.name);
+        assert_ordered_select_f32(&kt.source, "multi-output strided f32");
+        // Vectorized-multi (contig, aligned, even extent ⇒ per-lane V4).
+        let v = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+        let vec_key = structure_key(
+            OpCategory::BinaryElementwise,
+            &std::iter::repeat_n(v, 5).collect::<Vec<_>>(),
+            ArchSku::Sm89,
+        );
+        let kv = generate(&op(), &vec_key, &Cuda);
+        assert!(
+            kv.name.contains("_v4"),
+            "expected a V4 multi kernel: {}",
+            kv.name
+        );
+        assert_ordered_select_f32(&kv.source, "multi-output vectorized f32");
+    }
+
+    // ---- G5: the Tier-2 emitter backstop, independent of the plan gate ----
+
+    #[test]
+    #[should_panic(expected = "Select at an integer dtype")]
+    fn int_dtype_select_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::plan::{KernelPlan, Schedule};
+        // build_plan never produces this plan (G1 rejects int select) — but
+        // the backstop must hold INDEPENDENTLY (the 0a lesson: gate every
+        // layer): a hand-built int-dtype select plan handed straight to
+        // `Cuda::lower` must panic in `assert_no_int_div_or_const`'s Select
+        // arm, never emit C that happens to compile.
+        let key = sel_key(ElementKind::I32, 4, 4);
+        let body = input(0).select(input(1), input(2)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 3,
+            dtype: ElementKind::I32,
+            out_dtype: ElementKind::I32,
+            schedule: Schedule::Scalar,
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            access: &crate::ir::Access::Elementwise,
+            views: &[],
+            read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: crate::ir::BaseOffset::Zero,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    // ---- source dump for ondevice/select_validate.cu ----
+
+    /// Regenerate the generated kernels `ondevice/select_validate.cu` includes.
+    /// Run with:
+    ///   `SELECT_OUT=<outdir> cargo test -p baracuda-kernelgen dump_select_sources -- --ignored --nocapture`
+    #[test]
+    #[ignore = "writes generated sources for the on-device select harness"]
+    fn dump_select_sources() {
+        let out = std::env::var("SELECT_OUT").expect("set SELECT_OUT=<outdir>");
+        let write = |k: crate::GeneratedKernel| {
+            let path = format!("{out}/{}.cu", k.name);
+            std::fs::write(&path, &k.source).unwrap();
+            println!("wrote {path}");
+        };
+        // rank-2 strided cells for the triu/tril family (1 input + output).
+        let key_r2 = |dt: ElementKind| {
+            let a = OperandDesc::new(2, &[128, 256], &[256, 1], dt, 256);
+            structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89)
+        };
+        // Cell 1: the acceptance gate — bit-identical triu/tril vs bespoke.
+        // triu keeps j >= i + k (CmpGe); tril keeps j <= i + k (CmpLe).
+        let masked = |name: &str, dt: ElementKind, cmp: BinaryOp, k: f64| {
+            OpDef::elementwise(
+                name,
+                1,
+                &[dt],
+                coord(1)
+                    .binary(cmp, coord(0) + konst(k))
+                    .select(input(0), konst(0.0)),
+            )
+        };
+        for dt in [ElementKind::F32, ElementKind::F64] {
+            for (suffix, k) in [("", 0.0), ("_km1", -1.0), ("_k2", 2.0)] {
+                write(generate(
+                    &masked(&format!("triu_sel{suffix}"), dt, BinaryOp::CmpGe, k),
+                    &key_r2(dt),
+                    &Cuda,
+                ));
+                write(generate(
+                    &masked(&format!("tril_sel{suffix}"), dt, BinaryOp::CmpLe, k),
+                    &key_r2(dt),
+                    &Cuda,
+                ));
+            }
+        }
+        // Cells 2/3: fused-cmp select (4 inputs: a, b, x, y) + a composed cond,
+        // scalar rank-1 cells (align 4/8 defeats vectorization).
+        let selcmp = |name: &str, dt: ElementKind| {
+            OpDef::elementwise(
+                name,
+                4,
+                &[dt],
+                input(0)
+                    .binary(BinaryOp::CmpGe, input(1))
+                    .select(input(2), input(3)),
+            )
+        };
+        write(generate(
+            &selcmp("sel_cmp", ElementKind::F32),
+            &sel_key(ElementKind::F32, 5, 4),
+            &Cuda,
+        ));
+        write(generate(
+            &selcmp("sel_cmp", ElementKind::F64),
+            &sel_key(ElementKind::F64, 5, 8),
+            &Cuda,
+        ));
+        // Composed cond: (a >= b) * (a != 0) — the float-side conjunction the
+        // any-expression cond decision exists for.
+        write(generate(
+            &OpDef::elementwise(
+                "sel_and",
+                4,
+                &[ElementKind::F32],
+                (input(0).binary(BinaryOp::CmpGe, input(1))
+                    * input(0).binary(BinaryOp::CmpNe, konst(0.0)))
+                .select(input(2), input(3)),
+            ),
+            &sel_key(ElementKind::F32, 5, 4),
+            &Cuda,
+        ));
+        // Cell 3's device-computed u8 mask: the 0b-validated pred kernel.
+        {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 4);
+            let o = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::U8, 4);
+            let key = structure_key(OpCategory::BinaryElementwise, &[a, a, o], ArchSku::Sm89);
+            write(generate(
+                &OpDef::elementwise_pred(
+                    "mask_ge",
+                    2,
+                    &[ElementKind::F32],
+                    input(0).binary(BinaryOp::CmpGe, input(1)),
+                ),
+                &key,
+                &Cuda,
+            ));
+        }
+        // Cell 4: f16/bf16 raw-pick (leaf arms; scalar cells).
+        write(generate(
+            &sel_op(ElementKind::F16),
+            &sel_key(ElementKind::F16, 4, 2),
+            &Cuda,
+        ));
+        write(generate(
+            &sel_op(ElementKind::Bf16),
+            &sel_key(ElementKind::Bf16, 4, 2),
+            &Cuda,
+        ));
+        // Cell 5: vectorized-vs-scalar pair (same op, two cells).
+        write(generate(
+            &sel_op(ElementKind::F32),
+            &sel_key(ElementKind::F32, 4, 256),
+            &Cuda,
+        ));
+        write(generate(
+            &sel_op(ElementKind::F32),
+            &sel_key(ElementKind::F32, 4, 4),
+            &Cuda,
+        ));
     }
 }

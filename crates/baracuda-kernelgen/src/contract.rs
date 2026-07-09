@@ -468,6 +468,22 @@ pub fn contract(
         return None;
     }
 
+    // WHERE/SELECT honesty gate (its own guard, per the house rule that advert
+    // paths need independent gating — the pattern-layer `SelectUnsupported`
+    // miss does NOT substitute): a body containing a Select ANYWHERE has its
+    // contract withheld wholesale. The single-op `Where` advert needs the
+    // Model-A per-operand dtype tuple (Fuel binds `[U8, T, T, T]` — the cond
+    // is strictly a U8 tensor, inexpressible under uniform-dtype keying), and
+    // the fused-cmp form needs fuel-side matcher validation first
+    // (propose-first channel). Load-bearing beyond belt-and-suspenders: the
+    // Model-A gather advert below derives `op_kind` STRUCTURALLY (it never
+    // consults the pattern), so a select body inside a u32-index gather would
+    // otherwise sail past the pattern miss and advertise. The kernel still
+    // generates + runs AOT — only the contract is withheld.
+    if expr_contains_select(&op.body) {
+        return None;
+    }
+
     let pattern = derive_pattern(op).ok();
     let n_ops = pattern.as_ref().map_or(0, count_ops);
     // A u8-out predicate advertises ONLY as the single-op primitive; a FUSED
@@ -984,6 +1000,11 @@ fn scan_params(e: &ScalarExpr, out: &mut Vec<u8>) {
             scan_params(a, out);
             scan_params(b, out);
         }
+        ScalarExpr::Select(c, a, b) => {
+            scan_params(c, out);
+            scan_params(a, out);
+            scan_params(b, out);
+        }
     }
 }
 
@@ -1029,6 +1050,14 @@ fn ulp_bound(e: &ScalarExpr) -> f64 {
         | ScalarExpr::Sub(a, b)
         | ScalarExpr::Mul(a, b)
         | ScalarExpr::Div(a, b) => ulp_bound(a) + ulp_bound(b),
+        // Select contributes 0 ulp of its OWN: the pick never rounds (the arms'
+        // bits move untouched, the cond compare is exact) — the same modeling
+        // call as the Cmp* predicates in `binary_ulp`. Subexpression tiers sum
+        // as usual. (Defensive today — the select withhold in `contract` keeps
+        // any select body contract-less — but the table stays exhaustive on
+        // purpose so the rating is decided here, not silently defaulted, when
+        // the Where advert lands.)
+        ScalarExpr::Select(c, a, b) => ulp_bound(c) + ulp_bound(a) + ulp_bound(b),
     }
 }
 
@@ -1159,6 +1188,42 @@ pub(crate) fn expr_contains_cmp(e: &ScalarExpr) -> bool {
         ScalarExpr::Binary(bop, a, b) => {
             bop.is_cmp() || expr_contains_cmp(a) || expr_contains_cmp(b)
         }
+        // NO cond carve-out contract-side (unlike the JIT's interior-cmp
+        // decline, which permits a cmp as a Select's cond child): select
+        // bodies are withheld wholesale by `expr_contains_select` anyway, and
+        // the cmp honesty gate keeps its full reach independently — the arm
+        // exists for exhaustiveness, not policy.
+        ScalarExpr::Select(c, a, b) => {
+            expr_contains_cmp(c) || expr_contains_cmp(a) || expr_contains_cmp(b)
+        }
+    }
+}
+
+/// Whether `e` contains a [`ScalarExpr::Select`] anywhere — the WHERE/SELECT
+/// contract-withholding walk. Any select-containing body has its contract
+/// withheld WHOLESALE (see the guard in [`contract`]): the single-op `Where`
+/// advert needs the Model-A per-operand dtype tuple (Fuel's cond is a U8
+/// tensor — `[U8, T, T, T]`), and the fused-cmp form needs fuel-side matcher
+/// validation (propose-first) — neither exists in v1. The pattern layer's
+/// `PatternError::SelectUnsupported` miss does NOT substitute for this guard
+/// (0b house rule: the contract gets its own layer — concretely, the Model-A
+/// gather advert derives its `op_kind` STRUCTURALLY without consulting the
+/// pattern, so a select body inside a u32-index gather would advertise
+/// without this walk).
+fn expr_contains_select(e: &ScalarExpr) -> bool {
+    match e {
+        ScalarExpr::Select(..) => true,
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_)
+        | ScalarExpr::Coord(_) => false,
+        ScalarExpr::Add(a, b)
+        | ScalarExpr::Sub(a, b)
+        | ScalarExpr::Mul(a, b)
+        | ScalarExpr::Div(a, b)
+        | ScalarExpr::Binary(_, a, b) => expr_contains_select(a) || expr_contains_select(b),
+        ScalarExpr::Unary(_, a) => expr_contains_select(a),
     }
 }
 
@@ -1850,6 +1915,103 @@ mod tests {
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
         assert!(c.contains("op_kind: IndexSelect"), "{c}");
         assert!(c.contains("oob_policy: zero_fill"), "{c}");
+    }
+
+    #[test]
+    fn select_fusion_contract_is_withheld() {
+        use crate::ir::{BinaryOp, OobPolicy};
+        use crate::pattern::PatternError;
+        // WHERE/SELECT (M10's target): ANY select-containing body has its
+        // contract withheld wholesale — the Where advert needs the Model-A
+        // per-operand tuple (cond U8) / fuel-side matcher validation, neither
+        // of which exists in v1.
+        //
+        // (a) A cmp-free select body (cond = a raw input): the CMP honesty
+        // gate does not fire here, so the select guard is the withholding
+        // layer on the plain-elementwise path too.
+        let sel = OpDef::elementwise(
+            "sel",
+            3,
+            &[ElementKind::F32],
+            input(0).select(input(1), input(2)),
+        );
+        let key = key_for(4, OpCategory::TernaryElementwise);
+        let kernel = generate(&sel, &key, &Cuda);
+        assert!(
+            contract(&sel, &key, &kernel, "cuda").is_none(),
+            "a select body must emit NO contract"
+        );
+        // The pattern side misses typed too — but the miss does NOT
+        // substitute for the contract guard (see (c)).
+        assert_eq!(
+            crate::derive_pattern(&sel),
+            Err(PatternError::SelectUnsupported)
+        );
+        // (b) The fused-cmp form withholds as well (dual-gated with the cmp
+        // honesty gate).
+        let fused = OpDef::elementwise(
+            "sel_cmp",
+            4,
+            &[ElementKind::F32],
+            input(0)
+                .binary(BinaryOp::CmpGe, input(1))
+                .select(input(2), input(3)),
+        );
+        let key5 = key_for(5, OpCategory::TernaryElementwise);
+        let kf = generate(&fused, &key5, &Cuda);
+        assert!(contract(&fused, &key5, &kf, "cuda").is_none());
+        // (c) The LOAD-BEARING path: the Model-A u32-index gather advert
+        // derives its op_kind STRUCTURALLY (never consults the pattern), so
+        // WITHOUT the expr_contains_select guard a select body inside a
+        // u32 gather would sail past the pattern miss and ADVERTISE. Prove
+        // the guard holds there — and that the select is the only reason
+        // (the select-free sibling advertises).
+        let mut gsel = OpDef::gather(
+            "gather_sel",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::U32,
+        );
+        gsel.body = input(0).select(input(0), crate::ir::konst(0.0)).0;
+        let gkey = gather_key(ElementKind::U32, false);
+        let gk = generate(&gsel, &gkey, &Cuda);
+        assert!(
+            contract(&gsel, &gkey, &gk, "cuda").is_none(),
+            "a select body inside a u32 gather must NOT advertise (the gather \
+             op_kind path never consults the pattern — the select guard is the \
+             only layer)"
+        );
+        let plain = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::U32,
+        );
+        let pk = generate(&plain, &gkey, &Cuda);
+        assert!(
+            contract(&plain, &gkey, &pk, "cuda").is_some(),
+            "the select-free gather sibling must still advertise (the None above \
+             comes from the select guard, not some other withhold)"
+        );
+    }
+
+    #[test]
+    fn select_bookkeeping_is_one_flop_zero_ulp() {
+        // Bookkeeping arms land even while the contract is withheld (so the
+        // ratings are decided, not defaulted, when the Where advert lands):
+        // the DAG-driven flop count charges a select ONE flop, and the ULP
+        // table rates a select 0 (an exact pick — the Cmp* modeling call).
+        let body = input(0).select(input(1), input(2)).0;
+        assert_eq!(count_flops(&body), 1, "select = 1 flop, deliberately");
+        assert_eq!(ulp_bound(&body), 0.0, "select never rounds (0 ulp)");
+        let (mode, ulp) = precision_of(&body);
+        assert_eq!(mode, "correctly_rounded");
+        assert_eq!(ulp, Some(0));
+        // Params thread through all three children.
+        let with_params = param(0).select(input(0) + param(1), param(2)).0;
+        assert_eq!(params_used(&with_params), vec![0, 1, 2]);
     }
 
     #[test]
