@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <vector>
 #include <algorithm>
+#include <functional>
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
@@ -98,8 +99,53 @@
 #include "baracuda_gen_argsort_bf16_rowsort_asc_stable_idx.cu"
 #include "baracuda_gen_argsort_f32s_rowsort_asc_stable_idx.cu"
 
+// ---- Increment 10 TOPK/BOTTOMK: the runtime-k-capped two-output kernels (ops
+// `topk` = Desc, `bottomk` = Asc), plus the matching-order fused Both oracle
+// (desc for the topk cross-check on i64/f16/bf16/f32s — asc already above).
+// Signature: (const T* in0, T* out_val, int* out_idx, long long n_out,
+//             long long k_in, long long k_out). ----
+#include "baracuda_gen_topk_f32_rowsort_desc_stable_both_topk.cu"
+#include "baracuda_gen_topk_f32_rowsort_desc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_bottomk_f32_rowsort_asc_stable_both_topk.cu"
+#include "baracuda_gen_bottomk_f32_rowsort_asc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_topk_f64_rowsort_desc_stable_both_topk.cu"
+#include "baracuda_gen_topk_f64_rowsort_desc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_bottomk_f64_rowsort_asc_stable_both_topk.cu"
+#include "baracuda_gen_bottomk_f64_rowsort_asc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_topk_i32_rowsort_desc_stable_both_topk.cu"
+#include "baracuda_gen_topk_i32_rowsort_desc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_bottomk_i32_rowsort_asc_stable_both_topk.cu"
+#include "baracuda_gen_bottomk_i32_rowsort_asc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_topk_i64_rowsort_desc_stable_both_topk.cu"
+#include "baracuda_gen_topk_i64_rowsort_desc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_bottomk_i64_rowsort_asc_stable_both_topk.cu"
+#include "baracuda_gen_bottomk_i64_rowsort_asc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_topk_f16_rowsort_desc_stable_both_topk.cu"
+#include "baracuda_gen_topk_f16_rowsort_desc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_bottomk_f16_rowsort_asc_stable_both_topk.cu"
+#include "baracuda_gen_bottomk_f16_rowsort_asc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_topk_bf16_rowsort_desc_stable_both_topk.cu"
+#include "baracuda_gen_topk_bf16_rowsort_desc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_bottomk_bf16_rowsort_asc_stable_both_topk.cu"
+#include "baracuda_gen_bottomk_bf16_rowsort_asc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_topk_f32s_rowsort_desc_stable_both_topk.cu"
+#include "baracuda_gen_topk_f32s_rowsort_desc_stable_both_topk_bitonic.cu"
+#include "baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk.cu"
+#include "baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk_bitonic.cu"
+// matching-order (DESC) fused Both oracle for the topk cross-check on the dtypes
+// whose desc fused was not included above (asc fused already present).
+#include "baracuda_gen_fused_i64_rowsort_desc_stable_both.cu"
+#include "baracuda_gen_fused_i64_rowsort_desc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_f16_rowsort_desc_stable_both.cu"
+#include "baracuda_gen_fused_f16_rowsort_desc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_bf16_rowsort_desc_stable_both.cu"
+#include "baracuda_gen_fused_bf16_rowsort_desc_stable_both_bitonic.cu"
+#include "baracuda_gen_fused_f32s_rowsort_desc_stable_both.cu"
+#include "baracuda_gen_fused_f32s_rowsort_desc_stable_both_bitonic.cu"
+
 #ifdef WITH_BESPOKE
 #include "C:/Projects/baracuda/crates/baracuda-kernels-sys/kernels/sort/sort.cu" // bespoke stable msort
+#include "C:/Projects/baracuda/crates/baracuda-kernels-sys/kernels/sort/topk.cu" // bespoke partial-bitonic topk
 #endif
 
 static int fails = 0;
@@ -616,6 +662,342 @@ static void both_bench() {
     cudaFree(dx); cudaFree(dv); cudaFree(di);
 }
 
+// ===================== Increment 10 TOPK / BOTTOMK ==========================
+// TopK is the strict generalization of the fused Both — the SAME sort, the write
+// CAPPED to the first k_out ranks under `order` (topk = Desc / largest first,
+// bottomk = Asc / smallest first). Signature adds the third launch scalar:
+//   (const T* in0, T* out_val, int* out_idx, long long n_out,
+//    long long k_in, long long k_out).
+//
+// THE ACCEPTANCE GATE (brief §6): for every cell, the two topk outputs are
+//  (A) whole-buffer memcmp-equal to the CPU pair_lt oracle's first k_out (an
+//      independent, device-free reference), AND
+//  (B) PER-ROW (stride-aware) memcmp-equal to the device-validated RowSort Both's
+//      first-k_out slice — Both's row stride is k_in, topk's is k_out, so this is
+//      `topk[row*k_out .. +k_out] == Both[row*k_in .. +k_out]` for out_val AND
+//      out_idx, NOT a flat whole-buffer prefix (decision-5 caveat).
+// Plus base == bitonic (BitIdentical) and run-to-run determinism (both buffers).
+template <typename T>
+static void launch_topk(void* kern, const T* in, T* out_val, int* out_idx,
+                        long long n_out, long long k_in, long long k_out,
+                        int grid, int block, size_t smem) {
+    const T* pin = in; T* pv = out_val; int* pi = out_idx;
+    void* args[] = { (void*)&pin, (void*)&pv, (void*)&pi, (void*)&n_out, (void*)&k_in, (void*)&k_out };
+    CHECK(cudaLaunchKernel(kern, dim3(grid), dim3(block), args, smem, 0));
+}
+
+template <typename T, typename K>
+struct TopkCell {
+    const char* dtag; bool is_fp; bool asc; size_t acc_sz;   // asc == bottomk (order Asc)
+    void* topk_base; void* topk_bt;    // the capped kernel (_topk)
+    void* both_base; void* both_bt;    // the shipped RowSort Both at the SAME order (device oracle)
+    K (*to_key)(const T&);
+};
+
+template <typename T, typename K>
+static void run_topk_cell(const TopkCell<T, K>& c, const std::vector<T>& in,
+                          long long n_out, long long k_in, long long k_out,
+                          const char* tag, bool do_bitonic, int block) {
+    const size_t Nin = (size_t)n_out * (size_t)k_in;
+    const size_t Nout = (size_t)n_out * (size_t)k_out;
+
+    // ---- CPU pair_lt oracle → first k_out per row (independent of the device) ----
+    std::vector<T> ov(Nout); std::vector<int> oi(Nout);
+    for (long long r = 0; r < n_out; ++r) {
+        std::vector<K> keys((size_t)k_in);
+        for (long long j = 0; j < k_in; ++j) keys[(size_t)j] = c.to_key(in[(size_t)(r * k_in + j)]);
+        std::vector<int> perm; oracle_perm(keys, k_in, c.asc, c.is_fp, perm);
+        for (long long j = 0; j < k_out; ++j) {
+            ov[(size_t)(r * k_out + j)] = in[(size_t)(r * k_in + perm[(size_t)j])];
+            oi[(size_t)(r * k_out + j)] = perm[(size_t)j];
+        }
+    }
+
+    T* d_in = (T*)dev_bytes(in.data(), Nin * sizeof(T));
+    T* d_bv = nullptr; cudaMalloc(&d_bv, Nin * sizeof(T));    // device Both values (k_in wide)
+    int* d_bi = nullptr; cudaMalloc(&d_bi, Nin * sizeof(int));
+    T* d_tv = nullptr; cudaMalloc(&d_tv, Nout * sizeof(T));   // topk out_val (k_out wide)
+    int* d_ti = nullptr; cudaMalloc(&d_ti, Nout * sizeof(int));
+    T* d_tv2 = nullptr; cudaMalloc(&d_tv2, Nout * sizeof(T)); // determinism / bitonic
+    int* d_ti2 = nullptr; cudaMalloc(&d_ti2, Nout * sizeof(int));
+    int grid = (int)(n_out < 65535 ? n_out : 65535); if (grid < 1) grid = 1;
+    size_t smem = (size_t)next_pow2(k_in) * (c.acc_sz + sizeof(int));
+
+    auto report = [&](const char* what, bool ok) {
+        char nm[160];
+        snprintf(nm, sizeof nm, "%s %s %s %s k=%lld/%lld", c.dtag,
+                 c.asc ? "bottomk" : "topk", what, tag, k_out, k_in);
+        printf(ok ? "PASS %-64s\n" : "FAIL %-64s\n", nm); if (!ok) fails++;
+    };
+
+    // Device Both oracle (k_in wide), SAME order.
+    cudaMemset(d_bv, 0x5A, Nin * sizeof(T)); cudaMemset(d_bi, 0xFF, Nin * sizeof(int));
+    launch_both<T>(c.both_base, d_in, d_bv, d_bi, n_out, k_in, grid, 256, 0);
+    cudaDeviceSynchronize();
+    std::vector<T> bv(Nin); std::vector<int> bi(Nin);
+    cudaMemcpy(bv.data(), d_bv, Nin * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(bi.data(), d_bi, Nin * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // topk base — the acceptance gate.
+    cudaMemset(d_tv, 0x3C, Nout * sizeof(T)); cudaMemset(d_ti, 0x11, Nout * sizeof(int));
+    launch_topk<T>(c.topk_base, d_in, d_tv, d_ti, n_out, k_in, k_out, grid, 256, 0);
+    cudaDeviceSynchronize();
+    std::vector<T> tv(Nout); std::vector<int> ti(Nout);
+    cudaMemcpy(tv.data(), d_tv, Nout * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(ti.data(), d_ti, Nout * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // (A) topk == CPU pair_lt oracle first-k_out (whole buffer, both k_out wide).
+    report("base out_val==cpu-oracle", memcmp(tv.data(), ov.data(), Nout * sizeof(T)) == 0);
+    report("base out_idx==cpu-oracle", memcmp(ti.data(), oi.data(), Nout * sizeof(int)) == 0);
+
+    // (B) PER-ROW STRIDE-AWARE dual memcmp vs the device Both's first-k_out slice.
+    {
+        bool okv = true, oki = true;
+        for (long long r = 0; r < n_out; ++r) {
+            if (memcmp(&tv[(size_t)(r * k_out)], &bv[(size_t)(r * k_in)], (size_t)k_out * sizeof(T)) != 0) okv = false;
+            if (memcmp(&ti[(size_t)(r * k_out)], &bi[(size_t)(r * k_in)], (size_t)k_out * sizeof(int)) != 0) oki = false;
+        }
+        report("base out_val==Both[..k_out] per-row", okv);
+        report("base out_idx==Both[..k_out] per-row", oki);
+    }
+
+    // (C) determinism (both buffers).
+    cudaMemset(d_tv2, 0xA5, Nout * sizeof(T)); cudaMemset(d_ti2, 0x22, Nout * sizeof(int));
+    launch_topk<T>(c.topk_base, d_in, d_tv2, d_ti2, n_out, k_in, k_out, grid, 256, 0);
+    cudaDeviceSynchronize();
+    std::vector<T> tvb(Nout); std::vector<int> tib(Nout);
+    cudaMemcpy(tvb.data(), d_tv2, Nout * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(tib.data(), d_ti2, Nout * sizeof(int), cudaMemcpyDeviceToHost);
+    report("base determinism", memcmp(tv.data(), tvb.data(), Nout * sizeof(T)) == 0
+                            && memcmp(ti.data(), tib.data(), Nout * sizeof(int)) == 0);
+
+    // base == bitonic (BitIdentical) + bitonic vs both oracles.
+    if (do_bitonic) {
+        cudaMemset(d_tv2, 0x77, Nout * sizeof(T)); cudaMemset(d_ti2, 0x33, Nout * sizeof(int));
+        launch_topk<T>(c.topk_bt, d_in, d_tv2, d_ti2, n_out, k_in, k_out, grid, block, smem);
+        cudaDeviceSynchronize();
+        std::vector<T> btv(Nout); std::vector<int> bti(Nout);
+        cudaMemcpy(btv.data(), d_tv2, Nout * sizeof(T), cudaMemcpyDeviceToHost);
+        cudaMemcpy(bti.data(), d_ti2, Nout * sizeof(int), cudaMemcpyDeviceToHost);
+        report("bitonic out_val==cpu-oracle", memcmp(btv.data(), ov.data(), Nout * sizeof(T)) == 0);
+        report("bitonic out_idx==cpu-oracle", memcmp(bti.data(), oi.data(), Nout * sizeof(int)) == 0);
+        report("base==bitonic (both buffers)", memcmp(btv.data(), tv.data(), Nout * sizeof(T)) == 0
+                                            && memcmp(bti.data(), ti.data(), Nout * sizeof(int)) == 0);
+    }
+    cudaFree(d_in); cudaFree(d_bv); cudaFree(d_bi);
+    cudaFree(d_tv); cudaFree(d_ti); cudaFree(d_tv2); cudaFree(d_ti2);
+}
+
+// One constructor per dtype: `is_topk` picks Desc (topk) vs Asc (bottomk). The
+// CPU-oracle `asc` field is the SORT direction (bottomk == asc), the opposite of
+// `is_topk`.
+static TopkCell<float, float> topk_cell_f32(bool is_topk) {
+    return is_topk
+        ? TopkCell<float, float>{"f32", true, false, 4,
+            (void*)baracuda_gen_topk_f32_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_f32_rowsort_desc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_f32_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f32_rowsort_desc_stable_both_bitonic, k_f32}
+        : TopkCell<float, float>{"f32", true, true, 4,
+            (void*)baracuda_gen_bottomk_f32_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_f32_rowsort_asc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_f32_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f32_rowsort_asc_stable_both_bitonic, k_f32};
+}
+static TopkCell<double, double> topk_cell_f64(bool is_topk) {
+    return is_topk
+        ? TopkCell<double, double>{"f64", true, false, 8,
+            (void*)baracuda_gen_topk_f64_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_f64_rowsort_desc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_f64_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f64_rowsort_desc_stable_both_bitonic, k_f64}
+        : TopkCell<double, double>{"f64", true, true, 8,
+            (void*)baracuda_gen_bottomk_f64_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_f64_rowsort_asc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_f64_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f64_rowsort_asc_stable_both_bitonic, k_f64};
+}
+static TopkCell<int, int> topk_cell_i32(bool is_topk) {
+    return is_topk
+        ? TopkCell<int, int>{"i32", false, false, 4,
+            (void*)baracuda_gen_topk_i32_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_i32_rowsort_desc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_i32_rowsort_desc_stable_both, (void*)baracuda_gen_fused_i32_rowsort_desc_stable_both_bitonic, k_i32}
+        : TopkCell<int, int>{"i32", false, true, 4,
+            (void*)baracuda_gen_bottomk_i32_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_i32_rowsort_asc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_i32_rowsort_asc_stable_both, (void*)baracuda_gen_fused_i32_rowsort_asc_stable_both_bitonic, k_i32};
+}
+static TopkCell<long long, long long> topk_cell_i64(bool is_topk) {
+    return is_topk
+        ? TopkCell<long long, long long>{"i64", false, false, 8,
+            (void*)baracuda_gen_topk_i64_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_i64_rowsort_desc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_i64_rowsort_desc_stable_both, (void*)baracuda_gen_fused_i64_rowsort_desc_stable_both_bitonic, k_i64}
+        : TopkCell<long long, long long>{"i64", false, true, 8,
+            (void*)baracuda_gen_bottomk_i64_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_i64_rowsort_asc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_i64_rowsort_asc_stable_both, (void*)baracuda_gen_fused_i64_rowsort_asc_stable_both_bitonic, k_i64};
+}
+static TopkCell<__half, float> topk_cell_f16(bool is_topk) {
+    return is_topk
+        ? TopkCell<__half, float>{"f16", true, false, 4,
+            (void*)baracuda_gen_topk_f16_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_f16_rowsort_desc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_f16_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f16_rowsort_desc_stable_both_bitonic, k_f16}
+        : TopkCell<__half, float>{"f16", true, true, 4,
+            (void*)baracuda_gen_bottomk_f16_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_f16_rowsort_asc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_f16_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f16_rowsort_asc_stable_both_bitonic, k_f16};
+}
+static TopkCell<__nv_bfloat16, float> topk_cell_bf16(bool is_topk) {
+    return is_topk
+        ? TopkCell<__nv_bfloat16, float>{"bf16", true, false, 4,
+            (void*)baracuda_gen_topk_bf16_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_bf16_rowsort_desc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_bf16_rowsort_desc_stable_both, (void*)baracuda_gen_fused_bf16_rowsort_desc_stable_both_bitonic, k_bf16}
+        : TopkCell<__nv_bfloat16, float>{"bf16", true, true, 4,
+            (void*)baracuda_gen_bottomk_bf16_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_bf16_rowsort_asc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_bf16_rowsort_asc_stable_both, (void*)baracuda_gen_fused_bf16_rowsort_asc_stable_both_bitonic, k_bf16};
+}
+static TopkCell<float, double> topk_cell_f32s(bool is_topk) {
+    return is_topk
+        ? TopkCell<float, double>{"f32s", true, false, 8,
+            (void*)baracuda_gen_topk_f32s_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_f32s_rowsort_desc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_f32s_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f32s_rowsort_desc_stable_both_bitonic, k_f32s}
+        : TopkCell<float, double>{"f32s", true, true, 8,
+            (void*)baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk_bitonic,
+            (void*)baracuda_gen_fused_f32s_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f32s_rowsort_asc_stable_both_bitonic, k_f32s};
+}
+
+// INDEPENDENT CPU top-k oracle: on DISTINCT-KEY, NaN-free rows, `std::nth_element`
+// (quickselect — a different algorithm than the device's rank/bitonic sort) picks
+// the k_out extreme VALUES; their sorted order must equal the device topk out_val,
+// and each out_idx must point to a position holding the matching value. This is a
+// reference top-k identity, not a restatement of the sort-then-slice.
+static void topk_select_oracle_f32() {
+    const long long batch = 32, k_in = 300;
+    for (int is_topk = 0; is_topk <= 1; ++is_topk) {
+        for (long long k_out : {(long long)1, (long long)5, (long long)150, (long long)300}) {
+            std::vector<float> in((size_t)batch * k_in);
+            for (long long r = 0; r < batch; ++r) {          // distinct shuffled ramp per row
+                std::vector<int> perm((size_t)k_in); for (long long j = 0; j < k_in; ++j) perm[(size_t)j] = (int)j;
+                for (size_t i = perm.size(); i > 1; --i) { size_t j = xrand() % i; std::swap(perm[i - 1], perm[j]); }
+                for (long long j = 0; j < k_in; ++j) in[(size_t)(r * k_in + j)] = (float)perm[(size_t)j] * 0.5f - 75.0f;
+            }
+            TopkCell<float, float> c = topk_cell_f32(is_topk != 0);
+            const size_t Nout = (size_t)batch * (size_t)k_out;
+            float* d_in = (float*)dev_bytes(in.data(), (size_t)batch * k_in * sizeof(float));
+            float* d_tv = nullptr; cudaMalloc(&d_tv, Nout * sizeof(float));
+            int* d_ti = nullptr; cudaMalloc(&d_ti, Nout * sizeof(int));
+            int grid = (int)batch;
+            launch_topk<float>(c.topk_base, d_in, d_tv, d_ti, batch, k_in, k_out, grid, 256, 0);
+            cudaDeviceSynchronize();
+            std::vector<float> tv(Nout); std::vector<int> ti(Nout);
+            cudaMemcpy(tv.data(), d_tv, Nout * sizeof(float), cudaMemcpyDeviceToHost);
+            cudaMemcpy(ti.data(), d_ti, Nout * sizeof(int), cudaMemcpyDeviceToHost);
+            bool ok = true;
+            for (long long r = 0; r < batch && ok; ++r) {
+                std::vector<float> keys((size_t)k_in);
+                for (long long j = 0; j < k_in; ++j) keys[(size_t)j] = in[(size_t)(r * k_in + j)];
+                // Quickselect the k_out extreme, then sort them in output order.
+                if (is_topk) std::nth_element(keys.begin(), keys.begin() + (k_out - 1), keys.end(), std::greater<float>());
+                else         std::nth_element(keys.begin(), keys.begin() + (k_out - 1), keys.end());
+                std::vector<float> sel(keys.begin(), keys.begin() + (size_t)k_out);
+                if (is_topk) std::sort(sel.begin(), sel.end(), std::greater<float>());
+                else         std::sort(sel.begin(), sel.end());
+                for (long long j = 0; j < k_out; ++j) {
+                    if (tv[(size_t)(r * k_out + j)] != sel[(size_t)j]) { ok = false; break; }
+                    int idx = ti[(size_t)(r * k_out + j)];
+                    if (idx < 0 || idx >= k_in || in[(size_t)(r * k_in + idx)] != sel[(size_t)j]) { ok = false; break; }
+                }
+            }
+            char nm[96]; snprintf(nm, sizeof nm, "f32 %s nth_element select k=%lld/%lld",
+                                  is_topk ? "topk" : "bottomk", k_out, k_in);
+            printf(ok ? "PASS %-64s\n" : "FAIL %-64s\n", nm); if (!ok) fails++;
+            cudaFree(d_in); cudaFree(d_tv); cudaFree(d_ti);
+        }
+    }
+}
+
+// The full topk/bottomk acceptance matrix + the k_out boundary sweep.
+static void topk_acceptance() {
+    printf("- TOPK/BOTTOMK acceptance: cpu-oracle + per-row Both[..k_out] + base==bitonic, k_out sweep -\n");
+    const long long n = 3, k_in = 1000;
+    // k_out sweep: 1 (max/argmax), 2, k_in/2, k_in-1, k_in (== full sort).
+    long long sweep[5] = { 1, 2, k_in / 2, k_in - 1, k_in };
+    for (int is_topk = 0; is_topk <= 1; ++is_topk) {
+        bool tk = (is_topk != 0);
+        for (long long k_out : sweep) {
+            { std::vector<float> in((size_t)n * k_in); for (auto& x : in) x = (float)((int)(xrand() % 20001) - 10000) * 0.001f;
+              run_topk_cell<float, float>(topk_cell_f32(tk), in, n, k_in, k_out, "rand", true, 256); }
+            { std::vector<double> in((size_t)n * k_in); for (auto& x : in) x = (double)((int)(xrand() % 20001) - 10000) * 0.001;
+              run_topk_cell<double, double>(topk_cell_f64(tk), in, n, k_in, k_out, "rand", true, 256); }
+            { std::vector<int> in((size_t)n * k_in); for (auto& x : in) x = (int)((xrand() % 20001) - 10000);
+              run_topk_cell<int, int>(topk_cell_i32(tk), in, n, k_in, k_out, "rand", true, 256); }
+        }
+    }
+    // i64 / f16 / bf16 / f32s — smaller k_in (300), the k_out sweep scaled.
+    const long long k2 = 300; long long sweep2[5] = { 1, 2, k2 / 2, k2 - 1, k2 };
+    for (int is_topk = 0; is_topk <= 1; ++is_topk) {
+        bool tk = (is_topk != 0);
+        for (long long k_out : sweep2) {
+            { std::vector<long long> in((size_t)2 * k2); for (auto& x : in) x = (long long)((int)(xrand() % 20001) - 10000);
+              run_topk_cell<long long, long long>(topk_cell_i64(tk), in, 2, k2, k_out, "rand", true, 256); }
+            { std::vector<__half> in((size_t)2 * k2); for (auto& x : in) x = __float2half((float)((int)(xrand() % 2001) - 1000) * 0.03125f);
+              run_topk_cell<__half, float>(topk_cell_f16(tk), in, 2, k2, k_out, "rand", true, 256); }
+            { std::vector<__nv_bfloat16> in((size_t)2 * k2); for (auto& x : in) x = __float2bfloat16((float)((int)(xrand() % 2001) - 1000) * 0.03125f);
+              run_topk_cell<__nv_bfloat16, float>(topk_cell_bf16(tk), in, 2, k2, k_out, "rand", true, 256); }
+            { std::vector<float> in((size_t)2 * k2); for (auto& x : in) x = (float)((int)(xrand() % 20001) - 10000) * 0.001f;
+              run_topk_cell<float, double>(topk_cell_f32s(tk), in, 2, k2, k_out, "rand", true, 256); }
+        }
+    }
+    // Probe-seeded f32 (topk + bottomk): qNaN payloads (NaN-first for topk, NaN-last
+    // for bottomk), signed zeros, ±inf pad-tie — the torch-faithful cases.
+    for (int is_topk = 0; is_topk <= 1; ++is_topk) {
+        bool tk = (is_topk != 0);
+        {   const long long nn = 3, kk = 13; std::vector<float> in((size_t)nn * kk);
+            for (size_t i = 0; i < in.size(); ++i) in[i] = (float)((int)(i % 11) - 5) * 0.5f;
+            uint32_t nq[3] = {0x7fc00001u, 0x7fc0abcdu, 0xffc00042u};
+            for (int t = 0; t < 3; ++t) memcpy(&in[(size_t)(1 * kk + 2 + t * 3)], &nq[t], 4);
+            for (long long k_out : {(long long)1, (long long)4, (long long)13})
+                run_topk_cell<float, float>(topk_cell_f32(tk), in, nn, kk, k_out, "nan", true, 32); }
+        {   const long long nn = 1, kk = 8; std::vector<float> in((size_t)kk);
+            uint32_t pat[8] = {0x00000000u, 0x80000000u, 0x3f800000u, 0x00000000u,
+                               0x80000000u, 0xbf800000u, 0x80000000u, 0x00000000u};
+            for (int i = 0; i < 8; ++i) memcpy(&in[(size_t)i], &pat[i], 4);
+            for (long long k_out : {(long long)1, (long long)3, (long long)8})
+                run_topk_cell<float, float>(topk_cell_f32(tk), in, nn, kk, k_out, "signed0", true, 32); }
+        {   const long long nn = 1, kk = 100; std::vector<float> in((size_t)kk);
+            for (long long j = 0; j < kk; ++j) in[(size_t)j] = (float)((int)(xrand() % 201) - 100) * 0.1f;
+            uint32_t ninf = 0xff800000u, pinf = 0x7f800000u;
+            memcpy(&in[5], &ninf, 4); memcpy(&in[6], &ninf, 4); memcpy(&in[7], &pinf, 4);
+            for (long long k_out : {(long long)1, (long long)50, (long long)100})
+                run_topk_cell<float, float>(topk_cell_f32(tk), in, nn, kk, k_out, "extreme(inf)", true, 128); }
+    }
+    // k_in > 1024: base only (bitonic contract requires k_in <= 1024).
+    { std::vector<float> in((size_t)2 * 1500); for (auto& x : in) x = (float)((int)(xrand() % 4001) - 2000) * 0.01f;
+      for (long long k_out : {(long long)1, (long long)64, (long long)1500})
+          run_topk_cell<float, float>(topk_cell_f32(true), in, 2, 1500, k_out, "k1500 (base only)", false, 0); }
+    // Independent nth_element selection oracle (distinct-key rows).
+    topk_select_oracle_f32();
+}
+
+// Bench: topk (k_out-only writeback) vs the full-sort-then-host-slice baseline —
+// same sort cost, but topk writes only [batch,k_out] (no full [batch,k_in] output).
+static void topk_bench() {
+    const long long R = 4096, K = 1024, KO = 64; const long long tot = R * K;
+    std::vector<float> big((size_t)tot);
+    for (size_t i = 0; i < (size_t)tot; ++i) big[i] = (float)((int)(xrand() % 4001) - 2000) * 0.01f;
+    float* dx = (float*)dev_bytes(big.data(), (size_t)tot * 4);
+    float* dv = nullptr; cudaMalloc(&dv, (size_t)tot * 4);
+    int* di = nullptr; cudaMalloc(&di, (size_t)tot * 4);
+    float* dvo = nullptr; cudaMalloc(&dvo, (size_t)R * KO * 4);
+    int* dio = nullptr; cudaMalloc(&dio, (size_t)R * KO * 4);
+    TopkCell<float, float> c = topk_cell_f32(true);
+    size_t smem = (size_t)K * (4 + 4);
+    auto timeit = [&](auto fn) {
+        cudaEvent_t a, e; cudaEventCreate(&a); cudaEventCreate(&e);
+        for (int i = 0; i < 3; ++i) fn(); cudaDeviceSynchronize(); cudaEventRecord(a);
+        for (int i = 0; i < 20; ++i) fn(); cudaEventRecord(e); cudaEventSynchronize(e);
+        float ms = 0; cudaEventElapsedTime(&ms, a, e); return ms / 20;
+    };
+    double es = (double)tot / 1e9;
+    float t_tb = timeit([&] { launch_topk<float>(c.topk_base, dx, dvo, dio, R, K, KO, (int)R, 256, 0); });
+    float t_tt = timeit([&] { launch_topk<float>(c.topk_bt, dx, dvo, dio, R, K, KO, (int)R, 256, smem); });
+    float t_fb = timeit([&] { launch_both<float>(c.both_base, dx, dv, di, R, K, (int)R, 256, 0); });
+    float t_ft = timeit([&] { launch_both<float>(c.both_bt, dx, dv, di, R, K, (int)R, 256, smem); });
+    printf("[bench] topk f32 %lldx%lld k_out=%lld: base %.3f ms (%.2f Gelem/s) | bitonic %.3f ms (%.2f Gelem/s) || "
+           "full-sort Both (then host slice): base %.3f ms | bitonic %.3f ms\n",
+           R, K, KO, t_tb, es / (t_tb / 1000), t_tt, es / (t_tt / 1000), t_fb, t_ft);
+    cudaFree(dx); cudaFree(dv); cudaFree(di); cudaFree(dvo); cudaFree(dio);
+}
+
 #ifdef WITH_BESPOKE
 // Fisher-Yates shuffle of 0..k-1 for the distinct-key rows.
 static void shuffle(std::vector<int>& p) {
@@ -774,11 +1156,54 @@ static void bespoke_audit() {
         cudaFree(dx); cudaFree(dy); cudaFree(di);
     }
 }
+
+// ---- topk cross-check vs the bespoke partial-bitonic topk (baracuda_topk.cuh).
+// The bespoke has NO NaN branch and STABLE=0, so kernelgen (torch-faithful:
+// NaN-greatest + stable tie-break) DIVERGES on NaN / tie rows — the cross-check
+// runs on DISTINCT-KEY, NaN-FREE rows only, where the top-k set AND order are
+// unambiguous, so values AND indices must match bit-exactly. Bespoke limits:
+// row_len <= 1024, k <= 64. `largest != 0` == descending (topk); 0 == bottomk.
+static void topk_bespoke_audit() {
+    const long long batch = 64, k_in = 512, k_out = 32;
+    const size_t Nin = (size_t)batch * k_in, Nout = (size_t)batch * k_out;
+    auto run_dt = [&](const char* dtag, int largest) {
+        // f32 distinct shuffled ramp per row.
+        std::vector<float> in(Nin);
+        for (long long r = 0; r < batch; ++r) {
+            std::vector<int> perm((size_t)k_in); for (long long j = 0; j < k_in; ++j) perm[(size_t)j] = (int)j;
+            shuffle(perm);
+            for (long long j = 0; j < k_in; ++j) in[(size_t)(r * k_in + j)] = (float)perm[(size_t)j] * 0.5f - 128.0f;
+        }
+        float* d_in = (float*)dev_bytes(in.data(), Nin * 4);
+        float* d_gv = nullptr; cudaMalloc(&d_gv, Nout * 4); int* d_gi = nullptr; cudaMalloc(&d_gi, Nout * 4);
+        float* d_bv = nullptr; cudaMalloc(&d_bv, Nout * 4); int* d_bi = nullptr; cudaMalloc(&d_bi, Nout * 4);
+        TopkCell<float, float> c = topk_cell_f32(largest != 0);
+        launch_topk<float>(c.topk_base, d_in, d_gv, d_gi, batch, k_in, k_out, (int)batch, 256, 0);
+        int rc = baracuda_kernels_topk_f32_run((int)batch, (int)k_in, (int)k_out, largest,
+                                               d_in, d_bv, d_bi, nullptr, 0, nullptr);
+        cudaDeviceSynchronize();
+        std::vector<float> gv(Nout), bv(Nout); std::vector<int> gi(Nout), bi(Nout);
+        cudaMemcpy(gv.data(), d_gv, Nout * 4, cudaMemcpyDeviceToHost);
+        cudaMemcpy(gi.data(), d_gi, Nout * 4, cudaMemcpyDeviceToHost);
+        cudaMemcpy(bv.data(), d_bv, Nout * 4, cudaMemcpyDeviceToHost);
+        cudaMemcpy(bi.data(), d_bi, Nout * 4, cudaMemcpyDeviceToHost);
+        bool okv = (rc == 0) && memcmp(gv.data(), bv.data(), Nout * 4) == 0;
+        bool oki = (rc == 0) && memcmp(gi.data(), bi.data(), Nout * 4) == 0;
+        char nm[96];
+        snprintf(nm, sizeof nm, "audit %s %s VALUES==bespoke (distinct)", dtag, largest ? "topk" : "bottomk");
+        printf(okv ? "PASS %-64s\n" : "FAIL %-64s (rc=%d)\n", nm, rc); if (!okv) fails++;
+        snprintf(nm, sizeof nm, "audit %s %s INDICES==bespoke (distinct)", dtag, largest ? "topk" : "bottomk");
+        printf(oki ? "PASS %-64s\n" : "FAIL %-64s (rc=%d)\n", nm, rc); if (!oki) fails++;
+        cudaFree(d_in); cudaFree(d_gv); cudaFree(d_gi); cudaFree(d_bv); cudaFree(d_bi);
+    };
+    run_dt("f32", 1); // topk (descending)
+    run_dt("f32", 0); // bottomk (ascending)
+}
 #endif
 
 int main(int argc, char** argv) {
     bool san = (argc > 1 && strcmp(argv[1], "san") == 0);
-    printf("== sort_validate (increment 8 SORT_PERM + increment 9 FUSED_ARGSORT) ==\n");
+    printf("== sort_validate (increment 8 SORT_PERM + 9 FUSED_ARGSORT + 10 TOPK/BOTTOMK) ==\n");
 
     if (san) {
         {   const long long n = 4, k = 13; std::vector<float> in((size_t)n * k);
@@ -799,6 +1224,19 @@ int main(int argc, char** argv) {
         {   const long long n = 3, k = 32; std::vector<int> in((size_t)n * k);
             for (size_t i = 0; i < in.size(); ++i) in[i] = (int)((xrand() % 201) - 100);
             run_both_cell<int>(both_cell_i32(true), in, n, k, "san", true, 32); }
+        // TOPK/BOTTOMK on small shapes — initcheck LOAD-BEARING: the guarded store
+        // must write ALL k_out out slots (no under-write) AND none past k_out (no
+        // over-write). Sweep k_out to poke the guard at both ends.
+        {   const long long n = 4, k = 13; std::vector<float> in((size_t)n * k);
+            for (size_t i = 0; i < in.size(); ++i) in[i] = (float)((int)(xrand() % 201) - 100) * 0.1f;
+            for (long long k_out : {(long long)1, (long long)5, (long long)13}) {
+                run_topk_cell<float, float>(topk_cell_f32(true), in, n, k, k_out, "san", true, 32);
+                run_topk_cell<float, float>(topk_cell_f32(false), in, n, k, k_out, "san", true, 32);
+            } }
+        {   const long long n = 3, k = 32; std::vector<int> in((size_t)n * k);
+            for (size_t i = 0; i < in.size(); ++i) in[i] = (int)((xrand() % 201) - 100);
+            for (long long k_out : {(long long)1, (long long)16, (long long)32})
+                run_topk_cell<int, int>(topk_cell_i32(true), in, n, k, k_out, "san", true, 32); }
         printf(fails ? "\n%d case(s) FAILED\nRESULT: FAIL\n" : "\nRESULT: ALL PASSED\n", fails);
         return fails ? 1 : 0;
     }
@@ -841,9 +1279,15 @@ int main(int argc, char** argv) {
     both_acceptance();
     both_bench();
 
+    printf("- increment 10 TOPK/BOTTOMK: runtime-k cap acceptance + bandwidth -\n");
+    topk_acceptance();
+    topk_bench();
+
 #ifdef WITH_BESPOKE
     printf("- extract-the-delta audit vs bespoke stable msort (NaN-free) -\n");
     bespoke_audit();
+    printf("- topk cross-check vs bespoke partial-bitonic topk (non-NaN/non-tie rows) -\n");
+    topk_bespoke_audit();
 #endif
 
     cudaError_t e = cudaGetLastError();

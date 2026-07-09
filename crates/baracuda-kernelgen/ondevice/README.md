@@ -1221,10 +1221,16 @@ cp crates/baracuda-kernelgen/ondevice/sort_validate.cu <outdir>/
 nvcc -O3 -arch=sm_89 <outdir>/sort_validate.cu -o <outdir>/sort_validate && <outdir>/sort_validate
 ```
 
-The dump tool (`cuda::sort_tests::dump_sort_sources`) writes 34 cells: `{f32,f64,i32}`
-× `{asc,desc}` × `{sort,argsort}` × `{base,bitonic}`, plus i64 asc sort+argsort and
-f16/bf16/f32s asc values-sort (base+bitonic) — the exact `#include` set the harness
-names.
+The dump tool (`cuda::sort_tests::dump_sort_sources`) writes **96 cells**, of which the
+harness `#include`s **93**: the #8 `{f32,f64,i32}` × `{asc,desc}` × `{sort,argsort}` ×
+`{base,bitonic}` + i64/f16/bf16/f32s asc coverage, the #9 fused `Both` cells, and the
+increment-10 `topk` (Desc) / `bottomk` (Asc) `{base,bitonic}` capped cells for all
+seven dtypes (+ the matching-order desc `Both` oracle for the dtypes that dumped
+asc-only). The 3 written-but-not-included cells are the f16/bf16/f32s `argsort` **bitonic**
+oracles — for those dtypes the harness includes only the **base** argsort as the
+canonical index oracle (the bitonic argsort path is already covered by the included
+sort-bitonic and fused-`Both`-bitonic cells), so the dump is a superset of the
+`#include` set by exactly 3.
 
 **Sanitizers** (small shapes via the `san` argv — race/sync are **load-bearing** for
 the smem bitonic swaps + per-phase barriers; initcheck covers the global in/out
@@ -1432,6 +1438,94 @@ body-derived `= 1`; the second buffer is owned locally by the `SortOut::Both` st
 3-operand key, so the elementwise-multi dispatch never fires for RowSort.
 `baracuda-kernels-types` **UNTOUCHED** — no `STRUCTURE_KEY_VERSION` bump; the `_both`
 suffix rides the entry-point symbol, not the structure-key token.
+
+### Increment 10 TOPK/BOTTOMK — the runtime-k cap (ops `topk` = Desc, `bottomk` = Asc)
+
+`OpDef::row_topk` / `OpDef::row_bottomk` are the strict generalization of the fused
+`Both` — the SAME sort, the writeback **capped** to the first `k_out` ranks under
+`order` (topk = `Desc`/largest-first, NaN-first; bottomk = `Asc`/smallest-first,
+NaN-last — both torch.topk `sorted=True`). The current `Both` is exactly the
+`k_out == k_in` special case (`SortLimit::Full`); TopK adds one `long long k_out`
+launch scalar (the Window `(n_out, k_in, k_out)` ABI), splits the bases
+(`in_base = row*k_in`, `out_base = row*k_out`), and guards the store `if (r < k_out)`
+(base) / shortens the writeback to `p < k_out` (bitonic). Output extent `[batch,
+k_out]`. Signature `(const T* in0, T* out_val, int* out_idx, long long n_out, long
+long k_in, long long k_out)`; the `_topk` entry-point + `__device__` stem suffix keep
+it collision-free from the full-sort kernels. `Full` emits today's sort **byte-for-
+byte** (verified: all 60 pre-existing `.cu` cells diff `mismatches=0` between HEAD and
+this branch). Torch-faithful (NaN-greatest + stable ties), so it **diverges from the
+bespoke `baracuda_topk.cuh`** (no NaN branch, `STABLE=0`) on NaN/tie rows — the
+bespoke cross-check excludes those.
+
+**THE ACCEPTANCE GATE (device-launched):** for every cell, the two topk outputs are
+(A) whole-buffer `memcmp`-equal to a **CPU `pair_lt` oracle**'s first `k_out` per row
+(device-independent), AND (B) **per-row STRIDE-AWARE** `memcmp`-equal to the
+device-validated RowSort `Both`'s first-`k_out` slice — `topk[row*k_out .. +k_out] ==
+Both[row*k_in .. +k_out]` for `out_val` AND `out_idx` (Both's row stride is `k_in`,
+topk's is `k_out`, so NOT a flat whole-buffer prefix — the decision-5 caveat). Plus
+base ≡ bitonic (both buffers) and run-to-run determinism. Layered with an
+**independent CPU `nth_element`** top-k selection (quickselect — a different algorithm
+than the device's rank/bitonic sort) on distinct-key rows. Cells (all device-launched):
+
+- **random rows, `k_in = 1000`** (f32/f64/i32) and **`k_in = 300`** (i64/f16/bf16/
+  f32-strict), topk AND bottomk, over the **`k_out` boundary sweep `{1, 2, k_in/2,
+  k_in-1, k_in}`** (`k_out == 1` = max/argmax; `k_out == k_in` degenerates to the full
+  sort): CPU-oracle, per-row `Both[..k_out]`, base ≡ bitonic, determinism.
+- **probe-seeded f32** (topk + bottomk, base+bitonic): planted qNaN payloads
+  (**NaN-first** for topk / **NaN-last** for bottomk), mixed ±0.0, real ±inf pad-tie —
+  each at `k_out ∈ {1, mid, k_in}`.
+- **`k_in = 1500 > 1024`** — base-only device-launched (any-k rank sort); bitonic is
+  the `k_in ≤ 1024` contract.
+- **independent `nth_element` selection oracle** — f32 topk + bottomk, `k_out ∈ {1, 5,
+  150, 300}`, distinct-key rows (values + index-position identity).
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3, 2026-07-09 — **RESULT:
+ALL PASSED** (**+727 new topk/bottomk device-launched checks** over the #9 tally, 1057
+total). `compute-sanitizer` **memcheck / racecheck / synccheck / initcheck all 0
+errors** (racecheck 0 hazards) on the `san` shapes (72 topk checks over the `k_out ∈
+{1, mid, k_in}` guard sweep). The guarded store's correctness — writes ALL `k_out`
+output slots (no under-write) AND none past `k_out` (no over-write), the on-device
+enforcement of the `k_out ≤ k_in` precondition the plan gate cannot express (the
+structure key carries no numeric extents) — is proven by the **ensemble**:
+poison-seeded `memcmp` vs the oracle (an under-write leaves the 0x3C/0x11 poison,
+which mismatches), **memcheck** (a write past the `k_out`-wide output buffer is OOB —
+0 errors), and **initcheck** (0 errors — no uninitialized access on the global
+buffers; as with #8/#9 it does NOT see dynamic shared memory, so the smem pad cells
+stay protected by the poison-memcmp oracle + the pad-tie invariant cells).
+`-DWITH_BESPOKE` secondary green: topk + bottomk **VALUES and INDICES bit-exact vs the
+bespoke `baracuda_topk.cuh`** on distinct-key, NaN-free rows (`k_in = 512`, `k_out =
+32`).
+
+**Bandwidth (f32, 4096 × 1024, `k_out = 64`, sm_89):**
+
+| path | base | bitonic |
+| --- | --- | --- |
+| **topk** (`k_out`-only writeback) | 15.24 ms | **1.416 ms** (2.96 Gelem/s) |
+| full-sort `Both` (then host slice) | 15.31 ms | 1.433 ms |
+
+TopK is the **same sort cost** as the full `Both` (the v1 sort-then-slice reuses the
+validated network) — the payoff is downstream: the output is `[batch, k_out]`, so no
+full `[batch, k_in]` buffer is materialized (at `k_out = 64` of `k_in = 1024`, a **16×
+smaller** output + no host-side slice pass). The real partial-select (O(n log k) heap
+/ partial-bitonic / radix-select) is the **bench-gated measured-variant follow-up**
+(re-key-free — a `lower_variants` filter on the SAME `SortLimit::TopK` cell,
+`BitIdentical` iff it yields the same top-k in the same stable order); at the v1
+bitonic scope (`k_in ≤ 1024`) the compare-exchange phase count is `k_out`-independent,
+so a partial-select only pays off at `n ≫ 1024` = out of v1 scope.
+
+**Fuel contract (honest miss, AOT-only) — unchanged from #8/#9.** A topk emits **no
+contract**: it is still `Access::RowSort` (non-Elementwise), so `derive_pattern`
+rejects it as `NotElementwise` before any body walk and `contract()` returns `None`
+(`ZERO` `contract.rs`/`pattern.rs`/`jit.rs` change; pinned by
+`cuda::sort_tests::topk_is_an_honest_miss_no_contract`). This is the **correct**
+posture, not a limitation: **Fuel has no `top_k` OpKind** — its MoE routers compute
+top-k DENSELY (all N expert FFNs, gated by the full softmax) as a ~15–32× over-compute
+workaround (`fuel/docs/frontier-architecture-gaps.md`), so kernelgen topk delivers the
+**SELECTION half** of sparse MoE that Fuel cannot yet advertise. `n_outputs()` stays
+body-derived `= 1` for `Both`; `baracuda-kernels-types` **UNTOUCHED** (no
+`STRUCTURE_KEY_VERSION` bump; the `_topk` suffix rides the entry-point symbol, not the
+structure-key token). See `docs/fuel-ask-topk-2026-07-09.md` (propose-first, NOT a
+blocker).
 
 ## `relu_propagating_validate.cu` — bespoke NaN-propagating relu vs the generated relu (alpha.76)
 

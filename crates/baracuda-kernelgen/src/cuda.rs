@@ -4792,10 +4792,18 @@ fn emit_row_sort(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 /// a RAW-BIT permutation of the original `ctype` storage (no round-trip), so NaN
 /// payloads and `-0.0` signs are preserved bit-exactly.
 fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> GeneratedKernel {
-    let (order, out) = match plan.schedule {
-        Schedule::RowSort { order, out, .. } => (order, out),
+    let (order, out, limit) = match plan.schedule {
+        Schedule::RowSort {
+            order, out, limit, ..
+        } => (order, out, limit),
         _ => unreachable!("emit_row_sort on a non-RowSort schedule"),
     };
+    // Increment 10 TOPK/BOTTOMK: `TopK` caps the writeback to a runtime `k_out`
+    // (topk = Desc, bottomk = Asc). `Full` reproduces today's whole-row sort
+    // BYTE-FOR-BYTE (single `long long k`, base = row*k, no store guard, no `_topk`
+    // suffix) — every split below is GATED on this so the existing sort/argsort/Both
+    // emission is unchanged.
+    let topk = matches!(limit, crate::ir::SortLimit::TopK);
 
     // ---- Independent emitter backstops (belt-and-suspenders; validate_row_sort
     // validates the same — the 0a lesson: gate every layer). cuda-prefixed
@@ -4833,6 +4841,9 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
     // [in0, out_val, out_idx] (n_inputs+2 operands), and out_idx (operand 2) is a
     // forward-dense contiguous I32 store. Re-assert both here — the two-pointer
     // signature below assumes them (belt-and-suspenders for validate_row_sort's G2/G3).
+    // Increment 10 TopK rides the SAME backstop (the layout re-check is width-agnostic,
+    // so the narrower `[batch,k_out]` out_idx passes; the `k_out <= k_in` relationship
+    // is NOT emitter-checkable — the golden + on-device initcheck cover it).
     if matches!(out, SortOut::Both) {
         let n_inputs = plan.n_inputs as usize;
         assert!(
@@ -4843,8 +4854,8 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         let oi = plan.key.operands[n_inputs + 1];
         assert!(
             oi.bcast.is_empty() && oi.contig == Contiguity::Contig && !oi.flipped,
-            "cuda backend: RowSort Both out_idx (operand 2) must be full-width \
-             forward-dense contiguous"
+            "cuda backend: RowSort Both out_idx (operand 2) must be forward-dense \
+             contiguous (empty bcast, not flipped); width may be < input for a TopK cap"
         );
     }
 
@@ -4888,14 +4899,23 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         SortOut::Indices => "_idx",
         SortOut::Both => "_both",
     };
+    // Increment 10: the runtime-k cap rides `_topk` on BOTH the exported `name` and
+    // the `__device__` `stem`, AFTER `out_suf`, so capped kernels never collide with
+    // the full-sort kernels in the validator TU. `Full` keeps today's exact symbols
+    // (byte-identity).
+    let limit_suf = match limit {
+        crate::ir::SortLimit::Full => "",
+        crate::ir::SortLimit::TopK => "_topk",
+    };
     let bt_suf = if bitonic { "_bt" } else { "" };
     // Device-helper stem: base+variant + every dtype/order/out cell of one op get a
     // distinct `__device__` comparator symbol (no collision in the validator TU).
-    let stem = format!("{}_{dtag}_{ord}{out_suf}{bt_suf}", plan.op_name);
+    let stem = format!("{}_{dtag}_{ord}{out_suf}{limit_suf}{bt_suf}", plan.op_name);
     let name = format!(
-        "baracuda_gen_{}_{dtag}_rowsort_{ord}_stable{}{}",
+        "baracuda_gen_{}_{dtag}_rowsort_{ord}_stable{}{}{}",
         plan.op_name,
         out_suf,
+        limit_suf,
         if bitonic { "_bitonic" } else { "" }
     );
 
@@ -4971,8 +4991,16 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
             s.push_str(&format!("    {octype}* __restrict__ out,\n"));
         }
     }
-    s.push_str("    long long n_out,\n    long long k)\n{\n");
-    s.push_str("    if (k == 0) return;\n");
+    // Increment 10: `Full` keeps today's 2-scalar `(n_out, k)` ABI byte-for-byte;
+    // `TopK` rides the Window `(n_out, k_in, k_out)` 3-scalar ABI (`k_out` the OUT
+    // operand's inner extent, a runtime launch arg).
+    if topk {
+        s.push_str("    long long n_out,\n    long long k_in,\n    long long k_out)\n{\n");
+        s.push_str("    if (k_out == 0) return;\n");
+    } else {
+        s.push_str("    long long n_out,\n    long long k)\n{\n");
+        s.push_str("    if (k == 0) return;\n");
+    }
 
     if !bitonic {
         // -------------------- RANK-SORT BASE (one thread per output element) --------------------
@@ -4981,19 +5009,46 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         // `base + rank`. Pairs are all distinct ⇒ ranks are a permutation ⇒ every
         // slot written exactly once (no races), stable by construction, ANY k, no
         // smem, no __syncthreads. O(k²) reads — correctness base; perf is the variant.
-        s.push_str("    long long total = n_out * k;\n");
+        //
+        // Increment 10 TopK: grid over ALL inputs (`n_out * k_in`, every element
+        // needs its rank to know if it lands in the top `k_out`), split the bases
+        // (`in_base = row*k_in`, `out_base = row*k_out`), scan `j < k_in`, and GUARD
+        // the store `if (r < k_out)`. Ranks are a permutation of `[0, k_in)`, so
+        // exactly `k_out` threads pass the guard ⇒ all `k_out` out slots written
+        // once, none twice (initcheck-clean). `Full` emits the lines below verbatim.
+        let (total_x, rowlen) = if topk {
+            ("n_out * k_in", "k_in")
+        } else {
+            ("n_out * k", "k")
+        };
+        // Input base variable: `in_base` (TopK) vs `base` (Full, byte-identical).
+        let ib = if topk { "in_base" } else { "base" };
+        // Output base variable: `out_base` (TopK) vs `base` (Full, byte-identical).
+        let ob = if topk { "out_base" } else { "base" };
+        s.push_str(&format!("    long long total = {total_x};\n"));
         s.push_str("    long long grid_stride = (long long)blockDim.x * (long long)gridDim.x;\n");
         s.push_str("    for (long long t = (long long)blockIdx.x * (long long)blockDim.x + (long long)threadIdx.x;\n");
         s.push_str("         t < total; t += grid_stride) {\n");
-        s.push_str("        long long row = t / k;\n");
-        s.push_str("        long long base = row * k;\n");
-        s.push_str("        long long i = t - base;\n");
-        s.push_str(&format!("        {acc} ki = {};\n", load_at("base + i")));
+        s.push_str(&format!("        long long row = t / {rowlen};\n"));
+        if topk {
+            s.push_str("        long long in_base = row * k_in;\n");
+            s.push_str("        long long out_base = row * k_out;\n");
+            s.push_str("        long long i = t - in_base;\n");
+        } else {
+            s.push_str("        long long base = row * k;\n");
+            s.push_str("        long long i = t - base;\n");
+        }
+        s.push_str(&format!(
+            "        {acc} ki = {};\n",
+            load_at(&format!("{ib} + i"))
+        ));
         s.push_str("        long long r = 0;\n");
-        s.push_str("        for (long long j = 0; j < k; ++j) {\n");
+        s.push_str(&format!(
+            "        for (long long j = 0; j < {rowlen}; ++j) {{\n"
+        ));
         s.push_str(&format!(
             "            {acc} kj = {};\n",
-            load_at("base + j")
+            load_at(&format!("{ib} + j"))
         ));
         s.push_str(&format!(
             "            if ({stem}_pair_lt(kj, j, ki, i)) r++;\n"
@@ -5001,13 +5056,23 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         s.push_str("        }\n");
         // Store: Values writes the raw value, Indices the I32 index, Both writes
         // BOTH (both quantities in scope — no recomputation, the fusion payoff).
+        // TopK wraps the store in `if (r < k_out)` (indent +4); Full stores flat.
+        let g = if topk { "    " } else { "" }; // store-line extra indent under the guard
+        if topk {
+            s.push_str("        if (r < k_out) {\n");
+        }
         match out {
-            SortOut::Values => s.push_str("        out[base + r] = in0[base + i];\n"),
-            SortOut::Indices => s.push_str("        out[base + r] = (int)i;\n"),
-            SortOut::Both => {
-                s.push_str("        out_val[base + r] = in0[base + i];\n");
-                s.push_str("        out_idx[base + r] = (int)i;\n");
+            SortOut::Values => {
+                s.push_str(&format!("        {g}out[{ob} + r] = in0[{ib} + i];\n"));
             }
+            SortOut::Indices => s.push_str(&format!("        {g}out[{ob} + r] = (int)i;\n")),
+            SortOut::Both => {
+                s.push_str(&format!("        {g}out_val[{ob} + r] = in0[{ib} + i];\n"));
+                s.push_str(&format!("        {g}out_idx[{ob} + r] = (int)i;\n"));
+            }
+        }
+        if topk {
+            s.push_str("        }\n");
         }
         s.push_str("    }\n");
     } else {
@@ -5019,8 +5084,19 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         // blockDim a multiple of 32, <= 1024; dynamic smem = pow2 * (acc_sz + 4)
         // bytes; REQUIRES k <= 1024 (no emitted guard beyond k == 0 — the structure
         // key carries no extents; on-device-validated, per smemrow/blockscan).
+        // Increment 10 TopK: stage the FULL input row (`pow2` over `k_in`, smem
+        // bound on `k_in` unchanged), sort it, then SHORTEN the writeback to
+        // `p < k_out`. Split the bases: `base_in = row*k_in` (staging/gather),
+        // `out_base = row*k_out` (writeback). `Full` emits the lines below verbatim.
+        let (rowlen, ib, ob, wbound) = if topk {
+            ("k_in", "base_in", "out_base", "k_out")
+        } else {
+            ("k", "base", "base", "k")
+        };
         let pad = sort_pad_lit(plan.dtype, order);
-        s.push_str("    long long pow2 = 1; while (pow2 < k) pow2 <<= 1;\n");
+        s.push_str(&format!(
+            "    long long pow2 = 1; while (pow2 < {rowlen}) pow2 <<= 1;\n"
+        ));
         s.push_str("    extern __shared__ unsigned char baracuda_sort_smem[];\n");
         s.push_str(&format!("    {acc}* skey = ({acc}*)baracuda_sort_smem;\n"));
         s.push_str(&format!(
@@ -5029,15 +5105,22 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         s.push_str(
             "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
         );
-        s.push_str("        long long base = row * k;\n");
+        if topk {
+            s.push_str("        long long base_in = row * k_in;\n");
+            s.push_str("        long long out_base = row * k_out;\n");
+        } else {
+            s.push_str("        long long base = row * k;\n");
+        }
         // Stage + pad (all threads reach every barrier — the p-loop is uniform).
         s.push_str("        for (long long p = threadIdx.x; p < pow2; p += blockDim.x) {\n");
+        let cond = format!("if (p < {rowlen}) ");
         s.push_str(&format!(
-            "            if (p < k) {{ skey[p] = {}; sidx[p] = (int)p; }}\n",
-            load_at("base + p")
+            "            {cond}{{ skey[p] = {}; sidx[p] = (int)p; }}\n",
+            load_at(&format!("{ib} + p"))
         ));
+        let else_pad = " ".repeat(cond.len() - "else".len());
         s.push_str(&format!(
-            "            else       {{ skey[p] = {pad}; sidx[p] = (int)p; }}\n"
+            "            else{else_pad}{{ skey[p] = {pad}; sidx[p] = (int)p; }}\n"
         ));
         s.push_str("        }\n");
         s.push_str("        __syncthreads();\n");
@@ -5068,14 +5151,24 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
         s.push_str("                __syncthreads();\n");
         s.push_str("            }\n");
         s.push_str("        }\n");
-        // Writeback: the first k cells are exactly the real elements (pad invariant).
-        s.push_str("        for (long long p = threadIdx.x; p < k; p += blockDim.x) {\n");
+        // Writeback: the first `k`/`k_out` cells are exactly the retained real
+        // elements (pad invariant — the k_in real elements occupy `[0, k_in)`, so
+        // the first `k_out <= k_in` are the top-k_out under `order`).
+        s.push_str(&format!(
+            "        for (long long p = threadIdx.x; p < {wbound}; p += blockDim.x) {{\n"
+        ));
         match out {
-            SortOut::Values => s.push_str("            out[base + p] = in0[base + sidx[p]];\n"),
-            SortOut::Indices => s.push_str("            out[base + p] = sidx[p];\n"),
+            SortOut::Values => {
+                s.push_str(&format!(
+                    "            out[{ob} + p] = in0[{ib} + sidx[p]];\n"
+                ));
+            }
+            SortOut::Indices => s.push_str(&format!("            out[{ob} + p] = sidx[p];\n")),
             SortOut::Both => {
-                s.push_str("            out_val[base + p] = in0[base + sidx[p]];\n");
-                s.push_str("            out_idx[base + p] = sidx[p];\n");
+                s.push_str(&format!(
+                    "            out_val[{ob} + p] = in0[{ib} + sidx[p]];\n"
+                ));
+                s.push_str(&format!("            out_idx[{ob} + p] = sidx[p];\n"));
             }
         }
         s.push_str("        }\n");
@@ -5107,7 +5200,7 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
 /// validated precondition (the structure key carries no extents), the same trust
 /// model as smemrow/blockscan, with NO emitted guard beyond `k == 0`.
 fn row_sort_bitonic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
-    let Schedule::RowSort { .. } = plan.schedule else {
+    let Schedule::RowSort { limit, .. } = plan.schedule else {
         return None;
     };
     // The fixed signature has no `p{i}` slots — a Param body would emit an
@@ -5137,11 +5230,13 @@ fn row_sort_bitonic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         4
     };
     let k = emit_row_sort_impl(plan, ctype, true);
-    Some(Variant {
-        tag: "bitonic",
-        kernels: vec![k],
-        fidelity: VariantFidelity::BitIdentical,
-        launch_note: format!(
+    // The bitonic network stages and sorts the WHOLE input row regardless of the
+    // cap, so the smem/occupancy contract is on the INPUT row length: `k` for a
+    // Full sort, `k_in` for a TopK (which then writes only the top `k_out`). The
+    // Full note is kept byte-identical (its launch_note goldens pin it); the TopK
+    // note names the correct `(k_in, k_out)` ABI so the metadata is not stale.
+    let launch_note = match limit {
+        crate::ir::SortLimit::Full => format!(
             "bitonic pair-sort (one block per row, grid-stride over rows; the whole \
              next_pow2(k)-padded row staged in dynamic shared memory as (key, index) \
              pairs and sorted by a bitonic network under the (key, original-index) \
@@ -5155,6 +5250,28 @@ fn row_sort_bitonic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
             acc_sz,
             VariantFidelity::BitIdentical.determinism_str()
         ),
+        crate::ir::SortLimit::TopK => format!(
+            "bitonic top-k (one block per row, grid-stride over rows; the whole \
+             next_pow2(k_in)-padded INPUT row staged in dynamic shared memory as \
+             (key, index) pairs and sorted by a bitonic network under the (key, \
+             original-index) total order, then only the top k_out written): \
+             <<<min(n_out, maxblocks), B, smem>>> with B a multiple of 32 and \
+             <= 1024, and dynamic shared memory = next_pow2(k_in) * {} bytes \
+             (sizeof(acc)={} + sizeof(int)=4). REQUIRES k_in <= 1024 (the bitonic \
+             network stages the whole padded INPUT row in one block); longer input \
+             rows use the any-k rank-sort base. k_out <= k_in is a caller/on-device \
+             precondition. BitIdentical to the base (a pair sort is a pure \
+             permutation). Determinism: {}.",
+            acc_sz + 4,
+            acc_sz,
+            VariantFidelity::BitIdentical.determinism_str()
+        ),
+    };
+    Some(Variant {
+        tag: "bitonic",
+        kernels: vec![k],
+        fidelity: VariantFidelity::BitIdentical,
+        launch_note,
     })
 }
 
@@ -11908,6 +12025,20 @@ mod sort_tests {
         let oi = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::I32, 256);
         structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89)
     }
+    // Increment 10 TOPK/BOTTOMK: the 3-operand `Both` key with NARROWER
+    // `[256,k_out]` outputs (k_out < k_in = 128) — the shrunk out extent.
+    fn topk_both_key(dt: ElementKind, k_out: i64) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let ov = OperandDesc::new(2, &[256, k_out], &[k_out, 1], dt, 256);
+        let oi = OperandDesc::new(2, &[256, k_out], &[k_out, 1], ElementKind::I32, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89)
+    }
+    // A single-output (Values) key with a narrower output — the free TopK+Values path.
+    fn topk_values_key(dt: ElementKind, k_out: i64) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let o = OperandDesc::new(2, &[256, k_out], &[k_out, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
 
     #[test]
     fn base_asc_values_signature_and_rank_loop() {
@@ -12314,6 +12445,353 @@ mod sort_tests {
         assert!(!k.source.contains("_both"), "{}", k.source);
     }
 
+    // ================= Increment 10 TOPK/BOTTOMK: runtime-k cap ==================
+
+    #[test]
+    fn topk_both_base_golden_f32() {
+        // The capped fused base kernel: the 3-scalar `(n_out, k_in, k_out)` ABI, the
+        // split bases, ONE shared pair_lt rank scan over `j < k_in`, and the store
+        // GUARDED by `if (r < k_out)`. Pins M2 (guard), M3 (grid = n_out*k_in), M4
+        // (out_base = row*k_out), M9 (store targets), M10 (out_idx is int*).
+        let sc = OpDef::row_topk("topk", ElementKind::F32);
+        let k = generate(&sc, &topk_both_key(ElementKind::F32, 64), &Cuda);
+        assert_eq!(
+            k.name,
+            "baracuda_gen_topk_f32_rowsort_desc_stable_both_topk"
+        );
+        // 3-scalar signature + k_out==0 early-out (the Window ABI precedent).
+        assert!(k.source.contains("long long n_out,"), "{}", k.source);
+        assert!(k.source.contains("long long k_in,"), "{}", k.source);
+        assert!(k.source.contains("long long k_out)"), "{}", k.source);
+        assert!(k.source.contains("if (k_out == 0) return;"), "{}", k.source);
+        // Full's single-`k` ABI is ABSENT (M1/M12: no byte-identity bleed the wrong way).
+        assert!(!k.source.contains("long long k)"), "{}", k.source);
+        // Grid over ALL inputs (M3), split bases (M4).
+        assert!(
+            k.source.contains("long long total = n_out * k_in;"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("long long in_base = row * k_in;"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("long long out_base = row * k_out;"),
+            "{}",
+            k.source
+        );
+        // ONE shared rank scan over k_in (M3: not k_out), ONE accumulator.
+        assert_eq!(
+            k.source
+                .matches("if (topk_f32_desc_both_topk_pair_lt(kj, j, ki, i)) r++;")
+                .count(),
+            1,
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("for (long long j = 0; j < k_in; ++j) {"),
+            "{}",
+            k.source
+        );
+        // The store GUARD (M2) + both capped stores (M4/M9).
+        assert!(k.source.contains("if (r < k_out) {"), "{}", k.source);
+        assert!(
+            k.source
+                .contains("out_val[out_base + r] = in0[in_base + i];"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out_idx[out_base + r] = (int)i;"),
+            "{}",
+            k.source
+        );
+        // Two-pointer signature; out_idx is int* (M10), never float*.
+        assert!(
+            k.source.contains("float* __restrict__ out_val,"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("int* __restrict__ out_idx,"),
+            "{}",
+            k.source
+        );
+        assert!(!k.source.contains("__restrict__ out,"), "{}", k.source);
+        assert!(
+            !k.source.contains("float* __restrict__ out_idx"),
+            "{}",
+            k.source
+        );
+        // Desc comparator argument order (kb,ka first) — topk = largest first (M8).
+        assert!(
+            k.source
+                .contains("if (topk_f32_desc_both_topk_key_lt(kb, ka)) return true;"),
+            "{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn topk_both_bitonic_golden_f32() {
+        // The capped fused bitonic variant: stage the FULL row (`pow2 < k_in`), sort,
+        // then SHORTEN the writeback to `p < k_out` into `out*[out_base + p]`. Pins M5
+        // (writeback bound), M6 (stage bound k_in), same network as the Both variant.
+        let sc = OpDef::row_topk("topk", ElementKind::F32);
+        let vs = generate_variants(&sc, &topk_both_key(ElementKind::F32, 64), &Cuda);
+        let bt = vs
+            .iter()
+            .find(|v| v.tag == "bitonic")
+            .expect("bitonic variant");
+        let src = &bt.kernels[0].source;
+        assert_eq!(
+            bt.kernels[0].name,
+            "baracuda_gen_topk_f32_rowsort_desc_stable_both_topk_bitonic"
+        );
+        // Stage the full input row over k_in (M6: not k_out).
+        assert!(
+            src.contains("long long pow2 = 1; while (pow2 < k_in) pow2 <<= 1;"),
+            "{}",
+            src
+        );
+        assert!(src.contains("long long base_in = row * k_in;"), "{}", src);
+        assert!(src.contains("long long out_base = row * k_out;"), "{}", src);
+        assert!(
+            src.contains("if (p < k_in) { skey[p] = in0[base_in + p]; sidx[p] = (int)p; }"),
+            "{}",
+            src
+        );
+        // Writeback SHORTENED to k_out (M5), gathering through the permutation.
+        assert!(
+            src.contains("for (long long p = threadIdx.x; p < k_out; p += blockDim.x) {"),
+            "{}",
+            src
+        );
+        assert!(
+            src.contains("out_val[out_base + p] = in0[base_in + sidx[p]];"),
+            "{}",
+            src
+        );
+        assert!(src.contains("out_idx[out_base + p] = sidx[p];"), "{}", src);
+        assert_eq!(bt.fidelity, crate::VariantFidelity::BitIdentical);
+        // The launch_note metadata must name the (k_in, k_out) TopK ABI — the
+        // variant reads `limit`, so a stale Full note here (`next_pow2(k)`,
+        // `REQUIRES k <= 1024`) would mis-describe the smem/occupancy contract.
+        assert!(
+            bt.launch_note.contains("next_pow2(k_in)")
+                && bt.launch_note.contains("REQUIRES k_in <= 1024")
+                && bt.launch_note.contains("top k_out"),
+            "topk bitonic launch_note must describe the (k_in,k_out) ABI:\n{}",
+            bt.launch_note
+        );
+        assert!(
+            !bt.launch_note.contains("REQUIRES k <= 1024"),
+            "topk bitonic launch_note must NOT carry the stale Full `k` contract:\n{}",
+            bt.launch_note
+        );
+    }
+
+    #[test]
+    fn bottomk_both_base_golden_f32() {
+        // bottomk = Asc + cap: the comparator argument order swaps to (ka,kb) first
+        // (smallest first) while the cap is identical — proving `order` selects the
+        // direction under TopK (M8: topk must NOT emit Asc). The `_topk` suffix + the
+        // guard + the split bases match the topk golden.
+        let sc = OpDef::row_bottomk("bottomk", ElementKind::F32);
+        let k = generate(&sc, &topk_both_key(ElementKind::F32, 64), &Cuda);
+        assert_eq!(
+            k.name,
+            "baracuda_gen_bottomk_f32_rowsort_asc_stable_both_topk"
+        );
+        // Asc comparator argument order (ka,kb first) — the M8 divergence from topk.
+        assert!(
+            k.source
+                .contains("if (bottomk_f32_asc_both_topk_key_lt(ka, kb)) return true;"),
+            "{}",
+            k.source
+        );
+        // Same cap machinery as topk.
+        assert!(k.source.contains("if (r < k_out) {"), "{}", k.source);
+        assert!(
+            k.source
+                .contains("out_val[out_base + r] = in0[in_base + i];"),
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("long long total = n_out * k_in;"),
+            "{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn topk_values_base_golden_f32() {
+        // The FREE `TopK`+`Values` single-output path (admitted-but-unexposed): a
+        // single `float* out` pointer, the guarded `out[out_base + r] = in0[in_base +
+        // i];` store — so the capped single-output path is tested, not dead. Built by
+        // capping a Desc values-sort (no public ctor in v1).
+        use crate::ir::{Access, SortLimit, SortOut};
+        let mut sc = OpDef::row_sort("topk", ElementKind::F32, SortOrder::Desc);
+        sc.access = Access::RowSort {
+            order: SortOrder::Desc,
+            stable: true,
+            out: SortOut::Values,
+            limit: SortLimit::TopK,
+        };
+        let k = generate(&sc, &topk_values_key(ElementKind::F32, 64), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_topk_f32_rowsort_desc_stable_topk");
+        assert!(
+            k.source.contains("float* __restrict__ out,"),
+            "{}",
+            k.source
+        );
+        assert!(k.source.contains("if (r < k_out) {"), "{}", k.source);
+        assert!(
+            k.source.contains("out[out_base + r] = in0[in_base + i];"),
+            "{}",
+            k.source
+        );
+        assert!(!k.source.contains("out_val"), "{}", k.source);
+        assert!(!k.source.contains("out_idx"), "{}", k.source);
+        assert!(!k.source.contains("_both"), "{}", k.source);
+    }
+
+    #[test]
+    fn topk_symbol_is_distinct() {
+        // M7: the `_topk` entry-point AND its `__device__` comparator stem collide
+        // with NEITHER the full-sort Both (`_both`) NOR any other symbol in the
+        // validator TU — reverting the suffix to "" would duplicate-link.
+        let topk = generate(
+            &OpDef::row_topk("op", ElementKind::F32),
+            &topk_both_key(ElementKind::F32, 64),
+            &Cuda,
+        );
+        let full_both = generate(
+            &OpDef::row_sort_indices("op", ElementKind::F32, SortOrder::Desc),
+            &both_key(ElementKind::F32),
+            &Cuda,
+        );
+        assert_eq!(
+            topk.name,
+            "baracuda_gen_op_f32_rowsort_desc_stable_both_topk"
+        );
+        assert_eq!(
+            full_both.name,
+            "baracuda_gen_op_f32_rowsort_desc_stable_both"
+        );
+        assert_ne!(topk.name, full_both.name);
+        // The comparator stems are distinct, and NOT substring collisions (the full
+        // stem `op_f32_desc_both_pair_lt` is not inside the topk source).
+        assert!(
+            topk.source.contains("op_f32_desc_both_topk_pair_lt"),
+            "{}",
+            topk.source
+        );
+        assert!(
+            !topk.source.contains("op_f32_desc_both_pair_lt"),
+            "{}",
+            topk.source
+        );
+        assert!(
+            full_both.source.contains("op_f32_desc_both_pair_lt"),
+            "{}",
+            full_both.source
+        );
+    }
+
+    #[test]
+    fn full_sort_emits_no_topk_artifacts() {
+        // M1/M12 REGRESSION (the #1 risk): every `Full` state (row_sort/row_argsort/
+        // row_sort_indices), base AND bitonic, emits the single-`k` ABI and NEVER the
+        // TopK split — no `_topk`, no `k_in`/`k_out`, no `if (r < k_out)` guard. This
+        // is the load-bearing byte-identity guard: a mutation that emits the split
+        // under Full fails HERE.
+        let cases = [
+            (
+                OpDef::row_sort("s", ElementKind::F32, SortOrder::Asc),
+                sort_key(ElementKind::F32),
+            ),
+            (
+                OpDef::row_argsort("s", ElementKind::F32, SortOrder::Asc),
+                argsort_key(ElementKind::F32),
+            ),
+            (
+                OpDef::row_sort_indices("s", ElementKind::F32, SortOrder::Asc),
+                both_key(ElementKind::F32),
+            ),
+        ];
+        for (sc, key) in &cases {
+            for v in generate_variants(sc, key, &Cuda) {
+                for kern in &v.kernels {
+                    assert!(kern.source.contains("long long k)"), "{}", kern.source);
+                    assert!(
+                        kern.source.contains("if (k == 0) return;"),
+                        "{}",
+                        kern.source
+                    );
+                    assert!(!kern.source.contains("_topk"), "{}", kern.source);
+                    assert!(!kern.source.contains("k_in"), "{}", kern.source);
+                    assert!(!kern.source.contains("k_out"), "{}", kern.source);
+                    assert!(!kern.source.contains("in_base"), "{}", kern.source);
+                    assert!(!kern.source.contains("out_base"), "{}", kern.source);
+                    assert!(!kern.source.contains("if (r < k_out)"), "{}", kern.source);
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "out_idx (operand 2) must be forward-dense")]
+    fn topk_both_emitter_backstop_rejects_broadcast_out_idx() {
+        // M11 (Tier-2 independent emitter backstop): a hand-built `TopK`+`Both`
+        // KernelPlan whose out_idx (operand 2) is broadcast (stride 0) — the SHARED
+        // layout backstop (width-agnostic; it covers TopK too) must refuse it. If a
+        // mutation gated the backstop on `limit == Full`, this TopK path would slip
+        // through — this pins that it does not.
+        use crate::backend::Backend;
+        use crate::ir::{Access, BaseOffset, SortLimit, SortOut, WriteIndex};
+        use crate::plan::{KernelPlan, Schedule};
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let ov = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
+        let oi = OperandDesc::new(2, &[256, 64], &[0, 1], ElementKind::I32, 256); // broadcast
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89);
+        let body = crate::ir::input(0).0;
+        let access = Access::RowSort {
+            order: SortOrder::Desc,
+            stable: true,
+            out: SortOut::Both,
+            limit: SortLimit::TopK,
+        };
+        let plan = KernelPlan {
+            op_name: "topk_bad",
+            n_inputs: 1,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::RowSort {
+                order: SortOrder::Desc,
+                stable: true,
+                out: SortOut::Both,
+                limit: SortLimit::TopK,
+            },
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            extra_out_dtypes: &[],
+            access: &access,
+            views: &[],
+            read_index: &[],
+            write_index: &WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: BaseOffset::Zero,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
     #[test]
     fn sort_both_is_an_honest_miss_no_contract() {
         // AOT-only, exactly like row_sort/row_argsort: `Both` is still
@@ -12335,6 +12813,26 @@ mod sort_tests {
     }
 
     #[test]
+    fn topk_is_an_honest_miss_no_contract() {
+        // Increment 10 AOT-only (unchanged from #8/#9): a capped topk is still
+        // Access::RowSort (non-Elementwise), so `derive_pattern` rejects it as
+        // NotElementwise and `contract()` returns None — the SAME withhold path,
+        // ZERO contract.rs/pattern.rs change. Fuel has no top_k OpKind (MoE routes
+        // densely), so AOT-only is the correct posture, not a limitation.
+        use crate::pattern::PatternError;
+        let sc = OpDef::row_topk("topk", ElementKind::F32);
+        let k = generate(&sc, &topk_both_key(ElementKind::F32, 64), &Cuda);
+        assert!(
+            crate::contract(&sc, &topk_both_key(ElementKind::F32, 64), &k, "cuda").is_none(),
+            "a topk must emit NO contract (no Fuel top_k OpTag; AOT-only)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&sc),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
     #[should_panic(expected = "key must carry n_inputs+2 operands")]
     fn both_emitter_backstop_rejects_two_operand_key() {
         // Tier-2 independent emitter backstop (M10): a hand-built `Both` KernelPlan
@@ -12342,7 +12840,7 @@ mod sort_tests {
         // but the emitter must ALSO refuse it (the two-pointer signature assumes the
         // third operand). Bypass build_plan and hand it straight to Cuda::lower.
         use crate::backend::Backend;
-        use crate::ir::{Access, BaseOffset, SortOut, WriteIndex};
+        use crate::ir::{Access, BaseOffset, SortLimit, SortOut, WriteIndex};
         use crate::plan::{KernelPlan, Schedule};
         let key = sort_key(ElementKind::F32); // only [in0, out_val] — 2 operands
         let body = crate::ir::input(0).0;
@@ -12350,6 +12848,7 @@ mod sort_tests {
             order: SortOrder::Asc,
             stable: true,
             out: SortOut::Both,
+            limit: SortLimit::Full,
         };
         let plan = KernelPlan {
             op_name: "fused_bad",
@@ -12360,6 +12859,7 @@ mod sort_tests {
                 order: SortOrder::Asc,
                 stable: true,
                 out: SortOut::Both,
+                limit: SortLimit::Full,
             },
             key: &key,
             body: &body,
@@ -12377,7 +12877,7 @@ mod sort_tests {
     }
 
     #[test]
-    #[should_panic(expected = "out_idx (operand 2) must be full-width")]
+    #[should_panic(expected = "out_idx (operand 2) must be forward-dense")]
     fn both_emitter_backstop_rejects_broadcast_out_idx() {
         // Tier-2 independent emitter backstop: a hand-built `Both` KernelPlan whose
         // out_idx (operand 2) is broadcast (stride 0) — the plan gate G3 would reject
@@ -12385,7 +12885,7 @@ mod sort_tests {
         // store assumes a full-width contiguous target). Pins the emitter's out_idx
         // LAYOUT re-check independently of the plan gate.
         use crate::backend::Backend;
-        use crate::ir::{Access, BaseOffset, SortOut, WriteIndex};
+        use crate::ir::{Access, BaseOffset, SortLimit, SortOut, WriteIndex};
         use crate::plan::{KernelPlan, Schedule};
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let ov = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
@@ -12396,6 +12896,7 @@ mod sort_tests {
             order: SortOrder::Asc,
             stable: true,
             out: SortOut::Both,
+            limit: SortLimit::Full,
         };
         let plan = KernelPlan {
             op_name: "fused_bad",
@@ -12406,6 +12907,7 @@ mod sort_tests {
                 order: SortOrder::Asc,
                 stable: true,
                 out: SortOut::Both,
+                limit: SortLimit::Full,
             },
             key: &key,
             body: &body,
@@ -12519,6 +13021,49 @@ mod sort_tests {
                 }
             }
             let fv = OpDef::row_sort_indices("fused", dt, SortOrder::Asc);
+            for v in generate_variants(&fv, &both_key(dt), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
+        }
+        // Increment 10 TOPK/BOTTOMK: row_topk (Desc) + row_bottomk (Asc), base +
+        // bitonic, for every validator dtype — the capped `_topk` cells the
+        // topk/bottomk acceptance matrix #includes. The out key is narrower
+        // ([256,64]); the emitted source is k_out-independent (k_out is a launch
+        // arg, never keyed), so one key per cell serves the whole boundary sweep.
+        for dt in [
+            ElementKind::F32,
+            ElementKind::F64,
+            ElementKind::I32,
+            ElementKind::I64,
+            ElementKind::F16,
+            ElementKind::Bf16,
+            ElementKind::F32Strict,
+        ] {
+            let tv = OpDef::row_topk("topk", dt);
+            for v in generate_variants(&tv, &topk_both_key(dt, 64), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
+            let bv = OpDef::row_bottomk("bottomk", dt);
+            for v in generate_variants(&bv, &topk_both_key(dt, 64), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
+        }
+        // The DESC fused Both oracle for the topk (Desc) per-row cross-check on the
+        // dtypes whose desc fused was NOT dumped above (i64/f16/bf16/f32s dumped asc
+        // only for the #9 Both matrix). bottomk (Asc) reuses the asc fused Both.
+        for dt in [
+            ElementKind::I64,
+            ElementKind::F16,
+            ElementKind::Bf16,
+            ElementKind::F32Strict,
+        ] {
+            let fv = OpDef::row_sort_indices("fused", dt, SortOrder::Desc);
             for v in generate_variants(&fv, &both_key(dt), &Cuda) {
                 for kern in v.kernels {
                     write(kern);

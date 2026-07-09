@@ -7,8 +7,8 @@
 //! the backend, keeps the decision shared across every backend.
 
 use crate::ir::{
-    Access, BaseOffset, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortOrder, SortOut,
-    View, WriteCombine, WriteIndex,
+    Access, BaseOffset, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortLimit, SortOrder,
+    SortOut, View, WriteCombine, WriteIndex,
 };
 use baracuda_kernels_types::{
     AxisMask, Contiguity, ElementKind, MAX_OPERANDS, OperandKey, StructureKey, VecWidth,
@@ -117,7 +117,7 @@ pub enum Schedule {
     /// construction. The cooperative smem **bitonic** pair-sort is a
     /// `cuda::row_sort_bitonic_variant` VARIANT (also `BitIdentical` — a pair
     /// sort is a pure permutation), contract-bounded to `k <= 1024` via
-    /// `launch_note`. The policy (`order`/`stable`/`out`) rides here (this
+    /// `launch_note`. The policy (`order`/`stable`/`out`/`limit`) rides here (this
     /// enum is `Copy`); `build_plan` always derives the base.
     RowSort {
         /// Ascending / descending (NaN orders greatest either way).
@@ -129,6 +129,11 @@ pub enum Schedule {
         /// two-output kernel — values to `out_val`, `I32` indices to `out_idx`).
         /// See [`crate::ir::SortOut`].
         out: SortOut,
+        /// Whether the writeback is capped to a runtime top-`k_out` (increment
+        /// 10): `Full` = today's whole-row sort; `TopK` = the first `k_out` ranks
+        /// under `order` (topk = `Desc`, bottomk = `Asc`), a `long long` launch
+        /// arg. ORTHOGONAL to `out`. See [`crate::ir::SortLimit`].
+        limit: SortLimit,
     },
 }
 
@@ -407,9 +412,19 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         // cooperative smem bitonic pair-sort is produced separately by
         // `cuda::row_sort_bitonic_variant` (a `lower_variants` filter), never
         // here. All payload fields are Copy — no `ref` borrow.
-        Access::RowSort { order, stable, out } => {
-            validate_row_sort(op, key, order, stable, out);
-            Schedule::RowSort { order, stable, out }
+        Access::RowSort {
+            order,
+            stable,
+            out,
+            limit,
+        } => {
+            validate_row_sort(op, key, order, stable, out, limit);
+            Schedule::RowSort {
+                order,
+                stable,
+                out,
+                limit,
+            }
         }
         Access::Elementwise => {
             let n = key.n_operands as usize;
@@ -2653,19 +2668,32 @@ fn validate_window(
 /// - **Input 0 layout** — `RowStreamed` + `Contig` + `!flipped` (the emitters
 ///   read `in0[base+j]` stride-free; a flipped/strided input reads mirrored/OOB).
 /// - **Output layout** — every output (out / out_val AND out_idx for `Both`) is
-///   empty bcast + `Contig` + `!flipped`.
+///   empty bcast + `Contig` + `!flipped`. This gate is LAYOUT-only (it does NOT
+///   assert the output WIDTH), so a `TopK` cell's narrower `[batch, k_out]` output
+///   passes as written — no relaxation needed.
 ///
 /// There is no axis field: RowSort is innermost-axis by definition (matching
 /// Scan/Window's `axis == rank-1` posture). The bitonic variant's `k <= 1024`
 /// bound is NOT checkable here (the structure key carries no numeric extents) —
 /// it is a `launch_note` precondition + on-device-validated contract, the same
 /// trust level as smemrow/blockscan; the base rank sort has no length limit.
+///
+/// - **`limit` (increment 10 TOPK/BOTTOMK)** — `Full` is today's whole-row sort;
+///   `TopK` caps the writeback to the first `k_out` ranks. `k_out` is the OUT
+///   operand's inner extent, a `long long` launch arg (the Window `(n_out, k_in,
+///   k_out)` precedent) — the structure key carries NO numeric extent, so the
+///   `k_out <= k_in` precondition is NOT expressible as a plan assert. It is a
+///   runtime launch precondition, on-device-validated by `initcheck` (proves all
+///   `k_out` slots written AND no over-write past `k_out`), the same trust tier as
+///   the bitonic `k <= 1024`. `Indices`/`Both` under `TopK` inherit argsort's
+///   `k_in <= 2^31-1` cap (the `I32` index).
 fn validate_row_sort(
     op: &OpDef,
     key: &StructureKey,
     _order: SortOrder,
     stable: bool,
     out: SortOut,
+    _limit: SortLimit,
 ) {
     let name = &op.name;
 
@@ -2777,15 +2805,15 @@ fn validate_row_sort(
     let out0 = key.operands[n];
     assert!(
         out0.bcast.is_empty() && out0.contig == Contiguity::Contig && !out0.flipped,
-        "OpDef '{name}': row_sort output must be full-width forward-dense contiguous \
-         (empty bcast, not flipped)"
+        "OpDef '{name}': row_sort output must be forward-dense contiguous (empty \
+         bcast, not flipped); the width may be < the input for a TopK cap"
     );
     if matches!(out, SortOut::Both) {
         let out_idx = key.operands[n + 1];
         assert!(
             out_idx.bcast.is_empty() && out_idx.contig == Contiguity::Contig && !out_idx.flipped,
-            "OpDef '{name}': row_sort Both out_idx (operand 2) must be full-width \
-             forward-dense contiguous (empty bcast, not flipped)"
+            "OpDef '{name}': row_sort Both out_idx (operand 2) must be forward-dense \
+             contiguous (empty bcast, not flipped); width may be < input for a TopK cap"
         );
     }
 }
@@ -4435,7 +4463,7 @@ mod sort_gate_validate {
     //! sort-specific gate is mutation-checked both directions by a targeted
     //! reverse-edit.
     use super::{Schedule, access_tag, build_plan};
-    use crate::ir::{Access, OpDef, ScalarExpr, SortOrder, SortOut, input};
+    use crate::ir::{Access, OpDef, ScalarExpr, SortLimit, SortOrder, SortOut, input};
     use baracuda_kernels_types::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -4478,7 +4506,8 @@ mod sort_gate_validate {
                 Schedule::RowSort {
                     order,
                     stable: true,
-                    out: SortOut::Values
+                    out: SortOut::Values,
+                    limit: SortLimit::Full
                 }
             );
             assert_eq!(access_tag(&sc.access), "RowSort");
@@ -4496,7 +4525,8 @@ mod sort_gate_validate {
             Schedule::RowSort {
                 order: SortOrder::Desc,
                 stable: true,
-                out: SortOut::Indices
+                out: SortOut::Indices,
+                limit: SortLimit::Full
             }
         );
     }
@@ -4520,6 +4550,7 @@ mod sort_gate_validate {
             order: SortOrder::Asc,
             stable: false,
             out: SortOut::Values,
+            limit: SortLimit::Full,
         };
         let _ = build_plan(&sc, &sort_key(ElementKind::F32));
     }
@@ -4606,7 +4637,7 @@ mod sort_gate_validate {
     }
 
     #[test]
-    #[should_panic(expected = "full-width forward-dense")]
+    #[should_panic(expected = "forward-dense contiguous")]
     fn flipped_output_rejected() {
         // A reversed OUTPUT keys |stride|-Contig + flipped; the store is
         // forward-dense (out[base+r]) — a flipped output would write mirrored.
@@ -4664,7 +4695,7 @@ mod sort_gate_validate {
     // n_operands == n_inputs+1 assert was deletable. Pin every term. ----
 
     #[test]
-    #[should_panic(expected = "full-width forward-dense")]
+    #[should_panic(expected = "forward-dense contiguous")]
     fn non_contig_output_rejected() {
         // A transposed (column-major) output keys non-Contig — the sorted writeback
         // out[base + r] assumes a dense inner axis.
@@ -4676,7 +4707,7 @@ mod sort_gate_validate {
     }
 
     #[test]
-    #[should_panic(expected = "full-width forward-dense")]
+    #[should_panic(expected = "forward-dense contiguous")]
     fn broadcast_output_rejected() {
         // A stride-0 (broadcast) output axis is not a full-width store target.
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
@@ -4715,7 +4746,8 @@ mod sort_gate_validate {
                 Schedule::RowSort {
                     order,
                     stable: true,
-                    out: SortOut::Both
+                    out: SortOut::Both,
+                    limit: SortLimit::Full
                 }
             );
             // n_outputs() stays body-derived = 1 for Both (the corollary decision);
@@ -4754,7 +4786,8 @@ mod sort_gate_validate {
             Schedule::RowSort {
                 order: SortOrder::Asc,
                 stable: true,
-                out: SortOut::Values
+                out: SortOut::Values,
+                limit: SortLimit::Full
             }
         );
     }
@@ -4777,6 +4810,7 @@ mod sort_gate_validate {
             SortOrder::Asc,
             true,
             SortOut::Both,
+            SortLimit::Full,
         );
     }
 
@@ -4802,7 +4836,7 @@ mod sort_gate_validate {
 
     // G3 — the out_idx (operand 2) layout: full-width forward-dense contiguous.
     #[test]
-    #[should_panic(expected = "out_idx (operand 2) must be full-width")]
+    #[should_panic(expected = "out_idx (operand 2) must be forward-dense")]
     fn both_out_idx_broadcast_rejected() {
         // A stride-0 (broadcast) out_idx inner axis is not a full-width store target.
         let oi = OperandDesc::new(2, &[256, 128], &[0, 1], ElementKind::I32, 256);
@@ -4812,7 +4846,7 @@ mod sort_gate_validate {
     }
 
     #[test]
-    #[should_panic(expected = "out_idx (operand 2) must be full-width")]
+    #[should_panic(expected = "out_idx (operand 2) must be forward-dense")]
     fn both_out_idx_flipped_rejected() {
         // A reversed out_idx keys |stride|-Contig + flipped; out_idx[base+r] writes
         // forward-dense, so a flipped index output would write mirrored.
@@ -4837,7 +4871,147 @@ mod sort_gate_validate {
             SortOrder::Asc,
             true,
             SortOut::Both,
+            SortLimit::Full,
         );
+    }
+
+    // ---- Increment 10 TOPK/BOTTOMK: the runtime-k cap + shrunk out-extent ----
+
+    // The `Both` key whose OUTPUTS are NARROWER than the input (`k_out < k_in`) —
+    // [256,128] input, [256,k_out] value + I32 index outputs. `validate_row_sort`'s
+    // output gate is LAYOUT-only (it does NOT assert the width), so this narrower
+    // output passes as written — no relaxation. The `k_out <= k_in` relationship is a
+    // runtime launch precondition (the key carries no numeric extent).
+    fn topk_key(dt: ElementKind, k_out: i64) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let ov = OperandDesc::new(2, &[256, k_out], &[k_out, 1], dt, 256);
+        let oi = OperandDesc::new(2, &[256, k_out], &[k_out, 1], ElementKind::I32, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89)
+    }
+
+    // G0 — `limit` threading: a TopK cell with a narrower `[batch,k_out]` out
+    // operand BUILDS and schedules `limit: TopK` with the direction `order` picks
+    // (topk = Desc, bottomk = Asc). This is the "gate" for the runtime-k/shrunk
+    // extent — there is NO plan-time `k_out <= k_in` assert (none is expressible;
+    // the key carries no numeric extents); the shrink is admitted because the
+    // layout gate is width-agnostic.
+    #[test]
+    fn topk_both_cell_builds() {
+        for (sc, want_order) in [
+            (OpDef::row_topk("topk", ElementKind::F32), SortOrder::Desc),
+            (
+                OpDef::row_bottomk("bottomk", ElementKind::F32),
+                SortOrder::Asc,
+            ),
+        ] {
+            assert_eq!(sc.out_dtype, None);
+            assert_eq!(sc.n_outputs(), 1); // increment-9 corollary: Both stays 1
+            let key = topk_key(ElementKind::F32, 64);
+            let plan = build_plan(&sc, &key);
+            assert_eq!(
+                plan.schedule,
+                Schedule::RowSort {
+                    order: want_order,
+                    stable: true,
+                    out: SortOut::Both,
+                    limit: SortLimit::TopK
+                }
+            );
+            assert_eq!(access_tag(&sc.access), "RowSort");
+        }
+    }
+
+    // G0 regression — a `Full` sort still builds and schedules `limit: Full` (adding
+    // the field did not disturb the existing three states).
+    #[test]
+    fn topk_full_regression_still_builds() {
+        let sc = OpDef::row_sort_indices("fused", ElementKind::F32, SortOrder::Asc);
+        let key = both_key(ElementKind::F32);
+        let plan = build_plan(&sc, &key);
+        assert_eq!(
+            plan.schedule,
+            Schedule::RowSort {
+                order: SortOrder::Asc,
+                stable: true,
+                out: SortOut::Both,
+                limit: SortLimit::Full
+            }
+        );
+    }
+
+    // G0 — TopK builds for every v1 dtype at a narrow k_out (the cap is orthogonal
+    // to the dtype set; inherits the RowSort dtype gate verbatim).
+    #[test]
+    fn topk_builds_for_all_v1_dtypes() {
+        for dt in [
+            ElementKind::F32,
+            ElementKind::F32Strict,
+            ElementKind::F64,
+            ElementKind::F16,
+            ElementKind::Bf16,
+            ElementKind::I32,
+            ElementKind::I64,
+        ] {
+            let sc = OpDef::row_topk("topk", dt);
+            let _ = build_plan(&sc, &topk_key(dt, 32));
+        }
+    }
+
+    // G1 — out_dtype ↔ SortOut coupling is UNCHANGED under TopK: a TopK+Both with a
+    // Some(I32) out_dtype rejects at `validate_row_sort`'s G1 (dtype-preserving on
+    // output 0). Called DIRECTLY to isolate G1 from the `assert_valid_out_dtype`
+    // front gate (mirrors `both_requires_out_dtype_none`).
+    #[test]
+    #[should_panic(expected = "dtype-preserving on output 0")]
+    fn topk_both_requires_out_dtype_none() {
+        let mut sc = OpDef::row_topk("topk", ElementKind::F32);
+        sc.out_dtype = Some(ElementKind::I32);
+        super::validate_row_sort(
+            &sc,
+            &topk_key(ElementKind::F32, 64),
+            SortOrder::Desc,
+            true,
+            SortOut::Both,
+            SortLimit::TopK,
+        );
+    }
+
+    // G2 — operand count is extent-independent, so TopK+Both reuses it verbatim: a
+    // 2-operand key against a Both op rejects (the two-pointer signature needs three).
+    #[test]
+    #[should_panic(expected = "expects n_inputs+2 operands")]
+    fn topk_both_key_needs_three_operands() {
+        let sc = OpDef::row_topk("topk", ElementKind::F32);
+        let _ = build_plan(&sc, &sort_key(ElementKind::F32)); // 2-operand key
+    }
+
+    // G3 — output layout is UNCHANGED (LAYOUT-only, admits the narrower width): a
+    // TopK+Both with a broadcast out_idx still rejects (the narrower width passes,
+    // but the broadcast does not).
+    #[test]
+    #[should_panic(expected = "out_idx (operand 2) must be forward-dense")]
+    fn topk_both_out_idx_broadcast_rejected() {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let ov = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
+        let oi = OperandDesc::new(2, &[256, 64], &[0, 1], ElementKind::I32, 256); // broadcast
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89);
+        let sc = OpDef::row_topk("topk", ElementKind::F32);
+        let _ = build_plan(&sc, &key);
+    }
+
+    // G4 — stable=false rejects under TopK too (the cap adds no exception to the
+    // inherited RowSort gates).
+    #[test]
+    #[should_panic(expected = "unstable declined")]
+    fn topk_rejects_unstable() {
+        let mut sc = OpDef::row_topk("topk", ElementKind::F32);
+        sc.access = Access::RowSort {
+            order: SortOrder::Desc,
+            stable: false,
+            out: SortOut::Both,
+            limit: SortLimit::TopK,
+        };
+        let _ = build_plan(&sc, &topk_key(ElementKind::F32, 64));
     }
 }
 

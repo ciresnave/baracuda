@@ -870,6 +870,28 @@ pub enum SortOut {
     Both,
 }
 
+/// Whether a row sort caps its output to a runtime top-`k_out` (increment 10
+/// TOPK/BOTTOMK). ORTHOGONAL to [`SortOut`] (which buffers) — a capped sort still
+/// independently writes Values / Indices / Both. `order` picks the direction:
+/// `Desc` + `TopK` = top-k (largest first, torch.topk `largest=True`); `Asc` +
+/// `TopK` = bottom-k (smallest first, `largest=False`). `Full` reproduces today's
+/// sort byte-for-byte (single `k`, no store guard).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SortLimit {
+    /// Sort the whole row; out extent == in extent (today's
+    /// `row_sort`/`row_argsort`/`row_sort_indices`, single `long long k`).
+    Full,
+    /// Cap the output to a runtime `k_out <= k_in`: write only ranks `< k_out`
+    /// (the top-`k_out` under `order`); out extent = `[batch, k_out]`. `k_out`
+    /// rides a `long long` launch arg (the Window `(n_out, k_in, k_out)` ABI
+    /// precedent); `k_out <= k_in` is a caller / on-device precondition (the
+    /// structure key carries no numeric extent), on-device-validated by
+    /// `initcheck` — the same trust tier as the bitonic `k <= 1024`. The
+    /// index-writing states (`Indices`/`Both`) inherit argsort's `k_in <= 2^31-1`
+    /// cap (the `I32` index).
+    TopK,
+}
+
 /// Ergonomic builder handle wrapping a [`ScalarExpr`]. Overloads arithmetic so
 /// op bodies read like math: `input(0) + input(1) * input(2)`.
 #[derive(Clone, Debug)]
@@ -1255,6 +1277,12 @@ pub enum Access {
         /// `out_val`, `I32` indices to `out_idx`, `out_dtype = None`, a 3-operand
         /// key). See [`SortOut`].
         out: SortOut,
+        /// Whether the output is capped to a runtime top-`k_out` (increment 10):
+        /// `Full` = today's whole-row sort (byte-for-byte); `TopK` = write only the
+        /// first `k_out` ranks under `order` (topk = `Desc`, bottomk = `Asc`), out
+        /// extent `[batch, k_out]`, `k_out` a `long long` launch arg. ORTHOGONAL to
+        /// `out`. See [`SortLimit`].
+        limit: SortLimit,
     },
 }
 
@@ -2310,6 +2338,7 @@ impl OpDef {
                 order,
                 stable: true,
                 out: SortOut::Values,
+                limit: SortLimit::Full,
             },
             views: Vec::new(),
             read_index: Vec::new(),
@@ -2345,6 +2374,7 @@ impl OpDef {
                 order,
                 stable: true,
                 out: SortOut::Indices,
+                limit: SortLimit::Full,
             },
             views: Vec::new(),
             read_index: Vec::new(),
@@ -2387,6 +2417,84 @@ impl OpDef {
                 order,
                 stable: true,
                 out: SortOut::Both,
+                limit: SortLimit::Full,
+            },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
+            out_dtype: None,
+            extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
+        }
+    }
+
+    /// Build a **row top-k** op (increment 10 TOPK/BOTTOMK): the fused two-output
+    /// `(values, indices)` of [`OpDef::row_sort_indices`] with its writeback CAPPED
+    /// to a runtime top-`k_out` — the `k_out` largest elements of each innermost
+    /// row, descending-sorted (torch.topk `largest=True`, `sorted=True`), NaN-first
+    /// (kernelgen's NaN-greatest convention). Output extent `[batch, k_out]`;
+    /// `k_out` is the OUT operand's inner extent, resolved at plan/launch as a
+    /// `long long` launch arg (NOT a ctor arg — exactly like `k` for `row_sort`).
+    ///
+    /// TopK is the strict generalization of `row_sort_indices` — the current code
+    /// is exactly its `k_out == k_in` special case (`Full`). It reuses verbatim the
+    /// same `pair_lt` total order, both validated RowSort emitter paths (rank base +
+    /// bitonic), the raw-bit value writeback, and the `I32` index. The single row
+    /// length splits into `k_in`/`k_out`; the store is guarded `if (r < k_out)`.
+    ///
+    /// **Caller / on-device precondition:** `k_out <= k_in` — a `k_out > k_in`
+    /// would leave slots `[k_in, k_out)` unwritten (ranks only reach `k_in - 1`).
+    /// The structure key carries no numeric extents, so this is a runtime launch
+    /// fact (on-device-validated by `initcheck`), NOT a plan assert — the same trust
+    /// tier as the bitonic `k <= 1024`. Inherits argsort's `k_in <= 2^31-1` cap (the
+    /// `I32` index output). Validated at `plan::validate_row_sort`. See
+    /// [`Access::RowSort`], [`SortOut::Both`], and [`SortLimit::TopK`].
+    #[must_use]
+    pub fn row_topk(name: &str, dtype: ElementKind) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs: 1,
+            body: ScalarExpr::Input(0),
+            dtypes: vec![dtype],
+            access: Access::RowSort {
+                order: SortOrder::Desc,
+                stable: true,
+                out: SortOut::Both,
+                limit: SortLimit::TopK,
+            },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
+            out_dtype: None,
+            extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
+        }
+    }
+
+    /// Build a **row bottom-k** op (increment 10 TOPK/BOTTOMK): [`OpDef::row_topk`]
+    /// with ascending direction — the `k_out` SMALLEST elements of each innermost
+    /// row, ascending-sorted (torch.topk `largest=False`, `sorted=True`), NaN-last
+    /// (kernelgen's NaN-greatest convention: NaN is excluded until the row holds
+    /// fewer than `k_out` non-NaN values). Only `order` differs from `row_topk`
+    /// (`Asc` vs `Desc`) — the cap, the fused two-output shape, and every
+    /// precondition (`k_out <= k_in`, `k_in <= 2^31-1`) are identical. See
+    /// [`OpDef::row_topk`] and [`SortLimit::TopK`].
+    #[must_use]
+    pub fn row_bottomk(name: &str, dtype: ElementKind) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs: 1,
+            body: ScalarExpr::Input(0),
+            dtypes: vec![dtype],
+            access: Access::RowSort {
+                order: SortOrder::Asc,
+                stable: true,
+                out: SortOut::Both,
+                limit: SortLimit::TopK,
             },
             views: Vec::new(),
             read_index: Vec::new(),
