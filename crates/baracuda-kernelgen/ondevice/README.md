@@ -1618,6 +1618,87 @@ body-derived `= 1` for `Both`; `baracuda-kernels-types` **UNTOUCHED** (no
 structure-key token). See `docs/fuel-ask-topk-2026-07-09.md` (propose-first, NOT a
 blocker).
 
+### PARTIAL-SELECT TOPK — the streaming tiled-bitonic top-k VARIANT (`…_topk_psel`)
+
+The measured-variant follow-up promised above, delivered: a **streaming tiled-bitonic
+top-k** `partial_select_topk_variant` (tag `psel`) that is the unique fast+correct path
+for `k_in > 1024` large-vocab top-k, where the `_bitonic` variant **declines** (its
+whole `next_pow2(k_in)`-padded row does not fit one block) and the rank base is
+`O(k_in²)`. Registered in `lower_variants` after the bitonic; the base and bitonic
+emitters are **byte-untouched** (a wholly new `emit_row_sort_partial` emitter).
+
+**Algorithm (`min_m`).** `m = next_pow2(k_out)`; a running best-buffer B of `m` pairs.
+Per tile of `m` input elements, fully bitonic-sort the `2m` window `[B | T]` ascending
+under `pair_lt` and keep the LOWER `m`. **Smem is a `2m`-pair arena** (`2·next_pow2(k_out)
+· (acc_sz+4)` bytes) — bounded on **`k_out`, NOT `k_in`** (the streaming win; **no `k_in
+≤ 1024` cap**). `O(k_in·log²k_out)` vs the bitonic's `O(k_in·log²k_in)`.
+
+**BitIdentical proof (one paragraph).** The composition lemma `min_m(min_m(X)∪Y) =
+min_m(X∪Y)` plus never-evict: a top-`k_out` member `r_p` has global rank `p < k_out ≤ m`
+and ZERO pads rank below it, so its rank `≤ p < m` in every intermediate window ⇒ it is
+never in the discarded upper half. So `B_final[0..k_out)` equals the full-sort
+top-`k_out` prefix **bit-for-bit** — `VariantFidelity::BitIdentical` (design-panel PROVEN,
+0 divergences / 200 000 adversarial rows). Values are RAW-BIT gathered `in0[base_in+idx]`
+(NaN payloads / −0.0 never round-trip through the key); the index is the `i32` original
+index.
+
+**The pad-index invariant (the #1 bug surface).** The stored `sidx` is the **ORIGINAL
+GLOBAL index `g = t*m + p`** for BOTH reals AND pads — NEVER the local smem slot (the
+shipped full-row bitonic stores `sidx[p]=(int)p` only because there slot == global
+index; the streaming slot `p < k_in` generally is not, so a slot store breaks the value
+gather, the tie-break, and puts pad indices below `k_in`). Pad KEY = `sort_pad_lit`
+verbatim (topk → type-min `−inf`/`INT_MIN`; bottomk → FP qNaN / **integer `INT_MAX`**,
+never a `+inf` FP pad — a real NaN `>` `+inf` under NaN-greatest would leak a `+inf` pad
+into the output). Keep-the-LOWER-half is constant for both directions; direction rides
+ONLY in `pair_lt`'s operand swap.
+
+The generated `_psel` cells auto-dump from `dump_sort_sources`; the harness memcmps
+`_psel` `out_val`/`out_idx` vs BOTH the CPU `pair_lt` first-`k_out` AND the device
+full-sort `Both` base's first-`k_out` per-row slice, plus two-launch determinism, across
+the whole `topk_acceptance` matrix (all 7 dtypes × topk/bottomk × the `k_out` sweep) AND
+the **11 mandatory probes**: (1) pad-index-invariant KILLER (bottomk real-NaN + pad-NaN),
+(2) store-slot detector (multi-tile distinct), (3) dup-key across tile boundary +
+all-equal, (4) wrong-pad `+inf` leak, (5) NaN payload preservation, (6) all-NaN bottomk,
+(7) keep-wrong-half / direction, (8) `k_out=1`, (9) `k_out=k_in`, (10) partial last tile,
+(11) **MULTI-TILE > 1024** (`k_in = 4096` / `8192`, and `k_in = 3000` with ~40% specials).
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3, 2026-07-09 — **RESULT: ALL
+PASSED** (1809 device-launched checks total, **579 psel-specific**, 0 fails).
+`compute-sanitizer` **memcheck / racecheck / synccheck / initcheck all 0 errors**
+(racecheck 0 hazards) on the `san-psel` block-size sweep `{32, 64, 128, 256, 1024}`
+crossing BOTH `2m < blockDim` and `2m > blockDim` (the `2m` smem swaps + 2 barriers per
+tile are the load-bearing racecheck/synccheck path; initcheck proves all `k_out` output
+slots written). **Mutation-checked:** store-slot (`sidx[s]=(int)(s-m)`) → **290 psel
+device fails** (base/bitonic stay green) + the emission goldens fail; `+inf` bottomk pad
+→ the wrong-pad golden fails; keep-upper-half (writeback reads `sidx[p+m]`) → the
+writeback golden fails.
+
+**Bench (f32, sm_89):**
+
+| top-k of k_in (batch) | psel | rank base (`O(k_in²)`) | full-bitonic | psel speedup |
+| --- | --- | --- | --- | --- |
+| **top-10 of 50 000** (64) | **8.64 ms** | 886 ms | **N/A** (row > one block) | **102.6× base** |
+| top-64 of 1 024 (4096) | 2.24 ms | 15.2 ms | 1.42 ms | 6.8× base, 0.6× bitonic |
+
+The headline is `top-10 of 50 000`: the `_bitonic` variant **cannot run** (the padded
+row exceeds one block's smem) and the rank base is `O(k_in²)` — psel is the ONLY
+fast+correct path, **102.6× the base**. At the modest `top-64 of 1 024` the full bitonic
+still wins (`0.6×`) — the **no-advantage regime**. This is why psel is a **measured
+variant** (ship-top-K): the advantage regime (`k_out ≪ k_in`, roughly
+`2·next_pow2(k_out) < next_pow2(k_in)`) is documented in the `launch_note`, and the
+bench/dispatch layer — which sees concrete extents — selects the measured default. The
+compile-time "advantage decline" the design panel specified is **NOT gateable in the
+variant filter**: the `StructureKey` carries size CLASSES, never literal extents (the §1
+non-negotiable), so neither `k_in` nor `k_out` is recoverable at variant-selection time —
+exactly the same limitation the `_bitonic` variant has with its `k ≤ 1024` precondition.
+Both are `BitIdentical`; psel is offered for **every** TopK cell it can serve (pinned by
+`cuda::sort_tests::partial_select_offers_regardless_of_kout_extent_free_key`).
+
+**Keying / Fuel (unchanged).** Additive `_psel` entry-point suffix; `baracuda-kernels-types`
+**UNTOUCHED** (no `STRUCTURE_KEY_VERSION` bump), `validate_row_sort` / `Schedule::RowSort`
+unchanged (TopK already valid). Still an honest AOT-only miss (no Fuel `top_k` OpKind).
+See `docs/fuel-ask-partial-select-topk-2026-07-09.md` (propose-first, NOT a blocker).
+
 ## `relu_propagating_validate.cu` — bespoke NaN-propagating relu vs the generated relu (alpha.76)
 
 Validates the **bespoke NaN-PROPAGATING relu** kernel family

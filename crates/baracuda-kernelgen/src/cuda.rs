@@ -67,6 +67,13 @@ impl Backend for Cuda {
         // rank-sort base (a pair sort is a pure permutation), so selectable
         // silently; declines a non-RowSort / param'd / non-dense cell to the base.
         vs.extend(row_sort_bitonic_variant(plan));
+        // PARTIAL-SELECT TOPK: the streaming tiled-bitonic top-k (O(k_in·log²k_out),
+        // smem bounded on k_out not k_in) — BitIdentical to the full-sort top-k_out,
+        // the unique fast+correct path for k_in > 1024 large-vocab top-k (where the
+        // bitonic declines and the rank base is O(k_in²)). TopK-only; the advantage
+        // regime rides the launch_note (the extent-free key cannot gate it), the
+        // bench/dispatch layer selects the measured default (ship-top-K).
+        vs.extend(partial_select_topk_variant(plan));
         vs
     }
 
@@ -5412,6 +5419,288 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
     GeneratedKernel { name, source: s }
 }
 
+/// Emit the **PARTIAL-SELECT streaming tiled-bitonic top-k** kernel — a wholly
+/// separate emitter from [`emit_row_sort_impl`] (which stays byte-untouched).
+///
+/// Instead of staging the whole `next_pow2(k_in)`-padded row (the bitonic
+/// variant, O(k_in·log²k_in) and REQUIRES k_in ≤ 1024), this streams the row in
+/// tiles of `m = next_pow2(k_out)` against a running best-buffer B of m pairs:
+/// per tile it fully bitonic-sorts the `2m` window `[B | T]` under `pair_lt`
+/// (ascending) and keeps the LOWER m. By the composition lemma
+/// `min_m(min_m(X)∪Y) = min_m(X∪Y)` plus the never-evict property (a top-k_out
+/// member has global rank `< k_out ≤ m` and zero pads rank below it, so it is
+/// never in the discarded upper half), `B_final[0..k_out)` equals the full-sort
+/// top-k_out prefix **bit-for-bit** — [`VariantFidelity::BitIdentical`]. The
+/// smem/occupancy contract is on `k_out` (2m arena), NOT `k_in`, so there is no
+/// `k_in ≤ 1024` cap: this is the unique fast+correct path for large-vocab
+/// (`k_in > 1024`) top-k. See the PARTIAL-SELECT TOPK brief §1–§3.
+///
+/// **The three load-bearing invariants** (the panel's only divergence surfaces):
+/// (1) **Pad key** = [`sort_pad_lit`] verbatim (topk→type-min, bottomk→FP qNaN /
+/// INTEGER INT_MAX — never a +inf FP pad, never a NaN-bitcast int pad). (2) **The
+/// stored index is the ORIGINAL GLOBAL index** `g = t*m + p` for BOTH reals AND
+/// pads (NEVER the local smem slot — the shipped bitonic stores the slot only
+/// because there slot == global index; here a slot `p < k_in` generally is not
+/// the global index, so a slot store would break the value gather, the tie-break,
+/// and would put pad indices below k_in). (3) **Keep the LOWER half** (constant
+/// for both directions; direction rides ONLY in `pair_lt`'s operand swap).
+///
+/// The comparator (`{stem}_key_lt` + `{stem}_pair_lt`) and the `load_at`
+/// up-convert are re-emitted with the SAME logic as [`emit_row_sort_impl`] (a
+/// distinct `_psel` stem so the validator TU never collides), so the on-device
+/// `memcmp` of `_psel` output vs the full-sort base is a like-for-like order.
+fn emit_row_sort_partial(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    let (order, out, limit) = match plan.schedule {
+        Schedule::RowSort {
+            order, out, limit, ..
+        } => (order, out, limit),
+        _ => unreachable!("emit_row_sort_partial on a non-RowSort schedule"),
+    };
+    // Emitter backstop (dual-gate; the variant gate is primary): the streaming
+    // top-k serves ONLY the runtime-k cap. A Full cell has no k_out to stream to.
+    assert!(
+        matches!(limit, crate::ir::SortLimit::TopK),
+        "cuda backend: emit_row_sort_partial serves only SortLimit::TopK (the \
+         streaming top-k has no whole-row Full form)"
+    );
+
+    // ---- Independent emitter backstops (identical in0/out layout re-checks as
+    // emit_row_sort_impl 5048-5091; belt-and-suspenders for the variant gate). ----
+    let rank = plan.key.rank;
+    assert!(
+        rank >= 1,
+        "cuda backend: RowSort needs a sorted axis (rank >= 1)"
+    );
+    let last = rank - 1;
+    {
+        let o0 = plan.key.operands[0];
+        assert!(
+            rr_role(o0, last) == RrRole::RowStreamed
+                && o0.contig == Contiguity::Contig
+                && !o0.flipped,
+            "cuda backend: RowSort input 0 must be the forward-dense contiguous sorted tensor (idx = base+j)"
+        );
+    }
+    assert!(
+        matches!(
+            plan.dtype,
+            ElementKind::F32
+                | ElementKind::F32Strict
+                | ElementKind::F64
+                | ElementKind::F16
+                | ElementKind::Bf16
+                | ElementKind::I32
+                | ElementKind::I64
+        ),
+        "cuda backend: RowSort dtype {:?} is out of the v1 set",
+        plan.dtype
+    );
+    if matches!(out, SortOut::Both) {
+        let n_inputs = plan.n_inputs as usize;
+        assert!(
+            plan.key.n_operands as usize == n_inputs + 2,
+            "cuda backend: RowSort Both writes two outputs — key must carry \
+             n_inputs+2 operands (in0, out_val, out_idx)"
+        );
+        let oi = plan.key.operands[n_inputs + 1];
+        assert!(
+            oi.bcast.is_empty() && oi.contig == Contiguity::Contig && !oi.flipped,
+            "cuda backend: RowSort Both out_idx (operand 2) must be forward-dense \
+             contiguous (empty bcast, not flipped); width may be < input for a TopK cap"
+        );
+    }
+
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let int_acc = crate::plan::is_int_dtype(plan.dtype);
+    let is_fp = !int_acc;
+    // Comparator/staging accumulator — EXACTLY as emit_row_sort_impl (double for
+    // f64/f32-strict, native ctype for integers, float otherwise).
+    let acc = if dbl {
+        "double"
+    } else if int_acc {
+        ctype
+    } else {
+        "float"
+    };
+    let octype = scalar_ctype(plan.out_dtype).expect(
+        "RowSort out dtype must have a scalar ctype (I32 for argsort, else the input dtype)",
+    );
+
+    let dtag = dtype_tag(plan.dtype);
+    let ord = match order {
+        SortOrder::Asc => "asc",
+        SortOrder::Desc => "desc",
+    };
+    let out_suf = match out {
+        SortOut::Values => "",
+        SortOut::Indices => "_idx",
+        SortOut::Both => "_both",
+    };
+    // `_topk` (limit) then `_psel` (this variant) — a distinct entry point AND a
+    // distinct `__device__` comparator stem so nothing collides with the
+    // base/bitonic in the validator TU (additive keying; no SKV bump).
+    let limit_suf = "_topk";
+    let stem = format!("{}_{dtag}_{ord}{out_suf}{limit_suf}_psel", plan.op_name);
+    let name = format!(
+        "baracuda_gen_{}_{dtag}_rowsort_{ord}_stable{out_suf}{limit_suf}_psel",
+        plan.op_name
+    );
+
+    // Up-convert load of `in0[{idx}]` into the `acc` KEY (f16/bf16/f32-strict
+    // widen) — SAME as emit_row_sort_impl's load_at.
+    let load_at = |idx: &str| -> String {
+        match plan.dtype {
+            ElementKind::F16 => format!("__half2float(in0[{idx}])"),
+            ElementKind::Bf16 => format!("__bfloat162float(in0[{idx}])"),
+            ElementKind::F32Strict => format!("(double)in0[{idx}]"),
+            _ => format!("in0[{idx}]"),
+        }
+    };
+
+    // ---- Preamble + comparator (byte-identical LOGIC to emit_row_sort_impl). ----
+    let mut s = format!(
+        "// Generated by baracuda-kernelgen — do not edit.\n// op: {} | cell: {}\n",
+        plan.op_name,
+        plan.key.to_token()
+    );
+    if let Some(inc) = extra_include(plan.dtype) {
+        s.push_str(inc);
+    }
+    s.push('\n');
+
+    s.push_str(&format!(
+        "__device__ __forceinline__ bool {stem}_key_lt({acc} a, {acc} b) {{\n"
+    ));
+    if is_fp {
+        s.push_str("    if (a != a) return false;\n");
+        s.push_str("    if (b != b) return true;\n");
+    }
+    s.push_str("    return a < b;\n}\n");
+    let (fa, fb, sa, sb) = match order {
+        SortOrder::Asc => ("ka", "kb", "kb", "ka"),
+        SortOrder::Desc => ("kb", "ka", "ka", "kb"),
+    };
+    s.push_str(&format!(
+        "__device__ __forceinline__ bool {stem}_pair_lt({acc} ka, long long ia, {acc} kb, long long ib) {{\n\
+         \x20   if ({stem}_key_lt({fa}, {fb})) return true;\n\
+         \x20   if ({stem}_key_lt({sa}, {sb})) return false;\n\
+         \x20   return ia < ib;\n\
+         }}\n\n"
+    ));
+
+    // ---- Signature: the (n_out, k_in, k_out) 3-scalar TopK ABI (verbatim). ----
+    s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
+    s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
+    match out {
+        SortOut::Both => {
+            s.push_str(&format!("    {ctype}* __restrict__ out_val,\n"));
+            s.push_str("    int* __restrict__ out_idx,\n");
+        }
+        SortOut::Values | SortOut::Indices => {
+            s.push_str(&format!("    {octype}* __restrict__ out,\n"));
+        }
+    }
+    s.push_str("    long long n_out,\n    long long k_in,\n    long long k_out)\n{\n");
+    s.push_str("    if (k_out == 0) return;\n");
+
+    // -------------------- STREAMING TILED-BITONIC TOP-K --------------------
+    // m = next_pow2(k_out); ONE contiguous 2m-pair arena: B = W[0..m), T = W[m..2m).
+    // Dynamic smem = 2m * (sizeof(acc) + sizeof(int)) — bounded on k_out, NOT k_in.
+    let pad = sort_pad_lit(plan.dtype, order);
+    s.push_str("    long long m = 1; while (m < k_out) m <<= 1;\n");
+    s.push_str("    extern __shared__ unsigned char baracuda_sort_smem[];\n");
+    s.push_str(&format!("    {acc}* skey = ({acc}*)baracuda_sort_smem;\n"));
+    s.push_str(&format!(
+        "    int* sidx = (int*)(baracuda_sort_smem + (size_t)(2*m) * sizeof({acc}));\n"
+    ));
+    s.push_str(
+        "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
+    );
+    s.push_str("        long long base_in = row * k_in;\n");
+    s.push_str("        long long out_base = row * k_out;\n");
+    // Init the running best-buffer B (lower half) with pads. Their index is any
+    // value >= k_in, so they are "<"-dominated by tile-0 reals and never output;
+    // still stored so the pre-tile-0 buffer is a well-defined pair set. SATURATE at
+    // INT_MAX: k_in <= 2^31-1 (the inherited i32 out_idx cap), so `k_in + p` can
+    // exceed INT_MAX for the top-m band of the supported range and a bare `(int)`
+    // would wrap NEGATIVE — a negative pad index would then "<"-BEAT a real on a
+    // key-tie (OOB read + wrong output). A saturated INT_MAX still dominates every
+    // real (< k_in <= INT_MAX), and pad/pad index ties are harmless (pads never
+    // reach [0,k_out)). Reals/tile-pads store `(int)g` with g <= INT_MAX, so only
+    // this init store (k_in + p, not rounded to a multiple of m) can overflow.
+    s.push_str("        for (long long p = threadIdx.x; p < m; p += blockDim.x) {\n");
+    s.push_str(&format!(
+        "            skey[p] = {pad}; long long pi = k_in + p; sidx[p] = (int)(pi < 2147483647LL ? pi : 2147483647LL);\n"
+    ));
+    s.push_str("        }\n");
+    s.push_str("        __syncthreads();\n");
+    // Stream ceil(k_in/m) tiles of m elements each.
+    s.push_str("        for (long long t = 0; t * m < k_in; ++t) {\n");
+    // Load the T half (upper m). sidx = the GLOBAL index g for BOTH branches (the
+    // #1 bug surface — NEVER the local slot s-m): a real (g < k_in) gathers its raw
+    // value at in0[base_in + g] and tie-breaks on g; a pad (g >= k_in) is dominated.
+    s.push_str("            for (long long s = m + threadIdx.x; s < 2*m; s += blockDim.x) {\n");
+    s.push_str("                long long g = t * m + (s - m);\n");
+    s.push_str(&format!(
+        "                if (g < k_in) {{ skey[s] = {}; }}\n",
+        load_at("base_in + g")
+    ));
+    s.push_str(&format!(
+        "                else       {{ skey[s] = {pad}; }}\n"
+    ));
+    s.push_str("                sidx[s] = (int)g;\n");
+    s.push_str("            }\n");
+    s.push_str("            __syncthreads();\n");
+    // FULL Batcher bitonic sort of the 2m window (ascending under pair_lt) — the
+    // shipped ladder with pow2 := 2*m, the barrier OUTSIDE if(q>p) at a uniform
+    // program point (byte-identical structure to emit_row_sort_impl 5361-5384).
+    s.push_str("            for (long long kk = 2; kk <= 2*m; kk <<= 1) {\n");
+    s.push_str("                for (long long j = kk >> 1; j > 0; j >>= 1) {\n");
+    s.push_str("                    for (long long p = threadIdx.x; p < 2*m; p += blockDim.x) {\n");
+    s.push_str("                        long long q = p ^ j;\n");
+    s.push_str("                        if (q > p) {\n");
+    s.push_str("                            bool up = ((p & kk) == 0);\n");
+    s.push_str(&format!(
+        "                            bool q_lt_p = {stem}_pair_lt(skey[q], sidx[q], skey[p], sidx[p]);\n"
+    ));
+    s.push_str("                            if (up == q_lt_p) {\n");
+    s.push_str(&format!(
+        "                                {acc} tk = skey[p]; skey[p] = skey[q]; skey[q] = tk;\n"
+    ));
+    s.push_str(
+        "                                int ti = sidx[p]; sidx[p] = sidx[q]; sidx[q] = ti;\n",
+    );
+    s.push_str("                            }\n");
+    s.push_str("                        }\n");
+    s.push_str("                    }\n");
+    s.push_str("                    __syncthreads();\n");
+    s.push_str("                }\n");
+    s.push_str("            }\n");
+    // Keep the LOWER half implicitly (W[0..m) now holds the m smallest of [B|T]).
+    // Barrier before the next tile overwrites W[m..2m).
+    s.push_str("            __syncthreads();\n");
+    s.push_str("        }\n");
+    // Writeback the first k_out (the retained top-k_out reals — their sidx are real
+    // global indices < k_in). Three-arm store identical to emit_row_sort_impl.
+    s.push_str("        for (long long p = threadIdx.x; p < k_out; p += blockDim.x) {\n");
+    match out {
+        SortOut::Values => {
+            s.push_str("            out[out_base + p] = in0[base_in + sidx[p]];\n");
+        }
+        SortOut::Indices => s.push_str("            out[out_base + p] = sidx[p];\n"),
+        SortOut::Both => {
+            s.push_str("            out_val[out_base + p] = in0[base_in + sidx[p]];\n");
+            s.push_str("            out_idx[out_base + p] = sidx[p];\n");
+        }
+    }
+    s.push_str("        }\n");
+    s.push_str("        __syncthreads();\n"); // before the next row reuses smem
+    s.push_str("    }\n");
+
+    s.push_str("}\n");
+    GeneratedKernel { name, source: s }
+}
+
 /// Bitonic-pair-sort schedule VARIANT for the [`Schedule::RowSort`] cell — one
 /// block per row, the whole padded row staged in dynamic smem as `(key, index)`
 /// pairs, sorted by a bitonic network under the `pair_lt` total order. A
@@ -5500,6 +5789,110 @@ fn row_sort_bitonic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     };
     Some(Variant {
         tag: "bitonic",
+        kernels: vec![k],
+        fidelity: VariantFidelity::BitIdentical,
+        launch_note,
+    })
+}
+
+/// PARTIAL-SELECT streaming tiled-bitonic **top-k** schedule VARIANT for the
+/// [`Schedule::RowSort`] cell — one block per row, a running best-buffer of
+/// `m = next_pow2(k_out)` pairs streamed against the input in tiles of m
+/// (O(k_in·log²k_out)). The unique fast+correct path for `k_in > 1024`
+/// large-vocab top-k, where the bitonic variant declines (`k_in ≤ 1024` cap) and
+/// the rank base is O(k_in²). A [`Variant`] filter (model:
+/// [`row_sort_bitonic_variant`]); `return None` for every cell it cannot serve.
+///
+/// **Bits:** the streamed keep-lower-m composition returns the full-sort
+/// top-k_out prefix bit-for-bit (design-panel PROVEN: composition lemma +
+/// never-evict, 0 divergences / 200 000 adversarial rows), so
+/// [`VariantFidelity::BitIdentical`] — selectable silently; the validator pins
+/// `_psel` ≡ the full-sort base memcmp.
+///
+/// **Scope (TopK only):** `Full` declines to the bitonic/base — the streaming
+/// buffer is a top-`k_out` selector with no whole-row form. Values / Indices /
+/// Both all served (the index rides in the pair). Same in0/out layout re-check as
+/// the bitonic.
+///
+/// **No compile-time advantage decline:** the panel's `2·next_pow2(k_out) ≥
+/// next_pow2(k_in)` "no-advantage" filter is NOT gateable here — the
+/// [`StructureKey`] carries size CLASSES, never literal extents (the §1
+/// non-negotiable; `plan.key`/`plan.schedule`/`plan.rs` expose neither `k_in`
+/// nor `k_out`), exactly as the bitonic variant cannot gate its `k ≤ 1024`
+/// precondition at compile time. Both variants are `BitIdentical` measured
+/// variants: per the ship-top-K policy each ships under the same
+/// `accept.structure_key`, the `launch_note` documents the advantage regime, and
+/// the bench/dispatch layer (which sees concrete extents) selects the measured
+/// default. Offering `_psel` for every TopK cell it can serve is therefore both
+/// correct (BitIdentical everywhere, `k_out ≤ k_in` a caller precondition) and
+/// consistent with the extent-free key.
+///
+/// **Contract (`launch_note`):** one block per row, grid-stride over rows,
+/// blockDim a multiple of 32 and `≤ 1024`; **dynamic smem = 2·next_pow2(k_out)·
+/// (acc_sz + 4) bytes** (bounded on `k_out`, NOT `k_in` — the streaming win; NO
+/// `k_in ≤ 1024` cap). `k_out ≤ k_in` is a caller/on-device precondition.
+fn partial_select_topk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
+    let Schedule::RowSort { limit, out, .. } = plan.schedule else {
+        return None;
+    };
+    // TopK only — the streaming best-buffer has no whole-row Full form.
+    if !matches!(limit, crate::ir::SortLimit::TopK) {
+        return None;
+    }
+    // out ∈ {Values, Indices, Both} — all served (index rides in the pair). (The
+    // match is exhaustive; kept explicit as documentation of the served set.)
+    match out {
+        SortOut::Values | SortOut::Indices | SortOut::Both => {}
+    }
+    // A Param body would emit an undefined identifier (mirror the bitonic / house
+    // style). RowSort's body is pinned Input(0), so this is always empty.
+    if !params_used(plan.body).is_empty() {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    // Re-assert in0 + out layout (the exact bitonic re-check; validate_row_sort
+    // already gated it — belt-and-suspenders).
+    let last = plan.key.rank.saturating_sub(1);
+    let in0 = plan.key.operands[0];
+    let out_op = plan.key.operands[plan.key.n_operands.saturating_sub(1) as usize];
+    if rr_role(in0, last) != RrRole::RowStreamed
+        || in0.contig != Contiguity::Contig
+        || in0.flipped
+        || !out_op.bcast.is_empty()
+        || out_op.contig != Contiguity::Contig
+        || out_op.flipped
+    {
+        return None;
+    }
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let acc_sz = if dbl || matches!(plan.dtype, ElementKind::I64) {
+        8
+    } else {
+        4
+    };
+    let k = emit_row_sort_partial(plan, ctype);
+    let launch_note = format!(
+        "partial-select streaming tiled-bitonic top-k (one block per row, \
+         grid-stride over rows; a running best-buffer of m = next_pow2(k_out) \
+         (key, index) pairs streamed against the input row in tiles of m, each \
+         tile fully bitonic-sorting the 2m window [B | T] under the (key, \
+         original-index) total order and keeping the lower m): <<<min(n_out, \
+         maxblocks), B, smem>>> with B a multiple of 32 and <= 1024, and dynamic \
+         shared memory = 2 * next_pow2(k_out) * {} bytes (sizeof(acc)={} + \
+         sizeof(int)=4) — bounded on k_out, NOT k_in, so there is NO k_in <= 1024 \
+         cap (the streaming win). O(k_in*log^2(k_out)) — the unique fast path for \
+         k_in > 1024 large-vocab top-k, where the bitonic declines and the rank \
+         base is O(k_in^2). k_out <= k_in is a caller/on-device precondition; the \
+         advantage regime is k_out << k_in (roughly 2*next_pow2(k_out) < \
+         next_pow2(k_in)) — the bench/dispatch layer selects the measured default. \
+         BitIdentical to the full-sort top-k_out (composition lemma + never-evict). \
+         Determinism: {}.",
+        acc_sz + 4,
+        acc_sz,
+        VariantFidelity::BitIdentical.determinism_str()
+    );
+    Some(Variant {
+        tag: "psel",
         kernels: vec![k],
         fidelity: VariantFidelity::BitIdentical,
         launch_note,
@@ -12959,6 +13352,17 @@ mod sort_tests {
         let o = OperandDesc::new(2, &[256, k_out], &[k_out, 1], dt, 256);
         structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
     }
+    // The PARTIAL-SELECT `_psel` variant's kernel source (it is a VARIANT, so it
+    // comes off generate_variants — the default `generate` lowering is the base).
+    fn psel_src(op: &OpDef, key: &StructureKey) -> String {
+        generate_variants(op, key, &Cuda)
+            .into_iter()
+            .find(|v| v.tag == "psel")
+            .expect("psel variant present")
+            .kernels
+            .swap_remove(0)
+            .source
+    }
 
     #[test]
     fn base_asc_values_signature_and_rank_loop() {
@@ -13859,6 +14263,248 @@ mod sort_tests {
         assert!(
             vs.iter().all(|v| v.tag != "bitonic"),
             "scan must not offer the sort bitonic variant"
+        );
+    }
+
+    // ======================= PARTIAL-SELECT TOPK (psel) =======================
+    // The streaming tiled-bitonic top-k VARIANT (O(k_in·log²k_out), smem bounded
+    // on k_out) — BitIdentical to the full-sort top-k_out. On-device numeric proof
+    // (memcmp==0 vs the base across the §8 matrix + the 11 probes) is in
+    // ondevice/sort_validate.cu; these pin the source shape + variant wiring.
+
+    #[test]
+    fn partial_select_variant_present_for_topk() {
+        // A row_topk cell (small k_out, large k_in) OFFERS a `psel` variant:
+        // BitIdentical, name ends `_topk_psel`.
+        let sc = OpDef::row_topk("topk", ElementKind::F32);
+        let vs = generate_variants(&sc, &topk_both_key(ElementKind::F32, 64), &Cuda);
+        let ps = vs
+            .iter()
+            .find(|v| v.tag == "psel")
+            .expect("psel variant present for a TopK cell");
+        assert_eq!(ps.fidelity, crate::VariantFidelity::BitIdentical);
+        assert_eq!(ps.kernels.len(), 1);
+        assert!(
+            ps.kernels[0].name.ends_with("_topk_psel"),
+            "{}",
+            ps.kernels[0].name
+        );
+        assert_eq!(
+            ps.kernels[0].name,
+            "baracuda_gen_topk_f32_rowsort_desc_stable_both_topk_psel"
+        );
+    }
+
+    #[test]
+    fn partial_select_declines_full() {
+        // A row_sort (Full) offers NO psel — the streaming best-buffer is a
+        // top-k_out selector with no whole-row form (the bitonic/base serve Full).
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let vs = generate_variants(&sc, &sort_key(ElementKind::F32), &Cuda);
+        assert!(
+            vs.iter().all(|v| v.tag != "psel"),
+            "a Full row_sort must not offer the partial-select top-k variant"
+        );
+        // The fused Both Full sort likewise offers no psel.
+        let fv = OpDef::row_sort_indices("fused", ElementKind::F32, SortOrder::Desc);
+        let vf = generate_variants(&fv, &both_key(ElementKind::F32), &Cuda);
+        assert!(vf.iter().all(|v| v.tag != "psel"));
+    }
+
+    #[test]
+    fn partial_select_offers_regardless_of_kout_extent_free_key() {
+        // BRIEF DEVIATION (flagged, not a silent work-around): the panel's
+        // compile-time "advantage decline" (None when 2·next_pow2(k_out) ≥
+        // next_pow2(k_in)) is NOT implementable here — the StructureKey carries
+        // size CLASSES, never literal extents (the §1 non-negotiable), so NEITHER
+        // k_in NOR k_out is recoverable at variant-selection time (verified:
+        // OperandKey exposes only contig/bcast/vec_width/inner_div/flipped; the key
+        // exposes only `work` = total-work class). This is the SAME limitation the
+        // bitonic variant has with its k ≤ 1024 precondition. Both are BitIdentical
+        // measured variants: psel is offered for EVERY TopK cell it can serve, the
+        // launch_note documents the advantage regime, and the bench/dispatch layer
+        // (which sees concrete extents) selects the measured default (ship-top-K).
+        //
+        // This test pins the ACTUAL behavior: a large-k_out TopK cell (where the
+        // brief wanted a decline) still offers psel, and two keys that differ ONLY
+        // in the literal k_out canonicalize identically ⇒ no gate could distinguish
+        // them. If a literal-extent facet is ever added to the key, revisit §4.
+        let sc = OpDef::row_topk("topk", ElementKind::F32);
+        // Input inner extent 128 (next_pow2 = 128). k_out = 16 → the brief's
+        // ADVANTAGE regime (2·next_pow2(16) = 32 < 128); k_out = 112 → the brief's
+        // DECLINE regime (2·next_pow2(112) = 256 ≥ 128). Both are ÷16, so they
+        // canonicalize to the SAME byte-equal key (only the divisibility BUCKET is
+        // keyed, never the magnitude) — no gate could tell the advantage cell from
+        // the no-advantage cell. This is the concrete proof §4's decline is
+        // ungateable on the extent-free key.
+        let k_small = topk_both_key(ElementKind::F32, 16);
+        let k_large = topk_both_key(ElementKind::F32, 112);
+        assert_eq!(
+            k_small, k_large,
+            "the extent-free structure key cannot distinguish k_out magnitude — so no \
+             compile-time decline gate is possible (brief §4 deviation)"
+        );
+        for key in [&k_small, &k_large] {
+            let vs = generate_variants(&sc, key, &Cuda);
+            assert!(
+                vs.iter().any(|v| v.tag == "psel"),
+                "psel is offered for every TopK cell (no extent-based decline)"
+            );
+        }
+    }
+
+    #[test]
+    fn partial_select_fidelity_bit_identical() {
+        // psel fidelity == BitIdentical for topk (Desc) AND bottomk (Asc).
+        for sc in [
+            OpDef::row_topk("topk", ElementKind::F32),
+            OpDef::row_bottomk("bottomk", ElementKind::F32),
+        ] {
+            let vs = generate_variants(&sc, &topk_both_key(ElementKind::F32, 64), &Cuda);
+            let ps = vs.iter().find(|v| v.tag == "psel").expect("psel present");
+            assert_eq!(
+                ps.fidelity,
+                crate::VariantFidelity::BitIdentical,
+                "psel is BitIdentical to the full-sort top-k_out (composition lemma)"
+            );
+            // The launch_note names the k_out-bounded smem contract (NOT k_in) and
+            // carries no `k_in <= 1024` cap — the streaming win.
+            assert!(
+                ps.launch_note.contains("2 * next_pow2(k_out)")
+                    && ps.launch_note.contains("NOT k_in")
+                    && ps.launch_note.contains("NO k_in <= 1024 cap"),
+                "psel launch_note must describe the k_out-bounded streaming smem:\n{}",
+                ps.launch_note
+            );
+        }
+    }
+
+    #[test]
+    fn partial_select_emission_goldens() {
+        // The `_psel` source contains the load-bearing shape: the 2m arena, the
+        // in-kernel m ramp, the ladder bound, the GLOBAL-index store, the keep-lower
+        // writeback, and sort_pad_lit-correct pads. (psel is a VARIANT, so it comes
+        // off generate_variants, not the default `generate` lowering = the base.)
+        let src = psel_src(
+            &OpDef::row_topk("topk", ElementKind::F32),
+            &topk_both_key(ElementKind::F32, 64),
+        );
+        let src = &src;
+        // 2m-pair arena carved from ONE contiguous smem block (sidx after 2m keys).
+        assert!(
+            src.contains("int* sidx = (int*)(baracuda_sort_smem + (size_t)(2*m) * sizeof(float));"),
+            "{src}"
+        );
+        // In-kernel m = next_pow2(k_out) (NOT next_pow2(k_in)).
+        assert!(
+            src.contains("long long m = 1; while (m < k_out) m <<= 1;"),
+            "{src}"
+        );
+        // Full Batcher ladder over the 2m window.
+        assert!(
+            src.contains("for (long long kk = 2; kk <= 2*m; kk <<= 1) {"),
+            "{src}"
+        );
+        assert!(
+            src.contains("for (long long p = threadIdx.x; p < 2*m; p += blockDim.x) {"),
+            "{src}"
+        );
+        // GLOBAL-index store for BOTH reals AND pads (the #1 bug surface).
+        assert!(src.contains("long long g = t * m + (s - m);"), "{src}");
+        assert!(src.contains("sidx[s] = (int)g;"), "{src}");
+        // Keep-lower writeback reads sidx[p] for p < k_out (Both writes BOTH buffers).
+        assert!(
+            src.contains("for (long long p = threadIdx.x; p < k_out; p += blockDim.x) {"),
+            "{src}"
+        );
+        assert!(
+            src.contains("out_val[out_base + p] = in0[base_in + sidx[p]];"),
+            "{src}"
+        );
+        assert!(src.contains("out_idx[out_base + p] = sidx[p];"), "{src}");
+        // topk (Desc) pad = -inf (sort_pad_lit type-min), init index >= k_in,
+        // SATURATED at INT_MAX so `k_in + p` cannot overflow `(int)` near the 2^31-1
+        // cap (a wrapped-negative pad index would tie-beat a real — the review fix).
+        assert!(
+            src.contains(
+                "skey[p] = __int_as_float(0xff800000u); long long pi = k_in + p; \
+                 sidx[p] = (int)(pi < 2147483647LL ? pi : 2147483647LL);"
+            ),
+            "{src}"
+        );
+        assert!(
+            src.contains("else       { skey[s] = __int_as_float(0xff800000u); }"),
+            "{src}"
+        );
+
+        // bottomk (Asc) FP pad = qNaN (NOT +inf — a real NaN > +inf leaks a pad).
+        let bottomk = psel_src(
+            &OpDef::row_bottomk("bottomk", ElementKind::F32),
+            &topk_both_key(ElementKind::F32, 64),
+        );
+        assert!(
+            bottomk.contains("skey[p] = __int_as_float(0x7fc00000u);"),
+            "bottomk FP pad must be a qNaN, never +inf:\n{bottomk}"
+        );
+        assert!(
+            !bottomk.contains("0x7f800000u"),
+            "bottomk must NOT emit a +inf pad (leaks before real NaNs):\n{bottomk}"
+        );
+        // bottomk (Asc) INTEGER pad = INT_MAX literal, NOT a NaN bitcast.
+        let bottomk_i32 = psel_src(
+            &OpDef::row_bottomk("bottomk", ElementKind::I32),
+            &topk_both_key(ElementKind::I32, 64),
+        );
+        assert!(
+            bottomk_i32.contains(
+                "skey[p] = 2147483647; long long pi = k_in + p; \
+                 sidx[p] = (int)(pi < 2147483647LL ? pi : 2147483647LL);"
+            ),
+            "bottomk integer pad must be INT_MAX (2147483647), never a NaN bitcast:\n{bottomk_i32}"
+        );
+        assert!(
+            !bottomk_i32.contains("__int_as_float"),
+            "an integer psel kernel must not reinterpret a NaN bit-pattern:\n{bottomk_i32}"
+        );
+    }
+
+    #[test]
+    fn partial_select_stores_global_not_slot() {
+        // The single most likely bug (§2): the sidx store MUST be the ORIGINAL
+        // GLOBAL index g = t*m + (s-m), never the local smem slot. The shipped
+        // full-row bitonic stores `sidx[p] = (int)p` (slot == global there); the
+        // STREAMING slot p is generally < k_in, so a slot store would break the
+        // value gather, the tie-break, and put pad indices below k_in.
+        let src = psel_src(
+            &OpDef::row_topk("topk", ElementKind::F32),
+            &topk_both_key(ElementKind::F32, 64),
+        );
+        let src = &src;
+        // The global-index store is present.
+        assert!(src.contains("sidx[s] = (int)g;"), "{src}");
+        // The T-load must NOT store the local slot as the index.
+        assert!(
+            !src.contains("sidx[s] = (int)(s - m);"),
+            "the T-load must store the GLOBAL index g, not the local slot (s-m):\n{src}"
+        );
+        // No bare `sidx[p] = (int)p;` (the shipped bitonic's slot store) leaks in.
+        assert!(
+            !src.contains("sidx[p] = (int)p;"),
+            "the streaming variant must never store the local slot as the index:\n{src}"
+        );
+        // The init-B pad index is >= k_in (dominated, never output), not the slot,
+        // and SATURATED at INT_MAX so `k_in + p` cannot overflow `(int)` to a
+        // negative that would tie-beat a real (the review fix).
+        assert!(
+            src.contains(
+                "long long pi = k_in + p; sidx[p] = (int)(pi < 2147483647LL ? pi : 2147483647LL);"
+            ),
+            "{src}"
+        );
+        // The bare unguarded `(int)(k_in + p)` overflow form must NOT remain.
+        assert!(
+            !src.contains("sidx[p] = (int)(k_in + p);"),
+            "init-B pad index must be saturated at INT_MAX, not the overflowing (int)(k_in + p):\n{src}"
         );
     }
 

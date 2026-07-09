@@ -132,6 +132,27 @@
 #include "baracuda_gen_topk_f32s_rowsort_desc_stable_both_topk_bitonic.cu"
 #include "baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk.cu"
 #include "baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk_bitonic.cu"
+
+// ---- PARTIAL-SELECT TOPK: the streaming tiled-bitonic `_psel` top-k VARIANT
+// (ops `topk` = Desc, `bottomk` = Asc). Same (const T* in0, T* out_val, int*
+// out_idx, long long n_out, long long k_in, long long k_out) ABI as `_topk`, but
+// the smem is bounded on k_out (2*next_pow2(k_out) pairs), NOT k_in — so there is
+// NO k_in <= 1024 cap: this is the fast path validated at k_in = 4096/8192. The
+// device oracle is the full-sort Both BASE (rank sort, any k_in). ----
+#include "baracuda_gen_topk_f32_rowsort_desc_stable_both_topk_psel.cu"
+#include "baracuda_gen_bottomk_f32_rowsort_asc_stable_both_topk_psel.cu"
+#include "baracuda_gen_topk_f64_rowsort_desc_stable_both_topk_psel.cu"
+#include "baracuda_gen_bottomk_f64_rowsort_asc_stable_both_topk_psel.cu"
+#include "baracuda_gen_topk_i32_rowsort_desc_stable_both_topk_psel.cu"
+#include "baracuda_gen_bottomk_i32_rowsort_asc_stable_both_topk_psel.cu"
+#include "baracuda_gen_topk_i64_rowsort_desc_stable_both_topk_psel.cu"
+#include "baracuda_gen_bottomk_i64_rowsort_asc_stable_both_topk_psel.cu"
+#include "baracuda_gen_topk_f16_rowsort_desc_stable_both_topk_psel.cu"
+#include "baracuda_gen_bottomk_f16_rowsort_asc_stable_both_topk_psel.cu"
+#include "baracuda_gen_topk_bf16_rowsort_desc_stable_both_topk_psel.cu"
+#include "baracuda_gen_bottomk_bf16_rowsort_asc_stable_both_topk_psel.cu"
+#include "baracuda_gen_topk_f32s_rowsort_desc_stable_both_topk_psel.cu"
+#include "baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk_psel.cu"
 // matching-order (DESC) fused Both oracle for the topk cross-check on the dtypes
 // whose desc fused was not included above (asc fused already present).
 #include "baracuda_gen_fused_i64_rowsort_desc_stable_both.cu"
@@ -691,6 +712,7 @@ struct TopkCell {
     const char* dtag; bool is_fp; bool asc; size_t acc_sz;   // asc == bottomk (order Asc)
     void* topk_base; void* topk_bt;    // the capped kernel (_topk)
     void* both_base; void* both_bt;    // the shipped RowSort Both at the SAME order (device oracle)
+    void* topk_psel;                   // the PARTIAL-SELECT streaming top-k VARIANT
     K (*to_key)(const T&);
 };
 
@@ -784,6 +806,45 @@ static void run_topk_cell(const TopkCell<T, K>& c, const std::vector<T>& in,
         report("base==bitonic (both buffers)", memcmp(btv.data(), tv.data(), Nout * sizeof(T)) == 0
                                             && memcmp(bti.data(), ti.data(), Nout * sizeof(int)) == 0);
     }
+
+    // ---- PARTIAL-SELECT streaming top-k (`_psel`): BitIdentical vs BOTH oracles
+    // — (A) the CPU pair_lt first-k_out AND (B) the device full-sort Both's
+    // first-k_out per-row slice — plus two-launch determinism. Smem is bounded on
+    // k_out (2*next_pow2(k_out) pairs), NOT k_in, so psel runs at ANY k_in
+    // (including the k_in > 1024 base-only cases the bitonic must decline). ----
+    if (c.topk_psel) {
+        int pblock = block < 32 ? 32 : block;
+        size_t smem_ps = (size_t)2 * next_pow2(k_out) * (c.acc_sz + sizeof(int));
+        cudaMemset(d_tv, 0x66, Nout * sizeof(T)); cudaMemset(d_ti, 0x44, Nout * sizeof(int));
+        launch_topk<T>(c.topk_psel, d_in, d_tv, d_ti, n_out, k_in, k_out, grid, pblock, smem_ps);
+        cudaDeviceSynchronize();
+        std::vector<T> pv(Nout); std::vector<int> pi(Nout);
+        cudaMemcpy(pv.data(), d_tv, Nout * sizeof(T), cudaMemcpyDeviceToHost);
+        cudaMemcpy(pi.data(), d_ti, Nout * sizeof(int), cudaMemcpyDeviceToHost);
+        // (A) psel == CPU pair_lt oracle first-k_out (whole buffer).
+        report("psel out_val==cpu-oracle", memcmp(pv.data(), ov.data(), Nout * sizeof(T)) == 0);
+        report("psel out_idx==cpu-oracle", memcmp(pi.data(), oi.data(), Nout * sizeof(int)) == 0);
+        // (B) psel == device full-sort Both's first-k_out slice, PER ROW (stride-aware).
+        {
+            bool okv = true, oki = true;
+            for (long long r = 0; r < n_out; ++r) {
+                if (memcmp(&pv[(size_t)(r * k_out)], &bv[(size_t)(r * k_in)], (size_t)k_out * sizeof(T)) != 0) okv = false;
+                if (memcmp(&pi[(size_t)(r * k_out)], &bi[(size_t)(r * k_in)], (size_t)k_out * sizeof(int)) != 0) oki = false;
+            }
+            report("psel out_val==Both[..k_out] per-row", okv);
+            report("psel out_idx==Both[..k_out] per-row", oki);
+        }
+        // (C) determinism (both buffers), second launch.
+        cudaMemset(d_tv2, 0x99, Nout * sizeof(T)); cudaMemset(d_ti2, 0x55, Nout * sizeof(int));
+        launch_topk<T>(c.topk_psel, d_in, d_tv2, d_ti2, n_out, k_in, k_out, grid, pblock, smem_ps);
+        cudaDeviceSynchronize();
+        std::vector<T> pvb(Nout); std::vector<int> pib(Nout);
+        cudaMemcpy(pvb.data(), d_tv2, Nout * sizeof(T), cudaMemcpyDeviceToHost);
+        cudaMemcpy(pib.data(), d_ti2, Nout * sizeof(int), cudaMemcpyDeviceToHost);
+        report("psel determinism", memcmp(pv.data(), pvb.data(), Nout * sizeof(T)) == 0
+                                && memcmp(pi.data(), pib.data(), Nout * sizeof(int)) == 0);
+    }
+
     cudaFree(d_in); cudaFree(d_bv); cudaFree(d_bi);
     cudaFree(d_tv); cudaFree(d_ti); cudaFree(d_tv2); cudaFree(d_ti2);
 }
@@ -795,64 +856,78 @@ static TopkCell<float, float> topk_cell_f32(bool is_topk) {
     return is_topk
         ? TopkCell<float, float>{"f32", true, false, 4,
             (void*)baracuda_gen_topk_f32_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_f32_rowsort_desc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_f32_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f32_rowsort_desc_stable_both_bitonic, k_f32}
+            (void*)baracuda_gen_fused_f32_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f32_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_topk_f32_rowsort_desc_stable_both_topk_psel, k_f32}
         : TopkCell<float, float>{"f32", true, true, 4,
             (void*)baracuda_gen_bottomk_f32_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_f32_rowsort_asc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_f32_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f32_rowsort_asc_stable_both_bitonic, k_f32};
+            (void*)baracuda_gen_fused_f32_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f32_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_bottomk_f32_rowsort_asc_stable_both_topk_psel, k_f32};
 }
 static TopkCell<double, double> topk_cell_f64(bool is_topk) {
     return is_topk
         ? TopkCell<double, double>{"f64", true, false, 8,
             (void*)baracuda_gen_topk_f64_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_f64_rowsort_desc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_f64_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f64_rowsort_desc_stable_both_bitonic, k_f64}
+            (void*)baracuda_gen_fused_f64_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f64_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_topk_f64_rowsort_desc_stable_both_topk_psel, k_f64}
         : TopkCell<double, double>{"f64", true, true, 8,
             (void*)baracuda_gen_bottomk_f64_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_f64_rowsort_asc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_f64_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f64_rowsort_asc_stable_both_bitonic, k_f64};
+            (void*)baracuda_gen_fused_f64_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f64_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_bottomk_f64_rowsort_asc_stable_both_topk_psel, k_f64};
 }
 static TopkCell<int, int> topk_cell_i32(bool is_topk) {
     return is_topk
         ? TopkCell<int, int>{"i32", false, false, 4,
             (void*)baracuda_gen_topk_i32_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_i32_rowsort_desc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_i32_rowsort_desc_stable_both, (void*)baracuda_gen_fused_i32_rowsort_desc_stable_both_bitonic, k_i32}
+            (void*)baracuda_gen_fused_i32_rowsort_desc_stable_both, (void*)baracuda_gen_fused_i32_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_topk_i32_rowsort_desc_stable_both_topk_psel, k_i32}
         : TopkCell<int, int>{"i32", false, true, 4,
             (void*)baracuda_gen_bottomk_i32_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_i32_rowsort_asc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_i32_rowsort_asc_stable_both, (void*)baracuda_gen_fused_i32_rowsort_asc_stable_both_bitonic, k_i32};
+            (void*)baracuda_gen_fused_i32_rowsort_asc_stable_both, (void*)baracuda_gen_fused_i32_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_bottomk_i32_rowsort_asc_stable_both_topk_psel, k_i32};
 }
 static TopkCell<long long, long long> topk_cell_i64(bool is_topk) {
     return is_topk
         ? TopkCell<long long, long long>{"i64", false, false, 8,
             (void*)baracuda_gen_topk_i64_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_i64_rowsort_desc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_i64_rowsort_desc_stable_both, (void*)baracuda_gen_fused_i64_rowsort_desc_stable_both_bitonic, k_i64}
+            (void*)baracuda_gen_fused_i64_rowsort_desc_stable_both, (void*)baracuda_gen_fused_i64_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_topk_i64_rowsort_desc_stable_both_topk_psel, k_i64}
         : TopkCell<long long, long long>{"i64", false, true, 8,
             (void*)baracuda_gen_bottomk_i64_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_i64_rowsort_asc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_i64_rowsort_asc_stable_both, (void*)baracuda_gen_fused_i64_rowsort_asc_stable_both_bitonic, k_i64};
+            (void*)baracuda_gen_fused_i64_rowsort_asc_stable_both, (void*)baracuda_gen_fused_i64_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_bottomk_i64_rowsort_asc_stable_both_topk_psel, k_i64};
 }
 static TopkCell<__half, float> topk_cell_f16(bool is_topk) {
     return is_topk
         ? TopkCell<__half, float>{"f16", true, false, 4,
             (void*)baracuda_gen_topk_f16_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_f16_rowsort_desc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_f16_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f16_rowsort_desc_stable_both_bitonic, k_f16}
+            (void*)baracuda_gen_fused_f16_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f16_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_topk_f16_rowsort_desc_stable_both_topk_psel, k_f16}
         : TopkCell<__half, float>{"f16", true, true, 4,
             (void*)baracuda_gen_bottomk_f16_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_f16_rowsort_asc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_f16_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f16_rowsort_asc_stable_both_bitonic, k_f16};
+            (void*)baracuda_gen_fused_f16_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f16_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_bottomk_f16_rowsort_asc_stable_both_topk_psel, k_f16};
 }
 static TopkCell<__nv_bfloat16, float> topk_cell_bf16(bool is_topk) {
     return is_topk
         ? TopkCell<__nv_bfloat16, float>{"bf16", true, false, 4,
             (void*)baracuda_gen_topk_bf16_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_bf16_rowsort_desc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_bf16_rowsort_desc_stable_both, (void*)baracuda_gen_fused_bf16_rowsort_desc_stable_both_bitonic, k_bf16}
+            (void*)baracuda_gen_fused_bf16_rowsort_desc_stable_both, (void*)baracuda_gen_fused_bf16_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_topk_bf16_rowsort_desc_stable_both_topk_psel, k_bf16}
         : TopkCell<__nv_bfloat16, float>{"bf16", true, true, 4,
             (void*)baracuda_gen_bottomk_bf16_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_bf16_rowsort_asc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_bf16_rowsort_asc_stable_both, (void*)baracuda_gen_fused_bf16_rowsort_asc_stable_both_bitonic, k_bf16};
+            (void*)baracuda_gen_fused_bf16_rowsort_asc_stable_both, (void*)baracuda_gen_fused_bf16_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_bottomk_bf16_rowsort_asc_stable_both_topk_psel, k_bf16};
 }
 static TopkCell<float, double> topk_cell_f32s(bool is_topk) {
     return is_topk
         ? TopkCell<float, double>{"f32s", true, false, 8,
             (void*)baracuda_gen_topk_f32s_rowsort_desc_stable_both_topk, (void*)baracuda_gen_topk_f32s_rowsort_desc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_f32s_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f32s_rowsort_desc_stable_both_bitonic, k_f32s}
+            (void*)baracuda_gen_fused_f32s_rowsort_desc_stable_both, (void*)baracuda_gen_fused_f32s_rowsort_desc_stable_both_bitonic,
+            (void*)baracuda_gen_topk_f32s_rowsort_desc_stable_both_topk_psel, k_f32s}
         : TopkCell<float, double>{"f32s", true, true, 8,
             (void*)baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk, (void*)baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk_bitonic,
-            (void*)baracuda_gen_fused_f32s_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f32s_rowsort_asc_stable_both_bitonic, k_f32s};
+            (void*)baracuda_gen_fused_f32s_rowsort_asc_stable_both, (void*)baracuda_gen_fused_f32s_rowsort_asc_stable_both_bitonic,
+            (void*)baracuda_gen_bottomk_f32s_rowsort_asc_stable_both_topk_psel, k_f32s};
 }
 
 // INDEPENDENT CPU top-k oracle: on DISTINCT-KEY, NaN-free rows, `std::nth_element`
@@ -996,6 +1071,134 @@ static void topk_bench() {
            "full-sort Both (then host slice): base %.3f ms | bitonic %.3f ms\n",
            R, K, KO, t_tb, es / (t_tb / 1000), t_tt, es / (t_tt / 1000), t_fb, t_ft);
     cudaFree(dx); cudaFree(dv); cudaFree(di); cudaFree(dvo); cudaFree(dio);
+}
+
+// ============ PARTIAL-SELECT TOPK: the 11 mandatory probes + multi-tile =======
+// Each probe feeds a hand-crafted input through run_topk_cell, whose psel block
+// memcmps `_psel` out_val/out_idx vs BOTH the CPU pair_lt oracle AND the device
+// full-sort Both base (the authoritative references) + two-launch determinism —
+// so a divergence on ANY probe FAILS. The INPUTS are engineered to stress the
+// three load-bearing invariants: the pad key (sort_pad_lit), the GLOBAL-index
+// store (g = t*m + p, never the local slot), and keep-the-LOWER-half.
+static std::vector<float> f32_bits(std::initializer_list<uint32_t> pats) {
+    std::vector<float> v; v.reserve(pats.size());
+    for (uint32_t p : pats) { float f; memcpy(&f, &p, 4); v.push_back(f); }
+    return v;
+}
+static void psel_probes() {
+    printf("- PARTIAL-SELECT: 11 mandatory probes (psel vs cpu-oracle + full-sort base, raw-bit) -\n");
+    // P1 pad-index-invariant KILLER (bottomk real-NaN + pad-NaN): a pad-index<k_in
+    // impl gives (0x7ff00000, idx1) at pos3 instead of (0x7fc00001, idx3).
+    {   auto in = f32_bits({0x00800000u, 0x7ff00000u, 0xe0a99e9au, 0x7fc00001u, 0x7fc00000u});
+        run_topk_cell<float, float>(topk_cell_f32(false), in, 1, 5, 4, "P1a padidx", true, 32); }
+    {   auto in = f32_bits({0x41100000u /*9.0*/, 0x7fc00001u, 0x7fc0abcdu});
+        run_topk_cell<float, float>(topk_cell_f32(false), in, 1, 3, 2, "P1b padidx", true, 32); }
+    // P2 store-slot detector (multi-tile distinct values, m=2 → 3 tiles).
+    {   std::vector<float> in = {10, 20, 30, 40, 50, 60};
+        run_topk_cell<float, float>(topk_cell_f32(true), in, 1, 6, 2, "P2 storeslot", true, 32); }
+    // P3 dup-key ACROSS the tile boundary (idx3 in tile0, idx4 in tile1 → idx3
+    // first) + an all-equal row (pure index order). Both directions via two rows
+    // (a value cannot be both the largest AND smallest).
+    {   std::vector<float> in = {1, 7, 3, 8, 8, 2, 4, 6};   // dup 8.0 @ idx3,idx4 → topk keeps 3 before 4
+        run_topk_cell<float, float>(topk_cell_f32(true), in, 1, 8, 4, "P3 dup-topk", true, 32); }
+    {   std::vector<float> in = {9, 3, 7, 1, 1, 8, 5, 2};   // dup 1.0 @ idx3,idx4 → bottomk keeps 3 before 4
+        run_topk_cell<float, float>(topk_cell_f32(false), in, 1, 8, 4, "P3 dup-bottom", true, 32); }
+    {   std::vector<float> in = {5, 5, 5, 5, 5, 5};
+        run_topk_cell<float, float>(topk_cell_f32(true), in, 1, 6, 2, "P3 alleq", true, 32); }
+    // P4 wrong-pad-key (+inf leak): bottomk reals asc end (..., +inf, NaN last); a
+    // +inf pad would sort BEFORE the real NaN and leak into the output.
+    {   auto in = f32_bits({0x3f800000u /*1*/, 0x7f800000u /*+inf*/, 0x7fc00001u, 0x40000000u /*2*/, 0xbf800000u /*-1*/});
+        run_topk_cell<float, float>(topk_cell_f32(false), in, 1, 5, 5, "P4 padleak", true, 32); }
+    // P5 NaN payload preservation, both directions (distinct payloads; no quieting).
+    {   auto in = f32_bits({0x40a00000u /*5*/, 0x7fc00001u, 0xffc0abcdu, 0x7fc0deadu, 0x40000000u /*2*/, 0xbfc00000u});
+        for (bool tk : {true, false}) run_topk_cell<float, float>(topk_cell_f32(tk), in, 1, 6, 4, "P5 nanpay", true, 32); }
+    // P6 all-NaN bottomk with pads (pure index tie-break; raw payloads intact).
+    {   auto in = f32_bits({0x7fc00001u, 0x7fc00002u, 0x7fc00003u, 0xffc00004u, 0x7fc00005u, 0x7fc00006u});
+        run_topk_cell<float, float>(topk_cell_f32(false), in, 1, 6, 4, "P6 allnan", true, 32); }
+    // P7 keep-wrong-half / direction (strictly monotone): topk idx [5,4], bottomk [0,1].
+    {   std::vector<float> in = {10, 20, 30, 40, 50, 60};
+        for (bool tk : {true, false}) run_topk_cell<float, float>(topk_cell_f32(tk), in, 1, 6, 2, "P7 direction", true, 32); }
+    // P8 k_out=1 (m=1 running-best scan; a tie keeps the LOWER index).
+    {   std::vector<float> in = {5, 9, 9, 3};   // topk tie at 9 → lower idx 1
+        run_topk_cell<float, float>(topk_cell_f32(true), in, 1, 4, 1, "P8 kout1-top", true, 32); }
+    {   std::vector<float> in = {5, 3, 3, 9};   // bottomk tie at 3 → lower idx 1
+        run_topk_cell<float, float>(topk_cell_f32(false), in, 1, 4, 1, "P8 kout1-bottom", true, 32); }
+    // P9 k_out==k_in (== full sort): random k_in=13 + non-pow2 k_in=300, asc+desc.
+    {   std::vector<float> in(13); for (auto& x : in) x = (float)((int)(xrand() % 2001) - 1000) * 0.01f;
+        for (bool tk : {true, false}) run_topk_cell<float, float>(topk_cell_f32(tk), in, 1, 13, 13, "P9 kfull13", true, 32); }
+    {   std::vector<float> in(300); for (auto& x : in) x = (float)((int)(xrand() % 20001) - 10000) * 0.001f;
+        for (bool tk : {true, false}) run_topk_cell<float, float>(topk_cell_f32(tk), in, 1, 300, 300, "P9 kfull300", true, 256); }
+    // P10 partial last tile (m=2 → 3 tiles, last = 1 real + 1 pad): topk idx [4,2].
+    {   std::vector<float> in = {5, 2, 8, 1, 9};
+        run_topk_cell<float, float>(topk_cell_f32(true), in, 1, 5, 2, "P10 lasttile", true, 32); }
+}
+
+// P11: MULTI-TILE k_in > 1024 (the variant's PURPOSE) — the bitonic must decline
+// (whole padded row exceeds one block), the rank base is O(k_in^2). psel streams
+// in tiles of m = next_pow2(k_out); memcmp vs the full-sort Both base + determinism.
+static void psel_multitile() {
+    printf("- PARTIAL-SELECT probe 11: MULTI-TILE k_in > 1024 (the variant's PURPOSE) -\n");
+    // k_in=4096 (128 tiles) asc+desc; k_in=8192 (256 tiles) asc+desc; k_out=32.
+    for (long long k_in : {(long long)4096, (long long)8192}) {
+        std::vector<float> in((size_t)3 * k_in);
+        for (auto& x : in) x = (float)((int)(xrand() % 40001) - 20000) * 0.001f;
+        for (bool tk : {true, false})
+            run_topk_cell<float, float>(topk_cell_f32(tk), in, 3, k_in, 32, "P11 multitile", false, 256);
+    }
+    // k_in=3000 with ~40% specials (±0, ±inf, qNaN/sNaN payloads, subnormals), k_out=17 asc.
+    {
+        const long long k_in = 3000, n = 2;
+        std::vector<float> in((size_t)n * k_in);
+        uint32_t sp[] = {0x00000000u, 0x80000000u, 0x7f800000u, 0xff800000u, 0x7fc00001u,
+                         0x7fa00001u, 0xffc0abcdu, 0x00000001u, 0x80000001u, 0x007fffffu};
+        for (size_t i = 0; i < in.size(); ++i) {
+            if (xrand() % 5 < 2) { uint32_t p = sp[xrand() % (sizeof sp / 4)]; memcpy(&in[i], &p, 4); }
+            else in[i] = (float)((int)(xrand() % 40001) - 20000) * 0.001f;
+        }
+        run_topk_cell<float, float>(topk_cell_f32(false), in, n, k_in, 17, "P11 specials", false, 256);
+    }
+}
+
+// Bench: psel vs the full bitonic (CANNOT run at k_in=50000 — the whole padded row
+// exceeds one block's smem) vs the rank base (O(k_in^2)). Headline top-10 of 50000
+// + a modest top-64 of 1024 where all three run.
+static void psel_bench() {
+    auto timeit_n = [](auto fn, int warm, int iters) {
+        cudaEvent_t a, e; cudaEventCreate(&a); cudaEventCreate(&e);
+        for (int i = 0; i < warm; ++i) fn(); cudaDeviceSynchronize(); cudaEventRecord(a);
+        for (int i = 0; i < iters; ++i) fn(); cudaEventRecord(e); cudaEventSynchronize(e);
+        float ms = 0; cudaEventElapsedTime(&ms, a, e); return ms / iters;
+    };
+    auto bench_one = [&](long long R, long long K, long long KO, bool base_slow) {
+        const long long tot = R * K;
+        std::vector<float> big((size_t)tot);
+        for (size_t i = 0; i < (size_t)tot; ++i) big[i] = (float)((int)(xrand() % 40001) - 20000) * 0.001f;
+        float* dx = (float*)dev_bytes(big.data(), (size_t)tot * 4);
+        float* dvo = nullptr; cudaMalloc(&dvo, (size_t)R * KO * 4);
+        int* dio = nullptr; cudaMalloc(&dio, (size_t)R * KO * 4);
+        TopkCell<float, float> c = topk_cell_f32(true);
+        size_t smem_ps = (size_t)2 * next_pow2(KO) * (4 + 4);
+        double es = (double)tot / 1e9;
+        float t_ps = timeit_n([&] { launch_topk<float>(c.topk_psel, dx, dvo, dio, R, K, KO, (int)R, 256, smem_ps); }, 3, 20);
+        // The rank base is O(k_in^2); for the huge-k_in headline time it lightly.
+        float t_rb = base_slow
+            ? timeit_n([&] { launch_topk<float>(c.topk_base, dx, dvo, dio, R, K, KO, (int)R, 256, 0); }, 1, 2)
+            : timeit_n([&] { launch_topk<float>(c.topk_base, dx, dvo, dio, R, K, KO, (int)R, 256, 0); }, 3, 20);
+        if (K <= 1024) {
+            size_t smem_bt = (size_t)next_pow2(K) * (4 + 4);
+            float t_bt = timeit_n([&] { launch_topk<float>(c.topk_bt, dx, dvo, dio, R, K, KO, (int)R, 256, smem_bt); }, 3, 20);
+            printf("[bench] psel top-%lld of %lld (batch %lld): psel %.3f ms (%.2f Gelem/s) | rank base %.3f ms | "
+                   "full-bitonic %.3f ms || psel %.1fx base, %.1fx bitonic\n",
+                   KO, K, R, t_ps, es / (t_ps / 1000), t_rb, t_bt, t_rb / t_ps, t_bt / t_ps);
+        } else {
+            printf("[bench] psel top-%lld of %lld (batch %lld): psel %.3f ms (%.2f Gelem/s) | rank base %.3f ms | "
+                   "full-bitonic N/A (k_in>1024 exceeds one block) || psel %.1fx base\n",
+                   KO, K, R, t_ps, es / (t_ps / 1000), t_rb, t_rb / t_ps);
+        }
+        cudaFree(dx); cudaFree(dvo); cudaFree(dio);
+    };
+    bench_one(64, 50000, 10, true);   // the headline — bitonic can't run at k_in=50000
+    bench_one(4096, 1024, 64, false); // modest regime — all three run
 }
 
 #ifdef WITH_BESPOKE
@@ -1237,6 +1440,20 @@ int main(int argc, char** argv) {
             for (size_t i = 0; i < in.size(); ++i) in[i] = (int)((xrand() % 201) - 100);
             for (long long k_out : {(long long)1, (long long)16, (long long)32})
                 run_topk_cell<int, int>(topk_cell_i32(true), in, n, k, k_out, "san", true, 32); }
+        // PARTIAL-SELECT psel sanitizer sweep: the 2m smem swaps + 2 barriers/tile
+        // are the load-bearing racecheck/synccheck path; initcheck proves all k_out
+        // slots are written. Sweep block sizes {32,64,128,256,1024} to cross BOTH
+        // 2m < blockDim AND 2m > blockDim (k_out=17 → 2m=64: b=32 is <, b>=128 is >).
+        {   const long long n = 3, k = 64; std::vector<float> in((size_t)n * k);
+            for (size_t i = 0; i < in.size(); ++i) in[i] = (float)((int)(xrand() % 401) - 200) * 0.05f;
+            for (int b : {32, 64, 128, 256, 1024}) {
+                run_topk_cell<float, float>(topk_cell_f32(true), in, n, k, 17, "san-psel", false, b);
+                run_topk_cell<float, float>(topk_cell_f32(false), in, n, k, 5, "san-psel", false, b);
+            } }
+        {   const long long n = 2, k = 40; std::vector<int> in((size_t)n * k);
+            for (size_t i = 0; i < in.size(); ++i) in[i] = (int)((xrand() % 401) - 200);
+            for (int b : {32, 128})
+                run_topk_cell<int, int>(topk_cell_i32(true), in, n, k, 6, "san-psel", false, b); }
         printf(fails ? "\n%d case(s) FAILED\nRESULT: FAIL\n" : "\nRESULT: ALL PASSED\n", fails);
         return fails ? 1 : 0;
     }
@@ -1282,6 +1499,11 @@ int main(int argc, char** argv) {
     printf("- increment 10 TOPK/BOTTOMK: runtime-k cap acceptance + bandwidth -\n");
     topk_acceptance();
     topk_bench();
+
+    printf("- PARTIAL-SELECT TOPK: streaming tiled-bitonic top-k (psel) — 11 probes + multi-tile + bench -\n");
+    psel_probes();
+    psel_multitile();
+    psel_bench();
 
 #ifdef WITH_BESPOKE
     printf("- extract-the-delta audit vs bespoke stable msort (NaN-free) -\n");
