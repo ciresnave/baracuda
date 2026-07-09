@@ -1684,6 +1684,26 @@ pub struct OpDef {
     /// hoisted `tmp` referenced by multiple stores — strictly fewer global loads
     /// than decomposing into N single-output kernels.
     pub extra_out_bodies: Vec<ScalarExpr>,
+    /// Per-EXTRA-output element dtype for a **hetero multi-output** op (the
+    /// dropout-class increment). `extra_out_dtypes[j]` is output `(j+1)`'s dtype;
+    /// `None` ⇒ that output is uniform (`== key dtype`). Output 0's hetero dtype
+    /// stays on [`Self::out_dtype`] (unchanged). **EMPTY for every single-output
+    /// op and every UNIFORM multi-output op** — so emission is byte-identical
+    /// (`extra_out_dtypes.is_empty()` ⇒ `out_dtype_of(j)` resolves to the key
+    /// dtype for every extra output, exactly the pre-increment behaviour). Length,
+    /// when non-empty, **MUST equal `extra_out_bodies.len()`**. The legal `Some(_)`
+    /// set is exactly the single-output [`Self::out_dtype`] set applied per-output:
+    /// `Some(U8)` with a `Cmp*`-root body (the FKC "comparison → U8 mask"
+    /// convention). This authored legality is validated at
+    /// `plan::assert_valid_multi_output` (G1) and emitter-backstopped in
+    /// `cuda::assert_multi_output_lowerable` (G5). Note the store is driven by this
+    /// AUTHORED dtype (`out_dtype_of`), so the gate and the emitter read one source
+    /// — no key-side cross-check is possible or needed: `OperandKey` carries no
+    /// per-operand dtype, so author↔caller output-dtype agreement is an honest
+    /// CALLER PRECONDITION (like buffer aliasing / exact extents), documented at
+    /// `plan::assert_valid_multi_output`. Set only via
+    /// [`OpDef::elementwise_multi_hetero`].
+    pub extra_out_dtypes: Vec<Option<ElementKind>>,
     /// Per-input **data-dependent read role** (index `i` ↔ `Input(i)`; increment
     /// 4, GATHER). Empty ⇒ every input is [`ReadIndex::Direct`] (back-compat:
     /// every pre-increment-4 op is index-free, so address math + the whole
@@ -1744,6 +1764,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 
@@ -1770,6 +1791,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: Some(ElementKind::U8),
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 
@@ -1786,8 +1808,10 @@ impl OpDef {
     /// over decomposing into N single-output kernels.
     ///
     /// v1 scope (validated at `plan::build_plan`, emitter-backstopped in `cuda`):
-    /// `Access::Elementwise` only; uniform dtype across all outputs (`out_dtype`
-    /// stays `None` — hetero multi-out is the follow-up); each body may read
+    /// `Access::Elementwise` only; **uniform dtype across all outputs**
+    /// (`out_dtype`/`extra_out_dtypes` all `None` — for a per-output hetero dtype,
+    /// e.g. a U8 keep-mask beside an F32 value, use
+    /// [`OpDef::elementwise_multi_hetero`]); each body may read
     /// `Input`/`Const`/`Param` but NOT `Reduced`/`Coord` (those are other access
     /// spaces); outputs must not be broadcast/flipped and must not alias inputs
     /// (in-place is deferred). `1 ≤ n_outputs` and `n_inputs + n_outputs ≤
@@ -1802,17 +1826,80 @@ impl OpDef {
         dtypes: &[ElementKind],
         bodies: Vec<Expr>,
     ) -> Self {
+        // Delegate to the hetero constructor with an all-`None` (uniform) dtype
+        // per output — byte-identical to the pre-hetero behaviour (`out_dtype` and
+        // `extra_out_dtypes` both stay empty/`None`, so `out_dtype_of(j)` resolves
+        // to the key dtype for every output and every store is unchanged).
+        Self::elementwise_multi_hetero(
+            name,
+            n_inputs,
+            dtypes,
+            bodies.into_iter().map(|b| (b, None)).collect(),
+        )
+    }
+
+    /// Build a **hetero multi-output** elementwise op (the dropout-class
+    /// increment): one kernel that writes `bodies.len()` outputs, each through its
+    /// **own** element dtype, from a shared body-DAG. `bodies[j]` is `(body_j,
+    /// dtype_j)`: `bodies[0]`'s body is output 0 ([`OpDef::body`]) and its dtype
+    /// (when `Some`) is [`OpDef::out_dtype`]; `bodies[1..]`'s bodies become
+    /// [`OpDef::extra_out_bodies`] and their dtypes [`OpDef::extra_out_dtypes`]. A
+    /// `None` dtype means that output is uniform (`== key dtype`) — passing all
+    /// `None` reproduces [`OpDef::elementwise_multi`] exactly (`out_dtype` `None`,
+    /// `extra_out_dtypes` empty), which is the byte-identical uniform path.
+    ///
+    /// The v1 vehicle is `dropout_fw`: output 0 = the F32 value
+    /// `Input(0) * Select(Input(1) < keep_prob, scale, 0.0)` (uniform), output 1 =
+    /// the U8 keep-mask `Input(1) < keep_prob` (a shared `Cmp*` node, hoisted once
+    /// by cross-body CSE). The per-output store conversion (`Cmp*` `0.0/1.0` → U8,
+    /// exact) is applied at the STORE SITE, never baked into the shared DAG node,
+    /// so output 0 still consumes the compute-dtype comparison inside its `Select`.
+    ///
+    /// v1 hetero scope (authored legality validated at
+    /// `plan::assert_valid_multi_output`, G1, emitter-backstopped in
+    /// `cuda::assert_multi_output_lowerable`, G5 — no key-side cross-check, since
+    /// `OperandKey` carries no per-operand dtype; see the caller-precondition note
+    /// there): the only legal per-output hetero dtype is `Some(U8)`, and only when
+    /// that output's body ROOT is a `Cmp*` predicate (so the U8 store is the exact
+    /// `0.0/1.0` mask). Every other per-output legality/shape rule is inherited from
+    /// [`OpDef::elementwise_multi`] (`Access::Elementwise`, no `Reduced`/`Coord`,
+    /// non-broadcast/-flipped outputs, `n_inputs + n_outputs ≤ MAX_OPERANDS`).
+    ///
+    /// `extra_out_dtypes` is stored **empty when every extra output is uniform**
+    /// (all `bodies[1..]` dtypes are `None`) so the uniform emission stays
+    /// byte-identical; it is materialized (length `== extra_out_bodies.len()`) only
+    /// when at least one extra output is hetero.
+    ///
+    /// # Panics
+    /// If `bodies` is empty (a multi-output op needs at least one output).
+    #[must_use]
+    pub fn elementwise_multi_hetero(
+        name: &str,
+        n_inputs: u8,
+        dtypes: &[ElementKind],
+        bodies: Vec<(Expr, Option<ElementKind>)>,
+    ) -> Self {
         assert!(
             !bodies.is_empty(),
-            "OpDef::elementwise_multi: needs at least one output body"
+            "OpDef::elementwise_multi_hetero: needs at least one output body"
         );
         let mut it = bodies.into_iter();
-        let body = it.next().expect("non-empty checked above").0;
-        let extra_out_bodies: Vec<ScalarExpr> = it.map(|e| e.0).collect();
+        let (body0, out_dtype) = it.next().expect("non-empty checked above");
+        let mut extra_out_bodies: Vec<ScalarExpr> = Vec::new();
+        let mut extra_out_dtypes: Vec<Option<ElementKind>> = Vec::new();
+        for (b, d) in it {
+            extra_out_bodies.push(b.0);
+            extra_out_dtypes.push(d);
+        }
+        // Keep `extra_out_dtypes` EMPTY when every extra output is uniform — the
+        // byte-identical uniform-multi path (`out_dtype_of` reads the key dtype).
+        if extra_out_dtypes.iter().all(Option::is_none) {
+            extra_out_dtypes.clear();
+        }
         Self {
             name: name.to_string(),
             n_inputs,
-            body,
+            body: body0.0,
             dtypes: dtypes.to_vec(),
             access: Access::Elementwise,
             views: Vec::new(),
@@ -1820,8 +1907,9 @@ impl OpDef {
             write_index: WriteIndex::Direct,
             base_offsets: Vec::new(),
             out_base_offset: BaseOffset::Zero,
-            out_dtype: None,
+            out_dtype,
             extra_out_bodies,
+            extra_out_dtypes,
         }
     }
 
@@ -1896,6 +1984,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 
@@ -1936,6 +2025,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 
@@ -1969,6 +2059,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 
@@ -2001,6 +2092,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 
@@ -2045,6 +2137,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 
@@ -2123,6 +2216,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 
@@ -2188,6 +2282,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 
@@ -2222,6 +2317,7 @@ impl OpDef {
             out_base_offset: BaseOffset::Zero,
             out_dtype: Some(ElementKind::I32),
             extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
         }
     }
 

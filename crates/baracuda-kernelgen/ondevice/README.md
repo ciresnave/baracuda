@@ -1701,3 +1701,116 @@ then copy `select_validate.cu` beside them and compile like
   Input-arm only): run with `--features nvrtc -- --ignored` against the real
   nvrtc runtime (CUDA 13.3) — **PASS** (f32/f64/triu + both half Const-arm
   ctors compile headerless).
+
+## `dropout_validate.cu` — HETERO MULTI-OUTPUT (dropout-class, post-ramp increment)
+
+The **first hetero (mixed-dtype) multi-output** kernel: ONE fused pass writes an
+**F32 value** output AND a **U8 keep-mask** output from a shared body-DAG, each
+stored through its own dtype. `dropout_fw` reuses the shipped `Select`/`Cmp*`:
+
+- output 0 (value, F32): `y = x * (rand < keep_prob ? scale : 0)` — a genuine
+  MULTIPLY of `x` by a **selected multiplier** (`Select(cond, scale, 0.0)`), so it
+  is bit-identical to bespoke's single `x*(m ? scale : 0)` multiply and has **no
+  triu-style signed-zero hazard** (a dropped negative computes `x*0 = -0.0` in
+  BOTH generated and bespoke; a dropped NaN/Inf propagates identically);
+- output 1 (mask, U8): `mask = (rand < keep_prob)` — the **same** `Cmp*` node,
+  hoisted ONCE by cross-body CSE and consumed by both outputs (output 0 as the
+  `Select` cond in compute dtype, output 1 as the `(unsigned char)` store).
+
+The load-bearing invariant: the shared `Cmp*` lowers once in the compute dtype
+(F32) and the per-output store conversion (`0.0/1.0 -> U8`, exact) is applied at the
+STORE SITE, **never** baked into the shared DAG node — so output 0's value is never
+corrupted by the mask's cast. `rand` is a **host-filled uniform-F32 operand** (one
+sample per cell; bespoke `baracuda_random.cuh` convention), and `keep_prob = 1-p` /
+`scale = 1/(1-p)` are host-computed F32 params passed by value — so dropout is a
+pure elementwise map over `(x, rand)` with two scalar params (no in-kernel RNG).
+
+**Coverage** (honest tally — every case below is **device-launched** unless
+labeled otherwise):
+
+1. **THE ACCEPTANCE GATE — bit-identical dropout, BOTH outputs.** Generated
+   `elementwise_multi_hetero("dropout", 2, [F32], [(value, None), (mask, U8)])` vs
+   bespoke `baracuda_kernels_dropout_f32_run`, with the SAME host-filled `rand`
+   buffer and the SAME host `keep_prob = 1-p` / `scale = 1/(1-p)`: **two
+   whole-buffer memcmps, `bit_diff(y) == 0` AND `bit_diff(mask) == 0` required**,
+   across shapes {1 degenerate, 37x53, 4096, 1000003 (prime, tail-guard)} x p in
+   {0.0, 0.1, 0.5, 0.9} = **16 device-launched cells**. `x` is probe-seeded (+-0,
+   +-1, +-inf, qNaN + payload classes, sNaN payloads, negative-NaN, subnormals, min
+   normal, max finite, +-pi — tiled, so every class lands in BOTH kept and dropped
+   positions across the p sweep) + an xorshift random bit sweep. The dropped-
+   negative `-0.0` accounting class **collapses to zero** (the value is a genuine
+   multiply, not a select-of-value), and the mask is independently checked against
+   its raw definition (`rand < keep_prob`) so a both-wrong regression cannot pass.
+2. **Strided address math (both outputs)** — the generated `_mo2_strided_r2`
+   kernel writes a **transposed** output (column-major output strides, row-major
+   input reads — a shape the contig-only bespoke cannot serve without a
+   materialization); un-transposed on host, both outputs are `bit_diff == 0` vs the
+   scalar (contig) kernel, and the mask matches its raw definition.
+3. **Cross-body CSE (source-level, host)** — the Rust golden
+   `cuda::dropout_hetero_tests::dropout_scalar_hetero_golden_f32` pins that the
+   comparison hoists to exactly ONE `float tmp0 = ((float)in1[i] < (float)p0 ? ...)`
+   referenced by both stores (the payoff over two decomposed kernels).
+4. **Run-to-run determinism** — two launches, memcmp `y` AND `mask` (1000003
+   elements), bit-identical.
+5. **compute-sanitizer** — `san` mode (small shapes, every kernel family):
+   memcheck / synccheck / **initcheck** `ERROR SUMMARY: 0 errors`, racecheck `0
+   hazards`. (initcheck matters: the U8 mask buffer must be FULLY written.)
+6. **Bench** — house convention (3 warm-up + 20 timed via cudaEvent), generated
+   fused dropout vs bespoke `dropout_f32_run` (the fused kernel reads `x`,`rand`
+   once and writes `y`,`mask` in one pass).
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+Generate the two kernels with the `dump_dropout_sources` test, then copy the
+harness beside them:
+
+```sh
+DROPOUT_OUT=<outdir> cargo test -p baracuda-kernelgen dump_dropout_sources -- --ignored --nocapture
+cp crates/baracuda-kernelgen/ondevice/dropout_validate.cu <outdir>/
+# acceptance gate (bespoke header => conforming preprocessor + include path):
+nvcc -O3 -arch=sm_89 -std=c++17 -DWITH_BESPOKE \
+     -I <kernels-sys>/kernels/include -Xcompiler "/Zc:preprocessor /std:c++17" \
+     <outdir>/dropout_validate.cu -o <outdir>/dropout_validate && <outdir>/dropout_validate
+compute-sanitizer --tool memcheck  <outdir>/dropout_validate san   # + racecheck/synccheck/initcheck
+```
+
+Without `-DWITH_BESPOKE` the harness still builds (headerless) and checks the mask
+vs its definition + the strided/determinism cells, but cell 1's value memcmp gate
+needs the bespoke target.
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **RESULT: ALL
+PASSED**:
+
+- **Cell 1 (ACCEPTANCE GATE):** all 16 cells `bit_diff(y) = 0` AND `bit_diff(mask)
+  = 0` (dropped-negative `-0.0` class 0, mask-vs-definition 0) — full shape x p
+  matrix, probe-seeded, shared `rand`. Bit-exact for BOTH the F32 value and the U8
+  mask by construction (identical single multiply + identical `rand < keep_prob`).
+- **Cell 2 (strided):** both shapes (128x96, 37x53) `bit_diff(y) = 0`,
+  `bit_diff(mask) = 0` — the transposed-output offset math (`oo0`/`oo1`) is exact
+  for both outputs.
+- **Cell 4 (determinism):** `y` AND `mask` memcmp-identical across two launches.
+- **Cell 5 (sanitizers):** memcheck / synccheck / **initcheck** `ERROR SUMMARY: 0
+  errors`, racecheck **0 hazards** (the U8 mask buffer is fully written — no
+  uninitialized reads; the dual-buffer store is race-free and in-bounds).
+- **Cell 6 (bench):** 4096x4096, generated fused **0.975 ms** (17.21 Gelem/s, 223.7
+  GB/s) vs bespoke **0.974 ms** (17.23 Gelem/s, 224.0 GB/s) — **1.00x bespoke**
+  (parity; both are the same single-pass fused kernel, memory-bound at ~224 GB/s).
+
+**Device-launched vs host-side tally:** cells 1, 2, 4, 5, 6 are device-launched
+(the generated `_mo2_scalar` + `_mo2_strided_r2` kernels, and the bespoke
+`dropout_fw` launcher); cell 3 (cross-body CSE) is the host-side Rust golden. All
+value/mask numeric proofs run on the GPU.
+
+**Fuel contract (honest miss — AOT-ONLY, confirmed against Fuel's sources):** this
+is the FIRST hetero (mixed-dtype) multi-output kernel and it emits **no FKC
+contract**. `contract()` returns `None` for every `n_outputs > 1` op structurally
+(`contract.rs:245`), BEFORE `derive_pattern` — Fuel has no dual `OpKind` for an
+elementwise multi-output, `PatternNode` is single-rooted (a forest of N output
+roots is inexpressible), and Fuel's only multi-output ABI is a single-buffer
+`return.bundle`. Fuel additionally has no `Dropout`/`BernoulliMask` `OpTag`, so a
+seam region can never synthesize one — AOT-only forever given current Fuel types,
+the same posture the uniform multi-output increment already occupies. Making Fuel
+*call* the fused dropout kernel is a Fuel-side propose-first (an `Op::BernoulliMask`
+op + registering Baracuda's FKC as a hetero `return.bundle` FusedOp — Baracuda would
+be Fuel's first mixed-dtype bundle producer), filed in
+`docs/fuel-ask-heteromulti-dropout-2026-07-09.md`; the v1 AOT kernel needs none of
+it.

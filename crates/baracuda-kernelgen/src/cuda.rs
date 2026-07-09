@@ -720,29 +720,39 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
     GeneratedKernel { name, source: s }
 }
 
-/// The output pointer's scalar C type — the input `ctype` for a uniform-dtype
-/// plan, `unsigned char` for a u8-predicate plan (increment 0b).
-fn out_ctype<'c>(plan: &KernelPlan<'_>, ctype: &'c str) -> &'c str {
-    if plan.out_dtype == plan.dtype {
+/// Output `j`'s pointer scalar C type — the input `ctype` for a uniform output
+/// (`out_dtype_of(j) == plan.dtype`), `unsigned char` for a u8-predicate/keep-mask
+/// output (increment 0b single-output; the hetero multi-output / dropout-class
+/// increment per-output). `out_ctype_of(plan, 0, ctype)` is byte-identical to the
+/// pre-generalization `out_ctype` (output 0's dtype is `plan.out_dtype`), so every
+/// single-output + uniform-multi emitter that passes `j = 0`/a uniform `j` is
+/// unchanged.
+fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str {
+    let d = plan.out_dtype_of(j);
+    if d == plan.dtype {
         ctype
     } else {
-        scalar_ctype(plan.out_dtype).expect("validated out dtype has a scalar ctype")
+        scalar_ctype(d).expect("validated out dtype has a scalar ctype")
     }
 }
 
-/// The store expression for the lowered body root. Uniform-dtype plans store
-/// the root unchanged (byte-identical to pre-0b output). A u8-predicate plan
-/// converts the exact 0.0/1.0 predicate to `unsigned char` — exact by
-/// construction (`assert_valid_out_dtype` pinned the body root to a `Cmp*`).
-/// f16/bf16 re-promote first: the root lowered in the house promote-demote
-/// convention is the demoted `__float2half(<pred_f32>)` (byte-identical math
-/// to a nested cmp, one speller, no special root path), and 1.0/0.0 round-trip
-/// f32→half→f32 bit-exactly, so the extra conversion pair is value-exact (and
-/// folded by ptxas). The direct `(unsigned char)__half` conversion operator is
-/// deliberately avoided — it is a header-configuration-dependent C++ overload,
-/// not a house-audited intrinsic.
-fn store_expr(plan: &KernelPlan<'_>, root: String) -> String {
-    if plan.out_dtype == plan.dtype {
+/// The store expression for output `j`'s lowered body root. A uniform output
+/// (`out_dtype_of(j) == plan.dtype`) stores the root unchanged (byte-identical to
+/// pre-0b output). A u8 keep-mask output converts the exact 0.0/1.0 predicate
+/// (lowered in the COMPUTE dtype `plan.dtype`) to `unsigned char` — exact by
+/// construction (the G1 plan gate + G5 backstop pin the body root to a `Cmp*`).
+/// The conversion is applied HERE at the store site, per output, **never baked
+/// into the shared DAG node**: for dropout the same compute-dtype `Cmp*` temp is
+/// consumed by output 0 inside a `Select` (tested `!= 0.0f`) AND stored as
+/// `(unsigned char)` by output 1, so a cast on the shared node would corrupt
+/// output 0's value (mutation M9). f16/bf16 re-promote first: the root lowered in
+/// the house promote-demote convention is the demoted `__float2half(<pred_f32>)`,
+/// and 1.0/0.0 round-trip f32→half→f32 bit-exactly, so the conversion pair is
+/// value-exact (and folded by ptxas). `store_expr_of(plan, 0, root)` is
+/// byte-identical to the pre-generalization `store_expr`.
+fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> String {
+    let d = plan.out_dtype_of(j);
+    if d == plan.dtype {
         return root;
     }
     match plan.dtype {
@@ -759,7 +769,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         dtype_tag(plan.dtype)
     );
     let n = plan.n_inputs;
-    let octype = out_ctype(plan, ctype);
+    let octype = out_ctype_of(plan, 0, ctype);
     let mut s = header(plan, &name);
     for i in 0..n {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
@@ -787,7 +797,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
         },
     );
-    let store = store_expr(plan, root);
+    let store = store_expr_of(plan, 0, root);
     if prelude.is_empty() {
         s.push_str(&format!("    for (; i < n; i += step) out[i] = {store};\n"));
     } else {
@@ -842,7 +852,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         rank,
         off_suffix
     );
-    let octype = out_ctype(plan, ctype);
+    let octype = out_ctype_of(plan, 0, ctype);
     let mut s = header(plan, &name);
     for i in 0..n {
         // The INDEX operand (gather or scatter) is an integer tensor — its pointer
@@ -1102,7 +1112,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             scatter_combine_store(combine, octype, &root, hetero)
         ));
     } else {
-        let stored = store_expr(plan, root);
+        let stored = store_expr_of(plan, 0, root);
         // Increment 4 — GATHER store policy. The DATA load inside `stored` is
         // always in-bounds (`gidx_clamped`), so the policy only shapes the WRITE:
         //   - Clamp     → always store the clamped-index value (no predicate).
@@ -1467,7 +1477,7 @@ fn emit_scatter_gathersum(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel
         .expect("emit_scatter_gathersum called on a non-scatter plan");
     let idx_op = index_operand as usize;
     let idxct = scalar_ctype(index_dtype).expect("gate pins index dtype to I32/I64");
-    let octype = out_ctype(plan, ctype);
+    let octype = out_ctype_of(plan, 0, ctype);
     // The value operand (updates) is the non-index input; its offset uses the
     // UPDATE-domain coordinate. bincount-style (index==value) has no separate
     // value input — but bincount is integer (deterministic), so it never routes
@@ -1607,13 +1617,41 @@ fn assert_multi_output_lowerable(plan: &KernelPlan<'_>) {
         "cuda backend: multi-output op '{}' must be Access::Elementwise",
         plan.op_name
     );
+    // Per-output dtype legality (G5) — the SAME per-output rule the plan gate
+    // enforces (G1), held INDEPENDENTLY here (the 0a lesson: gate every layer). A
+    // UNIFORM output (`out_dtype_of(j) == plan.dtype`) is unconstrained; a HETERO
+    // output must be a U8 keep-mask with a `Cmp*`-root body (the exact 0.0/1.0 the
+    // store converts). Plus: any hetero output FORBIDS the Vectorized schedule (a
+    // U8 output has no packed vector store — G4 forces Scalar/Strided, so
+    // `emit_vectorized_multi` never receives a hetero plan).
+    let bodies = plan.output_bodies();
+    let mut any_hetero = false;
+    for (j, body) in bodies.iter().enumerate() {
+        let d = plan.out_dtype_of(j);
+        if d != plan.dtype {
+            any_hetero = true;
+            assert!(
+                d == ElementKind::U8,
+                "cuda backend: multi-output op '{}' output {j} has hetero dtype \
+                 {d:?} — the only lowerable per-output hetero dtype is U8 (a \
+                 comparison-predicate keep-mask)",
+                plan.op_name
+            );
+            assert!(
+                matches!(body, ScalarExpr::Binary(bop, _, _) if bop.is_cmp()),
+                "cuda backend: multi-output op '{}' output {j} is U8 but its body \
+                 root is not a Cmp* — the u8 store would truncate a non-predicate \
+                 silently",
+                plan.op_name
+            );
+        }
+    }
     assert!(
-        plan.out_dtype == plan.dtype,
-        "cuda backend: multi-output op '{}' must have a uniform output dtype (out \
-         {:?}, key {:?}) — hetero multi-output is a follow-up",
-        plan.op_name,
-        plan.out_dtype,
-        plan.dtype
+        !(any_hetero && matches!(plan.schedule, Schedule::Vectorized { .. })),
+        "cuda backend: multi-output op '{}' has a hetero (U8) output on the \
+         Vectorized schedule — a U8 keep-mask has no packed vector store, so a \
+         hetero plan must lower Scalar/Strided (G4/G5)",
+        plan.op_name
     );
     let want = plan.n_inputs as usize + plan.n_outputs as usize;
     assert!(
@@ -1735,7 +1773,13 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
     }
     for j in 0..n_out {
-        s.push_str(&format!("    {ctype}* __restrict__ out{j},\n"));
+        // Per-output pointer type (the hetero multi-output / dropout-class
+        // increment): `unsigned char*` for a U8 keep-mask output, `ctype*` for a
+        // uniform output — byte-identical for a uniform-multi op.
+        s.push_str(&format!(
+            "    {}* __restrict__ out{j},\n",
+            out_ctype_of(plan, j, ctype)
+        ));
     }
     s.push_str(&format!(
         "    long long n{})\n{{\n",
@@ -1763,7 +1807,13 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("        {decl}\n"));
     }
     for (j, root) in roots.iter().enumerate() {
-        s.push_str(&format!("        out{j}[i] = {root};\n"));
+        // Per-output store conversion at the STORE SITE (never on the shared DAG
+        // node): a U8 keep-mask stores `(unsigned char)root`, a uniform output
+        // stores `root` raw — byte-identical for a uniform-multi op.
+        s.push_str(&format!(
+            "        out{j}[i] = {};\n",
+            store_expr_of(plan, j, root.clone())
+        ));
     }
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
@@ -1792,7 +1842,13 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
     }
     for j in 0..n_out {
-        s.push_str(&format!("    {ctype}* __restrict__ out{j},\n"));
+        // Per-output pointer type (the hetero multi-output / dropout-class
+        // increment): `unsigned char*` for a U8 keep-mask output — byte-identical
+        // for a uniform-multi op.
+        s.push_str(&format!(
+            "    {}* __restrict__ out{j},\n",
+            out_ctype_of(plan, j, ctype)
+        ));
     }
     for d in 0..rank {
         s.push_str(&format!("    long long shape{d},\n"));
@@ -1868,10 +1924,37 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("        {decl}\n"));
     }
     for (j, root) in roots.iter().enumerate() {
-        s.push_str(&format!("        out{j}[oo{j}] = {root};\n"));
+        // Per-output store conversion at the STORE SITE (never on the shared DAG
+        // node): a U8 keep-mask stores `(unsigned char)root` — byte-identical for a
+        // uniform-multi op.
+        s.push_str(&format!(
+            "        out{j}[oo{j}] = {};\n",
+            store_expr_of(plan, j, root.clone())
+        ));
     }
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
+}
+
+/// Backstop for the multi-output VECTORIZED emitters (native + packed): each
+/// stores one packed vector type per output, so a hetero (U8 keep-mask) output —
+/// which has no packed vector store — must NEVER reach them. G4 forces any hetero
+/// multi-output plan to Scalar/Strided, and `assert_multi_output_lowerable` (G5)
+/// re-asserts `schedule != Vectorized` for a hetero plan; this pins the invariant
+/// at the emitter itself (the "gate every layer" rule) so a future schedule change
+/// cannot silently route a U8 output through a `float4` store.
+fn assert_multi_outputs_uniform(plan: &KernelPlan<'_>, emitter: &str) {
+    for j in 0..plan.n_outputs as usize {
+        let d = plan.out_dtype_of(j);
+        assert!(
+            d == plan.dtype,
+            "cuda backend: {emitter} received multi-output op '{}' with a hetero \
+             output {j} ({d:?} != {:?}) — a U8 keep-mask has no packed vector store; \
+             a hetero plan must lower Scalar/Strided (G4/G5)",
+            plan.op_name,
+            plan.dtype
+        );
+    }
 }
 
 /// Emit a **multi-output vectorized** elementwise kernel (increment 1): the
@@ -1879,6 +1962,7 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 /// input vector is loaded once (`v{i} = in{i}[i]`); each lane lowers ALL output
 /// bodies through the shared DAG, assigning `vo{j}.{lane}`; then N vector stores.
 fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> GeneratedKernel {
+    assert_multi_outputs_uniform(plan, "emit_vectorized_multi");
     let n_in = plan.n_inputs as usize;
     let n_out = plan.n_outputs as usize;
     let name = format!(
@@ -1953,6 +2037,7 @@ fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Ge
 /// per lane; hoisting-all (via [`lower_dag_multi`]'s `hoist_all`) keeps Tier-B
 /// pair-splits from duplicating text across the shared DAG.
 fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKernel {
+    assert_multi_outputs_uniform(plan, "emit_vectorized_packed_multi");
     let width = pk.fields.len() * 2;
     let n_in = plan.n_inputs as usize;
     let n_out = plan.n_outputs as usize;
@@ -2115,7 +2200,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     // The output pointer's scalar C type — the input `ctype` for a uniform-dtype
     // reduction, `unsigned char`/`long long` for a 0e hetero-out (any/all/count),
     // exactly the 0b pattern (`assert_valid_out_dtype` pinned the legal set).
-    let octype = out_ctype(plan, ctype);
+    let octype = out_ctype_of(plan, 0, ctype);
 
     // Accumulate in double for f64 / f32-strict; float otherwise. Shared by both
     // paths — the leaf load up-converts, and the body is lowered in the acc width.
@@ -6193,6 +6278,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -6232,6 +6318,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &ri,
@@ -6851,6 +6938,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &views,
             read_index: &[],
@@ -8531,6 +8619,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -9193,6 +9282,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -9220,6 +9310,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -9247,6 +9338,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -9278,6 +9370,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -9308,6 +9401,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -9581,6 +9675,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -9620,6 +9715,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &access,
             views: &[],
             read_index: &[],
@@ -9647,6 +9743,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -9678,6 +9775,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -10156,6 +10254,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -10185,6 +10284,7 @@ mod tests {
             body: &body,
             n_outputs: 2, // WRONG: an offset needs single-output.
             extra_out_bodies: &extra,
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
@@ -10224,6 +10324,7 @@ mod tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &access,
             views: &[],
             read_index: &[],
@@ -10597,6 +10698,272 @@ mod multi_output_tests {
             dag.consumers(dag.roots()[0]) >= 1,
             "the shared subexpr survives optimize-then-intern"
         );
+    }
+}
+
+#[cfg(test)]
+mod dropout_hetero_tests {
+    //! HETERO MULTI-OUTPUT (dropout-class) goldens + emitter backstops. One kernel
+    //! writes an F32 value output AND a U8 keep-mask output from a shared body-DAG:
+    //! the `rand < keep_prob` comparison hoists ONCE (cross-body CSE) and is
+    //! consumed by BOTH output 0 (inside a `Select`, in compute dtype) and output 1
+    //! (stored `(unsigned char)`). Per-output store conversion lives at the STORE
+    //! SITE, never on the shared node (M9). On-device numeric proof is
+    //! `ondevice/dropout_validate.cu`; these pin the source shape + the per-output
+    //! ptr type / store cast.
+    use crate::backend::Backend;
+    use crate::ir::{Access, BaseOffset, BinaryOp, OpDef, WriteIndex, input, konst, param};
+    use crate::plan::{KernelPlan, Schedule};
+    use crate::{Cuda, generate};
+    use baracuda_kernels_types::{
+        ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
+    };
+
+    // dropout_fw: inputs x=in0, rand=in1; params keep_prob=p0, scale=p1.
+    //   output 0 (value, F32): x·(rand<keep_prob ? scale : 0)
+    //   output 1 (mask,  U8 ): rand<keep_prob   (the SAME Cmp node, shared)
+    fn dropout_fw() -> OpDef {
+        let cond = || input(1).binary(BinaryOp::CmpLt, param(0));
+        OpDef::elementwise_multi_hetero(
+            "dropout",
+            2,
+            &[ElementKind::F32],
+            vec![
+                (input(0) * cond().select(param(1), konst(0.0)), None),
+                (cond(), Some(ElementKind::U8)),
+            ],
+        )
+    }
+
+    // inputs x,rand (F32) then outputs value (F32), mask (U8). `even` ⇒ V4-eligible.
+    fn dropout_contig_key(even: bool) -> StructureKey {
+        let ext: i64 = if even { 1 << 20 } else { 1_000_003 };
+        let f = OperandDesc::new(1, &[ext], &[1], ElementKind::F32, 256);
+        let u = OperandDesc::new(1, &[ext], &[1], ElementKind::U8, 256);
+        structure_key(OpCategory::BinaryElementwise, &[f, f, f, u], ArchSku::Sm89)
+    }
+    fn dropout_strided_key() -> StructureKey {
+        let f = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256);
+        let u = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::U8, 256);
+        structure_key(OpCategory::BinaryElementwise, &[f, f, f, u], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn dropout_scalar_hetero_golden_f32() {
+        let k = generate(&dropout_fw(), &dropout_contig_key(false), &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_dropout_f32_mo2_scalar",
+            "{}",
+            k.source
+        );
+        // Per-output pointer TYPES: value F32, mask u8 (M8).
+        assert!(
+            k.source.contains("float* __restrict__ out0,"),
+            "value ptr f32:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("unsigned char* __restrict__ out1,"),
+            "mask ptr u8:\n{}",
+            k.source
+        );
+        // The shared comparison hoists ONCE (cross-body CSE) in COMPUTE dtype.
+        assert_eq!(
+            k.source
+                .matches("float tmp0 = ((float)in1[i] < (float)p0 ? 1.0f : 0.0f);")
+                .count(),
+            1,
+            "shared cond hoisted once:\n{}",
+            k.source
+        );
+        // Value store: consumes the shared temp INSIDE the select (NOT the u8 cast
+        // — M9); one multiply of x by the selected multiplier.
+        assert!(
+            k.source.contains(
+                "out0[i] = (in0[i] * (((float)(tmp0)) != 0.0f ? (float)(p1) : (float)(0.0)));"
+            ),
+            "value store reads tmp0 raw:\n{}",
+            k.source
+        );
+        // Mask store: the u8 conversion at the STORE SITE (M7).
+        assert!(
+            k.source.contains("out1[i] = (unsigned char)tmp0;"),
+            "mask store (unsigned char)tmp0:\n{}",
+            k.source
+        );
+        // Both params threaded (keep_prob p0 across both bodies, scale p1).
+        assert!(
+            k.source.contains(", float p0, float p1)"),
+            "param signature:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn dropout_strided_hetero_golden_f32() {
+        let k = generate(&dropout_fw(), &dropout_strided_key(), &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_dropout_f32_mo2_strided_r2",
+            "{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("unsigned char* __restrict__ out1,"),
+            "mask ptr u8:\n{}",
+            k.source
+        );
+        // Shared cond hoisted once over the strided input load `in1[o1]`.
+        assert_eq!(
+            k.source
+                .matches("float tmp0 = ((float)in1[o1] < (float)p0 ? 1.0f : 0.0f);")
+                .count(),
+            1,
+            "shared cond hoisted once:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains(
+                "out0[oo0] = (in0[o0] * (((float)(tmp0)) != 0.0f ? (float)(p1) : (float)(0.0)));"
+            ),
+            "value store at oo0 reads tmp0 raw:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out1[oo1] = (unsigned char)tmp0;"),
+            "mask store (unsigned char)tmp0 at oo1:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn dropout_hetero_never_vectorizes() {
+        // G4: a contig V4-eligible dropout key STILL emits the `_scalar` entry (the
+        // u8 mask has no packed vector store) — never a `_co_v4` kernel.
+        let k = generate(&dropout_fw(), &dropout_contig_key(true), &Cuda);
+        assert_eq!(
+            k.name, "baracuda_gen_dropout_f32_mo2_scalar",
+            "{}",
+            k.source
+        );
+        assert!(!k.name.contains("_co_v"), "not vectorized: {}", k.name);
+    }
+
+    #[test]
+    fn uniform_multi_output_goldens_are_byte_identical() {
+        // G3: a UNIFORM multi-output op (mul_backward) is byte-identical whether the
+        // hetero constructor is used with all-`None` dtypes or the plain
+        // `elementwise_multi` — the additive-field no-op guarantee.
+        let f = OperandDesc::new(1, &[1_000_003], &[1], ElementKind::F32, 256);
+        let ops: Vec<_> = std::iter::repeat_n(f, 5).collect();
+        let key = structure_key(OpCategory::BinaryElementwise, &ops, ArchSku::Sm89);
+        let via_plain = generate(
+            &OpDef::elementwise_multi(
+                "mul_backward",
+                3,
+                &[ElementKind::F32],
+                vec![input(0) * input(2), input(0) * input(1)],
+            ),
+            &key,
+            &Cuda,
+        );
+        let via_hetero = generate(
+            &OpDef::elementwise_multi_hetero(
+                "mul_backward",
+                3,
+                &[ElementKind::F32],
+                vec![(input(0) * input(2), None), (input(0) * input(1), None)],
+            ),
+            &key,
+            &Cuda,
+        );
+        assert_eq!(
+            via_plain.source, via_hetero.source,
+            "uniform multi byte-identical via either constructor"
+        );
+    }
+
+    // ---- G5: the Tier-2 emitter backstop, independent of the plan gate ----
+    // Hand-built plans handed straight to `Cuda::lower` (build_plan never produces
+    // these); the backstop must hold INDEPENDENTLY (the 0a "gate every layer"
+    // lesson). Kill targets for M6.
+
+    fn hetero_plan_slots<'a>(
+        key: &'a StructureKey,
+        body0: &'a crate::ir::ScalarExpr,
+        extra_bodies: &'a [crate::ir::ScalarExpr],
+        extra_dtypes: &'a [Option<ElementKind>],
+        schedule: Schedule,
+    ) -> KernelPlan<'a> {
+        KernelPlan {
+            op_name: "backstop",
+            n_inputs: 2,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule,
+            key,
+            body: body0,
+            n_outputs: 2,
+            extra_out_bodies: extra_bodies,
+            extra_out_dtypes: extra_dtypes,
+            access: &Access::Elementwise,
+            views: &[],
+            read_index: &[],
+            write_index: &WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: BaseOffset::Zero,
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "the only lowerable per-output hetero dtype is U8")]
+    fn hetero_non_u8_output_refused_by_emitter_backstop() {
+        // A non-U8 hetero EXTRA output (I32) handed to `Cuda::lower` must panic in
+        // `assert_multi_output_lowerable` (G5) — NOT emit C. build_plan would reject
+        // it (G1); the backstop holds independently.
+        let key = dropout_contig_key(false);
+        let body0 = input(0).0;
+        let extra = [input(0).binary(BinaryOp::CmpLt, input(1)).0];
+        let extra_dt = [Some(ElementKind::I32)];
+        let plan = hetero_plan_slots(&key, &body0, &extra, &extra_dt, Schedule::Scalar);
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "has a hetero (U8) output on the Vectorized schedule")]
+    fn hetero_plan_tagged_vectorized_refused_by_emitter_backstop() {
+        // A LEGAL U8 hetero output but tagged Vectorized (which G4 never produces)
+        // must panic in the backstop — a u8 mask has no packed vector store.
+        let key = dropout_contig_key(true);
+        let body0 = input(0).0;
+        let extra = [input(1).binary(BinaryOp::CmpLt, param(0)).0];
+        let extra_dt = [Some(ElementKind::U8)];
+        let plan = hetero_plan_slots(
+            &key,
+            &body0,
+            &extra,
+            &extra_dt,
+            Schedule::Vectorized { width: 4 },
+        );
+        let _ = Cuda.lower(&plan);
+    }
+
+    // ---- source dump for ondevice/dropout_validate.cu ----
+
+    /// Regenerate the generated kernels `ondevice/dropout_validate.cu` includes.
+    /// Run with:
+    ///   `DROPOUT_OUT=<outdir> cargo test -p baracuda-kernelgen dump_dropout_sources -- --ignored --nocapture`
+    #[test]
+    #[ignore = "writes generated sources for the on-device dropout harness"]
+    fn dump_dropout_sources() {
+        let out = std::env::var("DROPOUT_OUT").expect("set DROPOUT_OUT=<outdir>");
+        let write = |k: crate::GeneratedKernel| {
+            let path = format!("{out}/{}.cu", k.name);
+            std::fs::write(&path, &k.source).unwrap();
+            println!("wrote {path}");
+        };
+        // Contiguous scalar (the acceptance-gate + bench kernel) and a strided cell.
+        write(generate(&dropout_fw(), &dropout_contig_key(false), &Cuda));
+        write(generate(&dropout_fw(), &dropout_strided_key(), &Cuda));
     }
 }
 
@@ -12343,6 +12710,7 @@ mod select_tests {
             body: &body,
             n_outputs: 1,
             extra_out_bodies: &[],
+            extra_out_dtypes: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],

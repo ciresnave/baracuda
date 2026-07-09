@@ -182,6 +182,15 @@ pub struct KernelPlan<'a> {
     /// multi-output emitter interns `[body] ++ extra_out_bodies` into one
     /// [`crate::ir::ExprDag`] for cross-body CSE.
     pub extra_out_bodies: &'a [ScalarExpr],
+    /// Per-EXTRA-output element dtypes ([`crate::ir::OpDef::extra_out_dtypes`], the
+    /// hetero multi-output / dropout-class increment) — **empty for every
+    /// single-output op and every UNIFORM multi-output op**, so the store emitters
+    /// are byte-identical (`out_dtype_of(j)` resolves to the compute dtype for
+    /// every output). A non-empty slice has length `extra_out_bodies.len()`; a
+    /// `Some(U8)` entry is a per-output hetero keep-mask whose store converts the
+    /// exact `0.0/1.0` `Cmp*` predicate to `unsigned char` at the store site.
+    /// Backends read per-output dtype via [`KernelPlan::out_dtype_of`].
+    pub extra_out_dtypes: &'a [Option<ElementKind>],
     /// The op's access pattern — the [`Schedule::RowReduce`] emitter reads its
     /// `stages` (and epilogue) off here, since `Schedule` is `Copy` and can't carry
     /// the stage `Vec`.
@@ -243,6 +252,28 @@ impl KernelPlan<'_> {
         std::iter::once(self.body)
             .chain(self.extra_out_bodies.iter())
             .collect()
+    }
+
+    /// The resolved element dtype of output `j` (the hetero multi-output /
+    /// dropout-class increment). Output 0 is [`Self::out_dtype`] (already resolved
+    /// `op.out_dtype.unwrap_or(key.dtype)`). Output `j > 0` reads
+    /// [`Self::extra_out_dtypes`]`[j-1]`, resolving `None` **and the empty-slice
+    /// case** (a uniform multi-output op stores an empty `extra_out_dtypes`) to the
+    /// compute dtype [`Self::dtype`]. So for every uniform-multi/single-output plan
+    /// `out_dtype_of(j) == dtype` and the store is byte-identical; a `Some(U8)`
+    /// entry is the only hetero case. Backends use this to pick each output
+    /// pointer's ctype + store conversion.
+    #[must_use]
+    pub fn out_dtype_of(&self, j: usize) -> ElementKind {
+        if j == 0 {
+            self.out_dtype
+        } else {
+            self.extra_out_dtypes
+                .get(j - 1)
+                .copied()
+                .flatten()
+                .unwrap_or(self.dtype)
+        }
     }
 }
 
@@ -394,6 +425,14 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 .map(|k| vec_width_elems(key.operands[k].vec_width))
                 .min()
                 .unwrap_or(1);
+            // Every output stores its compute-dtype value raw (no U8/hetero store):
+            // output 0 uniform (`out_dtype` None) AND every extra output uniform
+            // (`extra_out_dtypes` all None / empty). A hetero output has no packed
+            // vector store, so it must fall to Scalar/Strided (G4). This is the
+            // per-output generalization of the single-output 0b `out_dtype.is_none()`
+            // vectorize gate — byte-identical for every uniform op.
+            let all_outputs_uniform =
+                op.out_dtype.is_none() && op.extra_out_dtypes.iter().all(Option::is_none);
             if op_has_gather(op) || op_has_scatter(op) {
                 // Increment 4/5: a GATHERED input (read) or a SCATTERED output
                 // (write) resolves a DATA-DEPENDENT address (one axis coordinate
@@ -447,13 +486,17 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 Schedule::Strided
             } else if !all_contig {
                 Schedule::Strided
-            } else if min_width >= 2 && op.out_dtype.is_none() {
+            } else if min_width >= 2 && all_outputs_uniform {
                 // A hetero-output (u8 predicate) kernel takes the SCALAR path
                 // in v1 — never Vectorized: the vector/packed emitters load and
                 // STORE one vector type, and a u8-mask output has no packed
                 // store (a contiguous u8 output even keys V8, which would
-                // otherwise widen `min_width` past the inputs'). Pinned by the
-                // packed-fallback golden in `cuda`.
+                // otherwise widen `min_width` past the inputs'). `all_outputs_uniform`
+                // (G4) covers BOTH the single-output predicate (`out_dtype` Some)
+                // AND a hetero MULTI-output (any `extra_out_dtypes` Some, e.g. the
+                // dropout U8 keep-mask): any U8 output forces Scalar/Strided so
+                // `emit_vectorized_multi` never receives a hetero plan. Pinned by
+                // the packed-fallback golden + `dropout_hetero_never_vectorizes`.
                 Schedule::Vectorized { width: min_width }
             } else {
                 Schedule::Scalar
@@ -470,6 +513,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         body: &op.body,
         n_outputs: op.n_outputs(),
         extra_out_bodies: &op.extra_out_bodies,
+        extra_out_dtypes: &op.extra_out_dtypes,
         access: &op.access,
         views: &op.views,
         read_index: &op.read_index,
@@ -668,15 +712,26 @@ pub(crate) fn rr_role(o: OperandKey, last: u8) -> RrRole {
 /// [`crate::cuda::Cuda::lower`]. A single-output op (`extra_out_bodies` empty,
 /// every pre-increment-1 op) returns immediately, so nothing about the
 /// established path changes and emission stays byte-identical. For a multi-output
-/// op (built only by [`OpDef::elementwise_multi`]) the v1 rules, all honest
-/// AOT panics:
+/// op (built by [`OpDef::elementwise_multi`] or [`OpDef::elementwise_multi_hetero`])
+/// the v1 rules, all honest AOT panics:
 ///
 /// 1. **Access**: `Access::Elementwise` only. Multi-output is meaningful only for
 ///    an elementwise map; the reduction-class arms reject `extra_out_bodies`
 ///    (a fused reduction/contraction stores one accumulator, not N bodies).
-/// 2. **Uniform dtype**: `out_dtype == None`. All outputs share the key dtype;
-///    hetero multi-output (a u8 mask beside a float grad — dropout fw) is the
-///    follow-up.
+/// 2. **Per-output dtype legality** (G1): every output `j` resolves a declared
+///    dtype `d_j` (`out_dtype` for `j = 0`, `extra_out_dtypes[j-1]` for `j > 0`,
+///    each `unwrap_or(key dtype)`). A UNIFORM output (`d_j == key dtype`) is
+///    unconstrained (any elementwise body — the established path). A HETERO output
+///    must be `U8` **and** have a `Cmp*`-root body (the FKC "comparison → U8 mask"
+///    convention — only a predicate yields the exact `0.0/1.0` a u8 store
+///    round-trips; the per-output generalization of `assert_valid_out_dtype`'s
+///    Elementwise arm). The dropout fw U8 keep-mask is the v1 vehicle.
+///    `extra_out_dtypes` is EMPTY (every extra output uniform) or one entry per
+///    extra output. (A key-side cross-check of `d_j` vs the caller's OperandDesc
+///    dtype is NOT possible — the structure key carries no per-operand dtype, only
+///    the operand-0 primary; that agreement is an honest caller precondition, like
+///    buffer aliasing below. G1 authored legality + the G5 emitter backstop hold
+///    regardless.)
 /// 3. **Operand budget**: `1 ≤ n_outputs` and `n_inputs + n_outputs ≤
 ///    MAX_OPERANDS`, and the key must carry exactly `n_inputs + n_outputs`
 ///    operands (inputs then outputs) — the caller's `OperandDesc` list.
@@ -713,11 +768,15 @@ fn assert_valid_multi_output(op: &OpDef, key: &StructureKey) {
          extra_out_bodies is rejected on a {}-class op",
         access_tag(&op.access)
     );
+    // Per-output dtype length invariant: `extra_out_dtypes` is EMPTY (every extra
+    // output uniform — the byte-identical uniform-multi path) or carries exactly
+    // one dtype per extra output.
     assert!(
-        op.out_dtype.is_none(),
-        "OpDef '{name}': multi-output requires a uniform output dtype (out_dtype \
-         None) in v1 — a hetero multi-output (u8 mask beside a float grad) is the \
-         follow-up"
+        op.extra_out_dtypes.is_empty() || op.extra_out_dtypes.len() == op.extra_out_bodies.len(),
+        "OpDef '{name}': extra_out_dtypes (len {}) must be empty or match \
+         extra_out_bodies (len {})",
+        op.extra_out_dtypes.len(),
+        op.extra_out_bodies.len()
     );
     let n_inputs = op.n_inputs as usize;
     let n_outputs = op.n_outputs() as usize;
@@ -771,13 +830,28 @@ fn assert_valid_multi_output(op: &OpDef, key: &StructureKey) {
             }
         }
     }
-    for e in op.output_bodies() {
+    let bodies = op.output_bodies();
+    for &e in &bodies {
         check_body(e, op.n_inputs, name);
     }
 
-    // Output operands: the last n_outputs entries. A writable output must not be
-    // broadcast (stride-0 → aliased writes) or flipped.
-    for j in 0..n_outputs {
+    // Output operands: the last n_outputs entries. Per output j we check (a) the
+    // write shape (non-broadcast, non-flipped) and (b) the per-output dtype
+    // legality (G1: uniform == key dtype, or a U8 keep-mask with a Cmp* root).
+    //
+    // The authored per-output dtype vs the caller's OperandDesc dtype (the "G2
+    // wrong-bind cross-check" the brief called for) is NOT checkable here: the
+    // structure key does NOT carry a per-operand dtype (`OperandKey` is
+    // contig/bcast/vec_width/inner_div/flipped only; the caller's `OperandDesc`
+    // dtype is consumed to compute `vec_width` and then discarded — `StructureKey`
+    // keeps only the operand-0 primary `dtype`). Storing a per-operand output dtype
+    // would need a `baracuda-kernels-types` schema change, which is out of scope
+    // (kernels-types untouched, no `STRUCTURE_KEY_VERSION` bump). So per-output
+    // dtype/caller agreement joins the honest CALLER PRECONDITIONS the key cannot
+    // see (documented below with buffer aliasing and exact extents): the AOT op
+    // author keys each hetero output's `OperandDesc` at the authored dtype (U8 for
+    // a keep-mask). G1 (authored legality) + G5 (emitter backstop) hold regardless.
+    for (j, &body) in bodies.iter().enumerate() {
         let o = key.operands[n_inputs + j];
         assert!(
             o.bcast.is_empty(),
@@ -791,6 +865,36 @@ fn assert_valid_multi_output(op: &OpDef, key: &StructureKey) {
             "OpDef '{name}': multi-output output {j} is flipped (negative stride) — \
              a reversed output view is deferred"
         );
+        // G1: resolve the authored per-output dtype (`out_dtype` for output 0,
+        // `extra_out_dtypes[j-1]` else; each `unwrap_or(key dtype)`).
+        let d_j = if j == 0 {
+            op.out_dtype.unwrap_or(key.dtype)
+        } else {
+            op.extra_out_dtypes
+                .get(j - 1)
+                .copied()
+                .flatten()
+                .unwrap_or(key.dtype)
+        };
+        if d_j != key.dtype {
+            // A HETERO output is a U8 keep-mask ONLY, and only when its body ROOT
+            // is a `Cmp*` predicate (the exact 0.0/1.0 the u8 store round-trips —
+            // the per-output analog of `assert_valid_out_dtype`'s Elementwise arm).
+            assert!(
+                d_j == ElementKind::U8,
+                "OpDef '{name}': multi-output output {j} declares hetero dtype \
+                 {d_j:?} — the only legal per-output hetero dtype is U8 (a \
+                 comparison-predicate keep-mask); a non-U8 / wider-than-compute \
+                 side-output has no exact store conversion and is out of scope"
+            );
+            assert!(
+                matches!(body, ScalarExpr::Binary(bop, _, _) if bop.is_cmp()),
+                "OpDef '{name}': multi-output output {j} is U8 but its body ROOT is \
+                 not a comparison (ScalarExpr::Binary with a Cmp* op) — only a \
+                 predicate yields exactly 0.0/1.0, so any other body would truncate \
+                 silently under the u8 store"
+            );
+        }
     }
 }
 
@@ -2681,10 +2785,11 @@ fn vec_width_elems(v: VecWidth) -> u32 {
 
 #[cfg(test)]
 mod multi_output_validate {
-    //! Increment-1 multi-output gate-rejection tests. Per the house rule these
-    //! call `build_plan` DIRECTLY (an emitter panic would mask a gate mutation).
-    use super::build_plan;
-    use crate::ir::{Access, OpDef, ReduceOp, ScalarExpr, input, konst};
+    //! Increment-1 multi-output gate-rejection tests + the hetero (dropout-class)
+    //! per-output-dtype gates (G1/G3/G4). Per the house rule these call
+    //! `build_plan` DIRECTLY (an emitter panic would mask a gate mutation).
+    use super::{Schedule, build_plan};
+    use crate::ir::{Access, BinaryOp, OpDef, ReduceOp, ScalarExpr, input, konst, param};
     use baracuda_kernels_types::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -2707,6 +2812,38 @@ mod multi_output_validate {
             &[ElementKind::F32],
             vec![input(0) * input(2), input(0) * input(1)],
         )
+    }
+
+    // dropout_fw (the hetero v1 vehicle): inputs x=in0, rand=in1; params
+    // keep_prob=p0, scale=p1. Output 0 (value, F32) = x·(rand<keep_prob ? scale : 0);
+    // output 1 (mask, U8) = the SAME `rand<keep_prob` Cmp node (shared, hoisted by
+    // cross-body CSE).
+    fn dropout_fw() -> OpDef {
+        let cond = || input(1).binary(BinaryOp::CmpLt, param(0));
+        OpDef::elementwise_multi_hetero(
+            "dropout",
+            2,
+            &[ElementKind::F32],
+            vec![
+                (input(0) * cond().select(param(1), konst(0.0)), None),
+                (cond(), Some(ElementKind::U8)),
+            ],
+        )
+    }
+
+    // dropout key: inputs x,rand (F32) then outputs value (F32), mask (U8).
+    // `even` picks the V4-vectorizable extent vs an odd extent (scalar).
+    fn dropout_key_contig(even: bool) -> StructureKey {
+        let ext: i64 = if even { 1 << 20 } else { 1_000_003 };
+        let f = OperandDesc::new(1, &[ext], &[1], ElementKind::F32, 256);
+        let u = OperandDesc::new(1, &[ext], &[1], ElementKind::U8, 256);
+        structure_key(OpCategory::BinaryElementwise, &[f, f, f, u], ArchSku::Sm89)
+    }
+    // Transposed (column-major) rank-2 dropout key — all strided.
+    fn dropout_key_strided() -> StructureKey {
+        let f = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256);
+        let u = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::U8, 256);
+        structure_key(OpCategory::BinaryElementwise, &[f, f, f, u], ArchSku::Sm89)
     }
 
     #[test]
@@ -2790,22 +2927,125 @@ mod multi_output_validate {
         let _ = build_plan(&op, &key(2));
     }
 
+    // ==== Hetero multi-output (dropout-class) per-output-dtype gates ====
+
     #[test]
-    #[should_panic(expected = "uniform output dtype")]
-    fn hetero_multi_output_rejected() {
-        // out_dtype = Some on a multi-output op — hetero multi-out is deferred.
-        // Body 0's root is a valid Cmp so the pre-existing assert_valid_out_dtype
-        // predicate gate PASSES; the rejection is the multi-output uniform-dtype
-        // rule specifically.
-        use crate::ir::BinaryOp;
-        let mut op = OpDef::elementwise_multi(
+    fn dropout_hetero_multi_builds() {
+        // G1 POSITIVE (build_plan-direct): dropout_fw — output 0 F32 value +
+        // output 1 U8 keep-mask (a Cmp-root body) — builds. 2 inputs + 2 outputs =
+        // 4 operands; the last is U8. Pins that a legal U8-with-Cmp-root hetero
+        // output is admitted (kill target for M1: deleting the G1 loop / reverting
+        // to `out_dtype.is_none()` makes this panic).
+        let op = dropout_fw();
+        let k = dropout_key_contig(false);
+        let plan = build_plan(&op, &k);
+        assert_eq!(plan.n_outputs, 2);
+        assert_eq!(plan.out_dtype_of(0), ElementKind::F32);
+        assert_eq!(plan.out_dtype_of(1), ElementKind::U8);
+    }
+
+    #[test]
+    #[should_panic(expected = "the only legal per-output hetero dtype is U8")]
+    fn hetero_output_non_u8_is_rejected() {
+        // G1 (M3): a non-U8 hetero side-output (I32 count beside a float) has no
+        // exact compute→out store conversion — rejected. Built directly (no
+        // constructor produces an I32 elementwise side-output).
+        let op = OpDef::elementwise_multi_hetero(
             "bad",
             2,
             &[ElementKind::F32],
-            vec![input(0).binary(BinaryOp::CmpLt, input(1)), input(0)],
+            vec![
+                (input(0) * input(1), None),
+                (
+                    input(0).binary(BinaryOp::CmpLt, input(1)),
+                    Some(ElementKind::I32),
+                ),
+            ],
         );
-        op.out_dtype = Some(ElementKind::U8);
-        let _ = build_plan(&op, &key(4));
+        // Key output 1 keyed I32 so the operand shape checks pass; the per-output
+        // dtype-legality gate (G1) is what must fire. (A key-side dtype cross-check
+        // is not implementable — the structure key carries no per-operand dtype.)
+        let f = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
+        let i = OperandDesc::new(1, &[1024], &[1], ElementKind::I32, 256);
+        let k = structure_key(OpCategory::BinaryElementwise, &[f, f, f, i], ArchSku::Sm89);
+        let _ = build_plan(&op, &k);
+    }
+
+    #[test]
+    #[should_panic(expected = "body ROOT is not a comparison")]
+    fn hetero_u8_output_with_noncmp_root_is_rejected() {
+        // G1 (M2): a U8 output whose body ROOT is a Mul (not a Cmp*) would truncate
+        // a raw float silently under the u8 store — rejected.
+        let op = OpDef::elementwise_multi_hetero(
+            "bad",
+            2,
+            &[ElementKind::F32],
+            vec![
+                (input(0), None),
+                (input(0) * input(1), Some(ElementKind::U8)),
+            ],
+        );
+        let f = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
+        let u = OperandDesc::new(1, &[1024], &[1], ElementKind::U8, 256);
+        let k = structure_key(OpCategory::BinaryElementwise, &[f, f, f, u], ArchSku::Sm89);
+        let _ = build_plan(&op, &k);
+    }
+
+    #[test]
+    fn uniform_multi_output_plan_is_unchanged() {
+        // G3: a UNIFORM multi-output op (empty extra_out_dtypes) resolves every
+        // output to the compute dtype — `out_dtype_of(j) == dtype` for all j — so
+        // the store path is byte-identical to pre-hetero. Pins the no-op guarantee.
+        let op = mul_backward();
+        let k = key(5);
+        let plan = build_plan(&op, &k);
+        assert!(plan.extra_out_dtypes.is_empty());
+        for j in 0..plan.n_outputs as usize {
+            assert_eq!(plan.out_dtype_of(j), plan.dtype);
+        }
+    }
+
+    // ==== G4: schedule forces Scalar/Strided when any output is hetero ====
+
+    #[test]
+    fn dropout_contig_key_yields_scalar_schedule() {
+        // G4: a contig V4-eligible dropout key still takes SCALAR — the U8 mask has
+        // no packed vector store. (Kill target for M5: keeping `out_dtype.is_none()`
+        // in the vectorize gate would route this to Vectorized.)
+        let op = dropout_fw();
+        let k = dropout_key_contig(true);
+        let plan = build_plan(&op, &k);
+        assert_eq!(
+            plan.schedule,
+            Schedule::Scalar,
+            "hetero forces scalar on contig"
+        );
+    }
+
+    #[test]
+    fn dropout_strided_key_yields_strided() {
+        // G4: a non-contiguous (transposed) dropout key takes STRIDED.
+        let op = dropout_fw();
+        let k = dropout_key_strided();
+        let plan = build_plan(&op, &k);
+        assert_eq!(plan.schedule, Schedule::Strided);
+    }
+
+    #[test]
+    fn uniform_multi_vec4_key_still_vectorizes() {
+        // G4 no-regression: a UNIFORM multi-output op on a V4 contig key STILL
+        // vectorizes (all_outputs_uniform true) — the hetero gate does not steal the
+        // uniform vectorized path.
+        let f = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+        let ops: Vec<_> = std::iter::repeat_n(f, 5).collect();
+        let k = structure_key(OpCategory::BinaryElementwise, &ops, ArchSku::Sm89);
+        let op = mul_backward();
+        let plan = build_plan(&op, &k);
+        assert!(
+            matches!(plan.schedule, Schedule::Vectorized { .. }),
+            "uniform multi still vectorizes: {:?}",
+            plan.schedule
+        );
     }
 
     #[test]

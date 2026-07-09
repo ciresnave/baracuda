@@ -477,6 +477,10 @@ fn region_to_op(
         // body. Multi-output (increment 1) is AOT-only until Fuel's seam grows a
         // multi-output region envelope — see the module notes / synthesize.
         extra_out_bodies: Vec::new(),
+        // Uniform per-output dtype (the hetero multi-output / dropout-class
+        // increment): a synthesized op is single-output (above), so it never
+        // carries per-output hetero dtypes. Empty ⇒ no hetero store.
+        extra_out_dtypes: Vec::new(),
         // Index-free: a gather (increment 4) is AOT-only — its index-operand dtype
         // is unkeyable in the single-dtype token (see `PatternError::GatherUnsupported`),
         // so a seam region never synthesizes one.
