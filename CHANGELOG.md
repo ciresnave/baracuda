@@ -8,6 +8,59 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.77 — 2026-07-09 (post-ramp codegen breadth + the CapturedRun `_doff` unblock)
+
+Ten adversarially-reviewed increments on top of alpha.76: a device-resident
+dynamic range-start WriteSlice that unblocks Fuel's `CapturedRun` (CUDA-graph
+decode replay), and nine `baracuda-kernelgen` expressibility/performance
+increments closing the last named codegen gaps (rope, triu, fused dropout,
+fused argsort, top-k, im2col, f64 params) and adding measured cooperative
+variants (block-scan, partial-select top-k). Each shipped through the standing
+discipline: design-scout → background implementation → adversarial multi-lens
+review (find + refute-verify) → on-device validation on an RTX 4070 (sm_89).
+`baracuda-kernels-types` is UNTOUCHED (no `STRUCTURE_KEY_VERSION` bump) — every
+increment keys additively.
+
+### Added
+
+- **`_doff` WriteSlice** (`baracuda-kernels-sys`, form B): a device-resident
+  dynamic range-start variant of the bespoke `write_slice` so a captured KV
+  decode write survives CUDA-graph replay (capture bakes launch-arg values; the
+  offset now rides a fixed-address device cell updated by H2D memcpy). Unblocks
+  Fuel's `CapturedRun`. ABI frozen with the Fuel JIT-seam session.
+- **kernelgen — BASE_OFFSET slice**: runtime per-operand base element offsets
+  (`long long off{i}` launch args); **rope closed BIT-EXACT** vs the bespoke.
+- **kernelgen — WHERE/SELECT**: `ScalarExpr::Select` (the IR's first 3-child
+  node); bit-identical triu closes the increment-0d signed-zero gap.
+- **kernelgen — HETERO MULTI-OUTPUT**: per-output dtypes
+  (`OpDef.extra_out_dtypes`); the first mixed-dtype multi-output kernel — fused
+  dropout (value + U8 mask) bit-exact vs the bespoke.
+- **kernelgen — FUSED ARGSORT / TOP-K**: `SortOut::{Values,Indices,Both}` +
+  `SortLimit::{Full,TopK}` on `Access::RowSort` — one kernel writes sorted
+  values + i32 indices; per-row top-k / bottom-k with a runtime `k_out` and
+  shrunk output.
+- **kernelgen — IM2COL/unfold**: `Access::Im2Col` 2D conv-lowering structured
+  gather (the column matrix `[N, C·kh·kw, oH·oW]`), byte-exact raw-bit gather.
+- **kernelgen — F64 scalar launch params**: the scalar-param launch channel is
+  dtype-aware (`double` params); f64 dropout the vehicle.
+- **kernelgen — BLOCK-SCAN variants** (measured, `BitIdentical`/`Reassociated`):
+  the cooperative Kogge-Stone scan extended to reverse + Max/Min + integer
+  (I32/I64); FP Max/Min and integer scans are bit-identical to the serial base
+  (a design-panel-proven NaN/signed-zero associative combiner).
+- **kernelgen — PARTIAL-SELECT top-k** (measured, `BitIdentical`): a streaming
+  tiled-bitonic top-k, O(k_in·log²k_out), smem bounded on `k_out` not `k_in` —
+  the unique fast path for `k_in > 1024` large-vocab top-k (102.6× the rank base
+  at top-10 of 50000, where the full-sort bitonic cannot run). Bit-identical to
+  the full-sort top-`k_out` prefix (composition-lemma proven).
+
+### Fixed
+
+- **Build**: plain-shell test linking for `baracuda-optim` /
+  `baracuda-transformer-engine` / `baracuda-ozimmu`.
+- **partial-select top-k**: init-buffer pad-index saturated at `INT_MAX` (an
+  in-contract integer overflow near the i32 `out_idx` cap would wrap a pad index
+  negative and tie-beat a real — caught by adversarial review, memory-safety).
+
 ## 0.0.1-alpha.76 — 2026-07-08 (FKC contracts import through Fuel end-to-end; `baracuda-kernelgen` published — live JIT unblocked)
 
 The release both Fuel sessions are waiting on: `baracuda-kernelgen` is now **on
