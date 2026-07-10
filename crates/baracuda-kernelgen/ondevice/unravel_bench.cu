@@ -50,6 +50,19 @@ __global__ void k_hand(int64_t n, int rank, DimsI32 shape, DimsI64 stride, int64
     int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) out[i] = baracuda::coord::unravel_offset_1(i, rank, shape, stride);
 }
+// max-rank (r8) coverage for the single-stride path.
+__global__ void k_gen_r8(int64_t n, DimsI32 shape, DimsI64 stride, int64_t* out) {
+    int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = baracuda::coord::gen::unravel_offset_1_r8(i, shape, stride);
+}
+// multi-stride variant: ONE unravel pass feeds two offsets.
+__global__ void k_gen_off2_r4(int64_t n, DimsI32 shape, DimsI64 sa, DimsI64 sb, int64_t* oa, int64_t* ob) {
+    int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    int64_t a, b;
+    baracuda::coord::gen::unravel_offsets_2_r4(i, shape, sa, sb, a, b);
+    oa[i] = a; ob[i] = b;
+}
 
 // --- compute-bound bench kernels: REPEAT unravels accumulated, one write ---
 #define REPEAT 64
@@ -121,6 +134,53 @@ static void check_guard() {
     cudaFree(d);
 }
 
+// Max-rank (r8) single-stride coverage: the emission is rank-uniform, so r8
+// exercising the same generated logic as r4 is a cheap breadth check.
+static void check_r8() {
+    std::vector<int32_t> shp = {2,3,2,3,2,3,2,3};
+    std::vector<int64_t> str = {648,216,108,36,18,6,3,1};
+    int64_t n = 1; for (int32_t s : shp) n *= s;   // 1296
+    DimsI32 shape = mk_shape(shp); DimsI64 stride = mk_stride(str);
+    int64_t* dg; CHECK(cudaMalloc(&dg, n*sizeof(int64_t)));
+    int blocks = (int)((n + 255)/256);
+    k_gen_r8<<<blocks,256>>>(n, shape, stride, dg);
+    CHECK(cudaDeviceSynchronize());
+    std::vector<int64_t> hg(n);
+    CHECK(cudaMemcpy(hg.data(), dg, n*sizeof(int64_t), cudaMemcpyDeviceToHost));
+    int64_t bad = 0;
+    for (int64_t i = 0; i < n; ++i) if (hg[i] != unravel_ref(i, 8, shp.data(), str.data())) bad++;
+    printf("%-12s n=%-8lld %s\n", "rank8", (long long)n, bad ? "FAIL" : "ok (gen==ref)");
+    if (bad) fails++;
+    cudaFree(dg);
+}
+
+// Multi-stride: one pass feeds two offsets; each must equal its own
+// single-stride reference (with a broadcast + negative stride in the 2nd).
+static void check_multistride() {
+    std::vector<int32_t> shp = {7,5,3,4};
+    std::vector<int64_t> sa_ = {60,12,4,1};
+    std::vector<int64_t> sb_ = {0,20,-5,2};
+    int64_t n = 7*5*3*4;
+    DimsI32 shape = mk_shape(shp);
+    DimsI64 sa = mk_stride(sa_), sb = mk_stride(sb_);
+    int64_t *doa, *dob;
+    CHECK(cudaMalloc(&doa, n*sizeof(int64_t)));
+    CHECK(cudaMalloc(&dob, n*sizeof(int64_t)));
+    int blocks = (int)((n + 255)/256);
+    k_gen_off2_r4<<<blocks,256>>>(n, shape, sa, sb, doa, dob);
+    CHECK(cudaDeviceSynchronize());
+    std::vector<int64_t> ha(n), hb(n);
+    CHECK(cudaMemcpy(ha.data(), doa, n*sizeof(int64_t), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(hb.data(), dob, n*sizeof(int64_t), cudaMemcpyDeviceToHost));
+    int64_t bad = 0;
+    for (int64_t i = 0; i < n; ++i)
+        if (ha[i] != unravel_ref(i,4,shp.data(),sa_.data()) ||
+            hb[i] != unravel_ref(i,4,shp.data(),sb_.data())) bad++;
+    printf("%-12s n=%-8lld %s\n", "offsets_2", (long long)n, bad ? "FAIL" : "ok (both == ref)");
+    if (bad) fails++;
+    cudaFree(doa); cudaFree(dob);
+}
+
 // House cudaEvent timer: 5 warmup + iters timed, returns ms/iter.
 template <class F>
 static double timed(F launch, int iters=50) {
@@ -141,6 +201,8 @@ int main() {
     check_case("broadcast", 7*5*3*4, {7,5,3,4}, {60,0,4,1});     // stride[1]=0
     check_case("negative",  7*5*3*4, {7,5,3,4}, {-60,12,4,1});   // stride[0]<0
     check_guard();
+    check_r8();
+    check_multistride();
 
     printf("\n== bench (rank 4, REPEAT=%d unravels/elem, %d indices) ==\n", REPEAT, 4096*4096);
     int64_t n = (int64_t)4096*4096;

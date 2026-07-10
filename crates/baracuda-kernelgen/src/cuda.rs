@@ -983,9 +983,10 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // coord-unravel helper (single source of truth); this call is byte-identical
     // to the prior hand-inlined emission.
     s.push_str(&emit_unravel_decomp(
-        rank,
+        (0..rank).rev(),
         "        ",
         "lin",
+        |d| format!("c{d}"),
         |d| format!("shape{d}"),
         false,
     ));
@@ -1591,11 +1592,14 @@ fn emit_scatter_gathersum(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel
     s.push_str("    for (; i < n_out; i += step) {\n");
     // Unravel the destination coordinate.
     s.push_str("        long long lin = i;\n");
-    for d in (0..rank).rev() {
-        s.push_str(&format!(
-            "        long long oc{d} = lin % oshape{d}; lin /= oshape{d};\n"
-        ));
-    }
+    s.push_str(&emit_unravel_decomp(
+        (0..rank).rev(),
+        "        ",
+        "lin",
+        |d| format!("oc{d}"),
+        |d| format!("oshape{d}"),
+        false,
+    ));
     // Destination offset (identity — the owner cell for this thread), over the
     // OUTPUT coordinate `oc{d}` (NOT the default `c{d}`).
     let oo = offset_expr_coord(plan.key.operands[n], "so", "oc", rank);
@@ -1918,11 +1922,14 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
     s.push_str("    for (; i < n; i += step) {\n");
     s.push_str("        long long lin = i;\n");
-    for d in (0..rank).rev() {
-        s.push_str(&format!(
-            "        long long c{d} = lin % shape{d}; lin /= shape{d};\n"
-        ));
-    }
+    s.push_str(&emit_unravel_decomp(
+        (0..rank).rev(),
+        "        ",
+        "lin",
+        |d| format!("c{d}"),
+        |d| format!("shape{d}"),
+        false,
+    ));
     for k in 0..n_in {
         if !is_fully_broadcast(plan.key.operands[k], rank) {
             // A viewed input on a multi-output op is rejected at the plan gate
@@ -2594,11 +2601,14 @@ fn emit_reduction(
     // kept axes ⇒ n_out == 1, so no unravel and no `lin` — avoids an unused var.)
     if !kept.is_empty() {
         s.push_str("        long long lin = o;\n");
-        for &a in kept.iter().rev() {
-            s.push_str(&format!(
-                "        long long ck{a} = lin % shape{a}; lin /= shape{a};\n"
-            ));
-        }
+        s.push_str(&emit_unravel_decomp(
+            kept.iter().rev().copied(),
+            "        ",
+            "lin",
+            |a| format!("ck{a}"),
+            |a| format!("shape{a}"),
+            false,
+        ));
     }
     // Input base offset from the kept coords (a broadcast kept axis has stride 0
     // and drops out naturally).
@@ -6171,50 +6181,115 @@ fn offset_expr(o: OperandKey, stride_arr: &str, rank: usize, perm: Option<&[u8]>
 }
 
 /// Emit the row-major (last-axis-fastest) unravel decomposition — the ONE place
-/// the "linear index → per-axis coordinate" walk is spelled. For each axis
-/// high→low it declares `long long c{d}` from `{lin} % shape` and divides `{lin}`
-/// down (or the `s == 0`-guarded form when `guard`).
+/// the "linear index → per-axis coordinate" walk is spelled. For each axis in
+/// `axes` (passed high→low: `(0..rank).rev()` for a dense unravel, or the kept
+/// axes reversed for a reduction) it declares `long long {coord}` from
+/// `{lin} % shape` and divides `{lin}` down (or the `s == 0`-guarded form when
+/// `guard`).
 ///
-/// This is the single source of truth shared by the inline strided emitter
-/// ([`emit_strided`], via a scalar-param, unguarded call — **byte-identical** to
-/// the pre-factoring emission) and the freestanding coord-unravel helper
-/// ([`emit_coord_unravel_helper`], via an array-element, guarded call). An
-/// improvement to the decomposition lands once and propagates to both the
-/// generated kernels and the generated helper.
+/// This is the single source of truth shared by every inline strided emitter
+/// (`emit_strided` / scatter / strided-multi / reduction — scalar-param,
+/// unguarded calls, each **byte-identical** to the pre-factoring emission) and
+/// the freestanding coord-unravel helper ([`emit_coord_unravel_helper`] — an
+/// array-element, guarded call). An improvement to the decomposition lands once
+/// and propagates to every generated kernel and the generated helper.
 ///
-/// `shape(d)` spells axis `d`'s extent (scalar `shape{d}` inline; array element
-/// `shape.v[{d}]` in the helper). `guard` emits the empty-axis (`s == 0`)
-/// defense: the inline emitters omit it because an empty tensor yields `n == 0`
-/// ⇒ zero loop iterations (the modulo/divide never runs), while a generic helper
-/// is called with arbitrary shapes and must defend. `lin` is the mutable
+/// `coord(a)` names the coordinate variable for axis `a` (`c{a}` / `oc{a}` /
+/// `ck{a}`); `shape(a)` spells its extent (scalar `shape{a}` inline; array
+/// element `shape.v[{a}]` in the helper). `guard` emits the empty-axis
+/// (`s == 0`) defense: the inline emitters omit it because an empty tensor
+/// yields zero loop iterations (the modulo/divide never runs), while a generic
+/// helper is called with arbitrary shapes and must defend. `lin` is the mutable
 /// linear-index variable already in scope; `indent` is the leading whitespace.
 fn emit_unravel_decomp(
-    rank: usize,
+    axes: impl IntoIterator<Item = usize>,
     indent: &str,
     lin: &str,
+    coord: impl Fn(usize) -> String,
     shape: impl Fn(usize) -> String,
     guard: bool,
 ) -> String {
     let mut s = String::new();
-    for d in (0..rank).rev() {
-        let sh = shape(d);
+    for a in axes {
+        let cv = coord(a);
+        let sh = shape(a);
         if guard {
             s.push_str(&format!(
-                "{indent}long long c{d} = ({sh} == 0) ? 0 : ({lin} % (long long){sh}); if ({sh} != 0) {lin} /= (long long){sh};\n"
+                "{indent}long long {cv} = ({sh} == 0) ? 0 : ({lin} % (long long){sh}); if ({sh} != 0) {lin} /= (long long){sh};\n"
             ));
         } else {
             s.push_str(&format!(
-                "{indent}long long c{d} = {lin} % {sh}; {lin} /= {sh};\n"
+                "{indent}long long {cv} = {lin} % {sh}; {lin} /= {sh};\n"
             ));
         }
     }
     s
 }
 
+/// Emit one `unravel_offset{s}_r{n}` device function: `k` stride arrays dotted
+/// against a single unrolled rank-`n` unravel (one shared decomposition pass).
+/// `k == 1` returns the offset (`unravel_offset_1_r{n}`); `k >= 2` is `void` with
+/// `k` trailing `int64_t&` out-params (`unravel_offsets_{k}_r{n}`), matching the
+/// hand-written `unravel_offsets_2/3/4`. The decomposition comes from the shared
+/// [`emit_unravel_decomp`].
+fn emit_unravel_offset_fn(s: &mut String, n: usize, k: usize) {
+    const LETTERS: [&str; 4] = ["a", "b", "c", "d"];
+    let ls = &LETTERS[..k];
+    s.push_str("template <typename Shape, typename Stride>\n");
+    if k == 1 {
+        s.push_str(&format!(
+            "__device__ __forceinline__ int64_t unravel_offset_1_r{n}(\n"
+        ));
+        s.push_str("    int64_t linear, const Shape& shape, const Stride& stride)\n{\n");
+    } else {
+        s.push_str(&format!(
+            "__device__ __forceinline__ void unravel_offsets_{k}_r{n}(\n"
+        ));
+        s.push_str("    int64_t linear, const Shape& shape");
+        for l in ls {
+            s.push_str(&format!(", const Stride& stride_{l}"));
+        }
+        for l in ls {
+            s.push_str(&format!(", int64_t& off_{l}"));
+        }
+        s.push_str(")\n{\n");
+    }
+    // Shared decomposition: guarded, array-element shape spelling, unrolled.
+    s.push_str(&emit_unravel_decomp(
+        (0..n).rev(),
+        "    ",
+        "linear",
+        |d| format!("c{d}"),
+        |d| format!("shape.v[{d}]"),
+        true,
+    ));
+    if k == 1 {
+        s.push_str("    int64_t off = 0;\n");
+        for d in 0..n {
+            s.push_str(&format!("    off += c{d} * (int64_t)stride.v[{d}];\n"));
+        }
+        s.push_str("    return off;\n}\n\n");
+    } else {
+        for l in ls {
+            s.push_str(&format!("    off_{l} = 0;\n"));
+        }
+        for d in 0..n {
+            for l in ls {
+                s.push_str(&format!(
+                    "    off_{l} += c{d} * (int64_t)stride_{l}.v[{d}];\n"
+                ));
+            }
+        }
+        s.push_str("}\n\n");
+    }
+}
+
 /// Emit a freestanding, header-only coordinate-unravel helper (`.cuh`) — the
 /// **generated** counterpart of the hand-written
-/// `baracuda_coord_unravel.cuh`. For each rank in `1..=max_rank` it emits a
-/// `unravel_offset_1_r{N}` a hand-written CUDA kernel can `#include` and call.
+/// `baracuda_coord_unravel.cuh`. For each rank in `1..=max_rank` it emits the
+/// `unravel_offset_1_r{N}` (returns the offset) plus the multi-stride
+/// `unravel_offsets_2/3/4_r{N}` (void, out-params) a hand-written CUDA kernel can
+/// `#include` and call.
 ///
 /// Unlike the hand-written helper's single runtime-`rank` loop, each generated
 /// function is **specialized to a compile-time rank and fully unrolled** — the
@@ -6242,26 +6317,12 @@ pub fn emit_coord_unravel_helper(max_rank: usize) -> String {
     s.push_str("#include <cuda_runtime.h>\n\n");
     s.push_str("namespace baracuda { namespace coord { namespace gen {\n\n");
     for n in 1..=max_rank {
-        s.push_str("template <typename Shape, typename Stride>\n");
-        s.push_str(&format!(
-            "__device__ __forceinline__ int64_t unravel_offset_1_r{n}(\n"
-        ));
-        s.push_str("    int64_t linear, const Shape& shape, const Stride& stride)\n");
-        s.push_str("{\n");
-        // Shared decomposition: guarded, array-element shape spelling, unrolled.
-        s.push_str(&emit_unravel_decomp(
-            n,
-            "    ",
-            "linear",
-            |d| format!("shape.v[{d}]"),
-            true,
-        ));
-        s.push_str("    int64_t off = 0;\n");
-        for d in 0..n {
-            s.push_str(&format!("    off += c{d} * (int64_t)stride.v[{d}];\n"));
+        // `_1` (returns the offset) + `_2`/`_3`/`_4` (void, out-params — one
+        // unravel pass feeds K stride arrays) per rank, matching the hand-written
+        // `unravel_offset_1` / `unravel_offsets_2/3/4`.
+        for k in 1..=4 {
+            emit_unravel_offset_fn(&mut s, n, k);
         }
-        s.push_str("    return off;\n");
-        s.push_str("}\n\n");
     }
     s.push_str("}}}  // namespace baracuda::coord::gen\n");
     s.push_str("#endif  // BARACUDA_COORD_UNRAVEL_GEN_CUH\n");
@@ -6976,7 +7037,14 @@ mod tests {
         // The scalar-param, unguarded call MUST reproduce exactly what emit_strided
         // used to hand-inline. Pins the single-source-of-truth factoring
         // independently of the full emission-golden suite.
-        let got = super::emit_unravel_decomp(3, "        ", "lin", |d| format!("shape{d}"), false);
+        let got = super::emit_unravel_decomp(
+            (0..3).rev(),
+            "        ",
+            "lin",
+            |d| format!("c{d}"),
+            |d| format!("shape{d}"),
+            false,
+        );
         let want = concat!(
             "        long long c2 = lin % shape2; lin /= shape2;\n",
             "        long long c1 = lin % shape1; lin /= shape1;\n",
@@ -7012,6 +7080,14 @@ mod tests {
         assert!(src.contains("off += c3 * (int64_t)stride.v[3];"));
         assert!(src.contains("off += c0 * (int64_t)stride.v[0];"));
         assert!(src.contains("return off;"));
+        // multi-stride variants: one unravel pass feeds K offsets (void out-params),
+        // matching the hand-written unravel_offsets_2/3/4.
+        assert!(src.contains("void unravel_offsets_2_r4("));
+        assert!(src.contains("void unravel_offsets_3_r2("));
+        assert!(src.contains("void unravel_offsets_4_r4("));
+        assert!(src.contains("int64_t& off_d"));
+        assert!(src.contains("off_a += c0 * (int64_t)stride_a.v[0];"));
+        assert!(src.contains("off_d += c3 * (int64_t)stride_d.v[3];"));
     }
 
     /// Regenerate the generated coord-unravel helper for the on-device

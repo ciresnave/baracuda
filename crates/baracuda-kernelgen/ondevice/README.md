@@ -38,8 +38,14 @@ nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" \
 ```
 
 **Last run** (RTX 4070 Laptop / sm_89 / CUDA 13.3): PASSED — correctness
-`gen==hand==ref` on all 4 cases; bench rank-4, REPEAT=64 over 16.7M indices:
-**gen (unrolled) 15.98 ms vs hand (runtime rank) 20.79 ms = 1.30× faster**.
+`gen==hand==ref` on rank-4 normal / broadcast / negative / empty-axis guard, plus
+rank-8 (`gen==ref`) and the multi-stride `unravel_offsets_2` (both offsets == ref);
+bench rank-4, REPEAT=64 over 16.7M indices:
+**gen (unrolled) 15.83 ms vs hand (runtime rank) 20.79 ms = 1.31× faster**.
+
+The shared `emit_unravel_decomp` now also backs all four inline strided emitters
+(strided / scatter / strided-multi / reduction), byte-identically — so the win
+propagates to every generated strided kernel, not just the helper.
 
 ---
 
