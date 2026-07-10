@@ -1157,6 +1157,14 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "indexing/gather.cu",
             "indexing/scatter.cu",
             "indexing/index_select.cu",
+            // Capture-safe decode-shaped row gather (embedding lookup). All
+            // metadata by-value int64 scalars + native U32 index + every element
+            // written (strict `e < n*H`, OOB->zero) → a captured graph replays
+            // bit-identical, unlike index_select (whose 160-byte by-value POD
+            // param block mis-computes element 0 on graph replay). 9 FFI symbols
+            // `baracuda_kernels_gather_rows_{f16,bf16,f32}_{run,can_implement,
+            // workspace_size}`. Bespoke -> default set.
+            "indexing/gather_rows.cu",
             "indexing/masked_fill.cu",
             "indexing/one_hot.cu",
             "indexing/nonzero.cu",
@@ -1346,6 +1354,17 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // cuDNN dependency. col2im_1d uses atomicAdd scatter
             // (half/bf16 via `baracuda::atomic::add`).
             "conv/im2col.cu",
+            // Capture-safe dense m=1 GEMV (f32 / f16 / bf16). A plain
+            // custom GEMV with no vendor internal state → a captured
+            // CUDA graph replays byte-identical, unblocking Fuel's
+            // graph `CapturedRun` (the cuBLAS `gemm_dense` facade is
+            // faster but not capture-safe). Bespoke → default set (like
+            // write_slice / im2col); 9 FFI symbols
+            // (`baracuda_kernels_gemv_dense_m1_{f32,f16,bf16}_{run,
+            // can_implement,workspace_size}`) whose parameter list is a
+            // literal symbol-swap of the strided-batch gemm_dense_*_run
+            // signature. strideB == 0 broadcasts B for GQA.
+            "gemm/gemv_dense.cu",
         ] {
             if std::path::Path::new(&format!("kernels/{f}")).exists() {
                 kernels.push(*f);
