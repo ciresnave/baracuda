@@ -49,6 +49,34 @@ propagates to every generated strided kernel, not just the helper.
 
 ---
 
+## `dtype_promote_validate.cu` — generated dtype-promote helper (Phase 2c)
+
+Exhaustively validates the **generated** dtype-promotion helper
+(`baracuda::dtype::gen::load_as_f32_{f16,bf16}` etc., from `emit_dtype_promote_helper`)
+against the hand-written `baracuda_dtype_promote.cuh`. Unlike coord-unravel this is
+a **de-duplication** win, not a speed win — both sides resolve to the same single
+hardware intrinsic (`__half2float` / `__float2half`, …) at compile time — so the
+proof is *exhaustive bit-exactness*: every one of the 65536 f16 codes and 65536
+bf16 codes, through generated-vs-hand-written promotion plus the lossless
+round-trip. The intrinsic pick is emitted from the same `promote_load_f32` /
+`demote_store_f32` routines the inline reduction load/store now route through
+(single source of truth).
+
+Run:
+
+```sh
+DTYPE_OUT=<outdir> cargo test -p baracuda-kernelgen dump_dtype_promote_helper -- --ignored --nocapture
+nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" \
+     -I <outdir> -I crates/baracuda-kernels-sys/kernels/include \
+     crates/baracuda-kernelgen/ondevice/dtype_promote_validate.cu -o <outdir>/dtype_promote_validate && <outdir>/dtype_promote_validate
+```
+
+**Last run** (RTX 4070 Laptop / sm_89 / CUDA 13.3): PASSED — all **131072** codes
+(f16 + bf16): generated load == hand-written, generated round-trip == hand-written,
+and lossless-identity round-trip for every non-NaN code. 0 mismatches.
+
+---
+
 ## `reduce_validate.cu` — general reduction path (item 03)
 
 Launches the general-path reduction kernels (`_reduce_{tag}_ax{hex}[_kd]`) with

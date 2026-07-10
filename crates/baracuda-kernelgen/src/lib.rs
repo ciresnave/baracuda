@@ -54,7 +54,7 @@ pub mod telemetry;
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, contract, front_matter};
 pub use cpu_c::CpuC;
-pub use cuda::{Cuda, emit_coord_unravel_helper};
+pub use cuda::{Cuda, emit_coord_unravel_helper, emit_dtype_promote_helper};
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
     Access, AccumSpec, AxisRole, ContractionAxes, DagNode, Expr, ExprDag, NodeId, OpDef, ReduceOp,
