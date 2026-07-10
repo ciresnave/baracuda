@@ -54,6 +54,10 @@ impl Backend for Cuda {
         // values (cross-pass materialization — Softmax's shared exp).
         let mut vs = Vec::new();
         vs.extend(reduction_splitk_variant(plan));
+        // Precision-first: a double-accumulator serial fold of an f32 Sum/Mean
+        // reduction — MorePrecise, selectable only through an honest contract (the
+        // caller's precision policy decides), never the silent default.
+        vs.extend(precision_first_variant(plan));
         vs.extend(row_reduce_materialize_variant(plan));
         vs.extend(contraction_splitk_variant(plan));
         vs.extend(scatter_atomic_variant(plan));
@@ -338,7 +342,7 @@ impl Backend for Cuda {
                     _ => emit_strided(plan, ctype),
                 }
             }
-            Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op),
+            Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op, false),
             Schedule::RowReduce { .. } => emit_row_reduce(plan, ctype),
             Schedule::Contraction => emit_contraction(plan, ctype),
             // Increment 6 SCAN: `build_plan` always derives `block: false` (the
@@ -2180,7 +2184,12 @@ fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> Gener
 /// so these never fire across the `synthesize` trust boundary): a single input,
 /// float dtype. Multi-input (weighted) reductions and integer accumulation
 /// (item 04) are follow-ups; the axes/keepdim/strided generalization is this item.
-fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> GeneratedKernel {
+fn emit_reduction(
+    plan: &KernelPlan<'_>,
+    ctype: &str,
+    rop: ReduceOp,
+    precision: bool,
+) -> GeneratedKernel {
     let tag = match rop {
         ReduceOp::Sum => "sum",
         ReduceOp::Mean => "mean",
@@ -2188,6 +2197,13 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         ReduceOp::Min => "min",
         ReduceOp::Prod => "prod",
     };
+    // Precision-first (`MorePrecise` variant): force a `double` accumulator and
+    // route through the serial per-output general nest (below), NOT the InnerContig
+    // block-tree. Double accumulation lifts the f32 error from O(√n·eps) to
+    // ~0.5 ULP(f32) of the correctly-rounded reduction, and the serial nest is a
+    // fixed order — bitwise-reproducible across hardware AND matching the CPU
+    // oracle's fold order. Gated so the base lowering stays byte-identical.
+    let prec = if precision { "_prec" } else { "" };
     let int_acc = matches!(plan.dtype, ElementKind::I32 | ElementKind::I64);
     assert!(
         matches!(
@@ -2239,7 +2255,8 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     // Integer reductions accumulate in `long long` (exact, overflow-resistant);
     // f64 / f32-strict in double; everything else in float. The leaf load is native
     // for int (the `_` arm below) and up-converts only f16/bf16/f32-strict.
-    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    // `precision` forces double even for plain f32 (the MorePrecise variant).
+    let dbl = precision || matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let acc = if int_acc {
         "long long"
     } else if dbl {
@@ -2382,8 +2399,11 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         (Some(format!("{acc} red0 = {finalized};")), store(posted))
     };
 
-    if class == ReduceAxisClass::InnerContig {
+    if class == ReduceAxisClass::InnerContig && !precision {
         // ---------- Contiguous last-axis reduction: ONE BLOCK per output row. ----------
+        // (A precision-first cell skips this coalesced block-tree and takes the serial
+        // general nest below — the block-tree order is reassociated, not the fixed
+        // bitwise-reproducible order the MorePrecise contract promises.)
         // Coalesced reads (adjacent threads read adjacent row elements) + a warp-
         // shuffle / shared-mem block reduce (reuses `emit_block_reducers`). Replaces
         // the old one-thread-per-row *sequential* fold, which was memory-UNCOALESCED
@@ -2500,8 +2520,17 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     // Compile-time axis split (kept vs reduced, ascending). The runtime supplies
     // per-input-axis extents `shape[]` + input strides `s0[]` + output strides `so[]`.
     let rank = plan.key.rank as usize;
-    let reduced: Vec<usize> = (0..rank).filter(|&d| axes.is_set(d as u8)).collect();
-    let kept: Vec<usize> = (0..rank).filter(|&d| !axes.is_set(d as u8)).collect();
+    // EMPTY axes = the last-axis default. The base reaches this general path only
+    // with EXPLICIT axes (an empty-axes cell is contiguous ⇒ the InnerContig fast
+    // path above, which folds via `k`), so this normalization is a no-op for the
+    // base; a precision-first cell, however, routes an empty-axes InnerContig cell
+    // HERE and must materialize the reduced set as the last axis (like the oracle).
+    let reduced: Vec<usize> = if axes.is_empty() {
+        vec![rank - 1]
+    } else {
+        (0..rank).filter(|&d| axes.is_set(d as u8)).collect()
+    };
+    let kept: Vec<usize> = (0..rank).filter(|&d| !reduced.contains(&d)).collect();
     // Output-store injectivity guard (§5c/§8): the store must not alias. A broadcast
     // (stride-0) output axis that a *kept* coordinate varies over would collapse
     // distinct outputs onto one `oo`; a flipped output can write out of bounds. A
@@ -2524,7 +2553,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     );
     // The axis set + keepdim disambiguate the symbol so two axis-sets never collide.
     let name = format!(
-        "baracuda_gen_{}_{}_reduce_{tag}_ax{:x}{}",
+        "baracuda_gen_{}_{}_reduce_{tag}_ax{:x}{}{prec}",
         plan.op_name,
         dtype_tag(plan.dtype),
         axes.0,
@@ -2710,6 +2739,73 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     s.push_str(&format!("        out[oo] = {rhs};\n"));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
+}
+
+/// Precision-first variant ([`VariantFidelity::MorePrecise`]) of an f32 Sum/Mean
+/// reduction: a `double`-accumulator serial fold. The base f32 reduction folds in
+/// `float` (error growing with the reduced length); this forces `double`
+/// accumulation through `emit_reduction`'s serial per-output general nest (a fixed
+/// order — bitwise-reproducible across hardware AND matching the CPU oracle's fold
+/// order), giving ~0.5 ULP(f32) of the correctly-rounded reduction. It costs the
+/// coalesced block-tree's throughput, so it is NEVER the silent default — only an
+/// honest FKC contract whose precision block advertises the tighter bound selects
+/// it (the caller's precision policy decides). Declines every cell it cannot
+/// strictly improve.
+fn precision_first_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
+    let rop = match plan.schedule {
+        Schedule::Reduction { op, .. } => op,
+        _ => return None,
+    };
+    // Only Sum/Mean carry a length-growing running FP sum a wider accumulator
+    // fixes. Max/Min are a pick and Prod a product — order-exact, so the double
+    // fold is bit-identical to the base (no distinct precision offer).
+    if !matches!(rop, ReduceOp::Sum | ReduceOp::Mean) {
+        return None;
+    }
+    // F32 ONLY. F64/F32Strict already accumulate in `double` (this would be a
+    // byte-identical duplicate). F16/Bf16 up-convert to float in the fold, but
+    // their low-mantissa STORE rounds the extra accumulation precision away —
+    // not worth a distinct variant. Integer reductions are exact (no FP axis).
+    if plan.dtype != ElementKind::F32 {
+        return None;
+    }
+    // `emit_reduction`'s single-input contract, and the serial general nest's
+    // store-injectivity guard (a flipped or broadcast-on-a-kept-axis output would
+    // alias / write OOB — the base emitter asserts the same; decline rather than
+    // trip the assert, keeping the variant set total).
+    if plan.n_inputs != 1 || plan.key.n_operands < 2 {
+        return None;
+    }
+    // The serial general nest requires an injective, forward-dense output (it
+    // asserts as much). A fresh reduction output is dense; a broadcast (stride-0)
+    // or flipped (negative-stride) output would alias / write OOB — decline. The
+    // input may be strided (the general path reads runtime strides), so only the
+    // output is constrained.
+    let out_key = plan.key.operands[(plan.key.n_operands as usize) - 1];
+    if out_key.flipped || out_key.contig != Contiguity::Contig {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    let kernel = emit_reduction(plan, ctype, rop, true);
+    let det = VariantFidelity::MorePrecise.determinism_str();
+    Some(Variant {
+        tag: "prec",
+        kernels: vec![kernel],
+        fidelity: VariantFidelity::MorePrecise,
+        launch_note: format!(
+            "Precision-first {} reduction: double accumulator, serial per-output fold \
+             (1-D grid over n_out, one thread per output, grid-stride). MORE ACCURATE \
+             than the f32-accumulate base — ~0.5 ULP(f32) of the correctly-rounded \
+             reduction vs the base's length-growing float error. determinism: {det} \
+             (fixed serial order, hardware-independent). NOT the default: trades the \
+             coalesced block-tree's throughput for accuracy; select only when the \
+             caller's precision policy asks for it.",
+            match rop {
+                ReduceOp::Mean => "mean",
+                _ => "sum",
+            }
+        ),
+    })
 }
 
 /// Split-K schedule **variant** for the outer-axis reduction cell
@@ -7254,6 +7350,79 @@ mod tests {
     }
 
     #[test]
+    fn precision_first_variant_offered_for_f32_sum() {
+        use crate::ir::ReduceOp;
+        use crate::{VariantFidelity, generate_variants};
+        // Last-axis (empty-axes default) f32 Sum: base = InnerContig block-tree,
+        // prec = the serial double general nest (split-K declines — not Outer).
+        let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[128], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let vs = generate_variants(&op, &key, &Cuda);
+        assert_eq!(vs[0].tag, "base");
+        assert_eq!(vs[0].fidelity, VariantFidelity::BitIdentical);
+        assert!(
+            vs[0].kernels[0].source.contains("block_sum"),
+            "base keeps the coalesced block-tree"
+        );
+        let prec = vs
+            .iter()
+            .find(|v| v.tag == "prec")
+            .expect("precision-first variant offered for f32 Sum");
+        assert_eq!(prec.fidelity, VariantFidelity::MorePrecise);
+        // A serial double fold is reproducible across IEEE-754 hardware.
+        assert_eq!(prec.fidelity.determinism_str(), "bitwise");
+        assert_eq!(prec.kernels.len(), 1);
+        let k = &prec.kernels[0];
+        assert!(
+            k.source.contains("double acc"),
+            "precision fold accumulates in double"
+        );
+        assert!(
+            !k.source.contains("block_sum"),
+            "precision routes through the serial nest, not the block-tree"
+        );
+        assert!(
+            k.name.ends_with("_prec"),
+            "distinct _prec entry point: {}",
+            k.name
+        );
+    }
+
+    #[test]
+    fn precision_first_variant_declines_non_f32_and_order_exact() {
+        use crate::generate_variants;
+        use crate::ir::ReduceOp;
+        let vs_of = |op: &OpDef, dt: ElementKind| {
+            let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], dt, 256);
+            let o = OperandDesc::new(1, &[128], &[1], dt, 256);
+            let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+            generate_variants(op, &key, &Cuda)
+        };
+        // f16 Sum: declined — the low-mantissa store rounds the extra accumulation
+        // precision away, so a double variant isn't worth a distinct offer.
+        let vs = vs_of(
+            &OpDef::reduction("sum", 1, &[ElementKind::F16], input(0), ReduceOp::Sum),
+            ElementKind::F16,
+        );
+        assert!(
+            vs.iter().all(|v| v.tag != "prec"),
+            "f16 declines precision-first"
+        );
+        // f32 Max: declined — a pick is order-exact, so the double fold is
+        // bit-identical to the base (no distinct precision offer).
+        let vs = vs_of(
+            &OpDef::reduction("max", 1, &[ElementKind::F32], input(0), ReduceOp::Max),
+            ElementKind::F32,
+        );
+        assert!(
+            vs.iter().all(|v| v.tag != "prec"),
+            "Max declines precision-first"
+        );
+    }
+
+    #[test]
     fn splitk_variant_offered_for_outer_sum() {
         use crate::ir::ReduceOp;
         use crate::{VariantFidelity, generate_variants};
@@ -7271,9 +7440,11 @@ mod tests {
         let o = OperandDesc::new(1, &[8192], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
         let vs = generate_variants(&op, &key, &Cuda);
-        assert_eq!(vs.len(), 2, "base + splitk");
+        // base + splitk + prec (an Outer f32 Sum also earns the precision variant).
+        assert_eq!(vs.len(), 3, "base + splitk + prec");
         assert_eq!(vs[0].tag, "base");
         assert_eq!(vs[0].fidelity, VariantFidelity::BitIdentical);
+        assert_eq!(vs[2].tag, "prec");
         let sk = &vs[1];
         assert_eq!(sk.tag, "splitk");
         assert_eq!(sk.fidelity, VariantFidelity::ReassociatedDeterministic);
@@ -7324,8 +7495,9 @@ mod tests {
         let o = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
         let vs = generate_variants(&op, &key, &Cuda);
-        assert_eq!(vs.len(), 2);
+        assert_eq!(vs.len(), 3, "base + splitk + prec");
         let sk = &vs[1];
+        assert_eq!(sk.tag, "splitk");
         assert!(
             !sk.kernels[0].source.contains("acc /"),
             "partial never divides"
@@ -7530,10 +7702,14 @@ mod tests {
         // out of bounds. The gate must refuse.
         let rev = OperandDesc::new(2, &[4096, 1024], &[-1024, 1], ElementKind::F32, 256);
         let k_rev = structure_key(OpCategory::Reduction, &[rev, o], ArchSku::Sm89);
-        assert_eq!(
-            generate_variants(&op, &k_rev, &Cuda).len(),
-            1,
-            "flipped input: base only"
+        // split-K refuses (its stride-free ABI can't address a reversed view); the
+        // precision variant CAN (the general nest reads runtime strides), so assert
+        // the split-K gate specifically, not a raw count.
+        assert!(
+            generate_variants(&op, &k_rev, &Cuda)
+                .iter()
+                .all(|v| v.tag != "splitk"),
+            "flipped input: no split-K"
         );
         // Param body: the fixed splitk signature has no p{i} slot — refused
         // (the emitted source would reference an undefined identifier).
@@ -7548,10 +7724,13 @@ mod tests {
         );
         let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let k_ok = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
-        assert_eq!(
-            generate_variants(&wsum, &k_ok, &Cuda).len(),
-            1,
-            "param body: base only"
+        // split-K's fixed signature has no p{i} slot; the precision variant rides
+        // the general nest, which DOES thread params — so gate on the split-K tag.
+        assert!(
+            generate_variants(&wsum, &k_ok, &Cuda)
+                .iter()
+                .all(|v| v.tag != "splitk"),
+            "param body: no split-K"
         );
         // Malformed 1-operand key: out_key would alias the input — refused.
         // (Exercised via lower_variants directly; generate() itself would also
@@ -7574,7 +7753,14 @@ mod tests {
         let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(1, &[4096], &[1], ElementKind::F32, 256);
         let k = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
-        assert_eq!(generate_variants(&last, &k, &Cuda).len(), 1, "base only");
+        // Last-axis (InnerContig) is already block-parallel → no split-K (the
+        // precision variant IS offered here, so gate on the split-K tag).
+        assert!(
+            generate_variants(&last, &k, &Cuda)
+                .iter()
+                .all(|v| v.tag != "splitk"),
+            "last-axis: no split-K"
+        );
         // Outer Max: the has-flag NaN fold needs its own variant treatment.
         let mx = OpDef::reduction_axes(
             "amax",

@@ -48,6 +48,22 @@ pub enum VariantFidelity {
     /// deterministic default (a gather-sum or sorted-segment sweep — the bespoke
     /// `segment_sorted_kernel` precedent) stays the base route.
     Nondeterministic,
+    /// **Strictly more accurate** than the default lowering, and deterministic.
+    /// The default f32 reduction accumulates in `float` (error growing with the
+    /// reduced length); this variant forces a `double` accumulator and a
+    /// no-reassociation serial fold, yielding ~0.5 ULP(f32) of the correctly-
+    /// rounded reduction — a *directed* "closer to the true reduction" guarantee.
+    /// That directedness is the whole selection signal, and it is why this is
+    /// neither [`Self::BitIdentical`] (it differs from the default bits, so it
+    /// must never be chosen silently) nor [`Self::ReassociatedDeterministic`]
+    /// (which is same-accuracy-different-rounding, undirected).
+    ///
+    /// The serial double fold is bitwise-reproducible on any IEEE-754 double
+    /// hardware (fixed order, per-op-deterministic), so its determinism spelling
+    /// is the strongest — `bitwise`, not `same_hardware_bitwise`. Selectable only
+    /// through an honest FKC contract whose precision block advertises the tighter
+    /// bound; the caller's precision policy decides.
+    MorePrecise,
 }
 
 impl VariantFidelity {
@@ -67,6 +83,8 @@ impl VariantFidelity {
             VariantFidelity::BitIdentical => "bitwise",
             VariantFidelity::ReassociatedDeterministic => "same_hardware_bitwise",
             VariantFidelity::Nondeterministic => "nondeterministic",
+            // A serial double fold is reproducible across IEEE-754 hardware.
+            VariantFidelity::MorePrecise => "bitwise",
         }
     }
 }
