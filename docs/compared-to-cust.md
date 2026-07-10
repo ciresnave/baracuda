@@ -74,11 +74,12 @@ while baracuda assumes it (or its generator) produced the kernel for you.
 ## Mixing the two
 
 Both wrap the same opaque driver handles (`CUdevice` / `CUcontext` / `CUstream` /
-`CUevent`) and expose `as_raw()`, so they coexist in one process against the same
-device — hand a raw handle across wherever an API accepts one. Adopting a
-*foreign* raw handle back into a safe baracuda type is currently limited (the
-owning RAII handles — `Context` / `Stream` / `Event` — expose `as_raw()` but no
-`from_raw`; for context sharing, use `baracuda_driver::PrimaryContext::retain(device)`
-to obtain baracuda's handle to the device's primary context), so mixing leans on
-baracuda-hands-out. A typical reason to mix: you write kernels in Rust with
-Rust-CUDA but want baracuda's cuDNN / cuTENSOR wrappers alongside.
+`CUevent`) and can move them across in **either ownership direction**: `as_raw()`
+hands baracuda's handle out, and `unsafe from_raw` (baracuda takes ownership,
+destroys on drop) / `unsafe borrow_raw` (non-owning, for a handle Rust-CUDA still
+owns) adopt a foreign one — on `Context` / `Stream` / `Event`, plus
+`Device::from_raw`. For context sharing specifically,
+`baracuda_driver::PrimaryContext::retain(device)` gives baracuda a handle to the
+device's primary context. A typical reason to mix: you write kernels in Rust with
+Rust-CUDA but want baracuda's cuDNN / cuTENSOR wrappers alongside, driving them on
+the same context and stream.

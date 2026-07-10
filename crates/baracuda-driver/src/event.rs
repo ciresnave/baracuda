@@ -19,6 +19,9 @@ pub struct Event {
 struct EventInner {
     handle: CUevent,
     context: Context,
+    /// When `false`, this is a non-owning (borrowed) wrapper produced by
+    /// [`Event::borrow_raw`]: `Drop` will not call `cuEventDestroy`.
+    owned: bool,
 }
 
 // SAFETY: CUevent is documented safe for multi-thread use.
@@ -61,8 +64,62 @@ impl Event {
             inner: Arc::new(EventInner {
                 handle: event,
                 context: context.clone(),
+                owned: true,
             }),
         })
+    }
+
+    /// Adopt a raw `CUevent`, **transferring ownership to baracuda**: the
+    /// returned [`Event`] (and every clone) shares it, and `cuEventDestroy`
+    /// runs when the last clone drops. `context` is the [`Context`] the event
+    /// belongs to; baracuda keeps a clone of that wrapper. Use this when another
+    /// library hands baracuda an event it created and no longer wants to manage.
+    ///
+    /// To synchronize against an event another library still owns, use
+    /// [`Event::borrow_raw`] instead — baracuda won't destroy it.
+    ///
+    /// # Safety
+    ///
+    /// - `handle` must be a valid, live `CUevent` created on `context` that
+    ///   baracuda may take sole ownership of: it must not be destroyed
+    ///   elsewhere, nor already be wrapped by another owning baracuda handle
+    ///   (either risks a double `cuEventDestroy`).
+    /// - The event's underlying CUDA context must outlive the returned `Event`
+    ///   and all its clones. Passing an *owning* [`Context`] guarantees that; if
+    ///   `context` is itself a [borrowed][`Context::borrow_raw`] (non-owning)
+    ///   wrapper, the held clone does **not** extend the real context's
+    ///   lifetime — the caller must keep it alive by other means.
+    pub unsafe fn from_raw(handle: CUevent, context: &Context) -> Self {
+        Self {
+            inner: Arc::new(EventInner {
+                handle,
+                context: context.clone(),
+                owned: true,
+            }),
+        }
+    }
+
+    /// Wrap a raw `CUevent` that **baracuda does not own**: `Drop` will not
+    /// call `cuEventDestroy`. Use this to let baracuda streams wait on, or
+    /// query, an event created and owned by another library (cudarc, cust, a
+    /// framework) that outlives this wrapper — the standard cross-library
+    /// synchronization path. `context` is the [`Context`] the event belongs to
+    /// (wrap a foreign one with [`Context::borrow_raw`] if needed).
+    ///
+    /// # Safety
+    ///
+    /// The caller guarantees `handle` is a valid `CUevent` on `context` that
+    /// stays live for the entire lifetime of the returned `Event` and all of
+    /// its clones. baracuda will not destroy it; the owning library keeps that
+    /// responsibility.
+    pub unsafe fn borrow_raw(handle: CUevent, context: &Context) -> Self {
+        Self {
+            inner: Arc::new(EventInner {
+                handle,
+                context: context.clone(),
+                owned: false,
+            }),
+        }
     }
 
     /// Record this event on the given stream. The event "happens" when all
@@ -126,8 +183,13 @@ impl Event {
 
 impl Drop for EventInner {
     fn drop(&mut self) {
+        // A borrowed (non-owning) wrapper must not destroy the foreign handle.
+        if !self.owned {
+            return;
+        }
         if let Ok(d) = driver() {
             if let Ok(cu) = d.cu_event_destroy() {
+                // SAFETY: owned handle (cuEventCreate or transferred via from_raw).
                 let _ = unsafe { cu(self.handle) };
             }
         }

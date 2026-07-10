@@ -105,14 +105,15 @@ Two deliberate design differences, unchanged by cudarc's restructure:
 
 ## Mixing the two
 
-Both wrap the same opaque driver handles and can coexist against one device. For
-sharing a **context**, the clean path is the primary context:
-`baracuda_driver::PrimaryContext::retain(device)` returns baracuda's handle to
-the device's primary context — the same one cudart-based frameworks use — so you
-don't juggle raw pointers. Otherwise, baracuda broadly exposes `as_raw()` to hand
-a raw `CUcontext` / `CUstream` to another library's API that accepts one;
-adopting a *foreign* raw handle back into a safe baracuda type is currently
-limited (the owning RAII handles — `Context` / `Stream` / `Event` — expose
-`as_raw()` but no `from_raw`), so mixing leans on baracuda-hands-out rather than
-baracuda-wraps-in. A common setup: keep candle-on-cudarc for your model and add
-baracuda's cuTENSOR / nvCOMP / CV-CUDA wrappers on the shared primary context.
+Both wrap the same opaque driver handles and can coexist against one device, in
+**either ownership direction**. Share a **context** via
+`baracuda_driver::PrimaryContext::retain(device)` — baracuda's handle to the
+device's primary context, the one cudart-based frameworks use. Or move an
+individual handle across: the owning handles (`Context` / `Stream` / `Event`)
+expose `as_raw()` to hand out, and both `unsafe from_raw` (take ownership —
+baracuda destroys on drop) and `unsafe borrow_raw` (non-owning — baracuda never
+destroys, for a handle the other library still owns); `Device` has a plain
+`from_raw`. So you can run baracuda kernels on candle/cudarc's own stream with
+`Stream::borrow_raw(custream, &ctx)`, wait on its events, and hand baracuda's
+handles back via `as_raw()`. A common setup: keep candle-on-cudarc for your model
+and add baracuda's cuTENSOR / nvCOMP / CV-CUDA wrappers on the shared context.

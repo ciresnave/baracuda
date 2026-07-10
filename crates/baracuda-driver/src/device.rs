@@ -163,6 +163,18 @@ impl Device {
         self.0
     }
 
+    /// Wrap a raw `CUdevice` ordinal — e.g. one obtained from another CUDA
+    /// library (cudarc, cust) via its own `as_raw` — as a baracuda [`Device`].
+    ///
+    /// Unlike the context / stream / event handles, a `CUdevice` is a plain
+    /// ordinal with no ownership or lifetime, so this is safe and needs no
+    /// `from_raw` / `borrow_raw` distinction. Prefer [`Device::get`] when you
+    /// have an ordinal rather than a raw handle.
+    #[inline]
+    pub fn from_raw(raw: CUdevice) -> Self {
+        Self(raw)
+    }
+
     /// Return the device's 16-byte UUID.
     pub fn uuid(&self) -> Result<[u8; 16]> {
         let d = driver()?;
