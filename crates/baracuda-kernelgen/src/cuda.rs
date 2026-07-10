@@ -372,7 +372,7 @@ impl Backend for Cuda {
 /// COMPUTE dtype (wrapping mod-256 C semantics), same class as the i32/i64
 /// arms. `S8` (FKC `I8`, increment 0c) is `signed char` — two's-complement
 /// wrapping via integer promotion + store truncation (see the ir.rs table).
-fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
+pub(crate) fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
     Some(match dt {
         ElementKind::F32 | ElementKind::F32Strict => "float",
         ElementKind::F64 => "double",
@@ -552,7 +552,7 @@ fn packed_binary(op: BinaryOp, a: String, b: String, dt: ElementKind) -> String 
 
 /// Short dtype tag for generated symbol names. Only called for dtypes that pass
 /// [`scalar_ctype`].
-fn dtype_tag(dt: ElementKind) -> &'static str {
+pub(crate) fn dtype_tag(dt: ElementKind) -> &'static str {
     match dt {
         ElementKind::F32 => "f32",
         ElementKind::F32Strict => "f32s",
@@ -757,7 +757,7 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
 /// pre-generalization `out_ctype` (output 0's dtype is `plan.out_dtype`), so every
 /// single-output + uniform-multi emitter that passes `j = 0`/a uniform `j` is
 /// unchanged.
-fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str {
+pub(crate) fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str {
     let d = plan.out_dtype_of(j);
     if d == plan.dtype {
         ctype
@@ -780,7 +780,7 @@ fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str 
 /// and 1.0/0.0 round-trip f32→half→f32 bit-exactly, so the conversion pair is
 /// value-exact (and folded by ptxas). `store_expr_of(plan, 0, root)` is
 /// byte-identical to the pre-generalization `store_expr`.
-fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> String {
+pub(crate) fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> String {
     let d = plan.out_dtype_of(j);
     if d == plan.dtype {
         return root;
@@ -6247,7 +6247,7 @@ fn zero_store_literal(octype: &str) -> &'static str {
 /// extra wrapping; the operator forms wrap themselves. (`Sigmoid`/`Gelu`/`Silu`
 /// reference the inner twice — fine for an atomic load; a temp-binding pass to
 /// avoid recompute on compound inners is a follow-up.)
-fn unary_f32(op: UnaryOp, x: String) -> String {
+pub(crate) fn unary_f32(op: UnaryOp, x: String) -> String {
     match op {
         UnaryOp::Neg => format!("(-{x})"),
         UnaryOp::Abs => format!("fabsf({x})"),
@@ -6297,7 +6297,7 @@ fn unary_f32(op: UnaryOp, x: String) -> String {
 }
 
 /// Same as [`unary_f32`] but with f64 math-function names and double literals.
-fn unary_f64(op: UnaryOp, x: String) -> String {
+pub(crate) fn unary_f64(op: UnaryOp, x: String) -> String {
     match op {
         UnaryOp::Neg => format!("(-{x})"),
         UnaryOp::Abs => format!("fabs({x})"),
@@ -6375,7 +6375,7 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
 /// as [`BinaryOp::FmaxIeee`]/[`BinaryOp::FminIeee`] below — so `Max`/`Min` emit
 /// the compare-select, never `fmaxf`. (Operands appear 3× — the deferred
 /// temp-binding pass, cf. relu/sigmoid, removes the recompute on compound inners.)
-fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
+pub(crate) fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
     match op {
         BinaryOp::Max => {
             format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))")
@@ -6436,7 +6436,7 @@ fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
 }
 
 /// Same as [`binary_f32`] but with f64 math-function names.
-fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
+pub(crate) fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
     match op {
         BinaryOp::Max => {
             format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))")
@@ -6517,7 +6517,7 @@ fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
 /// The final `other` arm is the second half of the emitter backstop: a float
 /// fn / cmp op that reaches the int speller (i.e. bypassed the plan gate at an
 /// int dtype) panics rather than emitting C that happens to compile.
-fn binary_int(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
+pub(crate) fn binary_int(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
     if op.is_logical() {
         assert!(
             dtype == ElementKind::U8,
@@ -6615,12 +6615,12 @@ fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String
 /// No arithmetic ever touches an arm: the ternary is data movement
 /// (setp+selp), so ±0 signs and NaN payloads (quiet and signaling) move
 /// intact — byte-for-byte the bespoke `keep ? input[k] : zero_of<T>()`.
-fn select_f32(c: String, a: String, b: String) -> String {
+pub(crate) fn select_f32(c: String, a: String, b: String) -> String {
     format!("(((float)({c})) != 0.0f ? (float)({a}) : (float)({b}))")
 }
 
 /// [`select_f32`] with double literals/casts (the `binary_f64` cmp precedent).
-fn select_f64(c: String, a: String, b: String) -> String {
+pub(crate) fn select_f64(c: String, a: String, b: String) -> String {
     format!("(((double)({c})) != 0.0 ? (double)({a}) : (double)({b}))")
 }
 
@@ -6707,7 +6707,7 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
 /// f64-spelled Const injects double math into an int kernel (f64 cannot even
 /// represent all i64). Called from [`Cuda::lower`] over the body and every
 /// reduction-class stage/epilogue, independent of `assert_int_op_admissibility`.
-fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
+pub(crate) fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
     match e {
         ScalarExpr::Input(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {}
         // A Coord at an int dtype is the SAME hazard class as Const (its
@@ -6816,7 +6816,7 @@ fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) {
 /// never `vty`/`octype`. The `Cuda::lower` param assert (see the `matches!` on
 /// `plan.dtype` above) guarantees a param-bearing plan has a spellable scalar
 /// ctype, so the `expect` is unreachable for any op that actually declares a param.
-fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
+pub(crate) fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
     scalar_ctype(plan.dtype).expect("param dtype checked by the Cuda::lower param assert")
 }
 
@@ -6828,7 +6828,7 @@ fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
 /// `float4`/`double2`) the declaration stays `double p0`, NOT `double2 p0` — so
 /// callers pass the SCALAR compute ctype, never `vty`/`octype` (the F64-param
 /// increment's load-bearing distinction).
-fn param_args(e: &ScalarExpr, param_ctype: &str) -> String {
+pub(crate) fn param_args(e: &ScalarExpr, param_ctype: &str) -> String {
     params_used(e)
         .iter()
         .map(|i| format!(", {param_ctype} p{i}"))

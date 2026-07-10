@@ -39,6 +39,7 @@
 
 pub mod backend;
 pub mod contract;
+pub mod cpu_c;
 pub mod cuda;
 pub mod dispatch_artifact;
 pub mod ir;
@@ -52,6 +53,7 @@ pub mod telemetry;
 
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, contract, front_matter};
+pub use cpu_c::CpuC;
 pub use cuda::Cuda;
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
