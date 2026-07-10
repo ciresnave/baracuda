@@ -44,6 +44,7 @@ pub mod cuda;
 pub mod dispatch_artifact;
 pub mod ir;
 pub mod jit;
+pub mod lift;
 pub mod link;
 pub mod optimize;
 pub mod oracle;
@@ -66,6 +67,7 @@ pub use jit::{
     ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe, StubCompiler,
     SynthKernel, synthesize,
 };
+pub use lift::{LiftError, Lifted, lift_elementwise};
 pub use link::{LinkEntry, emit_link_registry, link_entry};
 pub use optimize::{optimize, optimize_top_k};
 pub use oracle::{Fidelity, TypedBuffer, compare, evaluate};

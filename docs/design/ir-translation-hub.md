@@ -1,6 +1,6 @@
 # The IR as a universal kernel-translation hub — design + roadmap (2026-07-10)
 
-**Status: proposed direction (not yet built).** This captures a multi-phase
+**Status: in progress — several phases shipped.** This captures a multi-phase
 initiative that grows `baracuda-kernelgen` from "a generator that emits
 specialized CUDA kernels" into the **single source of truth** for every
 IR-expressible optimization, with the neutral IR as a bidirectional translation
@@ -8,6 +8,19 @@ hub. It builds directly on the shipped pieces: the neutral IR
 ([`ir.rs`](../../crates/baracuda-kernelgen/src/ir.rs)), the `Backend` emitter
 seam ([`backend.rs`](../../crates/baracuda-kernelgen/src/backend.rs)), the CPU
 correctness oracle ([`oracle.md`](oracle.md)), and the ship-top-K bench-gate.
+
+**Shipped so far** (device-validated on RTX 4070 / sm_89 / CUDA 13.3):
+Phase 1 — freestanding-helper emission (`emit_coord_unravel_helper`; a generated
+`.cuh` bit-identical to the hand-written one and **1.31× faster**, from a shared
+`emit_unravel_decomp` that also backs all four inline strided emitters
+byte-identically). Phase 2c (partial) — a second generated helper
+(`emit_dtype_promote_helper`), exhaustively bit-exact across all 131072 f16+bf16
+codes (a de-dup win, no speedup — the honest outcome). Phase 4 (spike) — the
+CUDA→IR **`lift`** frontend ([`lift.rs`](../../crates/baracuda-kernelgen/src/lift.rs)):
+recognizes a grid-stride elementwise CUDA kernel, parses its body to a
+`ScalarExpr`/`OpDef`, refuses non-expressible constructs as residue, and re-emits
+the same lifted IR to CUDA **and** portable-C — source → IR → every backend,
+proven end-to-end.
 
 ## The shape
 
