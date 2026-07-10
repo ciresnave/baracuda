@@ -105,11 +105,14 @@ Two deliberate design differences, unchanged by cudarc's restructure:
 
 ## Mixing the two
 
-Both wrap the same opaque driver handles, so they can coexist in one process
-against the same device: obtain a raw `CUcontext` / `CUstream` from one side
-(both expose `as_raw()`) and hand it to an API on the other that accepts a raw
-handle. Coverage of raw *reconstruction* differs per handle on baracuda's side —
-streams and events expose `from_raw`, but `Context` currently exposes only
-`as_raw()` — so share at the raw-handle level rather than assuming symmetric
-reconstruction. A common reason to mix: keep candle-on-cudarc for your model and
-add baracuda's cuTENSOR / nvCOMP / CV-CUDA wrappers alongside.
+Both wrap the same opaque driver handles and can coexist against one device. For
+sharing a **context**, the clean path is the primary context:
+`baracuda_driver::PrimaryContext::retain(device)` returns baracuda's handle to
+the device's primary context — the same one cudart-based frameworks use — so you
+don't juggle raw pointers. Otherwise, baracuda broadly exposes `as_raw()` to hand
+a raw `CUcontext` / `CUstream` to another library's API that accepts one;
+adopting a *foreign* raw handle back into a safe baracuda type is currently
+limited (the owning RAII handles — `Context` / `Stream` / `Event` — expose
+`as_raw()` but no `from_raw`), so mixing leans on baracuda-hands-out rather than
+baracuda-wraps-in. A common setup: keep candle-on-cudarc for your model and add
+baracuda's cuTENSOR / nvCOMP / CV-CUDA wrappers on the shared primary context.
