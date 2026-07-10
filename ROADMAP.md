@@ -7,16 +7,23 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current release is **v0.0.1-alpha.67** with **2280+ GPU tests
-passing, zero failures** across the 6 critical test crates
-(baracuda-kernels, baracuda-optim, baracuda-megatron, baracuda-nccl,
-baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89);
-the `baracuda-kernels` suite alone is 2180/0 across 513 binaries.
-alpha.67 ships Phase 74 (Fuel dense-FP-GEMM + reduce-to facade
-closure — see the Phase 74 entry below). Phases 64-71 shipped with
-alpha.64 and 72-73 with alpha.65 (the two phase write-ups below are
-kept for technical reference; their "in-progress" framing predates
-those releases).
+The current release is **v0.0.1-alpha.77** (2026-07-09). The 6 critical
+GPU test crates (baracuda-kernels, baracuda-optim, baracuda-megatron,
+baracuda-nccl, baracuda-transformer-engine, baracuda-ozimmu) ran **2280+
+tests, zero failures** on RTX 4070 (sm_89) as of the last full-suite
+measurement (`baracuda-kernels` alone 2180/0 across 513 binaries);
+`baracuda-kernelgen` (published since alpha.76) is at 589/0 under the seam
+feature. **alpha.68–77 shipped the kernel-specialization codegen ramp** —
+the IR-expansion arc (increments 0a–#8: op vocabulary → multi-output →
+RowReduce roles → layout/shape nodes → gather → scatter → scan → window →
+sort) plus the post-ramp backlog (base_offset/rope, where/select,
+hetero-multi/dropout, fused argsort, top-k/bottom-k, im2col, f64 scalar
+params, block-scan + partial-select measured variants) and the CapturedRun
+`_doff` WriteSlice. Earlier: Phase 74 (Fuel dense-FP-GEMM + reduce-to
+facade closure — see the Phase 74 entry below) shipped alpha.67; Phases
+64–71 shipped with alpha.64 and 72–73 with alpha.65 (the phase write-ups
+below are kept for technical reference; their "in-progress" framing
+predates those releases).
 
 **Phase 65a (shipped alpha.64)** — SMEM staging
 infrastructure for the normalizer-family retrofit. Adds two

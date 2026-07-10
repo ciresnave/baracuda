@@ -1,10 +1,13 @@
 # Kernel specialization — structure-class codegen
 
-**Status:** design / not yet implemented. This captures the agreed shape of
-an ahead-of-time (AOT) kernel-specialization system: a generator that takes
-the *logical math* of an op plus a matrix of *structural predicates* over its
-inputs/outputs and emits a specialized `.cu` kernel per cell, built with
-`nvcc` and ready to use at runtime.
+**Status:** SHIPPED — `baracuda-kernelgen`, published to crates.io since
+v0.0.1-alpha.76 (the IR-expansion ramp 0a–#8 + the post-ramp backlog landed
+across alpha.68–77). This document is the original design capture; it is kept
+for the rationale and the agreed shape, but the per-op *current* status lives
+in the code and the CHANGELOG, not here. This system takes the *logical math*
+of an op plus a matrix of *structural predicates* over its inputs/outputs and
+emits a specialized `.cu` kernel per cell (nvrtc at runtime for the live JIT
+seam, or `nvcc`-built AOT).
 
 It sits on top of, and does not replace, the existing strided-kernel layer
 (`TensorRef`/`TensorMut` + the `baracuda::coord::unravel_*` device helpers in
@@ -435,11 +438,14 @@ float (convert → f32 math → convert), correct for every op.
 **pure-tensor elementwise + activation epilogues**: each arithmetic/unary node →
 an `Op` node (names from FKC §4.1), each `Input(i)` → `bind: i`, a reused input →
 a repeated `bind` (node-identity for free), interior nodes → `consumers: 1`.
-Adversarially verified conformant against the FKC §3 grammar. **Not yet
-emittable**, and why: scalar-param ops (`AddScalar`/…) need a runtime-scalar
-*param* IR node distinct from the baked `Const`; norm/fused-linear patterns need
-`ORDER 3` below plus Fuel's spec fixes (review items A1/E2/E3); commutative
-ordering is emitted one way pending Fuel E1.
+Adversarially verified conformant against the FKC §3 grammar. **Since shipped**:
+the runtime-scalar `Param` node landed (distinct from the baked `Const`), so
+scalar-param ops (`AddScalar`/…, including f64 params) now emit and their
+contracts carry the params via the `op_params`/`extract:` carrier; the `ORDER 3`
+reductions/RowReduce/layout work below all shipped. **Still pending (Fuel-side)**:
+the fused-reduce norm/fused-linear seam advert (RmsNorm/Softmax/LayerNorm remain
+AOT-only honest misses awaiting a Fuel grammar reply); commutative ordering is
+still emitted one way pending Fuel E1.
 
 ### IR roadmap (status)
 
@@ -454,13 +460,16 @@ ordering is emitted one way pending Fuel E1.
   `docs/design/axis-role-vocabulary.md`). The **DAG IR with consumer counts**
   (`ExprDag`) hash-conses shared interiors and emits each once as a `tmp`
   (elementwise emit paths wired). Both on-device validated on sm_89 (RTX 4070).
-  `Access::RowReduce` (fused norms/softmax) also shipped. **Still pending**: layout
-  nodes (item 01 — now recognition-only after converging with Fuel on convention
-  (c)) and `MatMul` (the terminal contraction node — design spike complete in
-  [`matmul-contraction-spike.md`](matmul-contraction-spike.md), grounded in the
-  merged DAG/dispatch/reduction work; implementation gated on one 01 axis-role hook
-  + one 02 producer-leaf hook + the Fuel region grammar). After those, the FKC §8
-  RmsNorm/FusedLinear targets derive.
+  `Access::RowReduce` (fused norms/softmax) also shipped. **Layout nodes and
+  `MatMul` have since shipped too**: layout/shape nodes (item 01) landed as
+  recognition-only (fused transposed reads — the generic strided emitter reads any
+  input layout free) after converging with Fuel on convention (c); `Access::Contraction`
+  (MatMul) shipped v1 as a skinny-SIMT schedule + a split-K variant + dispatch-table
+  routing (see [`matmul-contraction-spike.md`](matmul-contraction-spike.md)). **Still
+  open**: the tensor-core / register-blocked contraction schedules (MMA fragments,
+  shared/register blocking, cp.async double-buffer — the larger-cell perf arc, gated
+  on on-device bench-gating), and the FKC §8 RmsNorm/FusedLinear *seam advert* (the
+  kernels emit AOT; the contract advert awaits a Fuel fused-reduce grammar reply).
 
 ### Validation (sm_89, RTX 4070)
 
