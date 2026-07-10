@@ -2741,21 +2741,31 @@ fn emit_reduction(
     GeneratedKernel { name, source: s }
 }
 
-/// Precision-first variant ([`VariantFidelity::MorePrecise`]) of an f32 Sum/Mean
-/// reduction: a `double`-accumulator serial fold. The base f32 reduction folds in
-/// `float` (error growing with the reduced length); this forces `double`
-/// accumulation through `emit_reduction`'s serial per-output general nest (a fixed
-/// order — bitwise-reproducible across hardware AND matching the CPU oracle's fold
-/// order), giving ~0.5 ULP(f32) of the correctly-rounded reduction. It costs the
-/// coalesced block-tree's throughput, so it is NEVER the silent default — only an
-/// honest FKC contract whose precision block advertises the tighter bound selects
-/// it (the caller's precision policy decides). Declines every cell it cannot
-/// strictly improve.
+/// Precision-first variant ([`VariantFidelity::MorePrecise`]) — a `double`-
+/// accumulator SERIAL fold that fixes the length-growing float error of an f32
+/// reduction's running sum AND pins a fixed, hardware-independent fold order
+/// (bitwise-reproducible, matching the CPU oracle). It is NEVER the silent
+/// default (it costs the coalesced block-tree's throughput); only an honest FKC
+/// contract whose precision block advertises the tighter bound selects it (the
+/// caller's precision policy decides). Declines every cell it cannot strictly
+/// improve.
+///
+/// Two schedules earn it: a last-/outer-axis [`Schedule::Reduction`]
+/// (`precision_first_reduction`) and a fused [`Schedule::RowReduce`]
+/// softmax/layernorm/rmsnorm cell (`precision_first_rowreduce`). Dispatch on the
+/// schedule up front, then hand off to the arm.
 fn precision_first_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
-    let rop = match plan.schedule {
-        Schedule::Reduction { op, .. } => op,
-        _ => return None,
-    };
+    match plan.schedule {
+        Schedule::Reduction { op, .. } => precision_first_reduction(plan, op),
+        Schedule::RowReduce { .. } => precision_first_rowreduce(plan),
+        _ => None,
+    }
+}
+
+/// Precision-first arm for a plain [`Schedule::Reduction`] f32 Sum/Mean cell:
+/// forces `double` accumulation through `emit_reduction`'s serial per-output
+/// general nest, giving ~0.5 ULP(f32) of the correctly-rounded reduction.
+fn precision_first_reduction(plan: &KernelPlan<'_>, rop: ReduceOp) -> Option<Variant> {
     // Only Sum/Mean carry a length-growing running FP sum a wider accumulator
     // fixes. Max/Min are a pick and Prod a product — order-exact, so the double
     // fold is bit-identical to the base (no distinct precision offer).
@@ -2804,6 +2814,60 @@ fn precision_first_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
                 ReduceOp::Mean => "mean",
                 _ => "sum",
             }
+        ),
+    })
+}
+
+/// Precision-first arm for a fused [`Schedule::RowReduce`] cell
+/// (softmax/layernorm/rmsnorm): the `_prec` serial-per-row double fold from
+/// `emit_row_reduce_impl(.., precision=true)` — one thread per row, no block-tree,
+/// a `double` accumulator through the sum/mean/variance stages. Bitwise across
+/// hardware.
+fn precision_first_rowreduce(plan: &KernelPlan<'_>) -> Option<Variant> {
+    let Access::RowReduce { stages, .. } = plan.access else {
+        return None;
+    };
+    // F32 ONLY, exactly as the reduction arm: F64/F32Strict already fold in
+    // `double`; f16/bf16's low-mantissa STORE rounds the wider accumulation away.
+    if plan.dtype != ElementKind::F32 {
+        return None;
+    }
+    // At least one Sum/Mean stage — those carry the length-growing FP sum a wider
+    // accumulator fixes (softmax's exp-sum denominator, layernorm/rmsnorm's
+    // mean/variance). A pure Max/Min-only rowreduce is order-exact per row, so the
+    // double fold would be bit-identical to the base — no distinct offer, decline.
+    if !stages
+        .iter()
+        .any(|st| matches!(st.op, ReduceOp::Sum | ReduceOp::Mean))
+    {
+        return None;
+    }
+    // The serial epilogue writes `out[base+j]` forward-dense for j∈[0,k), exactly
+    // like the base full-width output. A flipped (negative-stride) or broadcast
+    // (stride-0) output would alias / write OOB — decline (the block base serves
+    // it via its own path). The last operand in the key is the output.
+    if plan.key.n_operands < 2 {
+        return None;
+    }
+    let out_key = plan.key.operands[(plan.key.n_operands as usize) - 1];
+    if out_key.flipped || out_key.contig != Contiguity::Contig {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    let kernel = emit_row_reduce_impl(plan, ctype, false, true);
+    let det = VariantFidelity::MorePrecise.determinism_str();
+    Some(Variant {
+        tag: "prec",
+        kernels: vec![kernel],
+        fidelity: VariantFidelity::MorePrecise,
+        launch_note: format!(
+            "Precision-first {} rowreduce: double accumulator, serial per-row fold \
+             (1-D grid over n_out, one thread per row, grid-stride). MORE ACCURATE than \
+             the f32 base (double accumulation of the sum/mean/variance stages); \
+             determinism: {det} (fixed serial order, hardware-independent). NOT the \
+             default: trades the block-per-row parallelism for accuracy + \
+             reproducibility.",
+            plan.op_name
         ),
     })
 }
@@ -3386,7 +3450,7 @@ fn size_tag(s: baracuda_kernels_types::SizeClass) -> char {
 /// uses the full `0xffffffff` mask; the launch contract caps `blockDim.x <= 1024`
 /// and (for warp uniformity) a multiple of 32.
 fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
-    emit_row_reduce_impl(plan, ctype, false)
+    emit_row_reduce_impl(plan, ctype, false, false)
 }
 
 /// Cross-pass materialization **variant** for a RowReduce cell whose epilogue
@@ -3430,7 +3494,7 @@ fn row_reduce_materialize_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let ctype = scalar_ctype(plan.dtype)?;
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let (acc, asz) = if dbl { ("double", 8) } else { ("float", 4) };
-    let k = emit_row_reduce_impl(plan, ctype, true);
+    let k = emit_row_reduce_impl(plan, ctype, true, false);
     let kname = k.name.clone();
     Some(Variant {
         tag: "smemrow",
@@ -3491,10 +3555,25 @@ fn substitute_subexpr(e: &ScalarExpr, t: &ScalarExpr, marker: u8) -> ScalarExpr 
     }
 }
 
-fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -> GeneratedKernel {
+fn emit_row_reduce_impl(
+    plan: &KernelPlan<'_>,
+    ctype: &str,
+    materialize: bool,
+    precision: bool,
+) -> GeneratedKernel {
     let Access::RowReduce { stages, epilogue } = plan.access else {
         unreachable!("emit_row_reduce requires Access::RowReduce");
     };
+    // The materialize (smem cross-pass cache) and precision (serial double fold)
+    // variants are mutually-exclusive STRUCTURES — the former is a block-per-row
+    // shape with a per-thread j-strided cache, the latter a single-thread-per-row
+    // serial fold with no smem. No caller composes them; the assert makes that a
+    // hard invariant so the precision branches below can treat the cache paths as
+    // unreachable.
+    assert!(
+        !(materialize && precision),
+        "cuda backend: RowReduce materialize + precision are mutually-exclusive structures"
+    );
     // Independent emitter backstop (belt-and-suspenders; the plan gate
     // `validate_row_reduce` validates the same, the 0a lesson: gate every layer).
     // Re-derive each operand's role from the key and assert the OOB-relevant
@@ -3530,7 +3609,9 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
             "cuda backend: RowReduce input 0 must be the row-streamed reduced tensor"
         );
     }
-    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    // Precision forces the wider `double` accumulator (fixing the length-growing
+    // float error of the sum/mean/variance stages); F64/F32Strict already do.
+    let dbl = precision || matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let acc = if dbl { "double" } else { "float" };
     let zero = if dbl { "0.0" } else { "0.0f" };
     // Prod's multiplicative identity — passed through to `emit_block_reducers`
@@ -3538,7 +3619,13 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
     // `ops` never contains Prod here and no block_prod is emitted.
     let one = if dbl { "1.0" } else { "1.0f" };
     let n = plan.n_inputs;
-    let vsuf = if materialize { "_smemrow" } else { "" };
+    let vsuf = if materialize {
+        "_smemrow"
+    } else if precision {
+        "_prec"
+    } else {
+        ""
+    };
     let name = format!(
         "baracuda_gen_{}_{}_rowreduce{vsuf}",
         plan.op_name,
@@ -3551,7 +3638,13 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
         "{}_{}{}",
         plan.op_name,
         dtype_tag(plan.dtype),
-        if materialize { "_sm" } else { "" }
+        if materialize {
+            "_sm"
+        } else if precision {
+            "_prec"
+        } else {
+            ""
+        }
     );
 
     // The feature (reduced/last) axis index, for the role classifier. `saturating_sub`
@@ -3648,7 +3741,11 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
     for st in stages {
         ops.insert(st.op);
     }
-    emit_block_reducers(&mut s, acc, zero, one, &ops, &stem);
+    // The precision serial fold has one thread per row own the whole reduction, so
+    // it needs NO cooperative block/warp/smem reducers — skip the helper emission.
+    if !precision {
+        emit_block_reducers(&mut s, acc, zero, one, &ops, &stem);
+    }
     s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
     for i in 0..n {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
@@ -3671,10 +3768,29 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
             "    extern __shared__ {acc} baracuda_row_smem[];\n"
         ));
     }
-    s.push_str(
-        "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
-    );
+    // Row mapping: the base kernel is one BLOCK per row (grid-stride over rows,
+    // the block cooperatively folds each row). The precision variant is one THREAD
+    // per row (grid-stride over rows), each thread serially folding its whole row —
+    // a fixed, hardware-independent order.
+    if precision {
+        s.push_str(
+            "    for (long long row = (long long)blockIdx.x * blockDim.x + threadIdx.x; row < n_out; row += (long long)gridDim.x * blockDim.x) {\n",
+        );
+    } else {
+        s.push_str(
+            "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
+        );
+    }
     s.push_str("        long long base = row * k;\n");
+    // Per-element fold loop header: block-strided (each block thread takes a lane of
+    // the row) for the base/materialize kernels; plain serial for the precision
+    // variant (the single owning thread walks the whole row in order). Shared by
+    // every stage fold AND the epilogue below.
+    let fold_open = if precision {
+        "        for (long long j = 0; j < k; ++j) {\n"
+    } else {
+        "        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n"
+    };
     // Hoist per-row scalar operands (saved stats: μ, rstd, lse) once per row: they
     // are constant along the feature axis, so `in{i}[row]` is loaded here (outside
     // the feature loop), up-converted to the accumulate type, and referenced as
@@ -3708,7 +3824,7 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
             ),
             ReduceOp::Sum | ReduceOp::Mean => {
                 s.push_str(&format!("        {acc} acc{i} = {zero};\n"));
-                s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+                s.push_str(fold_open);
                 s.push_str("            long long idx = base + j;\n");
                 if cache {
                     s.push_str(&format!("            {acc} v = {pre};\n"));
@@ -3718,9 +3834,17 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                     s.push_str(&format!("            acc{i} += {pre};\n"));
                 }
                 s.push_str("        }\n");
-                // block_sum broadcasts the row sum to every thread; Mean divides by
-                // k (k>0 guaranteed by the guard above) — uniform in every thread.
-                let fin = if matches!(st.op, ReduceOp::Mean) {
+                // Base: block_sum broadcasts the row sum to every thread. Precision:
+                // the single owning thread already holds the full serial sum in
+                // acc{i}, so no cooperative combine. Mean divides by k (k>0 by the
+                // guard above) either way.
+                let fin = if precision {
+                    if matches!(st.op, ReduceOp::Mean) {
+                        format!("acc{i} / ({acc})k")
+                    } else {
+                        format!("acc{i}")
+                    }
+                } else if matches!(st.op, ReduceOp::Mean) {
                     format!("block_sum_{stem}(acc{i}) / ({acc})k")
                 } else {
                     format!("block_sum_{stem}(acc{i})")
@@ -3739,9 +3863,11 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                     "min"
                 };
                 // Carry a `has` flag so idle / short-row lanes inject nothing and no
-                // ±inf seed is needed (headerless); NaN sticks via `e != e`.
+                // ±inf seed is needed (headerless); NaN sticks via `e != e`. Kept in
+                // the precision fold too: it gives the same empty/NaN semantics when
+                // the single owning thread walks the row serially.
                 s.push_str(&format!("        {acc} acc{i} = {zero}; int has{i} = 0;\n"));
-                s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+                s.push_str(fold_open);
                 s.push_str("            long long idx = base + j;\n");
                 s.push_str(&format!("            {acc} e = {pre};\n"));
                 if cache {
@@ -3751,9 +3877,15 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                     "            if (!has{i} || e != e || e {cmp} acc{i}) {{ acc{i} = e; has{i} = 1; }}\n"
                 ));
                 s.push_str("        }\n");
-                s.push_str(&format!(
-                    "        {acc} r{i} = block_{suf}_{stem}(acc{i}, has{i});\n"
-                ));
+                // Base: block_{suf} folds the per-thread extrema across the block.
+                // Precision: the single owning thread already holds the row extremum
+                // in acc{i} (the has{i} flag settled it), so read it directly.
+                let rfin = if precision {
+                    format!("acc{i}")
+                } else {
+                    format!("block_{suf}_{stem}(acc{i}, has{i})")
+                };
+                s.push_str(&format!("        {acc} r{i} = {rfin};\n"));
             }
         }
     }
@@ -3777,7 +3909,7 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
         ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
         _ => epi,
     };
-    s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+    s.push_str(fold_open);
     s.push_str("            long long idx = base + j;\n");
     s.push_str(&format!("            out[idx] = {stored};\n"));
     s.push_str("        }\n");
@@ -7423,6 +7555,89 @@ mod tests {
     }
 
     #[test]
+    fn precision_first_rowreduce_offered_for_f32_softmax() {
+        use crate::{VariantFidelity, generate_variants};
+        // Numerically-stable f32 softmax: max stage + exp-sum stage + divide
+        // epilogue. The exp-sum denominator is the length-growing FP sum the
+        // serial double fold fixes.
+        let softmax = softmax_op(ElementKind::F32);
+        let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
+        let vs = generate_variants(&softmax, &key, &Cuda);
+        // Base keeps the coalesced block-per-row tree.
+        assert_eq!(vs[0].tag, "base");
+        assert_eq!(vs[0].fidelity, VariantFidelity::BitIdentical);
+        assert!(
+            vs[0].kernels[0].source.contains("block_sum"),
+            "base keeps the block-tree"
+        );
+        let prec = vs
+            .iter()
+            .find(|v| v.tag == "prec")
+            .expect("precision-first rowreduce offered for f32 softmax");
+        assert_eq!(prec.fidelity, VariantFidelity::MorePrecise);
+        // A serial double fold is reproducible across IEEE-754 hardware.
+        assert_eq!(prec.fidelity.determinism_str(), "bitwise");
+        assert_eq!(prec.kernels.len(), 1);
+        let k = &prec.kernels[0];
+        assert!(
+            k.source.contains("double acc"),
+            "precision fold accumulates in double"
+        );
+        // Serial per-row fold (one thread per row), NOT the block-strided lane loop.
+        assert!(
+            k.source.contains("for (long long j = 0; j < k; ++j)"),
+            "serial per-row fold"
+        );
+        assert!(
+            !k.source.contains("block_sum"),
+            "precision routes through the serial fold, not the block-tree"
+        );
+        assert!(
+            k.name.ends_with("_prec"),
+            "distinct _prec entry point: {}",
+            k.name
+        );
+    }
+
+    #[test]
+    fn precision_first_rowreduce_declines_f16_and_max_only() {
+        use crate::generate_variants;
+        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        // f16 softmax: declined — the low-mantissa store rounds the wider
+        // accumulation away, so a double rowreduce variant isn't worth an offer.
+        let sm16 = softmax_op(ElementKind::F16);
+        let x16 = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F16, 256);
+        let key16 = structure_key(OpCategory::Softmax, &[x16, x16], ArchSku::Sm89);
+        assert!(
+            generate_variants(&sm16, &key16, &Cuda)
+                .iter()
+                .all(|v| v.tag != "prec"),
+            "f16 rowreduce declines precision-first"
+        );
+        // Pure Max-only rowreduce (a row shift-by-max): order-exact per row, so the
+        // double fold is bit-identical to the base — declined.
+        let rowmax = OpDef::row_reduce(
+            "rowmax",
+            1,
+            &[ElementKind::F32],
+            vec![ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Max,
+            }],
+            input(0) - reduced(0),
+        );
+        let xf = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let keyf = structure_key(OpCategory::Softmax, &[xf, xf], ArchSku::Sm89);
+        assert!(
+            generate_variants(&rowmax, &keyf, &Cuda)
+                .iter()
+                .all(|v| v.tag != "prec"),
+            "Max-only rowreduce declines precision-first (order-exact)"
+        );
+    }
+
+    #[test]
     fn splitk_variant_offered_for_outer_sum() {
         use crate::ir::ReduceOp;
         use crate::{VariantFidelity, generate_variants};
@@ -7632,8 +7847,12 @@ mod tests {
         let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
         let vs = generate_variants(&softmax, &key, &Cuda);
-        assert_eq!(vs.len(), 2, "base + smemrow");
-        let sm = &vs[1];
+        // An f32 softmax now also earns the precision-first variant, so this cell
+        // yields base + prec + smemrow; select the materialize offer by TAG.
+        let sm = vs
+            .iter()
+            .find(|v| v.tag == "smemrow")
+            .expect("smemrow variant offered");
         assert_eq!(sm.tag, "smemrow");
         assert_eq!(sm.fidelity, VariantFidelity::BitIdentical);
         let src = &sm.kernels[0].source;
@@ -7675,10 +7894,12 @@ mod tests {
         );
         let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Normalization, &[x, x], ArchSku::Sm89);
-        assert_eq!(
-            generate_variants(&rmsnorm, &key, &Cuda).len(),
-            1,
-            "base only"
+        // The precision variant IS offered (an f32 Mean rowreduce), but smemrow is
+        // NOT — the epilogue never recomputes a stage expr, so nothing to cache.
+        let vs = generate_variants(&rmsnorm, &key, &Cuda);
+        assert!(
+            vs.iter().all(|v| v.tag != "smemrow"),
+            "no materialize offer when the epilogue doesn't recompute"
         );
     }
 
