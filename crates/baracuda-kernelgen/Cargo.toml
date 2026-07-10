@@ -24,6 +24,11 @@ seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam"]
 
 [dependencies]
 baracuda-kernels-types = { workspace = true }
+# Accurate f64 transcendentals (erf/erfc) for the CPU oracle reference — a pure-Rust
+# (MUSL/fdlibm heritage) implementation INDEPENDENT of the emitter's device erf/erff,
+# so it remains a valid differential oracle. Replaces the v1 ~1e-7 rational that was
+# too loose to reference an f32/f64 erf/gelu kernel (adversarial review).
+libm = "0.2"
 baracuda-nvrtc = { workspace = true, optional = true }
 # Fuel's dependency-free std-POD grammar crate (OpTag / OpAttrs / PatternNode) — the
 # §5 shared wire vocabulary. crates.io version dep so the default build resolves

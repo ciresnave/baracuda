@@ -446,6 +446,7 @@ dependencies = [
  "baracuda-nvrtc",
  "fuel-kernel-seam",
  "fuel-kernel-seam-types",
+ "libm",
 ]
 
 [[package]]

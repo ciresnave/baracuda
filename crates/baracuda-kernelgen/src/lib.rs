@@ -45,6 +45,7 @@ pub mod ir;
 pub mod jit;
 pub mod link;
 pub mod optimize;
+pub mod oracle;
 pub mod pattern;
 pub mod plan;
 pub mod telemetry;
@@ -65,6 +66,7 @@ pub use jit::{
 };
 pub use link::{LinkEntry, emit_link_registry, link_entry};
 pub use optimize::{optimize, optimize_top_k};
+pub use oracle::{Fidelity, TypedBuffer, compare, evaluate};
 pub use pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
 pub use plan::{KernelPlan, Schedule, build_plan};
 pub use telemetry::{
