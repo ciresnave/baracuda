@@ -16,6 +16,33 @@ nvcc -O3 -arch=sm_89 <outdir>/<harness>.cu -o <outdir>/<harness> && <outdir>/<ha
 
 ---
 
+## `unravel_bench.cu` — generated coord-unravel helper vs hand-written (Phase 1)
+
+The first **freestanding-helper** validation (IR-translation-hub roadmap, Phase 1,
+`docs/design/ir-translation-hub.md`): proves `baracuda-kernelgen` can emit a
+reusable `.cuh` helper — `baracuda::coord::gen::unravel_offset_1_r{N}`, produced by
+`emit_coord_unravel_helper` from the SAME `emit_unravel_decomp` routine that backs
+the inline strided kernels (single source of truth) — that is bit-identical to the
+hand-written `baracuda_coord_unravel.cuh` and faster. Compares the generated
+per-rank UNROLLED functions against the hand-written runtime-rank `unravel_offset_1`
+and a CPU reference (normal / stride-0 broadcast / negative-stride / empty-axis `%0`
+guard), then micro-benches both (compute-bound, REPEAT unravels/elem).
+
+Run (needs the bespoke include dir + the MSVC conforming preprocessor):
+
+```sh
+UNRAVEL_OUT=<outdir> cargo test -p baracuda-kernelgen dump_coord_unravel_helper -- --ignored --nocapture
+nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" \
+     -I <outdir> -I crates/baracuda-kernels-sys/kernels/include \
+     crates/baracuda-kernelgen/ondevice/unravel_bench.cu -o <outdir>/unravel_bench && <outdir>/unravel_bench
+```
+
+**Last run** (RTX 4070 Laptop / sm_89 / CUDA 13.3): PASSED — correctness
+`gen==hand==ref` on all 4 cases; bench rank-4, REPEAT=64 over 16.7M indices:
+**gen (unrolled) 15.98 ms vs hand (runtime rank) 20.79 ms = 1.30× faster**.
+
+---
+
 ## `reduce_validate.cu` — general reduction path (item 03)
 
 Launches the general-path reduction kernels (`_reduce_{tag}_ax{hex}[_kd]`) with
