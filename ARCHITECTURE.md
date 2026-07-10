@@ -403,6 +403,143 @@ The two plans:
 A future Fuel-style autotuner / judge will pick between siblings at
 runtime by racing them once per descriptor and caching the winner.
 
+## The kernel-generation layer (`baracuda-kernelgen`)
+
+Everything above describes *hand-authored* kernels reached through Plans.
+Alongside it sits a second, newer path: `baracuda-kernelgen`, a **build-time
+kernel generator** that turns an op's abstract IR into specialized kernel
+source (and its Fuel contract) instead of shipping a fixed `.cu`. It is the
+layer that lets a kernel be produced from a description of the *math* rather
+than a hand-written CUDA body — so the same op can be vectorized, fused, or
+retargeted to another backend without a rewrite.
+
+The crate began life as a `publish = false` dev tool whose emitted artifacts
+are committed into `baracuda-kernels-sys`; it is now **published (as of
+alpha.76)** so the sibling Fuel project can build the live JIT synthesizer
+straight from crates.io. Its one **supported** surface is the `seam` feature
+(the `fuel_kernel_seam::Synthesizer` impl, frozen with Fuel on 2026-07-04);
+everything else — the IR, plan, emitters, contracts, dispatch artifacts — is
+alpha-fluid generator internals with no cross-version stability, so pin exact
+`0.0.1-alpha.N` versions.
+
+### The neutral IR
+
+An op is described as a *pure function at each output coordinate*
+([`ir::OpDef`](crates/baracuda-kernelgen/src/ir.rs)): a scalar-op DAG
+(`ir::ScalarExpr` — `Input` / `Const` / `Param` / `Reduced` / `Coord` leaves;
+`Add` / `Sub` / `Mul` / `Div` / `Unary` / `Binary` / `Select` nodes) plus an
+**access pattern** (`ir::Access`) naming how output coordinates map to input
+reads: `Elementwise`, `Reduction`, `RowReduce`, `Scan`, `Window`,
+`Contraction`, `Im2Col`, `RowSort`. Describing the math as IR — not opaque
+CUDA — is precisely what lets the emitter *see the dataflow* and transform it
+(vectorize, hoist, fuse). The whole access ramp (layout / shape, reductions,
+contraction, scan, window, sort, im2col) is present in the IR today.
+
+### `build_plan` → `KernelPlan` (the schedule decision)
+
+[`plan::build_plan(op, key)`](crates/baracuda-kernelgen/src/plan.rs) takes an
+`OpDef` plus a `StructureKey` cell (the structural admissibility key shared
+with Fuel) and produces a neutral `plan::KernelPlan`: *what* to compute (the
+body DAG + compute dtype + resolved output dtype) and the *schedule* to compute
+it with (`plan::Schedule` — `Vectorized { width }`, `Scalar`, `Strided`,
+`Reduction`, `RowReduce`, `Contraction`, `Scan`, `Window`, `RowSort`, …).
+Choosing the schedule here, not in the backend, keeps the decision shared
+across every backend. `Schedule` is `#[non_exhaustive]`: richer strided /
+broadcast / block-parallel schedules are the growth path, and a backend rejects
+the schedules it doesn't implement.
+
+### The `Backend` trait + the expression seam
+
+[`backend::Backend`](crates/baracuda-kernelgen/src/backend.rs) is the one
+language-specific seam: it lowers a neutral `KernelPlan` to a concrete
+`GeneratedKernel { name, source }`. Two impls exist:
+
+- **`cuda::Cuda`** — the CUDA emitter (the primary, golden-tested backend and
+  the only backend-specific module of any size).
+- **`cpu_c::CpuC`** — a NEW portable-C99 emitter that lowers the scalar
+  contiguous Elementwise path to a plain host `for` loop with none of CUDA's
+  `__global__` / `blockIdx` / `threadIdx` launch harness. Its purpose is to
+  *prove the IR is genuinely backend-neutral*: the body math lowers through the
+  same language-neutral expression seam (`backend::lower_dag` against a backend
+  `Lowering`) that the CUDA scalar path uses, and it reuses the CUDA per-op
+  spellers verbatim, overriding only the handful of CUDA-specific atoms (e.g.
+  `rsqrt`). It declines f16 / bf16 and every non-scalar schedule — a documented
+  honest v1 boundary, not a claim of completeness.
+
+Additional backends (Slang / SPIR-V / Metal) slot in as further `Backend`
+impls with no core change.
+
+### The CPU oracle (the correctness reference)
+
+[`oracle.rs`](crates/baracuda-kernelgen/src/oracle.rs) is an **independent**
+Rust interpreter of the same `KernelPlan` that re-implements every op from its
+*definition* rather than its CUDA spelling — sharing **zero** lowering code
+with the emitters. It is therefore a differential test of the emission, a
+universal numeric reference, and a GPU-free CI base. It accumulates in `f64`,
+uses pure-Rust transcendentals (libm-class `erf` / Lanczos `lgamma` / std
+`f64` for the rest), and covers Elementwise / Reduction / RowReduce / Scan /
+Window / Im2Col today; Contraction, RowSort, and gather / scatter are
+documented deferrals. Together the CUDA emitter, the CPU-C emitter, and the
+Rust oracle form a three-legged correctness triangle — a shared spelling bug
+cannot hide in all three.
+
+### Variants, fidelity, and dispatch
+
+`generate` produces one kernel; `generate_variants` produces the whole
+**variant set** for a cell — the default `"base"` lowering plus every
+alternative schedule. Each variant carries a `VariantFidelity` describing how
+its bits relate to the base:
+
+- `BitIdentical` — same result bits (may be selected silently).
+- `ReassociatedDeterministic` — deterministic for a fixed launch but a
+  different association (e.g. a split-K partial-sum tree vs. the serial fold).
+- `Nondeterministic` — run-to-run varying (order-varying FP `atomicAdd`);
+  never selectable silently.
+- `MorePrecise` — the NEW precision-first variant: a `double` serial fold that
+  is strictly *more accurate* than the default f32 accumulation **and**
+  bitwise-reproducible across IEEE-754 hardware, offered for f32 `Sum` / `Mean`
+  reductions and softmax / norm rowreduce.
+
+The house rule: only a `BitIdentical` variant is ever chosen silently;
+anything else is selectable only through an honest FKC contract whose
+determinism / precision blocks flip with the schedule's numeric class. The
+**ship-top-K** policy ships every validated variant with its own contract under
+the same `accept.structure_key`; a bench gate ranks them per arch and the
+dispatch table (`dispatch_artifact.rs`) records Baracuda's measured default,
+while **Fuel stays the runtime selector**. `telemetry.rs` ingests Fuel's
+per-cell dispatch / miss JSON-Lines feed (panic-free, `serde`-free) to fold the
+reported wins back into that table through the already-frozen merge seams.
+
+### Feeding Fuel: FKC contracts + the live JIT seam
+
+The generator's output crosses into Fuel two ways:
+
+- **AOT (contracts).**
+  [`contract.rs`](crates/baracuda-kernelgen/src/contract.rs) emits a complete
+  Fuel **FKC kernel contract** for a generated kernel — the `accept` /
+  `return` / `op_params` / `caps` / `cost` / `precision` / `determinism`
+  blocks, plus a `pattern:` block for recognized fusions (derived by
+  `pattern.rs`). The admissibility predicate *is* the `StructureKey`, carried
+  verbatim under `accept`, so the planner's miss signal stays honest by
+  construction. These bundles import through Fuel end-to-end.
+- **JIT (the seam).** [`jit.rs`](crates/baracuda-kernelgen/src/jit.rs)
+  implements Baracuda as the **synthesizer** in the Kernel-Seam split:
+  **Fuel is the strategist** — it chooses which primitive subgraph to fuse and
+  whether to adopt the result — and **Baracuda is the synthesizer** — it builds
+  the best kernel for the Fuel-chosen region and returns the kernel, its FKC
+  contract, a recipe, and a link row. It never scans a graph for fusion
+  opportunities; it only
+  synthesizes the region it is handed. The on-demand compiler is a trait
+  (`Compiler`) with a stub impl plus an optional nvrtc backend (the `nvrtc`
+  feature); the `seam` feature exposes the frozen `Synthesizer` impl Fuel
+  constructs from crates.io.
+
+This layer is scoped honestly: the shipped emitter / JIT path centers on f32
+elementwise plus reduction / rowreduce cells, `float4`-vectorized where the
+cell says so and scalar otherwise. Per-operand dtypes, tiled / MMA contraction
+schedules, block-parallel reductions, and additional lowering backends are the
+growth path — the IR already represents them; the emitters are catching up.
+
 ## Vendoring convention
 
 baracuda generally **wraps** rather than forks upstream code. Two
@@ -668,6 +805,8 @@ The original "Phase 11 = Hopper sm_90a" and "Phase 12 = 1.0 freeze"
 items remain valid targets but are sequenced behind ongoing
 downstream-driven work.
 
-The current published tag is **v0.0.1-alpha.67** (Phase 74 — Fuel
-dense-FP-GEMM + reduce-to facade closure); consult `CHANGELOG.md`
-for the release-by-release detail.
+The workspace is at **v0.0.1-alpha.77**. The most recent structural
+addition is the `baracuda-kernelgen` kernel-generation layer described
+above — published at alpha.76 so Fuel can build the live JIT synthesizer
+from crates.io. Consult `CHANGELOG.md` for the release-by-release detail;
+this is a `0.0.1-alpha` project, so nothing here is a stability promise.
