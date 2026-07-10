@@ -215,6 +215,99 @@ fn index_select_element0_replay_repro() {
 }
 
 // ============================================================================
+// index_select — DIAGNOSTIC #2: Fuel's EXACT framing (rank=3, select_dim=1).
+// ============================================================================
+//
+// Fuel corrected: SAME env (driver 610.47 / CUDA 13.3 / sm_89) as this box, so
+// the bug is NOT driver-specific — the differentiator is the exact params or
+// Fuel's capture path. Fuel frames gather as [outer, source_dim_size,
+// n_indices, inner], so their [3,4]/tok[0] call is rank=3, select_dim=1,
+// out_shape=[1,1,4], stride_src=[12,4,1], stride_out=[4,4,1] — DIFFERENT from
+// the rank=2 framing above. Same-box A/B: does the exact framing trigger it?
+
+#[test]
+#[ignore]
+fn index_select_element0_replay_repro_fuel_exact() {
+    let (ctx, stream) = gpu();
+    let (v, h) = (3i64, 4i64);
+    let src = wte_table(v, h);
+    let idx: Vec<i32> = vec![0]; // Fuel passes U32 [0]; bit-identical to i32 [0]
+    let expected: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0];
+    let out_len = 4usize;
+
+    // Fuel's EXACT params (rank=3, select_dim=1).
+    let out_shape: Vec<i32> = vec![1, 1, 4];
+    let stride_src: Vec<i64> = vec![12, 4, 1];
+    let stride_out: Vec<i64> = vec![4, 4, 1];
+    let (out_numel, rank, select_dim, src_dim_size) = (4i64, 3i32, 1i32, v as i32);
+
+    let d_src = DeviceBuffer::from_slice(&ctx, &src).unwrap();
+    let d_idx = DeviceBuffer::from_slice(&ctx, &idx).unwrap();
+    let mut d_out = DeviceBuffer::from_slice(&ctx, &vec![0.0f32; out_len]).unwrap();
+
+    let src_ptr = d_src.as_slice().as_raw().0 as *const c_void;
+    let idx_ptr = d_idx.as_slice().as_raw().0 as *const c_void;
+    let out_ptr = d_out.as_slice_mut().as_raw().0 as *mut c_void;
+
+    let run_ffi = |stream_raw: *mut c_void| -> i32 {
+        unsafe {
+            baracuda_kernels_sys::baracuda_kernels_index_select_f32_run(
+                out_numel,
+                rank,
+                select_dim,
+                src_dim_size,
+                out_shape.as_ptr(),
+                stride_src.as_ptr(),
+                stride_out.as_ptr(),
+                src_ptr,
+                idx_ptr,
+                out_ptr,
+                core::ptr::null_mut(),
+                0,
+                stream_raw,
+            )
+        }
+    };
+
+    assert_eq!(run_ffi(stream.as_raw() as *mut c_void), 0, "warm FFI status");
+    stream.synchronize().unwrap();
+    let mut warm = vec![0f32; out_len];
+    d_out.copy_to_host(&mut warm).unwrap();
+    assert_eq!(warm, expected, "index_select (Fuel framing) warm launch");
+
+    let status = Cell::new(-1i32);
+    let graph = stream
+        .capture(CaptureMode::ThreadLocal, |s| {
+            status.set(run_ffi(s.as_raw() as *mut c_void));
+            Ok(())
+        })
+        .expect("capture index_select fuel-exact");
+    assert_eq!(status.get(), 0, "captured status");
+    let exec = graph.instantiate().expect("instantiate");
+
+    exec.launch(&stream).expect("cuGraphLaunch");
+    stream.synchronize().unwrap();
+    let mut replay = vec![0f32; out_len];
+    d_out.copy_to_host(&mut replay).unwrap();
+
+    if replay == expected {
+        println!(
+            "index_select FUEL-EXACT (rank=3, select_dim=1): replay == {expected:?} — bug did NOT \
+             reproduce even with Fuel's exact params -> the divergence is in Fuel's capture path, \
+             NOT the params/kernel (gather_rows will isolate it)."
+        );
+    } else {
+        println!(
+            "index_select FUEL-EXACT (rank=3, select_dim=1): REPRODUCED — warm {expected:?} -> \
+             replay {replay:?} (element 0: {} -> {}). The rank=3/select_dim=1 FRAMING is the \
+             trigger the rank=2 harness dodged -> param/kernel interaction, not Fuel's capture path.",
+            expected[0], replay[0]
+        );
+    }
+    drop(ctx);
+}
+
+// ============================================================================
 // gemv_dense_m1 — MUST replay byte-identical (the capture-safety property).
 // ============================================================================
 
