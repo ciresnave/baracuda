@@ -29,3 +29,22 @@ cuda.rs has ~226 `blockIdx/threadIdx/gridDim/blockDim/__global__/__shared__/__sh
 
 ## Anchors
 `backend.rs`: trait `113`, `GeneratedKernel 16`, `Lowering 143`, `lower_expr 209`, `lower_dag 241`, `const_lit 188`. `cuda.rs`: `emit_strided 849`, grid-stride prologue `976-978`, unravel `981-985`, `offset_expr 6016`, `unary_f32 6118`/`f64 6168`, `binary_f32 6246`/`f64 6307`, `select_f32 6486`, `emit_reduction 2187`, `emit_reduced_nest 2644`. `oracle.rs`: `eval 794`, `eval_elementwise 1075`, `eval_reduction 1133`, `read_strided 974`, independence doc `9-21`, half codec `323/339/344/397`. Reference: [[kernelgen-ir-frontier]], [[cuda-box-local-validation]] (compile+run validation is local).
+
+---
+
+# Backend-authoring guide (grounded in CpuC, VALIDATED)
+
+Plan steps 1–2 are **DONE**: `CpuC` (crates/baracuda-kernelgen/src/cpu_c.rs, commit 3bebce5c) is the first non-CUDA backend, and its emitted C was **compiled GPU-free and executed on this box** — `in0*in1+in0` produced `[5,12,21,-32,-3.5]` == the oracle/definition, proving the IR is backend-neutral *by execution*, not just design. This section is step 3: how to add the next backend.
+
+## To add a backend
+
+1. **Implement the three required `Backend` methods** (`lower_variants` defaults empty):
+   - `name(&self) -> &str` — a short id.
+   - `supports_dtype(&self, dt) -> bool` — the JIT trust boundary's typed-decline gate. Decline honestly (CpuC declines f16/bf16 = no CPU half codec yet, and u32 = index/address-only). AOT `lower` may still panic on a dtype it can't spell; add a `supports_dtype` assert at the top of `lower` as the backstop (the 0a "gate every layer" lesson).
+   - `lower(&self, plan) -> GeneratedKernel { name, source }` — dispatch on `plan.schedule`; emit `source` in your backend's language for the schedules you serve, and **panic clearly** on the rest (AOT authoring is trusted; a panic is the honest boundary).
+2. **REUSE the expression seam — do not re-implement it.** The body math lowers through the SAME neutral `lower_dag`/`lower_expr` over a `Lowering` whose six closures you provide. Reuse the CUDA spellers verbatim where they're portable (they mostly are — `binary_f32/f64`, `binary_int`, `select_f32/f64`, `const_lit`); write a twin ONLY for the atoms that differ in your target (CpuC's sole new atom is `rsqrt` → `1.0f/sqrtf(x)`). Promote a reused CUDA fn to `pub(crate)` **body-untouched** so every CUDA golden stays byte-identical.
+3. **Spell the SCHEDULE for your execution model — this is where backends legitimately diverge.** CUDA's is a parallel grid-stride + block-tree harness; CpuC's is a serial `for (long long i = 0; i < n; ++i)`. **Do NOT hoist schedule skeletons into a shared trait** — that is a forced abstraction (parallel tree vs serial loop have no worth-sharing common shape). The seam is the factoring; the schedule is the divergence. Author each schedule against the oracle's matching `eval_*` (`oracle.rs`), which already encodes the serial loop nest + fold order + index math your emitter must reproduce.
+4. **VALIDATE by triangulation.** An emission golden pins the structure. The load-bearing check is compile-and-run vs the oracle: the oracle shares ZERO lowering code (`oracle.rs:9-21`), so agreement of `<your backend's compiled output>` with `oracle::evaluate(&plan, ...)` is a genuine third leg (CUDA emitter ↔ your emitter ↔ oracle). On this box (see [[cuda-box-local-validation]]): `nvcc -ccbin "<VC/Tools/MSVC/<ver>/bin/Hostx64/x64>" -x c emitted.c -o e.exe` compiles portable C via MSVC (cl isn't on PATH; nvcc `-ccbin` at the cl dir sets up the MSVC env).
+
+## Extend CpuC (as consumers warrant)
+Reduction next — its *general* path is already a serial nest matching the oracle order, so the CPU version strips the grid-stride wrapper. Then RowReduce (staged serial folds). Contraction/RowSort are from-scratch naive rewrites (lowest reuse) — do them only if a consumer needs GPU-free execution of those. f16/bf16 need a CPU half codec (the oracle's is reusable). Multi-output Elementwise is the N-store follow-up.
