@@ -320,7 +320,7 @@ impl<T: Element> GemvDensePlan<T> {
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let d_ptr = args.d.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let alpha = args.alpha.to_f32();
         let beta = args.beta.to_f32();
 
