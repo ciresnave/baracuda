@@ -1,13 +1,17 @@
 //! `kernelgen` — thin CLI over the [`baracuda_kernelgen`] library.
 //!
-//! Usage: `kernelgen <out-dir>`. v1 emits the elementwise pilot cell (f32 `add`,
-//! contiguous + V4) into `<out-dir>` via the CUDA backend. The spec-driven
-//! matrix (ops × structure cells, eventually fed from Fuel telemetry) and a
-//! `--backend` selector replace the hardcoded pilot next.
+//! Usage: `kernelgen <out-dir> [telemetry.jsonl]`. v1 emits the elementwise pilot
+//! cell (f32 `add`, contiguous + V4) into `<out-dir>` via the CUDA backend. With
+//! an optional Fuel telemetry JSONL path, the ingested per-cell dispatch wins are
+//! folded (through the frozen `merge` seam) into the dispatch table before it is
+//! emitted, and the demand ranking is logged; without it, the hardcoded pilot is
+//! byte-identical (backward-compatible). The spec-driven matrix (ops × structure
+//! cells) and a `--backend` selector replace the hardcoded pilot next.
 
 use baracuda_kernelgen::{
     Cuda, OpDef, ReduceOp, ReduceStage, UnaryOp, derive_pattern, emit_dispatch_table, generate,
-    generate_variants, input, konst, param, reduced, to_fkc,
+    generate_variants, ingest_jsonl, input, konst, merge_reports, param, rank_matrix, reduced,
+    to_fkc,
 };
 use baracuda_kernels_types::{
     ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc,
@@ -19,6 +23,7 @@ fn main() {
     let out_dir = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "generated".to_string());
+    let telemetry_path = std::env::args().nth(2);
     fs::create_dir_all(&out_dir).expect("create out dir");
 
     // v1 pilot op: elementwise add, fanned out over a few dtype cells.
@@ -549,11 +554,46 @@ fn main() {
         }
     }
 
-    let table = DispatchTable::from_entries(dispatch);
+    let mut table = DispatchTable::from_entries(dispatch);
+
+    // --- Telemetry ingest (item 08) --------------------------------------------
+    // With a Fuel telemetry JSONL path: ingest the feed, fold the reported wins
+    // into the table through the frozen `merge` seam, and log the demand ranking
+    // that drives build order. captured_unix_s is injected from the file mtime
+    // (it is not on the wire). Without a path, the pilot is byte-identical.
+    if let Some(path) = telemetry_path {
+        match fs::File::open(&path) {
+            Ok(file) => {
+                let captured_unix_s = fs::metadata(&path)
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_secs());
+                let ingest = ingest_jsonl(std::io::BufReader::new(file));
+                println!(
+                    "telemetry: {} dispatch, {} miss record(s), {} skipped (from {path})",
+                    ingest.dispatches.len(),
+                    ingest.misses.len(),
+                    ingest.skipped
+                );
+                for cell in rank_matrix(&ingest) {
+                    println!(
+                        "  demand: miss={} gen_wins={}  {}",
+                        cell.miss_count,
+                        cell.dispatch_wins,
+                        cell.key.to_token()
+                    );
+                }
+                merge_reports(&ingest, captured_unix_s, &mut table);
+            }
+            Err(e) => eprintln!("telemetry: could not open {path}: {e} — keeping pilot table"),
+        }
+    }
+
     let dpath = format!("{out_dir}/dispatch_table.rs");
     fs::write(&dpath, emit_dispatch_table(&table)).expect("write dispatch table");
     println!(
-        "emitted dispatch table -> {dpath}  ({} vendor-routed cell(s))",
+        "emitted dispatch table -> {dpath}  ({} routed cell(s))",
         table.entries.len()
     );
 }

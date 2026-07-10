@@ -47,6 +47,7 @@ pub mod link;
 pub mod optimize;
 pub mod pattern;
 pub mod plan;
+pub mod telemetry;
 
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, contract, front_matter};
@@ -63,9 +64,14 @@ pub use jit::{
     SynthKernel, synthesize,
 };
 pub use link::{LinkEntry, emit_link_registry, link_entry};
-pub use optimize::optimize;
+pub use optimize::{optimize, optimize_top_k};
 pub use pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
 pub use plan::{KernelPlan, Schedule, build_plan};
+pub use telemetry::{
+    Candidate, DispatchRecord, HwFingerprint, ImplId, Ingest, MissRecord, RankedCell,
+    TELEMETRY_SCHEMA_MAX, VariantVote, arch_sku_of, ingest_jsonl, merge_reports, rank_matrix,
+    resolve_impl, variant_votes,
+};
 
 use baracuda_kernels_types::StructureKey;
 
