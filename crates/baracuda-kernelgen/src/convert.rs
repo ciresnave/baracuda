@@ -177,20 +177,120 @@ pub fn lift_reduction_slang(
     lift_reduce_store(&tree, src, name, dtypes, "output", "input")
 }
 
-/// Lift a **CUDA** kernel of unknown op-class: try elementwise, then reduction.
-pub fn lift_cuda(src: &str, name: &str, dtypes: &[ElementKind]) -> Result<Lifted, LiftError> {
-    match lift_elementwise_cuda(src, name, dtypes) {
-        Ok(l) => Ok(l),
-        Err(_) => lift_reduction_cuda(src, name, dtypes),
+/// Lift a naive inclusive-forward **scan** (prefix cumulative) CUDA kernel into
+/// an [`OpDef`]. Recognizes `T acc = init; for(...) { acc <reduce> <pre>;
+/// out[i] = acc; }` — the running accumulator stored INSIDE the loop at `out[i]`
+/// (vs a reduction's `out[0]` after it). Monoid from the update (`+=` → cumsum,
+/// `*=` → cumprod, `fmaxf` → cummax, `fminf` → cummin); `<pre>` is the
+/// per-element pre-map (reuses the elementwise walk). Lifts as an inclusive
+/// forward scan on `axis = 0` (the 1-D reading of the flat loop); a higher-rank
+/// row-scan sets the axis via a matching-rank `StructureKey`. `Mean` is not a
+/// monoid; `fmaxf`/`fminf`/`+=`/`*=` never produce it, so it cannot arise here.
+pub fn lift_scan_cuda(src: &str, name: &str, dtypes: &[ElementKind]) -> Result<Lifted, LiftError> {
+    if !src.contains("__global__") {
+        return Err(LiftError::NotAKernel);
     }
+    reject_markers(src, CUDA_RESIDUE)?;
+    let tree = parse_cuda(src).ok_or(LiftError::NotAKernel)?;
+    lift_scan_store(&tree, src, name, dtypes, "out", "in")
 }
 
-/// Lift a **Slang** kernel of unknown op-class: try elementwise, then reduction.
-pub fn lift_slang(src: &str, name: &str, dtypes: &[ElementKind]) -> Result<Lifted, LiftError> {
-    match lift_elementwise_slang(src, name, dtypes) {
-        Ok(l) => Ok(l),
-        Err(_) => lift_reduction_slang(src, name, dtypes),
+/// Lift a naive inclusive-forward **scan** Slang compute kernel (same shape as
+/// [`lift_scan_cuda`]; `output`/`input{K}` conventions).
+pub fn lift_scan_slang(src: &str, name: &str, dtypes: &[ElementKind]) -> Result<Lifted, LiftError> {
+    if !src.contains("numthreads") {
+        return Err(LiftError::NotAKernel);
     }
+    reject_markers(src, SLANG_RESIDUE)?;
+    let tree = parse_slang(src).ok_or(LiftError::NotAKernel)?;
+    lift_scan_store(&tree, src, name, dtypes, "output", "input")
+}
+
+/// Lift a **CUDA** kernel of unknown op-class: try elementwise, then reduction,
+/// then scan (the three are mutually exclusive by store shape).
+pub fn lift_cuda(src: &str, name: &str, dtypes: &[ElementKind]) -> Result<Lifted, LiftError> {
+    lift_elementwise_cuda(src, name, dtypes)
+        .or_else(|_| lift_reduction_cuda(src, name, dtypes))
+        .or_else(|_| lift_scan_cuda(src, name, dtypes))
+}
+
+/// Lift a **Slang** kernel of unknown op-class: elementwise, then reduction, then scan.
+pub fn lift_slang(src: &str, name: &str, dtypes: &[ElementKind]) -> Result<Lifted, LiftError> {
+    lift_elementwise_slang(src, name, dtypes)
+        .or_else(|_| lift_reduction_slang(src, name, dtypes))
+        .or_else(|_| lift_scan_slang(src, name, dtypes))
+}
+
+/// Shared scan tail: find the in-loop `{out_name}[i] = acc` running store, find
+/// the reduce update of `acc`, walk its per-element `pre`, and build an inclusive
+/// forward [`OpDef::scan`] on axis 0 (`post = reduced(0)`, the plain prefix).
+fn lift_scan_store(
+    tree: &Tree,
+    src: &str,
+    name: &str,
+    dtypes: &[ElementKind],
+    out_name: &str,
+    in_prefix: &str,
+) -> Result<Lifted, LiftError> {
+    let acc = find_running_out_store(tree.root_node(), src, out_name).ok_or_else(|| {
+        LiftError::Residue(format!("no running `{out_name}[i] = acc` scan store"))
+    })?;
+    let (op, pre_node) = find_accumulation(tree.root_node(), src, &acc)
+        .ok_or_else(|| LiftError::Residue(format!("no recognizable scan update of `{acc}`")))?;
+    let idx_var = first_input_index(pre_node, src, in_prefix)
+        .ok_or_else(|| LiftError::Residue("scan body reads no inK[idx]".into()))?;
+    let mut w = Walk {
+        src,
+        idx_var,
+        in_prefix,
+        max_input: None,
+    };
+    let pre = w.expr(pre_node)?;
+    let n_inputs = w.max_input.map_or(0, |m| m + 1);
+    Ok(Lifted {
+        op: OpDef::scan(
+            name,
+            n_inputs,
+            dtypes,
+            op,
+            0,     // axis — 1-D reading; caller sets higher rank via the key
+            false, // reverse
+            false, // exclusive — naive `acc op= in; out[i] = acc` is inclusive
+            Expr(pre),
+            crate::ir::reduced(0),
+        ),
+        n_inputs,
+    })
+}
+
+/// Find an in-loop `{out_name}[<identifier>] = <identifier>` store (the running
+/// accumulator written at the scanned axis) and return the accumulator ident.
+/// The identifier index (vs. a numeric literal) distinguishes a scan's running
+/// store from a reduction's scalar `out[0] = acc`; the bare-identifier RHS
+/// distinguishes it from an elementwise `out[i] = <expr>`.
+fn find_running_out_store(node: Node, src: &str, out_name: &str) -> Option<String> {
+    if node.kind() == "assignment_expression"
+        && let (Some(lhs), Some(rhs)) = (
+            node.child_by_field_name("left"),
+            node.child_by_field_name("right"),
+        )
+        && lhs.kind() == "subscript_expression"
+        && rhs.kind() == "identifier"
+        && lhs
+            .child_by_field_name("argument")
+            .and_then(|a| a.utf8_text(src.as_bytes()).ok())
+            == Some(out_name)
+        && subscript_index(lhs, src).is_some()
+    {
+        return Some(rhs.utf8_text(src.as_bytes()).ok()?.to_string());
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        if let Some(hit) = find_running_out_store(child, src, out_name) {
+            return Some(hit);
+        }
+    }
+    None
 }
 
 /// Shared reduction tail: find `{out_name}[<lit>] = acc`, find the reduce update
@@ -745,5 +845,74 @@ mod tests {
         let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
         let k = generate(&lifted.op, &key, &Cuda);
         assert!(k.name.contains("reduce_sum"), "name was {}", k.name);
+    }
+
+    // --- Scans (running accumulator stored in-loop at out[i] → OpDef::scan) ---
+
+    fn scan_info(l: &Lifted) -> Option<(ReduceOp, &ScalarExpr, bool, bool)> {
+        if let crate::ir::Access::Scan {
+            op,
+            pre,
+            reverse,
+            exclusive,
+            ..
+        } = &l.op.access
+        {
+            Some((*op, pre, *reverse, *exclusive))
+        } else {
+            None
+        }
+    }
+
+    #[test]
+    fn cuda_lifts_cumsum() {
+        let src = "__global__ void cs(const float* in0, float* out, long long n){ float acc = 0.0f; for (long long i=0;i<n;i++){ acc += in0[i]; out[i] = acc; } }";
+        let lifted = lift_scan_cuda(src, "cs", F32).unwrap();
+        assert_eq!(lifted.n_inputs, 1);
+        let (op, pre, rev, exc) = scan_info(&lifted).unwrap();
+        assert_eq!(op, ReduceOp::Sum);
+        assert_eq!(pre, &ScalarExpr::Input(0));
+        assert!(!rev && !exc);
+    }
+
+    #[test]
+    fn cuda_lifts_cumprod_and_cummax() {
+        let cp = "__global__ void cp(const float* in0, float* out, long long n){ float acc = 1.0f; for (long long i=0;i<n;i++){ acc *= in0[i]; out[i] = acc; } }";
+        assert_eq!(
+            scan_info(&lift_scan_cuda(cp, "cp", F32).unwrap())
+                .unwrap()
+                .0,
+            ReduceOp::Prod
+        );
+        let cm = "__global__ void cm(const float* in0, float* out, long long n){ float acc = in0[0]; for (long long i=0;i<n;i++){ acc = fmaxf(acc, in0[i]); out[i] = acc; } }";
+        assert_eq!(
+            scan_info(&lift_scan_cuda(cm, "cm", F32).unwrap())
+                .unwrap()
+                .0,
+            ReduceOp::Max
+        );
+    }
+
+    #[test]
+    fn scan_reduction_elementwise_are_disjoint() {
+        // out[i]=acc (running) → scan; out[0]=acc → reduction; out[i]=expr → elementwise.
+        let scan = "__global__ void cs(const float* in0, float* out, long long n){ float acc = 0.0f; for (long long i=0;i<n;i++){ acc += in0[i]; out[i] = acc; } }";
+        assert!(lift_scan_cuda(scan, "x", F32).is_ok());
+        assert!(lift_reduction_cuda(scan, "x", F32).is_err());
+        assert!(lift_elementwise_cuda(scan, "x", F32).is_err());
+        assert!(matches!(
+            lift_cuda(scan, "x", F32).unwrap().op.access,
+            crate::ir::Access::Scan { .. }
+        ));
+    }
+
+    #[test]
+    fn slang_lifts_cumsum() {
+        let src = "StructuredBuffer<float> input0;\n\
+            RWStructuredBuffer<float> output;\n\
+            [numthreads(256,1,1)]\n\
+            void csum(uint3 tid : SV_DispatchThreadID){ float acc = 0.0f; for (uint i=0;i<256;i++){ acc += input0[i]; output[i] = acc; } }";
+        let lifted = lift_scan_slang(src, "csum", F32).unwrap();
+        assert_eq!(scan_info(&lifted).unwrap().0, ReduceOp::Sum);
     }
 }
