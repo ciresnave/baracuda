@@ -51,6 +51,7 @@ pub mod oracle;
 pub mod pattern;
 pub mod plan;
 pub mod telemetry;
+mod text;
 
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, contract, front_matter};
@@ -78,6 +79,7 @@ pub use telemetry::{
     TELEMETRY_SCHEMA_MAX, VariantVote, arch_sku_of, ingest_jsonl, merge_reports, rank_matrix,
     resolve_impl, variant_votes,
 };
+pub use text::{op_from_text, op_to_text};
 
 use baracuda_kernels_types::StructureKey;
 

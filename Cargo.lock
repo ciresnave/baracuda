@@ -446,7 +446,8 @@ dependencies = [
  "baracuda-nvrtc",
  "fuel-kernel-seam",
  "fuel-kernel-seam-types",
- "libm",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

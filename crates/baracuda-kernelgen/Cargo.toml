@@ -40,6 +40,13 @@ fuel-kernel-seam-types = { version = "0.10.3", optional = true }
 # handle (Synthesized{entry_point}); envelope SynthArtifact{artifact,kind(Ptx|Cubin),
 # link,contract}; JitRequest.budget.
 fuel-kernel-seam = { version = "0.10.3", optional = true }
+# Human-readable / -writable IR text form (IR-hub Phase 3): the neutral `OpDef`
+# IR derives Serialize/Deserialize so an op can be authored/inspected/diffed as
+# pretty JSON and round-tripped (see `src/text.rs`, `op_to_text`/`op_from_text`).
+# Plain (non-optional) deps: the round-trip surface is always available and the
+# `--lib` tests exercise it under the default feature set.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [lints]
 workspace = true
