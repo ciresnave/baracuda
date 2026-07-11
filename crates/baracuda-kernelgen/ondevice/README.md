@@ -354,7 +354,7 @@ library into `<outdir>`, then copy this harness beside them as usual:
 ```rust
 use baracuda_kernelgen::ir::BinaryOp;
 use baracuda_kernelgen::{generate, input, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 use ElementKind::{I32, S8, U8};
 
 let out = std::env::args().nth(1).expect("outdir");
@@ -422,7 +422,7 @@ them:
 ```rust
 use baracuda_kernelgen::ir::BinaryOp;
 use baracuda_kernelgen::{coord, generate, input, konst, param, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: baracuda_kernelgen::GeneratedKernel| {
@@ -501,7 +501,7 @@ Generate them into `<outdir>`, then copy the harness beside them:
 ```rust
 use baracuda_kernelgen::ir::BinaryOp;
 use baracuda_kernelgen::{generate, input, konst, reduced, Cuda, OpDef, ReduceOp, UnaryOp};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: baracuda_kernelgen::GeneratedKernel| {
@@ -720,7 +720,7 @@ Generate them into `<outdir>`, then copy the harness beside them:
 ```rust
 use baracuda_kernelgen::ir::View;
 use baracuda_kernelgen::{generate, input, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: baracuda_kernelgen::GeneratedKernel| {
@@ -845,7 +845,7 @@ Generate them into `<outdir>`, then copy the harness beside them:
 ```rust
 use baracuda_kernelgen::ir::OobPolicy;
 use baracuda_kernelgen::{generate, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: baracuda_kernelgen::GeneratedKernel| {
@@ -975,7 +975,7 @@ Generate them into `<outdir>`, then copy the harness beside them:
 
 ```rust
 use baracuda_kernelgen::{generate, generate_variants, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: &baracuda_kernelgen::GeneratedKernel| {
