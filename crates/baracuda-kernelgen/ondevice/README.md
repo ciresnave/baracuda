@@ -130,8 +130,9 @@ CAST_OUT=<outdir> cargo test -p baracuda-kernelgen dump_cast_helper -- --ignored
 nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17"      -I <outdir> -I crates/baracuda-kernels-sys/kernels/include      crates/baracuda-kernelgen/ondevice/cast_validate.cu -o <outdir>/cast_validate && <outdir>/cast_validate
 ```
 
-**Expected**: PASSED — for every (source, destination) pair, generated ==
-hand-written (0 mismatches) and == CPU `static_cast` for the arithmetic pairs.
+**Last run** (RTX 4070 / sm_89 / CUDA 13.3): PASSED — every (source, destination)
+pair: generated == hand-written (0 mismatches) and == CPU `static_cast` for the
+arithmetic reference pairs.
 
 ---
 
