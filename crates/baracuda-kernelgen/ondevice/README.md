@@ -77,6 +77,39 @@ and lossless-identity round-trip for every non-NaN code. 0 mismatches.
 
 ---
 
+## `lift_roundtrip_validate.cu` — CUDA→IR lift round-trip (Phase 4)
+
+Proves the **CUDA → IR `lift` frontend** re-emits FAITHFULLY: a hand-written
+grid-stride elementwise kernel is lifted to the neutral IR (`lift_elementwise`),
+then re-emitted with `generate()`, and the re-emitted kernel must produce
+**BIT-IDENTICAL** output to the original on device. Both compute
+`out[i] = in0[i]*in1[i] + in0[i]` as one `a*b+c` expression, so nvcc contracts
+both to the same fma — the round-trip is the SAME integer/float arithmetic, hence
+the check is whole-buffer `memcmp` (exact), not a tolerance. The dump test writes
+the pair (`lift_gen.cu` = re-emitted, `lift_orig.cu` = original, same body) and
+`println!`s the generated kernel's name; the harness `#include`s both, launches
+each into its own output buffer over ~4.19M random f32 inputs (with signed-zero /
+±Inf / NaN edge seeds), and bit-compares.
+
+The generated kernel's symbol carries a cell suffix — the dump test prints it as
+`GENERATED KERNEL NAME:` (currently `baracuda_gen_lift_rt_f32_scalar`). The
+harness `#define`s `LIFT_GEN_KERNEL` to that name; override with
+`-DLIFT_GEN_KERNEL=<name>` if it changes.
+
+Run:
+
+```sh
+LIFT_OUT=<outdir> cargo test -p baracuda-kernelgen --lib lift::tests::dump_lift_roundtrip -- --ignored --nocapture
+nvcc -O3 -arch=sm_89 -std=c++17 \
+     -I <outdir> \
+     crates/baracuda-kernelgen/ondevice/lift_roundtrip_validate.cu -o <outdir>/lift_roundtrip_validate && <outdir>/lift_roundtrip_validate
+```
+
+**Run pending** — integrate + run the device differential (the parent runs nvcc).
+Expected: `PASSED` — all ~4.19M elements bit-identical (re-emitted == original).
+
+---
+
 ## `reduce_validate.cu` — general reduction path (item 03)
 
 Launches the general-path reduction kernels (`_reduce_{tag}_ax{hex}[_kd]`) with
