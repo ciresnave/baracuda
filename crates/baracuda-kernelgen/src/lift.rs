@@ -338,7 +338,7 @@ impl Parser {
 }
 
 /// CUDA unary math intrinsic → [`UnaryOp`], or `None` (unrecognized → residue).
-fn unary_fn(name: &str) -> Option<UnaryOp> {
+pub(crate) fn unary_fn(name: &str) -> Option<UnaryOp> {
     Some(match name {
         "expf" | "__expf" => UnaryOp::Exp,
         "logf" | "__logf" => UnaryOp::Log,
@@ -359,7 +359,7 @@ fn unary_fn(name: &str) -> Option<UnaryOp> {
 /// CUDA binary math intrinsic → [`BinaryOp`], or `None`. Note `fmaxf`/`fminf`
 /// are IEEE NaN-**suppressing** ([`BinaryOp::FmaxIeee`]/`FminIeee`), distinct
 /// from the NaN-propagating `Max`/`Min`.
-fn binary_fn(name: &str) -> Option<BinaryOp> {
+pub(crate) fn binary_fn(name: &str) -> Option<BinaryOp> {
     Some(match name {
         "fmaxf" | "fmax" => BinaryOp::FmaxIeee,
         "fminf" | "fmin" => BinaryOp::FminIeee,

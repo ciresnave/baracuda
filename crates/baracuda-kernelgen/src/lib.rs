@@ -39,6 +39,8 @@
 
 pub mod backend;
 pub mod contract;
+#[cfg(feature = "convert")]
+pub mod convert;
 pub mod cpu_c;
 pub mod cuda;
 pub mod dispatch_artifact;
