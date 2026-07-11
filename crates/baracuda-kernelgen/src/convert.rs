@@ -17,7 +17,7 @@
 
 use crate::ir::{Expr, OpDef, ScalarExpr, UnaryOp};
 use crate::lift::{LiftError, Lifted, binary_fn, unary_fn};
-use baracuda_kernels_types::ElementKind;
+use baracuda_kernel_vocab::ElementKind;
 use tree_sitter::{Node, Parser, Tree};
 
 /// Parse CUDA source into a tree-sitter CST (error-tolerant; unrecognized
@@ -411,7 +411,7 @@ mod tests {
     #[test]
     fn round_trip_reemits_to_cuda_and_cpuc() {
         use crate::{CpuC, Cuda, generate};
-        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         // Lift a Slang kernel, re-emit to CUDA AND portable-C — cross-language port.
         let lifted = lift_elementwise_slang(SLANG_MUL, "ported", F32).unwrap();
         let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 4);

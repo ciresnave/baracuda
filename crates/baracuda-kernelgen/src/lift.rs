@@ -16,7 +16,7 @@
 //! against the oracle.
 
 use crate::ir::{BinaryOp, Expr, OpDef, ScalarExpr, UnaryOp};
-use baracuda_kernels_types::ElementKind;
+use baracuda_kernel_vocab::ElementKind;
 
 /// Why a source kernel could not be fully lifted. `Residue` is the honest
 /// "keep this in the source language" outcome (the string names the construct).
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn round_trip_reemits_to_cuda_and_cpuc() {
         use crate::{CpuC, Cuda, generate};
-        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         // A hand-written CUDA elementwise kernel a "copy-paster" might have.
         let src = "__global__ void mul(const float* in0, const float* in1, float* out, long long n) {\n\
                    long long i = blockIdx.x*blockDim.x + threadIdx.x;\n\
@@ -525,7 +525,7 @@ mod tests {
     #[ignore = "writes the lift round-trip pair for the on-device differential validator"]
     fn dump_lift_roundtrip() {
         use crate::{Cuda, generate};
-        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
 
         let out = std::env::var("LIFT_OUT").unwrap_or_else(|_| ".".to_string());
 

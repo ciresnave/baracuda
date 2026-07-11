@@ -48,7 +48,7 @@ use crate::cuda::{
 };
 use crate::ir::{BinaryOp, ExprDag, UnaryOp};
 use crate::plan::{KernelPlan, Schedule};
-use baracuda_kernels_types::ElementKind;
+use baracuda_kernel_vocab::ElementKind;
 
 /// The portable-C CPU backend. Lowers a [`KernelPlan`] to `.c` source.
 #[derive(Copy, Clone, Debug, Default)]
@@ -255,18 +255,18 @@ mod tests {
     use super::*;
     use crate::generate;
     use crate::ir::{OpDef, input};
-    use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+    use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
 
     /// A binary Elementwise cell whose small `align` defeats vectorization, so
     /// `build_plan` derives [`Schedule::Scalar`] (the path CpuC v1 serves) — the
     /// exact `binary_scalar_key` device-test precedent.
-    fn binary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernels_types::StructureKey {
+    fn binary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
         structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
     }
 
     /// A unary Elementwise scalar cell (align defeats vectorization).
-    fn unary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernels_types::StructureKey {
+    fn unary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
         structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
     }

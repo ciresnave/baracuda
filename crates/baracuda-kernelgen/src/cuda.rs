@@ -12,7 +12,7 @@ use crate::backend::{
 };
 use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp};
 use crate::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
-use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
+use baracuda_kernel_vocab::{Contiguity, ElementKind, OperandKey};
 
 /// The CUDA C++ backend. Lowers a [`KernelPlan`] to `.cu` source.
 #[derive(Copy, Clone, Debug, Default)]
@@ -3145,7 +3145,7 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         .expect("build_plan asserted contraction facts");
     assert_eq!(
         c.m,
-        baracuda_kernels_types::SizeClass::Tiny,
+        baracuda_kernel_vocab::SizeClass::Tiny,
         "contraction v1 emits the Tiny-M skinny schedule only; larger M classes \
          are the tiled variant's territory (and all-Large routes to the vendor)"
     );
@@ -3283,7 +3283,7 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     };
     // build_plan admissibility already ran; these mirror emit_contraction.
     let c = plan.key.contraction?;
-    if c.m != baracuda_kernels_types::SizeClass::Tiny {
+    if c.m != baracuda_kernel_vocab::SizeClass::Tiny {
         return None;
     }
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
@@ -3437,13 +3437,13 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     })
 }
 
-/// One-letter tag for a [`baracuda_kernels_types::SizeClass`] in symbol names.
-fn size_tag(s: baracuda_kernels_types::SizeClass) -> char {
+/// One-letter tag for a [`baracuda_kernel_vocab::SizeClass`] in symbol names.
+fn size_tag(s: baracuda_kernel_vocab::SizeClass) -> char {
     match s {
-        baracuda_kernels_types::SizeClass::Tiny => 't',
-        baracuda_kernels_types::SizeClass::Small => 's',
-        baracuda_kernels_types::SizeClass::Mid => 'm',
-        baracuda_kernels_types::SizeClass::Large => 'l',
+        baracuda_kernel_vocab::SizeClass::Tiny => 't',
+        baracuda_kernel_vocab::SizeClass::Small => 's',
+        baracuda_kernel_vocab::SizeClass::Mid => 'm',
+        baracuda_kernel_vocab::SizeClass::Large => 'l',
     }
 }
 
@@ -7223,13 +7223,13 @@ fn param_args_multi(exprs: &[&ScalarExpr], param_ctype: &str) -> String {
 mod tests {
     use crate::ir::{OpDef, input, param};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+    use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn add_op(dtypes: &[ElementKind]) -> OpDef {
         OpDef::elementwise("add", 2, dtypes, input(0) + input(1))
     }
 
-    fn binary_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn binary_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
         structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
     }
@@ -7484,11 +7484,11 @@ mod tests {
     // rank-2 gather cell: data [4,3] (input 0, gathered axis 0), index [4,3] i32
     // full-shape (input 1), out [4,3]. Non-contig (strided) so it would strided
     // anyway; the gather forces strided regardless.
-    fn gather_2d_key() -> baracuda_kernels_types::StructureKey {
+    fn gather_2d_key() -> baracuda_kernel_vocab::StructureKey {
         gather_2d_key_idx(ElementKind::I32)
     }
 
-    fn gather_2d_key_idx(idx_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn gather_2d_key_idx(idx_dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
         let out = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
@@ -7688,7 +7688,7 @@ mod tests {
     // rank-2 scatter cell: updates [4,3] f32 (in0), index [4,3] i32 full-shape
     // (in1), dst [4,3] f32 (out). The dst extent along the scattered axis rides
     // `sext`; the key dst supplies strides/broadcast facts.
-    fn scatter_2d_key(idx_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn scatter_2d_key(idx_dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let upd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
         let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
@@ -8257,7 +8257,7 @@ mod tests {
     fn splitk_variant_offered_for_outer_sum() {
         use crate::ir::ReduceOp;
         use crate::{VariantFidelity, generate_variants};
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "sum",
             1,
@@ -8312,7 +8312,7 @@ mod tests {
     fn splitk_mean_divides_in_combine_only() {
         use crate::generate_variants;
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "mean",
             1,
@@ -8523,7 +8523,7 @@ mod tests {
     fn splitk_gate_refuses_flipped_param_and_malformed_cells() {
         use crate::ir::ReduceOp;
         use crate::{Backend, generate_variants};
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "sum",
             1,
@@ -8584,7 +8584,7 @@ mod tests {
     fn splitk_not_offered_for_lastaxis_max_or_int() {
         use crate::generate_variants;
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Last-axis (InnerContig): already block-parallel — no split-K.
         let last = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
         let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
@@ -8648,7 +8648,7 @@ mod tests {
     // A rank-2 contiguous [128,256] f32 cell (1 input + 1 output) that would
     // VECTORIZE view-free — used to prove the view both forces Strided and remaps
     // the input offset.
-    fn view_2d_key(n_operands: usize) -> baracuda_kernels_types::StructureKey {
+    fn view_2d_key(n_operands: usize) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
         let ops: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
         let cat = if n_operands >= 3 {
@@ -8914,7 +8914,7 @@ mod tests {
         assert!(k.source.contains("((v0.x * p0) + p1)"));
     }
 
-    fn reduce_key(in_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn reduce_key(in_dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         // [256, 128] contiguous input, [256] output — reduce the last axis.
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], in_dt, 256);
         let out = OperandDesc::new(1, &[256], &[1], in_dt, 256);
@@ -9033,7 +9033,7 @@ mod tests {
     #[test]
     fn reduction_outer_axis_collapses() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Reduce axis 0 of a contiguous [4,8] input → collapse to [8].
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(1, &[8], &[1], ElementKind::F32, 256);
@@ -9079,7 +9079,7 @@ mod tests {
     #[test]
     fn reduction_multi_axis_mean_divisor_is_the_extent_product() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Reduce axes {0,1} of [2,3,4] → [4], Mean: divisor = shape0 * shape1.
         let a = OperandDesc::new(3, &[2, 3, 4], &[12, 4, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(1, &[4], &[1], ElementKind::F32, 256);
@@ -9114,7 +9114,7 @@ mod tests {
     #[test]
     fn reduction_keepdim_outer_axis_uses_input_axis_output_stride() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Reduce axis 0 of [4,8] with keepdim → [1,8]: the output stride is indexed
         // by INPUT axis (kept axis 1), not a collapsed position.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -9137,7 +9137,7 @@ mod tests {
     #[test]
     fn reduction_general_max_seeds_and_propagates_nan() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Max over a non-last axis still uses the NaN-propagating select, seeded via
         // the `has` flag (no ±∞ literal, empty extent leaves acc = 0).
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -9165,7 +9165,7 @@ mod tests {
     #[test]
     fn reduction_strided_last_axis_takes_the_general_path() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Reduce the last axis of a column-major (transposed, strided) [8,4] input:
         // the trailing axis over a non-contiguous input is NOT the contiguous fast
         // path, so it routes to the strided general fold.
@@ -9193,7 +9193,7 @@ mod tests {
     #[should_panic(expected = "output store must be injective")]
     fn reduction_broadcast_output_is_rejected() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // A broadcast (stride-0) output would collapse every result onto one slot —
         // the general path must reject it, not emit an aliasing store.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -9256,7 +9256,7 @@ mod tests {
     #[test]
     fn reduction_prod_general_axis_folds_from_one() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Prod over the outer axis (general path): identity 1, `acc *= elem`,
         // no Mean divisor.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -9346,7 +9346,7 @@ mod tests {
     }
 
     // Reduce-key with a hetero output dtype: [256,128] float input, [256] `out_dt`.
-    fn reduce_key_hetero(out_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn reduce_key_hetero(out_dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(1, &[256], &[1], out_dt, 256);
         structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89)
@@ -9471,7 +9471,7 @@ mod tests {
         let _ = crate::build_plan(&op, &rr_key(ElementKind::F32, OpCategory::Softmax));
     }
 
-    fn rr_key(dt: ElementKind, cat: OpCategory) -> baracuda_kernels_types::StructureKey {
+    fn rr_key(dt: ElementKind, cat: OpCategory) -> baracuda_kernel_vocab::StructureKey {
         // full-width fused op: input + output share the [256, 128] contiguous shape.
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
         structure_key(cat, &[a, a], ArchSku::Sm89)
@@ -9623,7 +9623,7 @@ mod tests {
 
     // --- multi-input RowReduce: weighted-RmsNorm + LayerNorm ---
 
-    fn mi_key(dt: ElementKind, n_col: usize) -> baracuda_kernels_types::StructureKey {
+    fn mi_key(dt: ElementKind, n_col: usize) -> baracuda_kernel_vocab::StructureKey {
         // x [256,128] full + n_col per-column [k] weight/bias (rank-aligned broadcast
         // view, stride [0,1]) + full-width output.
         let x = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
@@ -9764,7 +9764,7 @@ mod tests {
 
     // Two full-width row-streamed inputs [256,128] + full output — softmax bw's
     // (y, dy, dx). No column/row-scalar operand.
-    fn softmax_bw_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn softmax_bw_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let full = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
         structure_key(OpCategory::Softmax, &[full, full, full], ArchSku::Sm89)
     }
@@ -9786,7 +9786,7 @@ mod tests {
 
     // x, dy row-streamed [256,128]; mean, rstd per-row scalars ([n_out,k]-presented,
     // strides [1,0]: feature-axis broadcast, outer varies) + full output.
-    fn layer_norm_bw_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn layer_norm_bw_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let stream = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
         let rowscalar = OperandDesc::new(2, &[256, 128], &[1, 0], dt, 256);
         structure_key(
@@ -9910,12 +9910,12 @@ mod tests {
 
     /// Scalar (unvectorized) unary cell: align defeats vectorization so the
     /// emitted body is the bare `out[i] = <fn>(in0[i]);` golden.
-    fn unary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernels_types::StructureKey {
+    fn unary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
         structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
     }
 
-    fn binary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernels_types::StructureKey {
+    fn binary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
         structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
     }
@@ -10284,7 +10284,7 @@ mod tests {
     /// the caller-side key shape of an `elementwise_pred` op. Note the aligned
     /// contiguous u8 output keys V8 on its own — the plan must still force the
     /// scalar path (no packed u8 store exists).
-    fn pred_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn pred_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
         let o = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::U8, 256);
         structure_key(OpCategory::BinaryElementwise, &[a, a, o], ArchSku::Sm89)
@@ -11251,7 +11251,7 @@ mod tests {
     /// Rank-2 contiguous, fully aligned cell — the shape whose ALIGNED inputs
     /// would normally vectorize (V4 at f32): exactly the cell the Coord
     /// routing must force onto Strided.
-    fn coord_key_2d(dt: ElementKind, n_operands: usize) -> baracuda_kernels_types::StructureKey {
+    fn coord_key_2d(dt: ElementKind, n_operands: usize) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], dt, 256);
         let operands: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
         structure_key(OpCategory::BinaryElementwise, &operands, ArchSku::Sm89)
@@ -11524,7 +11524,7 @@ mod tests {
         use crate::backend::Backend;
         use crate::ir::ReduceOp;
         use crate::plan::{KernelPlan, ReduceAxisClass, Schedule};
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let key = reduce_key(ElementKind::F32);
         let body = (input(0) * coord(0)).0;
         let access = crate::ir::Access::Reduction {
@@ -11647,7 +11647,7 @@ mod tests {
     /// A contiguous rank-1 unary cell (1 input + 1 output) that VECTORIZES to
     /// float4 offset-free — used to prove an offset both forces Strided and bumps
     /// the OUTPUT pointer.
-    fn unary_contig_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn unary_contig_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
         structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
     }
@@ -12133,7 +12133,7 @@ mod tests {
         use crate::backend::Backend;
         use crate::ir::{BaseOffset, ReduceOp};
         use crate::plan::{KernelPlan, ReduceAxisClass, Schedule};
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let key = reduce_key(ElementKind::F32);
         let body = input(0).0;
         let access = crate::ir::Access::Reduction {
@@ -12177,7 +12177,7 @@ mod multi_output_tests {
     //! `single_body_multi_matches_elementwise`.
     use crate::ir::{BinaryOp, OpDef, UnaryOp, input, konst};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -12547,7 +12547,7 @@ mod dropout_hetero_tests {
     use crate::ir::{Access, BaseOffset, BinaryOp, OpDef, WriteIndex, input, konst, param};
     use crate::plan::{KernelPlan, Schedule};
     use crate::{Cuda, build_plan, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -13069,7 +13069,7 @@ mod scan_tests {
     use crate::ir::{Access, OpDef, ReduceOp};
     use crate::plan::Schedule;
     use crate::{Cuda, build_plan, generate, generate_variants};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -13378,7 +13378,7 @@ mod scan_tests {
     #[ignore = "manual regeneration tool for ondevice/relu_propagating_validate.cu"]
     fn dump_relu_sources() {
         use crate::ir::input;
-        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("RELU_OUT").unwrap_or_else(|_| ".".to_string());
         for dt in [
             ElementKind::F32,
@@ -13414,7 +13414,7 @@ mod scan_tests {
     #[ignore = "manual regeneration tool for ondevice/offset_validate.cu"]
     fn dump_offset_sources() {
         use crate::ir::{BaseOffset, input};
-        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
         let write = |k: crate::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
@@ -13551,7 +13551,7 @@ mod scan_tests {
     #[ignore = "manual regeneration tool for ondevice/offset_validate.cu (rope E2E)"]
     fn dump_rope_pair_sources() {
         use crate::ir::{BaseOffset, input};
-        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
         let write = |k: crate::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
@@ -13707,7 +13707,7 @@ mod window_tests {
     use crate::ir::{Access, OpDef, ReduceOp};
     use crate::plan::Schedule;
     use crate::{Cuda, build_plan, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -14101,7 +14101,7 @@ mod im2col_tests {
     //! gate mutations are covered `build_plan`-DIRECT in `plan::im2col_gate_validate`.
     use crate::plan::{KernelPlan, Schedule};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -14339,7 +14339,7 @@ mod sort_tests {
     //! are source-shape + variant-wiring + no-INFINITY pins.
     use crate::ir::{OpDef, SortOrder};
     use crate::{Cuda, generate, generate_variants};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -15671,7 +15671,7 @@ mod select_tests {
     //! signed zeros) lives in that harness; these pin the source text.
     use crate::ir::{BinaryOp, OpDef, coord, input, konst, reduced};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 

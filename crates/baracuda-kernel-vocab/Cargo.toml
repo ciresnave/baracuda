@@ -1,0 +1,24 @@
+[package]
+name = "baracuda-kernel-vocab"
+version = "0.0.1-alpha.77"
+description = "Driver-free classifier vocabulary for the baracuda kernel facade: the pure-data kernel-dispatch tags (ElementKind, ArchSku, OpCategory, layout / op-family tags), the StructureKey / OperandDesc classifier key + `structure_key` derivation, the dispatch-table types, and the PlanPreference / PrecisionGuarantee descriptors. Carved out of baracuda-kernels-types so neutral consumers (the kernel generator, selectors, Fuel) depend on the vocabulary WITHOUT the CUDA driver (baracuda-driver -> baracuda-cuda-sys) transitive pull. The device-view half (MatrixRef / TensorRef / Workspace + the tensor->OperandDesc adapter) stays in baracuda-kernels-types, which re-exports this crate so its public API is unchanged. Seeds the ThinkersJournal KISS (Kernel Interface Standards Suite) classifier-vocabulary reference implementation."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "ml", "kernel", "types", "vocabulary"]
+categories = ["api-bindings", "science"]
+
+[dependencies]
+# DeviceRepr (the memory-layout marker the KernelDtype hierarchy bounds on) plus
+# the half / float8 dtype primitives. baracuda-types is itself driver-free — the
+# CUDA-driver pull this crate exists to shed lived only in baracuda-kernels-types'
+# device-view modules, never here.
+baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
+half = { workspace = true }
+float8 = { workspace = true }
+
+[lints]
+workspace = true

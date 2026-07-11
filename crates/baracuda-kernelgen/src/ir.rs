@@ -3,11 +3,11 @@
 //! An op is the *pure function* computed at each output coordinate ([`OpDef`]),
 //! described as a scalar-op DAG ([`ScalarExpr`]) over its input operands plus an
 //! access pattern ([`Access`]). The emitter lowers this to a concrete backend
-//! and *schedule* (chosen per [`baracuda_kernels_types::StructureKey`] cell).
+//! and *schedule* (chosen per [`baracuda_kernel_vocab::StructureKey`] cell).
 //! Describing the math here — rather than as opaque CUDA — is what lets the
 //! emitter vectorize, hoist, and fuse, because it can see the dataflow.
 
-use baracuda_kernels_types::{AxisMask, ElementKind};
+use baracuda_kernel_vocab::{AxisMask, ElementKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -1402,7 +1402,7 @@ pub enum View {
     },
     /// Broadcast a lower-rank / size-1 producer up to the iteration shape: `bcast`
     /// marks the iteration axes the producer does **not** vary along (stride 0).
-    /// The named IR form of what [`baracuda_kernels_types::OperandKey`]'s
+    /// The named IR form of what [`baracuda_kernel_vocab::OperandKey`]'s
     /// broadcast mask already encodes on the schedule side.
     Broadcast {
         /// Iteration axes along which the producer is broadcast (stride 0).
@@ -1424,7 +1424,7 @@ impl View {
     /// always well-formed. Extent agreement between the declared view and the
     /// runtime `shape[]`/stride arrays is a *caller* precondition (the same trust
     /// level as the RowReduce `n_out`/`k` contract), because
-    /// [`baracuda_kernels_types::StructureKey`] deliberately abstracts numeric
+    /// [`baracuda_kernel_vocab::StructureKey`] deliberately abstracts numeric
     /// extents away.
     #[must_use]
     pub fn is_valid(&self, rank: u8) -> bool {
@@ -1736,7 +1736,7 @@ impl WriteIndex {
 ///
 /// Names the op, its input-operand count, the output expression, the accepted
 /// dtypes, and the access pattern. The generator fans one `OpDef` out across
-/// many [`baracuda_kernels_types::StructureKey`] cells (the schedule half).
+/// many [`baracuda_kernel_vocab::StructureKey`] cells (the schedule half).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OpDef {
     /// Stable op name — used in generated symbol names and the FKC contract.

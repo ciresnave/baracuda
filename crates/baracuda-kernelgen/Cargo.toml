@@ -28,7 +28,7 @@ seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam"]
 convert = ["dep:tree-sitter", "dep:tree-sitter-cuda", "dep:tree-sitter-slang"]
 
 [dependencies]
-baracuda-kernels-types = { workspace = true }
+baracuda-kernel-vocab = { workspace = true }
 # Accurate f64 transcendentals (erf/erfc) for the CPU oracle reference — a pure-Rust
 # (MUSL/fdlibm heritage) implementation INDEPENDENT of the emitter's device erf/erff,
 # so it remains a valid differential oracle. Replaces the v1 ~1e-7 rational that was

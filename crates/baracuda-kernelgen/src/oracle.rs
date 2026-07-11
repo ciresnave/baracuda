@@ -65,7 +65,7 @@
 
 use crate::ir::{Access, BinaryOp, ReduceOp, ScalarExpr, UnaryOp, View};
 use crate::plan::{KernelPlan, RrRole, Schedule, rr_role};
-use baracuda_kernels_types::{ElementKind, OperandDesc};
+use baracuda_kernel_vocab::{ElementKind, OperandDesc};
 
 // ===========================================================================
 // TypedBuffer — the storage image (the same byte image the GPU pointer sees).
@@ -1954,7 +1954,7 @@ mod tests {
     use super::*;
     use crate::ir::{BinaryOp, OpDef, ReduceOp, ReduceStage, input, konst, param, reduced};
     use crate::plan::build_plan;
-    use baracuda_kernels_types::{ArchSku, AxisMask, OpCategory, StructureKey, structure_key};
+    use baracuda_kernel_vocab::{ArchSku, AxisMask, OpCategory, StructureKey, structure_key};
 
     // --- plan/key builders --------------------------------------------------
 

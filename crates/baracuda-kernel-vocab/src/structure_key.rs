@@ -33,8 +33,7 @@
 //!   merge feeds [`StructureKey::eff_rank`]; legality-aware axis *reordering*
 //!   to maximize cell-merging is a follow-up).
 
-use crate::{ArchSku, ElementKind, KernelDtype, OpCategory, TensorRef};
-use baracuda_types::DeviceRepr;
+use crate::{ArchSku, ElementKind, OpCategory};
 
 /// Maximum tensor rank the structure key supports — matches the rank ceiling
 /// of every strided baracuda kernel (`baracuda::coord` `MAX_RANK`).
@@ -394,36 +393,12 @@ impl OperandDesc {
         }
     }
 
-    /// Build an operand description from a borrowed device tensor view.
-    ///
-    /// `align_bytes` is supplied by the caller (it knows its allocation /
-    /// view alignment — a base `cudaMalloc` is 256-byte aligned, but a sub-view
-    /// may be less). dtype is taken from `T` via [`KernelDtype::KIND`].
-    ///
-    /// # Panics
-    /// Panics if `N > MAX_RANK`.
-    #[must_use]
-    pub fn from_tensor_ref<T, const N: usize>(view: &TensorRef<'_, T, N>, align_bytes: u32) -> Self
-    where
-        T: KernelDtype + DeviceRepr + Copy + 'static,
-    {
-        assert!(N <= MAX_RANK, "rank {N} exceeds MAX_RANK {MAX_RANK}");
-        let mut shape = [0i64; MAX_RANK];
-        let mut strides = [0i64; MAX_RANK];
-        for d in 0..N {
-            shape[d] = i64::from(view.shape[d]);
-            strides[d] = view.stride[d];
-        }
-        Self {
-            rank: N as u8,
-            shape,
-            strides,
-            dtype: T::KIND,
-            align_bytes,
-            quant: None,
-            symbolic: None,
-        }
-    }
+    // NOTE: `from_tensor_ref` (build an OperandDesc from a borrowed device
+    // `TensorRef`) moved to `baracuda-kernels-types::operand_desc_ext` as the
+    // `OperandDescExt` trait — it needs the device-view `TensorRef`, which stays
+    // in the driver-coupled crate. All `OperandDesc` fields are `pub`, so the
+    // extension constructs it directly. `OperandDesc::new` (above) is the
+    // driver-free constructor callers use here.
 }
 
 // ===========================================================================

@@ -32,7 +32,7 @@
 use crate::backend::GeneratedKernel;
 use crate::ir::{BinaryOp, ExprDag, NodeId, OobPolicy, OpDef, ScalarExpr, UnaryOp};
 use crate::pattern::{PatternNode, derive_pattern, to_fkc};
-use baracuda_kernels_types::{Contiguity, ElementKind, StructureKey, VecWidth};
+use baracuda_kernel_vocab::{Contiguity, ElementKind, StructureKey, VecWidth};
 
 /// Canonicalize a caller's backend token to the exact capitalized spelling
 /// Fuel's FKC importer accepts (fuel-dispatch `fkc/lower.rs` `lower_backend`,
@@ -1525,7 +1525,7 @@ mod tests {
     use super::*;
     use crate::ir::{OpDef, input, param};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+    use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn key_for(n_operands: usize, op_cat: OpCategory) -> StructureKey {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
@@ -2339,7 +2339,7 @@ mod tests {
     fn reduction_is_an_honest_miss_no_contract() {
         use crate::ir::ReduceOp;
         use crate::pattern::PatternError;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // A general-path reduction (explicit axis set) must NEVER leak a bindable
         // elementwise contract — the honest-miss wall (§5f/§6). Pins that item 03's
         // axes/keepdim did not open a path around the `NotElementwise` reject.

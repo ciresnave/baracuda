@@ -439,10 +439,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-kernel-vocab"
+version = "0.0.1-alpha.77"
+dependencies = [
+ "baracuda-types",
+ "float8",
+ "half",
+]
+
+[[package]]
 name = "baracuda-kernelgen"
 version = "0.0.1-alpha.77"
 dependencies = [
- "baracuda-kernels-types",
+ "baracuda-kernel-vocab",
  "baracuda-nvrtc",
  "fuel-kernel-seam",
  "fuel-kernel-seam-types",
@@ -512,6 +521,7 @@ name = "baracuda-kernels-types"
 version = "0.0.1-alpha.77"
 dependencies = [
  "baracuda-driver",
+ "baracuda-kernel-vocab",
  "baracuda-types",
  "float8",
  "half",

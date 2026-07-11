@@ -31,7 +31,7 @@ use crate::link::{LinkEntry, link_entry};
 use crate::optimize::optimize;
 use crate::pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
 use crate::{Backend, generate};
-use baracuda_kernels_types::{
+use baracuda_kernel_vocab::{
     ArchSku, ElementKind, MAX_OPERANDS, OpCategory, OperandDesc, structure_key,
 };
 

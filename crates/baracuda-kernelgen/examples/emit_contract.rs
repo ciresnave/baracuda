@@ -15,9 +15,9 @@ use baracuda_kernelgen::{
     Cuda, LinkEntry, OpDef, bundle, contract, emit_link_registry, generate, input, link_entry,
     param,
 };
-use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
-fn cell(n_operands: usize, op: OpCategory) -> baracuda_kernels_types::StructureKey {
+fn cell(n_operands: usize, op: OpCategory) -> baracuda_kernel_vocab::StructureKey {
     // [128, 256] row-major f32, 256-byte aligned (contiguous, float4-vectorizable).
     let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
     let operands: Vec<_> = std::iter::repeat_n(a, n_operands).collect();

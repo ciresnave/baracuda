@@ -10,7 +10,7 @@ use crate::ir::{
     Access, BaseOffset, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortLimit, SortOrder,
     SortOut, View, WriteCombine, WriteIndex,
 };
-use baracuda_kernels_types::{
+use baracuda_kernel_vocab::{
     AxisMask, Contiguity, ElementKind, MAX_OPERANDS, OperandKey, StructureKey, VecWidth,
 };
 
@@ -3027,7 +3027,7 @@ mod multi_output_validate {
     //! `build_plan` DIRECTLY (an emitter panic would mask a gate mutation).
     use super::{Schedule, build_plan};
     use crate::ir::{Access, BinaryOp, OpDef, ReduceOp, ScalarExpr, input, konst, param};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -3342,7 +3342,7 @@ mod rowreduce_role_validate {
     //! cases.
     use super::{RrRole, build_plan, rr_role};
     use crate::ir::{OpDef, ReduceOp, ReduceStage, input, reduced};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, AxisMask, Contiguity, DivBucket, ElementKind, OpCategory, OperandDesc, OperandKey,
         VecWidth, structure_key,
     };
@@ -3518,7 +3518,7 @@ mod view_gate_validate {
     //! mutation (the 0c lesson).
     use super::{Schedule, build_plan};
     use crate::ir::{OpDef, ReduceOp, View, input};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, AxisMask, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -3686,7 +3686,7 @@ mod gather_gate_validate {
     //! mutation (the 0c lesson).
     use super::{Schedule, build_plan};
     use crate::ir::{OobPolicy, OpDef, ReadIndex, ReduceOp, input};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -3841,7 +3841,7 @@ mod scatter_gate_validate {
     //! mutation (the 0c lesson).
     use super::{Schedule, build_plan};
     use crate::ir::{OobPolicy, OpDef, ReduceOp, WriteCombine, WriteIndex, input};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -3994,7 +3994,7 @@ mod scan_gate_validate {
     //! test here; each is mutation-checked both directions by a targeted reverse-edit.
     use super::{Schedule, build_plan};
     use crate::ir::{OpDef, ReduceOp, input, konst, reduced};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -4240,7 +4240,7 @@ mod window_gate_validate {
     //! directions by a targeted reverse-edit.
     use super::{Schedule, build_plan};
     use crate::ir::{OpDef, ReduceOp, input, konst, reduced};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -4655,7 +4655,7 @@ mod im2col_gate_validate {
     //! reverse-edit.
     use super::{Schedule, build_plan};
     use crate::ir::{Access, OpDef};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -4882,7 +4882,7 @@ mod sort_gate_validate {
     //! reverse-edit.
     use super::{Schedule, access_tag, build_plan};
     use crate::ir::{Access, OpDef, ScalarExpr, SortLimit, SortOrder, SortOut, input};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -5440,7 +5440,7 @@ mod select_gate_validate {
     //! the emitter backstops are independent Tier-2 tests in `cuda`.
     use super::{Schedule, build_plan};
     use crate::ir::{BinaryOp, OpDef, ReduceOp, coord, input, konst};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 

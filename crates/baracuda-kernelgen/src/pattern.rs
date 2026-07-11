@@ -687,7 +687,7 @@ fn node_lines(node: &PatternNode) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::ir::{OpDef, input, konst, param};
-    use baracuda_kernels_types::ElementKind;
+    use baracuda_kernel_vocab::ElementKind;
 
     #[test]
     fn binary_add_pattern() {

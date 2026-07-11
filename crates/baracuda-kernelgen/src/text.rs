@@ -15,8 +15,8 @@
 //! `{"Add": [{"Mul": [{"Input": 0}, {"Input": 1}]}, {"Input": 2}]}`.
 //!
 //! Two IR-referenced types live in `baracuda-kernels-types` and do **not** derive
-//! serde ([`baracuda_kernels_types::ElementKind`], a C-like dtype tag, and
-//! [`baracuda_kernels_types::AxisMask`], a `u8` bitmask newtype). Rather than
+//! serde ([`baracuda_kernel_vocab::ElementKind`], a C-like dtype tag, and
+//! [`baracuda_kernel_vocab::AxisMask`], a `u8` bitmask newtype). Rather than
 //! modify that crate, each is bridged by a small `#[serde(with = "...")]` shim
 //! below: a dtype serializes as its readable name string (`"F32"`), an axis mask
 //! as its raw `u8`. A [`ScalarExpr::Const`](crate::ir::ScalarExpr::Const) `f64`
@@ -52,8 +52,8 @@ pub fn op_from_text(s: &str) -> Result<OpDef, String> {
 /// Readable name string for an [`ElementKind`] — the Rust variant spelling, so
 /// the text form is stable and self-documenting. Exhaustive: a new dtype variant
 /// forces an update here (compile error), which is the intended coupling.
-fn ek_to_str(k: baracuda_kernels_types::ElementKind) -> &'static str {
-    use baracuda_kernels_types::ElementKind::{
+fn ek_to_str(k: baracuda_kernel_vocab::ElementKind) -> &'static str {
+    use baracuda_kernel_vocab::ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
         I64, S4, S8, U4, U8, U32,
     };
@@ -80,8 +80,8 @@ fn ek_to_str(k: baracuda_kernels_types::ElementKind) -> &'static str {
 }
 
 /// Inverse of [`ek_to_str`].
-fn ek_from_str(s: &str) -> Result<baracuda_kernels_types::ElementKind, String> {
-    use baracuda_kernels_types::ElementKind::{
+fn ek_from_str(s: &str) -> Result<baracuda_kernel_vocab::ElementKind, String> {
+    use baracuda_kernel_vocab::ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
         I64, S4, S8, U4, U8, U32,
     };
@@ -110,7 +110,7 @@ fn ek_from_str(s: &str) -> Result<baracuda_kernels_types::ElementKind, String> {
 
 /// `#[serde(with)]` bridge for a bare [`ElementKind`] field (dtype name string).
 pub(crate) mod ek {
-    use baracuda_kernels_types::ElementKind;
+    use baracuda_kernel_vocab::ElementKind;
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub(crate) fn serialize<S: Serializer>(v: &ElementKind, s: S) -> Result<S::Ok, S::Error> {
@@ -125,7 +125,7 @@ pub(crate) mod ek {
 
 /// `#[serde(with)]` bridge for a `Vec<ElementKind>` field (a list of dtype names).
 pub(crate) mod ek_vec {
-    use baracuda_kernels_types::ElementKind;
+    use baracuda_kernel_vocab::ElementKind;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub(crate) fn serialize<S: Serializer>(v: &[ElementKind], s: S) -> Result<S::Ok, S::Error> {
@@ -146,7 +146,7 @@ pub(crate) mod ek_vec {
 
 /// `#[serde(with)]` bridge for an `Option<ElementKind>` field.
 pub(crate) mod ek_opt {
-    use baracuda_kernels_types::ElementKind;
+    use baracuda_kernel_vocab::ElementKind;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub(crate) fn serialize<S: Serializer>(
@@ -169,7 +169,7 @@ pub(crate) mod ek_opt {
 /// `#[serde(with)]` bridge for a `Vec<Option<ElementKind>>` field (per-extra-output
 /// dtypes, each optionally uniform).
 pub(crate) mod ek_opt_vec {
-    use baracuda_kernels_types::ElementKind;
+    use baracuda_kernel_vocab::ElementKind;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub(crate) fn serialize<S: Serializer>(
@@ -195,10 +195,10 @@ pub(crate) mod ek_opt_vec {
     }
 }
 
-/// `#[serde(with)]` bridge for an [`AxisMask`](baracuda_kernels_types::AxisMask)
+/// `#[serde(with)]` bridge for an [`AxisMask`](baracuda_kernel_vocab::AxisMask)
 /// field — serialized as its raw `u8` bitmask.
 pub(crate) mod axis {
-    use baracuda_kernels_types::AxisMask;
+    use baracuda_kernel_vocab::AxisMask;
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub(crate) fn serialize<S: Serializer>(v: &AxisMask, s: S) -> Result<S::Ok, S::Error> {
@@ -258,7 +258,7 @@ mod tests {
     use crate::ir::{
         Access, BinaryOp, OobPolicy, OpDef, ReduceOp, ScalarExpr, UnaryOp, input, konst,
     };
-    use baracuda_kernels_types::{AxisMask, ElementKind};
+    use baracuda_kernel_vocab::{AxisMask, ElementKind};
 
     /// A 3-input fused-multiply-add built via `OpDef::elementwise`, the canonical
     /// example: text is human-readable AND round-trips bit-for-bit.

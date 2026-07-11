@@ -13,6 +13,11 @@ categories = ["api-bindings", "science"]
 exclude = ["*.profraw", "target/"]
 
 [dependencies]
+# The driver-free classifier vocabulary (dtype/layout/op tags, StructureKey /
+# OperandDesc, dispatch types, plan descriptors) — carved out so neutral
+# consumers can depend on it without this crate's baracuda-driver pull. Wholesale
+# re-exported from lib.rs, so this crate's public API is unchanged.
+baracuda-kernel-vocab = { workspace = true }
 baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
 baracuda-driver = { workspace = true }
 half = { workspace = true }

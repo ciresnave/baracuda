@@ -28,7 +28,7 @@
 
 use std::io::BufRead;
 
-use baracuda_kernels_types::{
+use baracuda_kernel_vocab::{
     ArchSku, DispatchTable, HwStamp, Implementor, ReportedCandidate, STRUCTURE_KEY_VERSION,
     StructureKey, merge, reported_entry,
 };
@@ -750,7 +750,7 @@ pub fn variant_votes(ingest: &Ingest) -> Vec<VariantVote> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, DispatchEntry, DispatchTable, ElementKind, HwStamp, Implementor, OpCategory,
         OperandDesc, Provenance, ReportedCandidate, StructureKey, merge, reported_entry,
         structure_key, structure_key_token,

@@ -13,7 +13,7 @@ use baracuda_kernelgen::{
     generate_variants, ingest_jsonl, input, konst, merge_reports, param, rank_matrix, reduced,
     to_fkc,
 };
-use baracuda_kernels_types::{
+use baracuda_kernel_vocab::{
     ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc,
     seed_winner, structure_key,
 };
@@ -533,7 +533,7 @@ fn main() {
     // records today are the *seeds*: cells we deliberately route to a vendor
     // library and therefore do NOT generate — the honest miss made explicit (no
     // `.cu`, no link-registry entry). The bench gate later merges measured rows
-    // (`Provenance::Measured`) over these via `baracuda_kernels_types::merge`.
+    // (`Provenance::Measured`) over these via `baracuda_kernel_vocab::merge`.
     let mut dispatch: Vec<DispatchEntry> = Vec::new();
 
     // Large aligned half-precision GEMM → cuBLAS. kernelgen cannot yet emit a

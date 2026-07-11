@@ -10,12 +10,12 @@
 //! The committed row is the **routing projection**
 //! `(structure_key_token, winner_code, margin, provenance_code)` — enough to
 //! route, byte-stable across runs (no wall-clock timestamp; the richer
-//! [`HwStamp`](baracuda_kernels_types::HwStamp) stays on the in-memory table and
+//! [`HwStamp`](baracuda_kernel_vocab::HwStamp) stays on the in-memory table and
 //! the bench CSV). [`parse_dispatch_table`] reads the projection back so the
 //! emit→parse round-trip is a real, testable identity — the guard against a
 //! token-codec drift between build time and runtime silently missing every row.
 
-use baracuda_kernels_types::{DispatchEntry, DispatchTable, Implementor, Provenance};
+use baracuda_kernel_vocab::{DispatchEntry, DispatchTable, Implementor, Provenance};
 
 /// Emit the generated Rust `dispatch_table` source — a static routing table the
 /// runtime resolves per cell. Rows are sorted by `structure_key` token and
@@ -153,7 +153,7 @@ fn parse_row(row: &str) -> Option<DispatchEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, CandidateResult, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 

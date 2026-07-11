@@ -1,7 +1,7 @@
 //! # baracuda-kernelgen
 //!
 //! Build-time generator that turns an op's **abstract IR** (the algorithm) plus
-//! a [`baracuda_kernels_types::StructureKey`] cell (the schedule) into a
+//! a [`baracuda_kernel_vocab::StructureKey`] cell (the schedule) into a
 //! specialized kernel — and its FKC contract.
 //!
 //! ## Stability posture (published as of alpha.76)
@@ -83,7 +83,7 @@ pub use telemetry::{
 };
 pub use text::{op_from_text, op_to_text};
 
-use baracuda_kernels_types::StructureKey;
+use baracuda_kernel_vocab::StructureKey;
 
 /// Generate a specialized kernel for `op` at structure cell `key`, lowered by
 /// `backend`. Convenience over [`build_plan`] followed by [`Backend::lower`].
