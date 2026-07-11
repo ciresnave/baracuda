@@ -72,9 +72,9 @@ load-bearing:
 
 | Sub-standard | Covers | Reference seed (today) | Frozen? |
 |---|---|---|---|
-| **KISS-Announce** | 56-byte `#[repr(C)]` availability/capability handshake envelope; profile + capability bits | `baracuda-seam` (`SeamHello`) | envelope versioned; escape hatch exists |
+| **KISS-Announce** | 56-byte `#[repr(C)]` availability/capability handshake envelope; profile + capability bits | `baracuda-seam` (`SeamHello`) **and** `fuel-kernel-seam-announce` (`SeamHello`, split out of `-types` by Fuel 2026-07-11) — two byte-identical seeds pending convergence to one canonical crate | envelope versioned (`SEAM_ENVELOPE_VERSION` = 1); escape hatch exists |
 | **KISS-Classify** | dtype tags, layout/op-family tags, `StructureKey` / `OperandDesc`, `structure_key` derivation | `baracuda-kernel-vocab` (carved 2026-07-10) | **not frozen** — see §6 |
-| **KISS-Grammar** | op-tag + region grammar (`OpTag` / `OpAttrs` / `PatternNode`) | `fuel-kernel-seam-types` | frozen 2026-07-04 (Fuel-authored) |
+| **KISS-Grammar** | op-tag + region grammar (`OpTag` / `OpAttrs` / `PatternNode`) | `fuel-kernel-seam-types` (Announce split out to `fuel-kernel-seam-announce` 2026-07-11 → now Grammar-only) | frozen 2026-07-04 (Fuel-authored) |
 | **KISS-Synth** | `JitRequest` / `JitResponse` / `Synthesizer` trait / `SynthArtifact`; missing-kernel negotiation; two-step `synthesize` + `take_kernel` handover; never-panic contract | `fuel-kernel-seam` | frozen 2026-07-04 |
 | **KISS-Conform** | conformance tests each sub-standard is checked against, keyed to the relevant `*_VERSION` | *to be built* | — |
 
@@ -129,3 +129,34 @@ what makes "one type everywhere" hold — mirror-and-convert reintroduces drift.
    future **KISS-Emit** sub-standard we have not captured?
 5. Is there a loader/executor interface (Vulkane's SPIR-V load + dispatch) that
    warrants its own sub-standard, or does it stay out of KISS's kernel-gen scope?
+
+## 9. Review log
+
+- **2026-07-11 · Fuel review (no objections).** Fuel confirmed the name, the
+  Announce/Classify/Grammar/Synth/Conform decomposition, and the §6 ownership
+  split (Fuel authors Grammar + Synth; Baracuda authors Classify, which Fuel
+  treats as an opaque join token per its 2026-07-01 K1 decision and so has no
+  stake in reshaping ahead of Vulkane — leaving KISS-Classify unfrozen is
+  endorsed). §8.4: Fuel's Slang→Vulkan authoring (`fuel-vulkan-kernels`) stays
+  Fuel-owned; an Unpopped IR→Slang emitter would be an optional future
+  *contributor*, not a replacement, and implies no KISS-Classify change. §8.5:
+  Fuel defers the Vulkane loader/executor question to Vulkane.
+- **2026-07-11 · §8.3 acted on (Fuel).** Reviewing the stub surfaced that
+  `SeamHello`/`negotiate`/`SeamError` (Announce) were co-located with the region
+  grammar in `fuel-kernel-seam-types` — backwards for a layered suite. Fuel split
+  them into a new std-only, dependency-free `fuel-kernel-seam-announce`
+  (`5c1fcc4a` on Fuel `main`); `fuel-kernel-seam-types` is now Grammar-only. No
+  wire/ABI change (`SEAM_MAGIC`, `SEAM_ENVELOPE_VERSION` = 1, 56-byte layout all
+  byte-identical) — only the Rust crate boundary moved. **Non-event for
+  Baracuda:** Baracuda imports only Grammar types (`OpTag`/`PatternNode`/
+  `OpAttrs`) from `-types`, and its own `SeamHello` lives in `baracuda-seam`
+  (never imported from Fuel). **Open KISS-Announce v1 task:** the two byte-identical
+  `SeamHello` seeds (`baracuda-seam`, `fuel-kernel-seam-announce`) converge to one
+  canonical KISS-Announce crate — the "defined-twice / drift" resolution, and
+  low-risk today since no live Rust call site binds either across the project
+  boundary yet.
+- **2026-07-11 · sequencing (Fuel ask, accepted).** The `[patch.crates-io]`
+  path-vs-registry unification has already caused one real type-identity bug
+  (`BaracudaSynthesizer` seeing a distinct `Synthesizer` trait). §5's neutral
+  single-published-crate step retires that failure mode, so the neutral vocab
+  crate's **registry publish is sequenced EARLIER** in the arc rather than last.
