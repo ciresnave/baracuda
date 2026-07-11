@@ -4,14 +4,16 @@
 //! Instead of a hand-written parser (the pilot in `lift.rs`), these frontends
 //! reuse the mature `tree-sitter-cuda` / `tree-sitter-slang` grammars: parse
 //! source into an error-tolerant CST, recognize the expressible idioms
-//! (grid-stride elementwise, …) into the neutral IR (`OpDef`), and keep whatever
-//! doesn't map as source **residue** ([`LiftError::Residue`]). Error tolerance is
-//! a feature — unrecognized constructs stay as intact subtrees we refuse rather
-//! than mis-lift; portability scales with the lift fraction, honestly.
+//! (grid-stride / dispatch elementwise, …) into the neutral IR (`OpDef`), and
+//! keep whatever doesn't map as source **residue** ([`LiftError::Residue`]).
+//! Error tolerance is a feature — unrecognized constructs stay as intact subtrees
+//! we refuse rather than mis-lift; portability scales with the lift fraction.
 //!
-//! Walking a real CST (vs the hand-rolled tokenizer) generalizes the recognizer:
-//! precedence comes from the grammar, and any expression form the grammar knows
-//! is available without bespoke parsing.
+//! Because `tree-sitter-slang` is built on `tree-sitter-cpp`, a Slang elementwise
+//! store parses into the SAME `assignment_expression` / `subscript_expression` /
+//! `binary_expression` node shapes as CUDA — so ONE CST walk serves both, differing
+//! only in naming conventions (`out`/`in` are HLSL keywords, so Slang uses
+//! `output`/`input{k}`) and the kernel/residue markers.
 
 use crate::ir::{Expr, OpDef, ScalarExpr, UnaryOp};
 use crate::lift::{LiftError, Lifted, binary_fn, unary_fn};
@@ -37,10 +39,9 @@ pub fn parse_slang(src: &str) -> Option<Tree> {
     parser.parse(src, None)
 }
 
-/// Lift a grid-stride elementwise CUDA kernel into an [`OpDef`] by walking its
-/// tree-sitter CST — the tree-sitter counterpart of
-/// [`crate::lift::lift_elementwise`]. Recognizes `out[i] = <expr>;` where the
-/// body is arithmetic over `inK[i]`, literals, and CUDA math intrinsics; refuses
+/// Lift a grid-stride elementwise **CUDA** kernel into an [`OpDef`] by walking
+/// its tree-sitter CST. Recognizes `out[i] = <expr>;` where the body is
+/// arithmetic over `inK[i]`, literals, and CUDA math intrinsics; refuses
 /// anything else as [`LiftError::Residue`].
 pub fn lift_elementwise_cuda(
     src: &str,
@@ -50,27 +51,81 @@ pub fn lift_elementwise_cuda(
     if !src.contains("__global__") {
         return Err(LiftError::NotAKernel);
     }
-    for marker in [
-        "__shared__",
-        "atomicAdd",
-        "atomicCAS",
-        "__syncthreads",
-        "cublas",
-        "cudnn",
-        "printf",
-        "asm",
-        "cp.async",
-        "__shfl",
-    ] {
-        if src.contains(marker) {
-            return Err(LiftError::Residue(marker.to_string()));
+    reject_markers(
+        src,
+        &[
+            "__shared__",
+            "atomicAdd",
+            "atomicCAS",
+            "__syncthreads",
+            "cublas",
+            "cudnn",
+            "printf",
+            "asm",
+            "cp.async",
+            "__shfl",
+        ],
+    )?;
+    let tree = parse_cuda(src).ok_or(LiftError::NotAKernel)?;
+    lift_store(&tree, src, name, dtypes, "out", "in")
+}
+
+/// Lift a dispatch-elementwise **Slang** compute kernel into an [`OpDef`].
+/// Recognizes `output[i] = <expr>;` where the body is arithmetic over
+/// `input{K}[i]`, literals, and math intrinsics (`out`/`in` are HLSL keywords,
+/// so the buffer convention is `output`/`input{K}`). Refuses group-shared
+/// memory, atomics, and barriers as residue.
+pub fn lift_elementwise_slang(
+    src: &str,
+    name: &str,
+    dtypes: &[ElementKind],
+) -> Result<Lifted, LiftError> {
+    if !src.contains("numthreads") {
+        return Err(LiftError::NotAKernel);
+    }
+    reject_markers(
+        src,
+        &[
+            "groupshared",
+            "GroupMemoryBarrier",
+            "DeviceMemoryBarrier",
+            "AllMemoryBarrier",
+            "InterlockedAdd",
+            "InterlockedCompareExchange",
+            "RWByteAddressBuffer",
+        ],
+    )?;
+    let tree = parse_slang(src).ok_or(LiftError::NotAKernel)?;
+    lift_store(&tree, src, name, dtypes, "output", "input")
+}
+
+/// Refuse the first construct we cannot express in the IR — it belongs in the
+/// source language (residue).
+fn reject_markers(src: &str, markers: &[&str]) -> Result<(), LiftError> {
+    for m in markers {
+        if src.contains(m) {
+            return Err(LiftError::Residue((*m).to_string()));
         }
     }
-    let tree = parse_cuda(src).ok_or(LiftError::NotAKernel)?;
-    let (idx_var, rhs) = find_out_store(tree.root_node(), src).ok_or(LiftError::NotElementwise)?;
+    Ok(())
+}
+
+/// Shared tail: find the `{out_name}[i] = <rhs>` store, walk the RHS into a
+/// `ScalarExpr` (`{in_prefix}{K}[i]` → `Input(K)`), and build the [`OpDef`].
+fn lift_store(
+    tree: &Tree,
+    src: &str,
+    name: &str,
+    dtypes: &[ElementKind],
+    out_name: &str,
+    in_prefix: &str,
+) -> Result<Lifted, LiftError> {
+    let (idx_var, rhs) =
+        find_out_store(tree.root_node(), src, out_name).ok_or(LiftError::NotElementwise)?;
     let mut w = Walk {
         src,
         idx_var,
+        in_prefix,
         max_input: None,
     };
     let body = w.expr(rhs)?;
@@ -81,9 +136,9 @@ pub fn lift_elementwise_cuda(
     })
 }
 
-/// Find the `out[<idx>] = <rhs>` store (an `assignment_expression` whose LHS is a
-/// `subscript_expression` on `out`) and return `(idx_var, rhs_node)`.
-fn find_out_store<'t>(node: Node<'t>, src: &str) -> Option<(String, Node<'t>)> {
+/// Find the `{out_name}[<idx>] = <rhs>` store (an `assignment_expression` whose
+/// LHS is a `subscript_expression` on `out_name`) and return `(idx_var, rhs)`.
+fn find_out_store<'t>(node: Node<'t>, src: &str, out_name: &str) -> Option<(String, Node<'t>)> {
     if node.kind() == "assignment_expression"
         && let (Some(lhs), Some(rhs)) = (
             node.child_by_field_name("left"),
@@ -93,22 +148,22 @@ fn find_out_store<'t>(node: Node<'t>, src: &str) -> Option<(String, Node<'t>)> {
         && lhs
             .child_by_field_name("argument")
             .and_then(|a| a.utf8_text(src.as_bytes()).ok())
-            == Some("out")
+            == Some(out_name)
         && let Some(idx) = subscript_index(lhs, src)
     {
         return Some((idx, rhs));
     }
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
-        if let Some(hit) = find_out_store(child, src) {
+        if let Some(hit) = find_out_store(child, src, out_name) {
             return Some(hit);
         }
     }
     None
 }
 
-/// The single index identifier inside a `subscript_expression`'s `indices`
-/// (`inK[i]` / `out[i]`), or `None` if it isn't a lone identifier.
+/// The single index identifier inside a `subscript_expression`'s `indices`, or
+/// `None` if it isn't a lone identifier.
 fn subscript_index(sub: Node, src: &str) -> Option<String> {
     let indices = sub.child_by_field_name("indices")?;
     let mut cursor = indices.walk();
@@ -122,6 +177,7 @@ fn subscript_index(sub: Node, src: &str) -> Option<String> {
 struct Walk<'a> {
     src: &'a str,
     idx_var: String,
+    in_prefix: &'a str,
     max_input: Option<u8>,
 }
 
@@ -162,9 +218,11 @@ impl<'a> Walk<'a> {
             "subscript_expression" => {
                 let base = self.text(self.field(n, "argument")?);
                 let k: u8 = base
-                    .strip_prefix("in")
+                    .strip_prefix(self.in_prefix)
                     .and_then(|d| d.parse().ok())
-                    .ok_or_else(|| LiftError::Residue(format!("read '{base}[..]' (not inK)")))?;
+                    .ok_or_else(|| {
+                        LiftError::Residue(format!("read '{base}[..]' (not {}K)", self.in_prefix))
+                    })?;
                 let idx = subscript_index(n, self.src)
                     .ok_or_else(|| LiftError::Residue("index".into()))?;
                 if idx != self.idx_var {
@@ -224,9 +282,11 @@ mod tests {
 
     const F32: &[ElementKind] = &[ElementKind::F32];
 
-    fn body(src: &str) -> ScalarExpr {
+    fn cuda_body(src: &str) -> ScalarExpr {
         lift_elementwise_cuda(src, "x", F32).unwrap().op.body
     }
+
+    // --- CUDA ---
 
     #[test]
     fn grammars_load_and_parse() {
@@ -235,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn lifts_fused_multiply_add() {
+    fn cuda_lifts_fused_multiply_add() {
         let src = "__global__ void mul(const float* in0, const float* in1, const float* in2, float* out, long long n) {\n\
             long long i = blockIdx.x*blockDim.x + threadIdx.x;\n\
             for (; i < n; i += gridDim.x*blockDim.x) { out[i] = in0[i] * in1[i] + in2[i]; }\n}";
@@ -254,19 +314,19 @@ mod tests {
     }
 
     #[test]
-    fn lifts_unary_intrinsic() {
+    fn cuda_lifts_unary_intrinsic() {
         let src = "__global__ void k(const float* in0, float* out, long long n){ out[i] = __expf(in0[i]); }";
         assert_eq!(
-            body(src),
+            cuda_body(src),
             ScalarExpr::Unary(UnaryOp::Exp, Box::new(ScalarExpr::Input(0)))
         );
     }
 
     #[test]
-    fn lifts_fmaxf_as_ieee_not_torch_max() {
+    fn cuda_fmaxf_is_ieee_not_torch_max() {
         let src = "__global__ void k(const float* in0, float* out, long long n){ out[i] = fmaxf(in0[i], 0.0f); }";
         assert_eq!(
-            body(src),
+            cuda_body(src),
             ScalarExpr::Binary(
                 crate::ir::BinaryOp::FmaxIeee,
                 Box::new(ScalarExpr::Input(0)),
@@ -276,11 +336,10 @@ mod tests {
     }
 
     #[test]
-    fn precedence_from_the_grammar() {
-        // The grammar gives precedence for free: a+b*c => Add(a, Mul(b,c)).
+    fn cuda_precedence_from_the_grammar() {
         let src = "__global__ void k(const float* in0, const float* in1, const float* in2, float* out){ out[i] = in0[i] + in1[i]*in2[i]; }";
         assert_eq!(
-            body(src),
+            cuda_body(src),
             ScalarExpr::Add(
                 Box::new(ScalarExpr::Input(0)),
                 Box::new(ScalarExpr::Mul(
@@ -292,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    fn refuses_non_elementwise_index_and_shared_mem() {
+    fn cuda_refuses_residue() {
         let neigh = "__global__ void k(const float* in0, float* out){ out[i] = in0[i+1]; }";
         assert!(matches!(
             lift_elementwise_cuda(neigh, "x", F32),
@@ -305,13 +364,56 @@ mod tests {
         ));
     }
 
+    // --- Slang (the SAME walk, different conventions) ---
+
+    const SLANG_MUL: &str = "StructuredBuffer<float> input0;\n\
+        StructuredBuffer<float> input1;\n\
+        RWStructuredBuffer<float> output;\n\
+        [numthreads(256, 1, 1)]\n\
+        void mul(uint3 tid : SV_DispatchThreadID) {\n\
+            uint i = tid.x;\n\
+            output[i] = input0[i] * input1[i];\n\
+        }";
+
+    #[test]
+    fn slang_lifts_multiply() {
+        let lifted = lift_elementwise_slang(SLANG_MUL, "slang_mul", F32).unwrap();
+        assert_eq!(lifted.n_inputs, 2);
+        assert_eq!(
+            lifted.op.body,
+            ScalarExpr::Mul(
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Input(1)),
+            )
+        );
+    }
+
+    #[test]
+    fn slang_refuses_groupshared() {
+        let src = "groupshared float s[256];\n\
+            [numthreads(256,1,1)]\n\
+            void k(uint3 tid : SV_DispatchThreadID) { output[tid.x] = s[0]; }";
+        assert!(matches!(
+            lift_elementwise_slang(src, "x", F32),
+            Err(LiftError::Residue(_))
+        ));
+    }
+
+    #[test]
+    fn slang_and_cuda_lift_to_the_same_ir() {
+        // A CUDA and a Slang kernel for the same math lift to the SAME OpDef body.
+        let cuda = "__global__ void mul(const float* in0, const float* in1, float* out, long long n){ out[i] = in0[i] * in1[i]; }";
+        let c = lift_elementwise_cuda(cuda, "m", F32).unwrap();
+        let s = lift_elementwise_slang(SLANG_MUL, "m", F32).unwrap();
+        assert_eq!(c.op.body, s.op.body);
+    }
+
     #[test]
     fn round_trip_reemits_to_cuda_and_cpuc() {
         use crate::{CpuC, Cuda, generate};
         use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
-        let src = "__global__ void mul(const float* in0, const float* in1, float* out, long long n){ out[i] = in0[i] * in1[i]; }";
-        let lifted = lift_elementwise_cuda(src, "ts_mul", F32).unwrap();
-        assert_eq!(lifted.n_inputs, 2);
+        // Lift a Slang kernel, re-emit to CUDA AND portable-C — cross-language port.
+        let lifted = lift_elementwise_slang(SLANG_MUL, "ported", F32).unwrap();
         let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 4);
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         let cuda = generate(&lifted.op, &key, &Cuda);
