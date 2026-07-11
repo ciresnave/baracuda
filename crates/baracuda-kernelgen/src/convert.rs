@@ -15,7 +15,7 @@
 //! only in naming conventions (`out`/`in` are HLSL keywords, so Slang uses
 //! `output`/`input{k}`) and the kernel/residue markers.
 
-use crate::ir::{Expr, OpDef, ScalarExpr, UnaryOp};
+use crate::ir::{Expr, OpDef, ReduceOp, ScalarExpr, UnaryOp};
 use crate::lift::{LiftError, Lifted, binary_fn, unary_fn};
 use baracuda_kernel_vocab::ElementKind;
 use tree_sitter::{Node, Parser, Tree};
@@ -39,6 +39,35 @@ pub fn parse_slang(src: &str) -> Option<Tree> {
     parser.parse(src, None)
 }
 
+/// CUDA constructs that aren't IR-expressible — their presence means the kernel
+/// is hand-optimized (shared mem, atomics, barriers, library calls) and belongs
+/// in the source language. Shared across the elementwise and reduction lifters:
+/// a *naive* reduction (plain accumulator loop) has none of these; the generator
+/// supplies the cooperative/block machinery.
+const CUDA_RESIDUE: &[&str] = &[
+    "__shared__",
+    "atomicAdd",
+    "atomicCAS",
+    "__syncthreads",
+    "cublas",
+    "cudnn",
+    "printf",
+    "asm",
+    "cp.async",
+    "__shfl",
+];
+
+/// Slang analogue of [`CUDA_RESIDUE`] — group-shared memory, barriers, atomics.
+const SLANG_RESIDUE: &[&str] = &[
+    "groupshared",
+    "GroupMemoryBarrier",
+    "DeviceMemoryBarrier",
+    "AllMemoryBarrier",
+    "InterlockedAdd",
+    "InterlockedCompareExchange",
+    "RWByteAddressBuffer",
+];
+
 /// Lift a grid-stride elementwise **CUDA** kernel into an [`OpDef`] by walking
 /// its tree-sitter CST. Recognizes `out[i] = <expr>;` where the body is
 /// arithmetic over `inK[i]`, literals, and CUDA math intrinsics; refuses
@@ -51,21 +80,7 @@ pub fn lift_elementwise_cuda(
     if !src.contains("__global__") {
         return Err(LiftError::NotAKernel);
     }
-    reject_markers(
-        src,
-        &[
-            "__shared__",
-            "atomicAdd",
-            "atomicCAS",
-            "__syncthreads",
-            "cublas",
-            "cudnn",
-            "printf",
-            "asm",
-            "cp.async",
-            "__shfl",
-        ],
-    )?;
+    reject_markers(src, CUDA_RESIDUE)?;
     let tree = parse_cuda(src).ok_or(LiftError::NotAKernel)?;
     lift_store(&tree, src, name, dtypes, "out", "in")
 }
@@ -83,18 +98,7 @@ pub fn lift_elementwise_slang(
     if !src.contains("numthreads") {
         return Err(LiftError::NotAKernel);
     }
-    reject_markers(
-        src,
-        &[
-            "groupshared",
-            "GroupMemoryBarrier",
-            "DeviceMemoryBarrier",
-            "AllMemoryBarrier",
-            "InterlockedAdd",
-            "InterlockedCompareExchange",
-            "RWByteAddressBuffer",
-        ],
-    )?;
+    reject_markers(src, SLANG_RESIDUE)?;
     let tree = parse_slang(src).ok_or(LiftError::NotAKernel)?;
     lift_store(&tree, src, name, dtypes, "output", "input")
 }
@@ -134,6 +138,234 @@ fn lift_store(
         op: OpDef::elementwise(name, n_inputs, dtypes, Expr(body)),
         n_inputs,
     })
+}
+
+/// Lift a naive accumulator-loop full **reduction** CUDA kernel into an
+/// [`OpDef`]. Recognizes the *reference* reduction a human writes —
+/// `T acc = <init>; for (...) acc <reduce> <in-expr>; out[0] = acc;` — where the
+/// per-element `<in-expr>` is arithmetic over `inK[i]`. The generator turns it
+/// into an optimized block/grid cooperative reduce. Reduce-op mapping:
+/// `acc += e` / `acc = acc + e` → [`ReduceOp::Sum`]; `acc *= e` / `acc = acc * e`
+/// → [`ReduceOp::Prod`]; `acc = fmaxf(acc, e)` → [`ReduceOp::Max`]; `fminf` →
+/// [`ReduceOp::Min`]. This recognizes the IDIOM, not the loop bounds — the
+/// reduced extent is the caller's `StructureKey`, set at generate time.
+pub fn lift_reduction_cuda(
+    src: &str,
+    name: &str,
+    dtypes: &[ElementKind],
+) -> Result<Lifted, LiftError> {
+    if !src.contains("__global__") {
+        return Err(LiftError::NotAKernel);
+    }
+    reject_markers(src, CUDA_RESIDUE)?;
+    let tree = parse_cuda(src).ok_or(LiftError::NotAKernel)?;
+    lift_reduce_store(&tree, src, name, dtypes, "out", "in")
+}
+
+/// Lift a naive accumulator-loop full **reduction** Slang compute kernel (same
+/// shape as [`lift_reduction_cuda`]; `output`/`input{K}` conventions).
+pub fn lift_reduction_slang(
+    src: &str,
+    name: &str,
+    dtypes: &[ElementKind],
+) -> Result<Lifted, LiftError> {
+    if !src.contains("numthreads") {
+        return Err(LiftError::NotAKernel);
+    }
+    reject_markers(src, SLANG_RESIDUE)?;
+    let tree = parse_slang(src).ok_or(LiftError::NotAKernel)?;
+    lift_reduce_store(&tree, src, name, dtypes, "output", "input")
+}
+
+/// Lift a **CUDA** kernel of unknown op-class: try elementwise, then reduction.
+pub fn lift_cuda(src: &str, name: &str, dtypes: &[ElementKind]) -> Result<Lifted, LiftError> {
+    match lift_elementwise_cuda(src, name, dtypes) {
+        Ok(l) => Ok(l),
+        Err(_) => lift_reduction_cuda(src, name, dtypes),
+    }
+}
+
+/// Lift a **Slang** kernel of unknown op-class: try elementwise, then reduction.
+pub fn lift_slang(src: &str, name: &str, dtypes: &[ElementKind]) -> Result<Lifted, LiftError> {
+    match lift_elementwise_slang(src, name, dtypes) {
+        Ok(l) => Ok(l),
+        Err(_) => lift_reduction_slang(src, name, dtypes),
+    }
+}
+
+/// Shared reduction tail: find `{out_name}[<lit>] = acc`, find the reduce update
+/// of `acc`, walk the per-element body, and build a last-axis
+/// [`OpDef::reduction`].
+fn lift_reduce_store(
+    tree: &Tree,
+    src: &str,
+    name: &str,
+    dtypes: &[ElementKind],
+    out_name: &str,
+    in_prefix: &str,
+) -> Result<Lifted, LiftError> {
+    let acc = find_scalar_out_store(tree.root_node(), src, out_name)
+        .ok_or_else(|| LiftError::Residue(format!("no scalar `{out_name}[..] = acc` store")))?;
+    let (op, body_node) = find_accumulation(tree.root_node(), src, &acc)
+        .ok_or_else(|| LiftError::Residue(format!("no recognizable reduce update of `{acc}`")))?;
+    let idx_var = first_input_index(body_node, src, in_prefix)
+        .ok_or_else(|| LiftError::Residue("reduction body reads no inK[idx]".into()))?;
+    let mut w = Walk {
+        src,
+        idx_var,
+        in_prefix,
+        max_input: None,
+    };
+    let body = w.expr(body_node)?;
+    let n_inputs = w.max_input.map_or(0, |m| m + 1);
+    Ok(Lifted {
+        op: OpDef::reduction(name, n_inputs, dtypes, Expr(body), op),
+        n_inputs,
+    })
+}
+
+/// Find a `{out_name}[<number>] = <ident>` store and return the stored
+/// accumulator identifier. The numeric index (vs. an identifier) is what
+/// distinguishes a scalar reduction store from an elementwise `out[i] = ...`.
+fn find_scalar_out_store(node: Node, src: &str, out_name: &str) -> Option<String> {
+    if node.kind() == "assignment_expression"
+        && let (Some(lhs), Some(rhs)) = (
+            node.child_by_field_name("left"),
+            node.child_by_field_name("right"),
+        )
+        && lhs.kind() == "subscript_expression"
+        && rhs.kind() == "identifier"
+        && lhs
+            .child_by_field_name("argument")
+            .and_then(|a| a.utf8_text(src.as_bytes()).ok())
+            == Some(out_name)
+        && let Some(indices) = lhs.child_by_field_name("indices")
+    {
+        let mut c = indices.walk();
+        let kids: Vec<Node> = indices.named_children(&mut c).collect();
+        if kids.len() == 1 && kids[0].kind() == "number_literal" {
+            return Some(rhs.utf8_text(src.as_bytes()).ok()?.to_string());
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        if let Some(hit) = find_scalar_out_store(child, src, out_name) {
+            return Some(hit);
+        }
+    }
+    None
+}
+
+/// Find the reduce-update assignment of `acc` — `acc += e`, `acc *= e`,
+/// `acc = acc <+|*> e`, or `acc = fmaxf/fminf(acc, e)` — returning the reduce op
+/// and the per-element body node `e`.
+fn find_accumulation<'t>(node: Node<'t>, src: &str, acc: &str) -> Option<(ReduceOp, Node<'t>)> {
+    if node.kind() == "assignment_expression"
+        && let (Some(lhs), Some(op), Some(rhs)) = (
+            node.child_by_field_name("left"),
+            node.child_by_field_name("operator"),
+            node.child_by_field_name("right"),
+        )
+        && lhs.kind() == "identifier"
+        && lhs.utf8_text(src.as_bytes()).ok() == Some(acc)
+    {
+        match op.utf8_text(src.as_bytes()).unwrap_or("") {
+            "+=" => return Some((ReduceOp::Sum, rhs)),
+            "*=" => return Some((ReduceOp::Prod, rhs)),
+            "=" => {
+                if let Some(hit) = classify_reduce_rhs(rhs, src, acc) {
+                    return Some(hit);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        if let Some(hit) = find_accumulation(child, src, acc) {
+            return Some(hit);
+        }
+    }
+    None
+}
+
+/// Classify the RHS of `acc = <rhs>` as a reduce update: `acc <+|*> e` (acc on
+/// either side) or `fmaxf/fminf(acc, e)`. Returns the op + the body `e`.
+fn classify_reduce_rhs<'t>(rhs: Node<'t>, src: &str, acc: &str) -> Option<(ReduceOp, Node<'t>)> {
+    let is_acc =
+        |n: Node| n.kind() == "identifier" && n.utf8_text(src.as_bytes()).ok() == Some(acc);
+    match rhs.kind() {
+        "parenthesized_expression" => classify_reduce_rhs(rhs.named_child(0)?, src, acc),
+        "binary_expression" => {
+            let l = rhs.child_by_field_name("left")?;
+            let r = rhs.child_by_field_name("right")?;
+            let other = if is_acc(l) {
+                r
+            } else if is_acc(r) {
+                l
+            } else {
+                return None;
+            };
+            match rhs
+                .child_by_field_name("operator")?
+                .utf8_text(src.as_bytes())
+                .unwrap_or("")
+            {
+                "+" => Some((ReduceOp::Sum, other)),
+                "*" => Some((ReduceOp::Prod, other)),
+                _ => None,
+            }
+        }
+        "call_expression" => {
+            let fname = rhs
+                .child_by_field_name("function")?
+                .utf8_text(src.as_bytes())
+                .ok()?;
+            let args_node = rhs.child_by_field_name("arguments")?;
+            let mut c = args_node.walk();
+            let args: Vec<Node> = args_node.named_children(&mut c).collect();
+            if args.len() != 2 {
+                return None;
+            }
+            let other = if is_acc(args[0]) {
+                args[1]
+            } else if is_acc(args[1]) {
+                args[0]
+            } else {
+                return None;
+            };
+            let op = match fname {
+                "fmaxf" | "fmax" | "max" => ReduceOp::Max,
+                "fminf" | "fmin" | "min" => ReduceOp::Min,
+                _ => return None,
+            };
+            Some((op, other))
+        }
+        _ => None,
+    }
+}
+
+/// The index identifier of the first `{in_prefix}{K}[idx]` read in `node` — the
+/// reduced-axis loop variable the body iterates over.
+fn first_input_index(node: Node, src: &str, in_prefix: &str) -> Option<String> {
+    if node.kind() == "subscript_expression"
+        && let Some(base) = node
+            .child_by_field_name("argument")
+            .and_then(|a| a.utf8_text(src.as_bytes()).ok())
+        && base
+            .strip_prefix(in_prefix)
+            .and_then(|d| d.parse::<u8>().ok())
+            .is_some()
+    {
+        return subscript_index(node, src);
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        if let Some(idx) = first_input_index(child, src, in_prefix) {
+            return Some(idx);
+        }
+    }
+    None
 }
 
 /// Find the `{out_name}[<idx>] = <rhs>` store (an `assignment_expression` whose
@@ -420,5 +652,98 @@ mod tests {
         let cpuc = generate(&lifted.op, &key, &CpuC);
         assert!(cuda.source.contains("in0[") && cuda.source.contains("in1["));
         assert!(cpuc.source.contains("for (long long i"));
+    }
+
+    // --- Reductions (naive accumulator loop → OpDef::reduction) ---
+
+    fn reduce_op(l: &Lifted) -> Option<ReduceOp> {
+        if let crate::ir::Access::Reduction { op, .. } = &l.op.access {
+            Some(*op)
+        } else {
+            None
+        }
+    }
+
+    #[test]
+    fn cuda_lifts_sum_reduction() {
+        let src = "__global__ void sum(const float* in0, float* out, long long n){ float acc = 0.0f; for (long long i=0;i<n;i++) acc += in0[i]; out[0] = acc; }";
+        let lifted = lift_reduction_cuda(src, "sum", F32).unwrap();
+        assert_eq!(lifted.n_inputs, 1);
+        assert_eq!(lifted.op.body, ScalarExpr::Input(0));
+        assert_eq!(reduce_op(&lifted), Some(ReduceOp::Sum));
+    }
+
+    #[test]
+    fn cuda_lifts_sum_of_squares() {
+        let src = "__global__ void ss(const float* in0, float* out, long long n){ float acc = 0.0f; for (long long i=0;i<n;i++) acc += in0[i]*in0[i]; out[0] = acc; }";
+        let lifted = lift_reduction_cuda(src, "ss", F32).unwrap();
+        assert_eq!(
+            lifted.op.body,
+            ScalarExpr::Mul(
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Input(0))
+            )
+        );
+        assert_eq!(reduce_op(&lifted), Some(ReduceOp::Sum));
+    }
+
+    #[test]
+    fn cuda_lifts_prod_and_acc_plus_forms() {
+        let prod = "__global__ void pr(const float* in0, float* out, long long n){ float acc = 1.0f; for (long long i=0;i<n;i++) acc *= in0[i]; out[0] = acc; }";
+        assert_eq!(
+            reduce_op(&lift_reduction_cuda(prod, "pr", F32).unwrap()),
+            Some(ReduceOp::Prod)
+        );
+        let sum2 = "__global__ void s2(const float* in0, float* out, long long n){ float acc = 0.0f; for (long long i=0;i<n;i++) acc = acc + in0[i]; out[0] = acc; }";
+        assert_eq!(
+            reduce_op(&lift_reduction_cuda(sum2, "s2", F32).unwrap()),
+            Some(ReduceOp::Sum)
+        );
+    }
+
+    #[test]
+    fn cuda_lifts_max_via_fmaxf() {
+        let src = "__global__ void mx(const float* in0, float* out, long long n){ float acc = in0[0]; for (long long i=1;i<n;i++) acc = fmaxf(acc, in0[i]); out[0] = acc; }";
+        let lifted = lift_reduction_cuda(src, "mx", F32).unwrap();
+        assert_eq!(lifted.op.body, ScalarExpr::Input(0));
+        assert_eq!(reduce_op(&lifted), Some(ReduceOp::Max));
+    }
+
+    #[test]
+    fn elementwise_and_reduction_lifters_dont_cross() {
+        // The elementwise lifter refuses a reduction (scalar store), and vice versa.
+        let reduction = "__global__ void sum(const float* in0, float* out, long long n){ float acc = 0.0f; for (long long i=0;i<n;i++) acc += in0[i]; out[0] = acc; }";
+        assert!(lift_elementwise_cuda(reduction, "x", F32).is_err());
+        let elementwise = "__global__ void k(const float* in0, float* out){ out[i] = in0[i]; }";
+        assert!(lift_reduction_cuda(elementwise, "x", F32).is_err());
+        // The unified entry point handles either class.
+        assert!(lift_cuda(reduction, "x", F32).is_ok());
+        assert!(lift_cuda(elementwise, "x", F32).is_ok());
+    }
+
+    #[test]
+    fn slang_lifts_sum_reduction() {
+        let src = "StructuredBuffer<float> input0;\n\
+            RWStructuredBuffer<float> output;\n\
+            [numthreads(256,1,1)]\n\
+            void rsum(uint3 tid : SV_DispatchThreadID){ float acc = 0.0f; for (uint i=0;i<256;i++) acc += input0[i]; output[0] = acc; }";
+        let lifted = lift_reduction_slang(src, "rsum", F32).unwrap();
+        assert_eq!(lifted.op.body, ScalarExpr::Input(0));
+        assert_eq!(reduce_op(&lifted), Some(ReduceOp::Sum));
+    }
+
+    #[test]
+    fn reduction_round_trips_to_cuda() {
+        use crate::{Cuda, generate};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
+        // Lift a naive sum reduction and re-emit — the generator produces the
+        // optimized cooperative reduce (`baracuda_gen_<name>_f32_reduce_sum`).
+        let src = "__global__ void sum(const float* in0, float* out, long long n){ float acc = 0.0f; for (long long i=0;i<n;i++) acc += in0[i]; out[0] = acc; }";
+        let lifted = lift_reduction_cuda(src, "sum", F32).unwrap();
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let k = generate(&lifted.op, &key, &Cuda);
+        assert!(k.name.contains("reduce_sum"), "name was {}", k.name);
     }
 }
