@@ -84,29 +84,54 @@ grid-stride elementwise kernel is lifted to the neutral IR (`lift_elementwise`),
 then re-emitted with `generate()`, and the re-emitted kernel must produce
 **BIT-IDENTICAL** output to the original on device. Both compute
 `out[i] = in0[i]*in1[i] + in0[i]` as one `a*b+c` expression, so nvcc contracts
-both to the same fma — the round-trip is the SAME integer/float arithmetic, hence
-the check is whole-buffer `memcmp` (exact), not a tolerance. The dump test writes
-the pair (`lift_gen.cu` = re-emitted, `lift_orig.cu` = original, same body) and
-`println!`s the generated kernel's name; the harness `#include`s both, launches
-each into its own output buffer over ~4.19M random f32 inputs (with signed-zero /
-±Inf / NaN edge seeds), and bit-compares.
-
-The generated kernel's symbol carries a cell suffix — the dump test prints it as
-`GENERATED KERNEL NAME:` (currently `baracuda_gen_lift_rt_f32_scalar`). The
-harness `#define`s `LIFT_GEN_KERNEL` to that name; override with
-`-DLIFT_GEN_KERNEL=<name>` if it changes.
+both to the same fma — the round-trip is the SAME arithmetic, hence the check is
+whole-buffer `memcmp` (exact), not a tolerance. The dump test writes the pair
+(`lift_gen.cu` = re-emitted, `lift_orig.cu` = original) and prints the generated
+kernel's name; the harness `#include`s both, launches each over ~4.19M random f32
+inputs (signed-zero / ±Inf / NaN edge seeds), and bit-compares.
 
 Run:
 
 ```sh
 LIFT_OUT=<outdir> cargo test -p baracuda-kernelgen --lib lift::tests::dump_lift_roundtrip -- --ignored --nocapture
-nvcc -O3 -arch=sm_89 -std=c++17 \
-     -I <outdir> \
-     crates/baracuda-kernelgen/ondevice/lift_roundtrip_validate.cu -o <outdir>/lift_roundtrip_validate && <outdir>/lift_roundtrip_validate
+nvcc -O3 -arch=sm_89 -std=c++17 -I <outdir>      crates/baracuda-kernelgen/ondevice/lift_roundtrip_validate.cu -o <outdir>/lift_roundtrip_validate && <outdir>/lift_roundtrip_validate
 ```
 
-**Run pending** — integrate + run the device differential (the parent runs nvcc).
-Expected: `PASSED` — all ~4.19M elements bit-identical (re-emitted == original).
+**Last run** (RTX 4070 / sm_89 / CUDA 13.3): PASSED — all 4194304 elements
+bit-identical (re-emitted == original hand-written kernel).
+
+---
+
+## `cast_validate.cu` — generated cast helper (Phase 2c, cast pivot)
+
+Validates the **generated** elementwise dtype-cast helper
+(`baracuda::cast::gen::cast_<sin>_<sout>`, the full 8×8 dtype matrix from
+`emit_cast_helper`) against the hand-written `baracuda_cast.cuh`
+(`cast_value<TIn, TOut>`) plus an independent CPU `static_cast` reference.
+
+The **cast pivot** of the fp_bits/cast migration: `fp_bits` does *not* factor (the
+generator emits none of its mantissa/exponent/sign/TF32 logic — only inf/NaN
+sentinels, already single-sourced), so `cast` was migrated instead. Like
+dtype-promote it is a **de-duplication** win, not a speed win: each generated cast
+resolves to the same `static_cast` / half-intrinsic the hand-written `cast_value`
+does. The per-element conversion is emitted from the same `cast_scalar` routine the
+inline hetero store (`store_expr_of`) now routes through (which reuses
+`promote_load_f32` / `demote_store_f32`) — so the helper cannot drift. `cast` is a
+strict superset of dtype-promote (adds integer endpoints, cross-half, float↔int).
+
+Exhaustive over every 16-bit source (all 65536 f16 + 65536 bf16) and 8-bit integer
+source (all 256 i8 + 256 u8), each cast to all 8 destinations, plus curated
+`f32`/`f64`/`i32`/`i64` samples.
+
+Run:
+
+```sh
+CAST_OUT=<outdir> cargo test -p baracuda-kernelgen dump_cast_helper -- --ignored --nocapture
+nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17"      -I <outdir> -I crates/baracuda-kernels-sys/kernels/include      crates/baracuda-kernelgen/ondevice/cast_validate.cu -o <outdir>/cast_validate && <outdir>/cast_validate
+```
+
+**Expected**: PASSED — for every (source, destination) pair, generated ==
+hand-written (0 mismatches) and == CPU `static_cast` for the arithmetic pairs.
 
 ---
 

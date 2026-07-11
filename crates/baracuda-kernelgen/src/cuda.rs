@@ -785,11 +785,16 @@ pub(crate) fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> St
     if d == plan.dtype {
         return root;
     }
-    match plan.dtype {
-        ElementKind::F16 => format!("(unsigned char)__half2float({root})"),
-        ElementKind::Bf16 => format!("(unsigned char)__bfloat162float({root})"),
-        _ => format!("(unsigned char){root}"),
-    }
+    // The hetero elementwise store is exactly the U8 keep-mask (a `Cmp*`
+    // predicate, pinned by `assert_valid_out_dtype`; the bincount-I32 scatter
+    // narrows itself via `scatter_combine_store`, never through here). The
+    // per-element narrowing is the shared [`cast_scalar`] routine — one source of
+    // truth with the generated cast helper ([`emit_cast_helper`]). BYTE-IDENTICAL
+    // to the prior hand-inlined forms: `cast_scalar(F16, U8, r)` =
+    // `(unsigned char)__half2float(r)`, `(Bf16, U8)` =
+    // `(unsigned char)__bfloat162float(r)`, every other `(_, U8)` =
+    // `(unsigned char)r`.
+    cast_scalar(plan.dtype, d, &root)
 }
 
 fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
@@ -6365,6 +6370,53 @@ fn demote_store_f32(kind: ElementKind, inner: &str) -> String {
     }
 }
 
+/// A single element-wise dtype-cast expression — the value of `expr` (of dtype
+/// `from`) converted to dtype `to`, with the house f16/bf16 float-detour
+/// convention. The ONE place the generator spells a per-element conversion
+/// between two scalar dtypes, shared by the inline hetero store
+/// ([`store_expr_of`]) and the generated cast helper ([`emit_cast_helper`]), so
+/// the two can never drift.
+///
+/// Mirrors `baracuda_cast.cuh`'s `cast_value<TIn, TOut>` (value-identical, not
+/// necessarily text-identical — the generated form uses C-style casts and the
+/// shared [`promote_load_f32`] / [`demote_store_f32`] intrinsic picks):
+///   * `from == to` → identity (no cast).
+///   * f16/bf16 → f16/bf16 (cross) → widen to `float`, then narrow.
+///   * f16/bf16 → arithmetic → widen to `float`, then a C-style cast to the target.
+///   * arithmetic → f16/bf16 → cast to `float` (unless already `float`), then narrow.
+///   * arithmetic → arithmetic → a plain C-style cast.
+fn cast_scalar(from: ElementKind, to: ElementKind, expr: &str) -> String {
+    if from == to {
+        return expr.to_string();
+    }
+    match (
+        half_load_intrinsic(from).is_some(),
+        half_store_intrinsic(to).is_some(),
+    ) {
+        // f16/bf16 -> f16/bf16 (cross): widen to f32, then narrow.
+        (true, true) => demote_store_f32(to, &promote_load_f32(from, expr)),
+        // f16/bf16 -> arithmetic: widen to f32, C-cast to the target.
+        (true, false) => {
+            let oct = scalar_ctype(to).expect("cast target dtype has a scalar ctype");
+            format!("({oct}){}", promote_load_f32(from, expr))
+        }
+        // arithmetic -> f16/bf16: cast to float (unless already float), then narrow.
+        (false, true) => {
+            let widened = if matches!(from, ElementKind::F32 | ElementKind::F32Strict) {
+                expr.to_string()
+            } else {
+                format!("(float){expr}")
+            };
+            demote_store_f32(to, &widened)
+        }
+        // arithmetic -> arithmetic: plain C-style cast.
+        (false, false) => {
+            let oct = scalar_ctype(to).expect("cast target dtype has a scalar ctype");
+            format!("({oct}){expr}")
+        }
+    }
+}
+
 /// Emit a freestanding, header-only dtype-promotion helper (`.cuh`) — the
 /// **generated** counterpart of the hand-written `baracuda_dtype_promote.cuh`.
 /// Emits the f16/bf16 `load_as_f32` / `store_from_f32` (+ the f64 lane) widen /
@@ -6415,6 +6467,69 @@ pub fn emit_dtype_promote_helper() -> String {
     }
     s.push_str("}}}  // namespace baracuda::dtype::gen\n");
     s.push_str("#endif  // BARACUDA_DTYPE_PROMOTE_GEN_CUH\n");
+    s
+}
+
+/// The scalar compute dtypes the generated cast matrix ([`emit_cast_helper`])
+/// covers — one entry per distinct storage type. Mirrors `baracuda_cast.cuh`'s
+/// endpoint set. `F32Strict` is intentionally absent (identical `float` ctype to
+/// `F32`; it is a compute-mode distinction, not a distinct storage type) and
+/// `U32` is index-only (no compute-operand cast), so both are excluded to avoid
+/// duplicate / meaningless symbols.
+const CAST_MATRIX_DTYPES: [ElementKind; 8] = [
+    ElementKind::F16,
+    ElementKind::Bf16,
+    ElementKind::F32,
+    ElementKind::F64,
+    ElementKind::I32,
+    ElementKind::I64,
+    ElementKind::S8,
+    ElementKind::U8,
+];
+
+/// Emit a freestanding, header-only elementwise dtype-cast helper (`.cuh`) — the
+/// **generated** counterpart of the hand-written `baracuda_cast.cuh`. Emits the
+/// full `N×N` matrix of `baracuda::cast::gen::cast_<sin>_<sout>` device functions
+/// (`y = (TOut) x`) a hand-written CUDA kernel can `#include` and call.
+///
+/// Like dtype-promote (and unlike coord-unravel) this is a **de-duplication /
+/// one-source-of-truth** win, not a speed win: each generated cast resolves to
+/// the same `static_cast` / half-intrinsic the hand-written `cast_value<TIn,
+/// TOut>` does, so the emitted code is value-identical (proven exhaustively by
+/// `ondevice/cast_validate.cu`). The per-element conversion is spelled by the
+/// same [`cast_scalar`] routine the inline hetero store ([`store_expr_of`]) uses
+/// — which in turn routes half endpoints through the same [`promote_load_f32`] /
+/// [`demote_store_f32`] the reduction load/store use — so the generated cast can
+/// never drift from the live emitters. `cast` is a strict superset of
+/// dtype-promote: it adds the integer endpoints, the cross-half pair, and the
+/// float↔int conversions.
+pub fn emit_cast_helper() -> String {
+    let mut s = String::new();
+    s.push_str("// @generated by baracuda-kernelgen — do not edit.\n");
+    s.push_str("// Freestanding elementwise dtype-cast helper: the per-element (TOut)x\n");
+    s.push_str("// conversion the generator uses inline (cast_scalar), as a reusable N×N\n");
+    s.push_str("// matrix of device functions — one source of truth with the inline emitters.\n");
+    s.push_str("#ifndef BARACUDA_CAST_GEN_CUH\n");
+    s.push_str("#define BARACUDA_CAST_GEN_CUH\n");
+    s.push_str("#include <cstdint>\n");
+    s.push_str("#include <cuda_fp16.h>\n");
+    s.push_str("#include <cuda_bf16.h>\n\n");
+    s.push_str("namespace baracuda { namespace cast { namespace gen {\n\n");
+    for from in CAST_MATRIX_DTYPES {
+        let fcty = scalar_ctype(from).expect("cast source dtype has a scalar ctype");
+        let ftag = dtype_tag(from);
+        for to in CAST_MATRIX_DTYPES {
+            let tcty = scalar_ctype(to).expect("cast target dtype has a scalar ctype");
+            let ttag = dtype_tag(to);
+            s.push_str(&format!(
+                "__device__ __forceinline__ {tcty} cast_{ftag}_{ttag}({fcty} x) {{ return {}; }}\n",
+                cast_scalar(from, to, "x")
+            ));
+        }
+        s.push('\n');
+    }
+    s.push_str("}}}  // namespace baracuda::cast::gen\n");
+    s.push_str("#endif  // BARACUDA_CAST_GEN_CUH\n");
     s
 }
 
@@ -7246,6 +7361,123 @@ mod tests {
         let out = std::env::var("DTYPE_OUT").unwrap_or_else(|_| ".".to_string());
         let path = format!("{out}/dtype_promote_gen.cuh");
         std::fs::write(&path, super::emit_dtype_promote_helper()).unwrap();
+        println!("wrote {path}");
+    }
+
+    // ---- cast: shared per-element cast routine + freestanding helper ----
+
+    #[test]
+    fn cast_scalar_reproduces_inline_u8_narrowing() {
+        // The hetero elementwise store (`store_expr_of`) now routes through
+        // `cast_scalar(plan.dtype, U8, root)`; these must be BYTE-IDENTICAL to the
+        // prior hand-inlined `(unsigned char)…` spellings (goldens unchanged).
+        assert_eq!(
+            super::cast_scalar(ElementKind::F16, ElementKind::U8, "root"),
+            "(unsigned char)__half2float(root)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::Bf16, ElementKind::U8, "root"),
+            "(unsigned char)__bfloat162float(root)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::F32, ElementKind::U8, "root"),
+            "(unsigned char)root"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::I32, ElementKind::U8, "root"),
+            "(unsigned char)root"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::F64, ElementKind::U8, "root"),
+            "(unsigned char)root"
+        );
+    }
+
+    #[test]
+    fn cast_scalar_matches_cast_value_semantics() {
+        // Value-identical to `baracuda_cast.cuh`'s `cast_value<TIn, TOut>` (the
+        // generated form uses C-style casts + the shared half intrinsics).
+        // Identity.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F16, ElementKind::F16, "x"),
+            "x"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::I32, ElementKind::I32, "x"),
+            "x"
+        );
+        // Cross-half: widen then narrow.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F16, ElementKind::Bf16, "x"),
+            "__float2bfloat16(__half2float(x))"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::Bf16, ElementKind::F16, "x"),
+            "__float2half(__bfloat162float(x))"
+        );
+        // Half -> arithmetic: widen, C-cast.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F16, ElementKind::F32, "x"),
+            "(float)__half2float(x)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::Bf16, ElementKind::I32, "x"),
+            "(int)__bfloat162float(x)"
+        );
+        // Arithmetic -> half: float already-float skips the extra cast; others cast.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F32, ElementKind::F16, "x"),
+            "__float2half(x)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::F64, ElementKind::F16, "x"),
+            "__float2half((float)x)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::I32, ElementKind::Bf16, "x"),
+            "__float2bfloat16((float)x)"
+        );
+        // Arithmetic -> arithmetic: plain C-style cast.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F32, ElementKind::I32, "x"),
+            "(int)x"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::I64, ElementKind::F32, "x"),
+            "(float)x"
+        );
+    }
+
+    #[test]
+    fn cast_helper_emits_matrix() {
+        let src = super::emit_cast_helper();
+        assert!(src.contains("#ifndef BARACUDA_CAST_GEN_CUH"));
+        assert!(src.contains("namespace baracuda { namespace cast { namespace gen {"));
+        // Representative lanes across every arm of `cast_scalar`.
+        assert!(src.contains("__half cast_f16_f16(__half x) { return x; }"));
+        assert!(src.contains("float cast_f16_f32(__half x) { return (float)__half2float(x); }"));
+        assert!(src.contains(
+            "__nv_bfloat16 cast_f16_bf16(__half x) { return __float2bfloat16(__half2float(x)); }"
+        ));
+        assert!(src.contains("__half cast_f32_f16(float x) { return __float2half(x); }"));
+        assert!(src.contains("__half cast_f64_f16(double x) { return __float2half((float)x); }"));
+        assert!(src.contains("int cast_f32_i32(float x) { return (int)x; }"));
+        assert!(src.contains("float cast_i64_f32(long long x) { return (float)x; }"));
+        assert!(src.contains(
+            "unsigned char cast_f16_u8(__half x) { return (unsigned char)__half2float(x); }"
+        ));
+        // Full 8×8 matrix of device functions (identity lanes included).
+        assert_eq!(src.matches("__device__ __forceinline__").count(), 8 * 8);
+    }
+
+    /// Regenerate the generated cast helper for the on-device validator.
+    ///   `CAST_OUT=<outdir> cargo test -p baracuda-kernelgen dump_cast_helper -- --ignored --nocapture`
+    #[test]
+    #[ignore = "writes the generated cast helper for the on-device validator"]
+    fn dump_cast_helper() {
+        let out = std::env::var("CAST_OUT").unwrap_or_else(|_| ".".to_string());
+        let path = format!("{out}/cast_gen.cuh");
+        std::fs::write(&path, super::emit_cast_helper()).unwrap();
         println!("wrote {path}");
     }
 
