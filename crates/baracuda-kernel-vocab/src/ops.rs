@@ -51,13 +51,23 @@ pub enum BinaryKind {
     Nextafter = 11,
     /// `y = a · 2^b` (integer `b` broadcast as scalar in practice).
     Ldexp = 12,
-    /// `y = min(a, b)` — IEEE 754 semantics (NaN-aware).
+    /// `y = min(a, b)` — **NaN-propagating** (`torch.minimum`): if either operand
+    /// is NaN the result is NaN. The house minimum; DISTINCT from the
+    /// NaN-suppressing [`BinaryKind::Fmin`] (never alias them). Matches the
+    /// kernelgen IR `Min` and the KISS-Ops NaN-propagating `min`.
     Minimum = 13,
-    /// `y = max(a, b)` — IEEE 754 semantics (NaN-aware).
+    /// `y = max(a, b)` — **NaN-propagating** (`torch.maximum`): if either operand
+    /// is NaN the result is NaN. The house maximum; DISTINCT from the
+    /// NaN-suppressing [`BinaryKind::Fmax`] (never alias them). Matches the
+    /// kernelgen IR `Max` and the KISS-Ops NaN-propagating `max`.
     Maximum = 14,
-    /// `y = fmin(a, b)` — PyTorch fmin (NaN-propagating-from-other).
+    /// `y = fmin(a, b)` — IEEE-754 `minNum` (CUDA `fminf`) — **NaN-suppressing**:
+    /// if exactly one operand is NaN, returns the other (also `torch.fmin` / C
+    /// `fminf`). DISTINCT from the NaN-propagating [`BinaryKind::Minimum`].
     Fmin = 15,
-    /// `y = fmax(a, b)` — PyTorch fmax (NaN-propagating-from-other).
+    /// `y = fmax(a, b)` — IEEE-754 `maxNum` (CUDA `fmaxf`) — **NaN-suppressing**:
+    /// if exactly one operand is NaN, returns the other (also `torch.fmax` / C
+    /// `fmaxf`). DISTINCT from the NaN-propagating [`BinaryKind::Maximum`].
     Fmax = 16,
     /// `y = (a == b)` — returns bool.
     Eq = 17,

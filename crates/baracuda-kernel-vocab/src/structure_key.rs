@@ -368,7 +368,9 @@ impl OperandDesc {
     /// extents, strides, dtype, and base-pointer alignment.
     ///
     /// # Panics
-    /// Panics if `rank > MAX_RANK`.
+    /// Panics if `rank > MAX_RANK` or if `shape`/`strides` are shorter than
+    /// `rank`. Callers with statically-valid input use this; a path that reads
+    /// an operand shape from a peer uses [`OperandDesc::try_new`] instead.
     #[must_use]
     pub fn new(
         rank: usize,
@@ -377,12 +379,31 @@ impl OperandDesc {
         dtype: ElementKind,
         align_bytes: u32,
     ) -> Self {
-        assert!(rank <= MAX_RANK, "rank {rank} exceeds MAX_RANK {MAX_RANK}");
+        Self::try_new(rank, shape, strides, dtype, align_bytes)
+            .expect("OperandDesc::new: rank exceeds MAX_RANK or shape/strides shorter than rank")
+    }
+
+    /// Fallible constructor for untrusted or uncertain input: returns `None`
+    /// instead of panicking when `rank > MAX_RANK` or when `shape`/`strides` are
+    /// shorter than `rank`. Use this on any path that reads an operand shape from
+    /// a peer; [`OperandDesc::new`] is the infallible convenience for callers
+    /// whose `rank`/slices are statically valid.
+    #[must_use]
+    pub fn try_new(
+        rank: usize,
+        shape: &[i64],
+        strides: &[i64],
+        dtype: ElementKind,
+        align_bytes: u32,
+    ) -> Option<Self> {
+        if rank > MAX_RANK || shape.len() < rank || strides.len() < rank {
+            return None;
+        }
         let mut s = [0i64; MAX_RANK];
         let mut st = [0i64; MAX_RANK];
         s[..rank].copy_from_slice(&shape[..rank]);
         st[..rank].copy_from_slice(&strides[..rank]);
-        Self {
+        Some(Self {
             rank: rank as u8,
             shape: s,
             strides: st,
@@ -390,7 +411,7 @@ impl OperandDesc {
             align_bytes,
             quant: None,
             symbolic: None,
-        }
+        })
     }
 
     // NOTE: `from_tensor_ref` (build an OperandDesc from a borrowed device
@@ -785,11 +806,23 @@ impl StructureKey {
             _ => return None,
         };
         let rank: u8 = parts[6].strip_prefix('r')?.parse().ok()?;
+        // A rank beyond the ceiling is malformed: downstream consumers index
+        // MAX_RANK-sized arrays with it. Typed-decline rather than accept.
+        if rank as usize > MAX_RANK {
+            return None;
+        }
 
         let mut operands = [OperandKey::default(); MAX_OPERANDS];
         let mut n_operands = 0u8;
         if !parts[7].is_empty() {
-            for (slot, field) in operands.iter_mut().zip(parts[7].split(';')) {
+            // Reject an over-MAX_OPERANDS list rather than silently truncating it
+            // to the first MAX_OPERANDS (which would collapse two distinct operand
+            // lists onto one key). The reader parses untrusted wire tokens.
+            let fields: Vec<&str> = parts[7].split(';').collect();
+            if fields.len() > MAX_OPERANDS {
+                return None;
+            }
+            for (slot, field) in operands.iter_mut().zip(fields) {
                 *slot = parse_operand(field)?;
                 n_operands += 1;
             }
@@ -1212,6 +1245,72 @@ mod tests {
         assert_eq!(k, parsed);
         // Token is human-greppable.
         assert!(token.starts_with("sk1|bin|f32|sm89|"));
+    }
+
+    #[test]
+    fn from_token_rejects_more_than_max_operands() {
+        // A token carrying MORE than MAX_OPERANDS operand fields MUST be a typed
+        // decline (None), never a silent truncation to the first MAX_OPERANDS —
+        // otherwise two distinct operand lists collapse to the same parsed key,
+        // violating the KISS-Classify closed-membership / never-silently-accept
+        // discipline (an untrusted peer supplies these tokens over the wire).
+        let op = "co/00/v4/d16/f";
+        let too_many = std::iter::repeat(op)
+            .take(MAX_OPERANDS + 1)
+            .collect::<Vec<_>>()
+            .join(";");
+        let token = format!("sk1|bin|f32|sm89|i32|grid|r2|{too_many}|-");
+        assert_eq!(
+            StructureKey::from_token(&token),
+            None,
+            "an over-MAX_OPERANDS token must be rejected, not truncated"
+        );
+    }
+
+    #[test]
+    fn from_token_rejects_rank_above_max() {
+        // The rank field is bounded by MAX_RANK; a token claiming a larger rank is
+        // malformed and MUST be a typed decline, not silently accepted (downstream
+        // consumers index MAX_RANK-sized arrays with it).
+        let token = format!(
+            "sk1|bin|f32|sm89|i32|grid|r{}|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
+            MAX_RANK + 1
+        );
+        assert_eq!(
+            StructureKey::from_token(&token),
+            None,
+            "a rank above MAX_RANK must be rejected"
+        );
+    }
+
+    #[test]
+    fn try_new_rejects_rank_above_max() {
+        let big = [1i64; MAX_RANK + 1];
+        assert_eq!(
+            OperandDesc::try_new(MAX_RANK + 1, &big, &big, ElementKind::F32, 256),
+            None,
+            "try_new must decline rank > MAX_RANK, not panic"
+        );
+    }
+
+    #[test]
+    fn try_new_rejects_slices_shorter_than_rank() {
+        // rank claims 3 axes but only 2 extents/strides are supplied.
+        assert_eq!(
+            OperandDesc::try_new(3, &[8, 8], &[8, 1], ElementKind::F32, 256),
+            None,
+            "try_new must decline shape/strides shorter than rank, not panic"
+        );
+    }
+
+    #[test]
+    fn try_new_accepts_a_valid_operand() {
+        let d = OperandDesc::try_new(2, &[8, 4], &[4, 1], ElementKind::F32, 256)
+            .expect("a well-formed operand must construct");
+        assert_eq!(d.rank, 2);
+        assert_eq!(&d.shape[..2], &[8, 4]);
+        assert_eq!(&d.strides[..2], &[4, 1]);
+        assert_eq!(d.dtype, ElementKind::F32);
     }
 
     #[test]
