@@ -11,8 +11,12 @@
 //! an out-param fill, never a by-value return — and its 56-byte layout is frozen
 //! and cross-checked at compile time the way FDX checks its `#[repr(C)]` structs.
 
-/// `"SEAM"` — the envelope magic (§3.1). Never changes.
-pub const SEAM_MAGIC: u32 = 0x5345_414D;
+/// The envelope magic (§3.1). Equals `0x4D41_4553` so the on-wire bytes
+/// (little-endian, offset 0) are `53 45 41 4D` = ASCII `"SEAM"`, per
+/// KISS-ANNOUNCE §6.1-0004. The old `0x5345_414D` spelled `"SEAM"` only when read
+/// big-endian and put `"MAES"` on a little-endian wire; flipped in lockstep with
+/// Fuel's `fuel-kernel-seam-announce` seed (commit 1849bc9a).
+pub const SEAM_MAGIC: u32 = 0x4D41_4553;
 /// The envelope's own version (§3.1). Designed never to bump; only a change to
 /// the envelope *shape* (e.g. raising [`SEAM_MAX_PROFILES`]) would force it.
 pub const SEAM_ENVELOPE_VERSION: u8 = 1;
@@ -41,6 +45,12 @@ pub struct SeamHello {
     pub profiles_len: u16,
     /// Supported profile integers, ascending; entries `[profiles_len..]` are 0.
     pub profiles: [u16; SEAM_MAX_PROFILES],
+    /// Explicit alignment padding (offsets 42..48) between `profiles` and the
+    /// 8-byte-aligned `capabilities` — MUST be zeroed on write; a KISS-conform
+    /// reader hard-rejects a nonzero value (KISS-ANNOUNCE §6.2-0011). Made an
+    /// explicit field (not implicit `#[repr(C)]` padding) to mirror Fuel's
+    /// `SeamHello`, so the two seeds stay bit-for-bit identical.
+    pub reserved1: [u8; 6],
     /// Optional-feature bitset within the selected profile (§3.4).
     pub capabilities: u64,
 }
@@ -97,6 +107,7 @@ pub fn baracuda_hello() -> SeamHello {
         reserved: [0; 3],
         profiles_len: 1,
         profiles,
+        reserved1: [0; 6],
         capabilities: BARACUDA_CAPABILITIES,
     }
 }
@@ -143,6 +154,7 @@ mod tests {
             reserved: [0; 3],
             profiles_len: 0,
             profiles: [0; SEAM_MAX_PROFILES],
+            reserved1: [0; 6],
             capabilities: 0,
         };
         let rc = unsafe { baracuda_seam_hello(&mut hello) };
@@ -156,5 +168,25 @@ mod tests {
     #[test]
     fn envelope_is_56_bytes() {
         assert_eq!(core::mem::size_of::<SeamHello>(), 56);
+    }
+
+    #[test]
+    fn reserved_fields_are_zeroed() {
+        // KISS-ANNOUNCE §6.2-0011: reserved bytes MUST be zero on the wire; a
+        // conforming reader hard-rejects a nonzero reserved field.
+        let h = baracuda_hello();
+        assert_eq!(h.reserved, [0u8; 3]);
+        assert_eq!(h.reserved1, [0u8; 6]);
+    }
+
+    #[test]
+    fn seam_magic_wire_bytes_spell_seam() {
+        // KISS-ANNOUNCE §6.1-0004: the `magic` field MUST equal 0x4D414553 read
+        // as a little-endian u32, so the on-wire bytes at offset 0 are
+        // `53 45 41 4D` = ASCII "SEAM". (0x5345414D spells "SEAM" only big-endian
+        // and puts "MAES" on a little-endian wire.) Lockstep with Fuel's
+        // `fuel-kernel-seam-announce` seed (commit 1849bc9a).
+        assert_eq!(SEAM_MAGIC, 0x4D41_4553);
+        assert_eq!(SEAM_MAGIC.to_le_bytes(), *b"SEAM");
     }
 }
