@@ -83,8 +83,9 @@ fn const_repr(c: f64) -> String {
 }
 
 /// The confirmed KISS-Ops op token for a [`UnaryOp`], or `None` if not yet re-based.
-/// Only tokens verified present in the KISS-Ops op set are mapped; anything else
-/// (e.g. `Round`, or a variant added after this arm set) is an honest miss.
+/// **Exhaustive** (no catch-all) — a new [`UnaryOp`] variant forces a decision here
+/// (compile error) rather than silently becoming an honest miss. Only tokens
+/// verified present in the KISS-Ops op set are mapped; the rest return `None`.
 fn unary_kiss_name(op: UnaryOp) -> Option<&'static str> {
     use UnaryOp as U;
     Some(match op {
@@ -121,11 +122,18 @@ fn unary_kiss_name(op: UnaryOp) -> Option<&'static str> {
         U::Asin => "asin",
         U::Acos => "acos",
         U::Atan => "atan",
-        _ => return None,
+        U::Asinh => "asinh",
+        U::Acosh => "acosh",
+        U::Atanh => "atanh",
+        U::Cbrt => "cbrt",
+        U::Lgamma => "lgamma",
+        // No confirmed KISS-Ops token yet (`round` is not in the op set) — honest miss.
+        U::Round => return None,
     })
 }
 
 /// The confirmed KISS-Ops op token for a [`BinaryOp`], or `None` if not yet re-based.
+/// **Exhaustive** — a new [`BinaryOp`] variant forces a decision here.
 fn binary_kiss_name(op: BinaryOp) -> Option<&'static str> {
     use BinaryOp as B;
     Some(match op {
@@ -134,6 +142,7 @@ fn binary_kiss_name(op: BinaryOp) -> Option<&'static str> {
         B::Pow => "pow",
         B::Atan2 => "atan2",
         B::Copysign => "copysign",
+        B::Nextafter => "nextafter",
         B::FmaxIeee => "fmax_ieee",
         B::FminIeee => "fmin_ieee",
         B::RemTrunc => "rem_trunc",
@@ -148,15 +157,43 @@ fn binary_kiss_name(op: BinaryOp) -> Option<&'static str> {
         B::BitXor => "bit_xor",
         B::Shl => "shl",
         B::Shr => "shr",
-        _ => return None,
+        B::LogicalAnd => "logical_and",
+        B::LogicalOr => "logical_or",
+        // No confirmed KISS-Ops token yet: `Rem` (floored remainder) has no
+        // confirmed name, and `logical_xor` is not in the op set — honest miss.
+        B::Rem | B::LogicalXor => return None,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{Expr, OpDef, ScalarExpr, UnaryOp, input, konst};
+    use crate::ir::{BinaryOp, Expr, OpDef, ScalarExpr, UnaryOp, input, konst};
     use baracuda_kernel_vocab::ElementKind::F32;
+
+    fn unary_recipe(u: UnaryOp) -> Option<String> {
+        let op = OpDef::elementwise(
+            "t",
+            1,
+            &[F32],
+            Expr(ScalarExpr::Unary(u, Box::new(ScalarExpr::Input(0)))),
+        );
+        semantics_dag(&op)
+    }
+
+    fn binary_recipe(b: BinaryOp) -> Option<String> {
+        let op = OpDef::elementwise(
+            "t",
+            2,
+            &[F32],
+            Expr(ScalarExpr::Binary(
+                b,
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Input(1)),
+            )),
+        );
+        semantics_dag(&op)
+    }
 
     #[test]
     fn primitive_add_recipe() {
@@ -207,5 +244,38 @@ mod tests {
             )),
         );
         assert_eq!(semantics_dag(&op), None);
+    }
+
+    #[test]
+    fn extended_coverage_re_bases_the_newly_mapped_ops() {
+        assert_eq!(unary_recipe(UnaryOp::Asinh).as_deref(), Some("asinh(in0)"));
+        assert_eq!(unary_recipe(UnaryOp::Acosh).as_deref(), Some("acosh(in0)"));
+        assert_eq!(unary_recipe(UnaryOp::Atanh).as_deref(), Some("atanh(in0)"));
+        assert_eq!(unary_recipe(UnaryOp::Cbrt).as_deref(), Some("cbrt(in0)"));
+        assert_eq!(
+            unary_recipe(UnaryOp::Lgamma).as_deref(),
+            Some("lgamma(in0)")
+        );
+        assert_eq!(
+            binary_recipe(BinaryOp::Nextafter).as_deref(),
+            Some("nextafter(in0, in1)")
+        );
+        assert_eq!(
+            binary_recipe(BinaryOp::LogicalAnd).as_deref(),
+            Some("logical_and(in0, in1)")
+        );
+        assert_eq!(
+            binary_recipe(BinaryOp::LogicalOr).as_deref(),
+            Some("logical_or(in0, in1)")
+        );
+    }
+
+    #[test]
+    fn deliberately_unmapped_ops_stay_honest_misses() {
+        // No confirmed KISS-Ops token for these yet — a recipe is withheld, never
+        // a guessed name.
+        assert_eq!(unary_recipe(UnaryOp::Round), None);
+        assert_eq!(binary_recipe(BinaryOp::Rem), None);
+        assert_eq!(binary_recipe(BinaryOp::LogicalXor), None);
     }
 }
