@@ -119,7 +119,7 @@ pub fn bundle(backend_name: &str, revision_base: &str, contracts: &[String]) -> 
         // FusedOp is emitted by `contract` with the SCREAMING_SNAKE constant as its
         // `fused_op:` value (see `fuel_fused_op_name`), which this filter admits.
         // Verified 2026-07-08 against Fuel's real `import_bundle_str`.
-        if !contract_admissible(c) {
+        if !contract_admissible(c, false) {
             continue;
         }
         // The heading title = the contract's `kernel:` name (diagnostic; the
@@ -142,14 +142,22 @@ pub fn bundle(backend_name: &str, revision_base: &str, contracts: &[String]) -> 
 /// behind the negotiated `SEAM_CAP_KISC_FRAMING` cutover; [`bundle`] stays for
 /// pre-KISC peers.
 ///
-/// Same admission policy as [`bundle`]: a fused contract whose `fused_op:` is not
-/// a Fuel FusedOp is still withheld (genuinely non-importable, not merely a
-/// framing hazard). The KISC header-line format is PROVISIONAL (see [`crate::kisc`]).
+/// Admission is capability-gated on `recipe_import` (see [`contract_admissible`]):
+/// against a pre-recipe-import peer, a fused contract with no Fuel FusedOp is
+/// withheld; once Baracuda emits the recipe AND the peer advertises recipe-import
+/// (`SEAM_CAP_RECIPE_IMPORT`), that withhold retires — no code change here, only
+/// [`contract_carries_recipe`] becoming real. The KISC header-line and bundle
+/// structure are PROVISIONAL (see [`crate::kisc`]).
 #[must_use]
-pub fn bundle_kisc(backend_name: &str, revision_base: &str, contracts: &[String]) -> String {
+pub fn bundle_kisc(
+    backend_name: &str,
+    revision_base: &str,
+    contracts: &[String],
+    recipe_import: bool,
+) -> String {
     let mut s = front_matter(backend_name, revision_base);
     for c in contracts {
-        if !contract_admissible(c) {
+        if !contract_admissible(c, recipe_import) {
             continue;
         }
         s.push_str(&crate::kisc::kisc_frame(c));
@@ -170,12 +178,38 @@ fn fused_op_of(contract: &str) -> Option<&str> {
         .map(str::trim)
 }
 
-/// Whether `contract` is admissible into an importable bundle: a primitive
-/// contract always is; a fused one only if its `fused_op:` is a Fuel FusedOp (a
-/// free-form fused name is non-importable — see [`bundle`]). Shared by [`bundle`]
-/// and [`bundle_kisc`] so both framings apply the identical admission policy.
-fn contract_admissible(contract: &str) -> bool {
-    fused_op_of(contract).is_none_or(|name| FUEL_FUSED_OPS.contains(&name))
+/// Whether `contract` is admissible into an importable bundle for a peer whose
+/// importer supports `recipe_import` (recipe-verify-and-register).
+///
+/// - A primitive (`op_kind:`) contract is always importable — Fuel knows the base ops.
+/// - A fused contract whose `fused_op:` IS a Fuel FusedOp is importable by the
+///   closed-vocabulary importer.
+/// - A fused contract whose `fused_op:` is NOT a Fuel FusedOp is importable ONLY by
+///   a `recipe_import` peer, and ONLY if the contract carries a recipe (the KISS-Ops
+///   Semantics op-DAG to the base floor) the importer can verify + register. Baracuda
+///   does not emit that recipe yet ([`contract_carries_recipe`]), so today this stays
+///   withheld even against a recipe-import peer — this arm is the seam where retiring
+///   the withhold lands (in lockstep with recipe emission + Fuel's recipe importer).
+///
+/// Shared by [`bundle`] (which passes `recipe_import = false`) and [`bundle_kisc`].
+fn contract_admissible(contract: &str, recipe_import: bool) -> bool {
+    match fused_op_of(contract) {
+        None => true,
+        Some(name) if FUEL_FUSED_OPS.contains(&name) => true,
+        Some(_) => recipe_import && contract_carries_recipe(contract),
+    }
+}
+
+/// Whether `contract` carries a **recipe** — the KISS-Ops Semantics op-DAG
+/// decomposed to the base floor, which a recipe-verify importer runs to validate
+/// and register an op it does not already know.
+///
+/// NOT YET EMITTED: Baracuda contracts carry only the FKC `pattern:` fusion tree,
+/// not the full decomposition-to-base recipe (the neutral mandatory Semantics
+/// op-DAG convergence item). Returns `false` until that recipe ships; retiring the
+/// non-importable-fused-op withhold is gated on this becoming real.
+fn contract_carries_recipe(_contract: &str) -> bool {
+    false
 }
 
 /// The exhaustive `FusedOps::*` SCREAMING_SNAKE constant names Fuel's
@@ -2481,7 +2515,7 @@ mod tests {
     fn bundle_kisc_frames_each_admitted_contract_and_drops_the_heading() {
         let c1 = "kernel: relu\nop_kind: ReluElementwise\naccept: sk1|une|f32\n".to_string();
         let c2 = "kernel: add\nop_kind: AddElementwise\naccept: sk1|bin|f32\n".to_string();
-        let b = bundle_kisc("cuda", "rev0", &[c1.clone(), c2.clone()]);
+        let b = bundle_kisc("cuda", "rev0", &[c1.clone(), c2.clone()], false);
         // Provider front-matter still leads the file.
         assert!(b.starts_with("---\n"), "front matter leads: {b}");
         // Each contract is its own KISC document; NO `## ` heading framing.
@@ -2500,19 +2534,33 @@ mod tests {
     }
 
     #[test]
-    fn bundle_kisc_keeps_the_non_fuel_fused_op_withhold() {
-        // Admission policy is unchanged: a Fuel FusedOp is framed; a free-form
-        // fused name is withheld (genuinely non-importable).
+    fn bundle_kisc_withholds_a_non_fuel_fused_op_from_a_pre_recipe_peer() {
+        // Pre-recipe-import peer (recipe_import = false): a Fuel FusedOp is framed;
+        // a free-form fused name is withheld (non-importable by the closed vocab).
         let ok = "kernel: softmax\nfused_op: SOFTMAX_LAST_DIM\n".to_string();
         let bad = "kernel: relu_add\nfused_op: RELU_ADD\n".to_string();
-        let b = bundle_kisc("cuda", "rev0", &[ok.clone(), bad.clone()]);
+        let b = bundle_kisc("cuda", "rev0", &[ok.clone(), bad.clone()], false);
         assert!(
             b.contains(&crate::kisc::kisc_frame(&ok)),
             "an admitted Fuel FusedOp is framed: {b}"
         );
         assert!(
             !b.contains(&crate::kisc::kisc_frame(&bad)),
-            "a non-Fuel fused_op stays withheld: {b}"
+            "a non-Fuel fused_op stays withheld from a pre-recipe peer: {b}"
+        );
+    }
+
+    #[test]
+    fn bundle_kisc_recipe_import_peer_still_withholds_a_recipeless_fusion() {
+        // The gate exists but is inert TODAY: even a recipe-import peer can't
+        // verify a generic fusion until Baracuda emits the recipe (the neutral
+        // Semantics op-DAG), so `contract_carries_recipe` is false and the free-form
+        // fused op stays withheld. This pins the "retire in lockstep" contract.
+        let bad = "kernel: relu_add\nfused_op: RELU_ADD\n".to_string();
+        let b = bundle_kisc("cuda", "rev0", std::slice::from_ref(&bad), true);
+        assert!(
+            !b.contains(&crate::kisc::kisc_frame(&bad)),
+            "recipe-import peer + no recipe emitted yet ⇒ still withheld: {b}"
         );
     }
 

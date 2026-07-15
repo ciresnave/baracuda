@@ -193,6 +193,17 @@ pub const SEAM_CAP_JIT_ON_REQUEST: u64 = 1 << 32;
 /// [`BARACUDA_CAPABILITIES`] — the emitter/importer KISC path is still landing.
 pub const SEAM_CAP_KISC_FRAMING: u64 = 1 << 34;
 
+/// Recipe-verify import supported: the peer can import a kernel whose op it does
+/// NOT already know by requesting the contract, verifying the kernel against its
+/// **recipe** (the KISS-Ops Semantics op-DAG decomposed to the base floor), and
+/// registering the op on success — Fuel's "everything above the base floor flows
+/// through the one importer" direction. Its negotiated cutover is what retires the
+/// emitter's non-importable-fused-op withhold. Allocated in the KISS FEAT range
+/// (bit 35); **PROVISIONAL**, pending co-assignment. Not yet advertised: Baracuda
+/// does not emit the recipe yet (the neutral mandatory Semantics op-DAG item), so
+/// a recipe-import peer still can't verify a generic Baracuda fusion until it does.
+pub const SEAM_CAP_RECIPE_IMPORT: u64 = 1 << 35;
+
 /// The capabilities Baracuda advertises at first connect: the FDX tokens for its
 /// shipped kernel families **plus** `SeamCapJitOnRequest` — both halves of the §5
 /// seam are now live (Fuel published the `fuel-kernel-seam` envelope; Baracuda
@@ -289,6 +300,16 @@ mod tests {
             "KISC framing cap must be in the FEAT range (bit >= 32)"
         );
         assert_eq!(SEAM_CAP_KISC_FRAMING & SEAM_CAP_JIT_ON_REQUEST, 0);
+    }
+
+    #[test]
+    fn recipe_import_cap_is_in_the_feat_range_and_distinct() {
+        assert!(
+            SEAM_CAP_RECIPE_IMPORT >= (1 << 32),
+            "recipe-import cap must be in the FEAT range (bit >= 32)"
+        );
+        assert_eq!(SEAM_CAP_RECIPE_IMPORT & SEAM_CAP_JIT_ON_REQUEST, 0);
+        assert_eq!(SEAM_CAP_RECIPE_IMPORT & SEAM_CAP_KISC_FRAMING, 0);
     }
 
     #[test]
