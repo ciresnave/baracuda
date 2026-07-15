@@ -53,6 +53,7 @@ pub mod optimize;
 pub mod oracle;
 pub mod pattern;
 pub mod plan;
+pub mod recipe;
 pub mod slang;
 pub mod telemetry;
 mod text;
