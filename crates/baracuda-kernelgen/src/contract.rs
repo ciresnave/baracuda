@@ -119,10 +119,8 @@ pub fn bundle(backend_name: &str, revision_base: &str, contracts: &[String]) -> 
         // FusedOp is emitted by `contract` with the SCREAMING_SNAKE constant as its
         // `fused_op:` value (see `fuel_fused_op_name`), which this filter admits.
         // Verified 2026-07-08 against Fuel's real `import_bundle_str`.
-        if let Some(name) = fused_op_of(c) {
-            if !FUEL_FUSED_OPS.contains(&name) {
-                continue;
-            }
+        if !contract_admissible(c) {
+            continue;
         }
         // The heading title = the contract's `kernel:` name (diagnostic; the
         // block's own fields carry the real identity). A malformed contract
@@ -135,6 +133,33 @@ pub fn bundle(backend_name: &str, revision_base: &str, contracts: &[String]) -> 
     s
 }
 
+/// Assemble a **KISC-framed** importable bundle: the provider [`front_matter`]
+/// followed by each admitted [`contract`] as its own self-delimiting KISC
+/// document (KISS-Contract §6.11), in order. Replaces [`bundle`]'s `## `-heading
+/// framing — each kernel is one KISC document (magic + `len` + `crc32`,
+/// hard-reject), so a malformed contract can no longer import as a silent empty
+/// and a bad document declines alone instead of poisoning the file. Emitted
+/// behind the negotiated `SEAM_CAP_KISC_FRAMING` cutover; [`bundle`] stays for
+/// pre-KISC peers.
+///
+/// Same admission policy as [`bundle`]: a fused contract whose `fused_op:` is not
+/// a Fuel FusedOp is still withheld (genuinely non-importable, not merely a
+/// framing hazard). The KISC header-line format is PROVISIONAL (see [`crate::kisc`]).
+#[must_use]
+pub fn bundle_kisc(backend_name: &str, revision_base: &str, contracts: &[String]) -> String {
+    let mut s = front_matter(backend_name, revision_base);
+    for c in contracts {
+        if !contract_admissible(c) {
+            continue;
+        }
+        s.push_str(&crate::kisc::kisc_frame(c));
+        // Documents are self-delimiting (the header declares `len`); a single
+        // `\n` between them keeps the file readable and line-tool-friendly.
+        s.push('\n');
+    }
+    s
+}
+
 /// The `fused_op:` name declared inside a [`contract`] block, or `None` for a
 /// primitive (`op_kind:`) contract. Used by [`bundle`] to withhold a fused
 /// contract Fuel cannot import.
@@ -143,6 +168,14 @@ fn fused_op_of(contract: &str) -> Option<&str> {
         .lines()
         .find_map(|l| l.trim().strip_prefix("fused_op: "))
         .map(str::trim)
+}
+
+/// Whether `contract` is admissible into an importable bundle: a primitive
+/// contract always is; a fused one only if its `fused_op:` is a Fuel FusedOp (a
+/// free-form fused name is non-importable — see [`bundle`]). Shared by [`bundle`]
+/// and [`bundle_kisc`] so both framings apply the identical admission policy.
+fn contract_admissible(contract: &str) -> bool {
+    fused_op_of(contract).is_none_or(|name| FUEL_FUSED_OPS.contains(&name))
 }
 
 /// The exhaustive `FusedOps::*` SCREAMING_SNAKE constant names Fuel's
@@ -2442,6 +2475,45 @@ mod tests {
         let h = b.find(&format!("## {kname}")).unwrap();
         let fence = b.find("```fkc").unwrap();
         assert!(h < fence, "heading must precede the fkc block: {b}");
+    }
+
+    #[test]
+    fn bundle_kisc_frames_each_admitted_contract_and_drops_the_heading() {
+        let c1 = "kernel: relu\nop_kind: ReluElementwise\naccept: sk1|une|f32\n".to_string();
+        let c2 = "kernel: add\nop_kind: AddElementwise\naccept: sk1|bin|f32\n".to_string();
+        let b = bundle_kisc("cuda", "rev0", &[c1.clone(), c2.clone()]);
+        // Provider front-matter still leads the file.
+        assert!(b.starts_with("---\n"), "front matter leads: {b}");
+        // Each contract is its own KISC document; NO `## ` heading framing.
+        assert!(
+            b.contains(&crate::kisc::kisc_frame(&c1)),
+            "c1 framed as a KISC document: {b}"
+        );
+        assert!(
+            b.contains(&crate::kisc::kisc_frame(&c2)),
+            "c2 framed as a KISC document: {b}"
+        );
+        assert!(
+            !b.contains("\n## "),
+            "the markdown heading framing is gone: {b}"
+        );
+    }
+
+    #[test]
+    fn bundle_kisc_keeps_the_non_fuel_fused_op_withhold() {
+        // Admission policy is unchanged: a Fuel FusedOp is framed; a free-form
+        // fused name is withheld (genuinely non-importable).
+        let ok = "kernel: softmax\nfused_op: SOFTMAX_LAST_DIM\n".to_string();
+        let bad = "kernel: relu_add\nfused_op: RELU_ADD\n".to_string();
+        let b = bundle_kisc("cuda", "rev0", &[ok.clone(), bad.clone()]);
+        assert!(
+            b.contains(&crate::kisc::kisc_frame(&ok)),
+            "an admitted Fuel FusedOp is framed: {b}"
+        );
+        assert!(
+            !b.contains(&crate::kisc::kisc_frame(&bad)),
+            "a non-Fuel fused_op stays withheld: {b}"
+        );
     }
 
     #[test]
