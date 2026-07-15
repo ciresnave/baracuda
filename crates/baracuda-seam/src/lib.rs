@@ -184,6 +184,15 @@ pub const SEAM_CAP_DLPACK_EXT_GATHER: u64 = 1 << 5;
 /// Fuel-chosen region against the published `fuel-kernel-seam` envelope.
 pub const SEAM_CAP_JIT_ON_REQUEST: u64 = 1 << 32;
 
+/// KISC self-delimiting contract framing supported (KISS-Contract §6.11) — the
+/// negotiated-cutover flag for the KISC-framed kernel-import path. Allocated in the
+/// KISS **FEAT** range (bit ≥ 32), NOT the EXT-experimental low range. **PROVISIONAL**
+/// bit position, pending co-assignment with Fuel and recording in the
+/// kernel-seam-interop annex (bit 33 is reserved for the planned CONTRACT_QUERY
+/// split, so KISC framing takes bit 34). Allocated but **not yet advertised** in
+/// [`BARACUDA_CAPABILITIES`] — the emitter/importer KISC path is still landing.
+pub const SEAM_CAP_KISC_FRAMING: u64 = 1 << 34;
+
 /// The capabilities Baracuda advertises at first connect: the FDX tokens for its
 /// shipped kernel families **plus** `SeamCapJitOnRequest` — both halves of the §5
 /// seam are now live (Fuel published the `fuel-kernel-seam` envelope; Baracuda
@@ -268,6 +277,18 @@ mod tests {
     #[test]
     fn envelope_is_56_bytes() {
         assert_eq!(core::mem::size_of::<SeamHello>(), 56);
+    }
+
+    #[test]
+    fn kisc_framing_cap_is_in_the_feat_range_and_distinct() {
+        // Fuel's note: a seam cap bit MUST sit in the KISS FEAT range (bit >= 32),
+        // NOT the EXT-experimental low range. And it must not collide with the
+        // JIT-on-request bit.
+        assert!(
+            SEAM_CAP_KISC_FRAMING >= (1 << 32),
+            "KISC framing cap must be in the FEAT range (bit >= 32)"
+        );
+        assert_eq!(SEAM_CAP_KISC_FRAMING & SEAM_CAP_JIT_ON_REQUEST, 0);
     }
 
     #[test]

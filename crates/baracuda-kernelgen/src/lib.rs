@@ -46,6 +46,7 @@ pub mod cuda;
 pub mod dispatch_artifact;
 pub mod ir;
 pub mod jit;
+pub mod kisc;
 pub mod lift;
 pub mod link;
 pub mod optimize;
@@ -60,7 +61,6 @@ pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, contract, front_matter};
 pub use cpu_c::CpuC;
 pub use cuda::{Cuda, emit_cast_helper, emit_coord_unravel_helper, emit_dtype_promote_helper};
-pub use slang::Slang;
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
     Access, AccumSpec, AxisRole, ContractionAxes, DagNode, Expr, ExprDag, NodeId, OpDef, ReduceOp,
@@ -78,6 +78,7 @@ pub use optimize::{optimize, optimize_top_k};
 pub use oracle::{Fidelity, TypedBuffer, compare, evaluate};
 pub use pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
 pub use plan::{KernelPlan, Schedule, build_plan};
+pub use slang::Slang;
 pub use telemetry::{
     Candidate, DispatchRecord, HwFingerprint, ImplId, Ingest, MissRecord, RankedCell,
     TELEMETRY_SCHEMA_MAX, VariantVote, arch_sku_of, ingest_jsonl, merge_reports, rank_matrix,
