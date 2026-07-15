@@ -204,12 +204,14 @@ fn contract_admissible(contract: &str, recipe_import: bool) -> bool {
 /// decomposed to the base floor, which a recipe-verify importer runs to validate
 /// and register an op it does not already know.
 ///
-/// NOT YET EMITTED: Baracuda contracts carry only the FKC `pattern:` fusion tree,
-/// not the full decomposition-to-base recipe (the neutral mandatory Semantics
-/// op-DAG convergence item). Returns `false` until that recipe ships; retiring the
-/// non-importable-fused-op withhold is gated on this becoming real.
-fn contract_carries_recipe(_contract: &str) -> bool {
-    false
+/// Detected by the `semantics:` line [`contract`] emits when the op re-bases onto
+/// confirmed KISS-Ops tokens ([`crate::recipe::semantics_dag`]). An op with no
+/// confirmed re-basing carries no recipe, so an otherwise-unknown fused op stays
+/// withheld even from a recipe-import peer until its recipe can be emitted.
+fn contract_carries_recipe(contract: &str) -> bool {
+    contract
+        .lines()
+        .any(|l| l.trim_start().starts_with("semantics: "))
 }
 
 /// The exhaustive `FusedOps::*` SCREAMING_SNAKE constant names Fuel's
@@ -844,6 +846,15 @@ pub fn contract(
 
     if let (Some(p), true) = (&pattern, is_fusion) {
         s.push_str(&to_fkc(p));
+    }
+
+    // Neutral KISS-Ops Semantics recipe (KISS-Contract §2.3), emitted when the op
+    // re-bases onto confirmed KISS-Ops tokens — the decomposition a recipe-verify
+    // importer runs, and what [`contract_carries_recipe`] detects to admit an
+    // otherwise-unknown fused op to a recipe-import peer. Format PROVISIONAL —
+    // see [`crate::recipe`].
+    if let Some(recipe) = crate::recipe::semantics_dag(op) {
+        s.push_str(&format!("semantics: {recipe}\n"));
     }
 
     s.push_str("```\n");
@@ -2561,6 +2572,47 @@ mod tests {
         assert!(
             !b.contains(&crate::kisc::kisc_frame(&bad)),
             "recipe-import peer + no recipe emitted yet ⇒ still withheld: {b}"
+        );
+    }
+
+    #[test]
+    fn contract_emits_the_semantics_recipe_for_an_elementwise_op() {
+        let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let key = key_for(3, OpCategory::BinaryElementwise);
+        let kernel = generate(&add, &key, &Cuda);
+        let c = contract(&add, &key, &kernel, "cuda").unwrap();
+        assert!(
+            c.contains("semantics: add(in0, in1)\n"),
+            "the neutral KISS-Ops recipe is emitted: {c}"
+        );
+    }
+
+    #[test]
+    fn contract_carries_recipe_detects_the_semantics_line() {
+        assert!(contract_carries_recipe(
+            "kernel: x\nsemantics: add(in0, in1)\n"
+        ));
+        assert!(!contract_carries_recipe(
+            "kernel: x\nop_kind: AddElementwise\n"
+        ));
+    }
+
+    #[test]
+    fn bundle_kisc_admits_a_recipe_carrying_fusion_for_a_recipe_import_peer() {
+        // A fused op Fuel doesn't know, but CARRYING a recipe: a recipe-import peer
+        // can verify + register it, so it is now framed — the withhold seam flips
+        // live. The same contract stays withheld from a pre-recipe peer.
+        let recipe_fusion =
+            "kernel: relu_add\nfused_op: RELU_ADD\nsemantics: add(relu(in0), in1)\n".to_string();
+        let live = bundle_kisc("cuda", "rev0", std::slice::from_ref(&recipe_fusion), true);
+        assert!(
+            live.contains(&crate::kisc::kisc_frame(&recipe_fusion)),
+            "recipe-carrying fusion is admitted for a recipe-import peer: {live}"
+        );
+        let old = bundle_kisc("cuda", "rev0", std::slice::from_ref(&recipe_fusion), false);
+        assert!(
+            !old.contains(&crate::kisc::kisc_frame(&recipe_fusion)),
+            "still withheld from a pre-recipe peer: {old}"
         );
     }
 
