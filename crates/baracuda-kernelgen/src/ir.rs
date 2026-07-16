@@ -2206,6 +2206,40 @@ impl OpDef {
         }
     }
 
+    /// Build a **fused contraction + bias/activation** op — like
+    /// [`OpDef::contraction`] but the `epilogue` may also read `Input(2)`, a
+    /// per-column bias `[N]` broadcast over the M rows (the `nn.Linear` bias), so
+    /// `out[m,n] = epilogue(Σ_k lhs[m,k]·rhs[k,n], bias[n])` is one launch instead
+    /// of a GEMM followed by a separate bias/activation pass. `n_inputs = 3`
+    /// (lhs, rhs, bias); `body == epilogue` like [`OpDef::contraction`].
+    #[must_use]
+    pub fn contraction_bias(
+        name: &str,
+        dtypes: &[ElementKind],
+        axes: ContractionAxes,
+        epilogue: Expr,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs: 3,
+            body: epilogue.0.clone(),
+            dtypes: dtypes.to_vec(),
+            access: Access::Contraction {
+                axes,
+                accum: AccumSpec::WideFloat,
+                epilogue: epilogue.0,
+            },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
+            out_dtype: None,
+            extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
+        }
+    }
+
     /// Build a **prefix scan** op (increment 6): a cumsum/cumprod/cummax/cummin
     /// along `axis` with monoid `op`. `pre` is the per-element pre-map applied
     /// before the fold (identity: `input(0)`); `post` is the per-element epilogue

@@ -1309,15 +1309,30 @@ fn eval_contraction(
                 let b = read_strided(inputs, operands, 1, &[kk, ni], input_perm(plan, 1)).f64();
                 acc += a * b;
             }
-            // Epilogue over Reduced(0) = the accumulator; no Input/Coord leaves.
+            // Epilogue over Reduced(0) = the accumulator, plus the optional fused
+            // bias: Input(i>=2) is the per-column `[N]` bias, read at column `ni`
+            // (broadcast over rows). No Coord leaves. lhs/rhs (0/1) never appear.
             let reduced_leaf = |s: u8| {
                 assert_eq!(s, 0, "contraction epilogue reads only Reduced(0)");
                 Val::Float(acc)
             };
+            let bias_leaf = |i: u8| {
+                assert!(
+                    i as usize >= 2 && (i as usize) < n_in,
+                    "contraction epilogue Input({i}) must be a fused bias (2..n_inputs)"
+                );
+                read_strided(
+                    inputs,
+                    operands,
+                    i as usize,
+                    &[ni],
+                    input_perm(plan, i as usize),
+                )
+            };
             let ev = Eval {
                 dtype: plan.dtype,
                 params,
-                leaf: &(|i: u8| panic!("contraction epilogue reads no Input({i})")),
+                leaf: &bias_leaf,
                 reduced: &reduced_leaf,
                 coord: &panic_coord,
             };
@@ -2615,6 +2630,53 @@ mod tests {
         ];
         let got = evaluate(&plan, &ops, &ins, &[]);
         assert_eq!(f32s(&got[0]), vec![0.0, 2.0]);
+    }
+
+    /// A rank-2 dense GEMM cell WITH a per-column `[n]` bias operand:
+    /// operands `[lhs, rhs, bias, out]` (inputs THEN output).
+    fn gemm_bias_cell(
+        m: i64,
+        k: i64,
+        n: i64,
+    ) -> (
+        OperandDesc,
+        OperandDesc,
+        OperandDesc,
+        OperandDesc,
+        StructureKey,
+    ) {
+        let lhs = desc(&[m, k], &[k, 1], ElementKind::F32);
+        let rhs = desc(&[k, n], &[n, 1], ElementKind::F32);
+        let bias = desc(&[n], &[1], ElementKind::F32);
+        let out = desc(&[m, n], &[n, 1], ElementKind::F32);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, bias, out], ArchSku::Sm89);
+        (lhs, rhs, bias, out, key)
+    }
+
+    #[test]
+    fn contraction_matmul_bias_relu_epilogue() {
+        use crate::ir::{ContractionAxes, UnaryOp};
+        // Fused matmul + per-column bias + relu: out = relu(Σ_k lhs·rhs + bias[n]).
+        //   lhs = [[1, 2]]   rhs = [[3,4],[5,6]]   bias = [-100, 1]
+        //   K-sums = [1·3+2·5, 1·4+2·6] = [13, 16]
+        //   +bias  = [13-100, 16+1] = [-87, 17]
+        //   relu   = [0, 17]   (the biased-negative column clamps)
+        let op = OpDef::contraction_bias(
+            "matmul_bias_relu",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            (reduced(0) + input(2)).unary(UnaryOp::Relu),
+        );
+        let (lhs, rhs, bias, out, key) = gemm_bias_cell(1, 2, 2);
+        let plan = build_plan(&op, &key);
+        let ops = [lhs, rhs, bias, out];
+        let ins = [
+            f32b(&[1, 2], &[1.0, 2.0]),
+            f32b(&[2, 2], &[3.0, 4.0, 5.0, 6.0]),
+            f32b(&[2], &[-100.0, 1.0]),
+        ];
+        let got = evaluate(&plan, &ops, &ins, &[]);
+        assert_eq!(f32s(&got[0]), vec![0.0, 17.0]);
     }
 
     // --- compare helper -----------------------------------------------------

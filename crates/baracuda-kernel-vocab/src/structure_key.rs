@@ -479,16 +479,21 @@ pub fn structure_key(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) ->
 /// "no contraction facts", never a guess. (Batched / transposed / strided
 /// contraction classes join with the node's growth.)
 fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<ContractionKey> {
-    if op != OpCategory::Gemm || operands.len() != 3 {
+    // 3 operands = plain `[lhs, rhs, out]`; 4 = fused bias `[lhs, rhs, bias, out]`
+    // (the per-column `[N]` bias the epilogue reads). The bias rides the existing
+    // per-operand OperandKey list — it does NOT change the ContractionKey facts
+    // (m/n/k/k_div), so the token is codec-compatible (no version bump).
+    if op != OpCategory::Gemm || (operands.len() != 3 && operands.len() != 4) {
         return None;
     }
-    let (lhs, rhs, out) = (&operands[0], &operands[1], &operands[2]);
+    let has_bias = operands.len() == 4;
+    let (lhs, rhs, out) = (&operands[0], &operands[1], &operands[operands.len() - 1]);
     if lhs.rank != 2 || rhs.rank != 2 || out.rank != 2 {
         return None;
     }
     let (m, k) = (lhs.shape[0], lhs.shape[1]);
     let (k2, n) = (rhs.shape[0], rhs.shape[1]);
-    // Shapes must agree and every operand must be dense row-major.
+    // Shapes must agree and every rank-2 operand must be dense row-major.
     let dense = |o: &OperandDesc| o.strides[0] == o.shape[1] && o.strides[1] == 1;
     if k != k2
         || out.shape[0] != m
@@ -498,6 +503,13 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
         || !dense(out)
     {
         return None;
+    }
+    // A fused bias must be the per-column `[N]` vector broadcast over the M rows.
+    if has_bias {
+        let bias = &operands[2];
+        if bias.rank != 1 || bias.shape[0] != n {
+            return None;
+        }
     }
     Some(ContractionKey {
         m: SizeClass::of(m),

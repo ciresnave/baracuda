@@ -3188,7 +3188,22 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let epi = lower_expr(
         epilogue,
         &Lowering {
-            leaf: &|i| unreachable!("contraction v1 epilogue has no Input leaf: in{i}"),
+            // The only admissible epilogue Input is the fused bias `in{i}` (i>=2),
+            // a per-column `[N]` bias read at `col` and up-converted to the
+            // accumulator width, exactly as the operand loads are.
+            leaf: &|i| {
+                assert!(
+                    i >= 2,
+                    "contraction epilogue Input leaf must be the fused bias (>=2): in{i}"
+                );
+                let e = format!("in{i}[col]");
+                match plan.dtype {
+                    ElementKind::F16 => format!("__half2float({e})"),
+                    ElementKind::Bf16 => format!("__bfloat162float({e})"),
+                    ElementKind::F32Strict => format!("(double){e}"),
+                    _ => e,
+                }
+            },
             reduced: &red,
             coord: &|d| {
                 panic!(
@@ -3229,6 +3244,9 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let mut s = header(plan, &name);
     s.push_str(&format!("    const {ctype}* __restrict__ in0,\n")); // lhs [m,k]
     s.push_str(&format!("    const {ctype}* __restrict__ in1,\n")); // rhs [k,n]
+    if plan.n_inputs >= 3 {
+        s.push_str(&format!("    const {ctype}* __restrict__ in2,\n")); // bias [n]
+    }
     s.push_str(&format!("    {ctype}* __restrict__ out,\n")); // [m,n]
     s.push_str("    long long m,\n    long long n,\n    long long k)\n{\n");
     s.push_str("    long long col = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
@@ -3281,6 +3299,12 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let Access::Contraction { epilogue, .. } = plan.access else {
         return None;
     };
+    // Fused-bias cells (n_inputs > 2) decline the split-K variant in v1: split-K
+    // folds the epilogue into a second `_splitk_combine` kernel, and a per-column
+    // bias load there is a follow-up. A bias cell gets the base skinny kernel only.
+    if plan.n_inputs > 2 {
+        return None;
+    }
     // build_plan admissibility already ran; these mirror emit_contraction.
     let c = plan.key.contraction?;
     if c.m != baracuda_kernel_vocab::SizeClass::Tiny {
@@ -8394,6 +8418,68 @@ mod tests {
                 .contains("float w = __half2float(in1[kk * n + col]);")
         );
         assert!(kh.source.contains("out[mm * n + col] = __float2half(r0);"));
+    }
+
+    #[test]
+    fn contraction_bias_emits_bias_param_and_column_load() {
+        use crate::generate_variants;
+        use crate::ir::{ContractionAxes, UnaryOp, input, reduced};
+        // Fused matmul + per-column bias + relu: out = relu(Σ_k lhs·rhs + bias[n]).
+        let mb = OpDef::contraction_bias(
+            "matmul_bias_relu",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            (reduced(0) + input(2)).unary(UnaryOp::Relu),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let bias = OperandDesc::new(1, &[4096], &[1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, bias, out], ArchSku::Sm89);
+        let k = generate(&mb, &key, &Cuda);
+        // The bias input pointer is a kernel param…
+        assert!(
+            k.source.contains("const float* __restrict__ in2,"),
+            "missing bias param:\n{}",
+            k.source
+        );
+        // …and the epilogue adds it per column, then relu-clamps the K-sum.
+        assert!(
+            k.source.contains("in2[col]"),
+            "missing bias load:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("< 0.0f ? 0.0f :"),
+            "missing relu over (r0 + bias):\n{}",
+            k.source
+        );
+        // The split-K variant declines for a bias cell (folded-epilogue combine is
+        // a follow-up) — only the base kernel is offered.
+        let vs = generate_variants(&mb, &key, &Cuda);
+        assert_eq!(
+            vs.len(),
+            1,
+            "bias cell must offer only the base kernel (split-K declined)"
+        );
+
+        // The plain (no-bias) contraction emits NO in2 — byte-compat unchanged.
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let kp = generate(
+            &mm,
+            &structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89),
+            &Cuda,
+        );
+        assert!(
+            !kp.source.contains("in2"),
+            "plain contraction must not emit a bias param:\n{}",
+            kp.source
+        );
     }
 
     #[test]

@@ -374,9 +374,9 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 key.to_token()
             );
             assert!(
-                epilogue_reads_only_reduced0(epilogue),
-                "contraction v1: epilogue over Reduced(0) only (fused bias inputs \
-                 are a follow-up)"
+                contraction_epilogue_admissible(epilogue, op.n_inputs),
+                "contraction: epilogue may read only Reduced(0), constants, and the \
+                 fused bias Input(2..n_inputs); got a disallowed leaf"
             );
             Schedule::Contraction
         }
@@ -631,25 +631,33 @@ mod reduce_class_tests {
     }
 }
 
-/// `true` if `e` references no leaf other than `Reduced(0)` and constants — the
-/// contraction-v1 epilogue admissibility (no `Input`/`Param`, no other stage).
-fn epilogue_reads_only_reduced0(e: &crate::ir::ScalarExpr) -> bool {
+/// `true` if a contraction epilogue references only admissible leaves: `Reduced(0)`
+/// (the K-sum), constants, and — when `n_inputs > 2` — the fused bias `Input(i)`
+/// for `2 <= i < n_inputs` (a per-column `[N]` bias broadcast over the M rows).
+/// Never `Input(0)`/`Input(1)` (lhs/rhs are consumed by the contraction, not the
+/// epilogue), `Param`, another reduced stage, or `Coord`. For `n_inputs == 2` no
+/// `Input` is admitted, so this is byte-identical to the plain-contraction
+/// "Reduced(0) only" rule.
+fn contraction_epilogue_admissible(e: &crate::ir::ScalarExpr, n_inputs: u8) -> bool {
     use crate::ir::ScalarExpr as E;
     match e {
         E::Reduced(0) | E::Const(_) => true,
+        // A fused bias leaf: Input(i), 2 <= i < n_inputs.
+        E::Input(i) => *i >= 2 && *i < n_inputs,
         // Coord rejects here too: a contraction epilogue iterates the (m, n)
         // output space, not an elementwise cell's — Coord's v1 semantics are
         // Elementwise-only (`assert_coord_admissibility` fires first with the
         // targeted message; this arm keeps the predicate honest regardless).
-        E::Input(_) | E::Param(_) | E::Reduced(_) | E::Coord(_) => false,
-        E::Unary(_, x) => epilogue_reads_only_reduced0(x),
+        E::Param(_) | E::Reduced(_) | E::Coord(_) => false,
+        E::Unary(_, x) => contraction_epilogue_admissible(x, n_inputs),
         E::Add(a, b) | E::Sub(a, b) | E::Mul(a, b) | E::Div(a, b) | E::Binary(_, a, b) => {
-            epilogue_reads_only_reduced0(a) && epilogue_reads_only_reduced0(b)
+            contraction_epilogue_admissible(a, n_inputs)
+                && contraction_epilogue_admissible(b, n_inputs)
         }
         E::Select(c, a, b) => {
-            epilogue_reads_only_reduced0(c)
-                && epilogue_reads_only_reduced0(a)
-                && epilogue_reads_only_reduced0(b)
+            contraction_epilogue_admissible(c, n_inputs)
+                && contraction_epilogue_admissible(a, n_inputs)
+                && contraction_epilogue_admissible(b, n_inputs)
         }
     }
 }
