@@ -1424,12 +1424,19 @@ mod tests {
         // `from_token` parses tokens from an untrusted peer (telemetry / wire): it
         // must NEVER panic (no unbounded alloc, no index OOB, no parse crash) — only
         // `Some(key)` or `None`, whatever the bytes.
+        fn junk(rng: &mut Lcg, n: usize) -> String {
+            (0..n)
+                .map(|_| char::from((rng.next() % 94 + 33) as u8))
+                .collect()
+        }
         let mut rng = Lcg(0x0000_F00D);
-        // A token-shaped alphabet so the fuzz reaches the field parsers, not just
-        // the field-count guard.
+
+        // (1) Pure-random junk — exercises the outer split + field-count + magic
+        // guards. (A random alphabet almost never lands the 9/10 pipes with an
+        // in-range rank needed to reach the field parsers — hence stage (2).)
         let alpha = b"sk012|binuecmpgemredf32f64s8u8i32i64u32sm89sm80cuda:ix\
                       gridwarpblockr;co/icstbrvda-cxtsml0123456789";
-        for _ in 0..8000 {
+        for _ in 0..4000 {
             let len = (rng.next() % 140) as usize;
             let s: String = (0..len)
                 .map(|_| {
@@ -1443,13 +1450,100 @@ mod tests {
                 .collect();
             let _ = StructureKey::from_token(&s);
         }
-        // Adversarial: DoS-shaped and boundary inputs.
+
+        // (2) STRUCTURAL mutation of VALID tokens — the only way to fuzz the DEEP
+        // parsers (`op`/`dtype`/`arch`, per-operand `parse_operand`, the 10th
+        // contraction sub-parser) past the 9/10-part + `rank ≤ MAX_RANK` guards.
+        // Both bases are asserted to fully round-trip first, so from_token
+        // provably reaches every field parser on them; the mutations then fuzz
+        // around that reachable point.
+        let a = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 4);
+        let ew = structure_key_token(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let gemm = structure_key_token(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        assert!(
+            StructureKey::from_token(&ew).is_some(),
+            "base elementwise token must round-trip: {ew}"
+        );
+        assert!(
+            StructureKey::from_token(&gemm).is_some(),
+            "base gemm token must round-trip: {gemm}"
+        );
+        assert_eq!(
+            gemm.split('|').count(),
+            10,
+            "gemm token must carry the 10th contraction field: {gemm}"
+        );
+        for _ in 0..8000 {
+            let base = if rng.next() & 1 == 0 { &ew } else { &gemm };
+            let mut parts: Vec<String> = base.split('|').map(String::from).collect();
+            for _ in 0..(1 + rng.next() % 3) {
+                if parts.is_empty() {
+                    parts.push(junk(&mut rng, 3));
+                    continue;
+                }
+                let i = (rng.next() as usize) % parts.len();
+                match rng.next() % 8 {
+                    0 => {
+                        parts.remove(i);
+                    }
+                    1 => {
+                        let f = parts[i].clone();
+                        parts.insert(i, f);
+                    }
+                    2 => {
+                        let n = (rng.next() % 12) as usize;
+                        parts[i] = junk(&mut rng, n);
+                    }
+                    3 => {
+                        let j = junk(&mut rng, 4);
+                        parts[i].push_str(&j);
+                    }
+                    4 => parts[i] = format!("r{}", rng.next() % 100_000), // wild rank
+                    5 => {
+                        let l = parts[i].len();
+                        if l > 0 {
+                            parts[i].truncate((rng.next() as usize) % l);
+                        }
+                    }
+                    6 => parts.insert(i, String::new()),
+                    _ => {
+                        let l = parts[i].len();
+                        if l > 0 {
+                            let k = (rng.next() as usize) % l;
+                            let mut b = parts[i].clone().into_bytes();
+                            b[k] = (rng.next() % 94 + 33) as u8;
+                            parts[i] = String::from_utf8_lossy(&b).into_owned();
+                        }
+                    }
+                }
+            }
+            let _ = StructureKey::from_token(&parts.join("|"));
+        }
+
+        // (3) Adversarial DoS-shaped + boundary inputs, plus targeted vectors that
+        // reach the operand + contraction parsers with an IN-RANGE rank (r2), which
+        // the over-MAX_RANK `r250` vector below never does.
         let _ = StructureKey::from_token("");
         let _ = StructureKey::from_token(&"|".repeat(10_000));
         let _ = StructureKey::from_token(&"a".repeat(200_000));
+        // Over-MAX_RANK rank — declines at the rank guard (never reaches operands).
         let _ = StructureKey::from_token(&format!(
             "sk1|bin|f32|sm89|i32|grid|r250|{}|-",
             "co/00/v4/d16/f;".repeat(50)
         ));
+        // In-range rank + over-MAX_OPERANDS operand list — MUST reach parse_operand,
+        // then decline gracefully.
+        let _ = StructureKey::from_token(&format!(
+            "sk1|bin|f32|sm89|i32|grid|r2|{}|-",
+            "co/00/v1/d16/f;".repeat(50)
+        ));
+        // A valid gemm base with only its 10th (contraction) field corrupted —
+        // reaches the contraction sub-parser with everything else well-formed.
+        let mut gp: Vec<String> = gemm.split('|').map(String::from).collect();
+        gp[9] = "garbage/contraction/field".to_string();
+        let _ = StructureKey::from_token(&gp.join("|"));
     }
 }

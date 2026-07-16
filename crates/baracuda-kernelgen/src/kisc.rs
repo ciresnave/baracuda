@@ -175,14 +175,51 @@ mod tests {
     #[test]
     fn unframe_never_panics_on_arbitrary_input() {
         let mut rng = Lcg(0x0000_B16C);
+        // (1) Random bytes INCLUDING '\n' (~1/97) — without a newline every input
+        // short-circuits at the first `split_once('\n')`, so the header field
+        // parsers (magic/kind/version/len/crc) would never see random fuzz.
         for _ in 0..5000 {
             let len = (rng.next() % 200) as usize;
             let s: String = (0..len)
-                .map(|_| char::from((rng.next() % 96 + 32) as u8))
+                .map(|_| {
+                    let r = rng.next() % 97;
+                    if r == 0 {
+                        '\n'
+                    } else {
+                        char::from((r - 1 + 32) as u8) // 32..=127
+                    }
+                })
                 .collect();
             let _ = kisc_unframe(&s);
         }
-        // Adversarial headers that must decline (never panic): overflowing len,
+        // (2) HEADER-SHAPED fuzz — a well-formed `KISC …\n<body>` frame with each
+        // field independently valid-or-corrupted, so the kind/version/len=/crc32=
+        // parsers AND the LenMismatch/CrcMismatch/Ok paths are all exercised.
+        for _ in 0..5000 {
+            let blen = (rng.next() % 48) as usize;
+            let body: String = (0..blen)
+                .map(|_| char::from((rng.next() % 95 + 32) as u8))
+                .collect();
+            let kind = if rng.next() % 4 == 0 {
+                "kiss-contract"
+            } else {
+                "wrong-kind"
+            };
+            let ver = rng.next() % 4; // 1 is valid; others exercise UnknownVersion
+            let len = if rng.next() % 2 == 0 {
+                body.len() // correct — enables the Ok / CrcMismatch paths
+            } else {
+                (rng.next() % 100) as usize // wrong — LenMismatch
+            };
+            let crc = if rng.next() % 2 == 0 {
+                crc32(body.as_bytes()) // correct
+            } else {
+                rng.next() as u32 // wrong — CrcMismatch
+            };
+            let doc = format!("KISC {kind} {ver} len={len} crc32={crc:08x}\n{body}");
+            let _ = kisc_unframe(&doc);
+        }
+        // (3) Adversarial headers that must decline (never panic): overflowing len,
         // non-numeric len, bad hex crc, magic only.
         for s in [
             "",

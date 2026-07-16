@@ -13,7 +13,8 @@
 //! - **`cuda_full_op_emit_never_panics`** — random IR over the *full* float op
 //!   surface (all 39 `UnaryOp`, the 16 float-valid `BinaryOp`, `Select`, `Coord`,
 //!   `Param`, finite/NaN/Inf `Const`) → `build_plan` + `generate(Cuda)` must be
-//!   total (no panic) and emit non-empty source. Pure emitter robustness.
+//!   total (no panic) and emit a real output store (`out[…]` + the entry symbol,
+//!   not merely non-empty — every emitter writes a header first). Emitter robustness.
 //! - **`tri_backend_scalar_emit_never_panics`** — the same random body emitted
 //!   through ALL THREE backends (Cuda/CpuC/Slang) over their three-way-common
 //!   Scalar-schedule coverage; a panic is a real lowering-seam gap. (The sweep
@@ -399,13 +400,18 @@ fn cuda_full_op_emit_never_panics() {
             gen_expr(&mut rng, 5, n_inputs, &FULL),
         );
         let key = scalar_key(n_inputs);
-        // build_plan + emit must be total (no panic) and yield real source.
+        // build_plan + emit must be total (no panic) and emit a REAL kernel — the
+        // output store `out[…] =` (not merely non-empty: every emitter writes a
+        // header comment first, so `!is_empty()` would pass even for a body-less
+        // regression). Both the Scalar and the Coord/Param-forced Strided schedule
+        // write `out[`.
         let _plan = build_plan(&op, &key);
         let k = generate(&op, &key, &Cuda);
         assert!(
-            !k.source.is_empty(),
-            "empty CUDA source for body: {:?}",
-            op.body
+            k.source.contains("out[") && k.source.contains(&k.name),
+            "CUDA emit produced no output store / entry symbol for body: {:?}\n{}",
+            op.body,
+            k.source
         );
     }
 }
@@ -428,14 +434,18 @@ fn tri_backend_scalar_emit_never_panics() {
             gen_expr(&mut rng, 4, n_inputs, &TRI_BACKEND),
         );
         let key = scalar_key(n_inputs);
-        for (name, src) in [
-            ("cuda", generate(&op, &key, &Cuda).source),
-            ("cpu_c", generate(&op, &key, &CpuC).source),
-            ("slang", generate(&op, &key, &Slang).source),
+        // Assert each backend emits a REAL output store (its own store token), not
+        // merely non-empty source — every emitter writes a header comment first, so
+        // `!is_empty()` would pass even for a dropped-store regression. CUDA/CpuC
+        // store to `out[i]`, Slang to `output[i]`.
+        for (name, src, store) in [
+            ("cuda", generate(&op, &key, &Cuda).source, "out["),
+            ("cpu_c", generate(&op, &key, &CpuC).source, "out["),
+            ("slang", generate(&op, &key, &Slang).source, "output["),
         ] {
             assert!(
-                !src.is_empty(),
-                "{name} emitted empty source for body: {:?}",
+                src.contains(store),
+                "{name} emitted no output store (`{store}`) for body: {:?}\n{src}",
                 op.body
             );
         }
