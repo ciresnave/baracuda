@@ -23,56 +23,106 @@
 //! # Scope
 //!
 //! Elementwise bodies over `Input`/`Const` leaves **plus** the co-pinned source ops
-//! `Coord`→`iota` and `Param`→`runtime_scalar`. Reductions, scans, gather/scatter,
-//! the `Reduced` fold-edge, contraction/matmul (`Op::MatMul`), and the positional
-//! OpAttrs blob are follow-ups — an honest miss (`None`) until covered.
+//! `Coord`→`iota` / `Param`→`runtime_scalar`, **and contractions** (`matmul[<roles>]`
+//! fold node + the `Reduced(0)`→node epilogue, incl. fused bias/activation).
+//! Reductions, scans, gather/scatter, pooling, and sort are follow-ups — an honest
+//! miss (`None`) until covered.
 
-use crate::ir::{Access, BinaryOp, OpDef, ScalarExpr, UnaryOp};
+use crate::ir::{Access, AxisRole, BinaryOp, ContractionAxes, OpDef, ScalarExpr, UnaryOp};
 
 /// The KISS-Ops op-DAG (recipe) for `op`, or `None` if `op` is not yet expressible
-/// as a neutral recipe (non-elementwise access, or a node with no confirmed
-/// KISS-Ops name).
+/// as a neutral recipe (unsupported access, or a node with no confirmed KISS-Ops
+/// name).
 #[must_use]
 pub fn semantics_dag(op: &OpDef) -> Option<String> {
-    // Increment 1: elementwise bodies only. Reductions, scans, gather/scatter,
-    // pooling, and contractions carry structure (`Access`) the body alone doesn't
-    // express, so their recipe is a follow-up — an honest miss for now.
-    if !matches!(op.access, Access::Elementwise) {
-        return None;
+    match &op.access {
+        // Elementwise: the body over Input/Const/source-op leaves; no fold node.
+        Access::Elementwise => expr_to_recipe(&op.body, None),
+        // Contraction: a `matmul[<roles>](in0, in1)` fold node, then the epilogue
+        // over it. `Reduced(0)` in the epilogue = the K-sum = the matmul node (Fuel
+        // co-pin: `Reduced` is a child_edge to the fold node), and a fused
+        // bias/activation composes as ordinary elementwise nodes over it (the bias
+        // rides `in2` = Bind(2)). Roles come from the op's `ContractionAxes` — no
+        // rank/key dependency. `matmul` attr surface is a co-pin strawman
+        // (docs/fuel-ask-recipe-copin-2026-07-16.md).
+        Access::Contraction { axes, epilogue, .. } => {
+            let node = format!("matmul[{}](in0, in1)", contraction_roles(axes));
+            expr_to_recipe(epilogue, Some(&node))
+        }
+        // Reductions, scans, gather/scatter, pooling, sort carry structure the body
+        // alone doesn't express (axes/rank/monoid) — a follow-up honest miss.
+        _ => None,
     }
-    expr_to_recipe(&op.body)
+}
+
+/// Compact role-vector attr for a contraction — `<lhs>.<rhs>` over the axis-role
+/// codes (`b`atch / free-`m` / free-`n` / contracted-`k`); e.g. rank-2 `mk.kn`,
+/// batched `bmk.bkn`. The `{Batch,FreeM,FreeN,ContractedK}` vocabulary is Fuel's
+/// proposed `matmul` op_attrs (co-pin pending).
+fn contraction_roles(axes: &ContractionAxes) -> String {
+    fn code(r: AxisRole) -> char {
+        match r {
+            AxisRole::Batch => 'b',
+            AxisRole::FreeM => 'm',
+            AxisRole::FreeN => 'n',
+            AxisRole::ContractedK => 'k',
+        }
+    }
+    let lhs: String = axes.lhs.iter().map(|r| code(*r)).collect();
+    let rhs: String = axes.rhs.iter().map(|r| code(*r)).collect();
+    format!("{lhs}.{rhs}")
 }
 
 /// Serialize a scalar expression as a KISS-Ops recipe sub-DAG, or `None` if any
-/// node has no confirmed KISS-Ops re-basing (never fabricates a token).
-fn expr_to_recipe(e: &ScalarExpr) -> Option<String> {
+/// node has no confirmed KISS-Ops re-basing (never fabricates a token). `reduced`
+/// is the recipe string a `Reduced(0)` leaf resolves to — the fold node inside a
+/// reduction/contraction epilogue; `None` for a bare elementwise body.
+fn expr_to_recipe(e: &ScalarExpr, reduced: Option<&str>) -> Option<String> {
     use ScalarExpr as E;
     Some(match e {
         E::Input(i) => format!("in{i}"),
         E::Const(c) => format!("const({})", const_repr(*c)),
-        E::Add(a, b) => format!("add({}, {})", expr_to_recipe(a)?, expr_to_recipe(b)?),
-        E::Sub(a, b) => format!("sub({}, {})", expr_to_recipe(a)?, expr_to_recipe(b)?),
-        E::Mul(a, b) => format!("mul({}, {})", expr_to_recipe(a)?, expr_to_recipe(b)?),
-        E::Div(a, b) => format!("div({}, {})", expr_to_recipe(a)?, expr_to_recipe(b)?),
-        E::Unary(u, x) => format!("{}({})", unary_kiss_name(*u)?, expr_to_recipe(x)?),
+        E::Add(a, b) => format!(
+            "add({}, {})",
+            expr_to_recipe(a, reduced)?,
+            expr_to_recipe(b, reduced)?
+        ),
+        E::Sub(a, b) => format!(
+            "sub({}, {})",
+            expr_to_recipe(a, reduced)?,
+            expr_to_recipe(b, reduced)?
+        ),
+        E::Mul(a, b) => format!(
+            "mul({}, {})",
+            expr_to_recipe(a, reduced)?,
+            expr_to_recipe(b, reduced)?
+        ),
+        E::Div(a, b) => format!(
+            "div({}, {})",
+            expr_to_recipe(a, reduced)?,
+            expr_to_recipe(b, reduced)?
+        ),
+        E::Unary(u, x) => format!("{}({})", unary_kiss_name(*u)?, expr_to_recipe(x, reduced)?),
         E::Binary(op, x, y) => format!(
             "{}({}, {})",
             binary_kiss_name(*op)?,
-            expr_to_recipe(x)?,
-            expr_to_recipe(y)?
+            expr_to_recipe(x, reduced)?,
+            expr_to_recipe(y, reduced)?
         ),
         E::Select(c, a, b) => format!(
             "select({}, {}, {})",
-            expr_to_recipe(c)?,
-            expr_to_recipe(a)?,
-            expr_to_recipe(b)?
+            expr_to_recipe(c, reduced)?,
+            expr_to_recipe(a, reduced)?,
+            expr_to_recipe(b, reduced)?
         ),
         // Source ops (KISS-Ops leaves with an attr, no child edges — Fuel co-pin
         // 2026-07-15). The attr rides the parens, mirroring `const(v)`.
         E::Coord(axis) => format!("iota({axis})"),
         E::Param(i) => format!("runtime_scalar({i})"),
-        // `Reduced(i)` is a fold-result child_edge (reduction/contraction access),
-        // not an elementwise leaf — honest miss until those accesses emit recipes.
+        // `Reduced(0)` resolves to the fold node inside a reduction/contraction
+        // epilogue; a bare elementwise body has no fold (`reduced == None`) → honest
+        // miss. `Reduced(i>0)` (a second stage) is not yet expressible.
+        E::Reduced(0) => reduced.map(String::from)?,
         E::Reduced(_) => return None,
     })
 }
@@ -176,7 +226,7 @@ fn binary_kiss_name(op: BinaryOp) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{BinaryOp, Expr, OpDef, ScalarExpr, UnaryOp, input, konst, param};
+    use crate::ir::{BinaryOp, Expr, OpDef, ScalarExpr, UnaryOp, input, konst, param, reduced};
     use baracuda_kernel_vocab::ElementKind::F32;
 
     fn unary_recipe(u: UnaryOp) -> Option<String> {
@@ -290,6 +340,31 @@ mod tests {
         assert_eq!(
             binary_recipe(BinaryOp::LogicalOr).as_deref(),
             Some("logical_or(in0, in1)")
+        );
+    }
+
+    #[test]
+    fn contraction_recipe_is_a_matmul_node_with_the_epilogue_over_it() {
+        use crate::ir::ContractionAxes;
+        // Plain matmul: the identity epilogue (`Reduced(0)`) IS the matmul node.
+        let mm = OpDef::contraction("mm", &[F32], ContractionAxes::matmul(), reduced(0));
+        assert_eq!(
+            semantics_dag(&mm).as_deref(),
+            Some("matmul[mk.kn](in0, in1)")
+        );
+        // Batched: the role vector carries the leading batch axis.
+        let bmm = OpDef::contraction("bmm", &[F32], ContractionAxes::batched_matmul(), reduced(0));
+        assert_eq!(
+            semantics_dag(&bmm).as_deref(),
+            Some("matmul[bmk.bkn](in0, in1)")
+        );
+        // Fused matmul + per-column bias + relu: the epilogue composes as ordinary
+        // elementwise nodes over the matmul node; the bias is `in2` (Bind(2)).
+        let mbr =
+            OpDef::contraction_bias("mbr", &[F32], (reduced(0) + input(2)).unary(UnaryOp::Relu));
+        assert_eq!(
+            semantics_dag(&mbr).as_deref(),
+            Some("relu(add(matmul[mk.kn](in0, in1), in2))")
         );
     }
 
