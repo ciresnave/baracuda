@@ -11,17 +11,21 @@
 //!
 //! # Format — PROVISIONAL
 //!
-//! The Semantics text is a compact functional op-DAG — `op(arg, arg, …)`, leaves
-//! `in<i>` (kernel input) and `const(<v>)` — e.g. a fused `relu_add` is
-//! `add(relu(in0), in1)`. KISS §2.3 shows the DAG shape (`{ op: add }`, nested for a
-//! fusion) but does not pin the exact literal grammar, so this spelling is a strawman
-//! to co-pin with Fuel (the recipe format the importer parses), isolated here.
+//! The Semantics text is a compact functional op-DAG — `op(arg, arg, …)`, with the
+//! `Bind` leaf `in<i>` (kernel input) and the source-op leaves `const(<v>)`,
+//! `iota(<axis>)`, `runtime_scalar(<slot>)` (attr in the parens) — e.g. a fused
+//! `relu_add` is `add(relu(in0), in1)`. Fuel confirmed this functional text is a
+//! valid **surface** the importer parses; Fuel flattens it to the §6.4-0009
+//! `Op{op_name,op_attrs,child_edges} | Bind(input_index)` flat table and
+//! canonicalizes on ingest (`docs/fuel-reply-recipe-{grammar,schema}-2026-07-15.md`).
+//! The literal grammar is still a co-pin strawman, isolated here.
 //!
-//! # Scope (increment 1)
+//! # Scope
 //!
-//! Elementwise bodies over `Input`/`Const` leaves. Reductions, scans,
-//! gather/scatter, scalar `Param`/`Coord`/`Reduced` leaves, and the OpAttrs channel
-//! are follow-ups — an honest miss (`None`) until covered.
+//! Elementwise bodies over `Input`/`Const` leaves **plus** the co-pinned source ops
+//! `Coord`→`iota` and `Param`→`runtime_scalar`. Reductions, scans, gather/scatter,
+//! the `Reduced` fold-edge, contraction/matmul (`Op::MatMul`), and the positional
+//! OpAttrs blob are follow-ups — an honest miss (`None`) until covered.
 
 use crate::ir::{Access, BinaryOp, OpDef, ScalarExpr, UnaryOp};
 
@@ -63,9 +67,13 @@ fn expr_to_recipe(e: &ScalarExpr) -> Option<String> {
             expr_to_recipe(a)?,
             expr_to_recipe(b)?
         ),
-        // Param / Reduced / Coord leaves: not yet a recipe leaf (need the OpAttrs /
-        // Access channels) — honest miss.
-        E::Param(_) | E::Reduced(_) | E::Coord(_) => return None,
+        // Source ops (KISS-Ops leaves with an attr, no child edges — Fuel co-pin
+        // 2026-07-15). The attr rides the parens, mirroring `const(v)`.
+        E::Coord(axis) => format!("iota({axis})"),
+        E::Param(i) => format!("runtime_scalar({i})"),
+        // `Reduced(i)` is a fold-result child_edge (reduction/contraction access),
+        // not an elementwise leaf — honest miss until those accesses emit recipes.
+        E::Reduced(_) => return None,
     })
 }
 
@@ -168,7 +176,7 @@ fn binary_kiss_name(op: BinaryOp) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{BinaryOp, Expr, OpDef, ScalarExpr, UnaryOp, input, konst};
+    use crate::ir::{BinaryOp, Expr, OpDef, ScalarExpr, UnaryOp, input, konst, param};
     use baracuda_kernel_vocab::ElementKind::F32;
 
     fn unary_recipe(u: UnaryOp) -> Option<String> {
@@ -223,10 +231,25 @@ mod tests {
     }
 
     #[test]
-    fn unmapped_node_is_an_honest_miss() {
-        // A Coord leaf isn't expressible as a recipe leaf yet → None, never a wrong
-        // token. Guards against fabricating a KISS-Ops name.
-        let op = OpDef::elementwise("coordy", 1, &[F32], Expr(ScalarExpr::Coord(0)));
+    fn coord_and_param_map_to_the_resolved_source_ops() {
+        // Fuel co-pin (docs/fuel-reply-recipe-schema-2026-07-15.md): coord → the
+        // KISS-Ops `iota{axis}` source op, param → `runtime_scalar{slot}` — both
+        // keep the node schema closed to Op|Bind (the attr rides the parens, as
+        // `const(v)` already does). Previously honest misses.
+        let coord_op = OpDef::elementwise("c", 1, &[F32], Expr(ScalarExpr::Coord(2)));
+        assert_eq!(semantics_dag(&coord_op).as_deref(), Some("iota(2)"));
+        let param_op = OpDef::elementwise("p", 1, &[F32], input(0) * param(0));
+        assert_eq!(
+            semantics_dag(&param_op).as_deref(),
+            Some("mul(in0, runtime_scalar(0))")
+        );
+    }
+
+    #[test]
+    fn reduced_leaf_is_an_honest_miss_in_an_elementwise_body() {
+        // A `Reduced(i)` is a fold-result child_edge (reduction/contraction access),
+        // NOT an elementwise leaf — no recipe here yet → None, never a wrong token.
+        let op = OpDef::elementwise("redy", 1, &[F32], Expr(ScalarExpr::Reduced(0)));
         assert_eq!(semantics_dag(&op), None);
     }
 
