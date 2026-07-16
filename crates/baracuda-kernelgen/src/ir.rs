@@ -2223,20 +2223,20 @@ impl OpDef {
     /// `out[m,n] = epilogue(Σ_k lhs[m,k]·rhs[k,n], bias[n])` is one launch instead
     /// of a GEMM followed by a separate bias/activation pass. `n_inputs = 3`
     /// (lhs, rhs, bias); `body == epilogue` like [`OpDef::contraction`].
+    ///
+    /// Fixed to the rank-2 [`ContractionAxes::matmul`] cell: v1 does not combine a
+    /// fused bias with the batched form (that combination declines at
+    /// `derive_contraction`, which would then trip `build_plan`'s facts assert),
+    /// so hardwiring the axes makes the unsupported combo unconstructible.
     #[must_use]
-    pub fn contraction_bias(
-        name: &str,
-        dtypes: &[ElementKind],
-        axes: ContractionAxes,
-        epilogue: Expr,
-    ) -> Self {
+    pub fn contraction_bias(name: &str, dtypes: &[ElementKind], epilogue: Expr) -> Self {
         Self {
             name: name.to_string(),
             n_inputs: 3,
             body: epilogue.0.clone(),
             dtypes: dtypes.to_vec(),
             access: Access::Contraction {
-                axes,
+                axes: ContractionAxes::matmul(),
                 accum: AccumSpec::WideFloat,
                 epilogue: epilogue.0,
             },

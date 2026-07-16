@@ -8448,7 +8448,6 @@ mod tests {
         let mb = OpDef::contraction_bias(
             "matmul_bias_relu",
             &[ElementKind::F32],
-            ContractionAxes::matmul(),
             (reduced(0) + input(2)).unary(UnaryOp::Relu),
         );
         let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);

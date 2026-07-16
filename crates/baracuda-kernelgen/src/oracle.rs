@@ -2671,7 +2671,7 @@ mod tests {
 
     #[test]
     fn contraction_matmul_bias_relu_epilogue() {
-        use crate::ir::{ContractionAxes, UnaryOp};
+        use crate::ir::UnaryOp;
         // Fused matmul + per-column bias + relu: out = relu(Σ_k lhs·rhs + bias[n]).
         //   lhs = [[1, 2]]   rhs = [[3,4],[5,6]]   bias = [-100, 1]
         //   K-sums = [1·3+2·5, 1·4+2·6] = [13, 16]
@@ -2680,7 +2680,6 @@ mod tests {
         let op = OpDef::contraction_bias(
             "matmul_bias_relu",
             &[ElementKind::F32],
-            ContractionAxes::matmul(),
             (reduced(0) + input(2)).unary(UnaryOp::Relu),
         );
         let (lhs, rhs, bias, out, key) = gemm_bias_cell(1, 2, 2);

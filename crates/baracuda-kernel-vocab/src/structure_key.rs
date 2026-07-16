@@ -513,10 +513,13 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
             {
                 return None;
             }
-            // A fused bias must be the per-column `[N]` vector (broadcast over M).
+            // A fused bias must be the DENSE per-column `[N]` vector (unit stride,
+            // broadcast over M). The emitter reads a hardcoded `in2[col]`, so a
+            // strided or broadcast (stride-0) bias would silently mis-read / read
+            // out of bounds — decline (honest miss) rather than emit a wrong load.
             if has_bias {
                 let bias = &operands[2];
-                if bias.rank != 1 || bias.shape[0] != n {
+                if bias.rank != 1 || bias.shape[0] != n || bias.strides[0] != 1 {
                     return None;
                 }
             }
@@ -1004,6 +1007,72 @@ mod contraction_key_tests {
         let tok = k.to_token();
         assert!(tok.ends_with("|ctll/d16"), "optional trailing field: {tok}");
         assert_eq!(StructureKey::from_token(&tok), Some(k), "round-trips");
+    }
+
+    #[test]
+    fn gemm_bias_dense_derives_but_strided_or_broadcast_bias_declines() {
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        // A DENSE per-column [N] bias (unit stride) derives — the bias does not
+        // change the ContractionKey facts (token stays `ctll/d16`).
+        let bias = OperandDesc::new(1, &[4096], &[1], ElementKind::F32, 256);
+        let k = structure_key(OpCategory::Gemm, &[lhs, rhs, bias, out], ArchSku::Sm89);
+        assert!(k.contraction.is_some(), "dense bias cell derives facts");
+        assert!(k.to_token().ends_with("|ctll/d16"), "bias unchanged token");
+        // A STRIDED bias (every-other element) declines: the emitter reads a
+        // hardcoded in2[col], so a non-unit stride would silently mis-read.
+        let strided = OperandDesc::new(1, &[4096], &[2], ElementKind::F32, 256);
+        let ks = structure_key(OpCategory::Gemm, &[lhs, rhs, strided, out], ArchSku::Sm89);
+        assert!(ks.contraction.is_none(), "strided bias must decline");
+        // A BROADCAST bias (stride 0) declines: in2[col] over 0..N would read past
+        // a 1-element allocation (OOB device read).
+        let bcast = OperandDesc::new(1, &[4096], &[0], ElementKind::F32, 256);
+        let kb = structure_key(OpCategory::Gemm, &[lhs, rhs, bcast, out], ArchSku::Sm89);
+        assert!(kb.contraction.is_none(), "broadcast bias must decline");
+    }
+
+    #[test]
+    fn gemm_batched_derives_and_round_trips_with_batch_class() {
+        // [8,8,4096]·[8,4096,4096] → [8,8,4096] (B/M Tiny).
+        let lhs = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let rhs = OperandDesc::new(
+            3,
+            &[8, 4096, 4096],
+            &[4096 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let out = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let k = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let c = k.contraction.expect("batched gemm derives facts");
+        assert_eq!(c.batch, Some(SizeClass::Tiny));
+        let tok = k.to_token();
+        assert!(
+            tok.ends_with("|ctll/d16/bt"),
+            "batched token appends /b<class>: {tok}"
+        );
+        assert_eq!(
+            StructureKey::from_token(&tok),
+            Some(k),
+            "batched round-trips"
+        );
+        // A non-dense rank-3 lhs declines (v1 is dense row-major only).
+        let nd = OperandDesc::new(3, &[8, 8, 4096], &[1, 8, 64], ElementKind::F32, 256);
+        let knd = structure_key(OpCategory::Gemm, &[nd, rhs, out], ArchSku::Sm89);
+        assert!(knd.contraction.is_none(), "non-dense rank-3 declines");
     }
 
     #[test]
