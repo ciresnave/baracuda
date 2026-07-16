@@ -58,6 +58,9 @@ pub mod slang;
 pub mod telemetry;
 mod text;
 
+#[cfg(test)]
+mod fuzz;
+
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, bundle_kisc, contract, front_matter};
 pub use cpu_c::CpuC;
