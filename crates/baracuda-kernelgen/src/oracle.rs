@@ -1063,7 +1063,7 @@ pub fn evaluate(
         Access::Scan { .. } => vec![eval_scan(plan, operands, inputs, params)],
         Access::Window { .. } => vec![eval_window(plan, operands, inputs, params)],
         Access::Im2Col { .. } => vec![eval_im2col(plan, operands, inputs)],
-        Access::Contraction { .. } => panic!("oracle v1: Contraction is deferred to v2"),
+        Access::Contraction { .. } => vec![eval_contraction(plan, operands, inputs, params)],
         Access::RowSort { .. } => panic!("oracle v1: RowSort is deferred to v2"),
     }
 }
@@ -1254,6 +1254,77 @@ fn eval_reduction(
                 .sum()
         };
         store_val(posted, out_dt, &mut out.bytes, off as usize);
+    }
+    out
+}
+
+// ===========================================================================
+// B'. Contraction (matmul).
+// ===========================================================================
+
+/// Evaluate a rank-2 dense contraction `[m,k]·[k,n] → [m,n]` (the matmul axes the
+/// plan gate has already asserted). Independent of the CUDA skinny-SIMT emitter:
+/// a plain triple loop with the SAME accumulation ORDER (K ascending) and the
+/// SAME `Reduced(0)` epilogue over the per-`(m,n)` K-sum.
+///
+/// Accumulates the K-sum in `f64` — the accurate reference. Like the reductions,
+/// this oracle is a tolerance referee, not a bit-for-bit device mirror: the
+/// emitter's `f32`/`double` accumulator rounding is absorbed by the tolerant
+/// comparator (`Fidelity::Tolerant`), while an exactly-representable cell (small
+/// integers) matches bit-for-bit.
+///
+/// v1 scope mirrors the emitter and `derive_contraction`: matmul axes only, no
+/// batch/transpose, and the epilogue reads only `Reduced(0)` (no `Input`/`Coord`).
+fn eval_contraction(
+    plan: &KernelPlan<'_>,
+    operands: &[OperandDesc],
+    inputs: &[TypedBuffer],
+    params: &[f64],
+) -> TypedBuffer {
+    let epilogue = match plan.access {
+        Access::Contraction { epilogue, .. } => epilogue,
+        _ => unreachable!("eval_contraction requires Access::Contraction"),
+    };
+    let n_in = plan.n_inputs as usize;
+    let lhs = &operands[0];
+    let rhs = &operands[1];
+    let m = lhs.shape[0];
+    let k = lhs.shape[1];
+    let n = rhs.shape[1];
+    assert_eq!(
+        rhs.shape[0], k,
+        "oracle: contraction K mismatch (lhs cols {k} vs rhs rows {})",
+        rhs.shape[0]
+    );
+
+    let mut out = alloc_output(plan, operands, n_in, 0);
+    let out_dt = plan.out_dtype_of(0);
+
+    for mi in 0..m {
+        for ni in 0..n {
+            // K-sum, `kk` ascending — the emitter's inner loop order (cuda.rs:3245).
+            let mut acc = 0.0f64;
+            for kk in 0..k {
+                let a = read_strided(inputs, operands, 0, &[mi, kk], input_perm(plan, 0)).f64();
+                let b = read_strided(inputs, operands, 1, &[kk, ni], input_perm(plan, 1)).f64();
+                acc += a * b;
+            }
+            // Epilogue over Reduced(0) = the accumulator; no Input/Coord leaves.
+            let reduced_leaf = |s: u8| {
+                assert_eq!(s, 0, "contraction epilogue reads only Reduced(0)");
+                Val::Float(acc)
+            };
+            let ev = Eval {
+                dtype: plan.dtype,
+                params,
+                leaf: &(|i: u8| panic!("contraction epilogue reads no Input({i})")),
+                reduced: &reduced_leaf,
+                coord: &panic_coord,
+            };
+            let posted = eval(epilogue, &ev);
+            let off = mi * out.strides[0] + ni * out.strides[1];
+            store_val(posted, out_dt, &mut out.bytes, off as usize);
+        }
     }
     out
 }
@@ -2484,6 +2555,66 @@ mod tests {
         let out = evaluate(&plan, &ops, &ins, &[]);
         assert_eq!(bit32(&out[0], 0), 0.0f32.to_bits(), "+0 + -0 = +0");
         assert_eq!(bit32(&out[0], 1), (-0.0f32).to_bits(), "-0 + -0 = -0");
+    }
+
+    // --- H. Contraction (matmul) --------------------------------------------
+
+    // Cell/plan builder for a rank-2 dense row-major GEMM `[m,k]·[k,n] → [m,n]`.
+    fn gemm_cell(m: i64, k: i64, n: i64) -> (OperandDesc, OperandDesc, OperandDesc, StructureKey) {
+        let lhs = desc(&[m, k], &[k, 1], ElementKind::F32);
+        let rhs = desc(&[k, n], &[n, 1], ElementKind::F32);
+        let out = desc(&[m, n], &[n, 1], ElementKind::F32);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        (lhs, rhs, out, key)
+    }
+
+    #[test]
+    fn contraction_matmul_identity_epilogue() {
+        use crate::ir::ContractionAxes;
+        // [2,3]·[3,2] → [2,2], exactly-representable small integers so the f64
+        // reference is exact (independent of accumulation width / tolerance).
+        //   lhs = [[1,2,3],[4,5,6]]   rhs = [[7,8],[9,10],[11,12]]
+        //   out = [[1·7+2·9+3·11, 1·8+2·10+3·12], [4·7+5·9+6·11, 4·8+5·10+6·12]]
+        //       = [[58, 64], [139, 154]]
+        let op = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let (lhs, rhs, out, key) = gemm_cell(2, 3, 2);
+        let plan = build_plan(&op, &key);
+        let ops = [lhs, rhs, out];
+        let ins = [
+            f32b(&[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+            f32b(&[3, 2], &[7.0, 8.0, 9.0, 10.0, 11.0, 12.0]),
+        ];
+        let got = evaluate(&plan, &ops, &ins, &[]);
+        assert_eq!(f32s(&got[0]), vec![58.0, 64.0, 139.0, 154.0]);
+    }
+
+    #[test]
+    fn contraction_matmul_relu_epilogue_over_reduced0() {
+        use crate::ir::{ContractionAxes, UnaryOp};
+        // [1,2]·[2,2] → [1,2] with a relu epilogue over the K-sum (Reduced(0)).
+        //   lhs = [[1,-3]]   rhs = [[2,5],[4,1]]
+        //   raw K-sums = [1·2+(-3)·4, 1·5+(-3)·1] = [-10, 2]
+        //   relu       = [0, 2]  (the negative column clamps, exercising the epilogue)
+        let op = OpDef::contraction(
+            "matmul_relu",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0).unary(UnaryOp::Relu),
+        );
+        let (lhs, rhs, out, key) = gemm_cell(1, 2, 2);
+        let plan = build_plan(&op, &key);
+        let ops = [lhs, rhs, out];
+        let ins = [
+            f32b(&[1, 2], &[1.0, -3.0]),
+            f32b(&[2, 2], &[2.0, 5.0, 4.0, 1.0]),
+        ];
+        let got = evaluate(&plan, &ops, &ins, &[]);
+        assert_eq!(f32s(&got[0]), vec![0.0, 2.0]);
     }
 
     // --- compare helper -----------------------------------------------------
