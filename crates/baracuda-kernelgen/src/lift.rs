@@ -6,7 +6,7 @@
 //! hand-written kernel can be re-emitted to every backend the generator has an
 //! emitter for (CUDA, CpuC, …). It **refuses** anything it cannot express
 //! faithfully — a non-`[i]` index, an unknown call, shared memory, an atomic,
-//! a library call — returning it as [`LiftError::Residue`] rather than silently
+//! a library call — returning a typed [`LiftError`] refusal rather than silently
 //! mis-lifting. That is the "convert what you can, leave the rest in the source
 //! language" contract: portability scales with the lift fraction, honestly.
 //!
@@ -18,16 +18,54 @@
 use crate::ir::{BinaryOp, Expr, OpDef, ScalarExpr, UnaryOp};
 use baracuda_kernel_vocab::ElementKind;
 
-/// Why a source kernel could not be fully lifted. `Residue` is the honest
-/// "keep this in the source language" outcome (the string names the construct).
+/// Why a source kernel could not be fully lifted — the KISS-Consume refusal
+/// taxonomy. Each variant is one machine-actionable category (see
+/// [`LiftError::refusal`]); the string on the two residue variants names the
+/// construct so the un-lifted remainder stays honest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LiftError {
-    /// No `__global__` kernel in the source.
+    /// No `__global__` kernel in the source. (not-a-kernel)
     NotAKernel,
-    /// No recognizable `out[i] = <expr>;` elementwise store.
+    /// A kernel, but not the `out[i] = <expr>;` elementwise op class this
+    /// recognizer targets. (wrong-op-class — the recognized-op-class miss.)
     NotElementwise,
-    /// A construct we cannot express in the IR — left to the source language.
-    Residue(String),
+    /// A construct KISS-Ops could express that this small recognizer doesn't
+    /// handle yet (an unknown call/token, a non-`[i]` read, …). A recognizer gap,
+    /// not an IR limit. (unrecognized-but-expressible)
+    Unrecognized(String),
+    /// A construct with no neutral-IR representation — it MUST stay in the source
+    /// language (shared memory, atomics, sync, library calls, inline asm, warp
+    /// shuffles). (inexpressible-residue)
+    Inexpressible(String),
+}
+
+/// The KISS-Consume refusal category of a [`LiftError`] — machine-actionable, so a
+/// consumer can choose its next move (retry, request the op be added, fall back to
+/// another provider, or leave the fragment in the source language) rather than
+/// parse a free-text reason.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsumeRefusal {
+    /// The input is not a kernel.
+    NotAKernel,
+    /// A kernel of a different op class than this recognizer targets.
+    WrongOpClass,
+    /// KISS-Ops could express it; this recognizer doesn't yet.
+    UnrecognizedButExpressible,
+    /// No neutral-IR representation; leave it in the source language.
+    InexpressibleResidue,
+}
+
+impl LiftError {
+    /// This refusal's KISS-Consume category.
+    #[must_use]
+    pub fn refusal(&self) -> ConsumeRefusal {
+        match self {
+            LiftError::NotAKernel => ConsumeRefusal::NotAKernel,
+            LiftError::NotElementwise => ConsumeRefusal::WrongOpClass,
+            LiftError::Unrecognized(_) => ConsumeRefusal::UnrecognizedButExpressible,
+            LiftError::Inexpressible(_) => ConsumeRefusal::InexpressibleResidue,
+        }
+    }
 }
 
 /// A successfully lifted elementwise op.
@@ -64,7 +102,7 @@ pub fn lift_elementwise(
         "__shfl",
     ] {
         if src.contains(marker) {
-            return Err(LiftError::Residue(marker.to_string()));
+            return Err(LiftError::Inexpressible(marker.to_string()));
         }
     }
     let (rhs, idx_var) = extract_store(src).ok_or(LiftError::NotElementwise)?;
@@ -145,7 +183,7 @@ fn tokenize(s: &str) -> Result<Vec<Tok>, LiftError> {
             }
             let v: f64 = lit
                 .parse()
-                .map_err(|_| LiftError::Residue(format!("literal {lit}")))?;
+                .map_err(|_| LiftError::Unrecognized(format!("literal {lit}")))?;
             out.push(Tok::Num(v));
         } else if c.is_ascii_alphabetic() || c == '_' {
             let st = i;
@@ -164,7 +202,7 @@ fn tokenize(s: &str) -> Result<Vec<Tok>, LiftError> {
                 '[' => Tok::LBrack,
                 ']' => Tok::RBrack,
                 ',' => Tok::Comma,
-                other => return Err(LiftError::Residue(format!("token '{other}'"))),
+                other => return Err(LiftError::Unrecognized(format!("token '{other}'"))),
             };
             out.push(t);
             i += 1;
@@ -214,7 +252,7 @@ impl Parser {
         if self.pos == self.toks.len() {
             Ok(())
         } else {
-            Err(LiftError::Residue(format!(
+            Err(LiftError::Unrecognized(format!(
                 "trailing tokens {:?}",
                 &self.toks[self.pos..]
             )))
@@ -274,7 +312,7 @@ impl Parser {
             Some(Tok::LParen) => {
                 let e = self.parse_expr()?;
                 if !self.eat(&Tok::RParen) {
-                    return Err(LiftError::Residue("unmatched '('".into()));
+                    return Err(LiftError::Unrecognized("unmatched '('".into()));
                 }
                 Ok(e)
             }
@@ -284,10 +322,10 @@ impl Parser {
                 } else if self.peek() == Some(&Tok::LBrack) {
                     self.parse_input_ref(&name)
                 } else {
-                    Err(LiftError::Residue(format!("identifier '{name}'")))
+                    Err(LiftError::Unrecognized(format!("identifier '{name}'")))
                 }
             }
-            other => Err(LiftError::Residue(format!("unexpected {other:?}"))),
+            other => Err(LiftError::Unrecognized(format!("unexpected {other:?}"))),
         }
     }
 
@@ -296,19 +334,19 @@ impl Parser {
         let k: u8 = name
             .strip_prefix("in")
             .and_then(|d| d.parse().ok())
-            .ok_or_else(|| LiftError::Residue(format!("read '{name}[..]' (not inK)")))?;
+            .ok_or_else(|| LiftError::Unrecognized(format!("read '{name}[..]' (not inK)")))?;
         self.eat(&Tok::LBrack);
         match self.next() {
             Some(Tok::Ident(v)) if v == self.idx_var => {}
             other => {
-                return Err(LiftError::Residue(format!(
+                return Err(LiftError::Unrecognized(format!(
                     "non-elementwise index in {name}[{other:?}] (expected [{}])",
                     self.idx_var
                 )));
             }
         }
         if !self.eat(&Tok::RBrack) {
-            return Err(LiftError::Residue("unmatched '['".into()));
+            return Err(LiftError::Unrecognized("unmatched '['".into()));
         }
         self.max_input = Some(self.max_input.map_or(k, |m| m.max(k)));
         Ok(ScalarExpr::Input(k))
@@ -321,17 +359,17 @@ impl Parser {
         if self.eat(&Tok::Comma) {
             let b = self.parse_expr()?;
             if !self.eat(&Tok::RParen) {
-                return Err(LiftError::Residue("unmatched '(' in call".into()));
+                return Err(LiftError::Unrecognized("unmatched '(' in call".into()));
             }
-            let op =
-                binary_fn(name).ok_or_else(|| LiftError::Residue(format!("call '{name}(_,_)'")))?;
+            let op = binary_fn(name)
+                .ok_or_else(|| LiftError::Unrecognized(format!("call '{name}(_,_)'")))?;
             Ok(ScalarExpr::Binary(op, Box::new(a), Box::new(b)))
         } else {
             if !self.eat(&Tok::RParen) {
-                return Err(LiftError::Residue("unmatched '(' in call".into()));
+                return Err(LiftError::Unrecognized("unmatched '(' in call".into()));
             }
-            let op =
-                unary_fn(name).ok_or_else(|| LiftError::Residue(format!("call '{name}(_)'")))?;
+            let op = unary_fn(name)
+                .ok_or_else(|| LiftError::Unrecognized(format!("call '{name}(_)'")))?;
             Ok(ScalarExpr::Unary(op, Box::new(a)))
         }
     }
@@ -445,22 +483,37 @@ mod tests {
             "__global__ void k(const float* in0, float* out, long long n){ out[i] = in0[i+1]; }";
         assert!(matches!(
             lift_elementwise(src, "x", F32),
-            Err(LiftError::Residue(_))
+            Err(LiftError::Unrecognized(_))
         ));
     }
 
     #[test]
-    fn refuses_shared_memory_and_unknown_calls() {
+    fn shared_memory_is_inexpressible_residue() {
+        // A construct with no neutral-IR representation → inexpressible-residue,
+        // "leave it in the source language".
         let smem = "__global__ void k(float* out){ __shared__ float s[32]; out[i] = s[0]; }";
-        assert_eq!(
-            lift_elementwise(smem, "x", F32).unwrap_err(),
-            LiftError::Residue("__shared__".into())
-        );
+        let e = lift_elementwise(smem, "x", F32).unwrap_err();
+        assert_eq!(e, LiftError::Inexpressible("__shared__".into()));
+        assert_eq!(e.refusal(), ConsumeRefusal::InexpressibleResidue);
+    }
+
+    #[test]
+    fn unknown_call_is_unrecognized_but_expressible() {
+        // KISS-Ops could express `mystery` if it were a known op; the recognizer
+        // just doesn't map it → unrecognized-but-expressible (a recognizer gap).
         let unk = "__global__ void k(const float* in0, float* out){ out[i] = mystery(in0[i]); }";
-        assert!(matches!(
-            lift_elementwise(unk, "x", F32),
-            Err(LiftError::Residue(_))
-        ));
+        let e = lift_elementwise(unk, "x", F32).unwrap_err();
+        assert!(matches!(e, LiftError::Unrecognized(_)));
+        assert_eq!(e.refusal(), ConsumeRefusal::UnrecognizedButExpressible);
+    }
+
+    #[test]
+    fn refusal_maps_the_kiss_consume_categories() {
+        assert_eq!(LiftError::NotAKernel.refusal(), ConsumeRefusal::NotAKernel);
+        assert_eq!(
+            LiftError::NotElementwise.refusal(),
+            ConsumeRefusal::WrongOpClass
+        );
     }
 
     #[test]

@@ -5,7 +5,8 @@
 //! reuse the mature `tree-sitter-cuda` / `tree-sitter-slang` grammars: parse
 //! source into an error-tolerant CST, recognize the expressible idioms
 //! (grid-stride / dispatch elementwise, …) into the neutral IR (`OpDef`), and
-//! keep whatever doesn't map as source **residue** ([`LiftError::Residue`]).
+//! keep whatever doesn't map as a typed [`LiftError`] residue
+//! ([`LiftError::Unrecognized`] / [`LiftError::Inexpressible`]).
 //! Error tolerance is a feature — unrecognized constructs stay as intact subtrees
 //! we refuse rather than mis-lift; portability scales with the lift fraction.
 //!
@@ -71,7 +72,7 @@ const SLANG_RESIDUE: &[&str] = &[
 /// Lift a grid-stride elementwise **CUDA** kernel into an [`OpDef`] by walking
 /// its tree-sitter CST. Recognizes `out[i] = <expr>;` where the body is
 /// arithmetic over `inK[i]`, literals, and CUDA math intrinsics; refuses
-/// anything else as [`LiftError::Residue`].
+/// anything else as a typed [`LiftError`] residue.
 pub fn lift_elementwise_cuda(
     src: &str,
     name: &str,
@@ -108,7 +109,7 @@ pub fn lift_elementwise_slang(
 fn reject_markers(src: &str, markers: &[&str]) -> Result<(), LiftError> {
     for m in markers {
         if src.contains(m) {
-            return Err(LiftError::Residue((*m).to_string()));
+            return Err(LiftError::Inexpressible((*m).to_string()));
         }
     }
     Ok(())
@@ -233,12 +234,13 @@ fn lift_scan_store(
     in_prefix: &str,
 ) -> Result<Lifted, LiftError> {
     let acc = find_running_out_store(tree.root_node(), src, out_name).ok_or_else(|| {
-        LiftError::Residue(format!("no running `{out_name}[i] = acc` scan store"))
+        LiftError::Unrecognized(format!("no running `{out_name}[i] = acc` scan store"))
     })?;
-    let (op, pre_node) = find_accumulation(tree.root_node(), src, &acc)
-        .ok_or_else(|| LiftError::Residue(format!("no recognizable scan update of `{acc}`")))?;
+    let (op, pre_node) = find_accumulation(tree.root_node(), src, &acc).ok_or_else(|| {
+        LiftError::Unrecognized(format!("no recognizable scan update of `{acc}`"))
+    })?;
     let idx_var = first_input_index(pre_node, src, in_prefix)
-        .ok_or_else(|| LiftError::Residue("scan body reads no inK[idx]".into()))?;
+        .ok_or_else(|| LiftError::Unrecognized("scan body reads no inK[idx]".into()))?;
     let mut w = Walk {
         src,
         idx_var,
@@ -304,12 +306,14 @@ fn lift_reduce_store(
     out_name: &str,
     in_prefix: &str,
 ) -> Result<Lifted, LiftError> {
-    let acc = find_scalar_out_store(tree.root_node(), src, out_name)
-        .ok_or_else(|| LiftError::Residue(format!("no scalar `{out_name}[..] = acc` store")))?;
-    let (op, body_node) = find_accumulation(tree.root_node(), src, &acc)
-        .ok_or_else(|| LiftError::Residue(format!("no recognizable reduce update of `{acc}`")))?;
+    let acc = find_scalar_out_store(tree.root_node(), src, out_name).ok_or_else(|| {
+        LiftError::Unrecognized(format!("no scalar `{out_name}[..] = acc` store"))
+    })?;
+    let (op, body_node) = find_accumulation(tree.root_node(), src, &acc).ok_or_else(|| {
+        LiftError::Unrecognized(format!("no recognizable reduce update of `{acc}`"))
+    })?;
     let idx_var = first_input_index(body_node, src, in_prefix)
-        .ok_or_else(|| LiftError::Residue("reduction body reads no inK[idx]".into()))?;
+        .ok_or_else(|| LiftError::Unrecognized("reduction body reads no inK[idx]".into()))?;
     let mut w = Walk {
         src,
         idx_var,
@@ -523,7 +527,7 @@ impl<'a> Walk<'a> {
             "parenthesized_expression" => {
                 let inner = n
                     .named_child(0)
-                    .ok_or_else(|| LiftError::Residue("()".into()))?;
+                    .ok_or_else(|| LiftError::Unrecognized("()".into()))?;
                 self.expr(inner)
             }
             "binary_expression" => {
@@ -536,7 +540,7 @@ impl<'a> Walk<'a> {
                     "-" => ScalarExpr::Sub(Box::new(le), Box::new(re)),
                     "*" => ScalarExpr::Mul(Box::new(le), Box::new(re)),
                     "/" => ScalarExpr::Div(Box::new(le), Box::new(re)),
-                    other => return Err(LiftError::Residue(format!("operator '{other}'"))),
+                    other => return Err(LiftError::Unrecognized(format!("operator '{other}'"))),
                 })
             }
             "unary_expression" => {
@@ -544,7 +548,7 @@ impl<'a> Walk<'a> {
                 let a = self.field(n, "argument")?;
                 match self.text(op) {
                     "-" => Ok(ScalarExpr::Unary(UnaryOp::Neg, Box::new(self.expr(a)?))),
-                    other => Err(LiftError::Residue(format!("unary '{other}'"))),
+                    other => Err(LiftError::Unrecognized(format!("unary '{other}'"))),
                 }
             }
             "subscript_expression" => {
@@ -553,12 +557,15 @@ impl<'a> Walk<'a> {
                     .strip_prefix(self.in_prefix)
                     .and_then(|d| d.parse().ok())
                     .ok_or_else(|| {
-                        LiftError::Residue(format!("read '{base}[..]' (not {}K)", self.in_prefix))
+                        LiftError::Unrecognized(format!(
+                            "read '{base}[..]' (not {}K)",
+                            self.in_prefix
+                        ))
                     })?;
                 let idx = subscript_index(n, self.src)
-                    .ok_or_else(|| LiftError::Residue("index".into()))?;
+                    .ok_or_else(|| LiftError::Unrecognized("index".into()))?;
                 if idx != self.idx_var {
-                    return Err(LiftError::Residue(format!(
+                    return Err(LiftError::Unrecognized(format!(
                         "non-elementwise index [{idx}] (expected [{}])",
                         self.idx_var
                     )));
@@ -572,7 +579,7 @@ impl<'a> Walk<'a> {
                     .trim_end_matches(['f', 'F', 'l', 'L', 'u', 'U']);
                 t.parse::<f64>()
                     .map(ScalarExpr::Const)
-                    .map_err(|_| LiftError::Residue(format!("literal {t}")))
+                    .map_err(|_| LiftError::Unrecognized(format!("literal {t}")))
             }
             "call_expression" => {
                 let fname = self.text(self.field(n, "function")?);
@@ -582,29 +589,35 @@ impl<'a> Walk<'a> {
                 match args.len() {
                     1 => {
                         let op = unary_fn(fname)
-                            .ok_or_else(|| LiftError::Residue(format!("call '{fname}(_)'")))?;
+                            .ok_or_else(|| LiftError::Unrecognized(format!("call '{fname}(_)'")))?;
                         Ok(ScalarExpr::Unary(op, Box::new(self.expr(args[0])?)))
                     }
                     2 => {
-                        let op = binary_fn(fname)
-                            .ok_or_else(|| LiftError::Residue(format!("call '{fname}(_,_)'")))?;
+                        let op = binary_fn(fname).ok_or_else(|| {
+                            LiftError::Unrecognized(format!("call '{fname}(_,_)'"))
+                        })?;
                         Ok(ScalarExpr::Binary(
                             op,
                             Box::new(self.expr(args[0])?),
                             Box::new(self.expr(args[1])?),
                         ))
                     }
-                    n => Err(LiftError::Residue(format!("call '{fname}' with {n} args"))),
+                    n => Err(LiftError::Unrecognized(format!(
+                        "call '{fname}' with {n} args"
+                    ))),
                 }
             }
-            "identifier" => Err(LiftError::Residue(format!("identifier '{}'", self.text(n)))),
-            other => Err(LiftError::Residue(format!("node '{other}'"))),
+            "identifier" => Err(LiftError::Unrecognized(format!(
+                "identifier '{}'",
+                self.text(n)
+            ))),
+            other => Err(LiftError::Unrecognized(format!("node '{other}'"))),
         }
     }
 
     fn field<'t>(&self, n: Node<'t>, name: &str) -> Result<Node<'t>, LiftError> {
         n.child_by_field_name(name)
-            .ok_or_else(|| LiftError::Residue(format!("missing {name} in {}", n.kind())))
+            .ok_or_else(|| LiftError::Unrecognized(format!("missing {name} in {}", n.kind())))
     }
 }
 
@@ -687,12 +700,12 @@ mod tests {
         let neigh = "__global__ void k(const float* in0, float* out){ out[i] = in0[i+1]; }";
         assert!(matches!(
             lift_elementwise_cuda(neigh, "x", F32),
-            Err(LiftError::Residue(_))
+            Err(LiftError::Unrecognized(_))
         ));
         let smem = "__global__ void k(float* out){ __shared__ float s[32]; out[i] = s[0]; }";
         assert!(matches!(
             lift_elementwise_cuda(smem, "x", F32),
-            Err(LiftError::Residue(_))
+            Err(LiftError::Unrecognized(_))
         ));
     }
 
@@ -727,7 +740,7 @@ mod tests {
             void k(uint3 tid : SV_DispatchThreadID) { output[tid.x] = s[0]; }";
         assert!(matches!(
             lift_elementwise_slang(src, "x", F32),
-            Err(LiftError::Residue(_))
+            Err(LiftError::Unrecognized(_))
         ));
     }
 
