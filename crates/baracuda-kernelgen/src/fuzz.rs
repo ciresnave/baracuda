@@ -3,18 +3,25 @@
 //! dependency; fully deterministic, so any failure reproduces from the printed
 //! seed/body).
 //!
-//! Two properties are checked here (CPU-only, no compiler required):
+//! Four properties are checked here (CPU-only, no compiler required):
 //!
-//! - **`cuda_emit_lift_structural_round_trip`** — for random IR over the *liftable*
-//!   op subset (the ops whose CUDA emit spelling the hand-written `lift.rs`
-//!   recognizes 1:1), `generate(Cuda)` → `lift_elementwise` must recover a
-//!   STRUCTURALLY EQUAL `ScalarExpr`. This generalizes the single-case
-//!   `lift::tests` round-trips to thousands of random trees — a divergence is a
-//!   real emitter/lifter asymmetry, not a flaky test.
-//! - **`cuda_full_op_emit_never_panics`** — for random IR over the *full* float op
+//! - **`cuda_emit_lift_structural_round_trip`** — random IR over the *liftable* op
+//!   subset (ops whose CUDA emit spelling the hand-written `lift.rs` recognizes
+//!   1:1) → `generate(Cuda)` → `lift_elementwise` must recover a STRUCTURALLY
+//!   EQUAL `ScalarExpr`. Generalizes the single-case `lift::tests` round-trips to
+//!   thousands of random trees — a divergence is a real emitter/lifter asymmetry.
+//! - **`cuda_full_op_emit_never_panics`** — random IR over the *full* float op
 //!   surface (all 39 `UnaryOp`, the 16 float-valid `BinaryOp`, `Select`, `Coord`,
-//!   `Param`, finite/NaN/Inf `Const`), `build_plan` + `generate(Cuda)` must not
-//!   panic and must emit non-empty source. Pure emitter robustness.
+//!   `Param`, finite/NaN/Inf `Const`) → `build_plan` + `generate(Cuda)` must be
+//!   total (no panic) and emit non-empty source. Pure emitter robustness.
+//! - **`tri_backend_scalar_emit_never_panics`** — the same random body emitted
+//!   through ALL THREE backends (Cuda/CpuC/Slang) over their three-way-common
+//!   Scalar-schedule coverage; a panic is a real lowering-seam gap. (The sweep
+//!   itself surfaced Slang's intentional `Copysign`/`Nextafter` decline.)
+//! - **`oracle_elementwise_matches_independent_evaluator`** — `oracle::evaluate`
+//!   (plan interpreter) vs an INDEPENDENT f64 tree-walk over a numerically-safe
+//!   palette + random inputs, compared at tolerance — a numeric differential of
+//!   the correctness oracle's elementwise plumbing.
 //!
 //! The Slang cross-lift (needs the `convert` feature's cc-built tree-sitter
 //! grammars) and a CpuC compile-and-run numeric differential (needs a host C
@@ -22,7 +29,10 @@
 //! compiler is available in the default build here.
 
 use crate::ir::BinaryOp;
-use crate::{Cuda, OpDef, UnaryOp, build_plan, generate, input, konst, lift_elementwise, param};
+use crate::{
+    CpuC, Cuda, Fidelity, OpDef, ScalarExpr, Slang, TypedBuffer, UnaryOp, build_plan, compare,
+    evaluate, generate, input, konst, lift_elementwise, param,
+};
 use baracuda_kernel_vocab::{
     ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
 };
@@ -203,6 +213,29 @@ const FULL: Palette = Palette {
     param: true,
 };
 
+/// Binary ops in the THREE-WAY-common coverage of Cuda/CpuC/Slang: the liftable
+/// set minus `Copysign`. Slang v1 panic-declines `Copysign`/`Nextafter` and 8
+/// transcendentals (`Erf`/`Erfc`/`Gelu`/`Lgamma`/`Cbrt`/`Asinh`/`Acosh`/`Atanh`)
+/// as a documented follow-up (slang.rs) — the same honest panic-boundary
+/// convention CUDA/CpuC use for unsupported dtypes. Of those, `Copysign` is the
+/// only one in the liftable palette; the transcendentals + `Nextafter` aren't
+/// liftable anyway. `LIFTABLE_UNARY` is already entirely within Slang's coverage.
+const TRI_BINARY: &[BinaryOp] = &[
+    BinaryOp::Pow,
+    BinaryOp::Atan2,
+    BinaryOp::FmaxIeee,
+    BinaryOp::FminIeee,
+];
+
+const TRI_BACKEND: Palette = Palette {
+    consts: LIFTABLE_CONSTS,
+    unary: LIFTABLE_UNARY,
+    binary: TRI_BINARY,
+    select: false,
+    coord: false,
+    param: false,
+};
+
 // ---------------------------------------------------------------------------
 // The random-expression generator.
 // ---------------------------------------------------------------------------
@@ -374,5 +407,155 @@ fn cuda_full_op_emit_never_panics() {
             "empty CUDA source for body: {:?}",
             op.body
         );
+    }
+}
+
+#[test]
+fn tri_backend_scalar_emit_never_panics() {
+    // The genuinely CROSS-backend robustness check: the same random body emitted
+    // through all THREE backends (CUDA / CpuC / Slang), which share the neutral
+    // `Lowering` seam. Scoped to the liftable palette at F32 with the Scalar
+    // schedule (align 4) — the common ground every backend serves: single-output
+    // contiguous elementwise, finite consts, no Coord/Param/Select (CpuC/Slang v1
+    // decline those). A panic here is a real lowering-seam gap in one backend.
+    let mut rng = Rng::new(0xB11_0003);
+    for _ in 0..4000 {
+        let n_inputs = 1 + rng.below(3);
+        let op = OpDef::elementwise(
+            "fuzz",
+            n_inputs as u8,
+            &[ElementKind::F32],
+            gen_expr(&mut rng, 4, n_inputs, &TRI_BACKEND),
+        );
+        let key = scalar_key(n_inputs);
+        for (name, src) in [
+            ("cuda", generate(&op, &key, &Cuda).source),
+            ("cpu_c", generate(&op, &key, &CpuC).source),
+            ("slang", generate(&op, &key, &Slang).source),
+        ] {
+            assert!(
+                !src.is_empty(),
+                "{name} emitted empty source for body: {:?}",
+                op.body
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Numeric differential: the plan interpreter (`oracle::evaluate`) vs an
+// INDEPENDENT tree-walk, over a numerically-safe palette.
+// ---------------------------------------------------------------------------
+
+/// Small finite constants for the numeric sweep (negatives allowed — this is a
+/// value check, not the structural round-trip).
+const SAFE_CONSTS: &[f64] = &[-2.0, -0.5, 0.0, 0.5, 1.5, 2.0];
+
+/// A random body over `{+, -, *, Neg, Abs, Sqr}` — total on finite inputs (no
+/// `Div`/`Max`/`Min`, so no NaN source and no NaN-semantics ambiguity between the
+/// two evaluators), keeping the differential about the PLUMBING (multi-input
+/// indexing, output store, f32 narrowing), not scalar-op edge cases.
+fn gen_safe(rng: &mut Rng, depth: usize, n_inputs: usize) -> crate::Expr {
+    if depth == 0 || rng.below(3) == 0 {
+        return if rng.below(4) == 0 {
+            konst(*rng.pick(SAFE_CONSTS))
+        } else {
+            input(rng.below(n_inputs) as u8)
+        };
+    }
+    match rng.below(6) {
+        0 => gen_safe(rng, depth - 1, n_inputs) + gen_safe(rng, depth - 1, n_inputs),
+        1 => gen_safe(rng, depth - 1, n_inputs) - gen_safe(rng, depth - 1, n_inputs),
+        2 => gen_safe(rng, depth - 1, n_inputs) * gen_safe(rng, depth - 1, n_inputs),
+        3 => gen_safe(rng, depth - 1, n_inputs).unary(UnaryOp::Neg),
+        4 => gen_safe(rng, depth - 1, n_inputs).unary(UnaryOp::Abs),
+        _ => gen_safe(rng, depth - 1, n_inputs).unary(UnaryOp::Sqr),
+    }
+}
+
+/// Independent f64 tree-walk — shares NO code with `oracle::evaluate` (which
+/// routes through `build_plan` → the `Val` domain → store rounding). `ins[i]` is
+/// input `i`'s value at the current element.
+fn eval_ref(e: &ScalarExpr, ins: &[f64]) -> f64 {
+    match e {
+        ScalarExpr::Input(i) => ins[*i as usize],
+        ScalarExpr::Const(c) => *c,
+        ScalarExpr::Add(a, b) => eval_ref(a, ins) + eval_ref(b, ins),
+        ScalarExpr::Sub(a, b) => eval_ref(a, ins) - eval_ref(b, ins),
+        ScalarExpr::Mul(a, b) => eval_ref(a, ins) * eval_ref(b, ins),
+        ScalarExpr::Unary(UnaryOp::Neg, a) => -eval_ref(a, ins),
+        ScalarExpr::Unary(UnaryOp::Abs, a) => eval_ref(a, ins).abs(),
+        ScalarExpr::Unary(UnaryOp::Sqr, a) => {
+            let x = eval_ref(a, ins);
+            x * x
+        }
+        other => unreachable!("safe palette produced an unexpected node: {other:?}"),
+    }
+}
+
+#[test]
+fn oracle_elementwise_matches_independent_evaluator() {
+    let mut rng = Rng::new(0xB11_0004);
+    let len: i64 = 48;
+    for _ in 0..2500 {
+        let n_inputs = 1 + rng.below(3);
+        let op = OpDef::elementwise(
+            "fuzz",
+            n_inputs as u8,
+            &[ElementKind::F32],
+            gen_safe(&mut rng, 4, n_inputs),
+        );
+        // Small contiguous rank-1 f32 cell (align 4 → Scalar) — descs shared by
+        // the plan and the evaluate() call (inputs THEN output).
+        let a = OperandDesc::new(1, &[len], &[1], ElementKind::F32, 4);
+        let cat = match n_inputs {
+            1 => OpCategory::UnaryElementwise,
+            2 => OpCategory::BinaryElementwise,
+            _ => OpCategory::TernaryElementwise,
+        };
+        let descs = vec![a; n_inputs + 1];
+        let key = structure_key(cat, &descs, ArchSku::Sm89);
+        let plan = build_plan(&op, &key);
+
+        // Random finite f32 inputs in [-3, 3).
+        let cols: Vec<Vec<f32>> = (0..n_inputs)
+            .map(|_| {
+                (0..len)
+                    .map(|_| {
+                        let u = (rng.next() >> 40) as f64 / (1u64 << 24) as f64; // [0,1)
+                        (u * 6.0 - 3.0) as f32
+                    })
+                    .collect()
+            })
+            .collect();
+        let inbufs: Vec<TypedBuffer> = cols
+            .iter()
+            .map(|c| TypedBuffer::from_f32(&[len], c))
+            .collect();
+
+        let actual = &evaluate(&plan, &descs, &inbufs, &[])[0];
+
+        let exp: Vec<f32> = (0..len as usize)
+            .map(|idx| {
+                let ins: Vec<f64> = cols.iter().map(|c| c[idx] as f64).collect();
+                eval_ref(&op.body, &ins) as f32
+            })
+            .collect();
+        let expected = TypedBuffer::from_f32(&[len], &exp);
+
+        compare(
+            &expected,
+            actual,
+            Fidelity::Tolerant {
+                rel: 1e-6,
+                abs: 1e-6,
+            },
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "oracle vs independent evaluator diverged: {e}\nbody: {:?}",
+                op.body
+            )
+        });
     }
 }
