@@ -1362,6 +1362,17 @@ impl ContractionAxes {
             rhs: vec![AxisRole::ContractedK, AxisRole::FreeN],
         }
     }
+
+    /// The canonical rank-3 **batched** matmul: `lhs [B,M,K]`, `rhs [B,K,N]` →
+    /// `[B,M,N]` — a stack of `B` independent [`Self::matmul`] cells sharing a
+    /// leading `Batch` axis (the per-batch math is byte-identical to rank-2).
+    #[must_use]
+    pub fn batched_matmul() -> Self {
+        Self {
+            lhs: vec![AxisRole::Batch, AxisRole::FreeM, AxisRole::ContractedK],
+            rhs: vec![AxisRole::Batch, AxisRole::ContractedK, AxisRole::FreeN],
+        }
+    }
 }
 
 /// K-accumulation policy for a contraction.

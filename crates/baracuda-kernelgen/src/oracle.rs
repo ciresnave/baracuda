@@ -1288,57 +1288,73 @@ fn eval_contraction(
     let n_in = plan.n_inputs as usize;
     let lhs = &operands[0];
     let rhs = &operands[1];
-    let m = lhs.shape[0];
-    let k = lhs.shape[1];
-    let n = rhs.shape[1];
+    // rank-3 lhs ⇒ batched `[B,M,K]·[B,K,N]`; rank-2 ⇒ plain (bdim = 1).
+    let batched = lhs.rank == 3;
+    let (bdim, m, k, n) = if batched {
+        (lhs.shape[0], lhs.shape[1], lhs.shape[2], rhs.shape[2])
+    } else {
+        (1, lhs.shape[0], lhs.shape[1], rhs.shape[1])
+    };
+    let rhs_k = if batched { rhs.shape[1] } else { rhs.shape[0] };
     assert_eq!(
-        rhs.shape[0], k,
-        "oracle: contraction K mismatch (lhs cols {k} vs rhs rows {})",
-        rhs.shape[0]
+        rhs_k, k,
+        "oracle: contraction K mismatch (lhs cols {k} vs rhs rows {rhs_k})"
     );
 
     let mut out = alloc_output(plan, operands, n_in, 0);
     let out_dt = plan.out_dtype_of(0);
 
-    for mi in 0..m {
-        for ni in 0..n {
-            // K-sum, `kk` ascending — the emitter's inner loop order (cuda.rs:3245).
-            let mut acc = 0.0f64;
-            for kk in 0..k {
-                let a = read_strided(inputs, operands, 0, &[mi, kk], input_perm(plan, 0)).f64();
-                let b = read_strided(inputs, operands, 1, &[kk, ni], input_perm(plan, 1)).f64();
-                acc += a * b;
+    for bi in 0..bdim {
+        for mi in 0..m {
+            for ni in 0..n {
+                // K-sum, `kk` ascending — the emitter's inner loop order.
+                let mut acc = 0.0f64;
+                for kk in 0..k {
+                    let (lc, rc): (Vec<i64>, Vec<i64>) = if batched {
+                        (vec![bi, mi, kk], vec![bi, kk, ni])
+                    } else {
+                        (vec![mi, kk], vec![kk, ni])
+                    };
+                    let a = read_strided(inputs, operands, 0, &lc, input_perm(plan, 0)).f64();
+                    let b = read_strided(inputs, operands, 1, &rc, input_perm(plan, 1)).f64();
+                    acc += a * b;
+                }
+                // Epilogue over Reduced(0) = the accumulator, plus the optional
+                // fused bias: Input(i>=2) is the per-column `[N]` bias, read at
+                // column `ni` (broadcast over rows; batched v1 carries no bias). No
+                // Coord leaves. lhs/rhs (0/1) never appear.
+                let reduced_leaf = |s: u8| {
+                    assert_eq!(s, 0, "contraction epilogue reads only Reduced(0)");
+                    Val::Float(acc)
+                };
+                let bias_leaf = |i: u8| {
+                    assert!(
+                        i as usize >= 2 && (i as usize) < n_in,
+                        "contraction epilogue Input({i}) must be a fused bias (2..n_inputs)"
+                    );
+                    read_strided(
+                        inputs,
+                        operands,
+                        i as usize,
+                        &[ni],
+                        input_perm(plan, i as usize),
+                    )
+                };
+                let ev = Eval {
+                    dtype: plan.dtype,
+                    params,
+                    leaf: &bias_leaf,
+                    reduced: &reduced_leaf,
+                    coord: &panic_coord,
+                };
+                let posted = eval(epilogue, &ev);
+                let off = if batched {
+                    bi * out.strides[0] + mi * out.strides[1] + ni * out.strides[2]
+                } else {
+                    mi * out.strides[0] + ni * out.strides[1]
+                };
+                store_val(posted, out_dt, &mut out.bytes, off as usize);
             }
-            // Epilogue over Reduced(0) = the accumulator, plus the optional fused
-            // bias: Input(i>=2) is the per-column `[N]` bias, read at column `ni`
-            // (broadcast over rows). No Coord leaves. lhs/rhs (0/1) never appear.
-            let reduced_leaf = |s: u8| {
-                assert_eq!(s, 0, "contraction epilogue reads only Reduced(0)");
-                Val::Float(acc)
-            };
-            let bias_leaf = |i: u8| {
-                assert!(
-                    i as usize >= 2 && (i as usize) < n_in,
-                    "contraction epilogue Input({i}) must be a fused bias (2..n_inputs)"
-                );
-                read_strided(
-                    inputs,
-                    operands,
-                    i as usize,
-                    &[ni],
-                    input_perm(plan, i as usize),
-                )
-            };
-            let ev = Eval {
-                dtype: plan.dtype,
-                params,
-                leaf: &bias_leaf,
-                reduced: &reduced_leaf,
-                coord: &panic_coord,
-            };
-            let posted = eval(epilogue, &ev);
-            let off = mi * out.strides[0] + ni * out.strides[1];
-            store_val(posted, out_dt, &mut out.bytes, off as usize);
         }
     }
     out
@@ -2677,6 +2693,43 @@ mod tests {
         ];
         let got = evaluate(&plan, &ops, &ins, &[]);
         assert_eq!(f32s(&got[0]), vec![0.0, 17.0]);
+    }
+
+    /// A rank-3 dense BATCHED GEMM cell `[B,M,K]·[B,K,N] → [B,M,N]`.
+    fn gemm_batched_cell(
+        b: i64,
+        m: i64,
+        k: i64,
+        n: i64,
+    ) -> (OperandDesc, OperandDesc, OperandDesc, StructureKey) {
+        let lhs = desc(&[b, m, k], &[m * k, k, 1], ElementKind::F32);
+        let rhs = desc(&[b, k, n], &[k * n, n, 1], ElementKind::F32);
+        let out = desc(&[b, m, n], &[m * n, n, 1], ElementKind::F32);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        (lhs, rhs, out, key)
+    }
+
+    #[test]
+    fn contraction_batched_matmul_identity_epilogue() {
+        use crate::ir::ContractionAxes;
+        // Batched [2,1,2]·[2,2,2] → [2,1,2], identity epilogue.
+        //   batch0: [[1,2]] · [[1,2],[3,4]] = [1·1+2·3, 1·2+2·4] = [7, 10]
+        //   batch1: [[3,4]] · [[5,6],[7,8]] = [3·5+4·7, 3·6+4·8] = [43, 50]
+        let op = OpDef::contraction(
+            "bmm",
+            &[ElementKind::F32],
+            ContractionAxes::batched_matmul(),
+            reduced(0),
+        );
+        let (lhs, rhs, out, key) = gemm_batched_cell(2, 1, 2, 2);
+        let plan = build_plan(&op, &key);
+        let ops = [lhs, rhs, out];
+        let ins = [
+            f32b(&[2, 1, 2], &[1.0, 2.0, 3.0, 4.0]),
+            f32b(&[2, 2, 2], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+        ];
+        let got = evaluate(&plan, &ops, &ins, &[]);
+        assert_eq!(f32s(&got[0]), vec![7.0, 10.0, 43.0, 50.0]);
     }
 
     // --- compare helper -----------------------------------------------------

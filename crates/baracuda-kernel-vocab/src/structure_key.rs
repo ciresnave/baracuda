@@ -205,6 +205,11 @@ pub struct ContractionKey {
     pub k: SizeClass,
     /// Divisibility of K (remainder/tail handling; future MMA-k legality).
     pub k_div: DivBucket,
+    /// Size class of the leading batch dim for a rank-3 batched contraction
+    /// (`[B,M,K]·[B,K,N] → [B,M,N]`); `None` for the plain rank-2 cell. Additive:
+    /// a `None` batch serializes byte-identically to the pre-batch codec — only a
+    /// batched cell carries the trailing `/b<class>` token component.
+    pub batch: Option<SizeClass>,
 }
 
 // ===========================================================================
@@ -488,35 +493,76 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
     }
     let has_bias = operands.len() == 4;
     let (lhs, rhs, out) = (&operands[0], &operands[1], &operands[operands.len() - 1]);
-    if lhs.rank != 2 || rhs.rank != 2 || out.rank != 2 {
+    // rank-2 = plain `[M,K]·[K,N]`; rank-3 = batched `[B,M,K]·[B,K,N]`. All three
+    // core operands (lhs/rhs/out) must share the rank.
+    let rank = lhs.rank;
+    if rhs.rank != rank || out.rank != rank {
         return None;
     }
-    let (m, k) = (lhs.shape[0], lhs.shape[1]);
-    let (k2, n) = (rhs.shape[0], rhs.shape[1]);
-    // Shapes must agree and every rank-2 operand must be dense row-major.
-    let dense = |o: &OperandDesc| o.strides[0] == o.shape[1] && o.strides[1] == 1;
-    if k != k2
-        || out.shape[0] != m
-        || out.shape[1] != n
-        || !dense(lhs)
-        || !dense(rhs)
-        || !dense(out)
-    {
-        return None;
-    }
-    // A fused bias must be the per-column `[N]` vector broadcast over the M rows.
-    if has_bias {
-        let bias = &operands[2];
-        if bias.rank != 1 || bias.shape[0] != n {
-            return None;
+    match rank {
+        2 => {
+            let (m, k) = (lhs.shape[0], lhs.shape[1]);
+            let (k2, n) = (rhs.shape[0], rhs.shape[1]);
+            let dense = |o: &OperandDesc| o.strides[0] == o.shape[1] && o.strides[1] == 1;
+            if k != k2
+                || out.shape[0] != m
+                || out.shape[1] != n
+                || !dense(lhs)
+                || !dense(rhs)
+                || !dense(out)
+            {
+                return None;
+            }
+            // A fused bias must be the per-column `[N]` vector (broadcast over M).
+            if has_bias {
+                let bias = &operands[2];
+                if bias.rank != 1 || bias.shape[0] != n {
+                    return None;
+                }
+            }
+            Some(ContractionKey {
+                m: SizeClass::of(m),
+                n: SizeClass::of(n),
+                k: SizeClass::of(k),
+                k_div: div_bucket(k),
+                batch: None,
+            })
         }
+        3 => {
+            // Batched `[B,M,K]·[B,K,N] → [B,M,N]`. v1 does not combine batch with a
+            // fused bias (a follow-up).
+            if has_bias {
+                return None;
+            }
+            let (b, m, k) = (lhs.shape[0], lhs.shape[1], lhs.shape[2]);
+            let (b2, k2, n) = (rhs.shape[0], rhs.shape[1], rhs.shape[2]);
+            // Dense row-major rank-3: strides `[shape1*shape2, shape2, 1]`.
+            let dense3 = |o: &OperandDesc| {
+                o.strides[0] == o.shape[1] * o.shape[2]
+                    && o.strides[1] == o.shape[2]
+                    && o.strides[2] == 1
+            };
+            if b != b2
+                || k != k2
+                || out.shape[0] != b
+                || out.shape[1] != m
+                || out.shape[2] != n
+                || !dense3(lhs)
+                || !dense3(rhs)
+                || !dense3(out)
+            {
+                return None;
+            }
+            Some(ContractionKey {
+                m: SizeClass::of(m),
+                n: SizeClass::of(n),
+                k: SizeClass::of(k),
+                k_div: div_bucket(k),
+                batch: Some(SizeClass::of(b)),
+            })
+        }
+        _ => None,
     }
-    Some(ContractionKey {
-        m: SizeClass::of(m),
-        n: SizeClass::of(n),
-        k: SizeClass::of(k),
-        k_div: div_bucket(k),
-    })
 }
 
 /// [item 03] Derive the reduced-axis set for a reduction cell from **keepdim-form**
@@ -788,6 +834,11 @@ impl StructureKey {
                 size_code(c.k),
                 div_code(c.k_div),
             ));
+            // Batched cells append `/b<class>` — additive, so a plain rank-2 cell
+            // (`batch == None`) stays byte-identical to the pre-batch codec.
+            if let Some(b) = c.batch {
+                token.push_str(&format!("/b{}", size_code(b)));
+            }
         }
         token
     }
@@ -848,9 +899,27 @@ impl StructureKey {
         let contraction = match parts.get(9) {
             None => None,
             Some(f) => {
-                // `c<m><n><k>/<div>` — e.g. `ctll/d16`.
+                // `c<m><n><k>/<div>[/b<class>]` — e.g. `ctll/d16` or `ctll/d16/bs`.
                 let rest = f.strip_prefix('c')?;
-                let (classes, div) = rest.split_once('/')?;
+                let mut comps = rest.split('/');
+                let classes = comps.next()?;
+                let div = comps.next()?;
+                // Optional batch component (present only for a batched cell).
+                let batch = match comps.next() {
+                    None => None,
+                    Some(bc) => {
+                        let mut bcs = bc.strip_prefix('b')?.chars();
+                        let b = size_from_code(bcs.next()?)?;
+                        if bcs.next().is_some() {
+                            return None;
+                        }
+                        Some(b)
+                    }
+                };
+                // No trailing component beyond the optional batch.
+                if comps.next().is_some() {
+                    return None;
+                }
                 let mut cs = classes.chars();
                 let m = size_from_code(cs.next()?)?;
                 let n = size_from_code(cs.next()?)?;
@@ -863,6 +932,7 @@ impl StructureKey {
                     n,
                     k,
                     k_div: div_from_code(div)?,
+                    batch,
                 })
             }
         };

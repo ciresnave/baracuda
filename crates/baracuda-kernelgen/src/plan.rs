@@ -357,15 +357,17 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
             ref epilogue,
             ..
         } => {
-            // v1 admissibility: the canonical rank-2 dense matmul cell, keyed
-            // with contraction facts, and an epilogue over the K-sum only.
-            assert_eq!(
-                (axes.lhs.as_slice(), axes.rhs.as_slice()),
-                (
-                    crate::ir::ContractionAxes::matmul().lhs.as_slice(),
-                    crate::ir::ContractionAxes::matmul().rhs.as_slice()
-                ),
-                "contraction v1: canonical rank-2 matmul axis roles only"
+            // v1 admissibility: the canonical rank-2 dense matmul cell OR its
+            // rank-3 batched form, keyed with contraction facts and an epilogue
+            // over the K-sum (+ optional fused bias) only.
+            let m2 = crate::ir::ContractionAxes::matmul();
+            let m3 = crate::ir::ContractionAxes::batched_matmul();
+            let ax = (axes.lhs.as_slice(), axes.rhs.as_slice());
+            assert!(
+                ax == (m2.lhs.as_slice(), m2.rhs.as_slice())
+                    || ax == (m3.lhs.as_slice(), m3.rhs.as_slice()),
+                "contraction v1: canonical rank-2 matmul or rank-3 batched-matmul \
+                 axis roles only"
             );
             assert!(
                 key.contraction.is_some(),

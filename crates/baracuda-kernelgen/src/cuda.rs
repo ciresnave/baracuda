@@ -3241,6 +3241,15 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         _ => epi,
     };
 
+    // Batched cells (`c.batch` set) stride each operand by the batch index
+    // `b = blockIdx.z`; the per-batch col/mm/kk math is byte-identical to rank-2,
+    // so a rank-2 cell emits empty offsets (unchanged source).
+    let (lb, rb, ob) = if c.batch.is_some() {
+        ("b * m * k + ", "b * k * n + ", "b * m * n + ")
+    } else {
+        ("", "", "")
+    };
+
     let mut s = header(plan, &name);
     s.push_str(&format!("    const {ctype}* __restrict__ in0,\n")); // lhs [m,k]
     s.push_str(&format!("    const {ctype}* __restrict__ in1,\n")); // rhs [k,n]
@@ -3249,6 +3258,9 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     }
     s.push_str(&format!("    {ctype}* __restrict__ out,\n")); // [m,n]
     s.push_str("    long long m,\n    long long n,\n    long long k)\n{\n");
+    if c.batch.is_some() {
+        s.push_str("    long long b = (long long)blockIdx.z;\n");
+    }
     s.push_str("    long long col = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
     s.push_str("    for (; col < n; col += step) {\n");
@@ -3263,20 +3275,22 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     s.push_str("        for (long long kk = 0; kk < k; ++kk) {\n");
     s.push_str(&format!(
         "            {acc} w = {};\n",
-        load("in1[kk * n + col]".to_string())
+        load(format!("in1[{rb}kk * n + col]"))
     ));
     s.push_str("            #pragma unroll\n");
     s.push_str("            for (int mm = 0; mm < 8; ++mm) {\n");
     s.push_str(&format!(
         "                if (mm < m) accs[mm] += {} * w;\n",
-        load("in0[mm * k + kk]".to_string())
+        load(format!("in0[{lb}mm * k + kk]"))
     ));
     s.push_str("            }\n        }\n");
     s.push_str("        #pragma unroll\n");
     s.push_str("        for (int mm = 0; mm < 8; ++mm) {\n");
     s.push_str("            if (mm < m) {\n");
     s.push_str(&format!("                {acc} r0 = accs[mm];\n"));
-    s.push_str(&format!("                out[mm * n + col] = {stored};\n"));
+    s.push_str(&format!(
+        "                out[{ob}mm * n + col] = {stored};\n"
+    ));
     s.push_str("            }\n        }\n    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -3307,6 +3321,12 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     }
     // build_plan admissibility already ran; these mirror emit_contraction.
     let c = plan.key.contraction?;
+    // Batched cells decline the split-K variant in v1 (the split-K workspace +
+    // combine kernels have no batch dimension yet) — a batched cell gets the base
+    // per-batch skinny kernel only.
+    if c.batch.is_some() {
+        return None;
+    }
     if c.m != baracuda_kernel_vocab::SizeClass::Tiny {
         return None;
     }
@@ -8478,6 +8498,93 @@ mod tests {
         assert!(
             !kp.source.contains("in2"),
             "plain contraction must not emit a bias param:\n{}",
+            kp.source
+        );
+    }
+
+    #[test]
+    fn contraction_batched_emits_batch_offset_and_declines_splitk() {
+        use crate::generate_variants;
+        use crate::ir::{ContractionAxes, reduced};
+        // Batched [8,8,4096]·[8,4096,4096] → [8,8,4096], f32 (B/M Tiny).
+        let bmm = OpDef::contraction(
+            "bmm",
+            &[ElementKind::F32],
+            ContractionAxes::batched_matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let rhs = OperandDesc::new(
+            3,
+            &[8, 4096, 4096],
+            &[4096 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let out = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let k = generate(&bmm, &key, &Cuda);
+        // The batch index + per-operand batch strides (b = blockIdx.z).
+        assert!(
+            k.source.contains("long long b = (long long)blockIdx.z;"),
+            "missing batch index:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("in1[b * k * n + kk * n + col]"),
+            "missing rhs batch stride:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("in0[b * m * k + mm * k + kk]"),
+            "missing lhs batch stride:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out[b * m * n + mm * n + col]"),
+            "missing out batch stride:\n{}",
+            k.source
+        );
+        // The batched token carries the batch size class additively (`/b<class>`).
+        assert!(
+            key.to_token().contains("/bt"),
+            "batched token needs /b<class>: {}",
+            key.to_token()
+        );
+        // The split-K variant declines for a batched cell (base kernel only).
+        let vs = generate_variants(&bmm, &key, &Cuda);
+        assert_eq!(vs.len(), 1, "batched cell offers only the base kernel");
+
+        // A plain rank-2 cell emits NO batch index — byte-compat unchanged.
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let l2 = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let r2 = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let o2 = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let kp = generate(
+            &mm,
+            &structure_key(OpCategory::Gemm, &[l2, r2, o2], ArchSku::Sm89),
+            &Cuda,
+        );
+        assert!(
+            !kp.source.contains("blockIdx.z"),
+            "plain contraction must not emit a batch index:\n{}",
             kp.source
         );
     }
