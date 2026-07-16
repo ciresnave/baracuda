@@ -414,4 +414,53 @@ mod tests {
             Err(SeamError::ReservedNonZero)
         );
     }
+
+    /// Tiny deterministic PRNG for fuzz coverage — no external dependency.
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            self.0
+        }
+    }
+
+    #[test]
+    fn parse_hello_never_panics_on_arbitrary_bytes() {
+        // An envelope reader parses bytes from an untrusted peer: it must NEVER
+        // panic, only Ok or a typed decline — regardless of length or content.
+        let mut rng = Lcg(0x00C0_FFEE);
+        for _ in 0..5000 {
+            let len = (rng.next() % 80) as usize; // spans the 56-byte boundary
+            let bytes: Vec<u8> = (0..len).map(|_| (rng.next() >> 33) as u8).collect();
+            let _ = SeamHello::parse_hello(&bytes);
+        }
+        for len in [0usize, 1, 55, 56, 57, 4096] {
+            let _ = SeamHello::parse_hello(&vec![0u8; len]);
+        }
+    }
+
+    #[test]
+    fn wire_round_trips_random_valid_hellos() {
+        let mut rng = Lcg(0x5EA3);
+        for _ in 0..1000 {
+            let n = (rng.next() % (SEAM_MAX_PROFILES as u64 + 1)) as usize;
+            let mut profiles = [0u16; SEAM_MAX_PROFILES];
+            for p in profiles.iter_mut().take(n) {
+                *p = (rng.next() & 0xFFFF) as u16;
+            }
+            let h = SeamHello {
+                magic: SEAM_MAGIC,
+                envelope_version: SEAM_ENVELOPE_VERSION,
+                reserved: [0; 3],
+                profiles_len: n as u16,
+                profiles,
+                reserved1: [0; 6],
+                capabilities: rng.next(),
+            };
+            assert_eq!(SeamHello::parse_hello(&h.to_wire_bytes()), Ok(h));
+        }
+    }
 }

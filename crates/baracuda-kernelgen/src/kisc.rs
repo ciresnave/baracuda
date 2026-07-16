@@ -159,4 +159,58 @@ mod tests {
             Err(KiscError::LenMismatch) | Err(KiscError::CrcMismatch)
         ));
     }
+
+    /// Tiny deterministic PRNG for fuzz coverage — no external dependency.
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            self.0
+        }
+    }
+
+    #[test]
+    fn unframe_never_panics_on_arbitrary_input() {
+        let mut rng = Lcg(0x0000_B16C);
+        for _ in 0..5000 {
+            let len = (rng.next() % 200) as usize;
+            let s: String = (0..len)
+                .map(|_| char::from((rng.next() % 96 + 32) as u8))
+                .collect();
+            let _ = kisc_unframe(&s);
+        }
+        // Adversarial headers that must decline (never panic): overflowing len,
+        // non-numeric len, bad hex crc, magic only.
+        for s in [
+            "",
+            "KISC",
+            "KISC kiss-contract 1 len=999999999999999999999 crc32=00000000\nx",
+            "KISC kiss-contract 1 len=abc crc32=00000000\nx",
+            "KISC kiss-contract 1 len=0 crc32=zzzzzzzz\n",
+        ] {
+            let _ = kisc_unframe(s);
+        }
+    }
+
+    #[test]
+    fn unframe_round_trips_random_bodies() {
+        let mut rng = Lcg(0x1234);
+        for _ in 0..2000 {
+            let len = (rng.next() % 120) as usize;
+            let body: String = (0..len)
+                .map(|_| {
+                    let r = rng.next() % 96;
+                    if r == 0 {
+                        '\n' // bodies may be multi-line
+                    } else {
+                        char::from((r + 31) as u8)
+                    }
+                })
+                .collect();
+            assert_eq!(kisc_unframe(&kisc_frame(&body)), Ok(body.as_str()));
+        }
+    }
 }

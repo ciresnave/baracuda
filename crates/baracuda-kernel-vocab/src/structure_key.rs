@@ -1406,4 +1406,50 @@ mod tests {
         assert_eq!(a.dtype, ElementKind::Bf16);
         assert_eq!(a.shape[1], 16);
     }
+
+    /// Tiny deterministic PRNG for fuzz coverage — no external dependency.
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            self.0
+        }
+    }
+
+    #[test]
+    fn from_token_never_panics_on_arbitrary_input() {
+        // `from_token` parses tokens from an untrusted peer (telemetry / wire): it
+        // must NEVER panic (no unbounded alloc, no index OOB, no parse crash) — only
+        // `Some(key)` or `None`, whatever the bytes.
+        let mut rng = Lcg(0x0000_F00D);
+        // A token-shaped alphabet so the fuzz reaches the field parsers, not just
+        // the field-count guard.
+        let alpha = b"sk012|binuecmpgemredf32f64s8u8i32i64u32sm89sm80cuda:ix\
+                      gridwarpblockr;co/icstbrvda-cxtsml0123456789";
+        for _ in 0..8000 {
+            let len = (rng.next() % 140) as usize;
+            let s: String = (0..len)
+                .map(|_| {
+                    let pick = (rng.next() as usize) % (alpha.len() + 4);
+                    char::from(if pick < alpha.len() {
+                        alpha[pick]
+                    } else {
+                        (rng.next() % 128) as u8
+                    })
+                })
+                .collect();
+            let _ = StructureKey::from_token(&s);
+        }
+        // Adversarial: DoS-shaped and boundary inputs.
+        let _ = StructureKey::from_token("");
+        let _ = StructureKey::from_token(&"|".repeat(10_000));
+        let _ = StructureKey::from_token(&"a".repeat(200_000));
+        let _ = StructureKey::from_token(&format!(
+            "sk1|bin|f32|sm89|i32|grid|r250|{}|-",
+            "co/00/v4/d16/f;".repeat(50)
+        ));
+    }
 }
