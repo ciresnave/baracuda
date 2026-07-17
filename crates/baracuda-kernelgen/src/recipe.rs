@@ -23,12 +23,17 @@
 //! # Scope
 //!
 //! Elementwise bodies over `Input`/`Const` leaves **plus** the co-pinned source ops
-//! `Coord`→`iota` / `Param`→`runtime_scalar`, **and contractions** (`matmul[<roles>]`
-//! fold node + the `Reduced(0)`→node epilogue, incl. fused bias/activation).
-//! Reductions, scans, gather/scatter, pooling, and sort are follow-ups — an honest
-//! miss (`None`) until covered.
+//! `Coord`→`iota` / `Param`→`runtime_scalar`; **contractions** (`matmul[<roles>]`
+//! fold + the `Reduced(0)`→node epilogue, incl. fused bias/activation);
+//! **reductions** (`reduce[<monoid>,<axes>,<keepdim>]` fold + post, `Mean` an honest
+//! miss); and **scans** (`prefix_scan[<monoid>,<axis>,<excl>]`, reverse = flip ∘ scan
+//! ∘ flip). RowReduce, gather/scatter, pooling, sort, and im2col are follow-ups — an
+//! honest miss (`None`) until covered.
 
-use crate::ir::{Access, AxisRole, BinaryOp, ContractionAxes, OpDef, ScalarExpr, UnaryOp};
+use crate::ir::{
+    Access, AxisRole, BinaryOp, ContractionAxes, OpDef, ReduceOp, ScalarExpr, UnaryOp,
+};
+use baracuda_kernel_vocab::AxisMask;
 
 /// The KISS-Ops op-DAG (recipe) for `op`, or `None` if `op` is not yet expressible
 /// as a neutral recipe (unsupported access, or a node with no confirmed KISS-Ops
@@ -49,9 +54,75 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
             let node = format!("matmul[{}](in0, in1)", contraction_roles(axes));
             expr_to_recipe(epilogue, Some(&node))
         }
-        // Reductions, scans, gather/scatter, pooling, sort carry structure the body
-        // alone doesn't express (axes/rank/monoid) — a follow-up honest miss.
+        // Reduction: a `reduce[<monoid>,<axes>,<keepdim>]` fold node over the
+        // per-element pre-map (`op.body`), then the post epilogue over it
+        // (`Reduced(0)`→node). `Mean` is not a monoid (Fuel: sum-fold + div) —
+        // honest miss.
+        Access::Reduction {
+            op: rop,
+            axes,
+            keepdim,
+            post,
+        } => {
+            let monoid = reduce_monoid(*rop)?;
+            let pre = expr_to_recipe(&op.body, None)?;
+            let node = format!(
+                "reduce[{monoid},{},{}]({pre})",
+                reduce_axes_code(axes),
+                if *keepdim { "kd" } else { "nokd" }
+            );
+            expr_to_recipe(post, Some(&node))
+        }
+        // Scan: a `prefix_scan[<monoid>,<axis>,<excl>]` node over the pre-map, then
+        // the post over it. Fuel co-pin: a `reverse` scan = flip ∘ prefix_scan ∘
+        // flip (there is no reverse field). `Mean` is rejected at plan (not a
+        // monoid).
+        Access::Scan {
+            op: rop,
+            axis,
+            reverse,
+            exclusive,
+            pre,
+            post,
+        } => {
+            let monoid = reduce_monoid(*rop)?;
+            let pre_r = expr_to_recipe(pre, None)?;
+            let excl = if *exclusive { "excl" } else { "incl" };
+            let node = if *reverse {
+                format!("flip[{axis}](prefix_scan[{monoid},{axis},{excl}](flip[{axis}]({pre_r})))")
+            } else {
+                format!("prefix_scan[{monoid},{axis},{excl}]({pre_r})")
+            };
+            expr_to_recipe(post, Some(&node))
+        }
+        // RowReduce, gather/scatter, pooling, sort, im2col carry structure not yet
+        // covered — a follow-up honest miss.
         _ => None,
+    }
+}
+
+/// The KISS-Ops monoid token for a [`ReduceOp`], or `None` for `Mean` — which is
+/// NOT a monoid (Fuel: a `sum` fold + a `div`-by-extent epilogue), an honest miss
+/// until the extent-div is expressible.
+fn reduce_monoid(op: ReduceOp) -> Option<&'static str> {
+    match op {
+        ReduceOp::Sum => Some("sum"),
+        ReduceOp::Prod => Some("prod"),
+        ReduceOp::Max => Some("max"),
+        ReduceOp::Min => Some("min"),
+        ReduceOp::Mean => None,
+    }
+}
+
+/// The reduced-axis attr for a `reduce[…]` node: `last` for the empty-mask
+/// last-axis default (Fuel resolves it against the interface rank), else the raw
+/// mask as `0x<hex>`. A co-pin strawman surface (the field is the pinned
+/// `reduce_axes`).
+fn reduce_axes_code(axes: &AxisMask) -> String {
+    if axes.is_empty() {
+        "last".to_string()
+    } else {
+        format!("0x{:x}", axes.0)
     }
 }
 
@@ -365,6 +436,66 @@ mod tests {
         assert_eq!(
             semantics_dag(&mbr).as_deref(),
             Some("relu(add(matmul[mk.kn](in0, in1), in2))")
+        );
+    }
+
+    #[test]
+    fn reduction_recipe_is_a_reduce_node_with_the_post_over_it() {
+        use crate::ir::ReduceOp;
+        // norm2 = sqrt(sum(sqr(x))): pre-map `sqr(in0)` feeds a `reduce[sum,…]`
+        // fold node; the post `sqrt(Reduced(0))` composes over it (last-axis
+        // default, no keepdim).
+        let op = OpDef::reduction_post(
+            "norm2",
+            1,
+            &[F32],
+            input(0).unary(UnaryOp::Sqr),
+            ReduceOp::Sum,
+            reduced(0).sqrt(),
+        );
+        assert_eq!(
+            semantics_dag(&op).as_deref(),
+            Some("sqrt(reduce[sum,last,nokd](sqr(in0)))")
+        );
+        // Mean is not a monoid (Fuel: sum-fold + div-by-extent) → honest miss.
+        let mean = OpDef::reduction("mean", 1, &[F32], input(0), ReduceOp::Mean);
+        assert_eq!(semantics_dag(&mean), None);
+    }
+
+    #[test]
+    fn scan_recipe_is_a_prefix_scan_node_with_reverse_as_flip() {
+        use crate::ir::ReduceOp;
+        // Forward inclusive cumsum on axis 1.
+        let cs = OpDef::scan(
+            "cumsum",
+            1,
+            &[F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+            input(0),
+            reduced(0),
+        );
+        assert_eq!(
+            semantics_dag(&cs).as_deref(),
+            Some("prefix_scan[sum,1,incl](in0)")
+        );
+        // Reverse exclusive cumprod: Fuel's reverse = flip ∘ prefix_scan ∘ flip.
+        let rc = OpDef::scan(
+            "revcumprod",
+            1,
+            &[F32],
+            ReduceOp::Prod,
+            2,
+            true,
+            true,
+            input(0),
+            reduced(0),
+        );
+        assert_eq!(
+            semantics_dag(&rc).as_deref(),
+            Some("flip[2](prefix_scan[prod,2,excl](flip[2](in0)))")
         );
     }
 
