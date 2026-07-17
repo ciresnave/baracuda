@@ -554,10 +554,23 @@ pub fn contract(
     }
 
     let pattern = derive_pattern(op).ok();
+    // The neutral KISS-Ops recipe (if any) — computed once, drives the recipe-
+    // carrying advert (its op_line + output shape/dtype rules + the `semantics:`
+    // line below). SCOPED to NON-elementwise ops (contraction/reduction/scan):
+    // their output shape/dtype ≠ their inputs so the FKC `same_as`/`passthrough`
+    // rules can't state them, and the realized recipe is the authority (Fuel's
+    // shape answer, 2026-07-17). An ELEMENTWISE op whose pattern derivation failed
+    // (NoFkcName / CoordUnsupported) stays a pattern-level honest miss — retiring
+    // its withhold via recipe-import is a separate, broader decision.
+    let recipe = crate::recipe::semantics_dag(op);
+    let recipe_carrying = recipe.is_some() && !matches!(op.access, crate::ir::Access::Elementwise);
     let n_ops = pattern.as_ref().map_or(0, count_ops);
     // A u8-out predicate advertises ONLY as the single-op primitive; a FUSED
-    // u8-out body would hit the same missing-Cast pattern problem above.
-    if out_u8 && n_ops != 1 {
+    // u8-out body would hit the same missing-Cast pattern problem above. This is a
+    // PATTERN-grammar limit, so a recipe-carrying op (whose identity is the recipe,
+    // not a pattern) is exempt — its u8 output rides the recipe's `from_recipe`
+    // dtype (e.g. a hetero-out `any` reduction).
+    if out_u8 && n_ops != 1 && !recipe_carrying {
         return None;
     }
     let is_fusion = n_ops > 1;
@@ -613,8 +626,13 @@ pub fn contract(
                 None => format!("fused_op: {}", op.name),
             },
             // body not expressible as a pattern (Const / non-elementwise / bind
-            // mismatch) → not advertisable; skip rather than fake an op_kind from
-            // the op's free-form name (which is not an OpKind dispatch key).
+            // mismatch). If the op carries a neutral KISS-Ops recipe (a contraction/
+            // reduction/scan), advertise it as a recipe-carrying fused op: bundle()
+            // still WITHHOLDS it (recipe_import=false ⇒ contract_admissible false),
+            // and bundle_kisc admits it ONLY to a recipe-import peer via the
+            // `semantics:` line below (contract_carries_recipe). Otherwise skip —
+            // an honest miss rather than a faked op_kind from the free-form name.
+            None if recipe_carrying => format!("fused_op: {}", op.name),
             None => return None,
         }
     };
@@ -721,7 +739,13 @@ pub fn contract(
     // which is SILENTLY DROPPED (no output slot in the key). `in0` is the item-4
     // name of input 0 (verified 2026-07-08 against Fuel's real importer: the
     // resolved primitive's `dtypes` then carries inputs + the output slot).
-    let dtype_rule = if out_u8 {
+    // A recipe-carrying non-elementwise op defers BOTH dtype and shape to the
+    // recipe (Fuel's `primitive_shape` returns `(shape, dtype)` — one authority);
+    // this is what makes a hetero-out reduction (count → i64) honest, where
+    // `passthrough(in0)` would state the wrong dtype.
+    let dtype_rule = if recipe_carrying {
+        "from_recipe"
+    } else if out_u8 {
         "fixed(U8)"
     } else {
         "passthrough(in0)"
@@ -745,9 +769,20 @@ pub fn contract(
         Contiguity::Contig => "contiguous",
         _ => "preallocated",
     };
+    // Output shape rule. A recipe-carrying non-elementwise op (contraction/
+    // reduction/scan) has an output shape that a bare `same_as(in0)` cannot state
+    // (a matmul's out `[M,N]` ≠ lhs `[M,K]`). Per Fuel's shape answer (2026-07-17)
+    // the realized RECIPE is the single shape authority for every non-basis op, so
+    // `shape_rule` DEFERS to it (`from_recipe`) rather than assert a false rule.
+    // Elementwise is itself a basis whose shape rule IS `same_as(in0)` — unchanged.
+    let shape_rule = if recipe_carrying {
+        "from_recipe"
+    } else {
+        "same_as(in0)"
+    };
     s.push_str(&format!(
         "    - dtype_rule: {dtype_rule}\n      \
-         shape_rule: same_as(in0)\n      \
+         shape_rule: {shape_rule}\n      \
          layout_guarantee: {layout_guarantee}\n      \
          aliasing: none\n"
     ));
@@ -853,8 +888,8 @@ pub fn contract(
     // importer runs, and what [`contract_carries_recipe`] detects to admit an
     // otherwise-unknown fused op to a recipe-import peer. Format PROVISIONAL —
     // see [`crate::recipe`].
-    if let Some(recipe) = crate::recipe::semantics_dag(op) {
-        s.push_str(&format!("semantics: {recipe}\n"));
+    if let Some(r) = &recipe {
+        s.push_str(&format!("semantics: {r}\n"));
     }
 
     s.push_str("```\n");
@@ -1612,12 +1647,14 @@ mod tests {
     }
 
     #[test]
-    fn contraction_is_an_honest_miss_no_contract() {
+    fn contraction_advertises_a_recipe_carrying_contract() {
         use crate::ir::{ContractionAxes, reduced};
         use crate::pattern::PatternError;
-        // The generated contraction node must NEVER leak a bindable elementwise
-        // contract — the honest-miss wall holds until the Fuel region grammar
-        // for contractions lands (item-10 spike §10).
+        // A contraction is NOT expressible as an elementwise pattern (derive_pattern
+        // rejects it), but it carries a neutral KISS-Ops recipe — so it advertises a
+        // recipe-carrying `fused_op` contract (matmul node + `from_recipe` shape),
+        // admitted ONLY to a recipe-import peer. The old "no contract at all" wall
+        // is replaced by the recipe-import withhold — the kernel still runs AOT.
         let mm = OpDef::contraction(
             "matmul",
             &[ElementKind::F32],
@@ -1629,7 +1666,24 @@ mod tests {
         let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
         let kernel = generate(&mm, &key, &Cuda);
-        assert!(contract(&mm, &key, &kernel, "cuda").is_none());
+        let c = contract(&mm, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: matmul"), "{c}");
+        assert!(c.contains("semantics: matmul[mk.kn](in0, in1)"), "{c}");
+        // The matmul output shape ≠ any input → shape defers to the recipe, never a
+        // false `same_as(in0)`.
+        assert!(c.contains("shape_rule: from_recipe"), "{c}");
+        assert!(!c.contains("shape_rule: same_as"), "{c}");
+        // Honest-miss discipline preserved: WITHHELD from a non-recipe-import bundle,
+        // admitted only to a recipe-import peer.
+        assert!(
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
+        );
+        // derive_pattern still rejects it — the recipe, not a pattern, is its identity.
         assert!(matches!(
             crate::derive_pattern(&mm),
             Err(PatternError::NotElementwise)
@@ -1637,14 +1691,14 @@ mod tests {
     }
 
     #[test]
-    fn scan_is_an_honest_miss_no_contract() {
+    fn scan_advertises_a_recipe_carrying_contract() {
         use crate::ir::ReduceOp;
         use crate::pattern::PatternError;
-        // Increment 6 SCAN is an AOT-only honest miss: neither contract.rs nor
-        // pattern.rs has any Scan/Cumsum vocabulary, and Fuel exposes no Scan OpTag,
-        // so a scan emits NO FKC contract (the kernel still generates + runs AOT) —
-        // the Reduction/RowReduce/Contraction precedent. `derive_pattern` rejects it
-        // as NotElementwise BEFORE any body walk; `contract()` then returns None.
+        // A scan is not an elementwise pattern (derive_pattern rejects it), but it
+        // carries a `prefix_scan` recipe — so it advertises a recipe-carrying
+        // `fused_op` contract, admitted only to a recipe-import peer. (Its output
+        // shape = input shape, but shape still defers to the recipe uniformly with
+        // the other non-elementwise families.)
         let sc = OpDef::scan_simple(
             "cumsum",
             &[ElementKind::F32],
@@ -1657,9 +1711,17 @@ mod tests {
         let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
         let kernel = generate(&sc, &key, &Cuda);
+        let c = contract(&sc, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: cumsum"), "{c}");
+        assert!(c.contains("semantics: prefix_scan[sum,1,incl](in0)"), "{c}");
+        assert!(c.contains("shape_rule: from_recipe"), "{c}");
         assert!(
-            contract(&sc, &key, &kernel, "cuda").is_none(),
-            "a scan must emit NO contract (no Fuel Scan OpTag; AOT-only honest miss)"
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
         );
         assert!(matches!(
             crate::derive_pattern(&sc),
@@ -2414,13 +2476,15 @@ mod tests {
     }
 
     #[test]
-    fn reduction_is_an_honest_miss_no_contract() {
+    fn reduction_advertises_a_recipe_carrying_contract() {
         use crate::ir::ReduceOp;
         use crate::pattern::PatternError;
         use baracuda_kernel_vocab::AxisMask;
-        // A general-path reduction (explicit axis set) must NEVER leak a bindable
-        // elementwise contract — the honest-miss wall (§5f/§6). Pins that item 03's
-        // axes/keepdim did not open a path around the `NotElementwise` reject.
+        // A general-path reduction is not an elementwise pattern, but it carries a
+        // `reduce[…]` recipe — so it advertises a recipe-carrying contract admitted
+        // only to a recipe-import peer. Its output shape+dtype ≠ its input (the axis
+        // is reduced away), so BOTH defer to the recipe (`from_recipe`), never a
+        // false `same_as(in0)`/`passthrough(in0)`.
         let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
@@ -2434,7 +2498,19 @@ mod tests {
             false,
         );
         let kernel = generate(&op, &key, &Cuda);
-        assert!(contract(&op, &key, &kernel, "cuda").is_none());
+        let c = contract(&op, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: sum"), "{c}");
+        assert!(c.contains("semantics: reduce[sum,0x1,nokd](in0)"), "{c}");
+        assert!(c.contains("shape_rule: from_recipe"), "{c}");
+        assert!(c.contains("dtype_rule: from_recipe"), "{c}");
+        assert!(
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
+        );
         assert!(matches!(
             derive_pattern(&op),
             Err(PatternError::NotElementwise)
@@ -2442,27 +2518,31 @@ mod tests {
     }
 
     #[test]
-    fn prod_and_hetero_out_reductions_are_honest_misses_no_contract() {
+    fn prod_and_hetero_out_reductions_advertise_recipe_carrying_contracts() {
         use crate::ir::{BinaryOp, ReduceOp, konst, reduced};
-        use crate::pattern::PatternError;
         // The 0e reductions (Prod combiner; boolean/count hetero-out via a Cmp*
-        // post) emit NO contract — reductions are not in the elementwise pattern
-        // vocabulary, AND Fuel has no ProdReduce/Any/All/CountNonzero OpKind yet
-        // (fuel-cuda-backend/src/baracuda/reduce.rs), so a contract would be
-        // un-importable. Honest miss, typed (NotElementwise), same wall as Sum.
+        // post) carry a `reduce[…]` recipe — so they advertise recipe-carrying
+        // contracts (admitted only to a recipe-import peer). Fuel resolves the
+        // recipe primitives even though it has no ProdReduce/Any OpKind: that's the
+        // whole point of recipe-import. The hetero-out dtype rides the recipe
+        // (`from_recipe`), where `passthrough(in0)` would state the wrong type.
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
 
-        // (a) Prod.
+        // (a) Prod (uniform f32 out).
         let prod_out = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
         let pk = structure_key(OpCategory::Reduction, &[a, prod_out], ArchSku::Sm89);
         let prod = OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod);
-        assert!(contract(&prod, &pk, &generate(&prod, &pk, &Cuda), "cuda").is_none());
-        assert!(matches!(
-            derive_pattern(&prod),
-            Err(PatternError::NotElementwise)
-        ));
+        let cp = contract(&prod, &pk, &generate(&prod, &pk, &Cuda), "cuda")
+            .expect("recipe-carrying contract");
+        assert!(cp.contains("fused_op: p"), "{cp}");
+        assert!(
+            cp.contains("semantics: reduce[prod,last,nokd](in0)"),
+            "{cp}"
+        );
+        assert!(cp.contains("shape_rule: from_recipe"), "{cp}");
+        assert!(!contract_admissible(&cp, false) && contract_admissible(&cp, true));
 
-        // (b) hetero-out any (Sum(x!=0) → u8 via a Cmp* post).
+        // (b) hetero-out any (Sum(x!=0) → u8 via a Cmp* post) — dtype from the recipe.
         let any_out = OperandDesc::new(1, &[256], &[1], ElementKind::U8, 256);
         let ak = structure_key(OpCategory::Reduction, &[a, any_out], ArchSku::Sm89);
         let mut any = OpDef::reduction_post(
@@ -2474,11 +2554,17 @@ mod tests {
             reduced(0).binary(BinaryOp::CmpGt, konst(0.0)),
         );
         any.out_dtype = Some(ElementKind::U8);
-        assert!(contract(&any, &ak, &generate(&any, &ak, &Cuda), "cuda").is_none());
-        assert!(matches!(
-            derive_pattern(&any),
-            Err(PatternError::NotElementwise)
-        ));
+        let ca = contract(&any, &ak, &generate(&any, &ak, &Cuda), "cuda")
+            .expect("recipe-carrying contract");
+        assert!(ca.contains("fused_op: any"), "{ca}");
+        assert!(
+            ca.contains(
+                "semantics: cmp_gt(reduce[sum,last,nokd](cmp_ne(in0, const(0))), const(0))"
+            ),
+            "{ca}"
+        );
+        assert!(ca.contains("dtype_rule: from_recipe"), "{ca}");
+        assert!(!contract_admissible(&ca, false) && contract_admissible(&ca, true));
     }
 
     #[test]
