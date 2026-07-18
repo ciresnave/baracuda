@@ -309,6 +309,92 @@ irregular-K, and batched-many-tiny. Sixth measure-don't-assume instance.
 
 ---
 
+## `contract_bias_batched_validate.cu` — fused bias + batched contraction (B13/B14)
+
+On-device numeric proof for this session's contraction growth, whose NEW code the
+item-10 harness above does NOT cover:
+
+- **B13 — fused matmul + per-column `[N]` bias/activation epilogue** (the
+  `in2[col]` bias load + `relu(r0 + bias)` in `emit_contraction`). Cells
+  `matmul_bias` (bias alone) and `matmul_bias_relu` (fused bias + activation).
+- **B14 — batched `[B,M,K]·[B,K,N]`** (the `b = blockIdx.z` batch offset and the
+  per-operand batch strides `in0[b*m*k+…]` / `in1[b*k*n+…]` / `out[b*m*n+…]`).
+  Cells `bmm` (identity) and `bmm_relu` (batch strides + activation). Each batch
+  is filled with **distinct** data, so a batch-stride bug (e.g. reading batch 0
+  for all `b`) is caught.
+
+Method: diff the generated kernels vs a **host f64 reference** (matmul + optional
+bias + optional relu; per-batch loop). Two input regimes:
+
+- **Exactly-representable integer inputs, small K** (|partial sums| < 2²⁴) ⇒ the
+  kernel's f32 accumulation is **bit-exact** to `(float)`(the f64 reference),
+  asserted with `==` (max abs diff 0). This is the load/stride correctness proof:
+  a mis-indexed bias column or a wrong batch slice changes the exact value.
+- **Hashed pseudo-random inputs, large K** ⇒ f32 rounding genuinely diverges from
+  f64; asserted within a small relative tolerance (`< 1e-4`). Batched cases also
+  cross-check vs `cublasSgemmStridedBatched` (row-major via `C^T = B^T·A^T`,
+  strided over the batch dim).
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog. The
+companion example emits them (mirrors how the item-10 `_contract_tll` cells come
+from the catalog):
+
+```sh
+cargo run -p baracuda-kernelgen --example emit_bias_batched -- <outdir>
+cp crates/baracuda-kernelgen/ondevice/contract_bias_batched_validate.cu <outdir>/
+nvcc -O3 -arch=sm_89 <outdir>/contract_bias_batched_validate.cu -lcublas \
+     -o <outdir>/contract_bias_batched_validate
+<outdir>/contract_bias_batched_validate                          # correctness + cuBLAS + bench
+compute-sanitizer --tool memcheck  <outdir>/contract_bias_batched_validate san
+compute-sanitizer --tool initcheck <outdir>/contract_bias_batched_validate san
+```
+
+**Last run (RTX 4070 Laptop/sm_89, driver 610.62, CUDA 13.3 / nvcc 13.3) — ALL 23
+cases PASS**; `compute-sanitizer memcheck` = **0 errors**, `initcheck` = **0
+errors** (the `san` small-shape subset — the bias load, the batch-strided loads,
+and the output stores are all in-bounds and every read-back element is written).
+
+Bit-exact (integer inputs, `maxabs 0` / `0 ULP` — the index/stride proof):
+
+| cell | shapes (M×N×K, `B;M×N×K`) | result |
+| --- | --- | --- |
+| `matmul_bias` / `matmul_bias_relu` | 3×5×4, 8×37×16, 1×4096×64 | **maxabs 0, 0 ULP** |
+| `bmm` / `bmm_relu` | 3;2×3×4, 4;8×33×16, 8;1×5×8 | **maxabs 0, 0 ULP** |
+
+The 8×37×16 / 4;8×33×16 cases put M at the Tiny-M ceiling (8); 1×4096×64 exercises
+the grid-stride column loop; 8;1×5×8 stacks 8 distinct batches. The `_relu` cells
+use column-negative biases / cancelling sums so relu actually clamps.
+
+Tolerance (hashed random inputs, f32-vs-f64 divergence — the realistic regime):
+
+| cell | shape | maxabs | maxrel |
+| --- | --- | --- | --- |
+| `matmul_bias` | 8×4096×4096 | 2.4e-04 | 9.1e-05 |
+| `matmul_bias_relu` | 8×4096×4096 | 1.9e-04 | 7.2e-05 |
+| `bmm` | 8;8×1024×1024 | 4.8e-05 | 2.4e-05 |
+| `bmm` vs `cublasSgemmStridedBatched` | 8;8×1024×1024 | 5.3e-05 | 2.6e-05 |
+| `bmm` vs `cublasSgemmStridedBatched` | 16;4×512×512 | 2.9e-05 | 9.8e-06 |
+
+(Per-element ULP is not a meaningful figure for the tolerance cases — random-sign
+GEMM outputs cancel toward zero, where ULP spacing explodes; `maxabs`/`maxrel` are
+the precision figures there. The kernel's sequential-K f32 fold lands within a few
+parts-per-million of both f64 and cuBLAS.)
+
+**Negative control (harness sensitivity confirmed):** dropping the `b*k*n` batch
+stride from the `bmm` cell's rhs load (a simulated stride bug) makes exactly the
+distinct-per-batch cases **FAIL** (`maxabs` 12–25, 3 cases) while the untouched
+`bmm_relu`/bias cells still pass — the diff genuinely tests the batch strides, it
+does not pass trivially.
+
+**Bench (batched, `B=8, M=8, N=K=4096`):** `bmm` **215–230 GB/s** vs
+`cublasSgemmStridedBatched` **~229 GB/s** — **0.94–1.01×**, i.e. parity with the
+vendor's strided-batched decode path on this Tiny-M batched cell (the same
+"vendor keeps the plain cell" verdict as item 10; the generated node's edge is
+the fused epilogue / dequant regimes, not raw batched GEMM). **No device bug
+found** — the B13 bias load and the B14 batch strides are correct on device.
+
+---
+
 ## `audit_reduce_softmax.cu` — generated-vs-bespoke audit, round 1
 
 Generated cells vs the hand-written `baracuda-kernels-sys` kernels, called
