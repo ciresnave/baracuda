@@ -729,63 +729,55 @@ pub fn contract(
     }
 
     s.push_str("return:\n  outputs:\n");
-    // A u8-predicate op returns the mask dtype, not the input dtype:
-    // `fixed(U8)` per FKC §5.1 ("a constant … comparisons → U8"), the exact
-    // rule Fuel's own CPU compare contracts carry. Everything else is an
-    // `passthrough(in0)` of input 0's dtype: Fuel's `parse_dtype_rule`
-    // (`fkc/lower.rs`) maps `passthrough(role)` → `DtypeRule::Passthrough` and
-    // `resolve_output_slot_dtype` then APPENDS the output dtype to the binding
-    // key — whereas the old `same_as_input(0)` parsed to `DtypeRule::Other`,
-    // which is SILENTLY DROPPED (no output slot in the key). `in0` is the item-4
-    // name of input 0 (verified 2026-07-08 against Fuel's real importer: the
-    // resolved primitive's `dtypes` then carries inputs + the output slot).
-    // A recipe-carrying non-elementwise op defers BOTH dtype and shape to the
-    // recipe (Fuel's `primitive_shape` returns `(shape, dtype)` — one authority);
-    // this is what makes a hetero-out reduction (count → i64) honest, where
-    // `passthrough(in0)` would state the wrong dtype.
-    let dtype_rule = if recipe_carrying {
-        "from_recipe"
-    } else if out_u8 {
-        "fixed(U8)"
-    } else {
-        "passthrough(in0)"
-    };
-    // shape_rule: `same_as(in0)` — Fuel's §5.2 grammar spells it `same_as(<role>)`
-    // (fuel-dispatch `fkc/schema.rs` OutputDesc; the `same_as_input(0)` form is
-    // OUTSIDE the grammar — `same_as_input` has zero occurrences in Fuel, and `0`
-    // is not an operand role). `in0` is the item-4 name of input 0, matching the
-    // sibling `dtype_rule: passthrough(in0)` role system.
-    //
-    // layout_guarantee: the OUTPUT descriptor has NO five-flag `layout:` field —
-    // Fuel's `OutputDesc` (`fkc/schema.rs`) carries `layout_guarantee:` with the
-    // §5.3 token values `contiguous` / `preallocated` / `same_as(<input>)` (the
-    // five-flag `LayoutSpec` map is the ACCEPT-input `TensorDesc.layout` form
-    // only; emitting it on an output is a silently-dropped unknown key). A
-    // contiguous output cell guarantees a packed contiguous buffer; anything else
-    // is the always-true `preallocated` (the executor pre-allocates it). Verified
-    // 2026-07-08 against Fuel's real parser (`layout:` → None; `layout_guarantee:
-    // contiguous` → Some).
+    // layout_guarantee (§5.3): a contiguous output cell guarantees a packed
+    // contiguous buffer, else the always-true `preallocated` (the executor
+    // pre-allocates it). The five-flag `LayoutSpec` map is the ACCEPT-input
+    // `TensorDesc.layout` form only; on an OUTPUT it's a silently-dropped unknown
+    // key. Verified 2026-07-08 against Fuel's parser.
     let layout_guarantee = match key.operands[out_idx].contig {
         Contiguity::Contig => "contiguous",
         _ => "preallocated",
     };
-    // Output shape rule. A recipe-carrying non-elementwise op (contraction/
-    // reduction/scan) has an output shape that a bare `same_as(in0)` cannot state
-    // (a matmul's out `[M,N]` ≠ lhs `[M,K]`). Per Fuel's shape answer (2026-07-17)
-    // the realized RECIPE is the single shape authority for every non-basis op, so
-    // `shape_rule` DEFERS to it (`from_recipe`) rather than assert a false rule.
-    // Elementwise is itself a basis whose shape rule IS `same_as(in0)` — unchanged.
-    let shape_rule = if recipe_carrying {
-        "from_recipe"
+    // The FKC `OutputDesc` rule fields (§5.1/§5.2), all omittable (serde default).
+    // Fuel confirmed the exact grammar 2026-07-17: `dtype_rule: passthrough(<role>)
+    // | fixed(<DType>)`; `shape_rule: same_as(<role>) | from_params(<field>, …)` —
+    // there is NO `from_recipe` form.
+    //
+    // RECIPE-CARRYING non-elementwise op (contraction/reduction/scan): the realized
+    // recipe is Fuel's single shape+dtype authority (`primitive_shape → (shape,
+    // dtype)`). SHAPE — no FKC `shape_rule` form states a non-elementwise output
+    // shape (a matmul's out `[M,N]` ≠ any input), and `shape_rule` is a claim
+    // VERIFIED against the recipe, not an authority (Fuel doesn't yet evaluate it) —
+    // so it is OMITTED; the recipe carries the shape. DTYPE — `dtype_rule` IS
+    // interpreted (it builds the binding-key output slot), so it is emitted: a
+    // hetero output declares `fixed(<dtype>)`, a uniform output `passthrough(in0)`.
+    //
+    // ELEMENTWISE op: a basis whose shape rule IS `same_as(in0)` (`passthrough(role)`
+    // → `DtypeRule::Passthrough`, then `resolve_output_slot_dtype` appends the output
+    // slot; `fixed(U8)` for a u8-predicate). Byte-identical to the pre-recipe emit.
+    if recipe_carrying {
+        let dtype_rule = match op.out_dtype.and_then(fkc_dtype) {
+            Some(d) => format!("fixed({d})"),
+            None => "passthrough(in0)".to_string(),
+        };
+        s.push_str(&format!(
+            "    - dtype_rule: {dtype_rule}\n      \
+             layout_guarantee: {layout_guarantee}\n      \
+             aliasing: none\n"
+        ));
     } else {
-        "same_as(in0)"
-    };
-    s.push_str(&format!(
-        "    - dtype_rule: {dtype_rule}\n      \
-         shape_rule: {shape_rule}\n      \
-         layout_guarantee: {layout_guarantee}\n      \
-         aliasing: none\n"
-    ));
+        let dtype_rule = if out_u8 {
+            "fixed(U8)"
+        } else {
+            "passthrough(in0)"
+        };
+        s.push_str(&format!(
+            "    - dtype_rule: {dtype_rule}\n      \
+             shape_rule: same_as(in0)\n      \
+             layout_guarantee: {layout_guarantee}\n      \
+             aliasing: none\n"
+        ));
+    }
 
     s.push_str("caps:\n");
     // in_place: ALWAYS `false`. Two Fuel-side facts, both verified 2026-07-08:
@@ -1669,10 +1661,14 @@ mod tests {
         let c = contract(&mm, &key, &kernel, "cuda").expect("recipe-carrying contract");
         assert!(c.contains("fused_op: matmul"), "{c}");
         assert!(c.contains("semantics: matmul[mk.kn](in0, in1)"), "{c}");
-        // The matmul output shape ≠ any input → shape defers to the recipe, never a
-        // false `same_as(in0)`.
-        assert!(c.contains("shape_rule: from_recipe"), "{c}");
-        assert!(!c.contains("shape_rule: same_as"), "{c}");
+        // The matmul output shape ≠ any input → no FKC shape_rule form fits, so
+        // shape_rule is OMITTED (the recipe carries the shape). dtype is uniform →
+        // passthrough(in0), a real form Fuel interprets.
+        assert!(
+            !c.contains("shape_rule"),
+            "shape rides the recipe, omitted:\n{c}"
+        );
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
         // Honest-miss discipline preserved: WITHHELD from a non-recipe-import bundle,
         // admitted only to a recipe-import peer.
         assert!(
@@ -1714,7 +1710,9 @@ mod tests {
         let c = contract(&sc, &key, &kernel, "cuda").expect("recipe-carrying contract");
         assert!(c.contains("fused_op: cumsum"), "{c}");
         assert!(c.contains("semantics: prefix_scan[sum,1,incl](in0)"), "{c}");
-        assert!(c.contains("shape_rule: from_recipe"), "{c}");
+        // Shape rides the recipe (omitted); a scan's dtype is uniform → passthrough.
+        assert!(!c.contains("shape_rule"), "{c}");
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
         assert!(
             !contract_admissible(&c, false),
             "withheld without recipe-import"
@@ -2501,8 +2499,11 @@ mod tests {
         let c = contract(&op, &key, &kernel, "cuda").expect("recipe-carrying contract");
         assert!(c.contains("fused_op: sum"), "{c}");
         assert!(c.contains("semantics: reduce[sum,0x1,nokd](in0)"), "{c}");
-        assert!(c.contains("shape_rule: from_recipe"), "{c}");
-        assert!(c.contains("dtype_rule: from_recipe"), "{c}");
+        assert!(
+            !c.contains("shape_rule"),
+            "shape rides the recipe, omitted:\n{c}"
+        );
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
         assert!(
             !contract_admissible(&c, false),
             "withheld without recipe-import"
@@ -2524,8 +2525,9 @@ mod tests {
         // post) carry a `reduce[…]` recipe — so they advertise recipe-carrying
         // contracts (admitted only to a recipe-import peer). Fuel resolves the
         // recipe primitives even though it has no ProdReduce/Any OpKind: that's the
-        // whole point of recipe-import. The hetero-out dtype rides the recipe
-        // (`from_recipe`), where `passthrough(in0)` would state the wrong type.
+        // whole point of recipe-import. Shape rides the recipe (omitted); the
+        // hetero-out dtype declares `fixed(<dtype>)`, where `passthrough(in0)`
+        // would state the wrong type.
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
 
         // (a) Prod (uniform f32 out).
@@ -2539,7 +2541,8 @@ mod tests {
             cp.contains("semantics: reduce[prod,last,nokd](in0)"),
             "{cp}"
         );
-        assert!(cp.contains("shape_rule: from_recipe"), "{cp}");
+        assert!(!cp.contains("shape_rule"), "{cp}");
+        assert!(cp.contains("dtype_rule: passthrough(in0)"), "{cp}");
         assert!(!contract_admissible(&cp, false) && contract_admissible(&cp, true));
 
         // (b) hetero-out any (Sum(x!=0) → u8 via a Cmp* post) — dtype from the recipe.
@@ -2563,7 +2566,10 @@ mod tests {
             ),
             "{ca}"
         );
-        assert!(ca.contains("dtype_rule: from_recipe"), "{ca}");
+        // Hetero U8 output → `fixed(U8)` (a real FKC dtype form Fuel interprets);
+        // shape rides the recipe (omitted).
+        assert!(ca.contains("dtype_rule: fixed(U8)"), "{ca}");
+        assert!(!ca.contains("shape_rule"), "{ca}");
         assert!(!contract_admissible(&ca, false) && contract_admissible(&ca, true));
     }
 
