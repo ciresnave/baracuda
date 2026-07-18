@@ -400,8 +400,12 @@ fn unary_kiss_name(op: UnaryOp) -> Option<&'static str> {
 fn binary_kiss_name(op: BinaryOp) -> Option<&'static str> {
     use BinaryOp as B;
     Some(match op {
-        B::Max => "max",
-        B::Min => "min",
+        // NaN-propagating elementwise minmax (`torch.maximum`/`minimum`) — the
+        // KISS-Ops tokens are `max_prop`/`min_prop`, NOT bare `max`/`min` (those are
+        // the reduce/scan MONOID enum, see `reduce_monoid`) and NOT the NaN-suppressing
+        // `fmax_ieee`/`fmin_ieee` below. Never alias the two families (KISS-OPS-6.15-0001).
+        B::Max => "max_prop",
+        B::Min => "min_prop",
         B::Pow => "pow",
         B::Atan2 => "atan2",
         B::Copysign => "copysign",
@@ -545,6 +549,35 @@ mod tests {
         assert_eq!(
             binary_recipe(BinaryOp::LogicalOr).as_deref(),
             Some("logical_or(in0, in1)")
+        );
+    }
+
+    #[test]
+    fn nan_propagating_elementwise_minmax_map_to_max_prop_min_prop() {
+        // `BinaryOp::Max`/`Min` are NaN-propagating (`torch.maximum`/`minimum` —
+        // ir.rs:264), deliberately distinct from the NaN-suppressing `FmaxIeee`/
+        // `FminIeee`. Their KISS-Ops elementwise tokens are `max_prop`/`min_prop`
+        // (kiss-ops-vocab `MaxProp`/`MinProp`), NOT bare `max`/`min` — those exist
+        // ONLY as the reduce/scan MONOID enum (`reduce[max,…]`). Emitting bare
+        // `max`/`min` here would be unresolvable to a recipe-import peer, or silently
+        // bind to the IEEE op and drop NaN-propagation (KISS-OPS-6.15-0001 forbids
+        // aliasing the two families).
+        assert_eq!(
+            binary_recipe(BinaryOp::Max).as_deref(),
+            Some("max_prop(in0, in1)")
+        );
+        assert_eq!(
+            binary_recipe(BinaryOp::Min).as_deref(),
+            Some("min_prop(in0, in1)")
+        );
+        // The NaN-suppressing IEEE variants stay distinct — never aliased to the above.
+        assert_eq!(
+            binary_recipe(BinaryOp::FmaxIeee).as_deref(),
+            Some("fmax_ieee(in0, in1)")
+        );
+        assert_eq!(
+            binary_recipe(BinaryOp::FminIeee).as_deref(),
+            Some("fmin_ieee(in0, in1)")
         );
     }
 
