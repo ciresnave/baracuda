@@ -26,9 +26,12 @@
 //! `Coord`→`iota` / `Param`→`runtime_scalar`; **contractions** (`matmul[<roles>]`
 //! fold + the `Reduced(0)`→node epilogue, incl. fused bias/activation);
 //! **reductions** (`reduce[<monoid>,<axes>,<keepdim>]` fold + post, `Mean` an honest
-//! miss); and **scans** (`prefix_scan[<monoid>,<axis>,<excl>]`, reverse = flip ∘ scan
-//! ∘ flip). RowReduce, gather/scatter, pooling, sort, and im2col are follow-ups — an
-//! honest miss (`None`) until covered.
+//! miss); **scans** (`prefix_scan[<monoid>,<axis>,<excl>]`, reverse = flip ∘ scan
+//! ∘ flip); and **row-reductions** (staged `reduce[<monoid>,last,nokd]` folds
+//! producing `Reduced(0..n)`, then a full-width epilogue over the stage scalars +
+//! the row-streamed inputs — softmax/rmsnorm; `Mean` still an honest miss).
+//! Gather/scatter, pooling, sort, and im2col are follow-ups — an honest miss
+//! (`None`) until covered.
 
 use crate::ir::{
     Access, AxisRole, BinaryOp, ContractionAxes, OpDef, ReduceOp, ScalarExpr, UnaryOp,
@@ -42,7 +45,7 @@ use baracuda_kernel_vocab::AxisMask;
 pub fn semantics_dag(op: &OpDef) -> Option<String> {
     match &op.access {
         // Elementwise: the body over Input/Const/source-op leaves; no fold node.
-        Access::Elementwise => expr_to_recipe(&op.body, None),
+        Access::Elementwise => expr_to_recipe(&op.body, &[]),
         // Contraction: a `matmul[<roles>](in0, in1)` fold node, then the epilogue
         // over it. `Reduced(0)` in the epilogue = the K-sum = the matmul node (Fuel
         // co-pin: `Reduced` is a child_edge to the fold node), and a fused
@@ -52,7 +55,7 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
         // (docs/fuel-ask-recipe-copin-2026-07-16.md).
         Access::Contraction { axes, epilogue, .. } => {
             let node = format!("matmul[{}](in0, in1)", contraction_roles(axes));
-            expr_to_recipe(epilogue, Some(&node))
+            expr_to_recipe(epilogue, &[node])
         }
         // Reduction: a `reduce[<monoid>,<axes>,<keepdim>]` fold node over the
         // per-element pre-map (`op.body`), then the post epilogue over it
@@ -65,13 +68,13 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
             post,
         } => {
             let monoid = reduce_monoid(*rop)?;
-            let pre = expr_to_recipe(&op.body, None)?;
+            let pre = expr_to_recipe(&op.body, &[])?;
             let node = format!(
                 "reduce[{monoid},{},{}]({pre})",
                 reduce_axes_code(axes),
                 if *keepdim { "kd" } else { "nokd" }
             );
-            expr_to_recipe(post, Some(&node))
+            expr_to_recipe(post, &[node])
         }
         // Scan: a `prefix_scan[<monoid>,<axis>,<excl>]` node over the pre-map, then
         // the post over it. Fuel co-pin: a `reverse` scan = flip ∘ prefix_scan ∘
@@ -86,17 +89,32 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
             post,
         } => {
             let monoid = reduce_monoid(*rop)?;
-            let pre_r = expr_to_recipe(pre, None)?;
+            let pre_r = expr_to_recipe(pre, &[])?;
             let excl = if *exclusive { "excl" } else { "incl" };
             let node = if *reverse {
                 format!("flip[{axis}](prefix_scan[{monoid},{axis},{excl}](flip[{axis}]({pre_r})))")
             } else {
                 format!("prefix_scan[{monoid},{axis},{excl}]({pre_r})")
             };
-            expr_to_recipe(post, Some(&node))
+            expr_to_recipe(post, &[node])
         }
-        // RowReduce, gather/scatter, pooling, sort, im2col carry structure not yet
-        // covered — a follow-up honest miss.
+        // RowReduce (fused reduce → broadcast → elementwise over the last axis):
+        // each stage `i` is a `reduce[<monoid>,last,nokd]` fold producing
+        // `Reduced(i)`; a later stage's `pre` may read earlier stages' `Reduced(j<i)`
+        // (thread the already-built stage strings), and the `epilogue` reads
+        // `Reduced(0..n)` AND the full-width row-streamed `Input`s. `Mean` is not a
+        // monoid (Fuel: sum-fold + div-by-extent) — an honest miss, as in Reduction.
+        Access::RowReduce { stages, epilogue } => {
+            let mut stage_strs: Vec<String> = Vec::with_capacity(stages.len());
+            for st in stages {
+                let monoid = reduce_monoid(st.op)?;
+                let pre = expr_to_recipe(&st.pre, &stage_strs)?;
+                stage_strs.push(format!("reduce[{monoid},last,nokd]({pre})"));
+            }
+            expr_to_recipe(epilogue, &stage_strs)
+        }
+        // Gather/scatter, pooling, sort, im2col carry structure not yet covered — a
+        // follow-up honest miss.
         _ => None,
     }
 }
@@ -146,9 +164,11 @@ fn contraction_roles(axes: &ContractionAxes) -> String {
 
 /// Serialize a scalar expression as a KISS-Ops recipe sub-DAG, or `None` if any
 /// node has no confirmed KISS-Ops re-basing (never fabricates a token). `reduced`
-/// is the recipe string a `Reduced(0)` leaf resolves to — the fold node inside a
-/// reduction/contraction epilogue; `None` for a bare elementwise body.
-fn expr_to_recipe(e: &ScalarExpr, reduced: Option<&str>) -> Option<String> {
+/// is the ordered set of fold-node strings a `Reduced(i)` leaf resolves to — one
+/// entry per stage inside a reduction/contraction/scan/RowReduce epilogue (a
+/// single-fold arm passes a 1-element slice), and empty (`&[]`) for a bare
+/// elementwise body. A `Reduced(i)` with no `i`-th entry is an honest miss.
+fn expr_to_recipe(e: &ScalarExpr, reduced: &[String]) -> Option<String> {
     use ScalarExpr as E;
     Some(match e {
         E::Input(i) => format!("in{i}"),
@@ -190,11 +210,11 @@ fn expr_to_recipe(e: &ScalarExpr, reduced: Option<&str>) -> Option<String> {
         // 2026-07-15). The attr rides the parens, mirroring `const(v)`.
         E::Coord(axis) => format!("iota({axis})"),
         E::Param(i) => format!("runtime_scalar({i})"),
-        // `Reduced(0)` resolves to the fold node inside a reduction/contraction
-        // epilogue; a bare elementwise body has no fold (`reduced == None`) → honest
-        // miss. `Reduced(i>0)` (a second stage) is not yet expressible.
-        E::Reduced(0) => reduced.map(String::from)?,
-        E::Reduced(_) => return None,
+        // `Reduced(i)` resolves to stage `i`'s fold node (reduction/contraction/
+        // scan/RowReduce epilogue); a bare elementwise body has no fold (`reduced`
+        // empty) and an out-of-range stage index is an honest miss — never a
+        // fabricated leaf.
+        E::Reduced(i) => reduced.get(*i as usize).cloned()?,
     })
 }
 
@@ -497,6 +517,72 @@ mod tests {
             semantics_dag(&rc).as_deref(),
             Some("flip[2](prefix_scan[prod,2,excl](flip[2](in0)))")
         );
+    }
+
+    #[test]
+    fn rowreduce_softmax_recipe_is_staged_reduces_with_the_epilogue_over_them() {
+        use crate::ir::{ReduceOp, ReduceStage};
+        // Softmax (2 stages): stage0 = row max, stage1 = sum(exp(x − max)). Each
+        // stage folds over the LAST axis (`last`, `nokd`, row-broadcast). A later
+        // stage's `pre` (and the epilogue) thread the earlier stages' strings —
+        // stage1 reads `Reduced(0)`, the epilogue reads `Reduced(0..2)` AND the
+        // full-width row-streamed `Input` (admissible here, unlike a Reduction).
+        let stages = vec![
+            ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Max,
+            },
+            ReduceStage {
+                pre: (input(0) - reduced(0)).unary(UnaryOp::Exp).0,
+                op: ReduceOp::Sum,
+            },
+        ];
+        let epi = (input(0) - reduced(0)).unary(UnaryOp::Exp) / reduced(1);
+        let op = OpDef::row_reduce("softmax", 1, &[F32], stages, epi);
+        assert_eq!(
+            semantics_dag(&op).as_deref(),
+            Some(
+                "div(exp(sub(in0, reduce[max,last,nokd](in0))), \
+                 reduce[sum,last,nokd](exp(sub(in0, reduce[max,last,nokd](in0)))))"
+            )
+        );
+    }
+
+    #[test]
+    fn rowreduce_rmsnorm_recipe_is_a_sum_of_squares_reduce_with_the_scale_epilogue() {
+        use crate::ir::{ReduceOp, ReduceStage};
+        // RmsNorm (1 stage): stage0 = sum(x²) over the last axis; the epilogue
+        // `x · rsqrt(sum + eps)` scales the row-streamed input by the reduced
+        // scalar. (The mean-of-squares form is a `Mean` monoid — an honest miss
+        // until the extent-div lands; see the Mean case below.)
+        let stages = vec![ReduceStage {
+            pre: input(0).unary(UnaryOp::Sqr).0,
+            op: ReduceOp::Sum,
+        }];
+        let epi = input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt);
+        let op = OpDef::row_reduce("rmsnorm", 1, &[F32], stages, epi);
+        assert_eq!(
+            semantics_dag(&op).as_deref(),
+            Some("mul(in0, rsqrt(add(reduce[sum,last,nokd](sqr(in0)), const(0.00001))))")
+        );
+    }
+
+    #[test]
+    fn rowreduce_mean_stage_is_an_honest_miss() {
+        use crate::ir::{ReduceOp, ReduceStage};
+        // A `Mean` stage is not a monoid (Fuel: sum-fold + div-by-extent) → honest
+        // miss, matching the Reduction arm, until the extent-div is expressible.
+        let op = OpDef::row_reduce(
+            "rms_mean",
+            1,
+            &[F32],
+            vec![ReduceStage {
+                pre: input(0).unary(UnaryOp::Sqr).0,
+                op: ReduceOp::Mean,
+            }],
+            input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt),
+        );
+        assert_eq!(semantics_dag(&op), None);
     }
 
     #[test]

@@ -1687,6 +1687,75 @@ mod tests {
     }
 
     #[test]
+    fn rowreduce_advertises_a_recipe_carrying_contract() {
+        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, reduced};
+        use crate::pattern::PatternError;
+        // A RowReduce (softmax) is NOT an elementwise pattern (derive_pattern rejects
+        // it), but it carries a neutral KISS-Ops recipe — staged `reduce[…]` folds
+        // producing `Reduced(0..n)` + the row epilogue over them and the row-streamed
+        // input — so it advertises a recipe-carrying `fused_op` contract, admitted
+        // ONLY to a recipe-import peer (the same shape+dtype posture as the
+        // contraction/scan arms). No contract.rs change was needed: `recipe_carrying`
+        // auto-fires for a non-elementwise op the moment `semantics_dag` covers it.
+        let stages = vec![
+            ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Max,
+            },
+            ReduceStage {
+                pre: (input(0) - reduced(0)).unary(UnaryOp::Exp).0,
+                op: ReduceOp::Sum,
+            },
+        ];
+        let epi = (input(0) - reduced(0)).unary(UnaryOp::Exp) / reduced(1);
+        let sm = OpDef::row_reduce("softmax", 1, &[ElementKind::F32], stages, epi);
+        let a = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Softmax, &[a, o], ArchSku::Sm89);
+        let kernel = generate(&sm, &key, &Cuda);
+        let c = contract(&sm, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: softmax"), "{c}");
+        assert!(
+            c.contains(
+                "semantics: div(exp(sub(in0, reduce[max,last,nokd](in0))), \
+                 reduce[sum,last,nokd](exp(sub(in0, reduce[max,last,nokd](in0)))))"
+            ),
+            "{c}"
+        );
+        // The softmax output shape is the recipe's authority → no FKC shape_rule;
+        // dtype is uniform → passthrough(in0), a real form Fuel interprets.
+        assert!(
+            !c.contains("shape_rule"),
+            "shape rides the recipe, omitted:\n{c}"
+        );
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        // Honest-miss discipline preserved: WITHHELD from a non-recipe-import bundle,
+        // admitted only to a recipe-import peer.
+        assert!(
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
+        );
+        // End-to-end at the bundle seam: `bundle` (recipe_import=false) withholds the
+        // free-form fused op; `bundle_kisc` admits it ONLY to a recipe-import peer.
+        let withheld = bundle("cuda", "rev0", std::slice::from_ref(&c));
+        assert!(!withheld.contains("fused_op: softmax"), "{withheld}");
+        let admitted = bundle_kisc("cuda", "rev0", std::slice::from_ref(&c), true);
+        assert!(
+            admitted.contains(&crate::kisc::kisc_frame(&c)),
+            "recipe-carrying RowReduce admitted for a recipe-import peer: {admitted}"
+        );
+        // derive_pattern still rejects it — the recipe, not a pattern, is its identity.
+        assert!(matches!(
+            crate::derive_pattern(&sm),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
     fn scan_advertises_a_recipe_carrying_contract() {
         use crate::ir::ReduceOp;
         use crate::pattern::PatternError;
