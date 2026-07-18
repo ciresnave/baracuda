@@ -483,6 +483,47 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "blocked on Fuel reduce_extent{axes} co-pin — see docs/fuel-ask-reduce-extent-2026-07-18.md"]
+    fn mean_reduction_recipe_is_a_sum_fold_divided_by_the_reduced_extent() {
+        use crate::ir::ReduceOp;
+        // RED test (durable, ignored): the recipe a future impl emits once Fuel
+        // confirms the `reduce_extent{axes}` source-op leaf (the divisor for the
+        // shape-derived reduced-axis extent — NOT a literal `const`; `StructureKey`
+        // carries size *classes*, not literal extents). Mean = a `sum` fold + a
+        // `div`-by-extent finalize (Fuel's `MeanDim` decomposes exactly this way),
+        // with the extent leaf carrying the SAME reduced-axis attr as the fold node.
+        //
+        // Kept `#[ignore]` so `cargo test` stays fully green while Mean remains an
+        // honest miss (`semantics_dag → None`); un-ignore + implement the
+        // `Access::Reduction` `Mean` arm once the token is pinned.
+
+        // Plain f32 Mean (identity post): the `div(sum, extent)` node IS the output;
+        // last-axis default (`last`), no keepdim (`nokd`), matching `reduce_axes_code`.
+        let mean = OpDef::reduction("mean", 1, &[F32], input(0), ReduceOp::Mean);
+        assert_eq!(
+            semantics_dag(&mean).as_deref(),
+            Some("div(reduce[sum,last,nokd](in0), reduce_extent(last))")
+        );
+
+        // Fused post over Mean: the post's `Reduced(0)` resolves to the finalized
+        // `div(...)` node (the "post sees the POST-Mean value" ordering pinned at
+        // `plan::assert_valid_reduction_post` / the `Access::Reduction` doc), so a
+        // `sqrt(Reduced(0))` post composes as `sqrt(div(sum, extent))`.
+        let rms = OpDef::reduction_post(
+            "mean_then_sqrt",
+            1,
+            &[F32],
+            input(0).unary(UnaryOp::Sqr),
+            ReduceOp::Mean,
+            reduced(0).sqrt(),
+        );
+        assert_eq!(
+            semantics_dag(&rms).as_deref(),
+            Some("sqrt(div(reduce[sum,last,nokd](sqr(in0)), reduce_extent(last)))")
+        );
+    }
+
+    #[test]
     fn scan_recipe_is_a_prefix_scan_node_with_reverse_as_flip() {
         use crate::ir::ReduceOp;
         // Forward inclusive cumsum on axis 1.
