@@ -27,22 +27,39 @@
 //! fold + the `Reduced(0)`→node epilogue, incl. fused bias/activation);
 //! **reductions** (`reduce[<monoid>,<axes>,<keepdim>]` fold + post, `Mean` an honest
 //! miss); **scans** (`prefix_scan[<monoid>,<axis>,<excl>]`, reverse = flip ∘ scan
-//! ∘ flip); and **row-reductions** (staged `reduce[<monoid>,last,nokd]` folds
+//! ∘ flip); **row-reductions** (staged `reduce[<monoid>,last,nokd]` folds
 //! producing `Reduced(0..n)`, then a full-width epilogue over the stage scalars +
-//! the row-streamed inputs — softmax/rmsnorm; `Mean` still an honest miss).
-//! Gather/scatter, pooling, sort, and im2col are follow-ups — an honest miss
-//! (`None`) until covered.
+//! the row-streamed inputs — softmax/rmsnorm; `Mean` still an honest miss); and
+//! the **data-dependent indexed** ops that ride `op.read_index`/`op.write_index`
+//! rather than an `Access` variant — a `gather[<axis>,<oob>,<index_dtype>](data,
+//! index)` read and a `scatter[<axis>,<combine>,<oob>,<index_dtype>](value, index)`
+//! write (Fuel's pinned `gather`/`scatter` node schemas; child order data/value
+//! then index). Fuel's scatter floor is `ScatterAdd` = `scatter{atomic-add}` only,
+//! so a bare-assign / atomic-max / atomic-min scatter is an honest miss. Pooling,
+//! sort, and im2col remain follow-ups — an honest miss (`None`) until covered.
 
 use crate::ir::{
-    Access, AxisRole, BinaryOp, ContractionAxes, OpDef, ReduceOp, ScalarExpr, UnaryOp,
+    Access, AxisRole, BinaryOp, ContractionAxes, OobPolicy, OpDef, ReadIndex, ReduceOp, ScalarExpr,
+    UnaryOp, WriteCombine, WriteIndex,
 };
-use baracuda_kernel_vocab::AxisMask;
+use baracuda_kernel_vocab::{AxisMask, ElementKind};
 
 /// The KISS-Ops op-DAG (recipe) for `op`, or `None` if `op` is not yet expressible
 /// as a neutral recipe (unsupported access, or a node with no confirmed KISS-Ops
 /// name).
 #[must_use]
 pub fn semantics_dag(op: &OpDef) -> Option<String> {
+    // Data-dependent GATHER / SCATTER ride `op.read_index` / `op.write_index`, NOT an
+    // `Access` variant (a gather is `Access::Elementwise` WITH an `Indexed` read).
+    // Detect them BEFORE the access match, whose `Elementwise` arm would emit the
+    // plain body and SILENTLY DROP the runtime index — a wrong recipe for a gather
+    // (it would read as the identity `in0`).
+    if op.read_index.iter().any(|r| !r.is_direct()) {
+        return gather_recipe(op);
+    }
+    if !op.write_index.is_direct() {
+        return scatter_recipe(op);
+    }
     match &op.access {
         // Elementwise: the body over Input/Const/source-op leaves; no fold node.
         Access::Elementwise => expr_to_recipe(&op.body, &[]),
@@ -113,8 +130,9 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
             }
             expr_to_recipe(epilogue, &stage_strs)
         }
-        // Gather/scatter, pooling, sort, im2col carry structure not yet covered — a
-        // follow-up honest miss.
+        // Pooling (Window), sort (RowSort), im2col carry structure not yet covered —
+        // a follow-up honest miss. (Gather/scatter are handled above, off the
+        // read/write index roles, before this access match.)
         _ => None,
     }
 }
@@ -160,6 +178,102 @@ fn contraction_roles(axes: &ContractionAxes) -> String {
     let lhs: String = axes.lhs.iter().map(|r| code(*r)).collect();
     let rhs: String = axes.rhs.iter().map(|r| code(*r)).collect();
     format!("{lhs}.{rhs}")
+}
+
+/// The recipe node for a **gather** — `gather[<axis>,<oob>,<index_dtype>](<data>,
+/// <index>)`, child order data-then-index (Fuel's pinned `gather` child_edges
+/// `[data, index]`; the positional `index_operand` rides that order, not an attr).
+/// `None` (honest miss) for an un-namable index dtype (only `u32`/`i32`/`i64` are in
+/// Fuel's pinned `gather{…, index_dtype}` set) or a FUSED gather body: v1 covers the
+/// identity read `data[index]` only — an elementwise-over-gather (e.g. `relu(gather)`)
+/// is a follow-up, so a non-identity body is withheld rather than mis-described.
+fn gather_recipe(op: &OpDef) -> Option<String> {
+    // The one `Indexed` input is the gathered DATA operand (`data`); its role names
+    // which operand supplies the index and along which axis. (v1 gathers a single
+    // operand — `plan::assert_valid_gather`.)
+    let (data, index_operand, axis, oob, index_dtype) =
+        op.read_index
+            .iter()
+            .enumerate()
+            .find_map(|(i, r)| match r {
+                ReadIndex::Indexed {
+                    index_operand,
+                    axis,
+                    oob,
+                    index_dtype,
+                } => Some((i, *index_operand, *axis, *oob, *index_dtype)),
+                ReadIndex::Direct => None,
+            })?;
+    // The gathered body must be the identity read of the data operand; a fused body
+    // is not yet expressible as a single gather node → honest miss.
+    if op.body != ScalarExpr::Input(data as u8) {
+        return None;
+    }
+    let idt = index_dtype_code(index_dtype)?;
+    Some(format!(
+        "gather[{axis},{},{idt}](in{data}, in{index_operand})",
+        oob_code(oob)
+    ))
+}
+
+/// The recipe node for a **scatter** — `scatter[<axis>,<combine>,<oob>,<index_dtype>]
+/// (<value>, <index>)`, child order value-then-index. `None` (honest miss) for a
+/// combine outside Fuel's floor (Fuel implements `ScatterAdd` = `atomic-add` ONLY;
+/// bare-assign / atomic-max / atomic-min are Fuel-side gaps — an unresolvable recipe)
+/// or an un-namable index dtype. The scattered `value` is the op body (`in0` for
+/// scatter_add/index_add, `const(1)` for bincount).
+fn scatter_recipe(op: &OpDef) -> Option<String> {
+    let (index_operand, axis, combine, oob, index_dtype) = match &op.write_index {
+        WriteIndex::ScatterIndexed {
+            index_operand,
+            axis,
+            combine,
+            oob,
+            index_dtype,
+        } => (*index_operand, *axis, *combine, *oob, *index_dtype),
+        WriteIndex::Direct => return None,
+    };
+    let combine_code = scatter_combine_code(combine)?;
+    let idt = index_dtype_code(index_dtype)?;
+    let value = expr_to_recipe(&op.body, &[])?;
+    Some(format!(
+        "scatter[{axis},{combine_code},{},{idt}]({value}, in{index_operand})",
+        oob_code(oob)
+    ))
+}
+
+/// The KISS-Ops index-dtype token for a gather/scatter index operand, or `None` for
+/// a dtype outside Fuel's pinned `index_dtype∈{u32,i32,i64}` set (an honest miss —
+/// never a fabricated dtype token). Lowercase to match Fuel's pinned schema spelling.
+fn index_dtype_code(dt: ElementKind) -> Option<&'static str> {
+    match dt {
+        ElementKind::U32 => Some("u32"),
+        ElementKind::I32 => Some("i32"),
+        ElementKind::I64 => Some("i64"),
+        _ => None,
+    }
+}
+
+/// The out-of-range policy token — matching the contract-side `oob_policy` field
+/// spelling. **Exhaustive** over [`OobPolicy`] (a new policy forces a decision here).
+fn oob_code(oob: OobPolicy) -> &'static str {
+    match oob {
+        OobPolicy::Skip => "skip",
+        OobPolicy::Clamp => "clamp",
+        OobPolicy::ZeroFill => "zero_fill",
+    }
+}
+
+/// The KISS-Ops `scatter_combine` token, or `None` for a combine Fuel's floor lacks.
+/// **Exhaustive** over [`WriteCombine`] (a new combine forces a decision). Fuel
+/// implements `ScatterAdd` = `atomic-add` ONLY; a bare-`Assign` scatter (no Fuel
+/// `Scatter` op), `AtomicMax`, and `AtomicMin` (no scatter-reduce op) are Fuel-side
+/// gaps — an unresolvable recipe, so an honest miss rather than a fabricated token.
+fn scatter_combine_code(combine: WriteCombine) -> Option<&'static str> {
+    match combine {
+        WriteCombine::AtomicAdd => Some("atomic-add"),
+        WriteCombine::Assign | WriteCombine::AtomicMax | WriteCombine::AtomicMin => None,
+    }
 }
 
 /// Serialize a scalar expression as a KISS-Ops recipe sub-DAG, or `None` if any
@@ -633,5 +747,81 @@ mod tests {
         assert_eq!(unary_recipe(UnaryOp::Round), None);
         assert_eq!(binary_recipe(BinaryOp::Rem), None);
         assert_eq!(binary_recipe(BinaryOp::LogicalXor), None);
+    }
+
+    #[test]
+    fn gather_recipe_is_a_gather_node_over_data_and_index() {
+        use crate::ir::OobPolicy;
+        use baracuda_kernel_vocab::ElementKind::{I32, I64, U32};
+        // A gather rides `op.read_index` (Access::Elementwise WITH an Indexed read),
+        // so its recipe is NOT the plain elementwise body `in0` — it is a `gather[…]`
+        // node over (data, index), child order data-then-index (Fuel's pinned
+        // `gather` child_edges `[data, index]`). Attrs = axis, oob, index dtype
+        // (Fuel's pinned `gather{axis, oob_policy, index_operand, index_dtype}`; the
+        // positional `index_operand` rides the child order). Index dtype ∈
+        // {u32,i32,i64} (the pinned set) — all namable.
+        let g = OpDef::gather("g", &[F32], 0, OobPolicy::Skip, I32);
+        assert_eq!(
+            semantics_dag(&g).as_deref(),
+            Some("gather[0,skip,i32](in0, in1)")
+        );
+        // u32 index + a row gather (index_select / embedding) at axis 1, zero-fill OOB.
+        let emb = OpDef::gather("emb", &[F32], 1, OobPolicy::ZeroFill, U32);
+        assert_eq!(
+            semantics_dag(&emb).as_deref(),
+            Some("gather[1,zero_fill,u32](in0, in1)")
+        );
+        // i64 index — also in Fuel's pinned index-dtype set.
+        let g64 = OpDef::gather("g64", &[F32], 0, OobPolicy::Skip, I64);
+        assert_eq!(
+            semantics_dag(&g64).as_deref(),
+            Some("gather[0,skip,i64](in0, in1)")
+        );
+    }
+
+    #[test]
+    fn scatter_add_recipe_is_a_scatter_node_over_value_and_index() {
+        use baracuda_kernel_vocab::ElementKind::{I32, U32};
+        // scatter_add rides `op.write_index` (ScatterIndexed{combine: AtomicAdd}); the
+        // recipe is a `scatter[…]` node over (value = body, index), child order
+        // value-then-index. Fuel implements ScatterAdd = `scatter{atomic-add}`, so the
+        // combine is resolvable. Attrs = axis, combine, oob, index dtype (Fuel's pinned
+        // `scatter{axis, scatter_combine, oob_policy, index_operand, index_dtype}`).
+        let sa = OpDef::scatter_add("sa", &[I32], 0, I32);
+        assert_eq!(
+            semantics_dag(&sa).as_deref(),
+            Some("scatter[0,atomic-add,skip,i32](in0, in1)")
+        );
+        // bincount = scatter{atomic-add} of a const-1 value into a SELF-indexed dest
+        // (index_operand 0 = the data itself); the value is the `const(1)` body.
+        let bc = OpDef::bincount("bc", U32);
+        assert_eq!(
+            semantics_dag(&bc).as_deref(),
+            Some("scatter[0,atomic-add,skip,u32](const(1), in0)")
+        );
+    }
+
+    #[test]
+    fn unresolvable_scatter_combines_and_index_dtypes_stay_honest_misses() {
+        use crate::ir::{OobPolicy, WriteCombine, WriteIndex};
+        use baracuda_kernel_vocab::ElementKind::{F32 as F32K, I32};
+        // Fuel implements ScatterAdd (atomic-add) ONLY; a bare-assign scatter and
+        // atomic-max / atomic-min are Fuel-side gaps — an unresolvable recipe, so an
+        // honest miss (None), never a fabricated combine token.
+        let assign = OpDef::scatter("s", &[I32], 0, I32); // WriteCombine::Assign
+        assert_eq!(semantics_dag(&assign), None);
+        let amax =
+            OpDef::scatter("smax", &[I32], 0, I32).with_scatter(WriteIndex::ScatterIndexed {
+                index_operand: 1,
+                axis: 0,
+                combine: WriteCombine::AtomicMax,
+                oob: OobPolicy::Skip,
+                index_dtype: I32,
+            });
+        assert_eq!(semantics_dag(&amax), None);
+        // An un-namable index dtype (outside Fuel's pinned {u32,i32,i64}) → honest
+        // miss, never a fabricated dtype token.
+        let bad = OpDef::gather("gbad", &[F32K], 0, OobPolicy::Skip, F32K);
+        assert_eq!(semantics_dag(&bad), None);
     }
 }

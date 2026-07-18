@@ -421,12 +421,16 @@ pub fn contract(
     //      field (additive/`#[serde(default)]` on Fuel's side; their parser is
     //      permissive — `deny_unknown_fields` deliberately unset — so emitting it
     //      is safe today and load-bearing when Fuel wires the slot in lockstep).
-    // A non-u32 gather (or an un-fkc-spellable data dtype) → `None` → honest miss.
+    // A non-u32 gather no longer dies here (increment-7 recipe wiring): Fuel's pinned
+    // `gather` RECIPE schema admits index_dtype ∈ {u32,i32,i64}, so an i32/i64 index
+    // gather — unreachable as a Fuel graph PRIMITIVE (`op_kind: Gather` keys a fixed
+    // U32 slot) — falls through to the recipe-carrying advert (`fused_op:` + a
+    // `gather[…]` `semantics:` node, admitted only to a recipe-import peer). The u32
+    // gather still takes the op_kind primitive path below; a `None` here is the
+    // recipe-path signal, NOT an honest miss. (An un-fkc-spellable DATA dtype already
+    // returned `None` at the top via `fkc_dtype(key.dtype)`.)
     let gather_advert = if crate::plan::op_has_gather(op) {
-        match gather_advert(op, key) {
-            Some(g) => Some(g),
-            None => return None,
-        }
+        gather_advert(op, key)
     } else {
         None
     };
@@ -501,7 +505,13 @@ pub fn contract(
     // Verified against the real emitter (cuda.rs `offset_expr` / the fully-
     // broadcast hoist) + `classify_contiguity` (structure_key.rs), 2026-07-08.
     {
-        let gather_index = gather_advert.as_ref().map(|g| g.index_operand);
+        // The gather's index operand is exempt from the broadcast-withhold rule (a
+        // 1-D index's stride-0 broadcast over the non-gathered axes is the DEFINITION
+        // of index_select/embedding, not a caller-varying layout). Read the operand
+        // off the read-index roles — NOT `gather_advert` — so it exempts BOTH a u32
+        // op_kind gather AND a non-u32 recipe-carrying index_select.
+        let gather_index = crate::plan::gather_of(&op.read_index)
+            .map(|(_, index_operand, ..)| index_operand as usize);
         for i in 0..key.n_operands as usize {
             let o = key.operands[i];
             if o.flipped {
@@ -563,7 +573,18 @@ pub fn contract(
     // (NoFkcName / CoordUnsupported) stays a pattern-level honest miss — retiring
     // its withhold via recipe-import is a separate, broader decision.
     let recipe = crate::recipe::semantics_dag(op);
-    let recipe_carrying = recipe.is_some() && !matches!(op.access, crate::ir::Access::Elementwise);
+    // Recipe-carrying = the op's IMPORTABLE identity is the recipe, not a pattern /
+    // op_kind. Fires for (a) a NON-elementwise op (contraction/reduction/scan/
+    // rowreduce — its output shape/dtype ≠ any input's, so the FKC same_as/passthrough
+    // rules can't state them), and (b) a data-dependent GATHER whose index is not a
+    // Fuel graph primitive (a non-u32 index — `gather_advert` is `None`, so it does
+    // not ride the op_kind path): its out shape = the index shape ≠ same_as(in0), so
+    // it too defers shape to the recipe. EXCLUDES a u32 gather (`gather_advert` Some
+    // → op_kind primitive) and a plain elementwise op (Brief 4 scope). Scatter never
+    // reaches here (withheld above), so it is intentionally not folded in.
+    let recipe_carrying = recipe.is_some()
+        && gather_advert.is_none()
+        && (!matches!(op.access, crate::ir::Access::Elementwise) || crate::plan::op_has_gather(op));
     let n_ops = pattern.as_ref().map_or(0, count_ops);
     // A u8-out predicate advertises ONLY as the single-op primitive; a FUSED
     // u8-out body would hit the same missing-Cast pattern problem above. This is a
@@ -674,14 +695,18 @@ pub fn contract(
     s.push_str("accept:\n");
     s.push_str(&format!("  structure_key: \"{}\"\n", key.to_token()));
     s.push_str("  inputs:\n");
+    // The gather's index operand + its REAL FKC dtype token — read off the read-index
+    // roles so it is honest on BOTH the u32 op_kind path (U32, Fuel assembles the
+    // mixed-dtype key `[T, U32, T]`) AND the non-u32 recipe path (I32/I64, never the
+    // data dtype). `None` for a non-gather op ⇒ every input emits the uniform key
+    // `dtype` (byte-identical to the pre-Model-A emission).
+    let gather_index_slot: Option<(usize, &str)> =
+        crate::plan::gather_of(&op.read_index).and_then(|(_, index_operand, _, _, index_dtype)| {
+            fkc_dtype(index_dtype).map(|tok| (index_operand as usize, tok))
+        });
     for i in 0..op.n_inputs as usize {
-        // Per-operand dtype (Model-A): the INDEX operand of a gather emits its
-        // real dtype (U32) so Fuel assembles the mixed-dtype key `[T, U32, T]`;
-        // every value/data operand emits the uniform key dtype. A non-gather op
-        // has `gather_advert == None`, so EVERY input is `dtype` — byte-identical
-        // to the pre-Model-A emission.
-        let in_dtype = match &gather_advert {
-            Some(g) if g.index_operand == i => g.index_dtype_token,
+        let in_dtype = match gather_index_slot {
+            Some((io, tok)) if io == i => tok,
             _ => dtype,
         };
         // Fuel's FKC `TensorDesc` carries the operand dtype as the PLURAL
@@ -893,9 +918,10 @@ pub fn contract(
 // ---------------------------------------------------------------------------
 
 /// The Fuel-facing advert facts for a u32-index gather, or `None` for a gather
-/// that stays an honest miss. Computed once at the top of [`contract`] and
-/// threaded into the op_kind line, the per-operand accept dtypes, and the
-/// `oob_policy` field.
+/// that stays an honest miss (a non-u32 index → the recipe path instead). Computed
+/// once at the top of [`contract`] and threaded into the op_kind line and the
+/// `oob_policy` field. (The index operand + its accept dtype are read separately off
+/// the read-index roles at the accept block — honest for the recipe path too.)
 struct GatherAdvert {
     /// The verified Fuel primitive `OpKind` spelling — `"Gather"` (full-shape
     /// index) or `"IndexSelect"` (1-D / broadcast index). Both are exact strings
@@ -904,11 +930,6 @@ struct GatherAdvert {
     /// The `oob_policy` value — `skip` (gather / index_select) / `zero_fill`
     /// (embedding) / `clamp` (generator-only). Fuel's own gather is `error`.
     oob_policy: &'static str,
-    /// Which input operand is the integer index (its accept slot emits U32).
-    index_operand: usize,
-    /// FKC §5 spelling of the index dtype — always `"U32"` (the guard below only
-    /// admits a U32 index; i32/i64 stay honest misses).
-    index_dtype_token: &'static str,
 }
 
 /// Decide whether a gather `op` at cell `key` is honestly advertisable, and with
@@ -927,7 +948,6 @@ fn gather_advert(op: &OpDef, key: &StructureKey) -> Option<GatherAdvert> {
     if index_dtype != ElementKind::U32 {
         return None;
     }
-    let index_dtype_token = fkc_dtype(index_dtype)?; // "U32"
     let op_kind = if index_is_1d(key, index_operand as usize, axis) {
         "IndexSelect"
     } else {
@@ -941,8 +961,6 @@ fn gather_advert(op: &OpDef, key: &StructureKey) -> Option<GatherAdvert> {
     Some(GatherAdvert {
         op_kind,
         oob_policy,
-        index_operand: index_operand as usize,
-        index_dtype_token,
     })
 }
 
@@ -1928,27 +1946,37 @@ mod tests {
     }
 
     #[test]
-    fn gathered_op_is_an_honest_miss_no_contract() {
-        use crate::ir::OobPolicy;
+    fn fused_body_gather_is_an_honest_miss_no_contract() {
+        use crate::ir::{OobPolicy, ReadIndex, UnaryOp};
         use crate::pattern::PatternError;
-        // An i32-index gather stays an honest miss even after the Model-A wiring:
-        // Fuel is U32-index EVERYWHERE (its gather key is `[T, U32, T]`), so an
-        // i32/i64 index is unreachable from a Fuel graph node — `gather_advert`
-        // returns None and no contract is emitted (AOT-only; kernel still runs).
-        // (The u32 variant DOES emit — see `u32_gather_emits_a_keyed_contract…`.)
-        let op = OpDef::gather(
-            "gather",
+        // The recipe wiring covers the IDENTITY gather `data[index]` only. A FUSED
+        // gather body (elementwise-over-gather, e.g. `relu(gather)`) is not yet
+        // expressible as a single `gather[…]` recipe node, so `semantics_dag` returns
+        // None (never a mis-described recipe) and the op stays an honest miss (AOT-
+        // only; the kernel still runs). Uses a NON-u32 (recipe-path) index so it does
+        // not ride the u32 op_kind path — the pure recipe-scope guard.
+        let op = OpDef::elementwise(
+            "fused_gather",
+            2,
             &[ElementKind::F32],
-            0,
-            OobPolicy::Skip,
-            ElementKind::I32,
-        );
-        let key = key_for(3, OpCategory::BinaryElementwise);
+            input(0).unary(UnaryOp::Relu),
+        )
+        .with_indexed(vec![
+            ReadIndex::Indexed {
+                index_operand: 1,
+                axis: 0,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I32,
+            },
+            ReadIndex::Direct,
+        ]);
+        let key = gather_key(ElementKind::I32, false);
         let kernel = generate(&op, &key, &Cuda);
         assert!(
             contract(&op, &key, &kernel, "cuda").is_none(),
-            "a gathered op must emit NO contract (the index dtype is unkeyable)"
+            "a fused-body gather must emit NO contract (v1 covers the identity gather only)"
         );
+        assert_eq!(crate::recipe::semantics_dag(&op), None);
         assert!(matches!(
             crate::derive_pattern(&op),
             Err(PatternError::GatherUnsupported)
@@ -2156,6 +2184,75 @@ mod tests {
     }
 
     #[test]
+    fn i32_gather_advertises_a_recipe_carrying_contract() {
+        use crate::ir::OobPolicy;
+        use crate::pattern::PatternError;
+        // A non-u32 (i32/i64) index gather is NOT a Fuel graph primitive — Fuel's
+        // op_kind `Gather` keys the index as a FIXED U32 slot (`[T, U32, T]`), so an
+        // i32/i64 index is unreachable from a Fuel graph node and carries NO
+        // `op_kind: Gather` advert. But Fuel's pinned `gather` RECIPE schema admits
+        // index_dtype ∈ {u32,i32,i64}, so it now advertises a recipe-carrying
+        // `fused_op` contract (the `gather[…]` node), admitted ONLY to a recipe-import
+        // peer — the previously honest-missed gather retired to the recipe-import path
+        // (the kernel still runs AOT). Complements the u32 op_kind advert.
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        );
+        let key = gather_key(ElementKind::I32, false);
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        // Recipe advert, NOT the u32 op_kind primitive.
+        assert!(c.contains("fused_op: gather"), "{c}");
+        assert!(
+            !c.contains("op_kind: Gather"),
+            "no op_kind for a non-u32 gather: {c}"
+        );
+        assert!(c.contains("semantics: gather[0,skip,i32](in0, in1)"), "{c}");
+        // The gather output shape = the index shape ≠ same_as(in0) (the data), so no
+        // FKC shape_rule form fits → OMITTED (the recipe carries the shape); dtype is
+        // the gathered data dtype → passthrough(in0), a real form Fuel interprets.
+        assert!(
+            !c.contains("shape_rule"),
+            "shape rides the recipe, omitted:\n{c}"
+        );
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        // The index operand's accept slot still carries its REAL dtype (I32), never
+        // the data dtype — an honest per-operand gloss on the recipe path too.
+        assert!(
+            c.contains("    - name: in1\n      dtypes: [I32]\n"),
+            "index slot in1 I32: {c}"
+        );
+        // Honest-miss discipline preserved: WITHHELD from a non-recipe-import bundle,
+        // admitted only to a recipe-import peer.
+        assert!(
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
+        );
+        // End-to-end at the bundle seam: `bundle` (recipe_import=false) withholds it;
+        // `bundle_kisc` admits it ONLY to a recipe-import peer.
+        let withheld = bundle("cuda", "rev0", std::slice::from_ref(&c));
+        assert!(!withheld.contains("fused_op: gather"), "{withheld}");
+        let admitted = bundle_kisc("cuda", "rev0", std::slice::from_ref(&c), true);
+        assert!(
+            admitted.contains(&crate::kisc::kisc_frame(&c)),
+            "recipe-carrying i32 gather admitted for a recipe-import peer: {admitted}"
+        );
+        // derive_pattern still rejects it — the recipe, not a pattern, is its identity.
+        assert!(matches!(
+            crate::derive_pattern(&op),
+            Err(PatternError::GatherUnsupported)
+        ));
+    }
+
+    #[test]
     fn select_fusion_contract_is_withheld() {
         use crate::ir::{BinaryOp, OobPolicy};
         use crate::pattern::PatternError;
@@ -2253,17 +2350,34 @@ mod tests {
     }
 
     #[test]
-    fn i32_and_i64_gather_stay_honest_misses() {
+    fn i32_and_i64_gather_advertise_recipe_carrying_not_op_kind() {
         use crate::ir::OobPolicy;
-        // The guard-lift is SELECTIVE: Fuel is U32-index everywhere, so an i32/i64
-        // index gather is unreachable from a Fuel graph node → still no contract.
-        for dt in [ElementKind::I32, ElementKind::I64] {
+        // COMPLEMENT (not supersede) the u32 op_kind path: Fuel is U32-index for its
+        // graph PRIMITIVE (`op_kind: Gather` keys `[T, U32, T]`), so an i32/i64 index
+        // carries NO op_kind — but Fuel's pinned `gather` RECIPE schema admits
+        // index_dtype ∈ {u32,i32,i64}, so both now advertise a recipe-carrying
+        // `fused_op` contract with the index dtype in the `gather[…]` node, admitted
+        // only to a recipe-import peer. (The u32 twin stays on op_kind — see
+        // `u32_gather_emits_a_keyed_contract…`.)
+        for (dt, tok) in [(ElementKind::I32, "i32"), (ElementKind::I64, "i64")] {
             let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, dt);
             let key = gather_key(dt, false);
             let kernel = generate(&op, &key, &Cuda);
+            let c = contract(&op, &key, &kernel, "cuda").unwrap_or_else(|| {
+                panic!("{dt:?} gather must advertise a recipe-carrying contract")
+            });
+            assert!(c.contains("fused_op: gather"), "{c}");
             assert!(
-                contract(&op, &key, &kernel, "cuda").is_none(),
-                "a {dt:?}-index gather must stay an honest miss (Fuel can't bind non-u32)"
+                !c.contains("op_kind: Gather"),
+                "a non-u32 gather carries no op_kind: {c}"
+            );
+            assert!(
+                c.contains(&format!("semantics: gather[0,skip,{tok}](in0, in1)")),
+                "{c}"
+            );
+            assert!(
+                !contract_admissible(&c, false) && contract_admissible(&c, true),
+                "withheld pre-recipe, admitted to a recipe-import peer: {c}"
             );
         }
     }
