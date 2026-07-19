@@ -26,12 +26,12 @@
 //! `Coord`→`iota` / `Param`→`runtime_scalar`; **contractions** (`matmul[<roles>]`
 //! fold + the `Reduced(0)`→node epilogue, incl. fused bias/activation);
 //! **reductions** (`reduce[<monoid>,<axes>,<keepdim>]` fold + post; float `Mean` =
-//! `sum` fold ÷ `reduce_extent(<axes>)`, integer `Mean` an honest miss); **scans**
+//! `sum` fold ÷ `reduced_count(<axes>)`, integer `Mean` an honest miss); **scans**
 //! (`prefix_scan[<monoid>,<axis>,<excl>]`, reverse = flip ∘ scan
 //! ∘ flip); **row-reductions** (staged `reduce[<monoid>,last,nokd]` folds
 //! producing `Reduced(0..n)`, then a full-width epilogue over the stage scalars +
 //! the row-streamed inputs — softmax/rmsnorm, a float `Mean` stage = `sum` fold ÷
-//! `reduce_extent(last)`, integer `Mean` an honest miss); and
+//! `reduced_count(last)`, integer `Mean` an honest miss); and
 //! the **data-dependent indexed** ops that ride `op.read_index`/`op.write_index`
 //! rather than an `Access` variant — a `gather[<axis>,<oob>,<index_dtype>](data,
 //! index)` read and a `scatter[<axis>,<combine>,<oob>,<index_dtype>](value, index)`
@@ -80,7 +80,7 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
         // per-element pre-map (`op.body`), then the post epilogue over it
         // (`Reduced(0)`→node). `Mean` is not a monoid: a `sum` fold + a
         // `div`-by-extent finalize, the divisor being the shape-derived reduced-axis
-        // extent leaf `reduce_extent(<axes>)` (Fuel-confirmed — NOT a literal `const`;
+        // extent leaf `reduced_count(<axes>)` (Fuel-confirmed — NOT a literal `const`;
         // `StructureKey` carries size *classes*, not extents). INTEGER Mean stays an
         // honest miss (the emitter rejects `int_acc && Mean`, cuda.rs:2241 — an integer
         // average rounds, no such single-dtype cell).
@@ -100,7 +100,7 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
                 // The extent leaf carries the SAME axes token as the fold node
                 // (byte-identical axis field per Fuel's refinement); `keepdim` shapes
                 // only the fold's output, never the scalar divisor, so it is omitted.
-                format!("div(reduce[sum,{axes_code},{kd}]({pre}), reduce_extent({axes_code}))")
+                format!("div(reduce[sum,{axes_code},{kd}]({pre}), reduced_count({axes_code}))")
             } else {
                 let monoid = reduce_monoid(*rop)?;
                 format!("reduce[{monoid},{axes_code},{kd}]({pre})")
@@ -134,7 +134,7 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
         // stages' `Reduced(j<i)` (thread the already-built stage strings), and the
         // `epilogue` reads `Reduced(0..n)` AND the full-width row-streamed `Input`s. A
         // monoid stage is a `reduce[<monoid>,last,nokd]` fold; a `Mean` stage is a
-        // `sum` fold ÷ `reduce_extent(last)` — the same divisor leaf as the Reduction
+        // `sum` fold ÷ `reduced_count(last)` — the same divisor leaf as the Reduction
         // arm (RowReduce always folds the last axis, so `last`), which is exactly what
         // RmsNorm/LayerNorm internal means need. INTEGER Mean stays an honest miss.
         Access::RowReduce { stages, epilogue } => {
@@ -146,7 +146,7 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
                     if int_acc {
                         return None;
                     }
-                    format!("div(reduce[sum,last,nokd]({pre}), reduce_extent(last))")
+                    format!("div(reduce[sum,last,nokd]({pre}), reduced_count(last))")
                 } else {
                     let monoid = reduce_monoid(st.op)?;
                     format!("reduce[{monoid},last,nokd]({pre})")
@@ -672,11 +672,11 @@ mod tests {
     }
 
     #[test]
-    fn mean_reduction_recipe_is_a_sum_fold_divided_by_the_reduced_extent() {
+    fn mean_reduction_recipe_is_a_sum_fold_divided_by_the_reduced_count() {
         use crate::ir::ReduceOp;
         // Mean = a `sum` fold + a `div`-by-extent finalize (Fuel's `MeanDim`
         // decomposes exactly this way). The divisor is the shape-derived reduced-axis
-        // extent — the `reduce_extent(<axes>)` source-op leaf CONFIRMED by Fuel
+        // extent — the `reduced_count(<axes>)` source-op leaf CONFIRMED by Fuel
         // (docs/fuel-reply-reduce-extent-2026-07-18.md), NOT a literal `const`
         // (`StructureKey` carries size *classes*, not literal extents). The extent
         // leaf carries the SAME reduced-axis token as the fold node (byte-identical
@@ -687,7 +687,7 @@ mod tests {
         let mean = OpDef::reduction("mean", 1, &[F32], input(0), ReduceOp::Mean);
         assert_eq!(
             semantics_dag(&mean).as_deref(),
-            Some("div(reduce[sum,last,nokd](in0), reduce_extent(last))")
+            Some("div(reduce[sum,last,nokd](in0), reduced_count(last))")
         );
 
         // Fused post over Mean: the post's `Reduced(0)` resolves to the finalized
@@ -704,7 +704,7 @@ mod tests {
         );
         assert_eq!(
             semantics_dag(&rms).as_deref(),
-            Some("sqrt(div(reduce[sum,last,nokd](sqr(in0)), reduce_extent(last)))")
+            Some("sqrt(div(reduce[sum,last,nokd](sqr(in0)), reduced_count(last)))")
         );
     }
 
@@ -780,7 +780,7 @@ mod tests {
         // RmsNorm (1 stage): stage0 = sum(x²) over the last axis; the epilogue
         // `x · rsqrt(sum + eps)` scales the row-streamed input by the reduced
         // scalar. (The mean-of-squares form uses a `Mean` stage = sum-fold ÷ extent —
-        // see rowreduce_mean_stage_is_a_sum_fold_divided_by_the_reduced_extent below.)
+        // see rowreduce_mean_stage_is_a_sum_fold_divided_by_the_reduced_count below.)
         let stages = vec![ReduceStage {
             pre: input(0).unary(UnaryOp::Sqr).0,
             op: ReduceOp::Sum,
@@ -794,11 +794,11 @@ mod tests {
     }
 
     #[test]
-    fn rowreduce_mean_stage_is_a_sum_fold_divided_by_the_reduced_extent() {
+    fn rowreduce_mean_stage_is_a_sum_fold_divided_by_the_reduced_count() {
         use crate::ir::{ReduceOp, ReduceStage};
         // The canonical mean-of-squares RmsNorm: stage0 = mean(x²) over the last
         // axis, epilogue `x · rsqrt(mean + eps)`. A `Mean` stage folds `sum` then
-        // divides by the reduced-axis extent — the SAME `reduce_extent(last)` leaf as
+        // divides by the reduced-axis extent — the SAME `reduced_count(last)` leaf as
         // the Reduction arm (RowReduce always folds the last axis, so `last`). This is
         // the divisor Fuel flagged that RmsNorm/LayerNorm internal means need.
         let op = OpDef::row_reduce(
@@ -815,7 +815,7 @@ mod tests {
             semantics_dag(&op).as_deref(),
             Some(
                 "mul(in0, rsqrt(add(div(reduce[sum,last,nokd](sqr(in0)), \
-                 reduce_extent(last)), const(0.00001))))"
+                 reduced_count(last)), const(0.00001))))"
             )
         );
     }
