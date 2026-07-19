@@ -804,9 +804,12 @@ pub fn contract(
     // RECIPE-CARRYING non-elementwise op (contraction/reduction/scan): the realized
     // recipe is Fuel's single shape+dtype authority (`primitive_shape → (shape,
     // dtype)`). SHAPE — no FKC `shape_rule` form states a non-elementwise output
-    // shape (a matmul's out `[M,N]` ≠ any input), and `shape_rule` is a claim
-    // VERIFIED against the recipe, not an authority (Fuel doesn't yet evaluate it) —
-    // so it is OMITTED; the recipe carries the shape. DTYPE — `dtype_rule` IS
+    // shape (a matmul's out `[M,N]` ≠ any input), and `shape_rule` is a claim Fuel
+    // VERIFIES against the recipe, not a shape authority. Fuel's `eval_shape_rule`
+    // (fuel-dispatch return_check.rs, commit b1c33f91) now EVALUATES `same_as(role)`
+    // and `ShapeRuleMismatch`es a claim that disagrees with the realized shape
+    // (`from_params` stays a stub) — so a `same_as(in0)` here would be a FALSE claim;
+    // it is OMITTED and the recipe carries the shape. DTYPE — `dtype_rule` IS
     // interpreted (it builds the binding-key output slot), so it is emitted: a
     // hetero output declares `fixed(<dtype>)`, a uniform output `passthrough(in0)`.
     //
@@ -829,9 +832,22 @@ pub fn contract(
         } else {
             "passthrough(in0)"
         };
+        // A u32-index gather/index_select/embedding rides the op_kind path
+        // (`gather_advert` Some ⇒ NOT recipe_carrying), so it lands here — but its
+        // output shape is the INDEX shape, not `same_as(in0=data)` (the SAME reason
+        // the i32/i64 gather recipe path omits shape_rule; its own `semantics:
+        // gather[…]` node is the shape authority). Emitting `same_as(in0)` is a false
+        // claim Fuel's `eval_shape_rule` (return_check.rs) can `ShapeRuleMismatch` on
+        // a resized-axis gather — so OMIT it. `dtype_rule` (the gathered data dtype)
+        // stays correct. Every true-elementwise cell (out shape == in0) keeps
+        // `shape_rule: same_as(in0)` byte-identically.
+        let shape_rule_line = if gather_advert.is_some() {
+            String::new()
+        } else {
+            "shape_rule: same_as(in0)\n      ".to_string()
+        };
         s.push_str(&format!(
-            "    - dtype_rule: {dtype_rule}\n      \
-             shape_rule: same_as(in0)\n      \
+            "    - dtype_rule: {dtype_rule}\n      {shape_rule_line}\
              layout_guarantee: {layout_guarantee}\n      \
              aliasing: none\n"
         ));
@@ -2214,6 +2230,38 @@ mod tests {
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
         assert!(c.contains("op_kind: IndexSelect"), "{c}");
         assert!(c.contains("oob_policy: zero_fill"), "{c}");
+    }
+
+    #[test]
+    fn u32_gather_omits_shape_rule_output_is_the_index_shape() {
+        use crate::ir::OobPolicy;
+        // A u32-index gather rides the op_kind path (op_kind: Gather ⇒ NOT
+        // recipe_carrying), so it takes the elementwise return branch. But a
+        // gather's output shape is the INDEX shape, not the DATA shape, so
+        // `shape_rule: same_as(in0=data)` is a FALSE claim — the SAME reason the
+        // i32/i64 gather recipe path omits shape_rule. Fuel's now-live
+        // `eval_shape_rule` (return_check.rs) would `ShapeRuleMismatch` a
+        // resized-axis gather. So the u32 gather must OMIT shape_rule too; its
+        // dtype_rule (passthrough(in0) = the gathered data dtype) stays correct.
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::U32,
+        );
+        let key = gather_key(ElementKind::U32, false);
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        // Still the op_kind primitive advert (unchanged).
+        assert!(c.contains("op_kind: Gather"), "{c}");
+        // Output shape = index shape ≠ data shape ⇒ NO same_as(in0) claim.
+        assert!(
+            !c.contains("shape_rule"),
+            "u32 gather out shape = index shape, shape_rule must be omitted:\n{c}"
+        );
+        // dtype is still the gathered data dtype.
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
     }
 
     #[test]
