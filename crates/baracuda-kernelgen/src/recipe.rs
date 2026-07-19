@@ -390,8 +390,11 @@ fn unary_kiss_name(op: UnaryOp) -> Option<&'static str> {
         U::Atanh => "atanh",
         U::Cbrt => "cbrt",
         U::Lgamma => "lgamma",
-        // No confirmed KISS-Ops token yet (`round` is not in the op set) — honest miss.
-        U::Round => return None,
+        // `round` = round-half-to-even (RNE): the emitter is `rintf`/`rint` (Slang
+        // `round`), the oracle is `round_ties_even` — an EXACT match for KISS-Ops
+        // `round_even` (verified vs the emitter+oracle, not just the IR doc). A
+        // discontinuous op, so the tie-rule fidelity is load-bearing (no tolerance).
+        U::Round => "round_even",
     })
 }
 
@@ -413,6 +416,11 @@ fn binary_kiss_name(op: BinaryOp) -> Option<&'static str> {
         B::FmaxIeee => "fmax_ieee",
         B::FminIeee => "fmin_ieee",
         B::RemTrunc => "rem_trunc",
+        // Floored remainder (sign-of-divisor, `torch.remainder`): emitter/oracle
+        // `a - floor(a/b)*b` = KISS-Ops `rem_floor`'s reference decomposition
+        // `sub(a, mul(floor(div(a,b)), b))` verbatim. Distinct from `rem_trunc`
+        // (C `fmod`, sign-of-dividend) above — never alias the two.
+        B::Rem => "rem_floor",
         B::CmpEq => "cmp_eq",
         B::CmpNe => "cmp_ne",
         B::CmpLt => "cmp_lt",
@@ -426,9 +434,9 @@ fn binary_kiss_name(op: BinaryOp) -> Option<&'static str> {
         B::Shr => "shr",
         B::LogicalAnd => "logical_and",
         B::LogicalOr => "logical_or",
-        // No confirmed KISS-Ops token yet: `Rem` (floored remainder) has no
-        // confirmed name, and `logical_xor` is not in the op set — honest miss.
-        B::Rem | B::LogicalXor => return None,
+        // `logical_xor` is genuinely not in the KISS-Ops set (only logical_and/or/not)
+        // — honest miss, never a guessed name.
+        B::LogicalXor => return None,
     })
 }
 
@@ -513,19 +521,24 @@ mod tests {
     }
 
     #[test]
-    fn round_has_no_confirmed_kiss_name_yet() {
-        // `Round` is not (yet) a confirmed KISS-Ops token, so its recipe is withheld
-        // rather than guessed.
-        let op = OpDef::elementwise(
-            "roundy",
-            1,
-            &[F32],
-            Expr(ScalarExpr::Unary(
-                UnaryOp::Round,
-                Box::new(ScalarExpr::Input(0)),
-            )),
+    fn round_and_rem_re_base_to_round_even_and_rem_floor() {
+        // Both re-based to CONFIRMED kiss-ops-vocab tokens after verifying an EXACT
+        // semantic match against the actual emitter + oracle (not just the IR doc):
+        //   Round: emitter `rintf`/`rint` (cuda.rs) + Slang `round` = round-half-to-even
+        //          (RNE) across all backends; oracle `round_ties_even`; KISS `round_even`
+        //          is ties-to-even (2.5→2, -2.5→-2, -0.5→-0.0). Exact tie-rule match — a
+        //          discontinuous op, so the tie-rule MUST match (no tolerance cushion).
+        //   Rem:   emitter/oracle `a - floor(a/b)*b` (floored, sign-of-divisor); KISS
+        //          `rem_floor` decomposes to `sub(a, mul(floor(div(a,b)), b))` — the
+        //          identical formula on every backend (algebraic, no mode dependence).
+        assert_eq!(
+            unary_recipe(UnaryOp::Round).as_deref(),
+            Some("round_even(in0)")
         );
-        assert_eq!(semantics_dag(&op), None);
+        assert_eq!(
+            binary_recipe(BinaryOp::Rem).as_deref(),
+            Some("rem_floor(in0, in1)")
+        );
     }
 
     #[test]
@@ -775,10 +788,9 @@ mod tests {
 
     #[test]
     fn deliberately_unmapped_ops_stay_honest_misses() {
-        // No confirmed KISS-Ops token for these yet — a recipe is withheld, never
-        // a guessed name.
-        assert_eq!(unary_recipe(UnaryOp::Round), None);
-        assert_eq!(binary_recipe(BinaryOp::Rem), None);
+        // `logical_xor` is genuinely not in the KISS-Ops set (only logical_and/or/not) —
+        // a recipe is withheld, never a guessed name. (Round/Rem re-based to
+        // round_even/rem_floor — see round_and_rem_re_base_to_round_even_and_rem_floor.)
         assert_eq!(binary_recipe(BinaryOp::LogicalXor), None);
     }
 
