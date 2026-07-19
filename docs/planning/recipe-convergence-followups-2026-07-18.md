@@ -17,7 +17,7 @@ authoritative replies are saved in the repo:
 - `docs/fuel-reply-recipe-grammar-2026-07-15.md` — the 6-question co-design (AGREED).
 - `docs/fuel-reply-recipe-schema-2026-07-15.md` — §6.4-0009 node schema + 4 open items pinned.
 - `docs/fuel-reply-matmul-attr-2026-07-16.md` — matmul role-vector attr CONFIRMED.
-- The FKC `OutputDesc` grammar (Fuel, 2026-07-17): `dtype_rule: passthrough(<role>) | fixed(<DType>)`; `shape_rule: same_as(<role>) | from_params(…)`; **no `from_recipe` form**; all fields omittable; `shape_rule` is a claim verified vs the recipe (not evaluated yet), `dtype_rule` IS interpreted (builds the binding-key output slot).
+- The FKC `OutputDesc` grammar (Fuel, 2026-07-17): `dtype_rule: passthrough(<role>) | fixed(<DType>)`; `shape_rule: same_as(<role>) | from_params(…)`; **no `from_recipe` form**; all fields omittable; `shape_rule` is a claim Fuel verifies — its `eval_shape_rule` (fuel-dispatch return_check.rs, commit b1c33f91) EVALUATES `same_as(role)` today (`from_params` still a stub) — `dtype_rule` IS interpreted (builds the binding-key output slot).
 
 **The recipe emitter** is `crates/baracuda-kernelgen/src/recipe.rs`:
 `semantics_dag(op: &OpDef) -> Option<String>` matches `&op.access` and returns a

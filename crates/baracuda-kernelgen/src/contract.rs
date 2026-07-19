@@ -2217,6 +2217,10 @@ mod tests {
         assert!(c.contains("op_kind: IndexSelect"), "{c}");
         assert!(c.contains("oob_policy: skip"), "{c}");
         assert!(c.contains("    - name: in1\n      dtypes: [U32]\n"), "{c}");
+        // Output = index shape ≠ data shape ⇒ shape_rule omitted (same reason as
+        // the u32 gather test); dtype stays the gathered data dtype.
+        assert!(!c.contains("shape_rule"), "{c}");
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
     }
 
     #[test]
@@ -2230,6 +2234,9 @@ mod tests {
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
         assert!(c.contains("op_kind: IndexSelect"), "{c}");
         assert!(c.contains("oob_policy: zero_fill"), "{c}");
+        // Output = index shape ≠ data shape ⇒ shape_rule omitted; dtype = data.
+        assert!(!c.contains("shape_rule"), "{c}");
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
     }
 
     #[test]
