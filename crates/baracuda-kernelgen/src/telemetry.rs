@@ -841,11 +841,11 @@ mod tests {
             // unparseable JSON
             r#"{"schema":1,"chosen":"#.to_string(),
             // wrong |-count token (too few fields) on a miss
-            r#"{"schema":1,"wanted":"sk1|bin","fallback":{"backend":"gen"},"count":1}"#.to_string(),
+            r#"{"schema":1,"wanted":"sk2|bin","fallback":{"backend":"gen"},"count":1}"#.to_string(),
             // empty JSON object (no chosen/wanted)
             "{}".to_string(),
             // non-ascii garbage token on a dispatch
-            r#"{"schema":1,"structure_key":"sk1|café","chosen":{"backend":"gen"}}"#.to_string(),
+            r#"{"schema":1,"structure_key":"sk2|café","chosen":{"backend":"gen"}}"#.to_string(),
             // schema over the max
             format!(r#"{{"schema":999,"structure_key":"{tok}","chosen":{{"backend":"gen"}}}}"#),
             // two concatenated objects on one line (no-concatenation guard)
@@ -891,10 +891,11 @@ mod tests {
 
     #[test]
     fn ingest_version_gate_skips_future_structure_key() {
-        // A syntactically valid future `sk2|…` token: from_token would parse the
-        // version field, so ONLY the explicit version check rejects it.
-        let future = ew_token().replacen("sk1|", "sk2|", 1);
-        assert!(future.starts_with("sk2|"));
+        // A syntactically valid future `sk3|…` token (one past the current v2):
+        // from_token would parse the version field, so ONLY the explicit version
+        // check (`key.version == STRUCTURE_KEY_VERSION`) rejects it.
+        let future = ew_token().replacen("sk2|", "sk3|", 1);
+        assert!(future.starts_with("sk3|"));
         let line = format!(
             r#"{{"schema":1,"wanted":"{future}","fallback":{{"backend":"gen","op":"","dtypes":[],"kernel_source":"","kernel_revision_hash":""}},"count":1}}"#
         );

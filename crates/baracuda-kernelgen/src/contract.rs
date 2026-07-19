@@ -2887,8 +2887,8 @@ mod tests {
 
     #[test]
     fn bundle_kisc_frames_each_admitted_contract_and_drops_the_heading() {
-        let c1 = "kernel: relu\nop_kind: ReluElementwise\naccept: sk1|une|f32\n".to_string();
-        let c2 = "kernel: add\nop_kind: AddElementwise\naccept: sk1|bin|f32\n".to_string();
+        let c1 = "kernel: relu\nop_kind: ReluElementwise\naccept: sk2|une|f32\n".to_string();
+        let c2 = "kernel: add\nop_kind: AddElementwise\naccept: sk2|bin|f32\n".to_string();
         let b = bundle_kisc("cuda", "rev0", &[c1.clone(), c2.clone()], false);
         // Provider front-matter still leads the file.
         assert!(b.starts_with("---\n"), "front matter leads: {b}");
@@ -3083,7 +3083,7 @@ mod tests {
         // required §4.3 blocks.
         for block in [
             "accept:",
-            "structure_key: \"sk1|",
+            "structure_key: \"sk2|",
             "return:",
             "caps:",
             "cost:",

@@ -44,7 +44,12 @@ pub const MAX_OPERANDS: usize = 8;
 
 /// Structure-key schema version. Bumped when a predicate axis is added or
 /// altered; old-version tokens stay distinguishable by this field.
-pub const STRUCTURE_KEY_VERSION: u16 = 1;
+///
+/// v2 (D8, 2026-07-19): aligned the token codec to KISS-Classify — the
+/// namespaced `target_capability` (`cuda:sm89`, §6.8) replaces the bare `sm89`
+/// arch token, and the index-width field is spelled `ix32`/`ix64` (§6.7-0003,
+/// deliberately distinct from the `i32`/`i64` dtype tokens).
+pub const STRUCTURE_KEY_VERSION: u16 = 2;
 
 // ===========================================================================
 // Predicate axes
@@ -612,13 +617,13 @@ fn derive_reduce_axes(op: OpCategory, operands: &[OperandDesc]) -> AxisMask {
 /// numeric dtype codes — review item E5 — and is deferred to that.)
 ///
 /// ```
-/// use baracuda_kernels_types::{
+/// use baracuda_kernel_vocab::{
 ///     structure_key_token, ArchSku, ElementKind, OpCategory, OperandDesc,
 /// };
 /// // a [128, 256] row-major f32 (in, in, out) triple for a binary elementwise add.
 /// let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
 /// let token = structure_key_token(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
-/// assert!(token.starts_with("sk1|bin|f32|sm89|"));
+/// assert!(token.starts_with("sk2|bin|f32|cuda:sm89|"));
 /// ```
 #[must_use]
 pub fn structure_key_token(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) -> String {
@@ -861,8 +866,9 @@ impl StructureKey {
         let dtype = dtype_from_code(parts[2])?;
         let arch = arch_from_code(parts[3])?;
         let idx = match parts[4] {
-            "i32" => IdxWidth::Idx32,
-            "i64" => IdxWidth::Idx64,
+            // `ix32`/`ix64` (§6.7-0003), not the `i32`/`i64` dtype spellings.
+            "ix32" => IdxWidth::Idx32,
+            "ix64" => IdxWidth::Idx64,
             _ => return None,
         };
         let work = match parts[5] {
@@ -1139,8 +1145,11 @@ fn parse_operand(field: &str) -> Option<OperandKey> {
 
 const fn idx_code(v: IdxWidth) -> &'static str {
     match v {
-        IdxWidth::Idx32 => "i32",
-        IdxWidth::Idx64 => "i64",
+        // `ix32`/`ix64` per KISS-CLASSIFY-6.7-0003 — deliberately DISTINCT from
+        // the `i32`/`i64` dtype tokens so the index-width field never aliases a
+        // dtype spelling.
+        IdxWidth::Idx32 => "ix32",
+        IdxWidth::Idx64 => "ix64",
     }
 }
 
@@ -1181,18 +1190,22 @@ const fn div_code(v: DivBucket) -> &'static str {
 }
 
 const fn arch_code(v: ArchSku) -> &'static str {
+    // Namespaced `target_capability` per KISS-CLASSIFY-6.8 (`<namespace>:<cap>`,
+    // matched byte-exact, §6.8-0002). `ArchSku` stays a CUDA-only enum internally;
+    // only its token gains the `cuda:` namespace, so a future cpu:/vulkan: backend
+    // slots in without perturbing these CUDA tokens.
     match v {
-        ArchSku::Sm80 => "sm80",
-        ArchSku::Sm89 => "sm89",
-        ArchSku::Sm90a => "sm90a",
+        ArchSku::Sm80 => "cuda:sm80",
+        ArchSku::Sm89 => "cuda:sm89",
+        ArchSku::Sm90a => "cuda:sm90a",
     }
 }
 
 fn arch_from_code(s: &str) -> Option<ArchSku> {
     Some(match s {
-        "sm80" => ArchSku::Sm80,
-        "sm89" => ArchSku::Sm89,
-        "sm90a" => ArchSku::Sm90a,
+        "cuda:sm80" => ArchSku::Sm80,
+        "cuda:sm89" => ArchSku::Sm89,
+        "cuda:sm90a" => ArchSku::Sm90a,
         _ => return None,
     })
 }
@@ -1395,7 +1408,7 @@ mod tests {
         let parsed = StructureKey::from_token(&token).expect("round-trip parse");
         assert_eq!(k, parsed);
         // Token is human-greppable.
-        assert!(token.starts_with("sk1|bin|f32|sm89|"));
+        assert!(token.starts_with("sk2|bin|f32|cuda:sm89|"));
     }
 
     #[test]
@@ -1410,7 +1423,7 @@ mod tests {
             .take(MAX_OPERANDS + 1)
             .collect::<Vec<_>>()
             .join(";");
-        let token = format!("sk1|bin|f32|sm89|i32|grid|r2|{too_many}|-");
+        let token = format!("sk2|bin|f32|cuda:sm89|ix32|grid|r2|{too_many}|-");
         assert_eq!(
             StructureKey::from_token(&token),
             None,
@@ -1424,7 +1437,7 @@ mod tests {
         // malformed and MUST be a typed decline, not silently accepted (downstream
         // consumers index MAX_RANK-sized arrays with it).
         let token = format!(
-            "sk1|bin|f32|sm89|i32|grid|r{}|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
+            "sk2|bin|f32|cuda:sm89|ix32|grid|r{}|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
             MAX_RANK + 1
         );
         assert_eq!(
@@ -1467,21 +1480,22 @@ mod tests {
     #[test]
     fn u32_variant_is_additive_preexisting_token_byte_identical() {
         // The ElementKind::U32 addition (Model-A gather/scatter contract wiring)
-        // MUST be additive: STRUCTURE_KEY_VERSION stays 1 and EVERY pre-existing
-        // token stays byte-identical (no pre-existing cell keys a u32 operand, and
-        // the codec is spelling-keyed, not discriminant-keyed — adding a variant
-        // shifts no existing dtype's code). Pin a known pre-existing f32 token
-        // verbatim so a future reshuffle that perturbs it is caught.
+        // is codec-additive: the token codec is spelling-keyed, not
+        // discriminant-keyed, so adding a dtype shifts no existing dtype's code.
+        // (The schema version is 2 for an UNRELATED reason — the D8 §6.7/§6.8
+        // KISS-Classify codec alignment; the U32 addition itself required no bump.)
+        // Pin the canonical f32 token verbatim so a future reshuffle that perturbs
+        // it is caught.
         assert_eq!(
-            STRUCTURE_KEY_VERSION, 1,
-            "the u32 addition must NOT bump the version"
+            STRUCTURE_KEY_VERSION, 2,
+            "codec sits at the KISS-aligned schema version 2 (D8)"
         );
         let a = od(&[128, 256], &[256, 1], ElementKind::F32, 256);
         let k = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         assert_eq!(
             k.to_token(),
-            "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
-            "a pre-existing f32 cell's token must be byte-identical after adding U32"
+            "sk2|bin|f32|cuda:sm89|ix32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
+            "the canonical f32 cell serializes to the KISS-aligned sk2 token"
         );
     }
 
@@ -1503,7 +1517,7 @@ mod tests {
         );
         let token = k.to_token();
         assert!(
-            token.starts_with("sk1|une|u32|"),
+            token.starts_with("sk2|une|u32|"),
             "the token spells u32: {token}"
         );
         let parsed = StructureKey::from_token(&token).expect("u32 token round-trips");
@@ -1682,13 +1696,13 @@ mod tests {
         let _ = StructureKey::from_token(&"a".repeat(200_000));
         // Over-MAX_RANK rank — declines at the rank guard (never reaches operands).
         let _ = StructureKey::from_token(&format!(
-            "sk1|bin|f32|sm89|i32|grid|r250|{}|-",
+            "sk2|bin|f32|cuda:sm89|ix32|grid|r250|{}|-",
             "co/00/v4/d16/f;".repeat(50)
         ));
         // In-range rank + over-MAX_OPERANDS operand list — MUST reach parse_operand,
         // then decline gracefully.
         let _ = StructureKey::from_token(&format!(
-            "sk1|bin|f32|sm89|i32|grid|r2|{}|-",
+            "sk2|bin|f32|cuda:sm89|ix32|grid|r2|{}|-",
             "co/00/v1/d16/f;".repeat(50)
         ));
         // A valid gemm base with only its 10th (contraction) field corrupted —

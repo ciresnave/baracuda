@@ -99,7 +99,7 @@ comparator. Reference-crate debug asserts cite the clause ID they enforce
   algorithm as a testable procedure (highest mutual profile, hard-fail never panic on
   empty intersection); split the capability u64; POD readers MUST **reject** unknown
   layout; zero-dependency budget as a conformance check.
-- **KISS-Classify** — decide the ABI is the **string token codec** (`sk1|bin|f32|sm89|…`),
+- **KISS-Classify** — decide the ABI is the **string token codec** (`sk2|bin|f32|cuda:sm89|ix32|…`),
   struct is reference impl; **resolve the CUDA-shaped `ArchSku`** (abstract target-capability
   class or remove — an NVIDIA-only SKU contradicts sharing with Vulkane); pin every
   primitive (dtype set, `MAX_RANK=8`, `MAX_OPERANDS=8`, signed-i64 stride model,

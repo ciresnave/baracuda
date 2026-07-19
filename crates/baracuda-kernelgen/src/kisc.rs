@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn frame_unframe_round_trips_a_multiline_body() {
         // A realistic body has interior newlines (the seven contract sections).
-        let body = "kernel: relu_add\nop_kind: ReluAddElementwise\naccept: sk1|...\n";
+        let body = "kernel: relu_add\nop_kind: ReluAddElementwise\naccept: sk2|...\n";
         let doc = kisc_frame(body);
         assert_eq!(kisc_unframe(&doc), Ok(body));
     }

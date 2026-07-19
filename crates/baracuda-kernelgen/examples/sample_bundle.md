@@ -21,7 +21,7 @@ dtypes: [F32]
 entry_point: baracuda_gen_add_f32_co_v4
 kernel_revision_hash: "4b5b337c13997f67"
 accept:
-  structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-"
+  structure_key: "sk2|bin|f32|cuda:sm89|ix32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-"
   inputs:
     - name: in0
       dtypes: [F32]
@@ -61,7 +61,7 @@ determinism: bitwise
 
 /// `(entry_point, structure_key, revision_hash)` for every generated kernel.
 pub static BARACUDA_LINK_REGISTRY: &[(&str, &str, u64)] = &[
-    ("baracuda_gen_add_f32_co_v4", "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-", 0x4b5b337c13997f67),
-    ("baracuda_gen_affine_silu_f32_co_v4", "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f|-", 0x78de344453860aed),
-    ("baracuda_gen_relu_add_f32_co_v4", "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-", 0xb6c275409f9d8497),
+    ("baracuda_gen_add_f32_co_v4", "sk2|bin|f32|cuda:sm89|ix32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-", 0x4b5b337c13997f67),
+    ("baracuda_gen_affine_silu_f32_co_v4", "sk2|bin|f32|cuda:sm89|ix32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f|-", 0x78de344453860aed),
+    ("baracuda_gen_relu_add_f32_co_v4", "sk2|bin|f32|cuda:sm89|ix32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-", 0xb6c275409f9d8497),
 ];
