@@ -25,8 +25,9 @@
 //! Elementwise bodies over `Input`/`Const` leaves **plus** the co-pinned source ops
 //! `Coord`→`iota` / `Param`→`runtime_scalar`; **contractions** (`matmul[<roles>]`
 //! fold + the `Reduced(0)`→node epilogue, incl. fused bias/activation);
-//! **reductions** (`reduce[<monoid>,<axes>,<keepdim>]` fold + post, `Mean` an honest
-//! miss); **scans** (`prefix_scan[<monoid>,<axis>,<excl>]`, reverse = flip ∘ scan
+//! **reductions** (`reduce[<monoid>,<axes>,<keepdim>]` fold + post; float `Mean` =
+//! `sum` fold ÷ `reduce_extent(<axes>)`, integer `Mean` an honest miss); **scans**
+//! (`prefix_scan[<monoid>,<axis>,<excl>]`, reverse = flip ∘ scan
 //! ∘ flip); **row-reductions** (staged `reduce[<monoid>,last,nokd]` folds
 //! producing `Reduced(0..n)`, then a full-width epilogue over the stage scalars +
 //! the row-streamed inputs — softmax/rmsnorm; `Mean` still an honest miss); and
@@ -76,21 +77,33 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
         }
         // Reduction: a `reduce[<monoid>,<axes>,<keepdim>]` fold node over the
         // per-element pre-map (`op.body`), then the post epilogue over it
-        // (`Reduced(0)`→node). `Mean` is not a monoid (Fuel: sum-fold + div) —
-        // honest miss.
+        // (`Reduced(0)`→node). `Mean` is not a monoid: a `sum` fold + a
+        // `div`-by-extent finalize, the divisor being the shape-derived reduced-axis
+        // extent leaf `reduce_extent(<axes>)` (Fuel-confirmed — NOT a literal `const`;
+        // `StructureKey` carries size *classes*, not extents). INTEGER Mean stays an
+        // honest miss (the emitter rejects `int_acc && Mean`, cuda.rs:2241 — an integer
+        // average rounds, no such single-dtype cell).
         Access::Reduction {
             op: rop,
             axes,
             keepdim,
             post,
         } => {
-            let monoid = reduce_monoid(*rop)?;
             let pre = expr_to_recipe(&op.body, &[])?;
-            let node = format!(
-                "reduce[{monoid},{},{}]({pre})",
-                reduce_axes_code(axes),
-                if *keepdim { "kd" } else { "nokd" }
-            );
+            let axes_code = reduce_axes_code(axes);
+            let kd = if *keepdim { "kd" } else { "nokd" };
+            let node = if matches!(rop, ReduceOp::Mean) {
+                if matches!(op.dtypes.first(), Some(ElementKind::I32 | ElementKind::I64)) {
+                    return None;
+                }
+                // The extent leaf carries the SAME axes token as the fold node
+                // (byte-identical axis field per Fuel's refinement); `keepdim` shapes
+                // only the fold's output, never the scalar divisor, so it is omitted.
+                format!("div(reduce[sum,{axes_code},{kd}]({pre}), reduce_extent({axes_code}))")
+            } else {
+                let monoid = reduce_monoid(*rop)?;
+                format!("reduce[{monoid},{axes_code},{kd}]({pre})")
+            };
             expr_to_recipe(post, &[node])
         }
         // Scan: a `prefix_scan[<monoid>,<axis>,<excl>]` node over the pre-map, then
@@ -637,25 +650,25 @@ mod tests {
             semantics_dag(&op).as_deref(),
             Some("sqrt(reduce[sum,last,nokd](sqr(in0)))")
         );
-        // Mean is not a monoid (Fuel: sum-fold + div-by-extent) → honest miss.
-        let mean = OpDef::reduction("mean", 1, &[F32], input(0), ReduceOp::Mean);
-        assert_eq!(semantics_dag(&mean), None);
+        // INTEGER Mean stays an honest miss — the emitter rejects `int_acc && Mean`
+        // (cuda.rs:2241; an integer average rounds, unrepresentable in a single-dtype
+        // cell), so there is no such kernel to describe. Float Mean now emits the
+        // sum+div-extent recipe (see the dedicated test below).
+        use baracuda_kernel_vocab::ElementKind::I32;
+        let int_mean = OpDef::reduction("imean", 1, &[I32], input(0), ReduceOp::Mean);
+        assert_eq!(semantics_dag(&int_mean), None);
     }
 
     #[test]
-    #[ignore = "blocked on Fuel reduce_extent{axes} co-pin — see docs/fuel-ask-reduce-extent-2026-07-18.md"]
     fn mean_reduction_recipe_is_a_sum_fold_divided_by_the_reduced_extent() {
         use crate::ir::ReduceOp;
-        // RED test (durable, ignored): the recipe a future impl emits once Fuel
-        // confirms the `reduce_extent{axes}` source-op leaf (the divisor for the
-        // shape-derived reduced-axis extent — NOT a literal `const`; `StructureKey`
-        // carries size *classes*, not literal extents). Mean = a `sum` fold + a
-        // `div`-by-extent finalize (Fuel's `MeanDim` decomposes exactly this way),
-        // with the extent leaf carrying the SAME reduced-axis attr as the fold node.
-        //
-        // Kept `#[ignore]` so `cargo test` stays fully green while Mean remains an
-        // honest miss (`semantics_dag → None`); un-ignore + implement the
-        // `Access::Reduction` `Mean` arm once the token is pinned.
+        // Mean = a `sum` fold + a `div`-by-extent finalize (Fuel's `MeanDim`
+        // decomposes exactly this way). The divisor is the shape-derived reduced-axis
+        // extent — the `reduce_extent(<axes>)` source-op leaf CONFIRMED by Fuel
+        // (docs/fuel-reply-reduce-extent-2026-07-18.md), NOT a literal `const`
+        // (`StructureKey` carries size *classes*, not literal extents). The extent
+        // leaf carries the SAME reduced-axis token as the fold node (byte-identical
+        // axis field per Fuel's refinement).
 
         // Plain f32 Mean (identity post): the `div(sum, extent)` node IS the output;
         // last-axis default (`last`), no keepdim (`nokd`), matching `reduce_axes_code`.
