@@ -30,7 +30,8 @@
 //! (`prefix_scan[<monoid>,<axis>,<excl>]`, reverse = flip ∘ scan
 //! ∘ flip); **row-reductions** (staged `reduce[<monoid>,last,nokd]` folds
 //! producing `Reduced(0..n)`, then a full-width epilogue over the stage scalars +
-//! the row-streamed inputs — softmax/rmsnorm; `Mean` still an honest miss); and
+//! the row-streamed inputs — softmax/rmsnorm, a float `Mean` stage = `sum` fold ÷
+//! `reduce_extent(last)`, integer `Mean` an honest miss); and
 //! the **data-dependent indexed** ops that ride `op.read_index`/`op.write_index`
 //! rather than an `Access` variant — a `gather[<axis>,<oob>,<index_dtype>](data,
 //! index)` read and a `scatter[<axis>,<combine>,<oob>,<index_dtype>](value, index)`
@@ -129,17 +130,28 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
             expr_to_recipe(post, &[node])
         }
         // RowReduce (fused reduce → broadcast → elementwise over the last axis):
-        // each stage `i` is a `reduce[<monoid>,last,nokd]` fold producing
-        // `Reduced(i)`; a later stage's `pre` may read earlier stages' `Reduced(j<i)`
-        // (thread the already-built stage strings), and the `epilogue` reads
-        // `Reduced(0..n)` AND the full-width row-streamed `Input`s. `Mean` is not a
-        // monoid (Fuel: sum-fold + div-by-extent) — an honest miss, as in Reduction.
+        // each stage `i` produces `Reduced(i)`; a later stage's `pre` may read earlier
+        // stages' `Reduced(j<i)` (thread the already-built stage strings), and the
+        // `epilogue` reads `Reduced(0..n)` AND the full-width row-streamed `Input`s. A
+        // monoid stage is a `reduce[<monoid>,last,nokd]` fold; a `Mean` stage is a
+        // `sum` fold ÷ `reduce_extent(last)` — the same divisor leaf as the Reduction
+        // arm (RowReduce always folds the last axis, so `last`), which is exactly what
+        // RmsNorm/LayerNorm internal means need. INTEGER Mean stays an honest miss.
         Access::RowReduce { stages, epilogue } => {
+            let int_acc = matches!(op.dtypes.first(), Some(ElementKind::I32 | ElementKind::I64));
             let mut stage_strs: Vec<String> = Vec::with_capacity(stages.len());
             for st in stages {
-                let monoid = reduce_monoid(st.op)?;
                 let pre = expr_to_recipe(&st.pre, &stage_strs)?;
-                stage_strs.push(format!("reduce[{monoid},last,nokd]({pre})"));
+                let node = if matches!(st.op, ReduceOp::Mean) {
+                    if int_acc {
+                        return None;
+                    }
+                    format!("div(reduce[sum,last,nokd]({pre}), reduce_extent(last))")
+                } else {
+                    let monoid = reduce_monoid(st.op)?;
+                    format!("reduce[{monoid},last,nokd]({pre})")
+                };
+                stage_strs.push(node);
             }
             expr_to_recipe(epilogue, &stage_strs)
         }
@@ -767,8 +779,8 @@ mod tests {
         use crate::ir::{ReduceOp, ReduceStage};
         // RmsNorm (1 stage): stage0 = sum(x²) over the last axis; the epilogue
         // `x · rsqrt(sum + eps)` scales the row-streamed input by the reduced
-        // scalar. (The mean-of-squares form is a `Mean` monoid — an honest miss
-        // until the extent-div lands; see the Mean case below.)
+        // scalar. (The mean-of-squares form uses a `Mean` stage = sum-fold ÷ extent —
+        // see rowreduce_mean_stage_is_a_sum_fold_divided_by_the_reduced_extent below.)
         let stages = vec![ReduceStage {
             pre: input(0).unary(UnaryOp::Sqr).0,
             op: ReduceOp::Sum,
@@ -782,12 +794,15 @@ mod tests {
     }
 
     #[test]
-    fn rowreduce_mean_stage_is_an_honest_miss() {
+    fn rowreduce_mean_stage_is_a_sum_fold_divided_by_the_reduced_extent() {
         use crate::ir::{ReduceOp, ReduceStage};
-        // A `Mean` stage is not a monoid (Fuel: sum-fold + div-by-extent) → honest
-        // miss, matching the Reduction arm, until the extent-div is expressible.
+        // The canonical mean-of-squares RmsNorm: stage0 = mean(x²) over the last
+        // axis, epilogue `x · rsqrt(mean + eps)`. A `Mean` stage folds `sum` then
+        // divides by the reduced-axis extent — the SAME `reduce_extent(last)` leaf as
+        // the Reduction arm (RowReduce always folds the last axis, so `last`). This is
+        // the divisor Fuel flagged that RmsNorm/LayerNorm internal means need.
         let op = OpDef::row_reduce(
-            "rms_mean",
+            "rmsnorm_mean",
             1,
             &[F32],
             vec![ReduceStage {
@@ -795,6 +810,31 @@ mod tests {
                 op: ReduceOp::Mean,
             }],
             input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt),
+        );
+        assert_eq!(
+            semantics_dag(&op).as_deref(),
+            Some(
+                "mul(in0, rsqrt(add(div(reduce[sum,last,nokd](sqr(in0)), \
+                 reduce_extent(last)), const(0.00001))))"
+            )
+        );
+    }
+
+    #[test]
+    fn rowreduce_integer_mean_stage_stays_an_honest_miss() {
+        use crate::ir::{ReduceOp, ReduceStage};
+        use baracuda_kernel_vocab::ElementKind::I32;
+        // INTEGER Mean stays an honest miss, as in the Reduction arm — an integer
+        // average rounds (the emitter rejects int_acc && Mean), so no such kernel.
+        let op = OpDef::row_reduce(
+            "imean_rows",
+            1,
+            &[I32],
+            vec![ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Mean,
+            }],
+            reduced(0) + input(0),
         );
         assert_eq!(semantics_dag(&op), None);
     }
