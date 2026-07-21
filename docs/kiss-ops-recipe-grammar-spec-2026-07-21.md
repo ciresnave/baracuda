@@ -1,8 +1,10 @@
-# KISS-Ops Recipe Grammar — spec for the kiss-ref recipe-evaluation API
+# KISS-Ops Recipe Grammar — Baracuda's consolidated extract (INPUT to a KISS-owned spec)
 
-**Version:** recipe-grammar **v1** (the "recipe-grammar version" leg of the kiss-ref consumption triple: `(KISS-Ops spec version, recipe-grammar version, kiss-ref semver)`).
-**Purpose:** the stable input contract for kiss-ref's `eval_recipe(dag, inputs) -> (outputs, per_node_det)`. Baracuda AND Fuel both emit this canonical form, so a single evaluator makes kiss-ref the shared semantics reference for both producers.
-**Source of truth:** Baracuda's emitter `crates/baracuda-kernelgen/src/recipe.rs` (`semantics_dag`) + the flat-DAG structure `pattern.rs` (`PatternNode`). This doc is the consolidated, evaluator-facing extract.
+> **⚠ NOT the authority.** The recipe grammar is NOT Baracuda's to own — it is the shared **KISS-Ops Semantics op-DAG**, already (a) co-designed and agreed in `docs/fuel-reply-recipe-grammar-2026-07-15.md` (Fuel; "three things are one thing"; the 6 Qs), and (b) partially specified in KISS — Contract §2.3 Semantics, Ops §6.13 decompositions, Ops §6.19 OpAttrs, §6.4-0009/0010 flat-DAG — plus the 3B/Appendix F wire pinning (mlgheozs). **The authority is KISS**, and Baracuda has proposed KISS consolidate the scattered pieces into one project-agnostic recipe-grammar spec that Baracuda, Fuel, kiss-ref, and any KISS user build against. **This doc is Baracuda's consolidated EXTRACT — an input to that KISS consolidation (the concrete node vocabulary + per-node DetClass, evaluator-facing) — not a standalone standard.** Reconcile toward the KISS/Fuel sources on any divergence.
+
+**Version:** recipe-grammar **v1** (proposed as the "recipe-grammar version" leg of the kiss-ref consumption triple: `(KISS-Ops spec version, recipe-grammar version, kiss-ref semver)`, once the grammar lands in KISS).
+**Purpose:** a consolidated, evaluator-facing extract to help kiss-ref scope `eval_recipe(dag, inputs) -> (outputs, per_node_det)` NOW, while the authoritative grammar consolidates into KISS. Baracuda AND Fuel both emit this canonical form.
+**Sources (authoritative):** Fuel co-design `docs/fuel-reply-recipe-grammar-2026-07-15.md` + KISS Contract §2.3 / Ops §6.13 / §6.19 / §6.4-0009-0010 + the 3B/Appendix F pinning. **This extract** mirrors Baracuda's emitter `crates/baracuda-kernelgen/src/recipe.rs` (`semantics_dag`) + `pattern.rs` (`PatternNode`).
 
 > **Two layers, don't conflate.** kiss-ref evaluates the **logical flat-DAG** (a decoded Rust structure: nodes + edges + logical attrs). The **wire encoding** of that DAG (§6.4-0009/0010 + §6.19 OpAttrs, the bytes) is being pinned by the 3B/Appendix F work (mlgheozs) and is referenced in §7 — the evaluator does not parse wire bytes; a decoder produces the DAG it walks.
 
