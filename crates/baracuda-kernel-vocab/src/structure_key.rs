@@ -902,6 +902,21 @@ impl StructureKey {
 
         let reduce_axes = match parts[8] {
             "-" => AxisMask::EMPTY,
+            // §6.7-0005 rank-relative sentinels. Baracuda EMITS `x<hex>` (an explicit
+            // mask) and never these, but a conformant peer MAY emit `rall` (all axes) /
+            // `rlast` (trailing axis); a reader MUST accept them rather than decline the
+            // whole token. They resolve against the token's `rank` — the widest-operand /
+            // input-axis space the reduce mask indexes (see `structure_key`, `rank` =
+            // `max operand rank`). Accept-only: re-emitting yields `x<hex>`, which is
+            // byte-different but semantically identical (`rall`@rank-3 ≡ `x07`).
+            "rall" => AxisMask(((1u16 << rank) - 1) as u8),
+            "rlast" => {
+                if rank == 0 {
+                    // No trailing axis exists in a rank-0 space — malformed.
+                    return None;
+                }
+                AxisMask(1u8 << (rank - 1))
+            }
             s => AxisMask(u8::from_str_radix(s.strip_prefix('x')?, 16).ok()?),
         };
 
@@ -1550,6 +1565,27 @@ mod tests {
         // A non-empty reduce_axes round-trips through the token.
         let parsed = StructureKey::from_token(&k_ax0.to_token()).expect("round-trip");
         assert_eq!(k_ax0, parsed);
+    }
+
+    #[test]
+    fn from_token_accepts_rall_rlast_rank_relative_sentinels() {
+        // §6.7-0005: Baracuda emits `x<hex>` and never these, but a reader MUST ACCEPT
+        // a conformant peer's rank-relative `rall` (all axes) / `rlast` (trailing axis)
+        // sentinels rather than decline the whole token. They resolve against `rank`.
+        let base = "sk2|bin|f32|cuda:sm89|ix32|grid|r3|\
+                    co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f";
+        // `rall` @ rank 3 => all three axis bits => 0b111.
+        let k_all = StructureKey::from_token(&format!("{base}|rall")).expect("rall accepted");
+        assert_eq!(k_all.reduce_axes, AxisMask(0b111));
+        // Semantically identical to the explicit `x07` mask Baracuda itself emits.
+        let k_hex = StructureKey::from_token(&format!("{base}|x07")).expect("x07 accepted");
+        assert_eq!(k_all.reduce_axes, k_hex.reduce_axes);
+        // `rlast` @ rank 3 => the trailing axis bit only => 0b100.
+        let k_last = StructureKey::from_token(&format!("{base}|rlast")).expect("rlast accepted");
+        assert_eq!(k_last.reduce_axes, AxisMask(0b100));
+        // `rlast` on a rank-0 space is malformed (no trailing axis) => decline.
+        let r0 = "sk2|une|f32|cuda:sm89|ix32|grid|r0|co/00/v1/d16/f;co/00/v1/d16/f";
+        assert_eq!(StructureKey::from_token(&format!("{r0}|rlast")), None);
     }
 
     #[test]
