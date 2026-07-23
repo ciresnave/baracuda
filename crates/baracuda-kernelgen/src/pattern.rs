@@ -218,6 +218,21 @@ pub enum PatternError {
     /// grammar + dispatch ABI can carry the offset attr + scalar (recorded via the
     /// Baracuda↔Fuel propose-first channel).
     OffsetUnsupported,
+    /// The body references a fold-stage result ([`ScalarExpr::Reduced`]`(i)`)
+    /// with no backing stage — `i` is out of range of the op's fold-node list
+    /// (on the elementwise path there are NO stages, so ANY `Reduced` leaf is
+    /// out of range). This is the KISS decline taxonomy's `out-of-range-index`
+    /// closed code (KISS-Grammar, the #17/PR-71 taxonomy); previously the case
+    /// was mistyped here as [`PatternError::ScalarParamUnsupported`] (a
+    /// misleading reason — nothing scalar about it) and dropped as an untyped
+    /// `None` on the recipe path (`recipe::semantics_dag`'s `Option` honest-miss
+    /// channel, which cross-references this variant as the typed spelling).
+    OutOfRangeIndex {
+        /// The referenced stage index.
+        index: u8,
+        /// The number of fold stages actually available (0 for elementwise).
+        bound: u8,
+    },
 }
 
 /// Derive the FKC pattern tree for `op`, or a [`PatternError`] if the body isn't
@@ -402,12 +417,18 @@ fn walk(
     match e {
         ScalarExpr::Input(i) => Ok(PatternNode::Bind(*i)),
         // A bare Const or a standalone Param (not the scalar of an Add/Mul) has
-        // no graph-Op form; a Reduced leaf only exists inside a RowReduce op, which
-        // `derive_pattern` rejects (NotElementwise) before reaching `walk` — this
-        // arm is defensive and never fires on the elementwise path.
-        ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {
-            Err(PatternError::ScalarParamUnsupported)
-        }
+        // no graph-Op form.
+        ScalarExpr::Const(_) | ScalarExpr::Param(_) => Err(PatternError::ScalarParamUnsupported),
+        // A `Reduced(i)` stage reference only exists inside a fold-carrying op
+        // (RowReduce/Reduction/…), which `derive_pattern` rejects
+        // (NotElementwise) before reaching `walk` — so on this path EVERY
+        // `Reduced` leaf is an index with no backing stage: the taxonomy's
+        // `out-of-range-index` typed decline (bound 0), NOT a scalar-param
+        // miss (the pre-PR-71 mistyping).
+        ScalarExpr::Reduced(i) => Err(PatternError::OutOfRangeIndex {
+            index: *i,
+            bound: 0,
+        }),
         // Coord is a typed miss of its own kind — see the variant docs:
         // OpTag::Iota EXISTS (0.10.2 "value source") but the emitted pattern
         // grammar cannot carry the axis attribute and the Iota↔Coord
@@ -696,6 +717,25 @@ mod tests {
         assert_eq!(
             to_fkc(&pat),
             "pattern:\n  root:\n    op: Add\n    operands:\n      - bind: 0\n      - bind: 1\n"
+        );
+    }
+
+    #[test]
+    fn stray_reduced_leaf_is_a_typed_out_of_range_index_decline() {
+        use crate::ir::reduced;
+        // A `Reduced(i)` leaf in an ELEMENTWISE body references a fold stage
+        // that does not exist — the KISS decline taxonomy's `out-of-range-index`
+        // closed code (PR #71). It must type as OutOfRangeIndex with the honest
+        // bound (0 stages), NOT the misleading pre-PR-71 ScalarParamUnsupported.
+        let op = OpDef::elementwise(
+            "bogus",
+            1,
+            &[ElementKind::F32],
+            input(0) + crate::ir::Expr(reduced(2).0),
+        );
+        assert_eq!(
+            derive_pattern(&op),
+            Err(PatternError::OutOfRangeIndex { index: 2, bound: 0 })
         );
     }
 

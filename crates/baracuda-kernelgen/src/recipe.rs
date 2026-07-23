@@ -27,8 +27,9 @@
 //! fold + the `Reduced(0)`→node epilogue, incl. fused bias/activation);
 //! **reductions** (`reduce[<monoid>,<axes>,<keepdim>]` fold + post; float `Mean` =
 //! `sum` fold ÷ `reduced_count(<axes>)`, integer `Mean` an honest miss); **scans**
-//! (`prefix_scan[<monoid>,<axis>,<excl>]`, reverse = flip ∘ scan
-//! ∘ flip); **row-reductions** (staged `reduce[<monoid>,last,nokd]` folds
+//! (`prefix_scan[<monoid>,<axis>,<excl>]`; a REVERSE scan is an honest miss —
+//! its co-pinned flip ∘ scan ∘ flip decomposition needs `flip`, which is not
+//! in the KISS-Ops closed registry yet); **row-reductions** (staged `reduce[<monoid>,last,nokd]` folds
 //! producing `Reduced(0..n)`, then a full-width epilogue over the stage scalars +
 //! the row-streamed inputs — softmax/rmsnorm, a float `Mean` stage = `sum` fold ÷
 //! `reduced_count(last)`, integer `Mean` an honest miss); and
@@ -119,14 +120,21 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
             pre,
             post,
         } => {
+            // A REVERSE scan has no expressible recipe today: the co-pinned
+            // decomposition is flip ∘ prefix_scan ∘ flip, but `flip` is NOT in
+            // the KISS-Ops closed op registry (§6.1, the 106-token set) — the
+            // pre-consolidation emission fabricated the token, exactly what
+            // the #68 anti-fork witness (`emitted_recipe_tokens_are_all_kiss_ops`)
+            // forbids and now catches. HONEST MISS until `flip` registers
+            // (in flight: kiss-ref is building `Node::Flip` with this as the
+            // waiting consumer, and routing flip's grammar row via §6.19).
+            if *reverse {
+                return None;
+            }
             let monoid = reduce_monoid(*rop)?;
             let pre_r = expr_to_recipe(pre, &[])?;
             let excl = if *exclusive { "excl" } else { "incl" };
-            let node = if *reverse {
-                format!("flip[{axis}](prefix_scan[{monoid},{axis},{excl}](flip[{axis}]({pre_r})))")
-            } else {
-                format!("prefix_scan[{monoid},{axis},{excl}]({pre_r})")
-            };
+            let node = format!("prefix_scan[{monoid},{axis},{excl}]({pre_r})");
             expr_to_recipe(post, &[node])
         }
         // RowReduce (fused reduce → broadcast → elementwise over the last axis):
@@ -352,7 +360,9 @@ fn expr_to_recipe(e: &ScalarExpr, reduced: &[String]) -> Option<String> {
         // `Reduced(i)` resolves to stage `i`'s fold node (reduction/contraction/
         // scan/RowReduce epilogue); a bare elementwise body has no fold (`reduced`
         // empty) and an out-of-range stage index is an honest miss — never a
-        // fabricated leaf.
+        // fabricated leaf. (The `Option` channel is untyped by design; the TYPED
+        // spelling of this decline is `PatternError::OutOfRangeIndex` — the KISS
+        // taxonomy's `out-of-range-index` closed code, PR #71.)
         E::Reduced(i) => reduced.get(*i as usize).cloned()?,
     })
 }
@@ -709,7 +719,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_recipe_is_a_prefix_scan_node_with_reverse_as_flip() {
+    fn scan_recipe_is_a_prefix_scan_node_and_reverse_is_an_honest_miss() {
         use crate::ir::ReduceOp;
         // Forward inclusive cumsum on axis 1.
         let cs = OpDef::scan(
@@ -727,7 +737,10 @@ mod tests {
             semantics_dag(&cs).as_deref(),
             Some("prefix_scan[sum,1,incl](in0)")
         );
-        // Reverse exclusive cumprod: Fuel's reverse = flip ∘ prefix_scan ∘ flip.
+        // Reverse exclusive cumprod: the co-pinned decomposition (flip ∘
+        // prefix_scan ∘ flip) needs `flip`, which is NOT in the KISS-Ops closed
+        // registry — emitting it fabricated vocabulary (caught by the #68
+        // anti-fork witness below). Honest miss until `flip` registers.
         let rc = OpDef::scan(
             "revcumprod",
             1,
@@ -740,8 +753,262 @@ mod tests {
             reduced(0),
         );
         assert_eq!(
-            semantics_dag(&rc).as_deref(),
-            Some("flip[2](prefix_scan[prod,2,excl](flip[2](in0)))")
+            semantics_dag(&rc),
+            None,
+            "reverse scan must miss honestly until `flip` is a KISS-Ops token"
+        );
+    }
+
+    /// The #68 anti-fork witness: every op token the recipe emitter can spell
+    /// MUST be inside the closed KISS-Ops op registry (§6.1 — the 106-token
+    /// set) or the §6.12 scalar-source/structural leaf grammar. We NEVER invent
+    /// vocabulary: a new IR op with no registered KISS-Ops name must be an
+    /// honest miss (`None`), and a new emitted spelling must be added to the
+    /// pinned list below ONLY with a matching KISS-spec citation.
+    #[test]
+    fn emitted_recipe_tokens_are_all_kiss_ops() {
+        // The closed op registry, vendored VERBATIM from the KISS-Ops reference
+        // vocabulary (kiss-ops-vocab `Op::ALL`, 106 tokens, kiss-ref @ 004e1a4,
+        // 2026-07-23), which is itself conformance-tested 1:1 against the spec
+        // (`spec/ops.md` §6.1 registry / KISS-OPS-6.1-0001..2). Provenance
+        // matters: update this list ONLY from the spec or its reference vocab,
+        // never from what the emitter happens to produce (that would make the
+        // witness circular).
+        const KISS_OPS: &[&str] = &[
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "neg",
+            "abs",
+            "select",
+            "cmp_eq",
+            "cmp_ne",
+            "cmp_lt",
+            "cmp_le",
+            "cmp_gt",
+            "cmp_ge",
+            "floor",
+            "ceil",
+            "trunc",
+            "round_even",
+            "exp",
+            "log",
+            "sin",
+            "cos",
+            "sqrt",
+            "erf",
+            "atan",
+            "lgamma",
+            "atan2",
+            "copysign",
+            "nextafter",
+            "bit_and",
+            "bit_or",
+            "bit_xor",
+            "bit_not",
+            "shl",
+            "shr",
+            "popcount",
+            "clz",
+            "ctz",
+            "element_map",
+            "reduce",
+            "prefix_scan",
+            "gather",
+            "scatter",
+            "sort_network",
+            "sqr",
+            "recip",
+            "sign",
+            "rsqrt",
+            "exp2",
+            "expm1",
+            "log2",
+            "log10",
+            "log1p",
+            "tan",
+            "tanh",
+            "sinh",
+            "cosh",
+            "asinh",
+            "acosh",
+            "atanh",
+            "asin",
+            "acos",
+            "cbrt",
+            "erfc",
+            "frac",
+            "step",
+            "sigmoid",
+            "relu",
+            "silu",
+            "softplus",
+            "mish",
+            "gelu",
+            "gelu_tanh",
+            "max_prop",
+            "min_prop",
+            "fmax_ieee",
+            "fmin_ieee",
+            "pow",
+            "hypot",
+            "rem_floor",
+            "rem_trunc",
+            "ldexp",
+            "logical_and",
+            "logical_or",
+            "logical_not",
+            "reduce_mean",
+            "reduce_norm2",
+            "reduce_var",
+            "reduce_std",
+            "logsumexp",
+            "argmax",
+            "any",
+            "all",
+            "matmul",
+            "softmax",
+            "log_softmax",
+            "rms_norm",
+            "layer_norm",
+            "cumsum",
+            "cumprod",
+            "cummax",
+            "avg_pool",
+            "max_pool",
+            "index_select",
+            "embedding",
+            "scatter_add",
+            "im2col",
+        ];
+        assert_eq!(KISS_OPS.len(), 106, "the closed registry is 106 tokens");
+        // §6.12 scalar-source leaves + the bind leaf — grammar spellings, not
+        // registry ops (they carry attrs-in-parens, no child edges).
+        const LEAVES: &[&str] = &["const", "iota", "runtime_scalar", "reduced_count"];
+        let ok = |tok: &str| KISS_OPS.contains(&tok) || LEAVES.contains(&tok);
+
+        // (a) Every mapped unary/binary token. The emitter matches are
+        // EXHAUSTIVE (a new IR variant breaks compile there); this list is the
+        // witness's coverage of the same variants.
+        use BinaryOp as B;
+        use UnaryOp as U;
+        let unaries = [
+            U::Neg,
+            U::Abs,
+            U::Sqr,
+            U::Sqrt,
+            U::Rsqrt,
+            U::Recip,
+            U::Exp,
+            U::Log,
+            U::Tanh,
+            U::Sigmoid,
+            U::Relu,
+            U::Erf,
+            U::Gelu,
+            U::Silu,
+            U::Sin,
+            U::Cos,
+            U::Floor,
+            U::Ceil,
+            U::Round,
+            U::Sign,
+            U::Step,
+            U::Erfc,
+            U::Trunc,
+            U::Exp2,
+            U::Expm1,
+            U::Log2,
+            U::Log10,
+            U::Log1p,
+            U::Sinh,
+            U::Cosh,
+            U::Tan,
+            U::Asin,
+            U::Acos,
+            U::Atan,
+            U::Asinh,
+            U::Acosh,
+            U::Atanh,
+            U::Cbrt,
+            U::Lgamma,
+        ];
+        for u in unaries {
+            if let Some(tok) = unary_kiss_name(u) {
+                assert!(ok(tok), "unary {u:?} emits non-KISS token `{tok}`");
+            }
+        }
+        let binaries = [
+            B::Max,
+            B::Min,
+            B::Pow,
+            B::Atan2,
+            B::Copysign,
+            B::Nextafter,
+            B::FmaxIeee,
+            B::FminIeee,
+            B::RemTrunc,
+            B::Rem,
+            B::CmpEq,
+            B::CmpNe,
+            B::CmpLt,
+            B::CmpLe,
+            B::CmpGt,
+            B::CmpGe,
+            B::BitAnd,
+            B::BitOr,
+            B::BitXor,
+            B::Shl,
+            B::Shr,
+            B::LogicalAnd,
+            B::LogicalOr,
+            B::LogicalXor,
+        ];
+        for b in binaries {
+            if let Some(tok) = binary_kiss_name(b) {
+                assert!(ok(tok), "binary {b:?} emits non-KISS token `{tok}`");
+            }
+        }
+        // (b) The spellings the emitter formats DIRECTLY (infix arms, fold and
+        // indexed node names, select, the source-op leaves).
+        for tok in [
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "select",
+            "reduce",
+            "prefix_scan",
+            "matmul",
+            "gather",
+            "scatter",
+            "const",
+            "iota",
+            "runtime_scalar",
+            "reduced_count",
+        ] {
+            assert!(ok(tok), "directly-emitted spelling `{tok}` is non-KISS");
+        }
+        // (c) The monoid attr values ride the reduce/prefix_scan ATTR channel;
+        // they are attr tokens, not op names — but pin them against the
+        // registry anyway (sum/prod are not ops; max/min are attr spellings
+        // shared with nothing): the closed attr set is {sum, prod, max, min}.
+        use crate::ir::ReduceOp as R;
+        for r in [R::Sum, R::Prod, R::Max, R::Min] {
+            let m = reduce_monoid(r).expect("monoid token");
+            assert!(
+                ["sum", "prod", "max", "min"].contains(&m),
+                "monoid attr `{m}` outside the closed attr set"
+            );
+        }
+        assert_eq!(reduce_monoid(R::Mean), None, "Mean is not a monoid");
+        // (d) The negative control: `flip` — the token the pre-consolidation
+        // reverse-scan emission fabricated — is NOT in the registry, and the
+        // emitter no longer spells it anywhere (the reverse-scan honest miss).
+        assert!(
+            !ok("flip"),
+            "flip must stay out until the spec registers it"
         );
     }
 
