@@ -1,0 +1,26 @@
+[package]
+name = "kiss-ref-diff"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# DELIBERATELY NOT a workspace member (the root members list is crates/*,
+# xtask, examples): kiss-ref is a PRIVATE repo, so this tool cannot ride the
+# published workspace or default CI. Build it explicitly — see README.md.
+[workspace]
+
+[[bin]]
+name = "kiss-ref-diff"
+path = "main.rs"
+
+[dependencies]
+# e1b22fd = the eval_recipe lock-packet surface (004e1a4) + the conformance
+# corpus / never-panic fuzz suites (test-only, same API).
+kiss-ref-core = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "e1b22fd" }
+kiss-ops-vocab = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "e1b22fd" }
+kiss-classify-vocab = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "e1b22fd" }
+baracuda-kernelgen = { path = "../../crates/baracuda-kernelgen" }
+baracuda-kernel-vocab = { path = "../../crates/baracuda-kernel-vocab" }
+# Step-3a device leg: JIT the generated kernel via NVRTC, launch on the GPU.
+baracuda-driver = { path = "../../crates/baracuda-driver" }
+baracuda-nvrtc = { path = "../../crates/baracuda-nvrtc" }
