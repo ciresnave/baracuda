@@ -6800,11 +6800,15 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
 /// temp-binding pass, cf. relu/sigmoid, removes the recompute on compound inners.)
 pub(crate) fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
     match op {
+        // A ON TIES (`>=`/`<=`): the KISS-Ops `max_prop`/`min_prop` normative
+        // decomposition (`cmp_ge`/`cmp_le` select a) and numpy/torch
+        // `where(a >= b, a, b)`. Bit-visible only on signed-zero ties
+        // (`max_prop(-0.0, +0.0) = -0.0`); a `>`-spelled tie would return b.
         BinaryOp::Max => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} >= {b} ? {a} : {b})))")
         }
         BinaryOp::Min => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} <= {b} ? {a} : {b})))")
         }
         BinaryOp::Pow => format!("powf({a}, {b})"),
         // Floored remainder (torch.remainder, sign-of-divisor — Fuel's Op::Rem),
@@ -6861,11 +6865,12 @@ pub(crate) fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
 /// Same as [`binary_f32`] but with f64 math-function names.
 pub(crate) fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
     match op {
+        // A ON TIES (`>=`/`<=`) — see [`binary_f32`]'s Max/Min note.
         BinaryOp::Max => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} >= {b} ? {a} : {b})))")
         }
         BinaryOp::Min => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} <= {b} ? {a} : {b})))")
         }
         BinaryOp::Pow => format!("pow({a}, {b})"),
         BinaryOp::Rem => format!("({a} - floor({a} / {b}) * {b})"),

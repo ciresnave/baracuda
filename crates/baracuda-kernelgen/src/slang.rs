@@ -282,11 +282,14 @@ fn slang_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> Strin
 /// `FmaxIeee`/`FminIeee` are the NaN-suppressing intrinsics.
 fn slang_binary_fp(op: BinaryOp, a: String, b: String, ct: &str) -> String {
     match op {
+        // A ON TIES (`>=`/`<=`): the KISS-Ops `max_prop`/`min_prop` normative
+        // decomposition (`cmp_ge`/`cmp_le` select a) — signed-zero-tie-visible
+        // (see the CUDA `binary_f32` note).
         BinaryOp::Max => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} >= {b} ? {a} : {b})))")
         }
         BinaryOp::Min => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} <= {b} ? {a} : {b})))")
         }
         BinaryOp::Pow => format!("pow({a}, {b})"),
         // Floored remainder (torch.remainder, sign-of-divisor) — not fmod.

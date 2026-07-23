@@ -595,24 +595,30 @@ fn unary_op_f64(op: UnaryOp, x: f64) -> f64 {
 /// here.
 fn binary_op_f64(op: BinaryOp, a: f64, b: f64) -> f64 {
     match op {
-        // NaN-propagating (a>b?a:b after NaN checks — returns b on ties / equal).
+        // NaN-propagating, and A ON TIES (`a >= b ? a : b` after the NaN
+        // checks) — the KISS-Ops `max_prop` normative decomposition
+        // (`select(…, select(cmp_ge(a,b), a, b))`) and the numpy/torch
+        // `maximum` = `where(a >= b, a, b)` semantics. Bit-visible ONLY on
+        // signed-zero ties: `max_prop(-0.0, +0.0) = -0.0` (keep a), never the
+        // b-biased `+0.0`. Caught by the kiss-ref step-2 recipe differential.
         BinaryOp::Max => {
             if a.is_nan() {
                 a
             } else if b.is_nan() {
                 b
-            } else if a > b {
+            } else if a >= b {
                 a
             } else {
                 b
             }
         }
+        // Mirror: `min_prop` = `select(…, select(cmp_le(a,b), a, b))` — a on ties.
         BinaryOp::Min => {
             if a.is_nan() {
                 a
             } else if b.is_nan() {
                 b
-            } else if a < b {
+            } else if a <= b {
                 a
             } else {
                 b
@@ -2120,6 +2126,42 @@ mod tests {
         );
         assert_eq!(bit32(&out[0], 2), 2.0f32.to_bits());
         assert!(f32::from_bits(bit32(&out[0], 3)).is_nan());
+    }
+
+    #[test]
+    fn elementwise_maxmin_prop_signed_zero_ties_keep_a() {
+        // The KISS-Ops `max_prop`/`min_prop` normative decomposition selects A
+        // on numeric ties (`cmp_ge`/`cmp_le` → a) — the numpy/torch
+        // `where(a >= b, a, b)` semantics. Bit-visible ONLY on signed-zero
+        // ties: max_prop(-0.0, +0.0) = -0.0 and max_prop(+0.0, -0.0) = +0.0
+        // (keep a in both argument orders — never order-dependent-on-b).
+        // Caught by the kiss-ref recipe differential (step 2, 2026-07-23): a
+        // b-on-ties spelling diverged from the reference evaluator.
+        let a = desc(&[2], &[1], ElementKind::F32);
+        let k = key(OpCategory::BinaryElementwise, &[a, a, a]);
+        let ops = [a, a, a];
+        let ins = [
+            f32b(&[2], &[-0.0, 0.0]), // a-operand: (-0, +0)
+            f32b(&[2], &[0.0, -0.0]), // b-operand: (+0, -0)
+        ];
+        let maxp = OpDef::elementwise(
+            "maxp",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::Max, input(1)),
+        );
+        let out = evaluate(&build_plan(&maxp, &k), &ops, &ins, &[]);
+        assert_eq!(bit32(&out[0], 0), (-0.0f32).to_bits(), "max(-0,+0) keeps a");
+        assert_eq!(bit32(&out[0], 1), 0.0f32.to_bits(), "max(+0,-0) keeps a");
+        let minp = OpDef::elementwise(
+            "minp",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::Min, input(1)),
+        );
+        let out = evaluate(&build_plan(&minp, &k), &ops, &ins, &[]);
+        assert_eq!(bit32(&out[0], 0), (-0.0f32).to_bits(), "min(-0,+0) keeps a");
+        assert_eq!(bit32(&out[0], 1), 0.0f32.to_bits(), "min(+0,-0) keeps a");
     }
 
     #[test]
