@@ -1,8 +1,8 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke test for `MaxPool3dPlan` FW + BW.
 //!
 //! `[1, 1, 2, 2, 2]` input, window 2³, stride 2³ → `[1, 1, 1, 1, 1]`
 //! output (a single max over the whole input). Cleanest 3-D fixture.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

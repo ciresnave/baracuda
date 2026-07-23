@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Smoke test for the Phase 19.1 cuDNN pool FFI facade.
 //!
 //! Verifies that the raw `extern "C"` FFI entry points in
@@ -11,6 +10,7 @@
 //! once, and asserts byte-equivalence on the output buffers. cuDNN's
 //! pooling kernel is deterministic for fixed input + descriptor, so
 //! we expect exact bit-equality on the same hardware.
+#![cfg(feature = "cudnn")]
 
 use core::ffi::c_void;
 

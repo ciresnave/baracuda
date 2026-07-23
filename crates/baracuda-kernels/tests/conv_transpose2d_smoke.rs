@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke tests for `ConvTranspose2dPlan` (cuDNN wrap, Phase 11.7).
 //!
 //! Confirms the role-swap dispatch through `cudnnConvolutionBackwardData`
@@ -7,6 +6,7 @@
 //! dispatch (no NaN / no crash).
 //!
 //! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

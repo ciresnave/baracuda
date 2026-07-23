@@ -1,10 +1,10 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke tests for `Conv3dPlan` (cuDNN wrap, Phase 11.7).
 //!
 //! Covers FW + BW data + BW filter for f32 over a small NCDHW tensor.
 //! Compares against a naive 3-D cross-correlation CPU reference.
 //!
 //! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

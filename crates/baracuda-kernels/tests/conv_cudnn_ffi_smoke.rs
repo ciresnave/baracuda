@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Phase 19.2 — Real-GPU smoke tests for the cuDNN convolution FFI
 //! facade exposed by `baracuda-kernels-sys`.
 //!
@@ -16,6 +15,7 @@
 //!   - ConvTranspose2d f32 FW.
 //!
 //! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
+#![cfg(feature = "cudnn")]
 
 use core::ffi::c_void;
 

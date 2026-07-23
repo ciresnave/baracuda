@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Phase 16.1 — bit-exact PyTorch adaptive-pool smoke tests.
 //!
 //! Verifies the bespoke-kernel rewrite agrees with PyTorch's
@@ -20,6 +19,7 @@
 //!
 //! The PyTorch bit-exact behavior is the contract this test family
 //! pins.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
