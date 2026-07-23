@@ -3149,7 +3149,16 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         "contraction v1 emits the Tiny-M skinny schedule only; larger M classes \
          are the tiled variant's territory (and all-Large routes to the vendor)"
     );
-    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    // The CONTRACTION accumulator follows the canonical sk3 `<acc>` lattice
+    // (`baracuda_kernel_vocab::structure_key`'s `contraction_acc`, mirroring
+    // `GemmSku::precision_guarantee`): f16/bf16/f32/f32-strict → `float`,
+    // f64 → `double`. Unlike the REDUCTION emitters (no key `<acc>`
+    // coordinate), F32Strict here must NOT up-convert to double — the gem
+    // cell's key says `<acc>=f32`, the contract's `accumulation_type` must
+    // match it (KISS-Contract §6.8 pin), and the F32Strict element contract is
+    // "full IEEE 754 binary32 multiply-add THROUGHOUT" — a double accumulator
+    // would produce different (non-binary32-chain) bits than declared.
+    let dbl = matches!(plan.dtype, ElementKind::F64);
     assert!(
         matches!(
             plan.dtype,
@@ -3164,11 +3173,11 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     );
     let acc = if dbl { "double" } else { "float" };
     let zero = if dbl { "0.0" } else { "0.0f" };
-    // Loads up-convert to the accumulator width, exactly as the reductions do.
+    // Loads up-convert to the accumulator width, exactly as the reductions do
+    // (F32Strict is already accumulator-width — no conversion).
     let load = |expr: String| match plan.dtype {
         ElementKind::F16 => format!("__half2float({expr})"),
         ElementKind::Bf16 => format!("__bfloat162float({expr})"),
-        ElementKind::F32Strict => format!("(double){expr}"),
         _ => expr,
     };
     let name = format!(
@@ -3200,7 +3209,6 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
                 match plan.dtype {
                     ElementKind::F16 => format!("__half2float({e})"),
                     ElementKind::Bf16 => format!("__bfloat162float({e})"),
-                    ElementKind::F32Strict => format!("(double){e}"),
                     _ => e,
                 }
             },
@@ -3330,7 +3338,10 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     if c.m != baracuda_kernel_vocab::SizeClass::Tiny {
         return None;
     }
-    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    // Same canonical accumulator lattice as `emit_contraction` (the sk3
+    // `<acc>` coordinate): double for F64 ONLY — F32Strict stays a binary32
+    // chain, matching the key/contract-declared `<acc>=f32`.
+    let dbl = matches!(plan.dtype, ElementKind::F64);
     if !matches!(
         plan.dtype,
         ElementKind::F16
@@ -3347,7 +3358,6 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let load = |expr: String| match plan.dtype {
         ElementKind::F16 => format!("__half2float({expr})"),
         ElementKind::Bf16 => format!("__bfloat162float({expr})"),
-        ElementKind::F32Strict => format!("(double){expr}"),
         _ => expr,
     };
     let stem = format!(

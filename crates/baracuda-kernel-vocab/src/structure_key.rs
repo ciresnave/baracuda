@@ -49,7 +49,17 @@ pub const MAX_OPERANDS: usize = 8;
 /// namespaced `target_capability` (`cuda:sm89`, §6.8) replaces the bare `sm89`
 /// arch token, and the index-width field is spelled `ix32`/`ix64` (§6.7-0003,
 /// deliberately distinct from the `i32`/`i64` dtype tokens).
-pub const STRUCTURE_KEY_VERSION: u16 = 2;
+///
+/// v3 (sk3 RFC D1+D4+D5, 2026-07-22): the gem precision coordinates, landed as
+/// ONE bump per the "grow the key once" pin. The gem contraction field gains a
+/// REQUIRED trailing `/<wdt>/<acc>/<out>/<mp>` group (weight dtype, accumulator
+/// dtype, output dtype, math-precision `st`/`rm`) after the optional
+/// `/b<class>`; the spec-forbidden `f32s` dtype token retires into `<mp>` (D4 —
+/// strict-SIMT f32 = `f32`-primary + `st`, TF32 = `f32`-primary + `rm`); and
+/// the FP8 spellings go variant-explicit (`e4m3` → `e4m3fn`; `e5m2` is already
+/// variant-explicit and unchanged; the AMD `e4m3fnuz`/`e5m2fnuz` spellings are
+/// reserved, unused). Non-gem cells change only the version prefix.
+pub const STRUCTURE_KEY_VERSION: u16 = 3;
 
 // ===========================================================================
 // Predicate axes
@@ -191,6 +201,26 @@ impl SizeClass {
     }
 }
 
+/// Math-precision coordinate of the sk3 gem cell (RFC D4 / KISS-Ops §6.17):
+/// the input-rounding axis that replaced the spec-forbidden `f32s` dtype token.
+///
+/// Deliberately a 2-value key code, not the full `MathPrecision` enum — the key
+/// only needs the mantissa-reduction axis; the §6.17 semantics layer resolves a
+/// code to a concrete mode per `(primary_dtype, target_capability)` (`rm` on
+/// `f32`-primary `cuda:sm80+` = TF32: 10 mantissa bits, RNE, exponent carry).
+/// Codes never begin with `b` (that prefix is the batch coordinate's, §4.1.2 of
+/// the RFC), so the geometry and precision groups never collide in spelling.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum MpCode {
+    /// `st` — bit-stable / strict: no input rounding; each operand enters the
+    /// multiply at its full storage-dtype mantissa (the retired `F32Strict`
+    /// semantics on an `f32`-primary cell).
+    St,
+    /// `rm` — reduced-mantissa: operand mantissas are rounded to a pinned
+    /// narrower width before compute (per §6.17's `(bits, rounding_mode)` pin).
+    Rm,
+}
+
 /// Contraction-only structure facts (design §5.4 / the item-10 spike), carried
 /// as `StructureKey::contraction` — `None` for every non-contraction cell so
 /// non-GEMM tokens serialize **byte-identically** to the pre-contraction codec
@@ -198,8 +228,13 @@ impl SizeClass {
 ///
 /// v1 scope = the canonical rank-2 row-major dense cell (`lhs [M,K] · rhs
 /// [K,N] → out [M,N]`): the M/N/K size classes drive the vendor gate, the
-/// K-alignment class the (future) MMA fragment / tail handling. Layout and
-/// batch classes join when the node grows past the pilot.
+/// K-alignment class the (future) MMA fragment / tail handling. Layout classes
+/// join when the node grows past the pilot.
+///
+/// sk3 (D1+D4+D5) adds the precision/compute coordinate set — `wdt`/`acc`/
+/// `out`/`mp` — the RFC's fix for the §6.6-0018 collision (a mixed-input FP8
+/// GEMM and a homogeneous one, or SIMT-f32 and TF32-f32, previously derived
+/// byte-identical tokens).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ContractionKey {
     /// Size class of M (lhs rows / out rows).
@@ -213,8 +248,21 @@ pub struct ContractionKey {
     /// Size class of the leading batch dim for a rank-3 batched contraction
     /// (`[B,M,K]·[B,K,N] → [B,M,N]`); `None` for the plain rank-2 cell. Additive:
     /// a `None` batch serializes byte-identically to the pre-batch codec — only a
-    /// batched cell carries the trailing `/b<class>` token component.
+    /// batched cell carries the `/b<class>` token component (before the
+    /// precision group, per the RFC: batch is an iteration-structure fact, so
+    /// it sits with the geometry).
     pub batch: Option<SizeClass>,
+    /// Operand-1 (weight) dtype — canonical (never `F32Strict`; the strict axis
+    /// rides [`ContractionKey::mp`]).
+    pub wdt: ElementKind,
+    /// Accumulator / compute dtype (D5's key half). Derived by the canonical
+    /// accumulator lattice ([`contraction_acc`]); the cell's contract MUST
+    /// declare the same dtype as `accumulation_type` (KISS-Contract §6.8 pin).
+    pub acc: ElementKind,
+    /// Output operand dtype (Fuel #22) — canonical (never `F32Strict`).
+    pub out: ElementKind,
+    /// Math-precision coordinate (D4) — the `f32s` replacement.
+    pub mp: MpCode,
 }
 
 // ===========================================================================
@@ -462,6 +510,12 @@ pub fn structure_key(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) ->
     };
 
     let (dtype, work) = match operands.first() {
+        // The STRUCT keeps the raw operand dtype — `F32Strict` included: it is
+        // the in-process MathPrecision carrier (kernel selection, plan.dtype,
+        // the gem `<mp>` derivation). Only the TOKEN codec folds it to the
+        // canonical `f32` spelling (sk3 D4 — `f32s` retired from the closed
+        // set; on a gem cell the strict axis re-surfaces as `<mp>=st`, on a
+        // non-gem cell it is out-of-band per the RFC §4.1.5 / §6.6-0018).
         Some(p) => (p.dtype, work_class(p)),
         None => (ElementKind::F32, WorkClass::OneWarp),
     };
@@ -483,6 +537,51 @@ pub fn structure_key(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) ->
     }
 }
 
+/// The key's canonical dtype: `F32Strict` folds to `F32` (sk3 D4 — the `f32s`
+/// token retired from the closed set per §6.1-0005; the strict-vs-TF32 axis is
+/// the gem cell's `<mp>` coordinate, derived from the pre-fold dtype). The
+/// `F32Strict` Rust type itself stays — it still drives kernel selection and
+/// is the derivation INPUT that says "strict SIMT math" on the operand channel.
+const fn canonical_dtype(dt: ElementKind) -> ElementKind {
+    match dt {
+        ElementKind::F32Strict => ElementKind::F32,
+        other => other,
+    }
+}
+
+/// The canonical accumulator lattice for a dense-contraction cell, keyed off
+/// the primary (operand-0) dtype: `int8/int4/bin → i32`; `f64 → f64`;
+/// everything else (fp8/f16/bf16/f32) `→ f32`. Mirrors
+/// `GemmSku::precision_guarantee` (`baracuda-cutlass/src/types.rs`) — the two
+/// MUST stay in lock-step, and a provider kernel serving the cell MUST
+/// accumulate in this dtype (the KISS-Contract §6.8 `accumulation_type` ↔
+/// `<acc>` consistency pin).
+const fn contraction_acc(primary: ElementKind) -> ElementKind {
+    match primary {
+        ElementKind::F64 => ElementKind::F64,
+        ElementKind::S8
+        | ElementKind::U8
+        | ElementKind::S4
+        | ElementKind::U4
+        | ElementKind::Bin => ElementKind::I32,
+        _ => ElementKind::F32,
+    }
+}
+
+/// The gem cell's math-precision coordinate, keyed off the PRE-fold primary
+/// dtype. Mirrors the GEMM routing policy `GemmSku::precision_guarantee` pins
+/// (`baracuda-cutlass/src/types.rs`): a plain-`F32` GEMM routes through TF32
+/// tensor cores (`MathPrecision::Tf32` — reduced mantissa, `rm`), `F32Strict`
+/// through SIMT CUDA cores at full binary32 (`MathPrecision::F32` — `st`).
+/// Every other element kind multiplies at its declared storage precision (no
+/// hidden input rounding) — `st`.
+const fn contraction_mp(primary: ElementKind) -> MpCode {
+    match primary {
+        ElementKind::F32 => MpCode::Rm,
+        _ => MpCode::St,
+    }
+}
+
 /// [item 10] Derive contraction structure facts for the canonical rank-2
 /// row-major dense GEMM cell: `operands = [lhs [M,K], rhs [K,N], out [M,N]]`,
 /// all contiguous. Any other shape/layout/arity yields `None` — an honest
@@ -498,6 +597,15 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
     }
     let has_bias = operands.len() == 4;
     let (lhs, rhs, out) = (&operands[0], &operands[1], &operands[operands.len() - 1]);
+    // sk3 precision/compute coordinates (D1+D4+D5). `wdt`/`out` are the
+    // canonical operand spellings; `acc`/`mp` derive from the PRE-fold primary
+    // dtype (the `F32Strict`-vs-`F32` distinction is exactly the `<mp>` input).
+    let (wdt, acc, out_dt, mp) = (
+        canonical_dtype(rhs.dtype),
+        contraction_acc(lhs.dtype),
+        canonical_dtype(out.dtype),
+        contraction_mp(lhs.dtype),
+    );
     // rank-2 = plain `[M,K]·[K,N]`; rank-3 = batched `[B,M,K]·[B,K,N]`. All three
     // core operands (lhs/rhs/out) must share the rank.
     let rank = lhs.rank;
@@ -534,6 +642,10 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
                 k: SizeClass::of(k),
                 k_div: div_bucket(k),
                 batch: None,
+                wdt,
+                acc,
+                out: out_dt,
+                mp,
             })
         }
         3 => {
@@ -567,6 +679,10 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
                 k: SizeClass::of(k),
                 k_div: div_bucket(k),
                 batch: Some(SizeClass::of(b)),
+                wdt,
+                acc,
+                out: out_dt,
+                mp,
             })
         }
         _ => None,
@@ -623,7 +739,7 @@ fn derive_reduce_axes(op: OpCategory, operands: &[OperandDesc]) -> AxisMask {
 /// // a [128, 256] row-major f32 (in, in, out) triple for a binary elementwise add.
 /// let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
 /// let token = structure_key_token(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
-/// assert!(token.starts_with("sk2|bin|f32|cuda:sm89|"));
+/// assert!(token.starts_with("sk3|bin|f32|cuda:sm89|"));
 /// ```
 #[must_use]
 pub fn structure_key_token(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) -> String {
@@ -788,11 +904,18 @@ fn dtype_size_bytes(dt: ElementKind) -> Option<u32> {
 // ===========================================================================
 
 impl StructureKey {
-    /// Encode as the stable, lossless string token carried on the telemetry
-    /// wire. Round-trips through [`StructureKey::from_token`].
+    /// Encode as the stable string token carried on the telemetry wire.
+    /// Round-trips through [`StructureKey::from_token`] for every CANONICAL
+    /// key. The one deliberately lossy facet (sk3 D4): an `F32Strict`-keyed
+    /// struct spells the canonical `f32` — on a gem cell the strictness
+    /// re-surfaces as `<mp>=st`, on a non-gem cell it is out-of-band
+    /// (§6.6-0018) — so parsing yields the canonical `F32` twin, which
+    /// re-emits the identical token.
     ///
     /// Form: `sk<ver>|<op>|<dtype>|<arch>|<idx>|<work>|r<rank>|<op0>;…|<reduce>`
-    /// where each operand is `<contig>/<bcasthex>/<vec>/<div>/<flip>`.
+    /// where each operand is `<contig>/<bcasthex>/<vec>/<div>/<flip>`; a gem
+    /// cell appends the contraction field
+    /// `c<m><n><k>/<kdiv>[/b<class>]/<wdt>/<acc>/<out>/<mp>`.
     #[must_use]
     pub fn to_token(&self) -> String {
         let mut ops = String::new();
@@ -842,11 +965,22 @@ impl StructureKey {
                 size_code(c.k),
                 div_code(c.k_div),
             ));
-            // Batched cells append `/b<class>` — additive, so a plain rank-2 cell
-            // (`batch == None`) stays byte-identical to the pre-batch codec.
+            // Batched cells append `/b<class>` — conditionally present, BEFORE
+            // the precision group (batch is an iteration-structure fact, so it
+            // sits with the geometry — sk3 RFC §4.1.2).
             if let Some(b) = c.batch {
                 token.push_str(&format!("/b{}", size_code(b)));
             }
+            // sk3 (D1+D4+D5): the REQUIRED trailing precision group
+            // `/<wdt>/<acc>/<out>/<mp>`. `<mp>` codes never begin with `b`, so
+            // the batch and precision groups never collide in spelling.
+            token.push_str(&format!(
+                "/{}/{}/{}/{}",
+                dtype_code(c.wdt),
+                dtype_code(c.acc),
+                dtype_code(c.out),
+                mp_code(c.mp),
+            ));
         }
         token
     }
@@ -923,28 +1057,27 @@ impl StructureKey {
         let contraction = match parts.get(9) {
             None => None,
             Some(f) => {
-                // `c<m><n><k>/<div>[/b<class>]` — e.g. `ctll/d16` or `ctll/d16/bs`.
+                // sk3 grammar: `c<m><n><k>/<kdiv>[/b<class>]/<wdt>/<acc>/<out>/<mp>`
+                // — e.g. `ctll/d16/f32/f32/f32/rm` or `ctll/d16/bt/f32/f32/f32/rm`.
+                // The parse is COMPONENT-COUNT-driven: 6 components = non-batched,
+                // 7 = batched (the third MUST then parse as `b<class>`). The
+                // precision group is REQUIRED — an sk2-shaped gem field (2 or 3
+                // components) is a typed decline, never a silent partial accept.
                 let rest = f.strip_prefix('c')?;
-                let mut comps = rest.split('/');
-                let classes = comps.next()?;
-                let div = comps.next()?;
-                // Optional batch component (present only for a batched cell).
-                let batch = match comps.next() {
-                    None => None,
-                    Some(bc) => {
-                        let mut bcs = bc.strip_prefix('b')?.chars();
+                let comps: Vec<&str> = rest.split('/').collect();
+                let (batch, prec) = match comps.len() {
+                    6 => (None, &comps[2..6]),
+                    7 => {
+                        let mut bcs = comps[2].strip_prefix('b')?.chars();
                         let b = size_from_code(bcs.next()?)?;
                         if bcs.next().is_some() {
                             return None;
                         }
-                        Some(b)
+                        (Some(b), &comps[3..7])
                     }
+                    _ => return None,
                 };
-                // No trailing component beyond the optional batch.
-                if comps.next().is_some() {
-                    return None;
-                }
-                let mut cs = classes.chars();
+                let mut cs = comps[0].chars();
                 let m = size_from_code(cs.next()?)?;
                 let n = size_from_code(cs.next()?)?;
                 let k = size_from_code(cs.next()?)?;
@@ -955,8 +1088,12 @@ impl StructureKey {
                     m,
                     n,
                     k,
-                    k_div: div_from_code(div)?,
+                    k_div: div_from_code(comps[1])?,
                     batch,
+                    wdt: dtype_from_code(prec[0])?,
+                    acc: dtype_from_code(prec[1])?,
+                    out: dtype_from_code(prec[2])?,
+                    mp: mp_from_code(prec[3])?,
                 })
             }
         };
@@ -1025,9 +1162,141 @@ mod contraction_key_tests {
         assert_eq!(c.n, SizeClass::Large);
         assert_eq!(c.k, SizeClass::Large);
         assert_eq!(c.k_div, DivBucket::Div16);
+        // sk3 precision coordinates: plain-F32 operands derive the TF32-routed
+        // cell (f32 weight/out, f32 accumulator, reduced-mantissa math).
+        assert_eq!(c.wdt, ElementKind::F32);
+        assert_eq!(c.acc, ElementKind::F32);
+        assert_eq!(c.out, ElementKind::F32);
+        assert_eq!(c.mp, MpCode::Rm);
         let tok = k.to_token();
-        assert!(tok.ends_with("|ctll/d16"), "optional trailing field: {tok}");
+        assert!(
+            tok.ends_with("|ctll/d16/f32/f32/f32/rm"),
+            "optional trailing field carries the required precision group: {tok}"
+        );
         assert_eq!(StructureKey::from_token(&tok), Some(k), "round-trips");
+    }
+
+    #[test]
+    fn gemm_strict_and_tf32_f32_cells_hold_distinct_tokens_via_mp() {
+        // The D4/D1 collision fix: SIMT-f32 (F32Strict operands, full binary32)
+        // and TF32-f32 (plain F32 operands, reduced mantissa) are numerically
+        // and determinism-distinct cells — under sk2 the `f32s` dtype spelling
+        // was their only discriminator; under sk3 BOTH spell dtype `f32` and
+        // the `<mp>` coordinate separates them.
+        let mk = |dt| {
+            let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], dt, 256);
+            let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], dt, 256);
+            let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], dt, 256);
+            structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89)
+        };
+        let strict = mk(ElementKind::F32Strict);
+        let tf32 = mk(ElementKind::F32);
+        // The STRUCT keeps `F32Strict` (the in-process MathPrecision carrier —
+        // plan/kernel selection reads it); only the TOKEN folds to `f32`.
+        assert_eq!(strict.dtype, ElementKind::F32Strict);
+        let (st_tok, rm_tok) = (strict.to_token(), tf32.to_token());
+        assert!(!st_tok.contains("f32s"), "no f32s spelling: {st_tok}");
+        assert!(
+            st_tok.starts_with("sk3|gem|f32|"),
+            "strict cell spells the canonical f32 dtype: {st_tok}"
+        );
+        assert!(
+            st_tok.ends_with("|ctll/d16/f32/f32/f32/st"),
+            "strict cell = f32-primary + st: {st_tok}"
+        );
+        assert!(
+            rm_tok.ends_with("|ctll/d16/f32/f32/f32/rm"),
+            "TF32 cell = f32-primary + rm: {rm_tok}"
+        );
+        assert_ne!(st_tok, rm_tok, "the sk2 f32s collision is fixed by <mp>");
+        // The plain-F32 key round-trips exactly; the strict key parses to its
+        // CANONICAL twin (dtype `f32`, identical contraction incl. `mp=st`)
+        // that re-emits the identical token — token-level round-trip holds,
+        // and the strictness facet survives on the wire via `<mp>` alone.
+        assert_eq!(StructureKey::from_token(&rm_tok), Some(tf32));
+        let twin = StructureKey::from_token(&st_tok).expect("st token parses");
+        assert_eq!(twin.dtype, ElementKind::F32);
+        assert_eq!(twin.contraction, strict.contraction);
+        assert_eq!(twin.to_token(), st_tok, "canonical twin re-emits the token");
+    }
+
+    #[test]
+    fn gemm_mixed_fp8_cells_hold_distinct_tokens_via_wdt_and_out() {
+        // The RFC §2 motivating collision: a mixed-input FP8 GEMM and a
+        // homogeneous one previously derived byte-identical tokens (the key
+        // spelled only operand-0's dtype). sk3's `<wdt>`/`<out>` disambiguate,
+        // and the FP8 spellings are variant-explicit (`e4m3fn`, bare `e5m2`).
+        let lhs = |dt| OperandDesc::new(2, &[8, 4096], &[4096, 1], dt, 256);
+        let rhs = |dt| OperandDesc::new(2, &[4096, 4096], &[4096, 1], dt, 256);
+        let out = |dt| OperandDesc::new(2, &[8, 4096], &[4096, 1], dt, 256);
+        let mixed = structure_key(
+            OpCategory::Gemm,
+            &[
+                lhs(ElementKind::Fp8E4M3),
+                rhs(ElementKind::Fp8E5M2),
+                out(ElementKind::F32),
+            ],
+            ArchSku::Sm89,
+        );
+        let homog = structure_key(
+            OpCategory::Gemm,
+            &[
+                lhs(ElementKind::Fp8E4M3),
+                rhs(ElementKind::Fp8E4M3),
+                out(ElementKind::F16),
+            ],
+            ArchSku::Sm89,
+        );
+        let (mt, ht) = (mixed.to_token(), homog.to_token());
+        assert!(mt.starts_with("sk3|gem|e4m3fn|"), "variant-explicit: {mt}");
+        assert!(
+            mt.ends_with("|ctll/d16/e5m2/f32/f32/st"),
+            "mixed cell spells its e5m2 weight + f32 out: {mt}"
+        );
+        assert!(
+            ht.ends_with("|ctll/d16/e4m3fn/f32/f16/st"),
+            "homogeneous cell spells its e4m3fn weight + f16 out: {ht}"
+        );
+        assert_ne!(mt, ht, "the sk2 FP8 collision is fixed by <wdt>/<out>");
+        assert_eq!(StructureKey::from_token(&mt), Some(mixed));
+        assert_eq!(StructureKey::from_token(&ht), Some(homog));
+    }
+
+    #[test]
+    fn from_token_declines_sk2_shaped_and_malformed_gem_precision_groups() {
+        let base = "sk3|gem|f32|cuda:sm89|ix32|grid|r2|\
+                    co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-";
+        // The precision group is REQUIRED for an sk3 gem cell: the sk2 shapes
+        // (`c<mnk>/<kdiv>` and `c<mnk>/<kdiv>/b<class>`) are typed declines.
+        assert_eq!(StructureKey::from_token(&format!("{base}|ctll/d16")), None);
+        assert_eq!(
+            StructureKey::from_token(&format!("{base}|ctll/d16/bt")),
+            None
+        );
+        // 7 components whose third is NOT `b<class>` — malformed.
+        assert_eq!(
+            StructureKey::from_token(&format!("{base}|ctll/d16/f32/f32/f32/st/st")),
+            None
+        );
+        // Retired / renamed / reserved dtype spellings inside the precision
+        // group are typed declines: `f32s` (D4), bare `e4m3` (renamed
+        // `e4m3fn`), and the reserved-unused AMD `e4m3fnuz`.
+        for wdt in ["f32s", "e4m3", "e4m3fnuz"] {
+            assert_eq!(
+                StructureKey::from_token(&format!("{base}|ctll/d16/{wdt}/f32/f32/st")),
+                None,
+                "retired/unknown wdt spelling must decline: {wdt}"
+            );
+        }
+        // An unknown mp code declines (future `rm10`/`rm7` are additive-later).
+        assert_eq!(
+            StructureKey::from_token(&format!("{base}|ctll/d16/f32/f32/f32/rm10")),
+            None
+        );
+        // The `f32s` retirement also holds at the token's DTYPE field.
+        let f32s_dtype = "sk3|gem|f32s|cuda:sm89|ix32|grid|r2|\
+                          co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-|ctll/d16/f32/f32/f32/st";
+        assert_eq!(StructureKey::from_token(f32s_dtype), None);
     }
 
     #[test]
@@ -1040,7 +1309,10 @@ mod contraction_key_tests {
         let bias = OperandDesc::new(1, &[4096], &[1], ElementKind::F32, 256);
         let k = structure_key(OpCategory::Gemm, &[lhs, rhs, bias, out], ArchSku::Sm89);
         assert!(k.contraction.is_some(), "dense bias cell derives facts");
-        assert!(k.to_token().ends_with("|ctll/d16"), "bias unchanged token");
+        assert!(
+            k.to_token().ends_with("|ctll/d16/f32/f32/f32/rm"),
+            "bias unchanged token"
+        );
         // A STRIDED bias (every-other element) declines: the emitter reads a
         // hardcoded in2[col], so a non-unit stride would silently mis-read.
         let strided = OperandDesc::new(1, &[4096], &[2], ElementKind::F32, 256);
@@ -1082,8 +1354,8 @@ mod contraction_key_tests {
         assert_eq!(c.batch, Some(SizeClass::Tiny));
         let tok = k.to_token();
         assert!(
-            tok.ends_with("|ctll/d16/bt"),
-            "batched token appends /b<class>: {tok}"
+            tok.ends_with("|ctll/d16/bt/f32/f32/f32/rm"),
+            "batched token carries /b<class> BEFORE the precision group: {tok}"
         );
         assert_eq!(
             StructureKey::from_token(&tok),
@@ -1225,6 +1497,15 @@ fn arch_from_code(s: &str) -> Option<ArchSku> {
     })
 }
 
+/// The KISS-Classify closed-set dtype token spelling (§6.1). Public because the
+/// KISS-Contract §6.8 `accumulation_type` field MUST use the SAME spelling as
+/// the key's `<acc>` coordinate (one dtype, two surfaces — the sk3 RFC §4.2
+/// pin), so the contract emitter spells through this one function.
+#[must_use]
+pub const fn dtype_token(v: ElementKind) -> &'static str {
+    dtype_code(v)
+}
+
 const fn dtype_code(v: ElementKind) -> &'static str {
     use ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
@@ -1234,7 +1515,12 @@ const fn dtype_code(v: ElementKind) -> &'static str {
         F16 => "f16",
         Bf16 => "bf16",
         F32 => "f32",
-        F32Strict => "f32s",
+        // sk3 D4: the `f32s` spelling is RETIRED from the closed set
+        // (§6.1-0005 forbids a strict-precision dtype token). Derived keys
+        // never carry `F32Strict` (`canonical_dtype` folds it), so this arm is
+        // the total-match backstop for a hand-built key: it spells the
+        // canonical `f32`, and the strict axis rides the gem `<mp>` coordinate.
+        F32Strict => "f32",
         F64 => "f64",
         S8 => "s8",
         U8 => "u8",
@@ -1244,7 +1530,12 @@ const fn dtype_code(v: ElementKind) -> &'static str {
         // pre-existing cell keys a u32 operand) — STRUCTURE_KEY_VERSION stays 1.
         U32 => "u32",
         Bool => "bool",
-        Fp8E4M3 => "e4m3",
+        // sk3 D4: variant-explicit FP8. `e4m3fn` (OCP, SATFINITE, no-inf, max
+        // 448) renames the bare `e4m3`; `e5m2` is ALREADY the variant-explicit
+        // IEEE-style spelling (inf/NaN, max 57344) and stays. The AMD
+        // `e4m3fnuz`/`e5m2fnuz` spellings are reserved in the closed set,
+        // unused by Baracuda (no ElementKind — an unknown-spelling decline).
+        Fp8E4M3 => "e4m3fn",
         Fp8E5M2 => "e5m2",
         S4 => "s4",
         U4 => "u4",
@@ -1256,14 +1547,16 @@ const fn dtype_code(v: ElementKind) -> &'static str {
 
 fn dtype_from_code(s: &str) -> Option<ElementKind> {
     use ElementKind::{
-        Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F32Strict, F64, Fp8E4M3, Fp8E5M2, I32,
-        I64, S4, S8, U4, U8, U32,
+        Bf16, Bin, Bool, Complex32, Complex64, F16, F32, F64, Fp8E4M3, Fp8E5M2, I32, I64, S4, S8,
+        U4, U8, U32,
     };
     Some(match s {
         "f16" => F16,
         "bf16" => Bf16,
         "f32" => F32,
-        "f32s" => F32Strict,
+        // `"f32s"` deliberately ABSENT (sk3 D4 retirement) — a peer token still
+        // spelling it is a typed decline. Likewise the bare `"e4m3"` (renamed
+        // `e4m3fn`) and the reserved-but-unused `"e4m3fnuz"`/`"e5m2fnuz"`.
         "f64" => F64,
         "s8" => S8,
         "u8" => U8,
@@ -1271,13 +1564,32 @@ fn dtype_from_code(s: &str) -> Option<ElementKind> {
         "i64" => I64,
         "u32" => U32,
         "bool" => Bool,
-        "e4m3" => Fp8E4M3,
+        "e4m3fn" => Fp8E4M3,
         "e5m2" => Fp8E5M2,
         "s4" => S4,
         "u4" => U4,
         "b1" => Bin,
         "c32" => Complex32,
         "c64" => Complex64,
+        _ => return None,
+    })
+}
+
+const fn mp_code(v: MpCode) -> &'static str {
+    match v {
+        // `st` (not `bs`): `<mp>` codes never begin with `b` — that prefix is
+        // the batch coordinate's (sk3 RFC §4.1.2/§7).
+        MpCode::St => "st",
+        MpCode::Rm => "rm",
+    }
+}
+
+fn mp_from_code(s: &str) -> Option<MpCode> {
+    Some(match s {
+        "st" => MpCode::St,
+        "rm" => MpCode::Rm,
+        // A future additive sub-code (`rm10`/`rm7`, §6.17) is an unknown
+        // spelling here until adopted — typed decline, never a silent accept.
         _ => return None,
     })
 }
@@ -1423,7 +1735,7 @@ mod tests {
         let parsed = StructureKey::from_token(&token).expect("round-trip parse");
         assert_eq!(k, parsed);
         // Token is human-greppable.
-        assert!(token.starts_with("sk2|bin|f32|cuda:sm89|"));
+        assert!(token.starts_with("sk3|bin|f32|cuda:sm89|"));
     }
 
     #[test]
@@ -1438,7 +1750,7 @@ mod tests {
             .take(MAX_OPERANDS + 1)
             .collect::<Vec<_>>()
             .join(";");
-        let token = format!("sk2|bin|f32|cuda:sm89|ix32|grid|r2|{too_many}|-");
+        let token = format!("sk3|bin|f32|cuda:sm89|ix32|grid|r2|{too_many}|-");
         assert_eq!(
             StructureKey::from_token(&token),
             None,
@@ -1452,7 +1764,7 @@ mod tests {
         // malformed and MUST be a typed decline, not silently accepted (downstream
         // consumers index MAX_RANK-sized arrays with it).
         let token = format!(
-            "sk2|bin|f32|cuda:sm89|ix32|grid|r{}|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
+            "sk3|bin|f32|cuda:sm89|ix32|grid|r{}|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
             MAX_RANK + 1
         );
         assert_eq!(
@@ -1497,20 +1809,20 @@ mod tests {
         // The ElementKind::U32 addition (Model-A gather/scatter contract wiring)
         // is codec-additive: the token codec is spelling-keyed, not
         // discriminant-keyed, so adding a dtype shifts no existing dtype's code.
-        // (The schema version is 2 for an UNRELATED reason — the D8 §6.7/§6.8
-        // KISS-Classify codec alignment; the U32 addition itself required no bump.)
+        // (The schema version is 3 for an UNRELATED reason — the sk3 gem
+        // precision coordinates; the U32 addition itself required no bump.)
         // Pin the canonical f32 token verbatim so a future reshuffle that perturbs
-        // it is caught.
+        // it is caught. Non-gem cells change ONLY the version prefix at sk3.
         assert_eq!(
-            STRUCTURE_KEY_VERSION, 2,
-            "codec sits at the KISS-aligned schema version 2 (D8)"
+            STRUCTURE_KEY_VERSION, 3,
+            "codec sits at the KISS-aligned schema version 3 (sk3 RFC)"
         );
         let a = od(&[128, 256], &[256, 1], ElementKind::F32, 256);
         let k = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         assert_eq!(
             k.to_token(),
-            "sk2|bin|f32|cuda:sm89|ix32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
-            "the canonical f32 cell serializes to the KISS-aligned sk2 token"
+            "sk3|bin|f32|cuda:sm89|ix32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
+            "the canonical f32 cell serializes to the KISS-aligned sk3 token"
         );
     }
 
@@ -1532,7 +1844,7 @@ mod tests {
         );
         let token = k.to_token();
         assert!(
-            token.starts_with("sk2|une|u32|"),
+            token.starts_with("sk3|une|u32|"),
             "the token spells u32: {token}"
         );
         let parsed = StructureKey::from_token(&token).expect("u32 token round-trips");
@@ -1572,7 +1884,7 @@ mod tests {
         // §6.7-0005: Baracuda emits `x<hex>` and never these, but a reader MUST ACCEPT
         // a conformant peer's rank-relative `rall` (all axes) / `rlast` (trailing axis)
         // sentinels rather than decline the whole token. They resolve against `rank`.
-        let base = "sk2|bin|f32|cuda:sm89|ix32|grid|r3|\
+        let base = "sk3|bin|f32|cuda:sm89|ix32|grid|r3|\
                     co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f";
         // `rall` @ rank 3 => all three axis bits => 0b111.
         let k_all = StructureKey::from_token(&format!("{base}|rall")).expect("rall accepted");
@@ -1584,7 +1896,7 @@ mod tests {
         let k_last = StructureKey::from_token(&format!("{base}|rlast")).expect("rlast accepted");
         assert_eq!(k_last.reduce_axes, AxisMask(0b100));
         // `rlast` on a rank-0 space is malformed (no trailing axis) => decline.
-        let r0 = "sk2|une|f32|cuda:sm89|ix32|grid|r0|co/00/v1/d16/f;co/00/v1/d16/f";
+        let r0 = "sk3|une|f32|cuda:sm89|ix32|grid|r0|co/00/v1/d16/f;co/00/v1/d16/f";
         assert_eq!(StructureKey::from_token(&format!("{r0}|rlast")), None);
     }
 
@@ -1732,13 +2044,13 @@ mod tests {
         let _ = StructureKey::from_token(&"a".repeat(200_000));
         // Over-MAX_RANK rank — declines at the rank guard (never reaches operands).
         let _ = StructureKey::from_token(&format!(
-            "sk2|bin|f32|cuda:sm89|ix32|grid|r250|{}|-",
+            "sk3|bin|f32|cuda:sm89|ix32|grid|r250|{}|-",
             "co/00/v4/d16/f;".repeat(50)
         ));
         // In-range rank + over-MAX_OPERANDS operand list — MUST reach parse_operand,
         // then decline gracefully.
         let _ = StructureKey::from_token(&format!(
-            "sk2|bin|f32|cuda:sm89|ix32|grid|r2|{}|-",
+            "sk3|bin|f32|cuda:sm89|ix32|grid|r2|{}|-",
             "co/00/v1/d16/f;".repeat(50)
         ));
         // A valid gemm base with only its 10th (contraction) field corrupted —

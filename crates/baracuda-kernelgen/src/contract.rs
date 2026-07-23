@@ -891,7 +891,8 @@ pub fn contract(
     // the wire per the 2026-07-03 Fuel exchange (documentation-only for Fuel
     // today — launches are provider-internal — but load-bearing for their
     // declared-cost trampoline, and an 8x launch/cost hazard if ever assumed).
-    let cw = crate::cuda::effective_count_width(&crate::plan::build_plan(op, key));
+    let plan = crate::plan::build_plan(op, key);
+    let cw = crate::cuda::effective_count_width(&plan);
     if cw > 1 {
         s.push_str(&format!("  count_unit: vectors_x{cw}\n"));
     } else {
@@ -937,6 +938,37 @@ pub fn contract(
     s.push_str("  bit_stable_on_same_hardware: true\n");
     if let Some(u) = prec_ulp {
         s.push_str(&format!("  max_ulp: {u}\n"));
+    }
+    // KISS-Contract §6.8 `accumulation_type` (sk3 RFC §4.2): a contraction/
+    // reduction-bearing cell declares the dtype its fold accumulates in,
+    // spelled from the SAME closed dtype set as the key's `<acc>` coordinate
+    // (`baracuda_kernel_vocab::dtype_token` — one dtype, two surfaces). A pure
+    // elementwise/permutation cell has no fold, so the field is absent.
+    let acc_dtype = match plan.access {
+        // Gem cells: the key's `<acc>` IS the declaration — emitting from the
+        // key makes the §4.2 contract↔key consistency pin hold by
+        // construction (and `emit_contraction` accumulates in exactly this
+        // dtype: float for f16/bf16/f32/f32-strict, double for f64).
+        crate::ir::Access::Contraction { .. } => key.contraction.map(|c| c.acc),
+        // Reduction-class cells (no key coordinate — the §6.8 declaration is
+        // the only surface): the generated fold's accumulator rule, mirroring
+        // the cuda.rs emitters — F64/F32Strict fold in double, integers fold
+        // native (wrapping), every other float folds up-converted in float.
+        crate::ir::Access::Reduction { .. }
+        | crate::ir::Access::RowReduce { .. }
+        | crate::ir::Access::Scan { .. }
+        | crate::ir::Access::Window { .. } => Some(match plan.dtype {
+            ElementKind::F64 | ElementKind::F32Strict => ElementKind::F64,
+            dt if crate::plan::is_int_dtype(dt) => dt,
+            _ => ElementKind::F32,
+        }),
+        _ => None,
+    };
+    if let Some(a) = acc_dtype {
+        s.push_str(&format!(
+            "  accumulation_type: {}\n",
+            baracuda_kernel_vocab::dtype_token(a)
+        ));
     }
     s.push_str("  audited: true\n");
     s.push_str(&format!(
@@ -1751,6 +1783,60 @@ mod tests {
             crate::derive_pattern(&mm),
             Err(PatternError::NotElementwise)
         ));
+    }
+
+    #[test]
+    fn contract_accumulation_type_matches_key_acc() {
+        use crate::ir::{ContractionAxes, ReduceOp, reduced};
+        // The sk3 RFC §4.2 / KISS-Contract §6.8 pin: a contraction cell's
+        // contract MUST declare `accumulation_type` denoting the SAME dtype as
+        // the key's `<acc>` coordinate, in the SAME closed dtype-token
+        // spelling — one dtype, two surfaces.
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let acc = key.contraction.expect("gem cell").acc;
+        let want = format!(
+            "  accumulation_type: {}\n",
+            baracuda_kernel_vocab::dtype_token(acc)
+        );
+        let c = contract(&mm, &key, &generate(&mm, &key, &Cuda), "cuda").expect("contract");
+        assert!(c.contains(&want), "contract must declare the key's <acc>: {c}");
+        assert!(c.contains("  accumulation_type: f32\n"), "{c}");
+        // The generated skinny kernel actually accumulates in that dtype (a
+        // `float acc`, never `double` — the F32Strict/binary32 discipline).
+        let k = generate(&mm, &key, &Cuda);
+        assert!(k.source.contains("float acc"), "{}", k.source);
+        assert!(!k.source.contains("double acc"), "{}", k.source);
+
+        // A reduction-bearing cell (no key <acc> coordinate — the §6.8 field is
+        // the only surface) declares its fold dtype: an F32Strict sum folds in
+        // double (the precision-first strict-reduce kernel), so it declares f64.
+        let x = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32Strict, 256);
+        let ro = OperandDesc::new(1, &[256], &[1], ElementKind::F32Strict, 256);
+        let rk = structure_key(OpCategory::Reduction, &[x, ro], ArchSku::Sm89);
+        let red = OpDef::reduction("s", 1, &[ElementKind::F32Strict], input(0), ReduceOp::Sum);
+        let cr = contract(&red, &rk, &generate(&red, &rk, &Cuda), "cuda").expect("contract");
+        assert!(
+            cr.contains("  accumulation_type: f64\n"),
+            "strict reduce declares its double fold: {cr}"
+        );
+
+        // A pure elementwise cell has no fold — the field is ABSENT.
+        let ew = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let ek = key_for(3, OpCategory::BinaryElementwise);
+        let ce = contract(&ew, &ek, &generate(&ew, &ek, &Cuda), "cuda").expect("contract");
+        assert!(
+            !ce.contains("accumulation_type"),
+            "no fold, no declaration: {ce}"
+        );
     }
 
     #[test]
@@ -2887,8 +2973,8 @@ mod tests {
 
     #[test]
     fn bundle_kisc_frames_each_admitted_contract_and_drops_the_heading() {
-        let c1 = "kernel: relu\nop_kind: ReluElementwise\naccept: sk2|une|f32\n".to_string();
-        let c2 = "kernel: add\nop_kind: AddElementwise\naccept: sk2|bin|f32\n".to_string();
+        let c1 = "kernel: relu\nop_kind: ReluElementwise\naccept: sk3|une|f32\n".to_string();
+        let c2 = "kernel: add\nop_kind: AddElementwise\naccept: sk3|bin|f32\n".to_string();
         let b = bundle_kisc("cuda", "rev0", &[c1.clone(), c2.clone()], false);
         // Provider front-matter still leads the file.
         assert!(b.starts_with("---\n"), "front matter leads: {b}");
@@ -3083,7 +3169,7 @@ mod tests {
         // required §4.3 blocks.
         for block in [
             "accept:",
-            "structure_key: \"sk2|",
+            "structure_key: \"sk3|",
             "return:",
             "caps:",
             "cost:",

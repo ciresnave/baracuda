@@ -1809,7 +1809,7 @@ mod tests {
         assert!(resp.recipe.decompose.contains("op: Relu"));
         // the link row makes entry_point resolvable at load.
         assert_eq!(resp.link.entry_point, resp.kernel.entry_point);
-        assert!(resp.link.structure_key.starts_with("sk2|"));
+        assert!(resp.link.structure_key.starts_with("sk3|"));
     }
 
     #[test]

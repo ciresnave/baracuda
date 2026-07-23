@@ -78,7 +78,8 @@ pub use ops::{
 pub use plan::{PlanPreference, PrecisionGuarantee};
 pub use sku::{BackendKind, KernelSku, OpCategory};
 pub use structure_key::{
-    AxisMask, Contiguity, ContractionKey, DivBucket, IdxWidth, MAX_OPERANDS, MAX_RANK, OperandDesc,
-    OperandKey, QuantFacts, QuantFamily, STRUCTURE_KEY_VERSION, ScalePlacement, SizeClass,
-    StructureKey, SymExtent, SymKind, VecWidth, WorkClass, structure_key, structure_key_token,
+    AxisMask, Contiguity, ContractionKey, DivBucket, IdxWidth, MAX_OPERANDS, MAX_RANK, MpCode,
+    OperandDesc, OperandKey, QuantFacts, QuantFamily, STRUCTURE_KEY_VERSION, ScalePlacement,
+    SizeClass, StructureKey, SymExtent, SymKind, VecWidth, WorkClass, dtype_token, structure_key,
+    structure_key_token,
 };
