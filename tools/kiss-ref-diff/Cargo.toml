@@ -14,11 +14,11 @@ name = "kiss-ref-diff"
 path = "main.rs"
 
 [dependencies]
-# e1b22fd = the eval_recipe lock-packet surface (004e1a4) + the conformance
-# corpus / never-panic fuzz suites (test-only, same API).
-kiss-ref-core = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "e1b22fd" }
-kiss-ops-vocab = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "e1b22fd" }
-kiss-classify-vocab = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "e1b22fd" }
+# 417cc2e = 004e1a4 surface + conformance/fuzz suites + Node::Flip + scatter
+# broadcast-updates (additive; Provisional pending the KISS ruling).
+kiss-ref-core = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "417cc2e" }
+kiss-ops-vocab = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "417cc2e" }
+kiss-classify-vocab = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "417cc2e" }
 baracuda-kernelgen = { path = "../../crates/baracuda-kernelgen" }
 baracuda-kernel-vocab = { path = "../../crates/baracuda-kernel-vocab" }
 # Step-3a device leg: JIT the generated kernel via NVRTC, launch on the GPU.

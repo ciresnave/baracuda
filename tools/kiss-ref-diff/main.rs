@@ -374,9 +374,21 @@ fn parse_expr(s: &str, b: &mut DagBuilder) -> Result<usize, String> {
                 combine,
             }
         }
-        // Reverse scans emit `flip[axis](…)` — kiss-ref v1 has no flip node:
-        // a TYPED converter miss, never a silent mis-encode.
-        "flip" => return Err("`flip` has no kiss-ref v1 node (reverse-scan miss)".into()),
+        // `flip[<axis>](x)` — kiss-ref `Node::Flip` (417cc2e, Provisional
+        // pending the KISS registry ruling): reverse along axis, a raw-bit
+        // move, ExactByte. NOTE the asymmetry is deliberate: the CONVERTER can
+        // consume flip text, but Baracuda's EMITTER keeps reverse scans an
+        // honest miss until `flip` REGISTERS in the KISS-Ops closed set (the
+        // #68 anti-fork witness gates on the registry, not on kiss-ref).
+        "flip" => {
+            if attrs.len() != 1 || args.len() != 1 {
+                return Err(format!("flip shape: `{s}`"));
+            }
+            Node::Flip {
+                child: parse_expr(args[0], b)?,
+                axis: attrs[0].parse().map_err(|e| format!("axis `{s}`: {e}"))?,
+            }
+        }
         _ if !attrs.is_empty() => {
             return Err(format!("unknown bracketed node `{name}[…]`"));
         }
@@ -1025,32 +1037,42 @@ fn main() {
 
     // (12) bincount — the self-indexing scatter (`in0` is BOTH the only op
     // input and the index operand; the value is const(1)): zero value-lane
-    // inputs, dest binds slot 0, x rides `indices`. SEAM FINDING (flagged to
-    // kiss-ref, 2026-07-23): Baracuda emits a RANK-0 `const(1)` as the scatter
-    // updates (conceptually broadcast over the index count — the same rank-0
-    // broadcast kiss-ref's own `Gather.base` performs), but kiss-ref's Scatter
-    // requires updates shaped like the index -> typed ShapeMismatch. Whether
-    // scalar updates kernel-broadcast is a §6.11/#67 grammar ruling; until
-    // then this vector pins the CURRENT typed-decline behavior.
+    // inputs, dest binds slot 0, x rides `indices`. The 2c seam finding
+    // (rank-0 updates) RESOLVED at kiss-ref 417cc2e: scatter updates
+    // broadcast to the write shape under the general §6.11-0001 rules
+    // (Provisional pending the KISS ruling) — their corpus golden R10 is
+    // EXACTLY this shape, so this is now a cross-implementation golden.
     let bc = OpDef::bincount("bincount", ElementKind::I32);
     let text = semantics_dag(&bc).expect("bincount recipe");
     println!("  bincount emits: {text}");
     let dag = recipe_to_flatdag(&bc, 1).expect("bincount converts");
     let dest = Tensor::from_vec(vec![0.0f32; 4], &[4]).unwrap();
     let x = IndexTensor::new(vec![0, 2, 0, 3, 2, 2], &[6], Dtype::I32).unwrap();
-    match eval_recipe(&dag, &[dest], &[], &[x]) {
-        Err(e) => println!(
-            "  bincount: OPEN SEAM (typed, not a crash) — rank-0 const updates vs \
-             index-shaped updates: {e:?} (routed to the §6.11/#67 ruling)"
-        ),
-        Ok(r) => {
-            // If kiss-ref adopts rank-0 updates broadcast, this becomes the
-            // golden path: counts [2,0,3,1].
-            let got: Vec<f32> = r.outputs[0].clone().into_data();
-            assert_bits_eq("bincount", &[2.0, 0.0, 3.0, 1.0], &got);
-            println!("  bincount OK — {got:?} (broadcast-updates adopted)");
-        }
-    }
+    let r = eval_recipe(&dag, &[dest], &[], &[x]).expect("bincount eval (R10 golden)");
+    let got: Vec<f32> = r.outputs[0].clone().into_data();
+    assert_bits_eq("bincount", &[2.0, 0.0, 3.0, 1.0], &got);
+    println!("  bincount OK — {got:?} (= kiss-ref corpus golden R10)");
+
+    // (13) The converter's flip arm vs kiss-ref Node::Flip (417cc2e) — fed the
+    // WOULD-BE reverse-scan emission text DIRECTLY, because Baracuda's emitter
+    // correctly keeps reverse scans an honest miss until `flip` registers in
+    // the KISS-Ops closed set. flip∘prefix_scan∘flip = reverse cumsum.
+    let mut b = DagBuilder {
+        nodes: Vec::new(),
+        memo: HashMap::new(),
+        rank: 2,
+        imap: IndexMap { index_ops: vec![] },
+        n_inputs: 1,
+    };
+    let root = parse_expr("flip[1](prefix_scan[sum,1,incl](flip[1](in0)))", &mut b)
+        .expect("flip text converts");
+    let dag = FlatDag::new(b.nodes, vec![root]);
+    let x = Tensor::from_vec(vec![1.0f32, 2.0, 4.0, 8.0], &[1, 4]).unwrap();
+    let r = eval_recipe(&dag, &[x], &[], &[]).expect("reverse cumsum eval");
+    let got: Vec<f32> = r.outputs[0].clone().into_data();
+    // reverse cumsum of [1,2,4,8] = suffix sums = [15,14,12,8].
+    assert_bits_eq("flip∘scan∘flip", &[15.0, 14.0, 12.0, 8.0], &got);
+    println!("  flip[1](prefix_scan(flip[1])) OK — {got:?} (reverse-scan re-enable is STAGED; emission stays gated on registry)");
 
     println!(
         "steps 2+2b+3a+3b(partial)+2c OK: emitted-recipe -> FlatDag converter (elementwise + \
