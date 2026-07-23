@@ -509,16 +509,13 @@ pub fn structure_key(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) ->
         IdxWidth::Idx32
     };
 
-    let (dtype, work) = match operands.first() {
-        // The STRUCT keeps the raw operand dtype — `F32Strict` included: it is
-        // the in-process MathPrecision carrier (kernel selection, plan.dtype,
-        // the gem `<mp>` derivation). Only the TOKEN codec folds it to the
-        // canonical `f32` spelling (sk3 D4 — `f32s` retired from the closed
-        // set; on a gem cell the strict axis re-surfaces as `<mp>=st`, on a
-        // non-gem cell it is out-of-band per the RFC §4.1.5 / §6.6-0018).
-        Some(p) => (p.dtype, work_class(p)),
-        None => (ElementKind::F32, WorkClass::OneWarp),
-    };
+    // The primary DTYPE is operand-0's (the §6.6-0005 primary-dtype path — the
+    // STRUCT keeps the raw dtype, `F32Strict` included, as the in-process
+    // MathPrecision carrier; only the TOKEN codec folds it to `f32` per sk3 D4).
+    // The WORK class is FRAME-MAX across ALL operands (§6.5-0010/§6.6-0013),
+    // NOT operand-0 alone — orthogonal axes, computed from different reads.
+    let dtype = operands.first().map_or(ElementKind::F32, |p| p.dtype);
+    let work = frame_work_class(operands);
     // Raw iteration rank = the widest operand rank (output rank for elementwise).
     let rank = operands.iter().map(|o| o.rank).max().unwrap_or(0);
 
@@ -866,10 +863,30 @@ fn max_touched_offset(od: &OperandDesc) -> i64 {
     off
 }
 
-fn work_class(od: &OperandDesc) -> WorkClass {
+/// Total-work size class from the **iteration-frame numel** — the per-axis max
+/// extent across ALL operands (KISS-CLASSIFY §6.5-0010 / §6.6-0013 FRAME-MAX,
+/// the ruled work-class semantics), NOT operand-0's numel and NOT the output
+/// frame. The frame extent on axis `d` is `max` over operands of that operand's
+/// `shape[d]` (or `1` where `d >= operand.rank`), matching the rank-aligned
+/// broadcast frame; its product, thresholded, is the work class.
+///
+/// This distinguishes a skinny cell whose operand-0 is small but whose frame is
+/// large — e.g. a contraction `lhs[8,8]·rhs[8,4096]→out[8,4096]`: operand-0
+/// numel is `64` (block), but the frame is `max(8,8,8)·max(8,4096,4096) =
+/// 8·4096 = 32768` (grid). Reading operand-0 alone mislabels it block; frame-max
+/// (and Fuel's deriver, and the KISS golden) say grid.
+fn frame_work_class(operands: &[OperandDesc]) -> WorkClass {
+    let max_rank = operands.iter().map(|o| o.rank as usize).max().unwrap_or(0);
     let mut numel: i64 = 1;
-    for d in 0..od.rank as usize {
-        numel = numel.saturating_mul(od.shape[d].max(0));
+    for d in 0..max_rank {
+        // Per-axis frame extent = max across operands (absent axis ⇒ extent 1,
+        // the rank-aligned broadcast identity).
+        let frame_d = operands
+            .iter()
+            .map(|o| if d < o.rank as usize { o.shape[d].max(0) } else { 1 })
+            .max()
+            .unwrap_or(1);
+        numel = numel.saturating_mul(frame_d);
     }
     if numel <= 32 {
         WorkClass::OneWarp
@@ -1366,6 +1383,61 @@ mod contraction_key_tests {
         let nd = OperandDesc::new(3, &[8, 8, 4096], &[1, 8, 64], ElementKind::F32, 256);
         let knd = structure_key(OpCategory::Gemm, &[nd, rhs, out], ArchSku::Sm89);
         assert!(knd.contraction.is_none(), "non-dense rank-3 declines");
+    }
+
+    #[test]
+    fn work_class_is_frame_max_across_operands_not_operand_zero() {
+        // KISS-CLASSIFY §6.5-0010/§6.6-0013 FRAME-MAX ruling (Eric 2026-07-23,
+        // KISS #82 finding 2 / PR #85): the work class is the per-axis max
+        // extent across ALL operands, NOT operand-0's numel and NOT the output
+        // frame. The two #85 disambiguating goldens pin frame-max against both
+        // alternative readings.
+
+        // Cell A — lhs[8,4096]·rhs[4096,8]→out[8,8]. frame-max =
+        // max(8,4096)·max(4096,8) = 4096·4096 → grid; the OUTPUT frame (8·8=64)
+        // would read block. Catches the output-frame reading.
+        let a_lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let a_rhs = OperandDesc::new(2, &[4096, 8], &[8, 1], ElementKind::F32, 256);
+        let a_out = OperandDesc::new(2, &[8, 8], &[8, 1], ElementKind::F32, 256);
+        let ka = structure_key(OpCategory::Gemm, &[a_lhs, a_rhs, a_out], ArchSku::Sm89);
+        assert_eq!(
+            ka.work,
+            WorkClass::GridStride,
+            "frame-max (4096²) is grid, not the output-frame block reading"
+        );
+
+        // Cell B — lhs[8,8]·rhs[8,4096]→out[8,4096]. frame-max =
+        // max(8,8,8)·max(8,4096,4096) = 8·4096 = 32768 → grid; OPERAND-0's numel
+        // (8·8=64) would read block. Catches the operand-0-numel reading (the
+        // bug this fix closes — under the old `work_class(operands.first())`
+        // this derived block).
+        let b_lhs = OperandDesc::new(2, &[8, 8], &[8, 1], ElementKind::F32, 256);
+        let b_rhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let b_out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let kb = structure_key(OpCategory::Gemm, &[b_lhs, b_rhs, b_out], ArchSku::Sm89);
+        assert_eq!(
+            kb.work,
+            WorkClass::GridStride,
+            "frame-max (8·4096) is grid, not the operand-0-numel block reading"
+        );
+
+        // Elementwise sanity: rank-aligned operands ⇒ frame-max ≡ operand-0
+        // numel (the zero-churn case for every shipped elementwise golden).
+        let e = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let ke = structure_key(OpCategory::BinaryElementwise, &[e, e, e], ArchSku::Sm89);
+        assert_eq!(ke.work, WorkClass::GridStride);
+
+        // A genuine size-1 operand-0 broadcast still reads the frame from the
+        // larger operand: a[1,1] (numel 1, warp) with b[64,64] (4096, grid) ⇒
+        // frame-max grid, never warp.
+        let s = OperandDesc::new(2, &[1, 1], &[1, 1], ElementKind::F32, 256);
+        let big = OperandDesc::new(2, &[64, 64], &[64, 1], ElementKind::F32, 256);
+        let ks = structure_key(OpCategory::BinaryElementwise, &[s, big, big], ArchSku::Sm89);
+        assert_eq!(
+            ks.work,
+            WorkClass::GridStride,
+            "a small operand-0 must not shrink the frame below the larger operand"
+        );
     }
 
     #[test]
