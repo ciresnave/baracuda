@@ -317,10 +317,11 @@ fn parse_expr(s: &str, b: &mut DagBuilder) -> Result<usize, String> {
         // `gather[<axis>,<oob>,<index_dtype>](data, in<k>)` — child order
         // data-then-index (Fuel's pinned child_edges). The index child maps to
         // `IndexRef::Slot` (kiss-ref's separate index-lane slot space);
-        // `base: None` = the pre-§6.11-ruling semantics (Skip on an
-        // actually-OOB read stays kiss-ref's typed error — the seam is
-        // Provisional, so the differentials keep gather indices in-range or
-        // non-Skip).
+        // `base: None` + Skip is RULED LEGAL (Gap 1 = option 1, DYNAMIC
+        // base requirement, 2026-07-23): the in-place skip-gather stands
+        // as-is; only an ACTUAL OOB read without a base is the typed error
+        // (kiss-ref Error::GatherSkipNoBase). Differentials keep gather
+        // indices in-range or non-Skip so the error path stays untraveled.
         "gather" => {
             if attrs.len() != 3 || args.len() != 2 {
                 return Err(format!("gather shape: `{s}`"));
@@ -374,12 +375,12 @@ fn parse_expr(s: &str, b: &mut DagBuilder) -> Result<usize, String> {
                 combine,
             }
         }
-        // `flip[<axis>](x)` — kiss-ref `Node::Flip` (417cc2e, Provisional
-        // pending the KISS registry ruling): reverse along axis, a raw-bit
-        // move, ExactByte. NOTE the asymmetry is deliberate: the CONVERTER can
-        // consume flip text, but Baracuda's EMITTER keeps reverse scans an
-        // honest miss until `flip` REGISTERS in the KISS-Ops closed set (the
-        // #68 anti-fork witness gates on the registry, not on kiss-ref).
+        // `flip[<axis>](x)` — kiss-ref `Node::Flip` (417cc2e): reverse along
+        // axis, a raw-bit move, ExactByte. NOTE the asymmetry is deliberate:
+        // the CONVERTER can consume flip text, but Baracuda's EMITTER keeps
+        // reverse scans an honest miss until `flip` REGISTERS in the KISS-Ops
+        // closed set via the #67 grammar row (the #68 anti-fork witness gates
+        // on the registry, not on kiss-ref's node set).
         "flip" => {
             if attrs.len() != 1 || args.len() != 1 {
                 return Err(format!("flip shape: `{s}`"));
@@ -1040,7 +1041,7 @@ fn main() {
     // inputs, dest binds slot 0, x rides `indices`. The 2c seam finding
     // (rank-0 updates) RESOLVED at kiss-ref 417cc2e: scatter updates
     // broadcast to the write shape under the general §6.11-0001 rules
-    // (Provisional pending the KISS ruling) — their corpus golden R10 is
+    // (RULED as general broadcast, 2026-07-23) — their corpus golden R10 is
     // EXACTLY this shape, so this is now a cross-implementation golden.
     let bc = OpDef::bincount("bincount", ElementKind::I32);
     let text = semantics_dag(&bc).expect("bincount recipe");
