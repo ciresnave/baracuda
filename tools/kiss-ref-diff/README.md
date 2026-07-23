@@ -30,6 +30,12 @@ duplicated name table** (the drift the consolidation exists to kill).
 - **Step 3a, on-device**: NVRTC-JIT'd generated kernels on the live GPU vs
   kiss-ref, under the §6.8 conforming comparator (both-NaN equal — arithmetic
   REMINTS NaN payloads per device; ±0 stays one ULP apart).
+- **Step 3b (partial), on-device folds**: the block-tree last-axis reduce
+  kernel (`sum` + NaN-propagating `max`) vs kiss-ref's serial fold —
+  different association, bit-stable on exactly-representable values (the OIN
+  class collapsing, per kiss-ref's tolerance-basis preview). The
+  general-value tolerance leg joins when kiss-ref's fold-depth-scaled bound
+  arrives.
 - **Step 2c, indexed ops**: gather/scatter through `IndexRef::Slot` with the
   full lane split (value binds renumber past index operands; index data rides
   `indices`); scatter's explicit dest synthesized (the §6.11 explicit-dest

@@ -411,6 +411,59 @@ fn recipe_to_flatdag(op: &OpDef, rank: usize) -> Result<FlatDag, String> {
 }
 
 // ===========================================================================
+// Step 3b (partial) — the ON-DEVICE FOLD leg: the block-tree last-axis reduce
+// kernel `(in0, out, n_out, k)` (grid-stride rows, per-row tree; block must be
+// a multiple of 32 for the warp shuffles). With exactly-representable values
+// the honest OrderInvariantNondeterministic class COLLAPSES to bit-stable
+// (kiss-ref's tolerance-basis preview: OIN cells are value-set-conditioned);
+// the general-value tolerance leg joins when kiss-ref's fold-depth bound
+// arrives.
+// ===========================================================================
+
+fn device_reduce_leg(
+    dc: &DeviceCtx,
+    op: &OpDef,
+    rows: i64,
+    cols: i64,
+    input: &[f32],
+) -> Vec<f32> {
+    use baracuda_driver::{DeviceBuffer, Module, Stream};
+    let ind = OperandDesc::new(2, &[rows, cols], &[cols, 1], ElementKind::F32, 16);
+    let outd = OperandDesc::new(1, &[rows], &[1], ElementKind::F32, 16);
+    let key = structure_key(OpCategory::Reduction, &[ind, outd], ArchSku::Sm89);
+    let kernel = baracuda_kernelgen::generate(op, &key, &baracuda_kernelgen::Cuda);
+    if std::env::var_os("POC_DUMP").is_some() {
+        eprintln!("--- {} ({}) ---\n{}", op.name, kernel.name, kernel.source);
+    }
+    let ptx = baracuda_nvrtc::Program::compile(&kernel.source, "gen_reduce.cu", &[&dc.arch_flag])
+        .unwrap_or_else(|e| panic!("{}: nvrtc: {e}\n{}", op.name, kernel.source));
+    let stream = Stream::new(&dc.ctx).expect("stream");
+    let module = Module::load_ptx(&dc.ctx, &ptx).expect("load_ptx");
+    let func = module.get_function(&kernel.name).expect("get_function");
+    let d_in = DeviceBuffer::from_slice(&dc.ctx, input).expect("upload");
+    let d_out: DeviceBuffer<f32> = DeviceBuffer::new(&dc.ctx, rows as usize).expect("out");
+    let (in_ptr, out_ptr) = (d_in.as_raw(), d_out.as_raw());
+    // SAFETY: matches the generated `(const float* in0, float* out,
+    // long long n_out, long long k)` signature; block = 64 (multiple of 32).
+    unsafe {
+        func.launch()
+            .grid((rows as u32, 1, 1))
+            .block((64, 1, 1))
+            .stream(&stream)
+            .arg(&in_ptr)
+            .arg(&out_ptr)
+            .arg(&rows)
+            .arg(&cols)
+            .launch()
+            .expect("launch");
+    }
+    stream.synchronize().expect("sync");
+    let mut host = vec![0.0f32; rows as usize];
+    d_out.copy_to_host(&mut host).expect("copy back");
+    host
+}
+
+// ===========================================================================
 // The differential harness.
 // ===========================================================================
 
@@ -885,6 +938,24 @@ fn main() {
         );
     }
 
+    // ---- Step 3b (partial): on-device folds vs kiss-ref. --------------------
+    // The [4,8] exact-representable grid: the device block-tree fold order
+    // differs from kiss-ref's serial fold, but every partial sum is exactly
+    // representable, so the OIN class collapses to bit-stable — compared under
+    // the §6.8 conforming comparator (the NaN row's payload may remint).
+    println!("step-3b (partial) on-device fold differential:");
+    for (op, label) in [
+        (&rsum, "reduce[sum,last,nokd]"),
+        (&rmax, "reduce[max,last,nokd]"),
+    ] {
+        let shapes = vec![vec![4usize, 8]];
+        let (_, r) = kiss_ref_leg(op, &shapes, std::slice::from_ref(&grid), &[]);
+        let expect: Vec<f32> = r.outputs[0].clone().into_data();
+        let got = device_reduce_leg(&dc, op, 4, 8, &grid);
+        assert_conforming_eq(&format!("device:{label}"), &expect, &got);
+        println!("  {label} OK — GPU block-tree fold §6.8-exact vs kiss-ref: {got:?}");
+    }
+
     // ---- Step 2c: gather/scatter through IndexRef (CPU lane). ---------------
     println!("step-2c indexed-op differential (emitted recipe -> IndexRef -> eval_recipe):");
 
@@ -982,7 +1053,8 @@ fn main() {
     }
 
     println!(
-        "PoC steps 2+2b+3a+2c OK: emitted-recipe -> FlatDag converter (elementwise + folds \
-         + indexed IndexRef ops) matches, and the GENERATED CUDA kernels match kiss-ref ON DEVICE."
+        "steps 2+2b+3a+3b(partial)+2c OK: emitted-recipe -> FlatDag converter (elementwise + \
+         folds + indexed IndexRef ops) matches, and the GENERATED CUDA kernels — elementwise \
+         AND block-tree folds — match kiss-ref ON DEVICE."
     );
 }
