@@ -1447,6 +1447,73 @@ mod contraction_key_tests {
     }
 
     #[test]
+    fn zero_length_inner_run_derives_scalar_vec_width_not_v4() {
+        // §6.5-0009(c) E=0 divisibility trap (KISS #82/#87, cross-impl sweep
+        // 2026-07-24): `inner_extent % L == 0` is VACUOUSLY TRUE at E==0, so a
+        // ladder without a zero guard emits v4 for a zero-length run. Baracuda
+        // is structurally immune — `inner_axis` selects ONLY a strictly-non-unit
+        // axis (`shape[d] > 1`), so the divisibility ladder never sees E ∈ {0,1}.
+        // This pins the OUTCOME (E=0 → Scalar/v1) so a future `inner_axis`
+        // refactor that stopped excluding non-unit axes is caught. (KISS had the
+        // bug + fixed it #87; Fuel had it + fixing; Baracuda never had it.)
+
+        // A bare empty operand `[0]` / `[0,0]`: no axis is > 1, so inner_axis is
+        // None → Scalar via the guard, and div bucket is Any — a consistent
+        // (v1, da) pair, never the (v4, da) inconsistency the bug produces.
+        for shape in [&[0i64][..], &[0, 0][..]] {
+            let z = OperandDesc::new(
+                shape.len(),
+                shape,
+                &vec![1i64; shape.len()],
+                ElementKind::F32,
+                256,
+            );
+            let k = structure_key(OpCategory::UnaryElementwise, &[z, z], ArchSku::Sm89);
+            assert_eq!(
+                k.operands[0].vec_width,
+                VecWidth::Scalar,
+                "empty operand {shape:?} must derive Scalar, never a vectorized width"
+            );
+            assert_eq!(k.operands[0].inner_div, DivBucket::Any);
+        }
+
+        // MIXED case `[4, 0]` (zero-length INNER axis): `inner_axis` skips axis 1
+        // (0, not > 1) and picks axis 0 (4); a dense `[4,0]` has axis-0 stride 0,
+        // so it lands Scalar before the divisibility loop. Pins the outcome
+        // (a zero-inner operand → Scalar, never v4).
+        let inner_zero = OperandDesc::new(2, &[4, 0], &[0, 1], ElementKind::F32, 256);
+        let kz = structure_key(
+            OpCategory::UnaryElementwise,
+            &[inner_zero, inner_zero],
+            ArchSku::Sm89,
+        );
+        assert_eq!(
+            kz.operands[0].vec_width,
+            VecWidth::Scalar,
+            "[4,0] must derive Scalar"
+        );
+
+        // The load-bearing MECHANISM pin — `[0, 256]` (zero OUTER axis, non-zero
+        // unit-stride inner): `inner_axis` SKIPS the zero axis 0 and picks axis 1
+        // (256), so the divisibility ladder DOES run, on ext=256 (never the 0),
+        // and correctly derives V4. This proves the vacuous-`E % L == 0`-at-0 path
+        // is unreachable: a zero axis present in the operand does not corrupt the
+        // ladder, because `inner_axis` fed it the real 256, not the 0.
+        let outer_zero = OperandDesc::new(2, &[0, 256], &[256, 1], ElementKind::F32, 256);
+        let ko = structure_key(
+            OpCategory::UnaryElementwise,
+            &[outer_zero, outer_zero],
+            ArchSku::Sm89,
+        );
+        assert_eq!(
+            ko.operands[0].vec_width,
+            VecWidth::V4,
+            "[0,256] must derive V4 from the real 256-inner — the zero axis is \
+             skipped by inner_axis, never fed to the divisibility ladder"
+        );
+    }
+
+    #[test]
     fn non_gemm_and_malformed_gemm_stay_none_and_byte_identical() {
         // A non-GEMM cell: no contraction facts, token has exactly 9 fields —
         // byte-identical to the pre-contraction codec.
