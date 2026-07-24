@@ -54,15 +54,27 @@ driver-free vocab; the IR-to-wire derivation is kernelgen.
 ### Layer 1 — internal shape oracle (`baracuda-kernelgen/src/shape.rs`)
 
 ```rust
-/// The concrete output shape(s) of `op` given its operands' concrete shapes,
-/// or a typed gap for a symbolic / data-dependent extent.
-pub fn output_shape(op: &OpDef, operand_shapes: &[Vec<i64>])
-    -> Result<Vec<Vec<i64>>, ShapeGap>;
+/// The concrete output-0 shape of `op` given its INPUT operand shapes, or a
+/// typed error (a surfaced symbolic gap, a not-derivable in-place/runtime
+/// extent, a missing input, or an out-of-range axis).
+pub fn output_shape(op: &OpDef, input_shapes: &[Vec<i64>])
+    -> Result<Vec<i64>, ShapeError>;
 ```
 
 Covers **every shipped `Access` variant**, including pooling's arithmetic. This is
 the real capability gain — kernelgen now *knows* every output shape — and is the
 validation target against the CPU oracle.
+
+**Return type (v1 decision):** the oracle returns the single **output-0** shape,
+not `Vec<Vec<i64>>`. v1's only multi-output op is `RowSort` with `SortOut::Both`,
+whose values and indices outputs have **identical** shapes, so a per-output
+vector would be a vector of duplicates (YAGNI). The error is a typed `ShapeError`
+enum — `Gap` (§6.20-0004 symbolic extent), `NotDerivable` (in-place scatter dest
+/ runtime `k_out`), `MissingInput`, `AxisOutOfRange` — richer than a bare gap so
+the not-derivable and out-of-range cases stay distinct at the call site. The
+input is the op's **input** operand shapes only (deriving the output *from* the
+inputs is the point). Should a future op gain outputs with differing shapes, the
+signature widens then, when there is a real second shape to return.
 
 ### Layer 2 — §6.20 wire codec (`baracuda-kernel-vocab/src/shape_expr.rs`)
 
