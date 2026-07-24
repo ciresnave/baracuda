@@ -10,7 +10,7 @@
 //! See `docs/superpowers/specs/2026-07-23-shape-oracle-design.md`.
 
 use crate::ir::{Access, AxisRole, OpDef, ReadIndex, SortLimit, WriteIndex};
-use baracuda_kernel_vocab::MAX_RANK;
+use baracuda_kernel_vocab::{Axis, DimExpr, MAX_RANK, ShapeExpr};
 
 /// Sentinel marking a symbolic / data-dependent extent in a caller-supplied
 /// input shape. Any op whose output depends on a symbolic extent yields
@@ -298,6 +298,150 @@ fn shape_of(input_shapes: &[Vec<i64>], i: usize) -> Result<&Vec<i64>, ShapeError
         .ok_or(ShapeError::MissingInput { index: i })
 }
 
+// ===========================================================================
+// The §6.20 bridge — each op's wire-level shape rule
+// ===========================================================================
+
+/// How an op's output shape is expressed in the §6.20 surface.
+///
+/// Most ops carry **no** `ShapeExpr`: their shape is derived from semantics
+/// (§6.20-0007/0008). Only the irreducible free cases carry an expression, and
+/// the multi-axis arithmetic cases need constructors that are still reserved.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ShapeRuleForm {
+    /// The output equals a referenced operand's whole shape.
+    Whole(ShapeExpr),
+    /// The shape is derived from the op's existing attributes, not a shape
+    /// expression — `attr` names which ones (§6.20-0007/0008).
+    Semantic {
+        /// The attribute(s) the shape derives from.
+        attr: &'static str,
+    },
+    /// A single free dimension expressed as a [`DimExpr`].
+    Dim(DimExpr),
+    /// The rule needs a constructor that is **reserved** at this vocabulary
+    /// version (`WithDim` 0x0A / `Dims` 0x0B) and enters through the extension
+    /// registry (umbrella §6.4 — KISS #80). Emitting anything else here would
+    /// be a fabricated shape, so this is a typed, honest gap.
+    NeedsReservedConstructor {
+        /// The reserved constructor required (`"WithDim"` or `"Dims"`).
+        constructor: &'static str,
+        /// Why this op needs it.
+        why: &'static str,
+    },
+    /// The output shape is not a function of the inputs at all (an in-place
+    /// destination, or a runtime-supplied extent).
+    NotDerivable {
+        /// Why the shape is caller-supplied.
+        reason: &'static str,
+    },
+}
+
+/// The `DimExpr` for a windowed (pooled) axis — the wire form of
+/// [`windowed_extent`]: `(Extent(operand, axis) + pad_lo + pad_hi
+/// − dilation·(size−1) − 1) ÷ stride + 1`.
+///
+/// Built even while `WithDim` is reserved, so the arithmetic form can be
+/// evaluated against the concrete oracle and proven equivalent before the wire
+/// opens.
+#[must_use]
+pub fn pooled_axis_dim_expr(
+    operand: u8,
+    axis: u8,
+    size: u8,
+    stride: u8,
+    dilation: u8,
+    pad_lo: u8,
+    pad_hi: u8,
+) -> DimExpr {
+    let c = |v: i64| Box::new(DimExpr::Const(v));
+    let padded = DimExpr::Add(
+        Box::new(DimExpr::Extent(operand, Axis::Idx(axis))),
+        c(i64::from(pad_lo) + i64::from(pad_hi)),
+    );
+    // effective window span = dilation*(size-1) + 1
+    let effective = i64::from(dilation) * (i64::from(size) - 1) + 1;
+    let span = DimExpr::Sub(Box::new(padded), c(effective));
+    DimExpr::Add(
+        Box::new(DimExpr::Div(Box::new(span), c(i64::from(stride)))),
+        c(1),
+    )
+}
+
+/// The §6.20 wire-level shape rule for `op`.
+///
+/// `input_shapes` is consulted only to resolve the `SameAs`-frame guard (which
+/// operand, if any, carries the broadcast frame); the classification itself is
+/// structural.
+#[must_use]
+pub fn shape_rule_form(op: &OpDef, input_shapes: &[Vec<i64>]) -> ShapeRuleForm {
+    if !matches!(op.write_index, WriteIndex::Direct) {
+        return ShapeRuleForm::NotDerivable {
+            reason: "in-place scatter: the destination is the output buffer, not an input operand",
+        };
+    }
+    if op
+        .read_index
+        .iter()
+        .any(|r| !matches!(r, ReadIndex::Direct))
+    {
+        return ShapeRuleForm::Semantic {
+            attr: "gather axis + index operand shape",
+        };
+    }
+    match &op.access {
+        Access::Elementwise => same_as_frame_or_dims(input_shapes),
+        // RowReduce and Scan are shape-preserving: the output equals input 0.
+        Access::RowReduce { .. } | Access::Scan { .. } => {
+            ShapeRuleForm::Whole(ShapeExpr::SameAs(0))
+        }
+        Access::Reduction { .. } => ShapeRuleForm::Semantic {
+            attr: "reduce_axes + keepdim",
+        },
+        Access::Contraction { .. } => ShapeRuleForm::Semantic {
+            attr: "contraction axis roles (M/N/K)",
+        },
+        Access::Window { .. } => ShapeRuleForm::NeedsReservedConstructor {
+            constructor: "WithDim",
+            why: "the pooled axis is single-axis extent arithmetic on one operand",
+        },
+        Access::RowSort { limit, .. } => match limit {
+            SortLimit::Full => ShapeRuleForm::Whole(ShapeExpr::SameAs(0)),
+            SortLimit::TopK => ShapeRuleForm::NeedsReservedConstructor {
+                constructor: "WithDim",
+                why: "the trailing axis is replaced by the runtime k_out param",
+            },
+        },
+        Access::Im2Col { .. } => ShapeRuleForm::NeedsReservedConstructor {
+            constructor: "Dims",
+            why: "a fully assembled multi-axis shape with no single operand to extend",
+        },
+        // Every shipped Access variant is now covered, so this arm is presently
+        // unreachable — but `Access` grows over time (§6.20 tracks §6.13's
+        // vocabulary), and it exists so a NEWLY ADDED variant is an honest miss
+        // rather than a wrong classification or a silent compile-time gap.
+        #[allow(unreachable_patterns)]
+        _ => ShapeRuleForm::NotDerivable {
+            reason: "access variant not yet covered by the shape oracle",
+        },
+    }
+}
+
+/// `SameAs(i)` for the first input whose shape IS the broadcast frame; if no
+/// single input carries the frame, the rule needs the reserved `Dims`
+/// constructor rather than naming a wrong operand (the `a[N,1] · b[1,M]`
+/// degradation edge).
+fn same_as_frame_or_dims(input_shapes: &[Vec<i64>]) -> ShapeRuleForm {
+    let frame = broadcast_frame(input_shapes);
+    match input_shapes.iter().position(|s| *s == frame) {
+        Some(i) => ShapeRuleForm::Whole(ShapeExpr::SameAs(i as u8)),
+        None => ShapeRuleForm::NeedsReservedConstructor {
+            constructor: "Dims",
+            why: "the broadcast frame equals no single input's shape",
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -578,5 +722,121 @@ mod tests {
             output_shape(&ic_w, &[vec![1, 2, 4, 4]]),
             Err(ShapeError::InvalidStride { .. })
         ));
+    }
+
+    #[test]
+    fn elementwise_lowers_to_same_as_when_an_input_carries_the_frame() {
+        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        // input 0 carries the full frame -> SameAs(0)
+        assert_eq!(
+            shape_rule_form(&op, &[vec![128, 256], vec![128, 256]]),
+            ShapeRuleForm::Whole(ShapeExpr::SameAs(0))
+        );
+        // input 1 carries it, input 0 does not -> SameAs(1)
+        assert_eq!(
+            shape_rule_form(&op, &[vec![1, 256], vec![128, 256]]),
+            ShapeRuleForm::Whole(ShapeExpr::SameAs(1))
+        );
+        // NO input carries the frame (a[N,1] . b[1,M] -> [N,M]) -> the
+        // SameAs-frame guard degrades to the reserved Dims constructor rather
+        // than naming a wrong operand.
+        assert_eq!(
+            shape_rule_form(&op, &[vec![128, 1], vec![1, 256]]),
+            ShapeRuleForm::NeedsReservedConstructor {
+                constructor: "Dims",
+                why: "the broadcast frame equals no single input's shape",
+            }
+        );
+    }
+
+    #[test]
+    fn semantic_ops_carry_no_shape_expr() {
+        use crate::ir::{ContractionAxes, OobPolicy, reduced};
+        // §6.20-0008: a contraction's shape rides its axis ROLES, not a ShapeExpr.
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        assert_eq!(
+            shape_rule_form(&mm, &[vec![8, 4096], vec![4096, 4096]]),
+            ShapeRuleForm::Semantic {
+                attr: "contraction axis roles (M/N/K)"
+            }
+        );
+        // A reduce's shape rides its reduce_axes attr.
+        let red = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        assert_eq!(
+            shape_rule_form(&red, &[vec![4, 8]]),
+            ShapeRuleForm::Semantic {
+                attr: "reduce_axes + keepdim"
+            }
+        );
+        // A gather's shape rides its gather axis + the index operand.
+        let g = OpDef::gather(
+            "g",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Clamp,
+            ElementKind::I64,
+        );
+        assert_eq!(
+            shape_rule_form(&g, &[vec![6], vec![5]]),
+            ShapeRuleForm::Semantic {
+                attr: "gather axis + index operand shape"
+            }
+        );
+    }
+
+    #[test]
+    fn pooling_and_im2col_need_the_reserved_constructors() {
+        use crate::ir::reduced;
+        // These are the ops blocked on the KISS #80 Dims/WithDim activation —
+        // a typed marker naming the dependency, never a fabricated shape.
+        let pool = OpDef::window(
+            "maxpool",
+            1, // n_inputs
+            &[ElementKind::F32],
+            ReduceOp::Max,
+            1,    // axis
+            2,    // size
+            2,    // stride
+            1,    // dilation
+            0,    // pad_lo
+            0,    // pad_hi
+            true, // count_include_pad
+            input(0),
+            reduced(0),
+        );
+        assert_eq!(
+            shape_rule_form(&pool, &[vec![4, 8]]),
+            ShapeRuleForm::NeedsReservedConstructor {
+                constructor: "WithDim",
+                why: "the pooled axis is single-axis extent arithmetic on one operand",
+            }
+        );
+
+        let ic = OpDef::im2col_2d("im2col", ElementKind::F32, (2, 2), (1, 1), (0, 0), (1, 1));
+        assert_eq!(
+            shape_rule_form(&ic, &[vec![1, 2, 4, 4]]),
+            ShapeRuleForm::NeedsReservedConstructor {
+                constructor: "Dims",
+                why: "a fully assembled multi-axis shape with no single operand to extend",
+            }
+        );
+    }
+
+    #[test]
+    fn pooling_dim_expr_evaluates_to_the_oracle_shape() {
+        // The DimExpr the bridge WOULD emit once WithDim is registered must
+        // evaluate to exactly what the concrete oracle computes — proving the
+        // arithmetic form and the oracle agree before the wire opens.
+        use baracuda_kernel_vocab::{DimValue, Extent, eval_dim};
+        let e = pooled_axis_dim_expr(0, 1, 2, 2, 1, 0, 0);
+        let shape = [Extent::Known(4), Extent::Known(8)];
+        let ops: &[&[Extent]] = &[&shape];
+        assert_eq!(eval_dim(&e, ops, &[]), Ok(DimValue::Known(4)));
+        assert_eq!(windowed_extent(8, 2, 2, 1, 0, 0), 4);
     }
 }

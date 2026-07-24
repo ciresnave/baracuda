@@ -83,7 +83,10 @@ pub use optimize::{optimize, optimize_top_k};
 pub use oracle::{Fidelity, TypedBuffer, compare, evaluate};
 pub use pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
 pub use plan::{KernelPlan, Schedule, build_plan};
-pub use shape::{SYMBOLIC, ShapeError, output_shape, windowed_extent};
+pub use shape::{
+    SYMBOLIC, ShapeError, ShapeRuleForm, output_shape, pooled_axis_dim_expr, shape_rule_form,
+    windowed_extent,
+};
 pub use slang::Slang;
 pub use telemetry::{
     Candidate, DispatchRecord, HwFingerprint, ImplId, Ingest, MissRecord, RankedCell,
