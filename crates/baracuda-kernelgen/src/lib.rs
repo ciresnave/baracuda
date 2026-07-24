@@ -54,6 +54,7 @@ pub mod oracle;
 pub mod pattern;
 pub mod plan;
 pub mod recipe;
+pub mod shape;
 pub mod slang;
 pub mod telemetry;
 mod text;
@@ -82,6 +83,7 @@ pub use optimize::{optimize, optimize_top_k};
 pub use oracle::{Fidelity, TypedBuffer, compare, evaluate};
 pub use pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
 pub use plan::{KernelPlan, Schedule, build_plan};
+pub use shape::{SYMBOLIC, ShapeError, output_shape};
 pub use slang::Slang;
 pub use telemetry::{
     Candidate, DispatchRecord, HwFingerprint, ImplId, Ingest, MissRecord, RankedCell,
