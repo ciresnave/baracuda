@@ -269,7 +269,11 @@ fn index_select_element0_replay_repro_fuel_exact() {
         }
     };
 
-    assert_eq!(run_ffi(stream.as_raw() as *mut c_void), 0, "warm FFI status");
+    assert_eq!(
+        run_ffi(stream.as_raw() as *mut c_void),
+        0,
+        "warm FFI status"
+    );
     stream.synchronize().unwrap();
     let mut warm = vec![0f32; out_len];
     d_out.copy_to_host(&mut warm).unwrap();

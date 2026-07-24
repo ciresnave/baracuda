@@ -32,8 +32,7 @@ use std::collections::HashMap;
 
 use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 use baracuda_kernelgen::ir::{
-    BinaryOp, ContractionAxes, OpDef, ReadIndex, ReduceOp, WriteIndex, input, konst, param,
-    reduced,
+    BinaryOp, ContractionAxes, OpDef, ReadIndex, ReduceOp, WriteIndex, input, konst, param, reduced,
 };
 use baracuda_kernelgen::oracle::{self, TypedBuffer};
 use baracuda_kernelgen::plan::build_plan;
@@ -41,8 +40,8 @@ use baracuda_kernelgen::recipe::semantics_dag;
 use kiss_classify_vocab::Dtype;
 use kiss_ops_vocab::Op;
 use kiss_ref_core::{
-    eval_recipe, Combine, DetClass, FlatDag, IndexRef, IndexTensor, Monoid, Node, OobPolicy,
-    RecipeEval, Tensor,
+    Combine, DetClass, FlatDag, IndexRef, IndexTensor, Monoid, Node, OobPolicy, RecipeEval, Tensor,
+    eval_recipe,
 };
 
 // ===========================================================================
@@ -80,7 +79,9 @@ impl IndexMap {
     /// index operand (illegal in a value position — the lanes never mix).
     fn value_slot(&self, i: usize) -> Result<usize, String> {
         if self.index_ops.contains(&i) {
-            return Err(format!("in{i} is an INDEX operand used in a value position"));
+            return Err(format!(
+                "in{i} is an INDEX operand used in a value position"
+            ));
         }
         Ok(i - self.index_ops.iter().filter(|&&k| k < i).count())
     }
@@ -217,7 +218,9 @@ fn parse_expr(s: &str, b: &mut DagBuilder) -> Result<usize, String> {
         }
     }
     // Call: `head(args…)` where head is `name` or `name[attr,…]`.
-    let open = s.find('(').ok_or_else(|| format!("unrecognized leaf `{s}`"))?;
+    let open = s
+        .find('(')
+        .ok_or_else(|| format!("unrecognized leaf `{s}`"))?;
     if !s.ends_with(')') {
         return Err(format!("unbalanced call `{s}`"));
     }
@@ -307,7 +310,10 @@ fn parse_expr(s: &str, b: &mut DagBuilder) -> Result<usize, String> {
                 return Err(format!("matmul shape: `{s}`"));
             }
             if attrs[0] != "mk.kn" && attrs[0] != "bmk.bkn" {
-                return Err(format!("matmul roles `{}` not the canonical cell", attrs[0]));
+                return Err(format!(
+                    "matmul roles `{}` not the canonical cell",
+                    attrs[0]
+                ));
             }
             Node::Matmul {
                 lhs: parse_expr(args[0], b)?,
@@ -358,7 +364,10 @@ fn parse_expr(s: &str, b: &mut DagBuilder) -> Result<usize, String> {
             // skipped OOB writes (§6.11-0005) — the attr is validated, then
             // carried implicitly.
             if attrs[2] != "skip" {
-                return Err(format!("scatter oob `{}` (kernels are Skip-only)", attrs[2]));
+                return Err(format!(
+                    "scatter oob `{}` (kernels are Skip-only)",
+                    attrs[2]
+                ));
             }
             if !["u32", "i32", "i64"].contains(&attrs[3]) {
                 return Err(format!("scatter index_dtype `{}`", attrs[3]));
@@ -396,8 +405,8 @@ fn parse_expr(s: &str, b: &mut DagBuilder) -> Result<usize, String> {
         _ => {
             // The vocabulary join: the SAME closed KISS-Ops token set the
             // emitter re-based onto. An unknown token is a typed error.
-            let op = Op::from_token(name)
-                .ok_or_else(|| format!("`{name}` is not a KISS-Ops token"))?;
+            let op =
+                Op::from_token(name).ok_or_else(|| format!("`{name}` is not a KISS-Ops token"))?;
             let children = args
                 .iter()
                 .map(|a| parse_expr(a, b))
@@ -433,13 +442,7 @@ fn recipe_to_flatdag(op: &OpDef, rank: usize) -> Result<FlatDag, String> {
 // arrives.
 // ===========================================================================
 
-fn device_reduce_leg(
-    dc: &DeviceCtx,
-    op: &OpDef,
-    rows: i64,
-    cols: i64,
-    input: &[f32],
-) -> Vec<f32> {
+fn device_reduce_leg(dc: &DeviceCtx, op: &OpDef, rows: i64, cols: i64, input: &[f32]) -> Vec<f32> {
     use baracuda_driver::{DeviceBuffer, Module, Stream};
     let ind = OperandDesc::new(2, &[rows, cols], &[cols, 1], ElementKind::F32, 16);
     let outd = OperandDesc::new(1, &[rows], &[1], ElementKind::F32, 16);
@@ -573,7 +576,14 @@ fn diff_vs_oracle(
     let images: Vec<TypedBuffer> = inputs
         .iter()
         .zip(in_shapes)
-        .map(|(v, sh)| TypedBuffer::new(ElementKind::F32, sh.clone(), dense_strides(sh), f32_bytes(v)))
+        .map(|(v, sh)| {
+            TypedBuffer::new(
+                ElementKind::F32,
+                sh.clone(),
+                dense_strides(sh),
+                f32_bytes(v),
+            )
+        })
         .collect();
     let params_f64: Vec<f64> = params.iter().map(|&p| f64::from(p)).collect();
     let oracle_out = oracle::evaluate(&plan, &operands, &images, &params_f64);
@@ -775,10 +785,38 @@ fn main() {
     // and accumulator width give identical bits), one NaN cell, one signed-zero
     // pair in a row (deliberate monoid-tie probe).
     let grid: Vec<f32> = vec![
-        1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, //
-        -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, //
-        0.0, -0.0, 9.0, -9.0, 16.0, -16.0, 2.0, 4.0, //
-        1.0, f32::NAN, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, //
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0, //
+        -8.0,
+        -7.0,
+        -6.0,
+        -5.0,
+        -4.0,
+        -3.0,
+        -2.0,
+        -1.0, //
+        0.0,
+        -0.0,
+        9.0,
+        -9.0,
+        16.0,
+        -16.0,
+        2.0,
+        4.0, //
+        1.0,
+        f32::NAN,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0, //
     ];
 
     // (4) reduce[max,last,nokd] — ExactByte monoid; NaN row propagates; the
@@ -841,7 +879,14 @@ fn main() {
 
     // (7) prefix_scan[sum,1,incl] — cumulative sum along the last axis,
     // integer-valued (exact at any order); full-width output.
-    let scan = OpDef::scan_simple("cumsum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+    let scan = OpDef::scan_simple(
+        "cumsum",
+        &[ElementKind::F32],
+        ReduceOp::Sum,
+        1,
+        false,
+        false,
+    );
     let (dag, r) = diff_vs_oracle(
         &scan,
         OpCategory::Scan,
@@ -869,7 +914,12 @@ fn main() {
     );
     let lhs = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]; // [2,3]
     let rhs = vec![7.0f32, 8.0, 9.0, 10.0, 11.0, 12.0]; // [3,2]
-    let (dag, r) = kiss_ref_leg(&mm, &[vec![2, 3], vec![3, 2]], &[lhs.clone(), rhs.clone()], &[]);
+    let (dag, r) = kiss_ref_leg(
+        &mm,
+        &[vec![2, 3], vec![3, 2]],
+        &[lhs.clone(), rhs.clone()],
+        &[],
+    );
     let mut expect = vec![0.0f32; 4];
     for m in 0..2 {
         for n in 0..2 {
@@ -894,7 +944,11 @@ fn main() {
     // semantics_dag returns None until flip registers in KISS-Ops). The
     // converter's own flip guard stays as defense-in-depth for older text.
     let rev = OpDef::scan_simple("revsum", &[ElementKind::F32], ReduceOp::Sum, 1, true, false);
-    assert_eq!(semantics_dag(&rev), None, "reverse scan is an emission-level honest miss");
+    assert_eq!(
+        semantics_dag(&rev),
+        None,
+        "reverse scan is an emission-level honest miss"
+    );
     match recipe_to_flatdag(&rev, 2) {
         Err(e) if e.contains("honest miss") => {
             println!("  reverse-scan honest miss OK (at emission): {e}");
@@ -909,7 +963,10 @@ fn main() {
     let mut b13 = b.clone();
     b13.push(7.0);
     let dc = device_init();
-    println!("step-3a on-device differential ({} / {}):", dc.name, dc.arch_flag);
+    println!(
+        "step-3a on-device differential ({} / {}):",
+        dc.name, dc.arch_flag
+    );
 
     for (op, cat, ins, params) in [
         (
@@ -1012,9 +1069,9 @@ fn main() {
     );
     let dag = recipe_to_flatdag(&sc, 1).expect("scatter converts");
     assert!(
-        dag.nodes
-            .iter()
-            .any(|n| matches!(n, Node::Scatter { dest, .. } if matches!(dag.nodes[*dest], Node::Bind(1)))),
+        dag.nodes.iter().any(
+            |n| matches!(n, Node::Scatter { dest, .. } if matches!(dag.nodes[*dest], Node::Bind(1)))
+        ),
         "synthesized dest binds the slot after the value inputs"
     );
     let updates = Tensor::from_vec(vec![1.0f32, 2.0, 0.5, 0.25, 4.0, 1.5], &[6]).unwrap();
@@ -1034,7 +1091,9 @@ fn main() {
         !matches!(sc_det, DetClass::ExactByte),
         "a float atomic-add scatter must NOT class ExactByte: {sc_det:?}"
     );
-    println!("  scatter[0,atomic-add,skip,u32] OK — {got:?} (OOB 7 skipped), scatter det {sc_det:?}");
+    println!(
+        "  scatter[0,atomic-add,skip,u32] OK — {got:?} (OOB 7 skipped), scatter det {sc_det:?}"
+    );
 
     // (12) bincount — the self-indexing scatter (`in0` is BOTH the only op
     // input and the index operand; the value is const(1)): zero value-lane
@@ -1073,7 +1132,9 @@ fn main() {
     let got: Vec<f32> = r.outputs[0].clone().into_data();
     // reverse cumsum of [1,2,4,8] = suffix sums = [15,14,12,8].
     assert_bits_eq("flip∘scan∘flip", &[15.0, 14.0, 12.0, 8.0], &got);
-    println!("  flip[1](prefix_scan(flip[1])) OK — {got:?} (reverse-scan re-enable is STAGED; emission stays gated on registry)");
+    println!(
+        "  flip[1](prefix_scan(flip[1])) OK — {got:?} (reverse-scan re-enable is STAGED; emission stays gated on registry)"
+    );
 
     println!(
         "steps 2+2b+3a+3b(partial)+2c OK: emitted-recipe -> FlatDag converter (elementwise + \
