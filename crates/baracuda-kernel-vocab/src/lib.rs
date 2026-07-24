@@ -54,6 +54,7 @@ pub mod element;
 pub mod layout;
 pub mod ops;
 pub mod plan;
+pub mod shape_expr;
 pub mod sku;
 pub mod structure_key;
 
@@ -76,6 +77,9 @@ pub use ops::{
     ShapeLayoutKind, SoftmaxKind, SortKind, TernaryKind, UnaryKind,
 };
 pub use plan::{PlanPreference, PrecisionGuarantee};
+pub use shape_expr::{
+    Axis, DimExpr, DimValue, Extent, ShapeDecline, ShapeExpr, eval_dim, eval_shape,
+};
 pub use sku::{BackendKind, KernelSku, OpCategory};
 pub use structure_key::{
     AxisMask, Contiguity, ContractionKey, DivBucket, IdxWidth, MAX_OPERANDS, MAX_RANK, MpCode,
