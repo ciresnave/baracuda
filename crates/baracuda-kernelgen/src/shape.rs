@@ -10,6 +10,7 @@
 //! See `docs/superpowers/specs/2026-07-23-shape-oracle-design.md`.
 
 use crate::ir::{Access, OpDef, WriteIndex};
+use baracuda_kernel_vocab::MAX_RANK;
 
 /// Sentinel marking a symbolic / data-dependent extent in a caller-supplied
 /// input shape. Any op whose output depends on a symbolic extent yields
@@ -83,11 +84,20 @@ pub fn output_shape(op: &OpDef, input_shapes: &[Vec<i64>]) -> Result<Vec<i64>, S
                 }
                 vec![rank - 1]
             } else {
+                // Validate every set bit against the mask's full width, not
+                // just the rank-filtered subset below: a bit at/above `rank`
+                // must decline with AxisOutOfRange rather than silently drop
+                // out of the `0..rank` filter and behave as if unset.
+                if let Some(bad) =
+                    (0..MAX_RANK as u8).find(|&d| axes.is_set(d) && usize::from(d) >= rank)
+                {
+                    return Err(ShapeError::AxisOutOfRange {
+                        axis: bad as usize,
+                        rank,
+                    });
+                }
                 (0..rank).filter(|&d| axes.is_set(d as u8)).collect()
             };
-            if let Some(&bad) = reduced.iter().find(|&&d| d >= rank) {
-                return Err(ShapeError::AxisOutOfRange { axis: bad, rank });
-            }
             let mut out = Vec::with_capacity(rank);
             for (d, &e) in in0.iter().enumerate() {
                 match (reduced.contains(&d), *keepdim) {
@@ -175,6 +185,25 @@ mod tests {
             true,
         );
         assert_eq!(output_shape(&ax0kd, &[vec![4, 8]]), Ok(vec![1, 8]));
+    }
+
+    #[test]
+    fn reduction_mask_bit_above_rank_declines_axis_out_of_range() {
+        // AxisMask(0b100000) names axis 5, but the input is only rank 2 --
+        // this must decline typed, not silently behave as an unreduced no-op.
+        let bad = OpDef::reduction_axes(
+            "sbad",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            AxisMask(0b100000),
+            false,
+        );
+        assert_eq!(
+            output_shape(&bad, &[vec![4, 8]]),
+            Err(ShapeError::AxisOutOfRange { axis: 5, rank: 2 })
+        );
     }
 
     #[test]
