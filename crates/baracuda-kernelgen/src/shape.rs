@@ -42,6 +42,14 @@ pub enum ShapeError {
         /// The operand's rank.
         rank: usize,
     },
+    /// A `Window`/`Im2Col` `stride` attribute was `0`. The windowed-extent
+    /// formula divides by `stride`, so a zero stride has no valid geometry
+    /// (a real pooling/im2col stride is always `>= 1`) — declined rather
+    /// than divided.
+    InvalidStride {
+        /// Human-readable reason naming the op class and offending field.
+        reason: &'static str,
+    },
 }
 
 /// The concrete output shape of `op` given its **input** operand shapes.
@@ -185,6 +193,11 @@ pub fn output_shape(op: &OpDef, input_shapes: &[Vec<i64>]) -> Result<Vec<i64>, S
                     rank: in0.len(),
                 });
             }
+            if *stride == 0 {
+                return Err(ShapeError::InvalidStride {
+                    reason: "windowed pooling: stride must be >= 1",
+                });
+            }
             let mut out = in0.clone();
             out[d] = windowed_extent(in0[d], *size, *stride, *dilation, *pad_lo, *pad_hi);
             Ok(out)
@@ -210,6 +223,16 @@ pub fn output_shape(op: &OpDef, input_shapes: &[Vec<i64>]) -> Result<Vec<i64>, S
                 return Err(ShapeError::AxisOutOfRange {
                     axis: 3,
                     rank: in0.len(),
+                });
+            }
+            if stride.0 == 0 {
+                return Err(ShapeError::InvalidStride {
+                    reason: "im2col: stride.0 (height stride) must be >= 1",
+                });
+            }
+            if stride.1 == 0 {
+                return Err(ShapeError::InvalidStride {
+                    reason: "im2col: stride.1 (width stride) must be >= 1",
                 });
             }
             let (n, c, h, w) = (in0[0], in0[1], in0[2], in0[3]);
@@ -512,5 +535,48 @@ mod tests {
         // NOTE: the constructor is `im2col_2d` and takes a SINGLE dtype.
         let ic = OpDef::im2col_2d("im2col", ElementKind::F32, (2, 2), (1, 1), (0, 0), (1, 1));
         assert_eq!(output_shape(&ic, &[vec![1, 2, 4, 4]]), Ok(vec![1, 8, 9]));
+    }
+
+    #[test]
+    fn window_output_declines_zero_stride_instead_of_dividing() {
+        use crate::ir::reduced;
+        // A stride of 0 is unvalidated input at this layer (OpDef::window has
+        // no runtime check enforcing stride >= 1) — the oracle must decline,
+        // never divide by it.
+        let pool = OpDef::window(
+            "maxpool",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Max,
+            1,    // axis
+            2,    // size
+            0,    // stride
+            1,    // dilation
+            0,    // pad_lo
+            0,    // pad_hi
+            true, // count_include_pad
+            input(0),
+            reduced(0),
+        );
+        assert!(matches!(
+            output_shape(&pool, &[vec![4, 8]]),
+            Err(ShapeError::InvalidStride { .. })
+        ));
+    }
+
+    #[test]
+    fn im2col_output_declines_zero_stride_instead_of_dividing() {
+        // Same exposure via im2col_2d's stride tuple — either axis being 0
+        // must decline, never divide by it.
+        let ic_h = OpDef::im2col_2d("im2col", ElementKind::F32, (2, 2), (0, 1), (0, 0), (1, 1));
+        assert!(matches!(
+            output_shape(&ic_h, &[vec![1, 2, 4, 4]]),
+            Err(ShapeError::InvalidStride { .. })
+        ));
+        let ic_w = OpDef::im2col_2d("im2col", ElementKind::F32, (2, 2), (1, 0), (0, 0), (1, 1));
+        assert!(matches!(
+            output_shape(&ic_w, &[vec![1, 2, 4, 4]]),
+            Err(ShapeError::InvalidStride { .. })
+        ));
     }
 }
