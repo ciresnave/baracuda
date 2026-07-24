@@ -238,10 +238,13 @@ pub fn output_shape(op: &OpDef, input_shapes: &[Vec<i64>]) -> Result<Vec<i64>, S
             let (n, c, h, w) = (in0[0], in0[1], in0[2], in0[3]);
             let h_out = windowed_extent(h, kernel.0, stride.0, dilation.0, pad.0, pad.0);
             let w_out = windowed_extent(w, kernel.1, stride.1, dilation.1, pad.1, pad.1);
+            // Saturating: an adversarial channel/extent near i64::MAX saturates
+            // rather than overflow-panicking (the never-panic contract).
             Ok(vec![
                 n,
-                c * i64::from(kernel.0) * i64::from(kernel.1),
-                h_out * w_out,
+                c.saturating_mul(i64::from(kernel.0))
+                    .saturating_mul(i64::from(kernel.1)),
+                h_out.saturating_mul(w_out),
             ])
         }
         // Every shipped Access variant is now covered, so this arm is presently
@@ -259,6 +262,10 @@ pub fn output_shape(op: &OpDef, input_shapes: &[Vec<i64>]) -> Result<Vec<i64>, S
 /// geometry: `(input + pad_lo + pad_hi − dilation·(size−1) − 1) ÷ stride + 1`
 /// with **floor** division, clamped at 0 (a window wider than the padded input
 /// yields no output positions, never a negative extent).
+///
+/// **Saturating** on `input`: an adversarial extent near [`i64::MAX`] saturates
+/// rather than overflow-panicking, honoring the module's never-panic contract.
+/// (`effective` is bounded by the `u8` window params, so it never overflows.)
 #[must_use]
 pub fn windowed_extent(
     input: i64,
@@ -269,12 +276,14 @@ pub fn windowed_extent(
     pad_hi: u8,
 ) -> i64 {
     let effective = i64::from(dilation) * (i64::from(size) - 1) + 1;
-    let padded = input + i64::from(pad_lo) + i64::from(pad_hi);
-    let span = padded - effective;
+    let padded = input
+        .saturating_add(i64::from(pad_lo))
+        .saturating_add(i64::from(pad_hi));
+    let span = padded.saturating_sub(effective);
     if span < 0 {
         return 0;
     }
-    span / i64::from(stride) + 1
+    (span / i64::from(stride)).saturating_add(1)
 }
 
 /// The rank-aligned broadcast frame: per-axis max extent across every input.
@@ -317,7 +326,16 @@ pub enum ShapeRuleForm {
         /// The attribute(s) the shape derives from.
         attr: &'static str,
     },
-    /// A single free dimension expressed as a [`DimExpr`].
+    /// A single free dimension expressed as a [`DimExpr`] — the §6.20-0007
+    /// slice/iota-offset free case.
+    ///
+    /// **Currently unconstructed:** no shipped [`Access`] variant is a bare
+    /// slice or iota offset (pooling/im2col are multi-axis and map to
+    /// [`ShapeRuleForm::NeedsReservedConstructor`] instead), so
+    /// [`shape_rule_form`] never returns this today. It is kept as the §6.20
+    /// vocabulary slot the bridge will emit the moment such an op ships — the
+    /// `DimExpr` machinery ([`pooled_axis_dim_expr`], [`baracuda_kernel_vocab::eval_dim`])
+    /// is already built and tested, so wiring a slice/iota op to it is additive.
     Dim(DimExpr),
     /// The rule needs a constructor that is **reserved** at this vocabulary
     /// version (`WithDim` 0x0A / `Dims` 0x0B) and enters through the extension
@@ -632,6 +650,22 @@ mod tests {
         assert_eq!(windowed_extent(8, 3, 1, 2, 0, 0), 4);
         // A window wider than the padded input clamps at 0, never negative.
         assert_eq!(windowed_extent(2, 8, 1, 1, 0, 0), 0);
+    }
+
+    #[test]
+    fn windowed_extent_saturates_on_adversarial_extents_never_panics() {
+        // The never-panic contract: an input extent near i64::MAX must saturate,
+        // not overflow-panic (input + pad, and span/stride + 1). Debug builds
+        // trap on overflow — this pins the saturating arithmetic.
+        assert_eq!(
+            windowed_extent(i64::MAX, 1, 1, 1, 255, 255),
+            i64::MAX,
+            "input + pad near i64::MAX saturates; span/1 + 1 saturates"
+        );
+        // im2col's products likewise saturate rather than panic on a huge output.
+        let ic = OpDef::im2col_2d("im2col", ElementKind::F32, (2, 2), (1, 1), (0, 0), (1, 1));
+        let out = output_shape(&ic, &[vec![1, i64::MAX, 4, 4]]).expect("no panic");
+        assert_eq!(out[1], i64::MAX, "c * kh * kw saturates");
     }
 
     #[test]
