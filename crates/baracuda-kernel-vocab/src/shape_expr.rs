@@ -217,6 +217,209 @@ pub fn eval_shape(e: &ShapeExpr, operands: &[&[Extent]]) -> Result<Vec<DimValue>
     }
 }
 
+// ===========================================================================
+// Canonical byte codec (§6.20-0005 / §6.20-0006)
+// ===========================================================================
+
+/// Tag byte for [`ShapeExpr::SameAs`].
+const TAG_SAME_AS: u8 = 0x01;
+/// Tag byte for [`DimExpr::Extent`].
+const TAG_EXTENT: u8 = 0x02;
+/// Tag byte for [`DimExpr::Const`].
+const TAG_CONST: u8 = 0x03;
+/// Tag byte for [`DimExpr::Param`].
+const TAG_PARAM: u8 = 0x04;
+/// Tag byte for [`DimExpr::Add`].
+const TAG_ADD: u8 = 0x05;
+/// Tag byte for [`DimExpr::Sub`].
+const TAG_SUB: u8 = 0x06;
+/// Tag byte for [`DimExpr::Mul`].
+const TAG_MUL: u8 = 0x07;
+/// Tag byte for [`DimExpr::Div`].
+const TAG_DIV: u8 = 0x08;
+
+/// The `last`-axis sentinel on the wire — a **distinct** single-axis `u8`
+/// sentinel chosen high above the `0..MAX_RANK-1` concrete range, in the spirit
+/// of the §6.19-0020 trailing-axis sentinel but deliberately **not**
+/// byte-identical to that `u16` axis-set mask `0xFFFE` (§6.20-0005).
+const AXIS_LAST_SENTINEL: u8 = 0xFF;
+
+/// Why a shape-expression blob could not be decoded (§6.20-0006). Every
+/// malformed input is one of these — the decoder never panics.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum CodecDecline {
+    /// The reserved `0x00` tag, or a reserved-but-unregistered constructor
+    /// (`Reduce` 0x09 / `WithDim` 0x0A / `Dims` 0x0B).
+    ReservedTag(u8),
+    /// A tag outside the defined and reserved set.
+    UnknownTag(u8),
+    /// The blob ended before the tag's schema was satisfied (or a child's
+    /// declared length overran the buffer).
+    Truncated,
+    /// Bytes remained after a complete expression was decoded.
+    TrailingBytes,
+}
+
+/// Encode a [`DimExpr`] in the §6.20-0005 canonical form.
+///
+/// Byte-deterministic: one-byte tag, fixed-width little-endian fields, and each
+/// child definite-length-prefixed with a `u16` LE byte length. Never emits a
+/// reserved tag.
+#[must_use]
+pub fn encode_dim(e: &DimExpr) -> Vec<u8> {
+    let mut out = Vec::new();
+    push_dim(e, &mut out);
+    out
+}
+
+fn push_dim(e: &DimExpr, out: &mut Vec<u8>) {
+    match e {
+        DimExpr::Extent(operand, axis) => {
+            out.push(TAG_EXTENT);
+            out.push(*operand);
+            out.push(match axis {
+                Axis::Last => AXIS_LAST_SENTINEL,
+                Axis::Idx(a) => *a,
+            });
+        }
+        DimExpr::Const(v) => {
+            out.push(TAG_CONST);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        DimExpr::Param(f) => {
+            out.push(TAG_PARAM);
+            out.push(*f);
+        }
+        DimExpr::Add(a, b) | DimExpr::Sub(a, b) | DimExpr::Mul(a, b) | DimExpr::Div(a, b) => {
+            out.push(match e {
+                DimExpr::Add(..) => TAG_ADD,
+                DimExpr::Sub(..) => TAG_SUB,
+                DimExpr::Mul(..) => TAG_MUL,
+                DimExpr::Div(..) => TAG_DIV,
+                _ => unreachable!("outer match pinned the binary arms"),
+            });
+            for child in [a, b] {
+                let mut buf = Vec::new();
+                push_dim(child, &mut buf);
+                // Definite-length prefix, u16 LE (§6.19-0010). A child longer
+                // than u16::MAX is unreachable for real expressions; saturate
+                // rather than panic, and the decoder's length check rejects it.
+                let len = u16::try_from(buf.len()).unwrap_or(u16::MAX);
+                out.extend_from_slice(&len.to_le_bytes());
+                out.extend_from_slice(&buf);
+            }
+        }
+    }
+}
+
+/// Encode a [`ShapeExpr`] in the §6.20-0005 canonical form.
+#[must_use]
+pub fn encode_shape(e: &ShapeExpr) -> Vec<u8> {
+    match e {
+        ShapeExpr::SameAs(operand) => vec![TAG_SAME_AS, *operand],
+    }
+}
+
+/// Decode a [`DimExpr`] blob.
+///
+/// # Errors
+/// Returns a [`CodecDecline`] for a reserved/unknown tag, a truncated blob, or
+/// trailing bytes after a complete expression. Never panics (§6.20-0006).
+pub fn decode_dim(bytes: &[u8]) -> Result<DimExpr, CodecDecline> {
+    let (e, rest) = take_dim(bytes)?;
+    if rest.is_empty() {
+        Ok(e)
+    } else {
+        Err(CodecDecline::TrailingBytes)
+    }
+}
+
+/// Decode one `DimExpr` off the front of `bytes`, returning it and the remainder.
+fn take_dim(bytes: &[u8]) -> Result<(DimExpr, &[u8]), CodecDecline> {
+    let (&tag, rest) = bytes.split_first().ok_or(CodecDecline::Truncated)?;
+    match tag {
+        TAG_EXTENT => {
+            let (&operand, rest) = rest.split_first().ok_or(CodecDecline::Truncated)?;
+            let (&axis, rest) = rest.split_first().ok_or(CodecDecline::Truncated)?;
+            let axis = if axis == AXIS_LAST_SENTINEL {
+                Axis::Last
+            } else {
+                Axis::Idx(axis)
+            };
+            Ok((DimExpr::Extent(operand, axis), rest))
+        }
+        TAG_CONST => {
+            if rest.len() < 8 {
+                return Err(CodecDecline::Truncated);
+            }
+            let (v, rest) = rest.split_at(8);
+            let v = i64::from_le_bytes(v.try_into().expect("split_at(8) yields 8 bytes"));
+            Ok((DimExpr::Const(v), rest))
+        }
+        TAG_PARAM => {
+            let (&f, rest) = rest.split_first().ok_or(CodecDecline::Truncated)?;
+            Ok((DimExpr::Param(f), rest))
+        }
+        TAG_ADD | TAG_SUB | TAG_MUL | TAG_DIV => {
+            let (lhs, rest) = take_child(rest)?;
+            let (rhs, rest) = take_child(rest)?;
+            let (l, r) = (Box::new(lhs), Box::new(rhs));
+            let e = match tag {
+                TAG_ADD => DimExpr::Add(l, r),
+                TAG_SUB => DimExpr::Sub(l, r),
+                TAG_MUL => DimExpr::Mul(l, r),
+                _ => DimExpr::Div(l, r),
+            };
+            Ok((e, rest))
+        }
+        // `0x00` is reserved (§6.19-0006); 0x09/0x0A/0x0B are the reserved
+        // Reduce/WithDim/Dims constructors — recognized, and declined until
+        // they are registered through the extension registry.
+        0x00 | 0x09 | 0x0A | 0x0B => Err(CodecDecline::ReservedTag(tag)),
+        other => Err(CodecDecline::UnknownTag(other)),
+    }
+}
+
+/// Read a `u16` LE definite-length-prefixed child expression.
+fn take_child(bytes: &[u8]) -> Result<(DimExpr, &[u8]), CodecDecline> {
+    if bytes.len() < 2 {
+        return Err(CodecDecline::Truncated);
+    }
+    let (len, rest) = bytes.split_at(2);
+    let len = usize::from(u16::from_le_bytes([len[0], len[1]]));
+    if rest.len() < len {
+        return Err(CodecDecline::Truncated);
+    }
+    let (body, after) = rest.split_at(len);
+    let (e, leftover) = take_dim(body)?;
+    if leftover.is_empty() {
+        Ok((e, after))
+    } else {
+        Err(CodecDecline::TrailingBytes)
+    }
+}
+
+/// Decode a [`ShapeExpr`] blob.
+///
+/// # Errors
+/// Returns a [`CodecDecline`] for a reserved/unknown tag, a truncated blob, or
+/// trailing bytes. Never panics (§6.20-0006).
+pub fn decode_shape(bytes: &[u8]) -> Result<ShapeExpr, CodecDecline> {
+    let (&tag, rest) = bytes.split_first().ok_or(CodecDecline::Truncated)?;
+    match tag {
+        TAG_SAME_AS => {
+            let (&operand, rest) = rest.split_first().ok_or(CodecDecline::Truncated)?;
+            if rest.is_empty() {
+                Ok(ShapeExpr::SameAs(operand))
+            } else {
+                Err(CodecDecline::TrailingBytes)
+            }
+        }
+        0x00 | 0x09 | 0x0A | 0x0B => Err(CodecDecline::ReservedTag(tag)),
+        other => Err(CodecDecline::UnknownTag(other)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,5 +555,139 @@ mod tests {
             eval_shape(&ShapeExpr::SameAs(5), ops),
             Err(ShapeDecline::OperandOutOfRange { operand: 5 })
         );
+    }
+
+    #[test]
+    fn codec_golden_bytes_are_canonical() {
+        // SameAs(2) = [0x01, 0x02]
+        assert_eq!(encode_shape(&ShapeExpr::SameAs(2)), vec![0x01, 0x02]);
+        // Extent(1, last) = [0x02, 0x01, 0xFF] — 0xFF is the `last` sentinel.
+        assert_eq!(
+            encode_dim(&DimExpr::Extent(1, Axis::Last)),
+            vec![0x02, 0x01, 0xFF]
+        );
+        // Extent(0, 3) = [0x02, 0x00, 0x03]
+        assert_eq!(
+            encode_dim(&DimExpr::Extent(0, Axis::Idx(3))),
+            vec![0x02, 0x00, 0x03]
+        );
+        // Const(1) = [0x03] ++ i64 LE
+        assert_eq!(
+            encode_dim(&DimExpr::Const(1)),
+            vec![0x03, 1, 0, 0, 0, 0, 0, 0, 0]
+        );
+        // Param(4) = [0x04, 0x04]
+        assert_eq!(encode_dim(&DimExpr::Param(4)), vec![0x04, 0x04]);
+        // Add(Param(0), Const(2)) = [0x05] ++ u16 len ++ lhs ++ u16 len ++ rhs
+        assert_eq!(
+            encode_dim(&DimExpr::Add(
+                Box::new(DimExpr::Param(0)),
+                Box::new(DimExpr::Const(2)),
+            )),
+            vec![
+                0x05, // Add
+                0x02, 0x00, // lhs len = 2
+                0x04, 0x00, // Param(0)
+                0x09, 0x00, // rhs len = 9
+                0x03, 2, 0, 0, 0, 0, 0, 0, 0, // Const(2)
+            ]
+        );
+    }
+
+    #[test]
+    fn codec_round_trips_every_constructor() {
+        let exprs = vec![
+            DimExpr::Extent(0, Axis::Last),
+            DimExpr::Extent(3, Axis::Idx(7)),
+            DimExpr::Const(-9_000_000_000),
+            DimExpr::Param(2),
+            DimExpr::Div(
+                Box::new(DimExpr::Sub(
+                    Box::new(DimExpr::Extent(0, Axis::Idx(1))),
+                    Box::new(DimExpr::Const(3)),
+                )),
+                Box::new(DimExpr::Mul(
+                    Box::new(DimExpr::Param(1)),
+                    Box::new(DimExpr::Const(2)),
+                )),
+            ),
+        ];
+        for e in exprs {
+            assert_eq!(
+                decode_dim(&encode_dim(&e)),
+                Ok(e.clone()),
+                "round-trip {e:?}"
+            );
+        }
+        let s = ShapeExpr::SameAs(1);
+        assert_eq!(decode_shape(&encode_shape(&s)), Ok(s));
+    }
+
+    #[test]
+    fn codec_declines_reserved_short_and_trailing() {
+        // The reserved 0x00 tag.
+        assert_eq!(decode_dim(&[0x00]), Err(CodecDecline::ReservedTag(0x00)));
+        // Reserved-but-unregistered constructors (Reduce/WithDim/Dims).
+        for tag in [0x09u8, 0x0A, 0x0B] {
+            assert_eq!(decode_dim(&[tag]), Err(CodecDecline::ReservedTag(tag)));
+        }
+        // An unknown tag.
+        assert_eq!(decode_dim(&[0x7F]), Err(CodecDecline::UnknownTag(0x7F)));
+        // A blob shorter than its tag's schema (Const needs 8 bytes of payload).
+        assert_eq!(decode_dim(&[0x03, 1, 2, 3]), Err(CodecDecline::Truncated));
+        // Empty input.
+        assert_eq!(decode_dim(&[]), Err(CodecDecline::Truncated));
+        // Trailing bytes after a complete expression.
+        assert_eq!(
+            decode_dim(&[0x04, 0x00, 0xDE, 0xAD]),
+            Err(CodecDecline::TrailingBytes)
+        );
+        // A child length that overruns the blob.
+        assert_eq!(
+            decode_dim(&[0x05, 0xFF, 0xFF, 0x04, 0x00]),
+            Err(CodecDecline::Truncated)
+        );
+    }
+
+    #[test]
+    fn decode_never_panics_on_arbitrary_bytes() {
+        // The reader parses untrusted blobs: only Ok or a typed decline, never
+        // a panic — the `structure_key::from_token` discipline.
+        let mut state: u64 = 0x5EED_1234;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            state
+        };
+        for _ in 0..20_000 {
+            let len = (next() % 24) as usize;
+            let blob: Vec<u8> = (0..len).map(|_| (next() % 256) as u8).collect();
+            let _ = decode_dim(&blob);
+            let _ = decode_shape(&blob);
+        }
+        // Structured mutation of VALID blobs reaches the deep parsers.
+        let base = encode_dim(&DimExpr::Add(
+            Box::new(DimExpr::Extent(0, Axis::Last)),
+            Box::new(DimExpr::Const(2)),
+        ));
+        for _ in 0..20_000 {
+            let mut b = base.clone();
+            let n = 1 + (next() % 3) as usize;
+            for _ in 0..n {
+                if b.is_empty() {
+                    break;
+                }
+                let i = (next() as usize) % b.len();
+                match next() % 3 {
+                    0 => b[i] = (next() % 256) as u8,
+                    1 => {
+                        b.remove(i);
+                    }
+                    _ => b.insert(i, (next() % 256) as u8),
+                }
+            }
+            let _ = decode_dim(&b);
+        }
     }
 }

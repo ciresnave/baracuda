@@ -78,7 +78,8 @@ pub use ops::{
 };
 pub use plan::{PlanPreference, PrecisionGuarantee};
 pub use shape_expr::{
-    Axis, DimExpr, DimValue, Extent, ShapeDecline, ShapeExpr, eval_dim, eval_shape,
+    Axis, CodecDecline, DimExpr, DimValue, Extent, ShapeDecline, ShapeExpr, decode_dim,
+    decode_shape, encode_dim, encode_shape, eval_dim, eval_shape,
 };
 pub use sku::{BackendKind, KernelSku, OpCategory};
 pub use structure_key::{
