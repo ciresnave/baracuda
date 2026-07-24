@@ -17,7 +17,7 @@
 use crate::backend::GeneratedKernel;
 use crate::contract::revision_hash;
 use crate::ir::OpDef;
-use baracuda_kernels_types::StructureKey;
+use baracuda_kernel_vocab::StructureKey;
 
 /// One generated kernel's link-registry row.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -72,7 +72,7 @@ mod tests {
     use super::*;
     use crate::ir::{OpDef, input};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+    use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn entry(name: &str) -> LinkEntry {
         let op = OpDef::elementwise(name, 2, &[ElementKind::F32], input(0) + input(1));
@@ -86,7 +86,7 @@ mod tests {
     fn entry_mirrors_contract_fields() {
         let e = entry("add");
         assert!(e.entry_point.contains("add"));
-        assert!(e.structure_key.starts_with("sk1|bin|f32|sm89|"));
+        assert!(e.structure_key.starts_with("sk3|bin|f32|cuda:sm89|"));
         assert_ne!(e.revision_hash, 0);
     }
 

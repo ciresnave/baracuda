@@ -21,7 +21,11 @@ pub mod bin_gemm;
 // exists somewhere else — see the module docs for the split vs
 // `baracuda_cutlass::GemmPlan`.
 pub mod dense_gemm;
+// Capture-safe dense m=1 GEMV (bespoke kernel; RRR + strided-batch,
+// stride_b == 0 GQA broadcast). The m == 1 capture-safe companion to
+// `dense_gemm` — see its module docs for the split.
 pub mod fp8_gemm;
+pub mod gemv_dense;
 pub mod int4_gemm;
 pub mod int_gemm;
 
@@ -44,6 +48,7 @@ pub mod int4_marlin;
 pub use bin_gemm::{BinGemmArgs, BinGemmDescriptor, BinGemmPlan};
 pub use dense_gemm::{DenseGemmArgs, DenseGemmDescriptor, DenseGemmLayout, DenseGemmPlan};
 pub use fp8_gemm::{Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan};
+pub use gemv_dense::{GemvDenseArgs, GemvDenseDescriptor, GemvDensePlan};
 pub use int_gemm::{IntGemmArgs, IntGemmDescriptor, IntGemmPlan};
 pub use int4_gemm::{Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan};
 pub use sparse24::{GemmSparse24Args, GemmSparse24Descriptor, GemmSparse24Plan};

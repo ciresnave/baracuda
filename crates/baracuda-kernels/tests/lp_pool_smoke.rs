@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke tests for `LpPool1dPlan` / `LpPool2dPlan` FW + BW
 //! (Phase 16.2 — bespoke fused kernel).
 //!
@@ -8,6 +7,7 @@
 //! common case (p=2, 2x2 window).
 //!
 //! All tests are `#[ignore]` by default (require real CUDA device).
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

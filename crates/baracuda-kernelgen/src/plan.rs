@@ -10,7 +10,7 @@ use crate::ir::{
     Access, BaseOffset, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortLimit, SortOrder,
     SortOut, View, WriteCombine, WriteIndex,
 };
-use baracuda_kernels_types::{
+use baracuda_kernel_vocab::{
     AxisMask, Contiguity, ElementKind, MAX_OPERANDS, OperandKey, StructureKey, VecWidth,
 };
 
@@ -357,15 +357,17 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
             ref epilogue,
             ..
         } => {
-            // v1 admissibility: the canonical rank-2 dense matmul cell, keyed
-            // with contraction facts, and an epilogue over the K-sum only.
-            assert_eq!(
-                (axes.lhs.as_slice(), axes.rhs.as_slice()),
-                (
-                    crate::ir::ContractionAxes::matmul().lhs.as_slice(),
-                    crate::ir::ContractionAxes::matmul().rhs.as_slice()
-                ),
-                "contraction v1: canonical rank-2 matmul axis roles only"
+            // v1 admissibility: the canonical rank-2 dense matmul cell OR its
+            // rank-3 batched form, keyed with contraction facts and an epilogue
+            // over the K-sum (+ optional fused bias) only.
+            let m2 = crate::ir::ContractionAxes::matmul();
+            let m3 = crate::ir::ContractionAxes::batched_matmul();
+            let ax = (axes.lhs.as_slice(), axes.rhs.as_slice());
+            assert!(
+                ax == (m2.lhs.as_slice(), m2.rhs.as_slice())
+                    || ax == (m3.lhs.as_slice(), m3.rhs.as_slice()),
+                "contraction v1: canonical rank-2 matmul or rank-3 batched-matmul \
+                 axis roles only"
             );
             assert!(
                 key.contraction.is_some(),
@@ -374,9 +376,9 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 key.to_token()
             );
             assert!(
-                epilogue_reads_only_reduced0(epilogue),
-                "contraction v1: epilogue over Reduced(0) only (fused bias inputs \
-                 are a follow-up)"
+                contraction_epilogue_admissible(epilogue, op.n_inputs),
+                "contraction: epilogue may read only Reduced(0), constants, and the \
+                 fused bias Input(2..n_inputs); got a disallowed leaf"
             );
             Schedule::Contraction
         }
@@ -631,25 +633,33 @@ mod reduce_class_tests {
     }
 }
 
-/// `true` if `e` references no leaf other than `Reduced(0)` and constants — the
-/// contraction-v1 epilogue admissibility (no `Input`/`Param`, no other stage).
-fn epilogue_reads_only_reduced0(e: &crate::ir::ScalarExpr) -> bool {
+/// `true` if a contraction epilogue references only admissible leaves: `Reduced(0)`
+/// (the K-sum), constants, and — when `n_inputs > 2` — the fused bias `Input(i)`
+/// for `2 <= i < n_inputs` (a per-column `[N]` bias broadcast over the M rows).
+/// Never `Input(0)`/`Input(1)` (lhs/rhs are consumed by the contraction, not the
+/// epilogue), `Param`, another reduced stage, or `Coord`. For `n_inputs == 2` no
+/// `Input` is admitted, so this is byte-identical to the plain-contraction
+/// "Reduced(0) only" rule.
+fn contraction_epilogue_admissible(e: &crate::ir::ScalarExpr, n_inputs: u8) -> bool {
     use crate::ir::ScalarExpr as E;
     match e {
         E::Reduced(0) | E::Const(_) => true,
+        // A fused bias leaf: Input(i), 2 <= i < n_inputs.
+        E::Input(i) => *i >= 2 && *i < n_inputs,
         // Coord rejects here too: a contraction epilogue iterates the (m, n)
         // output space, not an elementwise cell's — Coord's v1 semantics are
         // Elementwise-only (`assert_coord_admissibility` fires first with the
         // targeted message; this arm keeps the predicate honest regardless).
-        E::Input(_) | E::Param(_) | E::Reduced(_) | E::Coord(_) => false,
-        E::Unary(_, x) => epilogue_reads_only_reduced0(x),
+        E::Param(_) | E::Reduced(_) | E::Coord(_) => false,
+        E::Unary(_, x) => contraction_epilogue_admissible(x, n_inputs),
         E::Add(a, b) | E::Sub(a, b) | E::Mul(a, b) | E::Div(a, b) | E::Binary(_, a, b) => {
-            epilogue_reads_only_reduced0(a) && epilogue_reads_only_reduced0(b)
+            contraction_epilogue_admissible(a, n_inputs)
+                && contraction_epilogue_admissible(b, n_inputs)
         }
         E::Select(c, a, b) => {
-            epilogue_reads_only_reduced0(c)
-                && epilogue_reads_only_reduced0(a)
-                && epilogue_reads_only_reduced0(b)
+            contraction_epilogue_admissible(c, n_inputs)
+                && contraction_epilogue_admissible(a, n_inputs)
+                && contraction_epilogue_admissible(b, n_inputs)
         }
     }
 }
@@ -3027,7 +3037,7 @@ mod multi_output_validate {
     //! `build_plan` DIRECTLY (an emitter panic would mask a gate mutation).
     use super::{Schedule, build_plan};
     use crate::ir::{Access, BinaryOp, OpDef, ReduceOp, ScalarExpr, input, konst, param};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -3342,7 +3352,7 @@ mod rowreduce_role_validate {
     //! cases.
     use super::{RrRole, build_plan, rr_role};
     use crate::ir::{OpDef, ReduceOp, ReduceStage, input, reduced};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, AxisMask, Contiguity, DivBucket, ElementKind, OpCategory, OperandDesc, OperandKey,
         VecWidth, structure_key,
     };
@@ -3518,7 +3528,7 @@ mod view_gate_validate {
     //! mutation (the 0c lesson).
     use super::{Schedule, build_plan};
     use crate::ir::{OpDef, ReduceOp, View, input};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, AxisMask, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -3686,7 +3696,7 @@ mod gather_gate_validate {
     //! mutation (the 0c lesson).
     use super::{Schedule, build_plan};
     use crate::ir::{OobPolicy, OpDef, ReadIndex, ReduceOp, input};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -3841,7 +3851,7 @@ mod scatter_gate_validate {
     //! mutation (the 0c lesson).
     use super::{Schedule, build_plan};
     use crate::ir::{OobPolicy, OpDef, ReduceOp, WriteCombine, WriteIndex, input};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -3994,7 +4004,7 @@ mod scan_gate_validate {
     //! test here; each is mutation-checked both directions by a targeted reverse-edit.
     use super::{Schedule, build_plan};
     use crate::ir::{OpDef, ReduceOp, input, konst, reduced};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -4240,7 +4250,7 @@ mod window_gate_validate {
     //! directions by a targeted reverse-edit.
     use super::{Schedule, build_plan};
     use crate::ir::{OpDef, ReduceOp, input, konst, reduced};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -4655,7 +4665,7 @@ mod im2col_gate_validate {
     //! reverse-edit.
     use super::{Schedule, build_plan};
     use crate::ir::{Access, OpDef};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -4882,7 +4892,7 @@ mod sort_gate_validate {
     //! reverse-edit.
     use super::{Schedule, access_tag, build_plan};
     use crate::ir::{Access, OpDef, ScalarExpr, SortLimit, SortOrder, SortOut, input};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -5440,7 +5450,7 @@ mod select_gate_validate {
     //! the emitter backstops are independent Tier-2 tests in `cuda`.
     use super::{Schedule, build_plan};
     use crate::ir::{BinaryOp, OpDef, ReduceOp, coord, input, konst};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 

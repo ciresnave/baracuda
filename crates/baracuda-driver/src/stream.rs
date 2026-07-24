@@ -23,6 +23,9 @@ struct StreamInner {
     handle: CUstream,
     // Hold the owning context so it outlives the stream.
     context: Context,
+    /// When `false`, this is a non-owning (borrowed) wrapper produced by
+    /// [`Stream::borrow_raw`]: `Drop` will not call `cuStreamDestroy`.
+    owned: bool,
 }
 
 // SAFETY: NVIDIA documents that a CUstream may be used from any thread.
@@ -68,6 +71,7 @@ impl Stream {
             inner: Arc::new(StreamInner {
                 handle: stream,
                 context: context.clone(),
+                owned: true,
             }),
         })
     }
@@ -85,8 +89,63 @@ impl Stream {
             inner: Arc::new(StreamInner {
                 handle: stream,
                 context: context.clone(),
+                owned: true,
             }),
         })
+    }
+
+    /// Adopt a raw `CUstream`, **transferring ownership to baracuda**: the
+    /// returned [`Stream`] (and every clone) shares it, and `cuStreamDestroy`
+    /// runs when the last clone drops. `context` is the [`Context`] the stream
+    /// belongs to; baracuda keeps a clone of that wrapper. Use this when another
+    /// library hands baracuda a stream it created and no longer wants to manage.
+    ///
+    /// To run baracuda work on a stream another library still owns, use
+    /// [`Stream::borrow_raw`] instead — baracuda won't destroy it.
+    ///
+    /// # Safety
+    ///
+    /// - `handle` must be a valid, live `CUstream` created on `context` that
+    ///   baracuda may take sole ownership of: it must not be destroyed
+    ///   elsewhere, nor already be wrapped by another owning baracuda handle
+    ///   (either risks a double `cuStreamDestroy`).
+    /// - The stream's underlying CUDA context must outlive the returned
+    ///   `Stream` and all its clones. Passing an *owning* [`Context`]
+    ///   guarantees that; if `context` is itself a
+    ///   [borrowed][`Context::borrow_raw`] (non-owning) wrapper, the held clone
+    ///   does **not** extend the real context's lifetime — the caller must keep
+    ///   it alive by other means.
+    pub unsafe fn from_raw(handle: CUstream, context: &Context) -> Self {
+        Self {
+            inner: Arc::new(StreamInner {
+                handle,
+                context: context.clone(),
+                owned: true,
+            }),
+        }
+    }
+
+    /// Wrap a raw `CUstream` that **baracuda does not own**: `Drop` will not
+    /// call `cuStreamDestroy`. This is the interop workhorse — it lets baracuda
+    /// enqueue kernels / copies / events onto a stream created and owned by
+    /// another library (cudarc, cust, a framework) that outlives this wrapper.
+    /// `context` is the [`Context`] the stream belongs to (wrap a foreign one
+    /// with [`Context::borrow_raw`] if you don't already hold it).
+    ///
+    /// # Safety
+    ///
+    /// The caller guarantees `handle` is a valid `CUstream` on `context` that
+    /// stays live for the entire lifetime of the returned `Stream` and all of
+    /// its clones. baracuda will not destroy it; the owning library keeps that
+    /// responsibility.
+    pub unsafe fn borrow_raw(handle: CUstream, context: &Context) -> Self {
+        Self {
+            inner: Arc::new(StreamInner {
+                handle,
+                context: context.clone(),
+                owned: false,
+            }),
+        }
     }
 
     /// This stream's scheduling priority.
@@ -399,9 +458,14 @@ impl Stream {
 
 impl Drop for StreamInner {
     fn drop(&mut self) {
+        // A borrowed (non-owning) wrapper must not destroy the foreign handle.
+        if !self.owned {
+            return;
+        }
         if let Ok(d) = driver() {
             if let Ok(cu) = d.cu_stream_destroy() {
-                // SAFETY: last Arc drop; handle is unique.
+                // SAFETY: owned handle (cuStreamCreate or transferred via
+                // from_raw); last Arc drop, so the handle is unique.
                 let _ = unsafe { cu(self.handle) };
             }
         }

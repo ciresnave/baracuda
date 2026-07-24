@@ -25,6 +25,9 @@ pub struct Context {
 struct ContextInner {
     handle: CUcontext,
     device: Device,
+    /// When `false`, this is a non-owning (borrowed) wrapper produced by
+    /// [`Context::borrow_raw`]: `Drop` will not call `cuCtxDestroy`.
+    owned: bool,
 }
 
 // SAFETY: CUcontext is a raw pointer, but NVIDIA documents that a context
@@ -63,16 +66,89 @@ impl Context {
             inner: Arc::new(ContextInner {
                 handle: ctx,
                 device: *device,
+                owned: true,
             }),
         })
     }
 
-    /// Retrieve the thread's currently-current context, if any. Returns
-    /// `Ok(None)` when no context is current.
+    /// Adopt a raw `CUcontext`, **transferring ownership to baracuda**: the
+    /// returned [`Context`] (and every clone) shares it, and `cuCtxDestroy`
+    /// runs when the last clone drops. Use this when another library or raw
+    /// FFI hands baracuda a context it created and no longer wants to manage.
     ///
-    /// **Note:** the returned `Context` is a _non-owning_ view — its `Drop`
-    /// will not call `cuCtxDestroy` on the handle. Use this only for
-    /// interop inspection, not lifecycle management.
+    /// For the common case of *sharing* a device's primary context with the
+    /// Runtime API / a framework, prefer [`PrimaryContext::retain`] (safe,
+    /// refcounted). To wrap a context another library still owns, use
+    /// [`Context::borrow_raw`] instead — baracuda won't destroy it.
+    ///
+    /// # Safety
+    ///
+    /// - `handle` must be a valid, live `CUcontext` on `device` that baracuda
+    ///   may take sole ownership of: it must not be destroyed elsewhere, nor
+    ///   already be wrapped by another owning baracuda handle (either risks a
+    ///   double `cuCtxDestroy`).
+    /// - `handle` must be an **explicitly-created** context (`cuCtxCreate`),
+    ///   **never a device _primary_ context**. `Drop` calls `cuCtxDestroy`,
+    ///   which is the wrong teardown for a primary context (its lifetime is
+    ///   refcounted, released via `cuDevicePrimaryCtxRelease`) — destroying it
+    ///   out from under the Runtime API or a framework that shares it is
+    ///   undefined behavior. To adopt a primary context use [`PrimaryContext`];
+    ///   to merely drive any foreign context without owning it use
+    ///   [`Context::borrow_raw`].
+    pub unsafe fn from_raw(handle: CUcontext, device: &Device) -> Self {
+        Self {
+            inner: Arc::new(ContextInner {
+                handle,
+                device: *device,
+                owned: true,
+            }),
+        }
+    }
+
+    /// Wrap a raw `CUcontext` that **baracuda does not own**: `Drop` will not
+    /// call `cuCtxDestroy`. Use this for interop where another library (cudarc,
+    /// cust, a framework, or raw FFI) retains ownership of the context and
+    /// outlives this wrapper — it lets you drive baracuda's `Context` methods
+    /// (and build streams / events / modules) against a foreign context.
+    ///
+    /// # Safety
+    ///
+    /// The caller guarantees `handle` is a valid `CUcontext` on `device` that
+    /// stays live for the entire lifetime of the returned `Context` and all of
+    /// its clones. baracuda will not destroy it; the owning library keeps that
+    /// responsibility.
+    pub unsafe fn borrow_raw(handle: CUcontext, device: &Device) -> Self {
+        Self {
+            inner: Arc::new(ContextInner {
+                handle,
+                device: *device,
+                owned: false,
+            }),
+        }
+    }
+
+    /// Retrieve the raw handle of the thread's currently-current context, if
+    /// any. Returns `Ok(None)` when no context is current.
+    ///
+    /// This returns the bare `CUcontext` (not a [`Context`]) precisely because
+    /// the caller does not own it. To drive it through baracuda's safe API
+    /// without taking ownership, get the device via [`Context::current_device`]
+    /// (valid while this context is current) or [`Device::get`], then wrap the
+    /// handle with the unsafe [`Context::borrow_raw`] — that view will not
+    /// destroy the context on drop:
+    ///
+    /// ```no_run
+    /// # use baracuda_driver::{Context, Device};
+    /// # fn demo() -> baracuda_driver::Result<()> {
+    /// if let Some(handle) = Context::current()? {
+    ///     let device = Context::current_device()?;
+    ///     // SAFETY: `handle` is the live current context on `device`; its real
+    ///     // owner keeps it alive for the borrow's lifetime.
+    ///     let ctx = unsafe { Context::borrow_raw(handle, &device) };
+    ///     let _ = ctx.api_version()?;
+    /// }
+    /// # Ok(()) }
+    /// ```
     pub fn current() -> Result<Option<CUcontext>> {
         init()?;
         let d = driver()?;
@@ -255,10 +331,14 @@ impl Context {
 
 impl Drop for ContextInner {
     fn drop(&mut self) {
+        // A borrowed (non-owning) wrapper must not destroy the foreign handle.
+        if !self.owned {
+            return;
+        }
         if let Ok(d) = driver() {
             if let Ok(cu) = d.cu_ctx_destroy() {
-                // SAFETY: `self.handle` was produced by cuCtxCreate and has
-                // not been destroyed elsewhere (we're dropping the last Arc).
+                // SAFETY: an owned handle (cuCtxCreate or transferred via
+                // from_raw), not destroyed elsewhere (we're dropping the last Arc).
                 let _ = unsafe { cu(self.handle) };
             }
         }

@@ -1,7 +1,7 @@
 //! # baracuda-kernelgen
 //!
 //! Build-time generator that turns an op's **abstract IR** (the algorithm) plus
-//! a [`baracuda_kernels_types::StructureKey`] cell (the schedule) into a
+//! a [`baracuda_kernel_vocab::StructureKey`] cell (the schedule) into a
 //! specialized kernel — and its FKC contract.
 //!
 //! ## Stability posture (published as of alpha.76)
@@ -39,18 +39,33 @@
 
 pub mod backend;
 pub mod contract;
+#[cfg(feature = "convert")]
+pub mod convert;
+pub mod cpu_c;
 pub mod cuda;
 pub mod dispatch_artifact;
 pub mod ir;
 pub mod jit;
+pub mod kisc;
+pub mod lift;
 pub mod link;
 pub mod optimize;
+pub mod oracle;
 pub mod pattern;
 pub mod plan;
+pub mod recipe;
+pub mod shape;
+pub mod slang;
+pub mod telemetry;
+mod text;
+
+#[cfg(test)]
+mod fuzz;
 
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
-pub use contract::{bundle, contract, front_matter};
-pub use cuda::Cuda;
+pub use contract::{bundle, bundle_kisc, contract, front_matter};
+pub use cpu_c::CpuC;
+pub use cuda::{Cuda, emit_cast_helper, emit_coord_unravel_helper, emit_dtype_promote_helper};
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
     Access, AccumSpec, AxisRole, ContractionAxes, DagNode, Expr, ExprDag, NodeId, OpDef, ReduceOp,
@@ -62,12 +77,25 @@ pub use jit::{
     ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe, StubCompiler,
     SynthKernel, synthesize,
 };
+pub use lift::{ConsumeRefusal, LiftError, Lifted, lift_elementwise};
 pub use link::{LinkEntry, emit_link_registry, link_entry};
-pub use optimize::optimize;
+pub use optimize::{optimize, optimize_top_k};
+pub use oracle::{Fidelity, TypedBuffer, compare, evaluate};
 pub use pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
 pub use plan::{KernelPlan, Schedule, build_plan};
+pub use shape::{
+    SYMBOLIC, ShapeError, ShapeRuleForm, output_shape, pooled_axis_dim_expr, shape_rule_form,
+    windowed_extent,
+};
+pub use slang::Slang;
+pub use telemetry::{
+    Candidate, DispatchRecord, HwFingerprint, ImplId, Ingest, MissRecord, RankedCell,
+    TELEMETRY_SCHEMA_MAX, VariantVote, arch_sku_of, ingest_jsonl, merge_reports, rank_matrix,
+    resolve_impl, variant_votes,
+};
+pub use text::{op_from_text, op_to_text};
 
-use baracuda_kernels_types::StructureKey;
+use baracuda_kernel_vocab::StructureKey;
 
 /// Generate a specialized kernel for `op` at structure cell `key`, lowered by
 /// `backend`. Convenience over [`build_plan`] followed by [`Backend::lower`].

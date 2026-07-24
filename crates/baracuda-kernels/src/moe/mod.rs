@@ -115,9 +115,14 @@ where
 {
     /// Activations `[num_tokens, d_model]`.
     pub activations: TensorRef<'a, T, 2>,
-    /// Top-k expert indices `[num_tokens, top_k]`.
+    /// Top-k expert indices `[num_tokens, top_k]`. NOTE: **currently unused by
+    /// the launch path** — routing is driven by the pre-sorted
+    /// `flat_expert_ids` + `sorted_token_ids`. Retained for API stability and a
+    /// future non-pre-sorted routing path.
     pub expert_indices: TensorRef<'a, i32, 2>,
-    /// Top-k expert mixing weights `[num_tokens, top_k]`.
+    /// Top-k expert mixing weights `[num_tokens, top_k]`. NOTE: **currently
+    /// unused by the launch path** — the applied mixing weight comes from
+    /// `topk_weight_flat` (indexed by token id). Retained for API stability.
     pub expert_weights: TensorRef<'a, T, 2>,
     /// Per-token sorted-by-expert flat index list `[num_tokens * top_k]`.
     /// Pre-computed upstream (top-k routing already done).
@@ -125,9 +130,12 @@ where
     /// Per-token expert id list aligned with `sorted_token_ids`
     /// `[num_tokens * top_k]`. Already sorted by expert.
     pub flat_expert_ids: TensorRef<'a, i32, 1>,
-    /// Optional per-token mixing weight `[num_tokens * top_k]`. When
-    /// `None`, the launcher passes `nullptr` and the kernel reads from
-    /// `expert_weights` via the routing path.
+    /// Optional per-token mixing weight, **indexed by token id** (so its
+    /// effective extent is `[num_tokens]`, and only the `top_k == 1` combine is
+    /// well-defined — see the `MoePlan` semantics note). When `None`, the
+    /// launcher passes `nullptr` and the kernel applies a mixing scale of `1.0`
+    /// (the "expanded" output — no scaling). NOTE: this is the ONLY mixing
+    /// weight the kernel reads; `expert_weights` is not consulted.
     pub topk_weight_flat: Option<TensorRef<'a, f32, 1>>,
     /// Packed expert weight bytes. For `Wmma`, must equal
     /// `num_experts * d_expert * d_model * sizeof(T)`; for GGUF, must
@@ -177,19 +185,35 @@ where
 /// hardware (no atomics — top-k writes are to distinct token rows;
 /// per-token weight scaling is applied in-kernel).
 ///
-/// # Variant / `topk_weight` semantics — **PENDING**
+/// # Variant / `topk_weight` semantics
 ///
-/// The reference CPU math for each variant is a known TODO: the
-/// `kernels/moe.cu` integration tests currently retain the kernel
-/// outputs via `let _ = ...` placeholders rather than asserting
-/// against a verified CPU reference. The exact composition rules
-/// — when the kernel reads `topk_weight_flat` vs `expert_weights`,
-/// the post-mix scaling order, the prefill-vs-decode tile-geometry
-/// numerical drift — are NOT yet pinned down by a reference
-/// implementation. Callers should treat any specific numerical
-/// output as kernel-defined until the reference lands. See
-/// `crates/baracuda-kernels/src/moe/mod.rs` and the integration
-/// tests under `crates/baracuda-kernels/tests/moe*.rs`.
+/// Every variant computes the SAME per-expert operation — a single linear
+/// projection `y = W_e · x` (no gate / SwiGLU / activation / bias; any such
+/// structure lives in ops *above* this one), differing only in the dot
+/// (dense-FP multiply vs GGUF dequant-dot). For a routed pair `m`:
+///
+/// ```text
+///   out[token_id, n] = s(token_id) · Σ_k  acts[in_row, k] · W[e, n, k]
+/// ```
+///
+/// with `e = flat_expert_ids[m]`, `token_id = sorted_token_ids[m]`,
+/// `in_row = token_id / (topk_weight_flat.is_some() ? 1 : top_k)`, and the
+/// mixing scale `s(token_id) = topk_weight_flat[token_id]` (or `1.0` when
+/// `None`) applied ONCE, after the dot, UNNORMALIZED (no softmax / renorm —
+/// pre-normalize upstream if you need it). The write is an ASSIGNMENT, so a
+/// `Some(..)` mixing combine is well-defined only for `top_k == 1`; for
+/// `top_k > 1` all selected experts target the same output row →
+/// last-write-wins (use the `None` "expanded" `[num_tokens*top_k, d_expert]`
+/// output and combine in a downstream op).
+///
+/// **Verified**: the integration tests under
+/// `crates/baracuda-kernels/tests/moe*.rs` build an f32 CPU reference of the
+/// formula above and assert the downloaded kernel output against it within
+/// tolerance — dense-FP WMMA and scalar/WMMA GGUF `Q8_0`, `top_k == 1`. Not
+/// yet covered by a reference: `top_k > 1` combination, the GGUF k-quants
+/// (`Q2_K`…`Q6_K`), and a prefill-vs-decode cross-geometry agreement check
+/// (the two tile geometries emit different MMA fragment shapes, so agreement
+/// is within-tolerance, not bit-exact).
 #[derive(Debug)]
 pub struct MoePlan {
     desc: MoeDescriptor,

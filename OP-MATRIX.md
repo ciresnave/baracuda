@@ -1,7 +1,10 @@
 # Op Coverage Matrix
 
-Generated for **baracuda-kernels v0.0.1-alpha.31** on **RTX 4070 (sm_89)** —
-2026-05-21 sweep at 1890/0 regression across 602 binaries.
+Baseline generated for **baracuda-kernels** on **RTX 4070 (sm_89)**; the body
+has since been re-annotated with the **baracuda-kernelgen op-matrix audit**
+(rounds through **2026-07-03**), current as of the **v0.0.1-alpha.77** line.
+See the per-op "Kernelgen audit" notes below for the generated-vs-bespoke
+dispatch calls.
 
 This file is the authoritative reference for "what ops are implemented and at
 what dtypes / shapes / backends." Each row corresponds to a `pub struct *Plan`

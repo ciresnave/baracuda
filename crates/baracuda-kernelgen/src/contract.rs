@@ -32,7 +32,7 @@
 use crate::backend::GeneratedKernel;
 use crate::ir::{BinaryOp, ExprDag, NodeId, OobPolicy, OpDef, ScalarExpr, UnaryOp};
 use crate::pattern::{PatternNode, derive_pattern, to_fkc};
-use baracuda_kernels_types::{Contiguity, ElementKind, StructureKey, VecWidth};
+use baracuda_kernel_vocab::{Contiguity, ElementKind, StructureKey, VecWidth};
 
 /// Canonicalize a caller's backend token to the exact capitalized spelling
 /// Fuel's FKC importer accepts (fuel-dispatch `fkc/lower.rs` `lower_backend`,
@@ -119,10 +119,8 @@ pub fn bundle(backend_name: &str, revision_base: &str, contracts: &[String]) -> 
         // FusedOp is emitted by `contract` with the SCREAMING_SNAKE constant as its
         // `fused_op:` value (see `fuel_fused_op_name`), which this filter admits.
         // Verified 2026-07-08 against Fuel's real `import_bundle_str`.
-        if let Some(name) = fused_op_of(c) {
-            if !FUEL_FUSED_OPS.contains(&name) {
-                continue;
-            }
+        if !contract_admissible(c, false) {
+            continue;
         }
         // The heading title = the contract's `kernel:` name (diagnostic; the
         // block's own fields carry the real identity). A malformed contract
@@ -135,6 +133,41 @@ pub fn bundle(backend_name: &str, revision_base: &str, contracts: &[String]) -> 
     s
 }
 
+/// Assemble a **KISC-framed** importable bundle: the provider [`front_matter`]
+/// followed by each admitted [`contract`] as its own self-delimiting KISC
+/// document (KISS-Contract §6.11), in order. Replaces [`bundle`]'s `## `-heading
+/// framing — each kernel is one KISC document (magic + `len` + `crc32`,
+/// hard-reject), so a malformed contract can no longer import as a silent empty
+/// and a bad document declines alone instead of poisoning the file. Emitted
+/// behind the negotiated `SEAM_CAP_KISC_FRAMING` cutover; [`bundle`] stays for
+/// pre-KISC peers.
+///
+/// Admission is capability-gated on `recipe_import` (see [`contract_admissible`]):
+/// against a pre-recipe-import peer, a fused contract with no Fuel FusedOp is
+/// withheld; once Baracuda emits the recipe AND the peer advertises recipe-import
+/// (`SEAM_CAP_RECIPE_IMPORT`), that withhold retires — no code change here, only
+/// [`contract_carries_recipe`] becoming real. The KISC header-line and bundle
+/// structure are PROVISIONAL (see [`crate::kisc`]).
+#[must_use]
+pub fn bundle_kisc(
+    backend_name: &str,
+    revision_base: &str,
+    contracts: &[String],
+    recipe_import: bool,
+) -> String {
+    let mut s = front_matter(backend_name, revision_base);
+    for c in contracts {
+        if !contract_admissible(c, recipe_import) {
+            continue;
+        }
+        s.push_str(&crate::kisc::kisc_frame(c));
+        // Documents are self-delimiting (the header declares `len`); a single
+        // `\n` between them keeps the file readable and line-tool-friendly.
+        s.push('\n');
+    }
+    s
+}
+
 /// The `fused_op:` name declared inside a [`contract`] block, or `None` for a
 /// primitive (`op_kind:`) contract. Used by [`bundle`] to withhold a fused
 /// contract Fuel cannot import.
@@ -143,6 +176,42 @@ fn fused_op_of(contract: &str) -> Option<&str> {
         .lines()
         .find_map(|l| l.trim().strip_prefix("fused_op: "))
         .map(str::trim)
+}
+
+/// Whether `contract` is admissible into an importable bundle for a peer whose
+/// importer supports `recipe_import` (recipe-verify-and-register).
+///
+/// - A primitive (`op_kind:`) contract is always importable — Fuel knows the base ops.
+/// - A fused contract whose `fused_op:` IS a Fuel FusedOp is importable by the
+///   closed-vocabulary importer.
+/// - A fused contract whose `fused_op:` is NOT a Fuel FusedOp is importable ONLY by
+///   a `recipe_import` peer, and ONLY if the contract carries a recipe (the KISS-Ops
+///   Semantics op-DAG to the base floor) the importer can verify + register. Baracuda
+///   does not emit that recipe yet ([`contract_carries_recipe`]), so today this stays
+///   withheld even against a recipe-import peer — this arm is the seam where retiring
+///   the withhold lands (in lockstep with recipe emission + Fuel's recipe importer).
+///
+/// Shared by [`bundle`] (which passes `recipe_import = false`) and [`bundle_kisc`].
+fn contract_admissible(contract: &str, recipe_import: bool) -> bool {
+    match fused_op_of(contract) {
+        None => true,
+        Some(name) if FUEL_FUSED_OPS.contains(&name) => true,
+        Some(_) => recipe_import && contract_carries_recipe(contract),
+    }
+}
+
+/// Whether `contract` carries a **recipe** — the KISS-Ops Semantics op-DAG
+/// decomposed to the base floor, which a recipe-verify importer runs to validate
+/// and register an op it does not already know.
+///
+/// Detected by the `semantics:` line [`contract`] emits when the op re-bases onto
+/// confirmed KISS-Ops tokens ([`crate::recipe::semantics_dag`]). An op with no
+/// confirmed re-basing carries no recipe, so an otherwise-unknown fused op stays
+/// withheld even from a recipe-import peer until its recipe can be emitted.
+fn contract_carries_recipe(contract: &str) -> bool {
+    contract
+        .lines()
+        .any(|l| l.trim_start().starts_with("semantics: "))
 }
 
 /// The exhaustive `FusedOps::*` SCREAMING_SNAKE constant names Fuel's
@@ -352,12 +421,16 @@ pub fn contract(
     //      field (additive/`#[serde(default)]` on Fuel's side; their parser is
     //      permissive — `deny_unknown_fields` deliberately unset — so emitting it
     //      is safe today and load-bearing when Fuel wires the slot in lockstep).
-    // A non-u32 gather (or an un-fkc-spellable data dtype) → `None` → honest miss.
+    // A non-u32 gather no longer dies here (increment-7 recipe wiring): Fuel's pinned
+    // `gather` RECIPE schema admits index_dtype ∈ {u32,i32,i64}, so an i32/i64 index
+    // gather — unreachable as a Fuel graph PRIMITIVE (`op_kind: Gather` keys a fixed
+    // U32 slot) — falls through to the recipe-carrying advert (`fused_op:` + a
+    // `gather[…]` `semantics:` node, admitted only to a recipe-import peer). The u32
+    // gather still takes the op_kind primitive path below; a `None` here is the
+    // recipe-path signal, NOT an honest miss. (An un-fkc-spellable DATA dtype already
+    // returned `None` at the top via `fkc_dtype(key.dtype)`.)
     let gather_advert = if crate::plan::op_has_gather(op) {
-        match gather_advert(op, key) {
-            Some(g) => Some(g),
-            None => return None,
-        }
+        gather_advert(op, key)
     } else {
         None
     };
@@ -432,7 +505,13 @@ pub fn contract(
     // Verified against the real emitter (cuda.rs `offset_expr` / the fully-
     // broadcast hoist) + `classify_contiguity` (structure_key.rs), 2026-07-08.
     {
-        let gather_index = gather_advert.as_ref().map(|g| g.index_operand);
+        // The gather's index operand is exempt from the broadcast-withhold rule (a
+        // 1-D index's stride-0 broadcast over the non-gathered axes is the DEFINITION
+        // of index_select/embedding, not a caller-varying layout). Read the operand
+        // off the read-index roles — NOT `gather_advert` — so it exempts BOTH a u32
+        // op_kind gather AND a non-u32 recipe-carrying index_select.
+        let gather_index = crate::plan::gather_of(&op.read_index)
+            .map(|(_, index_operand, ..)| index_operand as usize);
         for i in 0..key.n_operands as usize {
             let o = key.operands[i];
             if o.flipped {
@@ -443,6 +522,33 @@ pub fn contract(
             }
         }
     }
+
+    // The derived fusion pattern and the neutral KISS-Ops recipe, computed up front
+    // so the honesty gates below can consult them.
+    //   - `pattern` is `None` when `derive_pattern` REJECTS the body (NoFkcName /
+    //     CoordUnsupported / …) — a pattern-DERIVATION miss, distinct from a `Some(p)`
+    //     root that merely has no importable Fuel op_kind spelling (AddScalar etc.).
+    //   - `recipe` is the KISS-Ops op-DAG ([`crate::recipe::semantics_dag`]), `None`
+    //     when any node has no confirmed token. So `recipe.is_some()` ALREADY IS the
+    //     "every primitive is in Fuel's resolvable floor" gate — the exhaustive
+    //     `unary/binary_kiss_name` + the confirmed source-op leaves never fabricate a
+    //     token, and Fuel resolves any named floor op (grammar reply Q6). No separate
+    //     floor check is needed; an unconfirmed token → `None` → withheld honest miss.
+    let pattern = derive_pattern(op).ok();
+    let recipe = crate::recipe::semantics_dag(op);
+    // Brief 4 — a PLAIN elementwise op (NOT an indexed gather; that rides the
+    // `recipe_carrying` branch below) whose pattern derivation FAILED yet which
+    // carries a valid, Fuel-resolvable recipe: e.g. `BitAnd`→`bit_and(in0,in1)`
+    // (NoFkcName), `Erfc`→`erfc(in0)` (NoFkcName), `triu`→`mul(in0, cmp_ge(iota(1),
+    // …))` (CoordUnsupported). Its importable identity is the RECIPE, so it advertises
+    // `fused_op:` + a `semantics:` line — retiring the pattern-miss withhold that
+    // `derive_pattern` alone left. UNLIKE the non-elementwise `recipe_carrying`
+    // branch, its output shape+dtype = the input's, so it KEEPS the true elementwise
+    // return block (`same_as(in0)` + `passthrough(in0)`/`fixed(U8)`).
+    let elementwise_recipe_miss = matches!(op.access, crate::ir::Access::Elementwise)
+        && !crate::plan::op_has_gather(op)
+        && pattern.is_none()
+        && recipe.is_some();
 
     // Increment 0b honesty gate (tightened by the adversarial review): a body
     // containing a Cmp* ANYWHERE emits a contract only as the u8-out
@@ -463,8 +569,14 @@ pub fn contract(
     //   the structure key. Withheld until `Cast` joins the pattern
     //   vocabulary; the kernel itself still generates (AOT + seam lowering
     //   are unaffected).
+    // - EXEMPTION (Brief 4): an `elementwise_recipe_miss` is exempt. The Cast gap
+    //   is a PATTERN-grammar limit, but this op's identity is the RECIPE, which
+    //   expresses the cmp honestly (`cmp_ge` is a floor op Fuel resolves + verifies
+    //   numerically; the recipe is dtype-agnostic and realized at the accept dtypes),
+    //   so a Coord/cmp body like `triu` rides the recipe path. A cmp body whose
+    //   pattern DERIVES (gt_mask, relu_bw) is NOT a pattern miss, so it stays withheld.
     let out_u8 = op.out_dtype == Some(ElementKind::U8);
-    if expr_contains_cmp(&op.body) && !out_u8 {
+    if expr_contains_cmp(&op.body) && !out_u8 && !elementwise_recipe_miss {
         return None;
     }
 
@@ -484,11 +596,30 @@ pub fn contract(
         return None;
     }
 
-    let pattern = derive_pattern(op).ok();
+    // Recipe-carrying = the op's IMPORTABLE identity is the recipe, not a pattern /
+    // op_kind. Fires for (a) a NON-elementwise op (contraction/reduction/scan/
+    // rowreduce — its output shape/dtype ≠ any input's, so the FKC same_as/passthrough
+    // rules can't state them, and the realized recipe is the authority — Fuel's shape
+    // answer, 2026-07-17), and (b) a data-dependent GATHER whose index is not a Fuel
+    // graph primitive (a non-u32 index — `gather_advert` is `None`, so it does not ride
+    // the op_kind path): its out shape = the index shape ≠ same_as(in0), so it too
+    // defers shape to the recipe. Both OMIT `shape_rule`. EXCLUDES a u32 gather
+    // (`gather_advert` Some → op_kind primitive). A PLAIN elementwise pattern-miss is
+    // handled separately by `elementwise_recipe_miss` (Brief 4) — same `fused_op:` +
+    // `semantics:` advert, but it KEEPS the elementwise `same_as(in0)` return block
+    // (out shape/dtype = the input's). Scatter never reaches here (withheld above).
+    let recipe_carrying = recipe.is_some()
+        && gather_advert.is_none()
+        && (!matches!(op.access, crate::ir::Access::Elementwise) || crate::plan::op_has_gather(op));
     let n_ops = pattern.as_ref().map_or(0, count_ops);
     // A u8-out predicate advertises ONLY as the single-op primitive; a FUSED
-    // u8-out body would hit the same missing-Cast pattern problem above.
-    if out_u8 && n_ops != 1 {
+    // u8-out body would hit the same missing-Cast pattern problem above. This is a
+    // PATTERN-grammar limit, so a recipe-carrying op (whose identity is the recipe,
+    // not a pattern) is exempt — a non-elementwise `recipe_carrying` op's u8 output
+    // rides the recipe dtype (e.g. a hetero-out `any` reduction), and an elementwise
+    // `elementwise_recipe_miss` op emits the true `fixed(U8)` return rule (out dtype =
+    // U8, out shape = in0).
+    if out_u8 && n_ops != 1 && !recipe_carrying && !elementwise_recipe_miss {
         return None;
     }
     let is_fusion = n_ops > 1;
@@ -544,8 +675,18 @@ pub fn contract(
                 None => format!("fused_op: {}", op.name),
             },
             // body not expressible as a pattern (Const / non-elementwise / bind
-            // mismatch) → not advertisable; skip rather than fake an op_kind from
-            // the op's free-form name (which is not an OpKind dispatch key).
+            // mismatch, or an elementwise NoFkcName/CoordUnsupported miss). If the op
+            // carries a neutral KISS-Ops recipe — a NON-elementwise op / non-u32 gather
+            // (`recipe_carrying`) OR a plain elementwise pattern-miss
+            // (`elementwise_recipe_miss`, Brief 4) — advertise it as a recipe-carrying
+            // fused op: bundle() still WITHHOLDS it (recipe_import=false ⇒
+            // contract_admissible false), and bundle_kisc admits it ONLY to a
+            // recipe-import peer via the `semantics:` line below (contract_carries_recipe).
+            // Otherwise skip — an honest miss rather than a faked op_kind from the
+            // free-form name.
+            None if recipe_carrying || elementwise_recipe_miss => {
+                format!("fused_op: {}", op.name)
+            }
             None => return None,
         }
     };
@@ -587,14 +728,18 @@ pub fn contract(
     s.push_str("accept:\n");
     s.push_str(&format!("  structure_key: \"{}\"\n", key.to_token()));
     s.push_str("  inputs:\n");
+    // The gather's index operand + its REAL FKC dtype token — read off the read-index
+    // roles so it is honest on BOTH the u32 op_kind path (U32, Fuel assembles the
+    // mixed-dtype key `[T, U32, T]`) AND the non-u32 recipe path (I32/I64, never the
+    // data dtype). `None` for a non-gather op ⇒ every input emits the uniform key
+    // `dtype` (byte-identical to the pre-Model-A emission).
+    let gather_index_slot: Option<(usize, &str)> =
+        crate::plan::gather_of(&op.read_index).and_then(|(_, index_operand, _, _, index_dtype)| {
+            fkc_dtype(index_dtype).map(|tok| (index_operand as usize, tok))
+        });
     for i in 0..op.n_inputs as usize {
-        // Per-operand dtype (Model-A): the INDEX operand of a gather emits its
-        // real dtype (U32) so Fuel assembles the mixed-dtype key `[T, U32, T]`;
-        // every value/data operand emits the uniform key dtype. A non-gather op
-        // has `gather_advert == None`, so EVERY input is `dtype` — byte-identical
-        // to the pre-Model-A emission.
-        let in_dtype = match &gather_advert {
-            Some(g) if g.index_operand == i => g.index_dtype_token,
+        let in_dtype = match gather_index_slot {
+            Some((io, tok)) if io == i => tok,
             _ => dtype,
         };
         // Fuel's FKC `TensorDesc` carries the operand dtype as the PLURAL
@@ -642,46 +787,71 @@ pub fn contract(
     }
 
     s.push_str("return:\n  outputs:\n");
-    // A u8-predicate op returns the mask dtype, not the input dtype:
-    // `fixed(U8)` per FKC §5.1 ("a constant … comparisons → U8"), the exact
-    // rule Fuel's own CPU compare contracts carry. Everything else is an
-    // `passthrough(in0)` of input 0's dtype: Fuel's `parse_dtype_rule`
-    // (`fkc/lower.rs`) maps `passthrough(role)` → `DtypeRule::Passthrough` and
-    // `resolve_output_slot_dtype` then APPENDS the output dtype to the binding
-    // key — whereas the old `same_as_input(0)` parsed to `DtypeRule::Other`,
-    // which is SILENTLY DROPPED (no output slot in the key). `in0` is the item-4
-    // name of input 0 (verified 2026-07-08 against Fuel's real importer: the
-    // resolved primitive's `dtypes` then carries inputs + the output slot).
-    let dtype_rule = if out_u8 {
-        "fixed(U8)"
-    } else {
-        "passthrough(in0)"
-    };
-    // shape_rule: `same_as(in0)` — Fuel's §5.2 grammar spells it `same_as(<role>)`
-    // (fuel-dispatch `fkc/schema.rs` OutputDesc; the `same_as_input(0)` form is
-    // OUTSIDE the grammar — `same_as_input` has zero occurrences in Fuel, and `0`
-    // is not an operand role). `in0` is the item-4 name of input 0, matching the
-    // sibling `dtype_rule: passthrough(in0)` role system.
-    //
-    // layout_guarantee: the OUTPUT descriptor has NO five-flag `layout:` field —
-    // Fuel's `OutputDesc` (`fkc/schema.rs`) carries `layout_guarantee:` with the
-    // §5.3 token values `contiguous` / `preallocated` / `same_as(<input>)` (the
-    // five-flag `LayoutSpec` map is the ACCEPT-input `TensorDesc.layout` form
-    // only; emitting it on an output is a silently-dropped unknown key). A
-    // contiguous output cell guarantees a packed contiguous buffer; anything else
-    // is the always-true `preallocated` (the executor pre-allocates it). Verified
-    // 2026-07-08 against Fuel's real parser (`layout:` → None; `layout_guarantee:
-    // contiguous` → Some).
+    // layout_guarantee (§5.3): a contiguous output cell guarantees a packed
+    // contiguous buffer, else the always-true `preallocated` (the executor
+    // pre-allocates it). The five-flag `LayoutSpec` map is the ACCEPT-input
+    // `TensorDesc.layout` form only; on an OUTPUT it's a silently-dropped unknown
+    // key. Verified 2026-07-08 against Fuel's parser.
     let layout_guarantee = match key.operands[out_idx].contig {
         Contiguity::Contig => "contiguous",
         _ => "preallocated",
     };
-    s.push_str(&format!(
-        "    - dtype_rule: {dtype_rule}\n      \
-         shape_rule: same_as(in0)\n      \
-         layout_guarantee: {layout_guarantee}\n      \
-         aliasing: none\n"
-    ));
+    // The FKC `OutputDesc` rule fields (§5.1/§5.2), all omittable (serde default).
+    // Fuel confirmed the exact grammar 2026-07-17: `dtype_rule: passthrough(<role>)
+    // | fixed(<DType>)`; `shape_rule: same_as(<role>) | from_params(<field>, …)` —
+    // there is NO `from_recipe` form.
+    //
+    // RECIPE-CARRYING non-elementwise op (contraction/reduction/scan): the realized
+    // recipe is Fuel's single shape+dtype authority (`primitive_shape → (shape,
+    // dtype)`). SHAPE — no FKC `shape_rule` form states a non-elementwise output
+    // shape (a matmul's out `[M,N]` ≠ any input), and `shape_rule` is a claim Fuel
+    // VERIFIES against the recipe, not a shape authority. Fuel's `eval_shape_rule`
+    // (fuel-dispatch return_check.rs, commit b1c33f91) now EVALUATES `same_as(role)`
+    // and `ShapeRuleMismatch`es a claim that disagrees with the realized shape
+    // (`from_params` stays a stub) — so a `same_as(in0)` here would be a FALSE claim;
+    // it is OMITTED and the recipe carries the shape. DTYPE — `dtype_rule` IS
+    // interpreted (it builds the binding-key output slot), so it is emitted: a
+    // hetero output declares `fixed(<dtype>)`, a uniform output `passthrough(in0)`.
+    //
+    // ELEMENTWISE op: a basis whose shape rule IS `same_as(in0)` (`passthrough(role)`
+    // → `DtypeRule::Passthrough`, then `resolve_output_slot_dtype` appends the output
+    // slot; `fixed(U8)` for a u8-predicate). Byte-identical to the pre-recipe emit.
+    if recipe_carrying {
+        let dtype_rule = match op.out_dtype.and_then(fkc_dtype) {
+            Some(d) => format!("fixed({d})"),
+            None => "passthrough(in0)".to_string(),
+        };
+        s.push_str(&format!(
+            "    - dtype_rule: {dtype_rule}\n      \
+             layout_guarantee: {layout_guarantee}\n      \
+             aliasing: none\n"
+        ));
+    } else {
+        let dtype_rule = if out_u8 {
+            "fixed(U8)"
+        } else {
+            "passthrough(in0)"
+        };
+        // A u32-index gather/index_select/embedding rides the op_kind path
+        // (`gather_advert` Some ⇒ NOT recipe_carrying), so it lands here — but its
+        // output shape is the INDEX shape, not `same_as(in0=data)` (the SAME reason
+        // the i32/i64 gather recipe path omits shape_rule; its own `semantics:
+        // gather[…]` node is the shape authority). Emitting `same_as(in0)` is a false
+        // claim Fuel's `eval_shape_rule` (return_check.rs) can `ShapeRuleMismatch` on
+        // a resized-axis gather — so OMIT it. `dtype_rule` (the gathered data dtype)
+        // stays correct. Every true-elementwise cell (out shape == in0) keeps
+        // `shape_rule: same_as(in0)` byte-identically.
+        let shape_rule_line = if gather_advert.is_some() {
+            String::new()
+        } else {
+            "shape_rule: same_as(in0)\n      ".to_string()
+        };
+        s.push_str(&format!(
+            "    - dtype_rule: {dtype_rule}\n      {shape_rule_line}\
+             layout_guarantee: {layout_guarantee}\n      \
+             aliasing: none\n"
+        ));
+    }
 
     s.push_str("caps:\n");
     // in_place: ALWAYS `false`. Two Fuel-side facts, both verified 2026-07-08:
@@ -721,7 +891,8 @@ pub fn contract(
     // the wire per the 2026-07-03 Fuel exchange (documentation-only for Fuel
     // today — launches are provider-internal — but load-bearing for their
     // declared-cost trampoline, and an 8x launch/cost hazard if ever assumed).
-    let cw = crate::cuda::effective_count_width(&crate::plan::build_plan(op, key));
+    let plan = crate::plan::build_plan(op, key);
+    let cw = crate::cuda::effective_count_width(&plan);
     if cw > 1 {
         s.push_str(&format!("  count_unit: vectors_x{cw}\n"));
     } else {
@@ -768,6 +939,37 @@ pub fn contract(
     if let Some(u) = prec_ulp {
         s.push_str(&format!("  max_ulp: {u}\n"));
     }
+    // KISS-Contract §6.8 `accumulation_type` (sk3 RFC §4.2): a contraction/
+    // reduction-bearing cell declares the dtype its fold accumulates in,
+    // spelled from the SAME closed dtype set as the key's `<acc>` coordinate
+    // (`baracuda_kernel_vocab::dtype_token` — one dtype, two surfaces). A pure
+    // elementwise/permutation cell has no fold, so the field is absent.
+    let acc_dtype = match plan.access {
+        // Gem cells: the key's `<acc>` IS the declaration — emitting from the
+        // key makes the §4.2 contract↔key consistency pin hold by
+        // construction (and `emit_contraction` accumulates in exactly this
+        // dtype: float for f16/bf16/f32/f32-strict, double for f64).
+        crate::ir::Access::Contraction { .. } => key.contraction.map(|c| c.acc),
+        // Reduction-class cells (no key coordinate — the §6.8 declaration is
+        // the only surface): the generated fold's accumulator rule, mirroring
+        // the cuda.rs emitters — F64/F32Strict fold in double, integers fold
+        // native (wrapping), every other float folds up-converted in float.
+        crate::ir::Access::Reduction { .. }
+        | crate::ir::Access::RowReduce { .. }
+        | crate::ir::Access::Scan { .. }
+        | crate::ir::Access::Window { .. } => Some(match plan.dtype {
+            ElementKind::F64 | ElementKind::F32Strict => ElementKind::F64,
+            dt if crate::plan::is_int_dtype(dt) => dt,
+            _ => ElementKind::F32,
+        }),
+        _ => None,
+    };
+    if let Some(a) = acc_dtype {
+        s.push_str(&format!(
+            "  accumulation_type: {}\n",
+            baracuda_kernel_vocab::dtype_token(a)
+        ));
+    }
     s.push_str("  audited: true\n");
     s.push_str(&format!(
         "  notes: \"{}\"\n",
@@ -779,6 +981,15 @@ pub fn contract(
         s.push_str(&to_fkc(p));
     }
 
+    // Neutral KISS-Ops Semantics recipe (KISS-Contract §2.3), emitted when the op
+    // re-bases onto confirmed KISS-Ops tokens — the decomposition a recipe-verify
+    // importer runs, and what [`contract_carries_recipe`] detects to admit an
+    // otherwise-unknown fused op to a recipe-import peer. Format PROVISIONAL —
+    // see [`crate::recipe`].
+    if let Some(r) = &recipe {
+        s.push_str(&format!("semantics: {r}\n"));
+    }
+
     s.push_str("```\n");
     Some(s)
 }
@@ -788,9 +999,10 @@ pub fn contract(
 // ---------------------------------------------------------------------------
 
 /// The Fuel-facing advert facts for a u32-index gather, or `None` for a gather
-/// that stays an honest miss. Computed once at the top of [`contract`] and
-/// threaded into the op_kind line, the per-operand accept dtypes, and the
-/// `oob_policy` field.
+/// that stays an honest miss (a non-u32 index → the recipe path instead). Computed
+/// once at the top of [`contract`] and threaded into the op_kind line and the
+/// `oob_policy` field. (The index operand + its accept dtype are read separately off
+/// the read-index roles at the accept block — honest for the recipe path too.)
 struct GatherAdvert {
     /// The verified Fuel primitive `OpKind` spelling — `"Gather"` (full-shape
     /// index) or `"IndexSelect"` (1-D / broadcast index). Both are exact strings
@@ -799,11 +1011,6 @@ struct GatherAdvert {
     /// The `oob_policy` value — `skip` (gather / index_select) / `zero_fill`
     /// (embedding) / `clamp` (generator-only). Fuel's own gather is `error`.
     oob_policy: &'static str,
-    /// Which input operand is the integer index (its accept slot emits U32).
-    index_operand: usize,
-    /// FKC §5 spelling of the index dtype — always `"U32"` (the guard below only
-    /// admits a U32 index; i32/i64 stay honest misses).
-    index_dtype_token: &'static str,
 }
 
 /// Decide whether a gather `op` at cell `key` is honestly advertisable, and with
@@ -822,7 +1029,6 @@ fn gather_advert(op: &OpDef, key: &StructureKey) -> Option<GatherAdvert> {
     if index_dtype != ElementKind::U32 {
         return None;
     }
-    let index_dtype_token = fkc_dtype(index_dtype)?; // "U32"
     let op_kind = if index_is_1d(key, index_operand as usize, axis) {
         "IndexSelect"
     } else {
@@ -836,8 +1042,6 @@ fn gather_advert(op: &OpDef, key: &StructureKey) -> Option<GatherAdvert> {
     Some(GatherAdvert {
         op_kind,
         oob_policy,
-        index_operand: index_operand as usize,
-        index_dtype_token,
     })
 }
 
@@ -1525,7 +1729,7 @@ mod tests {
     use super::*;
     use crate::ir::{OpDef, input, param};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+    use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn key_for(n_operands: usize, op_cat: OpCategory) -> StructureKey {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
@@ -1534,12 +1738,14 @@ mod tests {
     }
 
     #[test]
-    fn contraction_is_an_honest_miss_no_contract() {
+    fn contraction_advertises_a_recipe_carrying_contract() {
         use crate::ir::{ContractionAxes, reduced};
         use crate::pattern::PatternError;
-        // The generated contraction node must NEVER leak a bindable elementwise
-        // contract — the honest-miss wall holds until the Fuel region grammar
-        // for contractions lands (item-10 spike §10).
+        // A contraction is NOT expressible as an elementwise pattern (derive_pattern
+        // rejects it), but it carries a neutral KISS-Ops recipe — so it advertises a
+        // recipe-carrying `fused_op` contract (matmul node + `from_recipe` shape),
+        // admitted ONLY to a recipe-import peer. The old "no contract at all" wall
+        // is replaced by the recipe-import withhold — the kernel still runs AOT.
         let mm = OpDef::contraction(
             "matmul",
             &[ElementKind::F32],
@@ -1551,7 +1757,28 @@ mod tests {
         let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
         let kernel = generate(&mm, &key, &Cuda);
-        assert!(contract(&mm, &key, &kernel, "cuda").is_none());
+        let c = contract(&mm, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: matmul"), "{c}");
+        assert!(c.contains("semantics: matmul[mk.kn](in0, in1)"), "{c}");
+        // The matmul output shape ≠ any input → no FKC shape_rule form fits, so
+        // shape_rule is OMITTED (the recipe carries the shape). dtype is uniform →
+        // passthrough(in0), a real form Fuel interprets.
+        assert!(
+            !c.contains("shape_rule"),
+            "shape rides the recipe, omitted:\n{c}"
+        );
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        // Honest-miss discipline preserved: WITHHELD from a non-recipe-import bundle,
+        // admitted only to a recipe-import peer.
+        assert!(
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
+        );
+        // derive_pattern still rejects it — the recipe, not a pattern, is its identity.
         assert!(matches!(
             crate::derive_pattern(&mm),
             Err(PatternError::NotElementwise)
@@ -1559,14 +1786,140 @@ mod tests {
     }
 
     #[test]
-    fn scan_is_an_honest_miss_no_contract() {
+    fn contract_accumulation_type_matches_key_acc() {
+        use crate::ir::{ContractionAxes, ReduceOp, reduced};
+        // The sk3 RFC §4.2 / KISS-Contract §6.8 pin: a contraction cell's
+        // contract MUST declare `accumulation_type` denoting the SAME dtype as
+        // the key's `<acc>` coordinate, in the SAME closed dtype-token
+        // spelling — one dtype, two surfaces.
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let acc = key.contraction.expect("gem cell").acc;
+        let want = format!(
+            "  accumulation_type: {}\n",
+            baracuda_kernel_vocab::dtype_token(acc)
+        );
+        let c = contract(&mm, &key, &generate(&mm, &key, &Cuda), "cuda").expect("contract");
+        assert!(
+            c.contains(&want),
+            "contract must declare the key's <acc>: {c}"
+        );
+        assert!(c.contains("  accumulation_type: f32\n"), "{c}");
+        // The generated skinny kernel actually accumulates in that dtype (a
+        // `float acc`, never `double` — the F32Strict/binary32 discipline).
+        let k = generate(&mm, &key, &Cuda);
+        assert!(k.source.contains("float acc"), "{}", k.source);
+        assert!(!k.source.contains("double acc"), "{}", k.source);
+
+        // A reduction-bearing cell (no key <acc> coordinate — the §6.8 field is
+        // the only surface) declares its fold dtype: an F32Strict sum folds in
+        // double (the precision-first strict-reduce kernel), so it declares f64.
+        let x = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32Strict, 256);
+        let ro = OperandDesc::new(1, &[256], &[1], ElementKind::F32Strict, 256);
+        let rk = structure_key(OpCategory::Reduction, &[x, ro], ArchSku::Sm89);
+        let red = OpDef::reduction("s", 1, &[ElementKind::F32Strict], input(0), ReduceOp::Sum);
+        let cr = contract(&red, &rk, &generate(&red, &rk, &Cuda), "cuda").expect("contract");
+        assert!(
+            cr.contains("  accumulation_type: f64\n"),
+            "strict reduce declares its double fold: {cr}"
+        );
+
+        // A pure elementwise cell has no fold — the field is ABSENT.
+        let ew = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let ek = key_for(3, OpCategory::BinaryElementwise);
+        let ce = contract(&ew, &ek, &generate(&ew, &ek, &Cuda), "cuda").expect("contract");
+        assert!(
+            !ce.contains("accumulation_type"),
+            "no fold, no declaration: {ce}"
+        );
+    }
+
+    #[test]
+    fn rowreduce_advertises_a_recipe_carrying_contract() {
+        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, reduced};
+        use crate::pattern::PatternError;
+        // A RowReduce (softmax) is NOT an elementwise pattern (derive_pattern rejects
+        // it), but it carries a neutral KISS-Ops recipe — staged `reduce[…]` folds
+        // producing `Reduced(0..n)` + the row epilogue over them and the row-streamed
+        // input — so it advertises a recipe-carrying `fused_op` contract, admitted
+        // ONLY to a recipe-import peer (the same shape+dtype posture as the
+        // contraction/scan arms). No contract.rs change was needed: `recipe_carrying`
+        // auto-fires for a non-elementwise op the moment `semantics_dag` covers it.
+        let stages = vec![
+            ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Max,
+            },
+            ReduceStage {
+                pre: (input(0) - reduced(0)).unary(UnaryOp::Exp).0,
+                op: ReduceOp::Sum,
+            },
+        ];
+        let epi = (input(0) - reduced(0)).unary(UnaryOp::Exp) / reduced(1);
+        let sm = OpDef::row_reduce("softmax", 1, &[ElementKind::F32], stages, epi);
+        let a = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Softmax, &[a, o], ArchSku::Sm89);
+        let kernel = generate(&sm, &key, &Cuda);
+        let c = contract(&sm, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: softmax"), "{c}");
+        assert!(
+            c.contains(
+                "semantics: div(exp(sub(in0, reduce[max,last,nokd](in0))), \
+                 reduce[sum,last,nokd](exp(sub(in0, reduce[max,last,nokd](in0)))))"
+            ),
+            "{c}"
+        );
+        // The softmax output shape is the recipe's authority → no FKC shape_rule;
+        // dtype is uniform → passthrough(in0), a real form Fuel interprets.
+        assert!(
+            !c.contains("shape_rule"),
+            "shape rides the recipe, omitted:\n{c}"
+        );
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        // Honest-miss discipline preserved: WITHHELD from a non-recipe-import bundle,
+        // admitted only to a recipe-import peer.
+        assert!(
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
+        );
+        // End-to-end at the bundle seam: `bundle` (recipe_import=false) withholds the
+        // free-form fused op; `bundle_kisc` admits it ONLY to a recipe-import peer.
+        let withheld = bundle("cuda", "rev0", std::slice::from_ref(&c));
+        assert!(!withheld.contains("fused_op: softmax"), "{withheld}");
+        let admitted = bundle_kisc("cuda", "rev0", std::slice::from_ref(&c), true);
+        assert!(
+            admitted.contains(&crate::kisc::kisc_frame(&c)),
+            "recipe-carrying RowReduce admitted for a recipe-import peer: {admitted}"
+        );
+        // derive_pattern still rejects it — the recipe, not a pattern, is its identity.
+        assert!(matches!(
+            crate::derive_pattern(&sm),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
+    fn scan_advertises_a_recipe_carrying_contract() {
         use crate::ir::ReduceOp;
         use crate::pattern::PatternError;
-        // Increment 6 SCAN is an AOT-only honest miss: neither contract.rs nor
-        // pattern.rs has any Scan/Cumsum vocabulary, and Fuel exposes no Scan OpTag,
-        // so a scan emits NO FKC contract (the kernel still generates + runs AOT) —
-        // the Reduction/RowReduce/Contraction precedent. `derive_pattern` rejects it
-        // as NotElementwise BEFORE any body walk; `contract()` then returns None.
+        // A scan is not an elementwise pattern (derive_pattern rejects it), but it
+        // carries a `prefix_scan` recipe — so it advertises a recipe-carrying
+        // `fused_op` contract, admitted only to a recipe-import peer. (Its output
+        // shape = input shape, but shape still defers to the recipe uniformly with
+        // the other non-elementwise families.)
         let sc = OpDef::scan_simple(
             "cumsum",
             &[ElementKind::F32],
@@ -1579,9 +1932,19 @@ mod tests {
         let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
         let kernel = generate(&sc, &key, &Cuda);
+        let c = contract(&sc, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: cumsum"), "{c}");
+        assert!(c.contains("semantics: prefix_scan[sum,1,incl](in0)"), "{c}");
+        // Shape rides the recipe (omitted); a scan's dtype is uniform → passthrough.
+        assert!(!c.contains("shape_rule"), "{c}");
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
         assert!(
-            contract(&sc, &key, &kernel, "cuda").is_none(),
-            "a scan must emit NO contract (no Fuel Scan OpTag; AOT-only honest miss)"
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
         );
         assert!(matches!(
             crate::derive_pattern(&sc),
@@ -1721,27 +2084,37 @@ mod tests {
     }
 
     #[test]
-    fn gathered_op_is_an_honest_miss_no_contract() {
-        use crate::ir::OobPolicy;
+    fn fused_body_gather_is_an_honest_miss_no_contract() {
+        use crate::ir::{OobPolicy, ReadIndex, UnaryOp};
         use crate::pattern::PatternError;
-        // An i32-index gather stays an honest miss even after the Model-A wiring:
-        // Fuel is U32-index EVERYWHERE (its gather key is `[T, U32, T]`), so an
-        // i32/i64 index is unreachable from a Fuel graph node — `gather_advert`
-        // returns None and no contract is emitted (AOT-only; kernel still runs).
-        // (The u32 variant DOES emit — see `u32_gather_emits_a_keyed_contract…`.)
-        let op = OpDef::gather(
-            "gather",
+        // The recipe wiring covers the IDENTITY gather `data[index]` only. A FUSED
+        // gather body (elementwise-over-gather, e.g. `relu(gather)`) is not yet
+        // expressible as a single `gather[…]` recipe node, so `semantics_dag` returns
+        // None (never a mis-described recipe) and the op stays an honest miss (AOT-
+        // only; the kernel still runs). Uses a NON-u32 (recipe-path) index so it does
+        // not ride the u32 op_kind path — the pure recipe-scope guard.
+        let op = OpDef::elementwise(
+            "fused_gather",
+            2,
             &[ElementKind::F32],
-            0,
-            OobPolicy::Skip,
-            ElementKind::I32,
-        );
-        let key = key_for(3, OpCategory::BinaryElementwise);
+            input(0).unary(UnaryOp::Relu),
+        )
+        .with_indexed(vec![
+            ReadIndex::Indexed {
+                index_operand: 1,
+                axis: 0,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I32,
+            },
+            ReadIndex::Direct,
+        ]);
+        let key = gather_key(ElementKind::I32, false);
         let kernel = generate(&op, &key, &Cuda);
         assert!(
             contract(&op, &key, &kernel, "cuda").is_none(),
-            "a gathered op must emit NO contract (the index dtype is unkeyable)"
+            "a fused-body gather must emit NO contract (v1 covers the identity gather only)"
         );
+        assert_eq!(crate::recipe::semantics_dag(&op), None);
         assert!(matches!(
             crate::derive_pattern(&op),
             Err(PatternError::GatherUnsupported)
@@ -1933,6 +2306,10 @@ mod tests {
         assert!(c.contains("op_kind: IndexSelect"), "{c}");
         assert!(c.contains("oob_policy: skip"), "{c}");
         assert!(c.contains("    - name: in1\n      dtypes: [U32]\n"), "{c}");
+        // Output = index shape ≠ data shape ⇒ shape_rule omitted (same reason as
+        // the u32 gather test); dtype stays the gathered data dtype.
+        assert!(!c.contains("shape_rule"), "{c}");
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
     }
 
     #[test]
@@ -1946,6 +2323,110 @@ mod tests {
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
         assert!(c.contains("op_kind: IndexSelect"), "{c}");
         assert!(c.contains("oob_policy: zero_fill"), "{c}");
+        // Output = index shape ≠ data shape ⇒ shape_rule omitted; dtype = data.
+        assert!(!c.contains("shape_rule"), "{c}");
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+    }
+
+    #[test]
+    fn u32_gather_omits_shape_rule_output_is_the_index_shape() {
+        use crate::ir::OobPolicy;
+        // A u32-index gather rides the op_kind path (op_kind: Gather ⇒ NOT
+        // recipe_carrying), so it takes the elementwise return branch. But a
+        // gather's output shape is the INDEX shape, not the DATA shape, so
+        // `shape_rule: same_as(in0=data)` is a FALSE claim — the SAME reason the
+        // i32/i64 gather recipe path omits shape_rule. Fuel's now-live
+        // `eval_shape_rule` (return_check.rs) would `ShapeRuleMismatch` a
+        // resized-axis gather. So the u32 gather must OMIT shape_rule too; its
+        // dtype_rule (passthrough(in0) = the gathered data dtype) stays correct.
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::U32,
+        );
+        let key = gather_key(ElementKind::U32, false);
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        // Still the op_kind primitive advert (unchanged).
+        assert!(c.contains("op_kind: Gather"), "{c}");
+        // Output shape = index shape ≠ data shape ⇒ NO same_as(in0) claim.
+        assert!(
+            !c.contains("shape_rule"),
+            "u32 gather out shape = index shape, shape_rule must be omitted:\n{c}"
+        );
+        // dtype is still the gathered data dtype.
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+    }
+
+    #[test]
+    fn i32_gather_advertises_a_recipe_carrying_contract() {
+        use crate::ir::OobPolicy;
+        use crate::pattern::PatternError;
+        // A non-u32 (i32/i64) index gather is NOT a Fuel graph primitive — Fuel's
+        // op_kind `Gather` keys the index as a FIXED U32 slot (`[T, U32, T]`), so an
+        // i32/i64 index is unreachable from a Fuel graph node and carries NO
+        // `op_kind: Gather` advert. But Fuel's pinned `gather` RECIPE schema admits
+        // index_dtype ∈ {u32,i32,i64}, so it now advertises a recipe-carrying
+        // `fused_op` contract (the `gather[…]` node), admitted ONLY to a recipe-import
+        // peer — the previously honest-missed gather retired to the recipe-import path
+        // (the kernel still runs AOT). Complements the u32 op_kind advert.
+        let op = OpDef::gather(
+            "gather",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Skip,
+            ElementKind::I32,
+        );
+        let key = gather_key(ElementKind::I32, false);
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        // Recipe advert, NOT the u32 op_kind primitive.
+        assert!(c.contains("fused_op: gather"), "{c}");
+        assert!(
+            !c.contains("op_kind: Gather"),
+            "no op_kind for a non-u32 gather: {c}"
+        );
+        assert!(c.contains("semantics: gather[0,skip,i32](in0, in1)"), "{c}");
+        // The gather output shape = the index shape ≠ same_as(in0) (the data), so no
+        // FKC shape_rule form fits → OMITTED (the recipe carries the shape); dtype is
+        // the gathered data dtype → passthrough(in0), a real form Fuel interprets.
+        assert!(
+            !c.contains("shape_rule"),
+            "shape rides the recipe, omitted:\n{c}"
+        );
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        // The index operand's accept slot still carries its REAL dtype (I32), never
+        // the data dtype — an honest per-operand gloss on the recipe path too.
+        assert!(
+            c.contains("    - name: in1\n      dtypes: [I32]\n"),
+            "index slot in1 I32: {c}"
+        );
+        // Honest-miss discipline preserved: WITHHELD from a non-recipe-import bundle,
+        // admitted only to a recipe-import peer.
+        assert!(
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
+        );
+        // End-to-end at the bundle seam: `bundle` (recipe_import=false) withholds it;
+        // `bundle_kisc` admits it ONLY to a recipe-import peer.
+        let withheld = bundle("cuda", "rev0", std::slice::from_ref(&c));
+        assert!(!withheld.contains("fused_op: gather"), "{withheld}");
+        let admitted = bundle_kisc("cuda", "rev0", std::slice::from_ref(&c), true);
+        assert!(
+            admitted.contains(&crate::kisc::kisc_frame(&c)),
+            "recipe-carrying i32 gather admitted for a recipe-import peer: {admitted}"
+        );
+        // derive_pattern still rejects it — the recipe, not a pattern, is its identity.
+        assert!(matches!(
+            crate::derive_pattern(&op),
+            Err(PatternError::GatherUnsupported)
+        ));
     }
 
     #[test]
@@ -2046,17 +2527,34 @@ mod tests {
     }
 
     #[test]
-    fn i32_and_i64_gather_stay_honest_misses() {
+    fn i32_and_i64_gather_advertise_recipe_carrying_not_op_kind() {
         use crate::ir::OobPolicy;
-        // The guard-lift is SELECTIVE: Fuel is U32-index everywhere, so an i32/i64
-        // index gather is unreachable from a Fuel graph node → still no contract.
-        for dt in [ElementKind::I32, ElementKind::I64] {
+        // COMPLEMENT (not supersede) the u32 op_kind path: Fuel is U32-index for its
+        // graph PRIMITIVE (`op_kind: Gather` keys `[T, U32, T]`), so an i32/i64 index
+        // carries NO op_kind — but Fuel's pinned `gather` RECIPE schema admits
+        // index_dtype ∈ {u32,i32,i64}, so both now advertise a recipe-carrying
+        // `fused_op` contract with the index dtype in the `gather[…]` node, admitted
+        // only to a recipe-import peer. (The u32 twin stays on op_kind — see
+        // `u32_gather_emits_a_keyed_contract…`.)
+        for (dt, tok) in [(ElementKind::I32, "i32"), (ElementKind::I64, "i64")] {
             let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, dt);
             let key = gather_key(dt, false);
             let kernel = generate(&op, &key, &Cuda);
+            let c = contract(&op, &key, &kernel, "cuda").unwrap_or_else(|| {
+                panic!("{dt:?} gather must advertise a recipe-carrying contract")
+            });
+            assert!(c.contains("fused_op: gather"), "{c}");
             assert!(
-                contract(&op, &key, &kernel, "cuda").is_none(),
-                "a {dt:?}-index gather must stay an honest miss (Fuel can't bind non-u32)"
+                !c.contains("op_kind: Gather"),
+                "a non-u32 gather carries no op_kind: {c}"
+            );
+            assert!(
+                c.contains(&format!("semantics: gather[0,skip,{tok}](in0, in1)")),
+                "{c}"
+            );
+            assert!(
+                !contract_admissible(&c, false) && contract_admissible(&c, true),
+                "withheld pre-recipe, admitted to a recipe-import peer: {c}"
             );
         }
     }
@@ -2336,13 +2834,15 @@ mod tests {
     }
 
     #[test]
-    fn reduction_is_an_honest_miss_no_contract() {
+    fn reduction_advertises_a_recipe_carrying_contract() {
         use crate::ir::ReduceOp;
         use crate::pattern::PatternError;
-        use baracuda_kernels_types::AxisMask;
-        // A general-path reduction (explicit axis set) must NEVER leak a bindable
-        // elementwise contract — the honest-miss wall (§5f/§6). Pins that item 03's
-        // axes/keepdim did not open a path around the `NotElementwise` reject.
+        use baracuda_kernel_vocab::AxisMask;
+        // A general-path reduction is not an elementwise pattern, but it carries a
+        // `reduce[…]` recipe — so it advertises a recipe-carrying contract admitted
+        // only to a recipe-import peer. Its output shape+dtype ≠ its input (the axis
+        // is reduced away), so BOTH defer to the recipe (`from_recipe`), never a
+        // false `same_as(in0)`/`passthrough(in0)`.
         let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
@@ -2356,7 +2856,22 @@ mod tests {
             false,
         );
         let kernel = generate(&op, &key, &Cuda);
-        assert!(contract(&op, &key, &kernel, "cuda").is_none());
+        let c = contract(&op, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: sum"), "{c}");
+        assert!(c.contains("semantics: reduce[sum,0x1,nokd](in0)"), "{c}");
+        assert!(
+            !c.contains("shape_rule"),
+            "shape rides the recipe, omitted:\n{c}"
+        );
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        assert!(
+            !contract_admissible(&c, false),
+            "withheld without recipe-import"
+        );
+        assert!(
+            contract_admissible(&c, true),
+            "admitted to a recipe-import peer"
+        );
         assert!(matches!(
             derive_pattern(&op),
             Err(PatternError::NotElementwise)
@@ -2364,27 +2879,33 @@ mod tests {
     }
 
     #[test]
-    fn prod_and_hetero_out_reductions_are_honest_misses_no_contract() {
+    fn prod_and_hetero_out_reductions_advertise_recipe_carrying_contracts() {
         use crate::ir::{BinaryOp, ReduceOp, konst, reduced};
-        use crate::pattern::PatternError;
         // The 0e reductions (Prod combiner; boolean/count hetero-out via a Cmp*
-        // post) emit NO contract — reductions are not in the elementwise pattern
-        // vocabulary, AND Fuel has no ProdReduce/Any/All/CountNonzero OpKind yet
-        // (fuel-cuda-backend/src/baracuda/reduce.rs), so a contract would be
-        // un-importable. Honest miss, typed (NotElementwise), same wall as Sum.
+        // post) carry a `reduce[…]` recipe — so they advertise recipe-carrying
+        // contracts (admitted only to a recipe-import peer). Fuel resolves the
+        // recipe primitives even though it has no ProdReduce/Any OpKind: that's the
+        // whole point of recipe-import. Shape rides the recipe (omitted); the
+        // hetero-out dtype declares `fixed(<dtype>)`, where `passthrough(in0)`
+        // would state the wrong type.
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
 
-        // (a) Prod.
+        // (a) Prod (uniform f32 out).
         let prod_out = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
         let pk = structure_key(OpCategory::Reduction, &[a, prod_out], ArchSku::Sm89);
         let prod = OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod);
-        assert!(contract(&prod, &pk, &generate(&prod, &pk, &Cuda), "cuda").is_none());
-        assert!(matches!(
-            derive_pattern(&prod),
-            Err(PatternError::NotElementwise)
-        ));
+        let cp = contract(&prod, &pk, &generate(&prod, &pk, &Cuda), "cuda")
+            .expect("recipe-carrying contract");
+        assert!(cp.contains("fused_op: p"), "{cp}");
+        assert!(
+            cp.contains("semantics: reduce[prod,last,nokd](in0)"),
+            "{cp}"
+        );
+        assert!(!cp.contains("shape_rule"), "{cp}");
+        assert!(cp.contains("dtype_rule: passthrough(in0)"), "{cp}");
+        assert!(!contract_admissible(&cp, false) && contract_admissible(&cp, true));
 
-        // (b) hetero-out any (Sum(x!=0) → u8 via a Cmp* post).
+        // (b) hetero-out any (Sum(x!=0) → u8 via a Cmp* post) — dtype from the recipe.
         let any_out = OperandDesc::new(1, &[256], &[1], ElementKind::U8, 256);
         let ak = structure_key(OpCategory::Reduction, &[a, any_out], ArchSku::Sm89);
         let mut any = OpDef::reduction_post(
@@ -2396,11 +2917,20 @@ mod tests {
             reduced(0).binary(BinaryOp::CmpGt, konst(0.0)),
         );
         any.out_dtype = Some(ElementKind::U8);
-        assert!(contract(&any, &ak, &generate(&any, &ak, &Cuda), "cuda").is_none());
-        assert!(matches!(
-            derive_pattern(&any),
-            Err(PatternError::NotElementwise)
-        ));
+        let ca = contract(&any, &ak, &generate(&any, &ak, &Cuda), "cuda")
+            .expect("recipe-carrying contract");
+        assert!(ca.contains("fused_op: any"), "{ca}");
+        assert!(
+            ca.contains(
+                "semantics: cmp_gt(reduce[sum,last,nokd](cmp_ne(in0, const(0))), const(0))"
+            ),
+            "{ca}"
+        );
+        // Hetero U8 output → `fixed(U8)` (a real FKC dtype form Fuel interprets);
+        // shape rides the recipe (omitted).
+        assert!(ca.contains("dtype_rule: fixed(U8)"), "{ca}");
+        assert!(!ca.contains("shape_rule"), "{ca}");
+        assert!(!contract_admissible(&ca, false) && contract_admissible(&ca, true));
     }
 
     #[test]
@@ -2442,6 +2972,100 @@ mod tests {
         let h = b.find(&format!("## {kname}")).unwrap();
         let fence = b.find("```fkc").unwrap();
         assert!(h < fence, "heading must precede the fkc block: {b}");
+    }
+
+    #[test]
+    fn bundle_kisc_frames_each_admitted_contract_and_drops_the_heading() {
+        let c1 = "kernel: relu\nop_kind: ReluElementwise\naccept: sk3|une|f32\n".to_string();
+        let c2 = "kernel: add\nop_kind: AddElementwise\naccept: sk3|bin|f32\n".to_string();
+        let b = bundle_kisc("cuda", "rev0", &[c1.clone(), c2.clone()], false);
+        // Provider front-matter still leads the file.
+        assert!(b.starts_with("---\n"), "front matter leads: {b}");
+        // Each contract is its own KISC document; NO `## ` heading framing.
+        assert!(
+            b.contains(&crate::kisc::kisc_frame(&c1)),
+            "c1 framed as a KISC document: {b}"
+        );
+        assert!(
+            b.contains(&crate::kisc::kisc_frame(&c2)),
+            "c2 framed as a KISC document: {b}"
+        );
+        assert!(
+            !b.contains("\n## "),
+            "the markdown heading framing is gone: {b}"
+        );
+    }
+
+    #[test]
+    fn bundle_kisc_withholds_a_non_fuel_fused_op_from_a_pre_recipe_peer() {
+        // Pre-recipe-import peer (recipe_import = false): a Fuel FusedOp is framed;
+        // a free-form fused name is withheld (non-importable by the closed vocab).
+        let ok = "kernel: softmax\nfused_op: SOFTMAX_LAST_DIM\n".to_string();
+        let bad = "kernel: relu_add\nfused_op: RELU_ADD\n".to_string();
+        let b = bundle_kisc("cuda", "rev0", &[ok.clone(), bad.clone()], false);
+        assert!(
+            b.contains(&crate::kisc::kisc_frame(&ok)),
+            "an admitted Fuel FusedOp is framed: {b}"
+        );
+        assert!(
+            !b.contains(&crate::kisc::kisc_frame(&bad)),
+            "a non-Fuel fused_op stays withheld from a pre-recipe peer: {b}"
+        );
+    }
+
+    #[test]
+    fn bundle_kisc_recipe_import_peer_still_withholds_a_recipeless_fusion() {
+        // The gate exists but is inert TODAY: even a recipe-import peer can't
+        // verify a generic fusion until Baracuda emits the recipe (the neutral
+        // Semantics op-DAG), so `contract_carries_recipe` is false and the free-form
+        // fused op stays withheld. This pins the "retire in lockstep" contract.
+        let bad = "kernel: relu_add\nfused_op: RELU_ADD\n".to_string();
+        let b = bundle_kisc("cuda", "rev0", std::slice::from_ref(&bad), true);
+        assert!(
+            !b.contains(&crate::kisc::kisc_frame(&bad)),
+            "recipe-import peer + no recipe emitted yet ⇒ still withheld: {b}"
+        );
+    }
+
+    #[test]
+    fn contract_emits_the_semantics_recipe_for_an_elementwise_op() {
+        let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let key = key_for(3, OpCategory::BinaryElementwise);
+        let kernel = generate(&add, &key, &Cuda);
+        let c = contract(&add, &key, &kernel, "cuda").unwrap();
+        assert!(
+            c.contains("semantics: add(in0, in1)\n"),
+            "the neutral KISS-Ops recipe is emitted: {c}"
+        );
+    }
+
+    #[test]
+    fn contract_carries_recipe_detects_the_semantics_line() {
+        assert!(contract_carries_recipe(
+            "kernel: x\nsemantics: add(in0, in1)\n"
+        ));
+        assert!(!contract_carries_recipe(
+            "kernel: x\nop_kind: AddElementwise\n"
+        ));
+    }
+
+    #[test]
+    fn bundle_kisc_admits_a_recipe_carrying_fusion_for_a_recipe_import_peer() {
+        // A fused op Fuel doesn't know, but CARRYING a recipe: a recipe-import peer
+        // can verify + register it, so it is now framed — the withhold seam flips
+        // live. The same contract stays withheld from a pre-recipe peer.
+        let recipe_fusion =
+            "kernel: relu_add\nfused_op: RELU_ADD\nsemantics: add(relu(in0), in1)\n".to_string();
+        let live = bundle_kisc("cuda", "rev0", std::slice::from_ref(&recipe_fusion), true);
+        assert!(
+            live.contains(&crate::kisc::kisc_frame(&recipe_fusion)),
+            "recipe-carrying fusion is admitted for a recipe-import peer: {live}"
+        );
+        let old = bundle_kisc("cuda", "rev0", std::slice::from_ref(&recipe_fusion), false);
+        assert!(
+            !old.contains(&crate::kisc::kisc_frame(&recipe_fusion)),
+            "still withheld from a pre-recipe peer: {old}"
+        );
     }
 
     #[test]
@@ -2548,7 +3172,7 @@ mod tests {
         // required §4.3 blocks.
         for block in [
             "accept:",
-            "structure_key: \"sk1|",
+            "structure_key: \"sk3|",
             "return:",
             "caps:",
             "cost:",
@@ -2741,7 +3365,7 @@ mod tests {
     }
 
     #[test]
-    fn int_ops_rate_zero_ulp_and_emit_no_contract() {
+    fn int_ops_rate_zero_ulp_and_carry_recipe_contracts() {
         use crate::ir::BinaryOp;
         const INT_OPS: [BinaryOp; 8] = [
             BinaryOp::BitAnd,
@@ -2763,10 +3387,16 @@ mod tests {
                 "{op:?}"
             );
         }
-        // Contract: HONEST MISS — neither OpTag 0.10.2 nor lower_op_kind names
-        // the bitwise/logical ops, so no pattern derives and no contract is
-        // emitted; the kernel itself still generates (bitwise at i32, logical
-        // at u8 — the audited-legal cells).
+        // Contract (Brief 4): bitwise/logical ops derive NO pattern — neither
+        // OpTag 0.10.2 nor `lower_op_kind` names them (`derive_pattern` → the SAME
+        // `NoFkcName` Err as before) — but they carry a valid KISS-Ops recipe
+        // (`bit_and`/`logical_and` are confirmed floor tokens: `binary_kiss_name`
+        // maps them, and Fuel resolves any named floor op — grammar reply Q6). So
+        // the pattern-miss withhold is RETIRED: they now advertise a RECIPE-CARRYING
+        // elementwise contract (`fused_op:` + `semantics:`, KEEPING the true
+        // `same_as(in0)` return block since out shape+dtype = the input's), withheld
+        // from a non-recipe-import bundle and admitted to a recipe-import peer. The
+        // kernel still generates (bitwise at i32, logical at u8).
         use crate::pattern::PatternError;
         let band = OpDef::elementwise(
             "band",
@@ -2780,9 +3410,18 @@ mod tests {
             k.source.contains("(in0[i] & in1[i])"),
             "the kernel still lowers"
         );
+        let c = contract(&band, &ki, &k, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: band"), "{c}");
+        assert!(c.contains("semantics: bit_and(in0, in1)"), "{c}");
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        assert!(c.contains("shape_rule: same_as(in0)"), "{c}");
         assert!(
-            contract(&band, &ki, &k, "cuda").is_none(),
-            "but no contract"
+            !c.contains("op_kind:"),
+            "a pattern miss carries no op_kind: {c}"
+        );
+        assert!(
+            !contract_admissible(&c, false) && contract_admissible(&c, true),
+            "withheld pre-recipe, admitted to a recipe-import peer: {c}"
         );
         assert!(matches!(
             derive_pattern(&band),
@@ -2797,10 +3436,14 @@ mod tests {
         let ku = key_dtype(ElementKind::U8, 3);
         let kl = generate(&land, &ku, &Cuda);
         assert!(kl.source.contains("!= 0 &&"), "the kernel still lowers");
-        assert!(
-            contract(&land, &ku, &kl, "cuda").is_none(),
-            "but no contract"
-        );
+        let cl = contract(&land, &ku, &kl, "cuda").expect("recipe-carrying contract");
+        assert!(cl.contains("fused_op: land"), "{cl}");
+        assert!(cl.contains("semantics: logical_and(in0, in1)"), "{cl}");
+        assert!(cl.contains("shape_rule: same_as(in0)"), "{cl}");
+        assert!(matches!(
+            derive_pattern(&land),
+            Err(PatternError::NoFkcName { ref op }) if op == "LogicalAnd"
+        ));
     }
 
     #[test]
@@ -2971,15 +3614,19 @@ mod tests {
     }
 
     #[test]
-    fn coord_bodies_have_no_contract_until_the_iota_bridge_lands() {
+    fn coord_bodies_carry_recipe_contracts_via_recipe_import() {
         use crate::ir::{BinaryOp, coord};
         use crate::pattern::PatternError;
-        // OpTag::Iota exists (0.10.2), but the emitted pattern grammar cannot
-        // carry its axis attribute and the Iota↔Coord correspondence is
-        // unreconciled — so a Coord body derives NO pattern
-        // (CoordUnsupported) and therefore NO contract (importable-honest:
-        // an axis-less `op: Iota` would advertise a wrong-bind matcher). The
-        // kernel itself still generates via the strided schedule.
+        // OpTag::Iota exists (0.10.2), but the emitted PATTERN grammar cannot carry
+        // its axis attribute, so a Coord body still derives NO pattern (the SAME
+        // `CoordUnsupported` Err). The RECIPE, however, expresses it honestly —
+        // `iota(axis)` / `cmp_ge` / `mul` are confirmed floor tokens Fuel resolves +
+        // numerically verifies, and the recipe is dtype-agnostic (the nested cmp
+        // rides the recipe path, exempt from the pattern-grammar missing-`Cast`
+        // limit) — so the withhold is RETIRED (Brief 4): the cell advertises a
+        // RECIPE-CARRYING elementwise contract (`fused_op:` + `semantics:`, KEEPING
+        // the true `same_as(in0)` return block), withheld from a non-recipe-import
+        // bundle and admitted to a recipe-import peer. The kernel still generates.
         let triu = OpDef::elementwise(
             "triu_mask",
             1,
@@ -2990,9 +3637,17 @@ mod tests {
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89);
         let k = generate(&triu, &key, &Cuda);
         assert!(k.source.contains("(float)c1"), "the kernel still lowers");
+        let c = contract(&triu, &key, &k, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: triu_mask"), "{c}");
         assert!(
-            contract(&triu, &key, &k, "cuda").is_none(),
-            "but no contract"
+            c.contains("semantics: mul(in0, cmp_ge(iota(1), add(iota(0), const(0))))"),
+            "{c}"
+        );
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        assert!(c.contains("shape_rule: same_as(in0)"), "{c}");
+        assert!(
+            !contract_admissible(&c, false) && contract_admissible(&c, true),
+            "withheld pre-recipe, admitted to a recipe-import peer: {c}"
         );
         assert!(matches!(
             derive_pattern(&triu),
@@ -3001,12 +3656,17 @@ mod tests {
     }
 
     #[test]
-    fn vocab_ops_have_no_contract_until_fuel_names_them() {
+    fn vocab_ops_carry_recipe_contracts_via_recipe_import() {
         use crate::ir::{BinaryOp, UnaryOp};
         use crate::pattern::PatternError;
-        // Fuel's §4.1/OpTag vocabulary doesn't name the increment-0a fns: no
-        // pattern derives (NoFkcName), so no contract is emitted — the honest
-        // miss. The kernel itself still generates (lowering is unaffected).
+        // Fuel's §4.1/OpTag vocabulary doesn't name the increment-0a fns, so
+        // `derive_pattern` still returns the SAME `NoFkcName` Err — but they carry a
+        // valid KISS-Ops recipe (`erfc`/`atan2` are confirmed floor tokens Fuel
+        // resolves), so the pattern-miss withhold is RETIRED (Brief 4): they now
+        // advertise a RECIPE-CARRYING elementwise contract (`fused_op:` +
+        // `semantics:`, KEEPING the true `same_as(in0)` return block), withheld from
+        // a non-recipe-import bundle and admitted to a recipe-import peer. The kernel
+        // still generates (lowering is unaffected).
         let erfc = OpDef::elementwise(
             "erfc",
             1,
@@ -3016,9 +3676,14 @@ mod tests {
         let ukey = key_for(2, OpCategory::UnaryElementwise);
         let uk = generate(&erfc, &ukey, &Cuda);
         assert!(uk.source.contains("erfcf("), "the kernel still lowers");
+        let c = contract(&erfc, &ukey, &uk, "cuda").expect("recipe-carrying contract");
+        assert!(c.contains("fused_op: erfc"), "{c}");
+        assert!(c.contains("semantics: erfc(in0)"), "{c}");
+        assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
+        assert!(c.contains("shape_rule: same_as(in0)"), "{c}");
         assert!(
-            contract(&erfc, &ukey, &uk, "cuda").is_none(),
-            "but no contract"
+            !contract_admissible(&c, false) && contract_admissible(&c, true),
+            "withheld pre-recipe, admitted to a recipe-import peer: {c}"
         );
         assert!(matches!(
             crate::derive_pattern(&erfc),
@@ -3032,7 +3697,10 @@ mod tests {
         );
         let bkey = key_for(3, OpCategory::BinaryElementwise);
         let bk = generate(&at2, &bkey, &Cuda);
-        assert!(contract(&at2, &bkey, &bk, "cuda").is_none());
+        let cb = contract(&at2, &bkey, &bk, "cuda").expect("recipe-carrying contract");
+        assert!(cb.contains("fused_op: atan2"), "{cb}");
+        assert!(cb.contains("semantics: atan2(in0, in1)"), "{cb}");
+        assert!(cb.contains("shape_rule: same_as(in0)"), "{cb}");
         assert!(matches!(
             crate::derive_pattern(&at2),
             Err(PatternError::NoFkcName { ref op }) if op == "Atan2"

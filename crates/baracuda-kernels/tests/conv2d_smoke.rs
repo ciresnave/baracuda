@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke tests for `Conv2dPlan` (cuDNN wrap).
 //!
 //! Phase 7 Milestone 7.1 trailblazer. Covers FW + BW data + BW filter
@@ -20,6 +19,7 @@
 //! correlation over the upstream gradient: `dw[co,c,kh,kw] = Σ_n,oh,ow
 //! dy[n,co,oh,ow] · x[n,c,oh·sh + kh·dh - ph, ow·sw + kw·dw - pw]`,
 //! treating out-of-bound `x` cells as zero.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

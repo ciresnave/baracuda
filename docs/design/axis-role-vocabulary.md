@@ -1,10 +1,23 @@
-# AxisRole vocabulary — the unified ORDER-3 axis-fact spec (paper design, 2026-07-01)
+# AxisRole vocabulary — the unified ORDER-3 axis-fact spec (design 2026-07-01; status updated 2026-07-10)
 
-**Status:** paper design / forward-compat spec. **Not wired.** It defines the axis-fact vocabulary that
-items 03 (reductions), 05 (fused-norm seam), and 10 (contraction / MatMul) all draw on, so they converge on
-one representation instead of three private ones. Item 03 ships `reduce_axes: AxisMask` **now** as the
-`{Reduced}` projection of this vocabulary; the **wire/token** form of the full vocabulary lands with **item
-10's spike** (one `STRUCTURE_KEY_VERSION` bump, informed by the contraction design + a real Fuel negotiation).
+**Status:** **wired** (in-IR) via `Access::Contraction`. The `AxisRole` enum (`{Batch, FreeM, FreeN,
+ContractedK, …}`) and `ContractionAxes { lhs, rhs }` now live in `crates/baracuda-kernelgen/src/ir.rs`
+(the `Access::Contraction { axes, accum, epilogue }` node carries them; `ContractionAxes::matmul()` is the
+canonical `M×K · K×N` case). This spec defines the axis-fact vocabulary that items 03 (reductions), 05
+(fused-norm seam), and 10 (contraction / MatMul) all draw on, so they converge on one representation instead
+of three private ones. Item 03 ships `reduce_axes: AxisMask` as the `{Reduced}` projection of this
+vocabulary; the **wire/token** form of the full vocabulary (the cross-process `STRUCTURE_KEY_VERSION`-bumped
+token codec) is the remaining forward-compat step and is still pending a real Fuel negotiation.
+
+> **Status update (2026-07-10).** Contraction (item 10) has since **shipped** — but not the way
+> §6/§8 below predicted. `Access::Contraction` and the `AxisRole` enum are wired **in-IR**
+> (`crates/baracuda-kernelgen/src/ir.rs:1330`), and contraction structure facts ride an **additive**
+> `ContractionKey` (`crates/baracuda-kernels-types/src/structure_key.rs:200`, derived at `:485`) that did
+> **not** require a schema change — `STRUCTURE_KEY_VERSION` is still `1`. So the anticipated "one
+> `STRUCTURE_KEY_VERSION` bump for a per-axis role token at item 10" did **not** happen; contraction landed
+> additively instead. The cross-process per-axis **role-token codec** remains a genuine future forward-compat
+> step, now **decoupled** from contraction (which no longer needs it). The design reasoning below is preserved
+> as the original 2026-07-01 rationale; read §6/§8's "at item 10" as "if/when the role-token codec is built."
 
 ## 1. Why this exists (and why paper-now / wire-later)
 
@@ -109,12 +122,13 @@ explicit where not.
 
 - **Today (item 03):** `reduce_axes: AxisMask` populated (a `u8` bitmask; token `x{:02x}`/`-`). No schema
   change, no version bump. Keepdim-form-output precondition on reduction operands (confirm-only Fuel ask).
-- **Item 10 (when contraction lands):** introduce the per-axis role encoding on the `StructureKey` (a compact
-  per-axis role code — 3 bits × `MAX_RANK` fits a `u32`, or additive role fields), bump
-  `STRUCTURE_KEY_VERSION` **once**, and negotiate the contraction role semantics + canonical numbering with
-  Fuel then. `reduce_axes` either stays (redundant, harmless) or becomes the `{Reduced}` projection of the
-  role code. The token stays opaque to Fuel throughout (K1), so the bump is a coordination event, not a parse
-  change on their side.
+- **The role-token step (not yet built; see the status update above).** Contraction itself has already
+  shipped *additively* via `ContractionKey` with **no** version bump, so this step is now **decoupled** from
+  it. If a compact per-axis role encoding on the `StructureKey` is later built (a 3-bit × `MAX_RANK` code in a
+  `u32`, or additive role fields), it would bump `STRUCTURE_KEY_VERSION` **once** and negotiate the role
+  semantics + canonical numbering with Fuel then. `reduce_axes` either stays (redundant, harmless) or becomes
+  the `{Reduced}` projection of the role code. The token stays opaque to Fuel throughout (K1), so the bump is
+  a coordination event, not a parse change on their side.
 
 ## 7. Invariant: specialize on structure, not extents
 
@@ -124,7 +138,7 @@ its structural *bit*; it never keys the reduced *extent value* and never classif
 shape alone. This is the same discipline as `Contiguity`/broadcast-mask/`DivBucket` — all stride/extent-derived
 structural buckets.
 
-## 8. Open questions for item 10's spike
+## 8. Open questions for the role-token step (item 10's contraction spike has shipped)
 
 1. **Role encoding on the token:** per-axis 3-bit role code vs. additive per-role `AxisMask` fields (Batch/M/N/K)
    — pick the one that keeps `reduce_axes` a clean projection.
@@ -137,6 +151,7 @@ structural buckets.
 
 ## Related
 
-- Item 03 brief: `docs/planning/foundational/03-strided-multiaxis-keepdim-reductions.md` (§5e keying, §10 asks).
-- Item 10 brief: `docs/planning/foundational/10-matmul-contraction-design-spike.md` (the spike that wires this).
+- Items 03 (reductions) + 10 (contraction) have shipped; their standalone briefs were removed on ship (see
+  `docs/planning/foundational/README.md` → Status, and git history). The contraction node now lives in
+  `crates/baracuda-kernelgen/src/ir.rs` (`Access::Contraction`, `AxisRole`, `ContractionAxes`).
 - `docs/design/kernel-specialization.md` (§1 thesis, canonicalization ~:141-149, `op_class.reduction_axes` ~:187).

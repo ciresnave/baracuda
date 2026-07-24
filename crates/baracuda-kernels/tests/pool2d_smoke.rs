@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke tests for `MaxPool2dPlan` / `AvgPool2dPlan` FW + BW.
 //!
 //! Covers all four FP dtypes (f32 / f64 / f16 / bf16). The base fixture
@@ -7,6 +6,7 @@
 //! reduction over a disjoint 2×2 input tile).
 //!
 //! `#[ignore]` by default — requires a real CUDA device + cuDNN.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

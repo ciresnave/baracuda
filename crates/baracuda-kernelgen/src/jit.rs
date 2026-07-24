@@ -31,7 +31,7 @@ use crate::link::{LinkEntry, link_entry};
 use crate::optimize::optimize;
 use crate::pattern::{PatternError, PatternNode, derive_pattern, to_fkc};
 use crate::{Backend, generate};
-use baracuda_kernels_types::{
+use baracuda_kernel_vocab::{
     ArchSku, ElementKind, MAX_OPERANDS, OpCategory, OperandDesc, structure_key,
 };
 
@@ -163,6 +163,41 @@ pub enum JitError {
 impl From<PatternError> for JitError {
     fn from(e: PatternError) -> Self {
         JitError::Pattern(e)
+    }
+}
+
+/// A KISS typed decline code (KISS-Announce §6.4 / KISS-Synth decline table) —
+/// the machine-actionable `u32` a provider returns on the provision /
+/// contract-query path, in place of a free-text error string.
+///
+/// The current KISS code set is coarse: every [`JitError`] is a "cell understood
+/// but not buildable by this provider" and maps to [`DeclineCode::CannotProvision`].
+/// The finer per-reason distinctions (unknown-op vs attrs-channel-gap vs
+/// operand-keying-gap vs determinism-gap) await the KISS typed-decline taxonomy
+/// proposed in ThinkersJournal/KISS#17.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum DeclineCode {
+    /// No such cell, and none can be provisioned.
+    UnknownStructureKey = 0x1,
+    /// Cell understood, but this provider cannot build it (unsupported op/dtype,
+    /// inexpressible operand tuple, or a failed on-demand compile).
+    CannotProvision = 0x2,
+    /// The provider does not advertise the contract-query capability.
+    QueryNotSupported = 0x4,
+    /// `structure_key` known but the requested `revision_hash` is not held.
+    UnknownRevision = 0x6,
+}
+
+impl JitError {
+    /// Map this error to its KISS typed decline code for the seam. The free-text
+    /// rendering (`Debug`) stays available as an optional human detail; the code
+    /// is the machine-actionable currency a non-Rust consumer can act on.
+    #[must_use]
+    pub fn decline_code(&self) -> DeclineCode {
+        // Every synthesis failure means "understood the request, cannot build it"
+        // — CANNOT_PROVISION under the current KISS code set (see the type docs).
+        DeclineCode::CannotProvision
     }
 }
 
@@ -1701,6 +1736,41 @@ mod tests {
         }
     }
 
+    #[test]
+    fn jit_errors_map_to_cannot_provision_decline() {
+        for e in [
+            JitError::UnsupportedDtype,
+            JitError::MixedDtype,
+            JitError::UnsupportedOp("Foo".into()),
+            JitError::Compile("nvrtc failed".into()),
+            JitError::Budget("max_compile_ms must be > 0".into()),
+            JitError::Arity {
+                op: "add".into(),
+                expected: 2,
+                got: 3,
+            },
+            JitError::OperandArity {
+                n_inputs: 1,
+                operands: 5,
+            },
+        ] {
+            assert_eq!(
+                e.decline_code(),
+                DeclineCode::CannotProvision,
+                "every synthesis failure is a CANNOT_PROVISION decline: {e:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn decline_codes_match_kiss_wire_values() {
+        // The u32 discriminants are the KISS-Announce §6.4 / KISS-Synth codes.
+        assert_eq!(DeclineCode::UnknownStructureKey as u32, 0x1);
+        assert_eq!(DeclineCode::CannotProvision as u32, 0x2);
+        assert_eq!(DeclineCode::QueryNotSupported as u32, 0x4);
+        assert_eq!(DeclineCode::UnknownRevision as u32, 0x6);
+    }
+
     fn req(region: PatternNode, n_inputs: u8, dt: ElementKind, id: &str) -> JitRequest {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], dt, 256);
         let operands: Vec<_> = std::iter::repeat_n(a, (n_inputs + 1) as usize).collect();
@@ -1739,7 +1809,7 @@ mod tests {
         assert!(resp.recipe.decompose.contains("op: Relu"));
         // the link row makes entry_point resolvable at load.
         assert_eq!(resp.link.entry_point, resp.kernel.entry_point);
-        assert!(resp.link.structure_key.starts_with("sk1|"));
+        assert!(resp.link.structure_key.starts_with("sk3|"));
     }
 
     #[test]

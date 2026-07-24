@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke tests for `Im2ColPlan` / `Im2Col1dPlan` /
 //! `Col2Im1dPlan` (Phase 19.3 — bespoke kernels).
 //!
@@ -6,6 +5,7 @@
 //! references plus the col2im round-trip identity.
 //!
 //! All tests are `#[ignore]` by default (require real CUDA device).
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

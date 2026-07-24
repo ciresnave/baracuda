@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke test for `Conv2dPlan` with `groups == c_in == c_out`
 //! (depthwise convolution).
 //!
@@ -6,6 +5,7 @@
 //! cuDNN's `cudnnSetConvolutionGroupCount` — each input channel is
 //! convolved with its own filter independently. Compares against a
 //! naive depthwise CPU reference.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

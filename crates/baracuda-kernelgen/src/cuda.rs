@@ -12,7 +12,7 @@ use crate::backend::{
 };
 use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp};
 use crate::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
-use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
+use baracuda_kernel_vocab::{Contiguity, ElementKind, OperandKey};
 
 /// The CUDA C++ backend. Lowers a [`KernelPlan`] to `.cu` source.
 #[derive(Copy, Clone, Debug, Default)]
@@ -54,6 +54,10 @@ impl Backend for Cuda {
         // values (cross-pass materialization — Softmax's shared exp).
         let mut vs = Vec::new();
         vs.extend(reduction_splitk_variant(plan));
+        // Precision-first: a double-accumulator serial fold of an f32 Sum/Mean
+        // reduction — MorePrecise, selectable only through an honest contract (the
+        // caller's precision policy decides), never the silent default.
+        vs.extend(precision_first_variant(plan));
         vs.extend(row_reduce_materialize_variant(plan));
         vs.extend(contraction_splitk_variant(plan));
         vs.extend(scatter_atomic_variant(plan));
@@ -338,7 +342,7 @@ impl Backend for Cuda {
                     _ => emit_strided(plan, ctype),
                 }
             }
-            Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op),
+            Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op, false),
             Schedule::RowReduce { .. } => emit_row_reduce(plan, ctype),
             Schedule::Contraction => emit_contraction(plan, ctype),
             // Increment 6 SCAN: `build_plan` always derives `block: false` (the
@@ -368,7 +372,7 @@ impl Backend for Cuda {
 /// COMPUTE dtype (wrapping mod-256 C semantics), same class as the i32/i64
 /// arms. `S8` (FKC `I8`, increment 0c) is `signed char` — two's-complement
 /// wrapping via integer promotion + store truncation (see the ir.rs table).
-fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
+pub(crate) fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
     Some(match dt {
         ElementKind::F32 | ElementKind::F32Strict => "float",
         ElementKind::F64 => "double",
@@ -548,7 +552,7 @@ fn packed_binary(op: BinaryOp, a: String, b: String, dt: ElementKind) -> String 
 
 /// Short dtype tag for generated symbol names. Only called for dtypes that pass
 /// [`scalar_ctype`].
-fn dtype_tag(dt: ElementKind) -> &'static str {
+pub(crate) fn dtype_tag(dt: ElementKind) -> &'static str {
     match dt {
         ElementKind::F32 => "f32",
         ElementKind::F32Strict => "f32s",
@@ -753,7 +757,7 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
 /// pre-generalization `out_ctype` (output 0's dtype is `plan.out_dtype`), so every
 /// single-output + uniform-multi emitter that passes `j = 0`/a uniform `j` is
 /// unchanged.
-fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str {
+pub(crate) fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str {
     let d = plan.out_dtype_of(j);
     if d == plan.dtype {
         ctype
@@ -776,16 +780,21 @@ fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str 
 /// and 1.0/0.0 round-trip f32→half→f32 bit-exactly, so the conversion pair is
 /// value-exact (and folded by ptxas). `store_expr_of(plan, 0, root)` is
 /// byte-identical to the pre-generalization `store_expr`.
-fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> String {
+pub(crate) fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> String {
     let d = plan.out_dtype_of(j);
     if d == plan.dtype {
         return root;
     }
-    match plan.dtype {
-        ElementKind::F16 => format!("(unsigned char)__half2float({root})"),
-        ElementKind::Bf16 => format!("(unsigned char)__bfloat162float({root})"),
-        _ => format!("(unsigned char){root}"),
-    }
+    // The hetero elementwise store is exactly the U8 keep-mask (a `Cmp*`
+    // predicate, pinned by `assert_valid_out_dtype`; the bincount-I32 scatter
+    // narrows itself via `scatter_combine_store`, never through here). The
+    // per-element narrowing is the shared [`cast_scalar`] routine — one source of
+    // truth with the generated cast helper ([`emit_cast_helper`]). BYTE-IDENTICAL
+    // to the prior hand-inlined forms: `cast_scalar(F16, U8, r)` =
+    // `(unsigned char)__half2float(r)`, `(Bf16, U8)` =
+    // `(unsigned char)__bfloat162float(r)`, every other `(_, U8)` =
+    // `(unsigned char)r`.
+    cast_scalar(plan.dtype, d, &root)
 }
 
 fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
@@ -974,11 +983,18 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     s.push_str("    for (; i < n; i += step) {\n");
     s.push_str("        long long lin = i;\n");
     // Row-major unravel (last axis fastest), unrolled over the iteration rank.
-    for d in (0..rank).rev() {
-        s.push_str(&format!(
-            "        long long c{d} = lin % shape{d}; lin /= shape{d};\n"
-        ));
-    }
+    // Scalar constant-bank params, no empty-axis guard (n>0 in the loop body ⇒ no
+    // empty axis is ever reached). The SAME shared routine backs the freestanding
+    // coord-unravel helper (single source of truth); this call is byte-identical
+    // to the prior hand-inlined emission.
+    s.push_str(&emit_unravel_decomp(
+        (0..rank).rev(),
+        "        ",
+        "lin",
+        |d| format!("c{d}"),
+        |d| format!("shape{d}"),
+        false,
+    ));
     // Increment 4 — GATHER pre-pass. Load the runtime index, then compute a
     // CLAMPED effective index used for the DATA load (always in-bounds for a
     // non-empty gathered axis, so the load is memcheck-clean regardless of OOB
@@ -1581,11 +1597,14 @@ fn emit_scatter_gathersum(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel
     s.push_str("    for (; i < n_out; i += step) {\n");
     // Unravel the destination coordinate.
     s.push_str("        long long lin = i;\n");
-    for d in (0..rank).rev() {
-        s.push_str(&format!(
-            "        long long oc{d} = lin % oshape{d}; lin /= oshape{d};\n"
-        ));
-    }
+    s.push_str(&emit_unravel_decomp(
+        (0..rank).rev(),
+        "        ",
+        "lin",
+        |d| format!("oc{d}"),
+        |d| format!("oshape{d}"),
+        false,
+    ));
     // Destination offset (identity — the owner cell for this thread), over the
     // OUTPUT coordinate `oc{d}` (NOT the default `c{d}`).
     let oo = offset_expr_coord(plan.key.operands[n], "so", "oc", rank);
@@ -1908,11 +1927,14 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
     s.push_str("    for (; i < n; i += step) {\n");
     s.push_str("        long long lin = i;\n");
-    for d in (0..rank).rev() {
-        s.push_str(&format!(
-            "        long long c{d} = lin % shape{d}; lin /= shape{d};\n"
-        ));
-    }
+    s.push_str(&emit_unravel_decomp(
+        (0..rank).rev(),
+        "        ",
+        "lin",
+        |d| format!("c{d}"),
+        |d| format!("shape{d}"),
+        false,
+    ));
     for k in 0..n_in {
         if !is_fully_broadcast(plan.key.operands[k], rank) {
             // A viewed input on a multi-output op is rejected at the plan gate
@@ -2180,7 +2202,12 @@ fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> Gener
 /// so these never fire across the `synthesize` trust boundary): a single input,
 /// float dtype. Multi-input (weighted) reductions and integer accumulation
 /// (item 04) are follow-ups; the axes/keepdim/strided generalization is this item.
-fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> GeneratedKernel {
+fn emit_reduction(
+    plan: &KernelPlan<'_>,
+    ctype: &str,
+    rop: ReduceOp,
+    precision: bool,
+) -> GeneratedKernel {
     let tag = match rop {
         ReduceOp::Sum => "sum",
         ReduceOp::Mean => "mean",
@@ -2188,6 +2215,13 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         ReduceOp::Min => "min",
         ReduceOp::Prod => "prod",
     };
+    // Precision-first (`MorePrecise` variant): force a `double` accumulator and
+    // route through the serial per-output general nest (below), NOT the InnerContig
+    // block-tree. Double accumulation lifts the f32 error from O(√n·eps) to
+    // ~0.5 ULP(f32) of the correctly-rounded reduction, and the serial nest is a
+    // fixed order — bitwise-reproducible across hardware AND matching the CPU
+    // oracle's fold order. Gated so the base lowering stays byte-identical.
+    let prec = if precision { "_prec" } else { "" };
     let int_acc = matches!(plan.dtype, ElementKind::I32 | ElementKind::I64);
     assert!(
         matches!(
@@ -2239,7 +2273,8 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     // Integer reductions accumulate in `long long` (exact, overflow-resistant);
     // f64 / f32-strict in double; everything else in float. The leaf load is native
     // for int (the `_` arm below) and up-converts only f16/bf16/f32-strict.
-    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    // `precision` forces double even for plain f32 (the MorePrecise variant).
+    let dbl = precision || matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let acc = if int_acc {
         "long long"
     } else if dbl {
@@ -2264,10 +2299,9 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         "1.0f"
     };
     let load = |i: u8| match plan.dtype {
-        ElementKind::F16 => format!("__half2float(in{i}[idx])"),
-        ElementKind::Bf16 => format!("__bfloat162float(in{i}[idx])"),
         ElementKind::F32Strict => format!("(double)in{i}[idx]"),
-        _ => format!("in{i}[idx]"), // f32 (float) / f64 (double) load natively
+        // f16/bf16 widen via the shared promotion intrinsic; f32/f64/int native.
+        k => promote_load_f32(k, &format!("in{i}[idx]")),
     };
     let elem = lower_expr(
         plan.body,
@@ -2317,11 +2351,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                 other => unreachable!("validated hetero out dtype {other:?}"),
             };
         }
-        match plan.dtype {
-            ElementKind::F16 => format!("__float2half({v})"),
-            ElementKind::Bf16 => format!("__float2bfloat16({v})"),
-            _ => v,
-        }
+        demote_store_f32(plan.dtype, &v)
     };
     // Apply the 0e fused post-expression (default = identity `Reduced(0)`) to the
     // finalized fold result, then convert for the store. The post lowers through
@@ -2382,8 +2412,11 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         (Some(format!("{acc} red0 = {finalized};")), store(posted))
     };
 
-    if class == ReduceAxisClass::InnerContig {
+    if class == ReduceAxisClass::InnerContig && !precision {
         // ---------- Contiguous last-axis reduction: ONE BLOCK per output row. ----------
+        // (A precision-first cell skips this coalesced block-tree and takes the serial
+        // general nest below — the block-tree order is reassociated, not the fixed
+        // bitwise-reproducible order the MorePrecise contract promises.)
         // Coalesced reads (adjacent threads read adjacent row elements) + a warp-
         // shuffle / shared-mem block reduce (reuses `emit_block_reducers`). Replaces
         // the old one-thread-per-row *sequential* fold, which was memory-UNCOALESCED
@@ -2500,8 +2533,17 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     // Compile-time axis split (kept vs reduced, ascending). The runtime supplies
     // per-input-axis extents `shape[]` + input strides `s0[]` + output strides `so[]`.
     let rank = plan.key.rank as usize;
-    let reduced: Vec<usize> = (0..rank).filter(|&d| axes.is_set(d as u8)).collect();
-    let kept: Vec<usize> = (0..rank).filter(|&d| !axes.is_set(d as u8)).collect();
+    // EMPTY axes = the last-axis default. The base reaches this general path only
+    // with EXPLICIT axes (an empty-axes cell is contiguous ⇒ the InnerContig fast
+    // path above, which folds via `k`), so this normalization is a no-op for the
+    // base; a precision-first cell, however, routes an empty-axes InnerContig cell
+    // HERE and must materialize the reduced set as the last axis (like the oracle).
+    let reduced: Vec<usize> = if axes.is_empty() {
+        vec![rank - 1]
+    } else {
+        (0..rank).filter(|&d| axes.is_set(d as u8)).collect()
+    };
+    let kept: Vec<usize> = (0..rank).filter(|&d| !reduced.contains(&d)).collect();
     // Output-store injectivity guard (§5c/§8): the store must not alias. A broadcast
     // (stride-0) output axis that a *kept* coordinate varies over would collapse
     // distinct outputs onto one `oo`; a flipped output can write out of bounds. A
@@ -2524,7 +2566,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     );
     // The axis set + keepdim disambiguate the symbol so two axis-sets never collide.
     let name = format!(
-        "baracuda_gen_{}_{}_reduce_{tag}_ax{:x}{}",
+        "baracuda_gen_{}_{}_reduce_{tag}_ax{:x}{}{prec}",
         plan.op_name,
         dtype_tag(plan.dtype),
         axes.0,
@@ -2559,11 +2601,14 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     // kept axes ⇒ n_out == 1, so no unravel and no `lin` — avoids an unused var.)
     if !kept.is_empty() {
         s.push_str("        long long lin = o;\n");
-        for &a in kept.iter().rev() {
-            s.push_str(&format!(
-                "        long long ck{a} = lin % shape{a}; lin /= shape{a};\n"
-            ));
-        }
+        s.push_str(&emit_unravel_decomp(
+            kept.iter().rev().copied(),
+            "        ",
+            "lin",
+            |a| format!("ck{a}"),
+            |a| format!("shape{a}"),
+            false,
+        ));
     }
     // Input base offset from the kept coords (a broadcast kept axis has stride 0
     // and drops out naturally).
@@ -2710,6 +2755,137 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     s.push_str(&format!("        out[oo] = {rhs};\n"));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
+}
+
+/// Precision-first variant ([`VariantFidelity::MorePrecise`]) — a `double`-
+/// accumulator SERIAL fold that fixes the length-growing float error of an f32
+/// reduction's running sum AND pins a fixed, hardware-independent fold order
+/// (bitwise-reproducible, matching the CPU oracle). It is NEVER the silent
+/// default (it costs the coalesced block-tree's throughput); only an honest FKC
+/// contract whose precision block advertises the tighter bound selects it (the
+/// caller's precision policy decides). Declines every cell it cannot strictly
+/// improve.
+///
+/// Two schedules earn it: a last-/outer-axis [`Schedule::Reduction`]
+/// (`precision_first_reduction`) and a fused [`Schedule::RowReduce`]
+/// softmax/layernorm/rmsnorm cell (`precision_first_rowreduce`). Dispatch on the
+/// schedule up front, then hand off to the arm.
+fn precision_first_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
+    match plan.schedule {
+        Schedule::Reduction { op, .. } => precision_first_reduction(plan, op),
+        Schedule::RowReduce { .. } => precision_first_rowreduce(plan),
+        _ => None,
+    }
+}
+
+/// Precision-first arm for a plain [`Schedule::Reduction`] f32 Sum/Mean cell:
+/// forces `double` accumulation through `emit_reduction`'s serial per-output
+/// general nest, giving ~0.5 ULP(f32) of the correctly-rounded reduction.
+fn precision_first_reduction(plan: &KernelPlan<'_>, rop: ReduceOp) -> Option<Variant> {
+    // Only Sum/Mean carry a length-growing running FP sum a wider accumulator
+    // fixes. Max/Min are a pick and Prod a product — order-exact, so the double
+    // fold is bit-identical to the base (no distinct precision offer).
+    if !matches!(rop, ReduceOp::Sum | ReduceOp::Mean) {
+        return None;
+    }
+    // F32 ONLY. F64/F32Strict already accumulate in `double` (this would be a
+    // byte-identical duplicate). F16/Bf16 up-convert to float in the fold, but
+    // their low-mantissa STORE rounds the extra accumulation precision away —
+    // not worth a distinct variant. Integer reductions are exact (no FP axis).
+    if plan.dtype != ElementKind::F32 {
+        return None;
+    }
+    // `emit_reduction`'s single-input contract, and the serial general nest's
+    // store-injectivity guard (a flipped or broadcast-on-a-kept-axis output would
+    // alias / write OOB — the base emitter asserts the same; decline rather than
+    // trip the assert, keeping the variant set total).
+    if plan.n_inputs != 1 || plan.key.n_operands < 2 {
+        return None;
+    }
+    // The serial general nest requires an injective, forward-dense output (it
+    // asserts as much). A fresh reduction output is dense; a broadcast (stride-0)
+    // or flipped (negative-stride) output would alias / write OOB — decline. The
+    // input may be strided (the general path reads runtime strides), so only the
+    // output is constrained.
+    let out_key = plan.key.operands[(plan.key.n_operands as usize) - 1];
+    if out_key.flipped || out_key.contig != Contiguity::Contig {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    let kernel = emit_reduction(plan, ctype, rop, true);
+    let det = VariantFidelity::MorePrecise.determinism_str();
+    Some(Variant {
+        tag: "prec",
+        kernels: vec![kernel],
+        fidelity: VariantFidelity::MorePrecise,
+        launch_note: format!(
+            "Precision-first {} reduction: double accumulator, serial per-output fold \
+             (1-D grid over n_out, one thread per output, grid-stride). MORE ACCURATE \
+             than the f32-accumulate base — ~0.5 ULP(f32) of the correctly-rounded \
+             reduction vs the base's length-growing float error. determinism: {det} \
+             (fixed serial order, hardware-independent). NOT the default: trades the \
+             coalesced block-tree's throughput for accuracy; select only when the \
+             caller's precision policy asks for it.",
+            match rop {
+                ReduceOp::Mean => "mean",
+                _ => "sum",
+            }
+        ),
+    })
+}
+
+/// Precision-first arm for a fused [`Schedule::RowReduce`] cell
+/// (softmax/layernorm/rmsnorm): the `_prec` serial-per-row double fold from
+/// `emit_row_reduce_impl(.., precision=true)` — one thread per row, no block-tree,
+/// a `double` accumulator through the sum/mean/variance stages. Bitwise across
+/// hardware.
+fn precision_first_rowreduce(plan: &KernelPlan<'_>) -> Option<Variant> {
+    let Access::RowReduce { stages, .. } = plan.access else {
+        return None;
+    };
+    // F32 ONLY, exactly as the reduction arm: F64/F32Strict already fold in
+    // `double`; f16/bf16's low-mantissa STORE rounds the wider accumulation away.
+    if plan.dtype != ElementKind::F32 {
+        return None;
+    }
+    // At least one Sum/Mean stage — those carry the length-growing FP sum a wider
+    // accumulator fixes (softmax's exp-sum denominator, layernorm/rmsnorm's
+    // mean/variance). A pure Max/Min-only rowreduce is order-exact per row, so the
+    // double fold would be bit-identical to the base — no distinct offer, decline.
+    if !stages
+        .iter()
+        .any(|st| matches!(st.op, ReduceOp::Sum | ReduceOp::Mean))
+    {
+        return None;
+    }
+    // The serial epilogue writes `out[base+j]` forward-dense for j∈[0,k), exactly
+    // like the base full-width output. A flipped (negative-stride) or broadcast
+    // (stride-0) output would alias / write OOB — decline (the block base serves
+    // it via its own path). The last operand in the key is the output.
+    if plan.key.n_operands < 2 {
+        return None;
+    }
+    let out_key = plan.key.operands[(plan.key.n_operands as usize) - 1];
+    if out_key.flipped || out_key.contig != Contiguity::Contig {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    let kernel = emit_row_reduce_impl(plan, ctype, false, true);
+    let det = VariantFidelity::MorePrecise.determinism_str();
+    Some(Variant {
+        tag: "prec",
+        kernels: vec![kernel],
+        fidelity: VariantFidelity::MorePrecise,
+        launch_note: format!(
+            "Precision-first {} rowreduce: double accumulator, serial per-row fold \
+             (1-D grid over n_out, one thread per row, grid-stride). MORE ACCURATE than \
+             the f32 base (double accumulation of the sum/mean/variance stages); \
+             determinism: {det} (fixed serial order, hardware-independent). NOT the \
+             default: trades the block-per-row parallelism for accuracy + \
+             reproducibility.",
+            plan.op_name
+        ),
+    })
 }
 
 /// Split-K schedule **variant** for the outer-axis reduction cell
@@ -2969,11 +3145,20 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         .expect("build_plan asserted contraction facts");
     assert_eq!(
         c.m,
-        baracuda_kernels_types::SizeClass::Tiny,
+        baracuda_kernel_vocab::SizeClass::Tiny,
         "contraction v1 emits the Tiny-M skinny schedule only; larger M classes \
          are the tiled variant's territory (and all-Large routes to the vendor)"
     );
-    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    // The CONTRACTION accumulator follows the canonical sk3 `<acc>` lattice
+    // (`baracuda_kernel_vocab::structure_key`'s `contraction_acc`, mirroring
+    // `GemmSku::precision_guarantee`): f16/bf16/f32/f32-strict → `float`,
+    // f64 → `double`. Unlike the REDUCTION emitters (no key `<acc>`
+    // coordinate), F32Strict here must NOT up-convert to double — the gem
+    // cell's key says `<acc>=f32`, the contract's `accumulation_type` must
+    // match it (KISS-Contract §6.8 pin), and the F32Strict element contract is
+    // "full IEEE 754 binary32 multiply-add THROUGHOUT" — a double accumulator
+    // would produce different (non-binary32-chain) bits than declared.
+    let dbl = matches!(plan.dtype, ElementKind::F64);
     assert!(
         matches!(
             plan.dtype,
@@ -2988,11 +3173,11 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     );
     let acc = if dbl { "double" } else { "float" };
     let zero = if dbl { "0.0" } else { "0.0f" };
-    // Loads up-convert to the accumulator width, exactly as the reductions do.
+    // Loads up-convert to the accumulator width, exactly as the reductions do
+    // (F32Strict is already accumulator-width — no conversion).
     let load = |expr: String| match plan.dtype {
         ElementKind::F16 => format!("__half2float({expr})"),
         ElementKind::Bf16 => format!("__bfloat162float({expr})"),
-        ElementKind::F32Strict => format!("(double){expr}"),
         _ => expr,
     };
     let name = format!(
@@ -3012,7 +3197,21 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let epi = lower_expr(
         epilogue,
         &Lowering {
-            leaf: &|i| unreachable!("contraction v1 epilogue has no Input leaf: in{i}"),
+            // The only admissible epilogue Input is the fused bias `in{i}` (i>=2),
+            // a per-column `[N]` bias read at `col` and up-converted to the
+            // accumulator width, exactly as the operand loads are.
+            leaf: &|i| {
+                assert!(
+                    i >= 2,
+                    "contraction epilogue Input leaf must be the fused bias (>=2): in{i}"
+                );
+                let e = format!("in{i}[col]");
+                match plan.dtype {
+                    ElementKind::F16 => format!("__half2float({e})"),
+                    ElementKind::Bf16 => format!("__bfloat162float({e})"),
+                    _ => e,
+                }
+            },
             reduced: &red,
             coord: &|d| {
                 panic!(
@@ -3050,11 +3249,26 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         _ => epi,
     };
 
+    // Batched cells (`c.batch` set) stride each operand by the batch index
+    // `b = blockIdx.z`; the per-batch col/mm/kk math is byte-identical to rank-2,
+    // so a rank-2 cell emits empty offsets (unchanged source).
+    let (lb, rb, ob) = if c.batch.is_some() {
+        ("b * m * k + ", "b * k * n + ", "b * m * n + ")
+    } else {
+        ("", "", "")
+    };
+
     let mut s = header(plan, &name);
     s.push_str(&format!("    const {ctype}* __restrict__ in0,\n")); // lhs [m,k]
     s.push_str(&format!("    const {ctype}* __restrict__ in1,\n")); // rhs [k,n]
+    if plan.n_inputs >= 3 {
+        s.push_str(&format!("    const {ctype}* __restrict__ in2,\n")); // bias [n]
+    }
     s.push_str(&format!("    {ctype}* __restrict__ out,\n")); // [m,n]
     s.push_str("    long long m,\n    long long n,\n    long long k)\n{\n");
+    if c.batch.is_some() {
+        s.push_str("    long long b = (long long)blockIdx.z;\n");
+    }
     s.push_str("    long long col = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
     s.push_str("    for (; col < n; col += step) {\n");
@@ -3069,20 +3283,22 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     s.push_str("        for (long long kk = 0; kk < k; ++kk) {\n");
     s.push_str(&format!(
         "            {acc} w = {};\n",
-        load("in1[kk * n + col]".to_string())
+        load(format!("in1[{rb}kk * n + col]"))
     ));
     s.push_str("            #pragma unroll\n");
     s.push_str("            for (int mm = 0; mm < 8; ++mm) {\n");
     s.push_str(&format!(
         "                if (mm < m) accs[mm] += {} * w;\n",
-        load("in0[mm * k + kk]".to_string())
+        load(format!("in0[{lb}mm * k + kk]"))
     ));
     s.push_str("            }\n        }\n");
     s.push_str("        #pragma unroll\n");
     s.push_str("        for (int mm = 0; mm < 8; ++mm) {\n");
     s.push_str("            if (mm < m) {\n");
     s.push_str(&format!("                {acc} r0 = accs[mm];\n"));
-    s.push_str(&format!("                out[mm * n + col] = {stored};\n"));
+    s.push_str(&format!(
+        "                out[{ob}mm * n + col] = {stored};\n"
+    ));
     s.push_str("            }\n        }\n    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -3105,12 +3321,27 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let Access::Contraction { epilogue, .. } = plan.access else {
         return None;
     };
-    // build_plan admissibility already ran; these mirror emit_contraction.
-    let c = plan.key.contraction?;
-    if c.m != baracuda_kernels_types::SizeClass::Tiny {
+    // Fused-bias cells (n_inputs > 2) decline the split-K variant in v1: split-K
+    // folds the epilogue into a second `_splitk_combine` kernel, and a per-column
+    // bias load there is a follow-up. A bias cell gets the base skinny kernel only.
+    if plan.n_inputs > 2 {
         return None;
     }
-    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    // build_plan admissibility already ran; these mirror emit_contraction.
+    let c = plan.key.contraction?;
+    // Batched cells decline the split-K variant in v1 (the split-K workspace +
+    // combine kernels have no batch dimension yet) — a batched cell gets the base
+    // per-batch skinny kernel only.
+    if c.batch.is_some() {
+        return None;
+    }
+    if c.m != baracuda_kernel_vocab::SizeClass::Tiny {
+        return None;
+    }
+    // Same canonical accumulator lattice as `emit_contraction` (the sk3
+    // `<acc>` coordinate): double for F64 ONLY — F32Strict stays a binary32
+    // chain, matching the key/contract-declared `<acc>=f32`.
+    let dbl = matches!(plan.dtype, ElementKind::F64);
     if !matches!(
         plan.dtype,
         ElementKind::F16
@@ -3127,7 +3358,6 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let load = |expr: String| match plan.dtype {
         ElementKind::F16 => format!("__half2float({expr})"),
         ElementKind::Bf16 => format!("__bfloat162float({expr})"),
-        ElementKind::F32Strict => format!("(double){expr}"),
         _ => expr,
     };
     let stem = format!(
@@ -3261,13 +3491,13 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     })
 }
 
-/// One-letter tag for a [`baracuda_kernels_types::SizeClass`] in symbol names.
-fn size_tag(s: baracuda_kernels_types::SizeClass) -> char {
+/// One-letter tag for a [`baracuda_kernel_vocab::SizeClass`] in symbol names.
+fn size_tag(s: baracuda_kernel_vocab::SizeClass) -> char {
     match s {
-        baracuda_kernels_types::SizeClass::Tiny => 't',
-        baracuda_kernels_types::SizeClass::Small => 's',
-        baracuda_kernels_types::SizeClass::Mid => 'm',
-        baracuda_kernels_types::SizeClass::Large => 'l',
+        baracuda_kernel_vocab::SizeClass::Tiny => 't',
+        baracuda_kernel_vocab::SizeClass::Small => 's',
+        baracuda_kernel_vocab::SizeClass::Mid => 'm',
+        baracuda_kernel_vocab::SizeClass::Large => 'l',
     }
 }
 
@@ -3290,7 +3520,7 @@ fn size_tag(s: baracuda_kernels_types::SizeClass) -> char {
 /// uses the full `0xffffffff` mask; the launch contract caps `blockDim.x <= 1024`
 /// and (for warp uniformity) a multiple of 32.
 fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
-    emit_row_reduce_impl(plan, ctype, false)
+    emit_row_reduce_impl(plan, ctype, false, false)
 }
 
 /// Cross-pass materialization **variant** for a RowReduce cell whose epilogue
@@ -3334,7 +3564,7 @@ fn row_reduce_materialize_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let ctype = scalar_ctype(plan.dtype)?;
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let (acc, asz) = if dbl { ("double", 8) } else { ("float", 4) };
-    let k = emit_row_reduce_impl(plan, ctype, true);
+    let k = emit_row_reduce_impl(plan, ctype, true, false);
     let kname = k.name.clone();
     Some(Variant {
         tag: "smemrow",
@@ -3395,10 +3625,25 @@ fn substitute_subexpr(e: &ScalarExpr, t: &ScalarExpr, marker: u8) -> ScalarExpr 
     }
 }
 
-fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -> GeneratedKernel {
+fn emit_row_reduce_impl(
+    plan: &KernelPlan<'_>,
+    ctype: &str,
+    materialize: bool,
+    precision: bool,
+) -> GeneratedKernel {
     let Access::RowReduce { stages, epilogue } = plan.access else {
         unreachable!("emit_row_reduce requires Access::RowReduce");
     };
+    // The materialize (smem cross-pass cache) and precision (serial double fold)
+    // variants are mutually-exclusive STRUCTURES — the former is a block-per-row
+    // shape with a per-thread j-strided cache, the latter a single-thread-per-row
+    // serial fold with no smem. No caller composes them; the assert makes that a
+    // hard invariant so the precision branches below can treat the cache paths as
+    // unreachable.
+    assert!(
+        !(materialize && precision),
+        "cuda backend: RowReduce materialize + precision are mutually-exclusive structures"
+    );
     // Independent emitter backstop (belt-and-suspenders; the plan gate
     // `validate_row_reduce` validates the same, the 0a lesson: gate every layer).
     // Re-derive each operand's role from the key and assert the OOB-relevant
@@ -3434,7 +3679,9 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
             "cuda backend: RowReduce input 0 must be the row-streamed reduced tensor"
         );
     }
-    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    // Precision forces the wider `double` accumulator (fixing the length-growing
+    // float error of the sum/mean/variance stages); F64/F32Strict already do.
+    let dbl = precision || matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let acc = if dbl { "double" } else { "float" };
     let zero = if dbl { "0.0" } else { "0.0f" };
     // Prod's multiplicative identity — passed through to `emit_block_reducers`
@@ -3442,7 +3689,13 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
     // `ops` never contains Prod here and no block_prod is emitted.
     let one = if dbl { "1.0" } else { "1.0f" };
     let n = plan.n_inputs;
-    let vsuf = if materialize { "_smemrow" } else { "" };
+    let vsuf = if materialize {
+        "_smemrow"
+    } else if precision {
+        "_prec"
+    } else {
+        ""
+    };
     let name = format!(
         "baracuda_gen_{}_{}_rowreduce{vsuf}",
         plan.op_name,
@@ -3455,7 +3708,13 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
         "{}_{}{}",
         plan.op_name,
         dtype_tag(plan.dtype),
-        if materialize { "_sm" } else { "" }
+        if materialize {
+            "_sm"
+        } else if precision {
+            "_prec"
+        } else {
+            ""
+        }
     );
 
     // The feature (reduced/last) axis index, for the role classifier. `saturating_sub`
@@ -3552,7 +3811,11 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
     for st in stages {
         ops.insert(st.op);
     }
-    emit_block_reducers(&mut s, acc, zero, one, &ops, &stem);
+    // The precision serial fold has one thread per row own the whole reduction, so
+    // it needs NO cooperative block/warp/smem reducers — skip the helper emission.
+    if !precision {
+        emit_block_reducers(&mut s, acc, zero, one, &ops, &stem);
+    }
     s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
     for i in 0..n {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
@@ -3575,10 +3838,29 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
             "    extern __shared__ {acc} baracuda_row_smem[];\n"
         ));
     }
-    s.push_str(
-        "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
-    );
+    // Row mapping: the base kernel is one BLOCK per row (grid-stride over rows,
+    // the block cooperatively folds each row). The precision variant is one THREAD
+    // per row (grid-stride over rows), each thread serially folding its whole row —
+    // a fixed, hardware-independent order.
+    if precision {
+        s.push_str(
+            "    for (long long row = (long long)blockIdx.x * blockDim.x + threadIdx.x; row < n_out; row += (long long)gridDim.x * blockDim.x) {\n",
+        );
+    } else {
+        s.push_str(
+            "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
+        );
+    }
     s.push_str("        long long base = row * k;\n");
+    // Per-element fold loop header: block-strided (each block thread takes a lane of
+    // the row) for the base/materialize kernels; plain serial for the precision
+    // variant (the single owning thread walks the whole row in order). Shared by
+    // every stage fold AND the epilogue below.
+    let fold_open = if precision {
+        "        for (long long j = 0; j < k; ++j) {\n"
+    } else {
+        "        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n"
+    };
     // Hoist per-row scalar operands (saved stats: μ, rstd, lse) once per row: they
     // are constant along the feature axis, so `in{i}[row]` is loaded here (outside
     // the feature loop), up-converted to the accumulate type, and referenced as
@@ -3612,7 +3894,7 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
             ),
             ReduceOp::Sum | ReduceOp::Mean => {
                 s.push_str(&format!("        {acc} acc{i} = {zero};\n"));
-                s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+                s.push_str(fold_open);
                 s.push_str("            long long idx = base + j;\n");
                 if cache {
                     s.push_str(&format!("            {acc} v = {pre};\n"));
@@ -3622,9 +3904,17 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                     s.push_str(&format!("            acc{i} += {pre};\n"));
                 }
                 s.push_str("        }\n");
-                // block_sum broadcasts the row sum to every thread; Mean divides by
-                // k (k>0 guaranteed by the guard above) — uniform in every thread.
-                let fin = if matches!(st.op, ReduceOp::Mean) {
+                // Base: block_sum broadcasts the row sum to every thread. Precision:
+                // the single owning thread already holds the full serial sum in
+                // acc{i}, so no cooperative combine. Mean divides by k (k>0 by the
+                // guard above) either way.
+                let fin = if precision {
+                    if matches!(st.op, ReduceOp::Mean) {
+                        format!("acc{i} / ({acc})k")
+                    } else {
+                        format!("acc{i}")
+                    }
+                } else if matches!(st.op, ReduceOp::Mean) {
                     format!("block_sum_{stem}(acc{i}) / ({acc})k")
                 } else {
                     format!("block_sum_{stem}(acc{i})")
@@ -3643,9 +3933,11 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                     "min"
                 };
                 // Carry a `has` flag so idle / short-row lanes inject nothing and no
-                // ±inf seed is needed (headerless); NaN sticks via `e != e`.
+                // ±inf seed is needed (headerless); NaN sticks via `e != e`. Kept in
+                // the precision fold too: it gives the same empty/NaN semantics when
+                // the single owning thread walks the row serially.
                 s.push_str(&format!("        {acc} acc{i} = {zero}; int has{i} = 0;\n"));
-                s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+                s.push_str(fold_open);
                 s.push_str("            long long idx = base + j;\n");
                 s.push_str(&format!("            {acc} e = {pre};\n"));
                 if cache {
@@ -3655,9 +3947,15 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
                     "            if (!has{i} || e != e || e {cmp} acc{i}) {{ acc{i} = e; has{i} = 1; }}\n"
                 ));
                 s.push_str("        }\n");
-                s.push_str(&format!(
-                    "        {acc} r{i} = block_{suf}_{stem}(acc{i}, has{i});\n"
-                ));
+                // Base: block_{suf} folds the per-thread extrema across the block.
+                // Precision: the single owning thread already holds the row extremum
+                // in acc{i} (the has{i} flag settled it), so read it directly.
+                let rfin = if precision {
+                    format!("acc{i}")
+                } else {
+                    format!("block_{suf}_{stem}(acc{i}, has{i})")
+                };
+                s.push_str(&format!("        {acc} r{i} = {rfin};\n"));
             }
         }
     }
@@ -3681,7 +3979,7 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
         ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
         _ => epi,
     };
-    s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+    s.push_str(fold_open);
     s.push_str("            long long idx = base + j;\n");
     s.push_str(&format!("            out[idx] = {stored};\n"));
     s.push_str("        }\n");
@@ -5936,6 +6234,359 @@ fn offset_expr(o: OperandKey, stride_arr: &str, rank: usize, perm: Option<&[u8]>
     }
 }
 
+/// Emit the row-major (last-axis-fastest) unravel decomposition — the ONE place
+/// the "linear index → per-axis coordinate" walk is spelled. For each axis in
+/// `axes` (passed high→low: `(0..rank).rev()` for a dense unravel, or the kept
+/// axes reversed for a reduction) it declares `long long {coord}` from
+/// `{lin} % shape` and divides `{lin}` down (or the `s == 0`-guarded form when
+/// `guard`).
+///
+/// This is the single source of truth shared by every inline strided emitter
+/// (`emit_strided` / scatter / strided-multi / reduction — scalar-param,
+/// unguarded calls, each **byte-identical** to the pre-factoring emission) and
+/// the freestanding coord-unravel helper ([`emit_coord_unravel_helper`] — an
+/// array-element, guarded call). An improvement to the decomposition lands once
+/// and propagates to every generated kernel and the generated helper.
+///
+/// `coord(a)` names the coordinate variable for axis `a` (`c{a}` / `oc{a}` /
+/// `ck{a}`); `shape(a)` spells its extent (scalar `shape{a}` inline; array
+/// element `shape.v[{a}]` in the helper). `guard` emits the empty-axis
+/// (`s == 0`) defense: the inline emitters omit it because an empty tensor
+/// yields zero loop iterations (the modulo/divide never runs), while a generic
+/// helper is called with arbitrary shapes and must defend. `lin` is the mutable
+/// linear-index variable already in scope; `indent` is the leading whitespace.
+fn emit_unravel_decomp(
+    axes: impl IntoIterator<Item = usize>,
+    indent: &str,
+    lin: &str,
+    coord: impl Fn(usize) -> String,
+    shape: impl Fn(usize) -> String,
+    guard: bool,
+) -> String {
+    let mut s = String::new();
+    for a in axes {
+        let cv = coord(a);
+        let sh = shape(a);
+        if guard {
+            s.push_str(&format!(
+                "{indent}long long {cv} = ({sh} == 0) ? 0 : ({lin} % (long long){sh}); if ({sh} != 0) {lin} /= (long long){sh};\n"
+            ));
+        } else {
+            s.push_str(&format!(
+                "{indent}long long {cv} = {lin} % {sh}; {lin} /= {sh};\n"
+            ));
+        }
+    }
+    s
+}
+
+/// Emit one `unravel_offset{s}_r{n}` device function: `k` stride arrays dotted
+/// against a single unrolled rank-`n` unravel (one shared decomposition pass).
+/// `k == 1` returns the offset (`unravel_offset_1_r{n}`); `k >= 2` is `void` with
+/// `k` trailing `int64_t&` out-params (`unravel_offsets_{k}_r{n}`), matching the
+/// hand-written `unravel_offsets_2/3/4`. The decomposition comes from the shared
+/// [`emit_unravel_decomp`].
+fn emit_unravel_offset_fn(s: &mut String, n: usize, k: usize) {
+    const LETTERS: [&str; 4] = ["a", "b", "c", "d"];
+    let ls = &LETTERS[..k];
+    s.push_str("template <typename Shape, typename Stride>\n");
+    if k == 1 {
+        s.push_str(&format!(
+            "__device__ __forceinline__ int64_t unravel_offset_1_r{n}(\n"
+        ));
+        s.push_str("    int64_t linear, const Shape& shape, const Stride& stride)\n{\n");
+    } else {
+        s.push_str(&format!(
+            "__device__ __forceinline__ void unravel_offsets_{k}_r{n}(\n"
+        ));
+        s.push_str("    int64_t linear, const Shape& shape");
+        for l in ls {
+            s.push_str(&format!(", const Stride& stride_{l}"));
+        }
+        for l in ls {
+            s.push_str(&format!(", int64_t& off_{l}"));
+        }
+        s.push_str(")\n{\n");
+    }
+    // Shared decomposition: guarded, array-element shape spelling, unrolled.
+    s.push_str(&emit_unravel_decomp(
+        (0..n).rev(),
+        "    ",
+        "linear",
+        |d| format!("c{d}"),
+        |d| format!("shape.v[{d}]"),
+        true,
+    ));
+    if k == 1 {
+        s.push_str("    int64_t off = 0;\n");
+        for d in 0..n {
+            s.push_str(&format!("    off += c{d} * (int64_t)stride.v[{d}];\n"));
+        }
+        s.push_str("    return off;\n}\n\n");
+    } else {
+        for l in ls {
+            s.push_str(&format!("    off_{l} = 0;\n"));
+        }
+        for d in 0..n {
+            for l in ls {
+                s.push_str(&format!(
+                    "    off_{l} += c{d} * (int64_t)stride_{l}.v[{d}];\n"
+                ));
+            }
+        }
+        s.push_str("}\n\n");
+    }
+}
+
+/// Emit a freestanding, header-only coordinate-unravel helper (`.cuh`) — the
+/// **generated** counterpart of the hand-written
+/// `baracuda_coord_unravel.cuh`. For each rank in `1..=max_rank` it emits the
+/// `unravel_offset_1_r{N}` (returns the offset) plus the multi-stride
+/// `unravel_offsets_2/3/4_r{N}` (void, out-params) a hand-written CUDA kernel can
+/// `#include` and call.
+///
+/// Unlike the hand-written helper's single runtime-`rank` loop, each generated
+/// function is **specialized to a compile-time rank and fully unrolled** — the
+/// generator's win: nvcc drops the loop and the runtime-rank branch. The
+/// arithmetic is bit-identical to the hand-written helper (same row-major walk,
+/// same `s == 0` guard, same signed-stride and stride-0-broadcast behavior), so
+/// the two are drop-in-equivalent per rank. The decomposition is emitted by the
+/// shared [`emit_unravel_decomp`] — the same routine the inline strided kernels
+/// use — which is the single-source-of-truth point that makes generator
+/// improvements propagate into the helper.
+///
+/// Templated on `Shape`/`Stride` (any layout-compatible POD exposing `.v[d]`),
+/// matching the hand-written helper's convention. As there, `base_offset` stays
+/// the caller's responsibility (this returns only the coordinate·stride dot).
+pub fn emit_coord_unravel_helper(max_rank: usize) -> String {
+    let mut s = String::new();
+    s.push_str("// @generated by baracuda-kernelgen — do not edit.\n");
+    s.push_str("// Freestanding coordinate-unravel helper: per-rank UNROLLED counterparts\n");
+    s.push_str("// of baracuda_coord_unravel.cuh's runtime-rank `unravel_offset_1`. Offsets\n");
+    s.push_str("// are bit-identical; nvcc unrolls the compile-time rank. `base_offset` is\n");
+    s.push_str("// the caller's responsibility, exactly as in the hand-written helper.\n");
+    s.push_str("#ifndef BARACUDA_COORD_UNRAVEL_GEN_CUH\n");
+    s.push_str("#define BARACUDA_COORD_UNRAVEL_GEN_CUH\n");
+    s.push_str("#include <cstdint>\n");
+    s.push_str("#include <cuda_runtime.h>\n\n");
+    s.push_str("namespace baracuda { namespace coord { namespace gen {\n\n");
+    for n in 1..=max_rank {
+        // `_1` (returns the offset) + `_2`/`_3`/`_4` (void, out-params — one
+        // unravel pass feeds K stride arrays) per rank, matching the hand-written
+        // `unravel_offset_1` / `unravel_offsets_2/3/4`.
+        for k in 1..=4 {
+            emit_unravel_offset_fn(&mut s, n, k);
+        }
+    }
+    s.push_str("}}}  // namespace baracuda::coord::gen\n");
+    s.push_str("#endif  // BARACUDA_COORD_UNRAVEL_GEN_CUH\n");
+    s
+}
+
+/// The f16/bf16 → f32 widening intrinsic (`__half2float` / `__bfloat162float`),
+/// or `None` for a dtype loaded without one. The ONE place the generator names
+/// the half→float promotion — shared by the inline load sites and the generated
+/// dtype-promote helper ([`emit_dtype_promote_helper`]).
+fn half_load_intrinsic(kind: ElementKind) -> Option<&'static str> {
+    match kind {
+        ElementKind::F16 => Some("__half2float"),
+        ElementKind::Bf16 => Some("__bfloat162float"),
+        _ => None,
+    }
+}
+
+/// The f32 → f16/bf16 narrowing intrinsic (`__float2half` / `__float2bfloat16`),
+/// or `None` for a dtype stored without one. Counterpart of
+/// [`half_load_intrinsic`].
+fn half_store_intrinsic(kind: ElementKind) -> Option<&'static str> {
+    match kind {
+        ElementKind::F16 => Some("__float2half"),
+        ElementKind::Bf16 => Some("__float2bfloat16"),
+        _ => None,
+    }
+}
+
+/// Widen a loaded `inner` expression to `float`: the half/bf16 intrinsic, else
+/// the value unchanged (already ≥ f32, or an integer loaded natively).
+fn promote_load_f32(kind: ElementKind, inner: &str) -> String {
+    match half_load_intrinsic(kind) {
+        Some(f) => format!("{f}({inner})"),
+        None => inner.to_string(),
+    }
+}
+
+/// Narrow a `float`-valued `inner` expression to the storage dtype: the
+/// half/bf16 intrinsic, else the value unchanged (the caller adds any cast).
+fn demote_store_f32(kind: ElementKind, inner: &str) -> String {
+    match half_store_intrinsic(kind) {
+        Some(f) => format!("{f}({inner})"),
+        None => inner.to_string(),
+    }
+}
+
+/// A single element-wise dtype-cast expression — the value of `expr` (of dtype
+/// `from`) converted to dtype `to`, with the house f16/bf16 float-detour
+/// convention. The ONE place the generator spells a per-element conversion
+/// between two scalar dtypes, shared by the inline hetero store
+/// ([`store_expr_of`]) and the generated cast helper ([`emit_cast_helper`]), so
+/// the two can never drift.
+///
+/// Mirrors `baracuda_cast.cuh`'s `cast_value<TIn, TOut>` (value-identical, not
+/// necessarily text-identical — the generated form uses C-style casts and the
+/// shared [`promote_load_f32`] / [`demote_store_f32`] intrinsic picks):
+///   * `from == to` → identity (no cast).
+///   * f16/bf16 → f16/bf16 (cross) → widen to `float`, then narrow.
+///   * f16/bf16 → arithmetic → widen to `float`, then a C-style cast to the target.
+///   * arithmetic → f16/bf16 → cast to `float` (unless already `float`), then narrow.
+///   * arithmetic → arithmetic → a plain C-style cast.
+fn cast_scalar(from: ElementKind, to: ElementKind, expr: &str) -> String {
+    if from == to {
+        return expr.to_string();
+    }
+    match (
+        half_load_intrinsic(from).is_some(),
+        half_store_intrinsic(to).is_some(),
+    ) {
+        // f16/bf16 -> f16/bf16 (cross): widen to f32, then narrow.
+        (true, true) => demote_store_f32(to, &promote_load_f32(from, expr)),
+        // f16/bf16 -> arithmetic: widen to f32, C-cast to the target.
+        (true, false) => {
+            let oct = scalar_ctype(to).expect("cast target dtype has a scalar ctype");
+            format!("({oct}){}", promote_load_f32(from, expr))
+        }
+        // arithmetic -> f16/bf16: cast to float (unless already float), then narrow.
+        (false, true) => {
+            let widened = if matches!(from, ElementKind::F32 | ElementKind::F32Strict) {
+                expr.to_string()
+            } else {
+                format!("(float){expr}")
+            };
+            demote_store_f32(to, &widened)
+        }
+        // arithmetic -> arithmetic: plain C-style cast.
+        (false, false) => {
+            let oct = scalar_ctype(to).expect("cast target dtype has a scalar ctype");
+            format!("({oct}){expr}")
+        }
+    }
+}
+
+/// Emit a freestanding, header-only dtype-promotion helper (`.cuh`) — the
+/// **generated** counterpart of the hand-written `baracuda_dtype_promote.cuh`.
+/// Emits the f16/bf16 `load_as_f32` / `store_from_f32` (+ the f64 lane) widen /
+/// narrow device functions a hand-written CUDA kernel can `#include` and call.
+///
+/// Unlike coord-unravel there is no compile-time-specialization perf win here
+/// (both the hand-written template specializations and the generator's
+/// per-`ElementKind` pick resolve to the same single hardware intrinsic at
+/// compile time — the emitted code is bit-identical). The value is
+/// **de-duplication / one source of truth**: the intrinsic pick comes from the
+/// same [`promote_load_f32`] / [`demote_store_f32`] routines the inline emitters
+/// use, so it can never drift from them.
+pub fn emit_dtype_promote_helper() -> String {
+    let mut s = String::new();
+    s.push_str("// @generated by baracuda-kernelgen — do not edit.\n");
+    s.push_str("// Freestanding dtype-promotion helper: the f16/bf16 <-> f32/f64 widen/narrow\n");
+    s.push_str("// intrinsics the generator uses inline, as reusable device functions — one\n");
+    s.push_str("// source of truth with the inline emitters.\n");
+    s.push_str("#ifndef BARACUDA_DTYPE_PROMOTE_GEN_CUH\n");
+    s.push_str("#define BARACUDA_DTYPE_PROMOTE_GEN_CUH\n");
+    s.push_str("#include <cuda_fp16.h>\n");
+    s.push_str("#include <cuda_bf16.h>\n\n");
+    s.push_str("namespace baracuda { namespace dtype { namespace gen {\n\n");
+    for (kind, tag, cty) in [
+        (ElementKind::F16, "f16", "__half"),
+        (ElementKind::Bf16, "bf16", "__nv_bfloat16"),
+    ] {
+        // f32 lane.
+        s.push_str(&format!(
+            "__device__ __forceinline__ float load_as_f32_{tag}({cty} x) {{ return {}; }}\n",
+            promote_load_f32(kind, "x")
+        ));
+        s.push_str(&format!(
+            "__device__ __forceinline__ {cty} store_from_f32_{tag}(float v) {{ return {}; }}\n",
+            demote_store_f32(kind, "v")
+        ));
+        // f64 lane — round-trips through f32 (no direct double↔half intrinsic;
+        // the extra f32 hop is lossless relative to the half mantissa), matching
+        // the hand-written helper.
+        s.push_str(&format!(
+            "__device__ __forceinline__ double load_as_f64_{tag}({cty} x) {{ return (double){}; }}\n",
+            promote_load_f32(kind, "x")
+        ));
+        s.push_str(&format!(
+            "__device__ __forceinline__ {cty} store_from_f64_{tag}(double v) {{ return {}; }}\n\n",
+            demote_store_f32(kind, "(float)v")
+        ));
+    }
+    s.push_str("}}}  // namespace baracuda::dtype::gen\n");
+    s.push_str("#endif  // BARACUDA_DTYPE_PROMOTE_GEN_CUH\n");
+    s
+}
+
+/// The scalar compute dtypes the generated cast matrix ([`emit_cast_helper`])
+/// covers — one entry per distinct storage type. Mirrors `baracuda_cast.cuh`'s
+/// endpoint set. `F32Strict` is intentionally absent (identical `float` ctype to
+/// `F32`; it is a compute-mode distinction, not a distinct storage type) and
+/// `U32` is index-only (no compute-operand cast), so both are excluded to avoid
+/// duplicate / meaningless symbols.
+const CAST_MATRIX_DTYPES: [ElementKind; 8] = [
+    ElementKind::F16,
+    ElementKind::Bf16,
+    ElementKind::F32,
+    ElementKind::F64,
+    ElementKind::I32,
+    ElementKind::I64,
+    ElementKind::S8,
+    ElementKind::U8,
+];
+
+/// Emit a freestanding, header-only elementwise dtype-cast helper (`.cuh`) — the
+/// **generated** counterpart of the hand-written `baracuda_cast.cuh`. Emits the
+/// full `N×N` matrix of `baracuda::cast::gen::cast_<sin>_<sout>` device functions
+/// (`y = (TOut) x`) a hand-written CUDA kernel can `#include` and call.
+///
+/// Like dtype-promote (and unlike coord-unravel) this is a **de-duplication /
+/// one-source-of-truth** win, not a speed win: each generated cast resolves to
+/// the same `static_cast` / half-intrinsic the hand-written `cast_value<TIn,
+/// TOut>` does, so the emitted code is value-identical (proven exhaustively by
+/// `ondevice/cast_validate.cu`). The per-element conversion is spelled by the
+/// same [`cast_scalar`] routine the inline hetero store ([`store_expr_of`]) uses
+/// — which in turn routes half endpoints through the same [`promote_load_f32`] /
+/// [`demote_store_f32`] the reduction load/store use — so the generated cast can
+/// never drift from the live emitters. `cast` is a strict superset of
+/// dtype-promote: it adds the integer endpoints, the cross-half pair, and the
+/// float↔int conversions.
+pub fn emit_cast_helper() -> String {
+    let mut s = String::new();
+    s.push_str("// @generated by baracuda-kernelgen — do not edit.\n");
+    s.push_str("// Freestanding elementwise dtype-cast helper: the per-element (TOut)x\n");
+    s.push_str("// conversion the generator uses inline (cast_scalar), as a reusable N×N\n");
+    s.push_str("// matrix of device functions — one source of truth with the inline emitters.\n");
+    s.push_str("#ifndef BARACUDA_CAST_GEN_CUH\n");
+    s.push_str("#define BARACUDA_CAST_GEN_CUH\n");
+    s.push_str("#include <cstdint>\n");
+    s.push_str("#include <cuda_fp16.h>\n");
+    s.push_str("#include <cuda_bf16.h>\n\n");
+    s.push_str("namespace baracuda { namespace cast { namespace gen {\n\n");
+    for from in CAST_MATRIX_DTYPES {
+        let fcty = scalar_ctype(from).expect("cast source dtype has a scalar ctype");
+        let ftag = dtype_tag(from);
+        for to in CAST_MATRIX_DTYPES {
+            let tcty = scalar_ctype(to).expect("cast target dtype has a scalar ctype");
+            let ttag = dtype_tag(to);
+            s.push_str(&format!(
+                "__device__ __forceinline__ {tcty} cast_{ftag}_{ttag}({fcty} x) {{ return {}; }}\n",
+                cast_scalar(from, to, "x")
+            ));
+        }
+        s.push('\n');
+    }
+    s.push_str("}}}  // namespace baracuda::cast::gen\n");
+    s.push_str("#endif  // BARACUDA_CAST_GEN_CUH\n");
+    s
+}
+
 /// [`offset_expr`] with an arbitrary coordinate-variable prefix (identity layout,
 /// no permutation) — the gather-sum kernel (increment 5) has TWO coordinate
 /// spaces in one kernel (the destination `oc{d}` and the update-domain `uc{d}`),
@@ -6019,7 +6670,7 @@ fn zero_store_literal(octype: &str) -> &'static str {
 /// extra wrapping; the operator forms wrap themselves. (`Sigmoid`/`Gelu`/`Silu`
 /// reference the inner twice — fine for an atomic load; a temp-binding pass to
 /// avoid recompute on compound inners is a follow-up.)
-fn unary_f32(op: UnaryOp, x: String) -> String {
+pub(crate) fn unary_f32(op: UnaryOp, x: String) -> String {
     match op {
         UnaryOp::Neg => format!("(-{x})"),
         UnaryOp::Abs => format!("fabsf({x})"),
@@ -6069,7 +6720,7 @@ fn unary_f32(op: UnaryOp, x: String) -> String {
 }
 
 /// Same as [`unary_f32`] but with f64 math-function names and double literals.
-fn unary_f64(op: UnaryOp, x: String) -> String {
+pub(crate) fn unary_f64(op: UnaryOp, x: String) -> String {
     match op {
         UnaryOp::Neg => format!("(-{x})"),
         UnaryOp::Abs => format!("fabs({x})"),
@@ -6147,13 +6798,17 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
 /// as [`BinaryOp::FmaxIeee`]/[`BinaryOp::FminIeee`] below — so `Max`/`Min` emit
 /// the compare-select, never `fmaxf`. (Operands appear 3× — the deferred
 /// temp-binding pass, cf. relu/sigmoid, removes the recompute on compound inners.)
-fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
+pub(crate) fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
     match op {
+        // A ON TIES (`>=`/`<=`): the KISS-Ops `max_prop`/`min_prop` normative
+        // decomposition (`cmp_ge`/`cmp_le` select a) and numpy/torch
+        // `where(a >= b, a, b)`. Bit-visible only on signed-zero ties
+        // (`max_prop(-0.0, +0.0) = -0.0`); a `>`-spelled tie would return b.
         BinaryOp::Max => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} >= {b} ? {a} : {b})))")
         }
         BinaryOp::Min => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} <= {b} ? {a} : {b})))")
         }
         BinaryOp::Pow => format!("powf({a}, {b})"),
         // Floored remainder (torch.remainder, sign-of-divisor — Fuel's Op::Rem),
@@ -6208,13 +6863,14 @@ fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
 }
 
 /// Same as [`binary_f32`] but with f64 math-function names.
-fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
+pub(crate) fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
     match op {
+        // A ON TIES (`>=`/`<=`) — see [`binary_f32`]'s Max/Min note.
         BinaryOp::Max => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} >= {b} ? {a} : {b})))")
         }
         BinaryOp::Min => {
-            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))")
+            format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} <= {b} ? {a} : {b})))")
         }
         BinaryOp::Pow => format!("pow({a}, {b})"),
         BinaryOp::Rem => format!("({a} - floor({a} / {b}) * {b})"),
@@ -6289,7 +6945,7 @@ fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
 /// The final `other` arm is the second half of the emitter backstop: a float
 /// fn / cmp op that reaches the int speller (i.e. bypassed the plan gate at an
 /// int dtype) panics rather than emitting C that happens to compile.
-fn binary_int(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
+pub(crate) fn binary_int(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
     if op.is_logical() {
         assert!(
             dtype == ElementKind::U8,
@@ -6387,12 +7043,12 @@ fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String
 /// No arithmetic ever touches an arm: the ternary is data movement
 /// (setp+selp), so ±0 signs and NaN payloads (quiet and signaling) move
 /// intact — byte-for-byte the bespoke `keep ? input[k] : zero_of<T>()`.
-fn select_f32(c: String, a: String, b: String) -> String {
+pub(crate) fn select_f32(c: String, a: String, b: String) -> String {
     format!("(((float)({c})) != 0.0f ? (float)({a}) : (float)({b}))")
 }
 
 /// [`select_f32`] with double literals/casts (the `binary_f64` cmp precedent).
-fn select_f64(c: String, a: String, b: String) -> String {
+pub(crate) fn select_f64(c: String, a: String, b: String) -> String {
     format!("(((double)({c})) != 0.0 ? (double)({a}) : (double)({b}))")
 }
 
@@ -6479,7 +7135,7 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
 /// f64-spelled Const injects double math into an int kernel (f64 cannot even
 /// represent all i64). Called from [`Cuda::lower`] over the body and every
 /// reduction-class stage/epilogue, independent of `assert_int_op_admissibility`.
-fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
+pub(crate) fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
     match e {
         ScalarExpr::Input(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {}
         // A Coord at an int dtype is the SAME hazard class as Const (its
@@ -6588,7 +7244,7 @@ fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) {
 /// never `vty`/`octype`. The `Cuda::lower` param assert (see the `matches!` on
 /// `plan.dtype` above) guarantees a param-bearing plan has a spellable scalar
 /// ctype, so the `expect` is unreachable for any op that actually declares a param.
-fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
+pub(crate) fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
     scalar_ctype(plan.dtype).expect("param dtype checked by the Cuda::lower param assert")
 }
 
@@ -6600,7 +7256,7 @@ fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
 /// `float4`/`double2`) the declaration stays `double p0`, NOT `double2 p0` — so
 /// callers pass the SCALAR compute ctype, never `vty`/`octype` (the F64-param
 /// increment's load-bearing distinction).
-fn param_args(e: &ScalarExpr, param_ctype: &str) -> String {
+pub(crate) fn param_args(e: &ScalarExpr, param_ctype: &str) -> String {
     params_used(e)
         .iter()
         .map(|i| format!(", {param_ctype} p{i}"))
@@ -6626,25 +7282,272 @@ fn param_args_multi(exprs: &[&ScalarExpr], param_ctype: &str) -> String {
 mod tests {
     use crate::ir::{OpDef, input, param};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+    use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn add_op(dtypes: &[ElementKind]) -> OpDef {
         OpDef::elementwise("add", 2, dtypes, input(0) + input(1))
     }
 
-    fn binary_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn binary_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
         structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
+    }
+
+    // ---- coord-unravel: shared decomposition + freestanding helper (Phase 1) ----
+
+    #[test]
+    fn unravel_decomp_inline_form_is_byte_identical() {
+        // The scalar-param, unguarded call MUST reproduce exactly what emit_strided
+        // used to hand-inline. Pins the single-source-of-truth factoring
+        // independently of the full emission-golden suite.
+        let got = super::emit_unravel_decomp(
+            (0..3).rev(),
+            "        ",
+            "lin",
+            |d| format!("c{d}"),
+            |d| format!("shape{d}"),
+            false,
+        );
+        let want = concat!(
+            "        long long c2 = lin % shape2; lin /= shape2;\n",
+            "        long long c1 = lin % shape1; lin /= shape1;\n",
+            "        long long c0 = lin % shape0; lin /= shape0;\n",
+        );
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn coord_unravel_helper_emits_unrolled_per_rank() {
+        let src = super::emit_coord_unravel_helper(4);
+        assert!(src.contains("#ifndef BARACUDA_COORD_UNRAVEL_GEN_CUH"));
+        assert!(src.contains("namespace baracuda { namespace coord { namespace gen {"));
+        // one function per rank 1..=4, none beyond max_rank
+        for n in 1..=4 {
+            assert!(
+                src.contains(&format!("unravel_offset_1_r{n}(")),
+                "missing rank {n}"
+            );
+        }
+        assert!(
+            !src.contains("unravel_offset_1_r5("),
+            "should stop at max_rank"
+        );
+        // rank-4 body: unrolled (c3..c0 declared straight-line, NO runtime loop),
+        // guarded, with the full offset accumulation.
+        assert!(src.contains("long long c3 = (shape.v[3] == 0)"));
+        assert!(src.contains("long long c0 = (shape.v[0] == 0)"));
+        assert!(
+            !src.contains("for ("),
+            "generated helper must be unrolled — no runtime loop"
+        );
+        assert!(src.contains("off += c3 * (int64_t)stride.v[3];"));
+        assert!(src.contains("off += c0 * (int64_t)stride.v[0];"));
+        assert!(src.contains("return off;"));
+        // multi-stride variants: one unravel pass feeds K offsets (void out-params),
+        // matching the hand-written unravel_offsets_2/3/4.
+        assert!(src.contains("void unravel_offsets_2_r4("));
+        assert!(src.contains("void unravel_offsets_3_r2("));
+        assert!(src.contains("void unravel_offsets_4_r4("));
+        assert!(src.contains("int64_t& off_d"));
+        assert!(src.contains("off_a += c0 * (int64_t)stride_a.v[0];"));
+        assert!(src.contains("off_d += c3 * (int64_t)stride_d.v[3];"));
+    }
+
+    /// Regenerate the generated coord-unravel helper for the on-device
+    /// `ondevice/unravel_bench.cu` harness. Run with:
+    ///   `UNRAVEL_OUT=<outdir> cargo test -p baracuda-kernelgen dump_coord_unravel_helper -- --ignored --nocapture`
+    #[test]
+    #[ignore = "writes the generated coord-unravel helper for the on-device bench"]
+    fn dump_coord_unravel_helper() {
+        let out = std::env::var("UNRAVEL_OUT").unwrap_or_else(|_| ".".to_string());
+        let path = format!("{out}/coord_unravel_gen.cuh");
+        std::fs::write(&path, super::emit_coord_unravel_helper(8)).unwrap();
+        println!("wrote {path}");
+    }
+
+    // ---- dtype-promote: shared promotion routines + freestanding helper ----
+
+    #[test]
+    fn promote_demote_routines_reproduce_inline_spelling() {
+        // The shared routines must reproduce exactly what the inline sites emit
+        // (the reduction load/store closures now route through them).
+        assert_eq!(
+            super::promote_load_f32(ElementKind::F16, "in0[idx]"),
+            "__half2float(in0[idx])"
+        );
+        assert_eq!(
+            super::promote_load_f32(ElementKind::Bf16, "in0[idx]"),
+            "__bfloat162float(in0[idx])"
+        );
+        assert_eq!(
+            super::promote_load_f32(ElementKind::F32, "in0[idx]"),
+            "in0[idx]"
+        );
+        assert_eq!(
+            super::demote_store_f32(ElementKind::F16, "v"),
+            "__float2half(v)"
+        );
+        assert_eq!(
+            super::demote_store_f32(ElementKind::Bf16, "v"),
+            "__float2bfloat16(v)"
+        );
+        assert_eq!(super::demote_store_f32(ElementKind::F32, "v"), "v");
+    }
+
+    #[test]
+    fn dtype_promote_helper_emits_lanes() {
+        let src = super::emit_dtype_promote_helper();
+        assert!(src.contains("#ifndef BARACUDA_DTYPE_PROMOTE_GEN_CUH"));
+        assert!(src.contains("namespace baracuda { namespace dtype { namespace gen {"));
+        assert!(src.contains("float load_as_f32_f16(__half x) { return __half2float(x); }"));
+        assert!(src.contains("__half store_from_f32_f16(float v) { return __float2half(v); }"));
+        assert!(
+            src.contains("float load_as_f32_bf16(__nv_bfloat16 x) { return __bfloat162float(x); }")
+        );
+        assert!(
+            src.contains("double load_as_f64_f16(__half x) { return (double)__half2float(x); }")
+        );
+        assert!(
+            src.contains("__half store_from_f64_f16(double v) { return __float2half((float)v); }")
+        );
+    }
+
+    /// Regenerate the generated dtype-promote helper for the on-device validator.
+    ///   `DTYPE_OUT=<outdir> cargo test -p baracuda-kernelgen dump_dtype_promote_helper -- --ignored --nocapture`
+    #[test]
+    #[ignore = "writes the generated dtype-promote helper for the on-device validator"]
+    fn dump_dtype_promote_helper() {
+        let out = std::env::var("DTYPE_OUT").unwrap_or_else(|_| ".".to_string());
+        let path = format!("{out}/dtype_promote_gen.cuh");
+        std::fs::write(&path, super::emit_dtype_promote_helper()).unwrap();
+        println!("wrote {path}");
+    }
+
+    // ---- cast: shared per-element cast routine + freestanding helper ----
+
+    #[test]
+    fn cast_scalar_reproduces_inline_u8_narrowing() {
+        // The hetero elementwise store (`store_expr_of`) now routes through
+        // `cast_scalar(plan.dtype, U8, root)`; these must be BYTE-IDENTICAL to the
+        // prior hand-inlined `(unsigned char)…` spellings (goldens unchanged).
+        assert_eq!(
+            super::cast_scalar(ElementKind::F16, ElementKind::U8, "root"),
+            "(unsigned char)__half2float(root)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::Bf16, ElementKind::U8, "root"),
+            "(unsigned char)__bfloat162float(root)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::F32, ElementKind::U8, "root"),
+            "(unsigned char)root"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::I32, ElementKind::U8, "root"),
+            "(unsigned char)root"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::F64, ElementKind::U8, "root"),
+            "(unsigned char)root"
+        );
+    }
+
+    #[test]
+    fn cast_scalar_matches_cast_value_semantics() {
+        // Value-identical to `baracuda_cast.cuh`'s `cast_value<TIn, TOut>` (the
+        // generated form uses C-style casts + the shared half intrinsics).
+        // Identity.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F16, ElementKind::F16, "x"),
+            "x"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::I32, ElementKind::I32, "x"),
+            "x"
+        );
+        // Cross-half: widen then narrow.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F16, ElementKind::Bf16, "x"),
+            "__float2bfloat16(__half2float(x))"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::Bf16, ElementKind::F16, "x"),
+            "__float2half(__bfloat162float(x))"
+        );
+        // Half -> arithmetic: widen, C-cast.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F16, ElementKind::F32, "x"),
+            "(float)__half2float(x)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::Bf16, ElementKind::I32, "x"),
+            "(int)__bfloat162float(x)"
+        );
+        // Arithmetic -> half: float already-float skips the extra cast; others cast.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F32, ElementKind::F16, "x"),
+            "__float2half(x)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::F64, ElementKind::F16, "x"),
+            "__float2half((float)x)"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::I32, ElementKind::Bf16, "x"),
+            "__float2bfloat16((float)x)"
+        );
+        // Arithmetic -> arithmetic: plain C-style cast.
+        assert_eq!(
+            super::cast_scalar(ElementKind::F32, ElementKind::I32, "x"),
+            "(int)x"
+        );
+        assert_eq!(
+            super::cast_scalar(ElementKind::I64, ElementKind::F32, "x"),
+            "(float)x"
+        );
+    }
+
+    #[test]
+    fn cast_helper_emits_matrix() {
+        let src = super::emit_cast_helper();
+        assert!(src.contains("#ifndef BARACUDA_CAST_GEN_CUH"));
+        assert!(src.contains("namespace baracuda { namespace cast { namespace gen {"));
+        // Representative lanes across every arm of `cast_scalar`.
+        assert!(src.contains("__half cast_f16_f16(__half x) { return x; }"));
+        assert!(src.contains("float cast_f16_f32(__half x) { return (float)__half2float(x); }"));
+        assert!(src.contains(
+            "__nv_bfloat16 cast_f16_bf16(__half x) { return __float2bfloat16(__half2float(x)); }"
+        ));
+        assert!(src.contains("__half cast_f32_f16(float x) { return __float2half(x); }"));
+        assert!(src.contains("__half cast_f64_f16(double x) { return __float2half((float)x); }"));
+        assert!(src.contains("int cast_f32_i32(float x) { return (int)x; }"));
+        assert!(src.contains("float cast_i64_f32(long long x) { return (float)x; }"));
+        assert!(src.contains(
+            "unsigned char cast_f16_u8(__half x) { return (unsigned char)__half2float(x); }"
+        ));
+        // Full 8×8 matrix of device functions (identity lanes included).
+        assert_eq!(src.matches("__device__ __forceinline__").count(), 8 * 8);
+    }
+
+    /// Regenerate the generated cast helper for the on-device validator.
+    ///   `CAST_OUT=<outdir> cargo test -p baracuda-kernelgen dump_cast_helper -- --ignored --nocapture`
+    #[test]
+    #[ignore = "writes the generated cast helper for the on-device validator"]
+    fn dump_cast_helper() {
+        let out = std::env::var("CAST_OUT").unwrap_or_else(|_| ".".to_string());
+        let path = format!("{out}/cast_gen.cuh");
+        std::fs::write(&path, super::emit_cast_helper()).unwrap();
+        println!("wrote {path}");
     }
 
     // rank-2 gather cell: data [4,3] (input 0, gathered axis 0), index [4,3] i32
     // full-shape (input 1), out [4,3]. Non-contig (strided) so it would strided
     // anyway; the gather forces strided regardless.
-    fn gather_2d_key() -> baracuda_kernels_types::StructureKey {
+    fn gather_2d_key() -> baracuda_kernel_vocab::StructureKey {
         gather_2d_key_idx(ElementKind::I32)
     }
 
-    fn gather_2d_key_idx(idx_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn gather_2d_key_idx(idx_dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
         let out = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
@@ -6844,7 +7747,7 @@ mod tests {
     // rank-2 scatter cell: updates [4,3] f32 (in0), index [4,3] i32 full-shape
     // (in1), dst [4,3] f32 (out). The dst extent along the scattered axis rides
     // `sext`; the key dst supplies strides/broadcast facts.
-    fn scatter_2d_key(idx_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn scatter_2d_key(idx_dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let upd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
         let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
         let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
@@ -7254,10 +8157,166 @@ mod tests {
     }
 
     #[test]
+    fn precision_first_variant_offered_for_f32_sum() {
+        use crate::ir::ReduceOp;
+        use crate::{VariantFidelity, generate_variants};
+        // Last-axis (empty-axes default) f32 Sum: base = InnerContig block-tree,
+        // prec = the serial double general nest (split-K declines — not Outer).
+        let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[128], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let vs = generate_variants(&op, &key, &Cuda);
+        assert_eq!(vs[0].tag, "base");
+        assert_eq!(vs[0].fidelity, VariantFidelity::BitIdentical);
+        assert!(
+            vs[0].kernels[0].source.contains("block_sum"),
+            "base keeps the coalesced block-tree"
+        );
+        let prec = vs
+            .iter()
+            .find(|v| v.tag == "prec")
+            .expect("precision-first variant offered for f32 Sum");
+        assert_eq!(prec.fidelity, VariantFidelity::MorePrecise);
+        // A serial double fold is reproducible across IEEE-754 hardware.
+        assert_eq!(prec.fidelity.determinism_str(), "bitwise");
+        assert_eq!(prec.kernels.len(), 1);
+        let k = &prec.kernels[0];
+        assert!(
+            k.source.contains("double acc"),
+            "precision fold accumulates in double"
+        );
+        assert!(
+            !k.source.contains("block_sum"),
+            "precision routes through the serial nest, not the block-tree"
+        );
+        assert!(
+            k.name.ends_with("_prec"),
+            "distinct _prec entry point: {}",
+            k.name
+        );
+    }
+
+    #[test]
+    fn precision_first_variant_declines_non_f32_and_order_exact() {
+        use crate::generate_variants;
+        use crate::ir::ReduceOp;
+        let vs_of = |op: &OpDef, dt: ElementKind| {
+            let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], dt, 256);
+            let o = OperandDesc::new(1, &[128], &[1], dt, 256);
+            let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+            generate_variants(op, &key, &Cuda)
+        };
+        // f16 Sum: declined — the low-mantissa store rounds the extra accumulation
+        // precision away, so a double variant isn't worth a distinct offer.
+        let vs = vs_of(
+            &OpDef::reduction("sum", 1, &[ElementKind::F16], input(0), ReduceOp::Sum),
+            ElementKind::F16,
+        );
+        assert!(
+            vs.iter().all(|v| v.tag != "prec"),
+            "f16 declines precision-first"
+        );
+        // f32 Max: declined — a pick is order-exact, so the double fold is
+        // bit-identical to the base (no distinct precision offer).
+        let vs = vs_of(
+            &OpDef::reduction("max", 1, &[ElementKind::F32], input(0), ReduceOp::Max),
+            ElementKind::F32,
+        );
+        assert!(
+            vs.iter().all(|v| v.tag != "prec"),
+            "Max declines precision-first"
+        );
+    }
+
+    #[test]
+    fn precision_first_rowreduce_offered_for_f32_softmax() {
+        use crate::{VariantFidelity, generate_variants};
+        // Numerically-stable f32 softmax: max stage + exp-sum stage + divide
+        // epilogue. The exp-sum denominator is the length-growing FP sum the
+        // serial double fold fixes.
+        let softmax = softmax_op(ElementKind::F32);
+        let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
+        let vs = generate_variants(&softmax, &key, &Cuda);
+        // Base keeps the coalesced block-per-row tree.
+        assert_eq!(vs[0].tag, "base");
+        assert_eq!(vs[0].fidelity, VariantFidelity::BitIdentical);
+        assert!(
+            vs[0].kernels[0].source.contains("block_sum"),
+            "base keeps the block-tree"
+        );
+        let prec = vs
+            .iter()
+            .find(|v| v.tag == "prec")
+            .expect("precision-first rowreduce offered for f32 softmax");
+        assert_eq!(prec.fidelity, VariantFidelity::MorePrecise);
+        // A serial double fold is reproducible across IEEE-754 hardware.
+        assert_eq!(prec.fidelity.determinism_str(), "bitwise");
+        assert_eq!(prec.kernels.len(), 1);
+        let k = &prec.kernels[0];
+        assert!(
+            k.source.contains("double acc"),
+            "precision fold accumulates in double"
+        );
+        // Serial per-row fold (one thread per row), NOT the block-strided lane loop.
+        assert!(
+            k.source.contains("for (long long j = 0; j < k; ++j)"),
+            "serial per-row fold"
+        );
+        assert!(
+            !k.source.contains("block_sum"),
+            "precision routes through the serial fold, not the block-tree"
+        );
+        assert!(
+            k.name.ends_with("_prec"),
+            "distinct _prec entry point: {}",
+            k.name
+        );
+    }
+
+    #[test]
+    fn precision_first_rowreduce_declines_f16_and_max_only() {
+        use crate::generate_variants;
+        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        // f16 softmax: declined — the low-mantissa store rounds the wider
+        // accumulation away, so a double rowreduce variant isn't worth an offer.
+        let sm16 = softmax_op(ElementKind::F16);
+        let x16 = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F16, 256);
+        let key16 = structure_key(OpCategory::Softmax, &[x16, x16], ArchSku::Sm89);
+        assert!(
+            generate_variants(&sm16, &key16, &Cuda)
+                .iter()
+                .all(|v| v.tag != "prec"),
+            "f16 rowreduce declines precision-first"
+        );
+        // Pure Max-only rowreduce (a row shift-by-max): order-exact per row, so the
+        // double fold is bit-identical to the base — declined.
+        let rowmax = OpDef::row_reduce(
+            "rowmax",
+            1,
+            &[ElementKind::F32],
+            vec![ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Max,
+            }],
+            input(0) - reduced(0),
+        );
+        let xf = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let keyf = structure_key(OpCategory::Softmax, &[xf, xf], ArchSku::Sm89);
+        assert!(
+            generate_variants(&rowmax, &keyf, &Cuda)
+                .iter()
+                .all(|v| v.tag != "prec"),
+            "Max-only rowreduce declines precision-first (order-exact)"
+        );
+    }
+
+    #[test]
     fn splitk_variant_offered_for_outer_sum() {
         use crate::ir::ReduceOp;
         use crate::{VariantFidelity, generate_variants};
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "sum",
             1,
@@ -7271,9 +8330,11 @@ mod tests {
         let o = OperandDesc::new(1, &[8192], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
         let vs = generate_variants(&op, &key, &Cuda);
-        assert_eq!(vs.len(), 2, "base + splitk");
+        // base + splitk + prec (an Outer f32 Sum also earns the precision variant).
+        assert_eq!(vs.len(), 3, "base + splitk + prec");
         assert_eq!(vs[0].tag, "base");
         assert_eq!(vs[0].fidelity, VariantFidelity::BitIdentical);
+        assert_eq!(vs[2].tag, "prec");
         let sk = &vs[1];
         assert_eq!(sk.tag, "splitk");
         assert_eq!(sk.fidelity, VariantFidelity::ReassociatedDeterministic);
@@ -7310,7 +8371,7 @@ mod tests {
     fn splitk_mean_divides_in_combine_only() {
         use crate::generate_variants;
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "mean",
             1,
@@ -7324,8 +8385,9 @@ mod tests {
         let o = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
         let vs = generate_variants(&op, &key, &Cuda);
-        assert_eq!(vs.len(), 2);
+        assert_eq!(vs.len(), 3, "base + splitk + prec");
         let sk = &vs[1];
+        assert_eq!(sk.tag, "splitk");
         assert!(
             !sk.kernels[0].source.contains("acc /"),
             "partial never divides"
@@ -7391,6 +8453,154 @@ mod tests {
                 .contains("float w = __half2float(in1[kk * n + col]);")
         );
         assert!(kh.source.contains("out[mm * n + col] = __float2half(r0);"));
+    }
+
+    #[test]
+    fn contraction_bias_emits_bias_param_and_column_load() {
+        use crate::generate_variants;
+        use crate::ir::{ContractionAxes, UnaryOp, input, reduced};
+        // Fused matmul + per-column bias + relu: out = relu(Σ_k lhs·rhs + bias[n]).
+        let mb = OpDef::contraction_bias(
+            "matmul_bias_relu",
+            &[ElementKind::F32],
+            (reduced(0) + input(2)).unary(UnaryOp::Relu),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let bias = OperandDesc::new(1, &[4096], &[1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, bias, out], ArchSku::Sm89);
+        let k = generate(&mb, &key, &Cuda);
+        // The bias input pointer is a kernel param…
+        assert!(
+            k.source.contains("const float* __restrict__ in2,"),
+            "missing bias param:\n{}",
+            k.source
+        );
+        // …and the epilogue adds it per column, then relu-clamps the K-sum.
+        assert!(
+            k.source.contains("in2[col]"),
+            "missing bias load:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("< 0.0f ? 0.0f :"),
+            "missing relu over (r0 + bias):\n{}",
+            k.source
+        );
+        // The split-K variant declines for a bias cell (folded-epilogue combine is
+        // a follow-up) — only the base kernel is offered.
+        let vs = generate_variants(&mb, &key, &Cuda);
+        assert_eq!(
+            vs.len(),
+            1,
+            "bias cell must offer only the base kernel (split-K declined)"
+        );
+
+        // The plain (no-bias) contraction emits NO in2 — byte-compat unchanged.
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let kp = generate(
+            &mm,
+            &structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89),
+            &Cuda,
+        );
+        assert!(
+            !kp.source.contains("in2"),
+            "plain contraction must not emit a bias param:\n{}",
+            kp.source
+        );
+    }
+
+    #[test]
+    fn contraction_batched_emits_batch_offset_and_declines_splitk() {
+        use crate::generate_variants;
+        use crate::ir::{ContractionAxes, reduced};
+        // Batched [8,8,4096]·[8,4096,4096] → [8,8,4096], f32 (B/M Tiny).
+        let bmm = OpDef::contraction(
+            "bmm",
+            &[ElementKind::F32],
+            ContractionAxes::batched_matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let rhs = OperandDesc::new(
+            3,
+            &[8, 4096, 4096],
+            &[4096 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let out = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let k = generate(&bmm, &key, &Cuda);
+        // The batch index + per-operand batch strides (b = blockIdx.z).
+        assert!(
+            k.source.contains("long long b = (long long)blockIdx.z;"),
+            "missing batch index:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("in1[b * k * n + kk * n + col]"),
+            "missing rhs batch stride:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("in0[b * m * k + mm * k + kk]"),
+            "missing lhs batch stride:\n{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("out[b * m * n + mm * n + col]"),
+            "missing out batch stride:\n{}",
+            k.source
+        );
+        // The batched token carries the batch size class additively (`/b<class>`).
+        assert!(
+            key.to_token().contains("/bt"),
+            "batched token needs /b<class>: {}",
+            key.to_token()
+        );
+        // The split-K variant declines for a batched cell (base kernel only).
+        let vs = generate_variants(&bmm, &key, &Cuda);
+        assert_eq!(vs.len(), 1, "batched cell offers only the base kernel");
+
+        // A plain rank-2 cell emits NO batch index — byte-compat unchanged.
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let l2 = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let r2 = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let o2 = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let kp = generate(
+            &mm,
+            &structure_key(OpCategory::Gemm, &[l2, r2, o2], ArchSku::Sm89),
+            &Cuda,
+        );
+        assert!(
+            !kp.source.contains("blockIdx.z"),
+            "plain contraction must not emit a batch index:\n{}",
+            kp.source
+        );
     }
 
     #[test]
@@ -7460,8 +8670,12 @@ mod tests {
         let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
         let vs = generate_variants(&softmax, &key, &Cuda);
-        assert_eq!(vs.len(), 2, "base + smemrow");
-        let sm = &vs[1];
+        // An f32 softmax now also earns the precision-first variant, so this cell
+        // yields base + prec + smemrow; select the materialize offer by TAG.
+        let sm = vs
+            .iter()
+            .find(|v| v.tag == "smemrow")
+            .expect("smemrow variant offered");
         assert_eq!(sm.tag, "smemrow");
         assert_eq!(sm.fidelity, VariantFidelity::BitIdentical);
         let src = &sm.kernels[0].source;
@@ -7503,10 +8717,12 @@ mod tests {
         );
         let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Normalization, &[x, x], ArchSku::Sm89);
-        assert_eq!(
-            generate_variants(&rmsnorm, &key, &Cuda).len(),
-            1,
-            "base only"
+        // The precision variant IS offered (an f32 Mean rowreduce), but smemrow is
+        // NOT — the epilogue never recomputes a stage expr, so nothing to cache.
+        let vs = generate_variants(&rmsnorm, &key, &Cuda);
+        assert!(
+            vs.iter().all(|v| v.tag != "smemrow"),
+            "no materialize offer when the epilogue doesn't recompute"
         );
     }
 
@@ -7514,7 +8730,7 @@ mod tests {
     fn splitk_gate_refuses_flipped_param_and_malformed_cells() {
         use crate::ir::ReduceOp;
         use crate::{Backend, generate_variants};
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "sum",
             1,
@@ -7530,10 +8746,14 @@ mod tests {
         // out of bounds. The gate must refuse.
         let rev = OperandDesc::new(2, &[4096, 1024], &[-1024, 1], ElementKind::F32, 256);
         let k_rev = structure_key(OpCategory::Reduction, &[rev, o], ArchSku::Sm89);
-        assert_eq!(
-            generate_variants(&op, &k_rev, &Cuda).len(),
-            1,
-            "flipped input: base only"
+        // split-K refuses (its stride-free ABI can't address a reversed view); the
+        // precision variant CAN (the general nest reads runtime strides), so assert
+        // the split-K gate specifically, not a raw count.
+        assert!(
+            generate_variants(&op, &k_rev, &Cuda)
+                .iter()
+                .all(|v| v.tag != "splitk"),
+            "flipped input: no split-K"
         );
         // Param body: the fixed splitk signature has no p{i} slot — refused
         // (the emitted source would reference an undefined identifier).
@@ -7548,10 +8768,13 @@ mod tests {
         );
         let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let k_ok = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
-        assert_eq!(
-            generate_variants(&wsum, &k_ok, &Cuda).len(),
-            1,
-            "param body: base only"
+        // split-K's fixed signature has no p{i} slot; the precision variant rides
+        // the general nest, which DOES thread params — so gate on the split-K tag.
+        assert!(
+            generate_variants(&wsum, &k_ok, &Cuda)
+                .iter()
+                .all(|v| v.tag != "splitk"),
+            "param body: no split-K"
         );
         // Malformed 1-operand key: out_key would alias the input — refused.
         // (Exercised via lower_variants directly; generate() itself would also
@@ -7568,13 +8791,20 @@ mod tests {
     fn splitk_not_offered_for_lastaxis_max_or_int() {
         use crate::generate_variants;
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Last-axis (InnerContig): already block-parallel — no split-K.
         let last = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
         let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(1, &[4096], &[1], ElementKind::F32, 256);
         let k = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
-        assert_eq!(generate_variants(&last, &k, &Cuda).len(), 1, "base only");
+        // Last-axis (InnerContig) is already block-parallel → no split-K (the
+        // precision variant IS offered here, so gate on the split-K tag).
+        assert!(
+            generate_variants(&last, &k, &Cuda)
+                .iter()
+                .all(|v| v.tag != "splitk"),
+            "last-axis: no split-K"
+        );
         // Outer Max: the has-flag NaN fold needs its own variant treatment.
         let mx = OpDef::reduction_axes(
             "amax",
@@ -7625,7 +8855,7 @@ mod tests {
     // A rank-2 contiguous [128,256] f32 cell (1 input + 1 output) that would
     // VECTORIZE view-free — used to prove the view both forces Strided and remaps
     // the input offset.
-    fn view_2d_key(n_operands: usize) -> baracuda_kernels_types::StructureKey {
+    fn view_2d_key(n_operands: usize) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
         let ops: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
         let cat = if n_operands >= 3 {
@@ -7891,7 +9121,7 @@ mod tests {
         assert!(k.source.contains("((v0.x * p0) + p1)"));
     }
 
-    fn reduce_key(in_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn reduce_key(in_dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         // [256, 128] contiguous input, [256] output — reduce the last axis.
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], in_dt, 256);
         let out = OperandDesc::new(1, &[256], &[1], in_dt, 256);
@@ -8010,7 +9240,7 @@ mod tests {
     #[test]
     fn reduction_outer_axis_collapses() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Reduce axis 0 of a contiguous [4,8] input → collapse to [8].
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(1, &[8], &[1], ElementKind::F32, 256);
@@ -8056,7 +9286,7 @@ mod tests {
     #[test]
     fn reduction_multi_axis_mean_divisor_is_the_extent_product() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Reduce axes {0,1} of [2,3,4] → [4], Mean: divisor = shape0 * shape1.
         let a = OperandDesc::new(3, &[2, 3, 4], &[12, 4, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(1, &[4], &[1], ElementKind::F32, 256);
@@ -8091,7 +9321,7 @@ mod tests {
     #[test]
     fn reduction_keepdim_outer_axis_uses_input_axis_output_stride() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Reduce axis 0 of [4,8] with keepdim → [1,8]: the output stride is indexed
         // by INPUT axis (kept axis 1), not a collapsed position.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -8114,7 +9344,7 @@ mod tests {
     #[test]
     fn reduction_general_max_seeds_and_propagates_nan() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Max over a non-last axis still uses the NaN-propagating select, seeded via
         // the `has` flag (no ±∞ literal, empty extent leaves acc = 0).
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -8142,7 +9372,7 @@ mod tests {
     #[test]
     fn reduction_strided_last_axis_takes_the_general_path() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Reduce the last axis of a column-major (transposed, strided) [8,4] input:
         // the trailing axis over a non-contiguous input is NOT the contiguous fast
         // path, so it routes to the strided general fold.
@@ -8170,7 +9400,7 @@ mod tests {
     #[should_panic(expected = "output store must be injective")]
     fn reduction_broadcast_output_is_rejected() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // A broadcast (stride-0) output would collapse every result onto one slot —
         // the general path must reject it, not emit an aliasing store.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -8233,7 +9463,7 @@ mod tests {
     #[test]
     fn reduction_prod_general_axis_folds_from_one() {
         use crate::ir::ReduceOp;
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         // Prod over the outer axis (general path): identity 1, `acc *= elem`,
         // no Mean divisor.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -8323,7 +9553,7 @@ mod tests {
     }
 
     // Reduce-key with a hetero output dtype: [256,128] float input, [256] `out_dt`.
-    fn reduce_key_hetero(out_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn reduce_key_hetero(out_dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(1, &[256], &[1], out_dt, 256);
         structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89)
@@ -8448,7 +9678,7 @@ mod tests {
         let _ = crate::build_plan(&op, &rr_key(ElementKind::F32, OpCategory::Softmax));
     }
 
-    fn rr_key(dt: ElementKind, cat: OpCategory) -> baracuda_kernels_types::StructureKey {
+    fn rr_key(dt: ElementKind, cat: OpCategory) -> baracuda_kernel_vocab::StructureKey {
         // full-width fused op: input + output share the [256, 128] contiguous shape.
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
         structure_key(cat, &[a, a], ArchSku::Sm89)
@@ -8600,7 +9830,7 @@ mod tests {
 
     // --- multi-input RowReduce: weighted-RmsNorm + LayerNorm ---
 
-    fn mi_key(dt: ElementKind, n_col: usize) -> baracuda_kernels_types::StructureKey {
+    fn mi_key(dt: ElementKind, n_col: usize) -> baracuda_kernel_vocab::StructureKey {
         // x [256,128] full + n_col per-column [k] weight/bias (rank-aligned broadcast
         // view, stride [0,1]) + full-width output.
         let x = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
@@ -8741,7 +9971,7 @@ mod tests {
 
     // Two full-width row-streamed inputs [256,128] + full output — softmax bw's
     // (y, dy, dx). No column/row-scalar operand.
-    fn softmax_bw_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn softmax_bw_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let full = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
         structure_key(OpCategory::Softmax, &[full, full, full], ArchSku::Sm89)
     }
@@ -8763,7 +9993,7 @@ mod tests {
 
     // x, dy row-streamed [256,128]; mean, rstd per-row scalars ([n_out,k]-presented,
     // strides [1,0]: feature-axis broadcast, outer varies) + full output.
-    fn layer_norm_bw_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn layer_norm_bw_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let stream = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
         let rowscalar = OperandDesc::new(2, &[256, 128], &[1, 0], dt, 256);
         structure_key(
@@ -8887,12 +10117,12 @@ mod tests {
 
     /// Scalar (unvectorized) unary cell: align defeats vectorization so the
     /// emitted body is the bare `out[i] = <fn>(in0[i]);` golden.
-    fn unary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernels_types::StructureKey {
+    fn unary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
         structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
     }
 
-    fn binary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernels_types::StructureKey {
+    fn binary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
         structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
     }
@@ -9261,7 +10491,7 @@ mod tests {
     /// the caller-side key shape of an `elementwise_pred` op. Note the aligned
     /// contiguous u8 output keys V8 on its own — the plan must still force the
     /// scalar path (no packed u8 store exists).
-    fn pred_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn pred_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
         let o = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::U8, 256);
         structure_key(OpCategory::BinaryElementwise, &[a, a, o], ArchSku::Sm89)
@@ -10228,7 +11458,7 @@ mod tests {
     /// Rank-2 contiguous, fully aligned cell — the shape whose ALIGNED inputs
     /// would normally vectorize (V4 at f32): exactly the cell the Coord
     /// routing must force onto Strided.
-    fn coord_key_2d(dt: ElementKind, n_operands: usize) -> baracuda_kernels_types::StructureKey {
+    fn coord_key_2d(dt: ElementKind, n_operands: usize) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], dt, 256);
         let operands: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
         structure_key(OpCategory::BinaryElementwise, &operands, ArchSku::Sm89)
@@ -10501,7 +11731,7 @@ mod tests {
         use crate::backend::Backend;
         use crate::ir::ReduceOp;
         use crate::plan::{KernelPlan, ReduceAxisClass, Schedule};
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let key = reduce_key(ElementKind::F32);
         let body = (input(0) * coord(0)).0;
         let access = crate::ir::Access::Reduction {
@@ -10624,7 +11854,7 @@ mod tests {
     /// A contiguous rank-1 unary cell (1 input + 1 output) that VECTORIZES to
     /// float4 offset-free — used to prove an offset both forces Strided and bumps
     /// the OUTPUT pointer.
-    fn unary_contig_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+    fn unary_contig_key(dt: ElementKind) -> baracuda_kernel_vocab::StructureKey {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
         structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
     }
@@ -11110,7 +12340,7 @@ mod tests {
         use crate::backend::Backend;
         use crate::ir::{BaseOffset, ReduceOp};
         use crate::plan::{KernelPlan, ReduceAxisClass, Schedule};
-        use baracuda_kernels_types::AxisMask;
+        use baracuda_kernel_vocab::AxisMask;
         let key = reduce_key(ElementKind::F32);
         let body = input(0).0;
         let access = crate::ir::Access::Reduction {
@@ -11154,7 +12384,7 @@ mod multi_output_tests {
     //! `single_body_multi_matches_elementwise`.
     use crate::ir::{BinaryOp, OpDef, UnaryOp, input, konst};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -11524,7 +12754,7 @@ mod dropout_hetero_tests {
     use crate::ir::{Access, BaseOffset, BinaryOp, OpDef, WriteIndex, input, konst, param};
     use crate::plan::{KernelPlan, Schedule};
     use crate::{Cuda, build_plan, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -12046,7 +13276,7 @@ mod scan_tests {
     use crate::ir::{Access, OpDef, ReduceOp};
     use crate::plan::Schedule;
     use crate::{Cuda, build_plan, generate, generate_variants};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -12355,7 +13585,7 @@ mod scan_tests {
     #[ignore = "manual regeneration tool for ondevice/relu_propagating_validate.cu"]
     fn dump_relu_sources() {
         use crate::ir::input;
-        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("RELU_OUT").unwrap_or_else(|_| ".".to_string());
         for dt in [
             ElementKind::F32,
@@ -12391,7 +13621,7 @@ mod scan_tests {
     #[ignore = "manual regeneration tool for ondevice/offset_validate.cu"]
     fn dump_offset_sources() {
         use crate::ir::{BaseOffset, input};
-        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
         let write = |k: crate::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
@@ -12528,7 +13758,7 @@ mod scan_tests {
     #[ignore = "manual regeneration tool for ondevice/offset_validate.cu (rope E2E)"]
     fn dump_rope_pair_sources() {
         use crate::ir::{BaseOffset, input};
-        use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
         let write = |k: crate::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
@@ -12684,7 +13914,7 @@ mod window_tests {
     use crate::ir::{Access, OpDef, ReduceOp};
     use crate::plan::Schedule;
     use crate::{Cuda, build_plan, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -13078,7 +14308,7 @@ mod im2col_tests {
     //! gate mutations are covered `build_plan`-DIRECT in `plan::im2col_gate_validate`.
     use crate::plan::{KernelPlan, Schedule};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -13316,7 +14546,7 @@ mod sort_tests {
     //! are source-shape + variant-wiring + no-INFINITY pins.
     use crate::ir::{OpDef, SortOrder};
     use crate::{Cuda, generate, generate_variants};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 
@@ -14648,7 +15878,7 @@ mod select_tests {
     //! signed zeros) lives in that harness; these pin the source text.
     use crate::ir::{BinaryOp, OpDef, coord, input, konst, reduced};
     use crate::{Cuda, generate};
-    use baracuda_kernels_types::{
+    use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
 

@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke tests for `FractionalMaxPool2dPlan` /
 //! `FractionalMaxPool3dPlan` (Phase 16.3 — bespoke kernel).
 //!
@@ -13,6 +12,7 @@
 //! `#[ignore]` by default; run with
 //! `cargo test -p baracuda-kernels --release --features cudnn,sm89 \
 //!   --test fractional_max_pool_smoke -- --ignored`.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

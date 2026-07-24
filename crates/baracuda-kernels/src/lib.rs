@@ -95,8 +95,8 @@ pub mod gemm;
 pub use gemm::{
     BinGemmArgs, BinGemmDescriptor, BinGemmPlan, DenseGemmArgs, DenseGemmDescriptor,
     DenseGemmLayout, DenseGemmPlan, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan, GemmSparse24Args,
-    GemmSparse24Descriptor, GemmSparse24Plan, Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan,
-    IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
+    GemmSparse24Descriptor, GemmSparse24Plan, GemvDenseArgs, GemvDenseDescriptor, GemvDensePlan,
+    Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
 };
 
 // Phase 48 — Marlin + AWQ 4-bit GEMM + GPTQ→Marlin repack utility.

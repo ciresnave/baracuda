@@ -648,6 +648,29 @@ fn bx(e: ScalarExpr) -> Box<ScalarExpr> {
     Box::new(e)
 }
 
+/// Total cost of a `ScalarExpr` under the same per-node [`weight`] model the
+/// e-graph extraction uses (recursive sum of `weight` over the tree), so it is
+/// directly comparable to a `KCand.cost`. Used by [`optimize_top_k`] to keep the
+/// returned list cost-ascending.
+fn expr_cost(e: &ScalarExpr) -> u64 {
+    let (node, kids): (ENode, Vec<&ScalarExpr>) = match e {
+        ScalarExpr::Input(i) => (ENode::Input(*i), vec![]),
+        ScalarExpr::Const(v) => (ENode::Const(v.to_bits()), vec![]),
+        ScalarExpr::Param(i) => (ENode::Param(*i), vec![]),
+        ScalarExpr::Reduced(i) => (ENode::Reduced(*i), vec![]),
+        ScalarExpr::Coord(d) => (ENode::Coord(*d), vec![]),
+        ScalarExpr::Add(a, b) => (ENode::Add(0, 0), vec![a, b]),
+        ScalarExpr::Sub(a, b) => (ENode::Sub(0, 0), vec![a, b]),
+        ScalarExpr::Mul(a, b) => (ENode::Mul(0, 0), vec![a, b]),
+        ScalarExpr::Div(a, b) => (ENode::Div(0, 0), vec![a, b]),
+        ScalarExpr::Binary(op, a, b) => (ENode::Binary(*op, 0, 0), vec![a, b]),
+        ScalarExpr::Unary(op, a) => (ENode::Unary(*op, 0), vec![a]),
+        ScalarExpr::Select(c, a, b) => (ENode::Select(0, 0, 0), vec![c, a, b]),
+    };
+    kids.into_iter()
+        .fold(weight(&node), |acc, k| acc.saturating_add(expr_cost(k)))
+}
+
 /// Algebraically simplify an op body to the lowest-cost equivalent form via
 /// equality saturation. Semantics-preserving within the precision-safe rule set
 /// (see the module scope note). Pure: `optimize(optimize(e)) == optimize(e)`.
@@ -659,10 +682,261 @@ pub fn optimize(e: &ScalarExpr) -> ScalarExpr {
     extract(&eg, root)
 }
 
+// ===========================================================================
+// k-best extraction (item 08 — telemetry variant surface)
+// ===========================================================================
+//
+// `optimize_top_k` extracts the *k* lowest-cost equivalent forms of a body
+// instead of the single best. It rides the SAME saturated e-graph, cost model
+// (`weight`/`children`), and rewrite set as `optimize` — no new IR node, no new
+// rule. The invariant that makes it safe to drop into JIT synthesis: `form[0]`
+// is bit-identical to `optimize(e)` (so the k==1 case *is* the shipped
+// optimizer, and every JIT-selected default form is unchanged).
+
+/// One reconstructed candidate form for an e-class, with its extraction cost.
+#[derive(Clone)]
+struct KCand {
+    /// Total extraction cost (`weight` summed over the reconstructed tree).
+    cost: u64,
+    /// The reconstructed expression for this candidate.
+    expr: ScalarExpr,
+}
+
+/// Deterministic total order over reconstructed forms — the tie-break that keeps
+/// `optimize_top_k` output stable when two candidates share a cost. Orders by
+/// node shape, then children, then leaf payload (`Const` by bits so it is
+/// NaN-stable), so it never depends on `HashMap` iteration order.
+fn expr_cmp(a: &ScalarExpr, b: &ScalarExpr) -> std::cmp::Ordering {
+    fn rank(e: &ScalarExpr) -> u8 {
+        match e {
+            ScalarExpr::Input(_) => 0,
+            ScalarExpr::Const(_) => 1,
+            ScalarExpr::Param(_) => 2,
+            ScalarExpr::Reduced(_) => 3,
+            ScalarExpr::Coord(_) => 4,
+            ScalarExpr::Add(..) => 5,
+            ScalarExpr::Sub(..) => 6,
+            ScalarExpr::Mul(..) => 7,
+            ScalarExpr::Div(..) => 8,
+            ScalarExpr::Binary(..) => 9,
+            ScalarExpr::Unary(..) => 10,
+            ScalarExpr::Select(..) => 11,
+        }
+    }
+    match (a, b) {
+        (ScalarExpr::Input(x), ScalarExpr::Input(y))
+        | (ScalarExpr::Param(x), ScalarExpr::Param(y))
+        | (ScalarExpr::Reduced(x), ScalarExpr::Reduced(y))
+        | (ScalarExpr::Coord(x), ScalarExpr::Coord(y)) => x.cmp(y),
+        (ScalarExpr::Const(x), ScalarExpr::Const(y)) => x.to_bits().cmp(&y.to_bits()),
+        (ScalarExpr::Add(a1, a2), ScalarExpr::Add(b1, b2))
+        | (ScalarExpr::Sub(a1, a2), ScalarExpr::Sub(b1, b2))
+        | (ScalarExpr::Mul(a1, a2), ScalarExpr::Mul(b1, b2))
+        | (ScalarExpr::Div(a1, a2), ScalarExpr::Div(b1, b2)) => {
+            expr_cmp(a1, b1).then_with(|| expr_cmp(a2, b2))
+        }
+        (ScalarExpr::Binary(o1, a1, a2), ScalarExpr::Binary(o2, b1, b2)) => format!("{o1:?}")
+            .cmp(&format!("{o2:?}"))
+            .then_with(|| expr_cmp(a1, b1))
+            .then_with(|| expr_cmp(a2, b2)),
+        (ScalarExpr::Unary(o1, x), ScalarExpr::Unary(o2, y)) => format!("{o1:?}")
+            .cmp(&format!("{o2:?}"))
+            .then_with(|| expr_cmp(x, y)),
+        (ScalarExpr::Select(c1, a1, b1), ScalarExpr::Select(c2, a2, b2)) => expr_cmp(c1, c2)
+            .then_with(|| expr_cmp(a1, a2))
+            .then_with(|| expr_cmp(b1, b2)),
+        _ => rank(a).cmp(&rank(b)),
+    }
+}
+
+/// Reconstruct the [`ScalarExpr`] for an e-node given the already-built child
+/// forms (in [`children`] order) — the k-best analogue of [`build`], but taking
+/// explicit child forms rather than recursing through a single-best table.
+fn reconstruct(n: &ENode, ch: Vec<ScalarExpr>) -> ScalarExpr {
+    let mut it = ch.into_iter();
+    let mut pop = || it.next().expect("reconstruct: child arity mismatch");
+    match *n {
+        ENode::Input(i) => ScalarExpr::Input(i),
+        ENode::Const(bits) => ScalarExpr::Const(f64::from_bits(bits)),
+        ENode::Param(i) => ScalarExpr::Param(i),
+        ENode::Reduced(i) => ScalarExpr::Reduced(i),
+        ENode::Coord(d) => ScalarExpr::Coord(d),
+        ENode::Add(..) => ScalarExpr::Add(bx(pop()), bx(pop())),
+        ENode::Sub(..) => ScalarExpr::Sub(bx(pop()), bx(pop())),
+        ENode::Mul(..) => ScalarExpr::Mul(bx(pop()), bx(pop())),
+        ENode::Div(..) => ScalarExpr::Div(bx(pop()), bx(pop())),
+        ENode::Binary(op, ..) => ScalarExpr::Binary(op, bx(pop()), bx(pop())),
+        ENode::Unary(op, ..) => ScalarExpr::Unary(op, bx(pop())),
+        ENode::Select(..) => ScalarExpr::Select(bx(pop()), bx(pop()), bx(pop())),
+    }
+}
+
+/// All index combinations across the child candidate lists (the bounded Lawler
+/// product). Each child list has ≤ `k` entries and there are ≤ 3 children, so the
+/// product is ≤ `k³` — bounded, never combinatorial blow-up.
+fn cartesian(lists: &[Vec<KCand>]) -> Vec<Vec<KCand>> {
+    let mut acc: Vec<Vec<KCand>> = vec![Vec::new()];
+    for list in lists {
+        let mut next = Vec::with_capacity(acc.len() * list.len());
+        for prefix in &acc {
+            for item in list {
+                let mut row = prefix.clone();
+                row.push(item.clone());
+                next.push(row);
+            }
+        }
+        acc = next;
+    }
+    acc
+}
+
+/// `true` if two candidate lists carry the same forms in the same order — the
+/// fixpoint-convergence test (compare by cost + structure, not `HashMap` order).
+fn kcands_equal(a: &[KCand], b: &[KCand]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|(x, y)| x.cost == y.cost && x.expr == y.expr)
+}
+
+/// Bottom-up bounded k-best table over the saturated e-graph: for every e-class,
+/// the ≤ `k` lowest-cost, structurally-distinct reconstructed forms, cheapest
+/// first. Relaxed to a fixpoint (a class's list only ever gains a cheaper /
+/// newly-reachable form), with an **explicit iteration cap as the cycle guard**:
+/// an e-graph can be cyclic (e.g. `neg(neg x)` unions the outer class with `x`'s,
+/// making a class reference itself), and the cap plus the ≤ `k` truncation keeps
+/// a self-referential class from spinning — deeper trees cost strictly more, so
+/// they never displace the bounded cheapest set. `debug_assert` pins that real
+/// bodies converge *before* the cap (the termination proof the tests exercise).
+fn kbest_table(eg: &EGraph, k: usize) -> HashMap<Id, Vec<KCand>> {
+    let mut classes: Vec<Id> = eg.class_nodes.keys().copied().collect();
+    classes.sort_unstable();
+    let mut table: HashMap<Id, Vec<KCand>> = HashMap::new();
+    let max_iters = classes.len().saturating_mul(k + 2).saturating_add(8);
+    let mut converged = false;
+    for _ in 0..max_iters {
+        let mut changed = false;
+        for &c in &classes {
+            let Some(nodes) = eg.class_nodes.get(&c) else {
+                continue;
+            };
+            let mut merged: Vec<KCand> = table.get(&c).cloned().unwrap_or_default();
+            let before = merged.clone();
+            for n in nodes {
+                let kids: Vec<Id> = children(n).iter().map(|&id| eg.find_imm(id)).collect();
+                // Every child must already have at least one form this round; a
+                // not-yet-populated child (or a cyclic self-reference on the
+                // first pass) simply defers this e-node to a later iteration.
+                let mut lists: Vec<Vec<KCand>> = Vec::with_capacity(kids.len());
+                let mut ready = true;
+                for &kid in &kids {
+                    match table.get(&kid) {
+                        Some(l) if !l.is_empty() => lists.push(l.clone()),
+                        _ => {
+                            ready = false;
+                            break;
+                        }
+                    }
+                }
+                if !ready {
+                    continue;
+                }
+                for combo in cartesian(&lists) {
+                    let mut cost = weight(n);
+                    let mut child_exprs = Vec::with_capacity(combo.len());
+                    for cand in &combo {
+                        cost = cost.saturating_add(cand.cost);
+                        child_exprs.push(cand.expr.clone());
+                    }
+                    merged.push(KCand {
+                        cost,
+                        expr: reconstruct(n, child_exprs),
+                    });
+                }
+            }
+            // Cheapest first, deterministic tie-break, structurally distinct,
+            // capped at k.
+            merged.sort_by(|a, b| a.cost.cmp(&b.cost).then_with(|| expr_cmp(&a.expr, &b.expr)));
+            merged.dedup_by(|a, b| a.expr == b.expr);
+            merged.truncate(k);
+            if !kcands_equal(&before, &merged) {
+                table.insert(c, merged);
+                changed = true;
+            }
+        }
+        if !changed {
+            converged = true;
+            break;
+        }
+    }
+    debug_assert!(
+        converged,
+        "kbest_table did not converge within {max_iters} iterations (cycle guard tripped)"
+    );
+    table
+}
+
+/// Extract up to `k` distinct lowest-cost equivalent forms of `e`, cheapest
+/// first — the k-best generalization of [`optimize`] that item 08 uses to ship a
+/// ranked *variant* set (each form is a bit-preserving equivalent under the same
+/// precision-safe rule set; Fuel's telemetry then picks among them per cell).
+///
+/// # Invariant
+///
+/// `optimize_top_k(e, 1) == [optimize(e)]` and, for every `k ≥ 1`, `form[0]` is
+/// **bit-identical** to [`optimize`]`(e)` — guaranteed *by construction* here
+/// (form[0] is literally `optimize(e)`), never inferred from a second
+/// reconstruction path. This is the load-bearing pin: a k-best that silently
+/// changed the k==1 winner would alter every JIT-selected default form.
+///
+/// `form[1..]` are the next-cheapest structurally-distinct equivalents drawn from
+/// the [`kbest_table`], deduped against `form[0]` and never cheaper than it, so
+/// the whole list is in non-decreasing cost order — this holds even on a
+/// pathological cyclic body where `optimize` returns a non-minimal head (see the
+/// body comment). [`ScalarExpr::Reduced`] is an opaque leaf with no rule, so a per-row reduced
+/// scalar is never cross-folded across forms — the same guarantee `optimize`
+/// carries. Termination is guaranteed by the k-best cycle guard.
+#[must_use]
+pub fn optimize_top_k(e: &ScalarExpr, k: usize) -> Vec<ScalarExpr> {
+    if k == 0 {
+        return Vec::new();
+    }
+    // form[0] IS optimize(e): the invariant is a construction, not a hope.
+    let head = optimize(e);
+    if k == 1 {
+        return vec![head];
+    }
+    let mut eg = EGraph::default();
+    let root = add_expr(&mut eg, e);
+    saturate(&mut eg, 32);
+    let root = eg.find_imm(root);
+    let table = kbest_table(&eg, k);
+
+    // Keep the list cost-ascending BY CONSTRUCTION even if `optimize` returned a
+    // non-minimal head on a pathological cyclic body (a deeply-nested involution
+    // chain like neg⁴(x), whose saturation/extract fixpoint is HashMap-order
+    // sensitive — no real op body reaches it): never offer an alternative cheaper
+    // than form[0]. For a real (acyclic) body the head IS the minimum, so every
+    // candidate is `>= head_cost` and NOTHING is dropped — byte-identical output.
+    let head_cost = expr_cost(&head);
+    let mut forms = vec![head];
+    if let Some(cands) = table.get(&root) {
+        for cand in cands {
+            if forms.len() >= k {
+                break;
+            }
+            if expr_cost(&cand.expr) >= head_cost && forms.iter().all(|f| *f != cand.expr) {
+                forms.push(cand.expr.clone());
+            }
+        }
+    }
+    forms
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{input, konst};
+    use crate::ir::{input, konst, reduced};
 
     fn opt(e: crate::ir::Expr) -> ScalarExpr {
         optimize(&e.0)
@@ -1201,5 +1475,186 @@ mod tests {
                 "non-finite-in or non-finite-out Rem must stay symbolic"
             );
         }
+    }
+
+    // -------------------------------------------------------------------
+    // optimize_top_k (item 08 k-best) tests
+    // -------------------------------------------------------------------
+
+    /// Extraction cost of a reconstructed form, mirroring `weight`+`children`
+    /// VERBATIM (a dummy-child e-node feeds the exact shipped `weight`), so the
+    /// tests assert cost-ascending order against the same cost model extraction
+    /// uses — no parallel cost table to drift.
+    fn cost_of(e: &ScalarExpr) -> u64 {
+        let (node, kids): (ENode, Vec<&ScalarExpr>) = match e {
+            ScalarExpr::Input(i) => (ENode::Input(*i), vec![]),
+            ScalarExpr::Const(v) => (ENode::Const(v.to_bits()), vec![]),
+            ScalarExpr::Param(i) => (ENode::Param(*i), vec![]),
+            ScalarExpr::Reduced(i) => (ENode::Reduced(*i), vec![]),
+            ScalarExpr::Coord(d) => (ENode::Coord(*d), vec![]),
+            ScalarExpr::Add(a, b) => (ENode::Add(0, 0), vec![a, b]),
+            ScalarExpr::Sub(a, b) => (ENode::Sub(0, 0), vec![a, b]),
+            ScalarExpr::Mul(a, b) => (ENode::Mul(0, 0), vec![a, b]),
+            ScalarExpr::Div(a, b) => (ENode::Div(0, 0), vec![a, b]),
+            ScalarExpr::Binary(op, a, b) => (ENode::Binary(*op, 0, 0), vec![a, b]),
+            ScalarExpr::Unary(op, a) => (ENode::Unary(*op, 0), vec![a]),
+            ScalarExpr::Select(c, a, b) => (ENode::Select(0, 0, 0), vec![c, a, b]),
+        };
+        kids.into_iter()
+            .fold(weight(&node), |acc, k| acc.saturating_add(cost_of(k)))
+    }
+
+    /// The #1 pin: `form[0] == optimize(e)` bit-identical, and `top_k(_, 1)` IS
+    /// the shipped optimizer — across a spread of body shapes. A k-best that
+    /// silently changed the k==1 winner would alter every JIT-selected form.
+    #[test]
+    fn top_k_form0_is_optimize_across_bodies() {
+        let abs = |e: ScalarExpr| ScalarExpr::Unary(UnaryOp::Abs, Box::new(e));
+        let bodies = [
+            (input(0) / konst(2.0)).0,
+            (input(0) * konst(1.0) + konst(-0.0)).0,
+            (input(0) + input(1) * input(2)).0,
+            neg(neg(ScalarExpr::Input(0))),
+            abs(abs(ScalarExpr::Input(0))),
+            konst(2.0).max(konst(5.0)).0,
+            (reduced(0) + konst(1e-5)).0,
+        ];
+        for body in bodies {
+            let opt = optimize(&body);
+            assert_eq!(
+                optimize_top_k(&body, 1),
+                vec![opt.clone()],
+                "k==1 must equal [optimize(e)]"
+            );
+            for k in [2usize, 3, 5] {
+                let forms = optimize_top_k(&body, k);
+                assert_eq!(forms[0], opt, "form[0] must be bit-identical to optimize");
+            }
+        }
+    }
+
+    /// The no-new-rule K=2 fixture the brief names: the shipped `x / 2^k ->
+    /// x * 2^-k` union puts `Mul(x, 0.5)` and `Div(x, 2)` in one class, so the
+    /// two cheapest forms are exactly `[Mul(Input,0.5), Div(Input,2)]`, form[0]
+    /// the cheaper Mul (== optimize).
+    #[test]
+    fn top_k_div_pow2_yields_mul_then_div() {
+        let body = (input(0) / konst(2.0)).0;
+        let forms = optimize_top_k(&body, 2);
+        assert_eq!(
+            forms,
+            vec![
+                ScalarExpr::Mul(
+                    Box::new(ScalarExpr::Input(0)),
+                    Box::new(ScalarExpr::Const(0.5))
+                ),
+                ScalarExpr::Div(
+                    Box::new(ScalarExpr::Input(0)),
+                    Box::new(ScalarExpr::Const(2.0))
+                ),
+            ]
+        );
+        assert_eq!(forms[0], optimize(&body));
+    }
+
+    /// Forms are structurally distinct and cost-ascending (non-decreasing), and
+    /// asking for more forms than exist just returns the ones that do.
+    #[test]
+    fn top_k_forms_distinct_and_cost_ascending() {
+        let body = (input(0) / konst(2.0)).0;
+        let forms = optimize_top_k(&body, 5);
+        // Only two equivalents exist for this cell.
+        assert_eq!(forms.len(), 2);
+        for w in forms.windows(2) {
+            assert_ne!(w[0], w[1], "forms must be structurally distinct");
+            assert!(
+                cost_of(&w[0]) <= cost_of(&w[1]),
+                "forms must be cost-ascending"
+            );
+        }
+        // An irreducible body has exactly one form even at large k.
+        let irr = (input(0) + input(1) * input(2)).0;
+        assert_eq!(optimize_top_k(&irr, 8), vec![irr]);
+    }
+
+    /// The cycle guard terminates on self-referential classes: `neg(neg x)`
+    /// unions the outer class with `x`'s (a class that references itself through
+    /// the `Neg` e-node). top-k must return (not spin), with form[0] == x, and a
+    /// bounded next form.
+    #[test]
+    fn top_k_cycle_guard_terminates() {
+        let body = neg(neg(ScalarExpr::Input(0)));
+        let forms = optimize_top_k(&body, 3);
+        assert_eq!(forms[0], ScalarExpr::Input(0), "form[0] == optimize == x");
+        // A cyclic class does not blow the list up past k, and stays distinct.
+        assert!(forms.len() <= 3);
+        for w in forms.windows(2) {
+            assert_ne!(w[0], w[1]);
+            assert!(cost_of(&w[0]) <= cost_of(&w[1]));
+        }
+        // A DEEPER nested body must also terminate (the cap never trips). Note
+        // `optimize` itself is not bit-deterministic on the artificial neg⁴ chain
+        // (its cyclic-extract fixpoint is HashMap-iteration-order sensitive — a
+        // pre-existing property no real op body reaches), so we assert only what
+        // k-best owns here: it returns a bounded, distinct, cost-ascending list
+        // rather than spinning on the self-referential class.
+        let deep = neg(neg(neg(neg(ScalarExpr::Input(0)))));
+        let deep_forms = optimize_top_k(&deep, 4);
+        assert!(
+            !deep_forms.is_empty() && deep_forms.len() <= 4,
+            "bounded, non-empty"
+        );
+        for w in deep_forms.windows(2) {
+            assert_ne!(w[0], w[1]);
+            assert!(cost_of(&w[0]) <= cost_of(&w[1]));
+        }
+    }
+
+    /// `Reduced` is an opaque leaf with no rule, so it is never cross-folded
+    /// across forms — every form that carries `reduced(0)` keeps it as an
+    /// untouched leaf, exactly as `optimize` does.
+    #[test]
+    fn top_k_reduced_never_cross_folded() {
+        // reduced(0)/2 -> the pow2 rule still applies (value-generic), but the
+        // reduced leaf itself is never folded into a constant or another leaf.
+        let body = (reduced(0) / konst(2.0)).0;
+        let forms = optimize_top_k(&body, 4);
+        assert_eq!(
+            forms[0],
+            ScalarExpr::Mul(
+                Box::new(ScalarExpr::Reduced(0)),
+                Box::new(ScalarExpr::Const(0.5))
+            )
+        );
+        for f in &forms {
+            let mentions_reduced = format!("{f:?}").contains("Reduced(0)");
+            assert!(
+                mentions_reduced,
+                "each form retains the reduced leaf: {f:?}"
+            );
+        }
+        // A bare reduced leaf is already minimal — single form.
+        assert_eq!(
+            optimize_top_k(&ScalarExpr::Reduced(1), 3),
+            vec![ScalarExpr::Reduced(1)]
+        );
+    }
+
+    /// Determinism: the same body yields byte-identical top-k across repeated
+    /// calls (no `HashMap`-iteration-order leakage into the result).
+    #[test]
+    fn top_k_is_deterministic() {
+        let body = (input(0) / konst(2.0) + input(1) * konst(1.0)).0;
+        let first = optimize_top_k(&body, 4);
+        for _ in 0..8 {
+            assert_eq!(optimize_top_k(&body, 4), first);
+        }
+        assert_eq!(first[0], optimize(&body));
+    }
+
+    /// k == 0 is the empty set (the invariant is vacuous, not a panic).
+    #[test]
+    fn top_k_zero_is_empty() {
+        assert!(optimize_top_k(&ScalarExpr::Input(0), 0).is_empty());
     }
 }

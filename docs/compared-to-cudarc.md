@@ -1,81 +1,119 @@
 # baracuda vs cudarc
 
-[`cudarc`](https://docs.rs/cudarc) is the ML-focused CUDA binding from
-the `coreylowman/cudarc` ecosystem. It pioneered dynamic loading in
-Rust-on-CUDA and is used by `candle`, `burn`, and related ML crates.
+[`cudarc`](https://docs.rs/cudarc) (repo [`chelsea0x3b/cudarc`](https://github.com/chelsea0x3b/cudarc),
+formerly `coreylowman/cudarc`) is the mature, minimal, safe Rust binding
+layer over the CUDA toolkit. As of this writing it is at **0.19.x** (CUDA
+11.4–13.3, selectable by feature), actively maintained, ~6M downloads, and the
+CUDA backend under HuggingFace **candle**. If you are choosing a Rust CUDA
+*binding*, cudarc is the incumbent and a safe default.
 
-## When to use `cudarc`
+The most important thing to understand up front: **cudarc and baracuda are not
+the same kind of thing.** cudarc is a binding library — safe wrappers over the
+driver and the NVIDIA math/DL libraries, and nothing above that. baracuda
+contains a binding layer *and* two layers cudarc does not attempt:
 
-- You want a mature ML stack today with a large existing user base.
-- You like its `CudaSlice<T>` + implicit-device-context design.
-- You only need Driver + cuBLAS + cuDNN + cuRAND + NCCL (cudarc's
-  primary coverage).
+- **bindings** (`baracuda-driver` / `-runtime` + ~22 library wrappers) — the
+  layer cudarc competes at;
+- an **op facade** (`baracuda-kernels`) — ready-made ML ops (softmax, layernorm,
+  the GEMM families, attention, …) as `Plan` types, not just library handles you
+  assemble yourself;
+- a **kernel generator + correctness stack** (`baracuda-kernelgen`) — a neutral
+  op IR that *emits* specialized CUDA (and portable-C) kernels, validated against
+  an independent CPU oracle, with precision-tiered variants and a live JIT seam.
 
-## When to use `baracuda`
+So the honest comparison is layered: at the binding layer they overlap heavily;
+above it they diverge. cudarc's binding breadth has grown a lot — the old "we
+wrap more libraries" pitch mostly no longer holds — so baracuda's real
+differentiation today is the op + codegen layers, not the bindings.
 
-- You need a library `cudarc` doesn't wrap — cuTENSOR, nvCOMP, CV-CUDA,
-  cuFile, NPP, NVML, CUPTI, nvJPEG, nvJitLink.
-- You want **both** the Driver and Runtime APIs as first-class. cudarc
-  is Driver-primary; some Runtime APIs are wrapped but the Runtime is
-  a second-class citizen.
-- You want a less-opinionated memory model. cudarc has a single
-  `CudaSlice` type that owns device memory plus a context reference;
-  baracuda has separate `DeviceBuffer`, `UnifiedBuffer`, `PinnedVec`,
-  `MemoryPool` types that reflect CUDA's own allocator family.
-- You want uniform conventions across every library. baracuda's
-  `-sys` + safe pair pattern, `CudaStatus` trait, and generic
-  `Error<S>` are consistent across 16+ libraries.
+## When cudarc is the better choice
 
-## API shape
+- **You target candle** (or its model zoo). candle is built directly on cudarc's
+  context/stream/`CudaSlice` model; baracuda can't substitute without
+  reimplementing that integration. This is the one true lock-in, and it's a good
+  reason. (burn has moved to its own `cubecl` stack and dfdx is largely dormant,
+  so candle is the live downstream that matters.)
+- **You want a stable, battle-tested binding shipping today.** cudarc is
+  semver-versioned, has years of production mileage, and tracks new CUDA toolkits
+  within weeks. baracuda is `0.0.1-alpha` with fluid internals and an explicit
+  "pin exact versions" warning. For anything you need to ship now, cudarc is
+  lower-risk.
+- **You want minimal footprint.** cudarc is one focused dependency with three
+  predictable tiers (`sys` / `result` / `safe`) and no op / IR / oracle / codegen
+  concepts to learn. If you just need safe raw CUDA + the math libraries and will
+  write your own kernels (via cudarc's `nvrtc` or precompiled PTX), it's lighter
+  to adopt than a full facade + codegen stack.
+- **You only need libraries cudarc already covers.** Its coverage is now broad:
+  driver, `nvrtc`, cuBLAS / cuBLASLt, cuDNN, cuRAND, cuFFT, cuSPARSE,
+  cuSOLVER(+Mg), cuTENSOR, cuFILE (GDS), NCCL, CUPTI, nvtx — plus CUDA graphs,
+  stream priorities, and P2P.
 
-| concept              | cudarc                          | baracuda                                       |
-| -------------------- | ------------------------------- | ---------------------------------------------- |
-| context              | `CudaDevice` (owns + manages)   | `Device` + explicit primary-context retain     |
-| device-owned buffer  | `CudaSlice<T>`                  | `DeviceBuffer<T>` (Driver) / same name (Runtime) |
-| H2D upload           | `dev.htod_copy(&host)?`         | `DeviceBuffer::from_slice(&host)?`             |
-| D2H download         | `dev.dtoh_sync_copy(&slice)?`   | `slice.copy_to_host(&mut host)?`               |
-| stream               | `CudaStream`                    | `Stream`                                       |
-| cuBLAS               | `CudaBlas::new(dev)`            | `baracuda_cublas::Handle::new()`               |
-| kernel launch        | `.launch_async(cfg, args)?`     | `LaunchBuilder::new(...).arg(...).launch()?`   |
+## When baracuda is the better choice
 
-## Memory semantics
+- **You want ops, not just handles.** cudarc hands you a cuBLAS handle; you
+  assemble the op yourself (candle exists precisely to add that layer).
+  `baracuda-kernels` presents hundreds of ready ops through one `Plan` API, each
+  routing to the right NVIDIA library or a bespoke kernel.
+- **You want generated / specialized kernels with a correctness guarantee.**
+  `baracuda-kernelgen` emits specialized kernels from an IR, checks them
+  bit-for-bit against an independent CPU oracle, and can offer precision-first
+  variants (e.g. a more-accurate, bitwise-reproducible reduction). cudarc
+  generates nothing and has no oracle — it is a pass-through to the vendor
+  libraries.
+- **You need a library cudarc still doesn't wrap** — NPP, nvJPEG / nvJPEG2000,
+  nvCOMP, CV-CUDA, NVML, nvJitLink. (This list is now *short*: cudarc has since
+  added cuTENSOR and cuFile, which earlier versions of this doc wrongly claimed
+  as baracuda-exclusive.)
+- **You want both the Driver and Runtime APIs as first-class.** cudarc's safe
+  surface is Driver-centric; its Runtime module is thin / unsafe. baracuda ships
+  separate first-class `baracuda-driver` and `baracuda-runtime` crates.
+- **You want one uniform error / convention model across every library** — the
+  `-sys` + safe-pair pattern, the `CudaStatus` trait, and a generic `Error<S>`
+  across all ~22 wrappers.
 
-cudarc's `CudaSlice` holds an `Arc<CudaDevice>`, so passing a slice
-across threads keeps the device context alive. This is convenient but
-bakes a specific ownership model into the type.
+## API shape (cudarc ≈ 0.19, 2026 — a moving target)
 
-baracuda's `DeviceBuffer<T>` holds only a raw pointer + size. The
-owning `Context` / `Device` lifetime is the user's responsibility
-(typically a top-level singleton). This gives you full control at the
-cost of one extra thing to hold onto, and it matches what the
-equivalent C code looks like.
+cudarc restructured to a **stream-centric** model; the older
+`CudaDevice`-owns-everything design is gone. Its API has changed across releases,
+so check its current docs for exact signatures — the feel today:
 
-## Dynamic loading
+| concept       | cudarc (0.19)                                   | baracuda                                   |
+| ------------- | ----------------------------------------------- | ------------------------------------------ |
+| context       | `CudaContext::new(id) -> Arc<CudaContext>`      | `Device` + explicit primary-context retain |
+| stream        | `ctx.default_stream() -> CudaStream`            | `Stream`                                   |
+| device buffer | `CudaSlice<T>`                                  | `DeviceBuffer<T>` (raw ptr + len)          |
+| H2D upload    | `stream.memcpy_stod(&host)?`                    | `DeviceBuffer::from_slice(&host)?`         |
+| D2H download  | `stream.memcpy_dtov(&slice)?`                   | `slice.copy_to_host(&mut host)?`           |
+| kernel launch | `stream.launch_builder(&f).arg(&x).launch(cfg)` | `LaunchBuilder::new(..).arg(..).launch()?` |
+| cuBLAS        | `CudaBlas::new(stream)`                         | `baracuda_cublas::Handle::new()`           |
 
-Both crates load NVIDIA shared libraries at runtime. The mechanics
-differ slightly — cudarc generates static function pointers via
-`bindgen` + a shim; baracuda uses `libloading` + a `runtime_fns!`
-macro with `OnceLock`-cached PFNs. Behavior is equivalent for users.
+Two deliberate design differences, unchanged by cudarc's restructure:
 
-## Framework compatibility
+- **Memory ownership.** cudarc's `CudaSlice` carries `Arc`s to its context and
+  stream, so a slice keeps the context alive across threads — foolproof, but it
+  bakes one ownership model into the type. baracuda's `DeviceBuffer<T>` holds
+  only a raw pointer + length; the owning `Device` / `Context` lifetime is yours
+  to manage (typically a top-level singleton). More control, one more thing to
+  hold, closer to what the equivalent C looks like. (baracuda also offers
+  `ManagedBuffer<T>` for unified/managed memory, `PinnedBuffer<T>` for pinned
+  host memory, and a `MemoryPool` — a small allocator family mirroring CUDA's
+  own, rather than a single slice type.)
+- **Dynamic loading.** Both load NVIDIA shared libraries at runtime, so neither
+  needs the CUDA toolkit at build time. cudarc uses a bindgen shim; baracuda uses
+  `libloading` + a `runtime_fns!` macro with `OnceLock`-cached PFNs. Equivalent
+  for users.
 
-`candle`, `burn`, and `dfdx` are built on cudarc. If you're targeting
-those ecosystems today, use cudarc.
+## Mixing the two
 
-baracuda's niche is:
-
-1. Applications that need libraries cudarc doesn't cover
-   (cuTENSOR for HPC / quantum, nvCOMP for data pipelines, CV-CUDA for
-   video, cuFile for GDS).
-2. Future ML frameworks / tooling that want a **uniform** base for
-   every NVIDIA compute library rather than building per-library
-   bespoke wrappers.
-
-## When to mix
-
-Both crates wrap the same opaque C handles. You can hold a
-`CudaDevice` from cudarc and get its underlying `CUcontext` via
-`dev.cu_primary_ctx()`, then feed that into
-`baracuda_driver::Context::from_raw(...)` for baracuda's cuTENSOR /
-nvCOMP wrappers. The two don't know about each other, but they both
-work against the same driver.
+Both wrap the same opaque driver handles and can coexist against one device, in
+**either ownership direction**. Share a **context** via
+`baracuda_driver::PrimaryContext::retain(device)` — baracuda's handle to the
+device's primary context, the one cudart-based frameworks use. Or move an
+individual handle across: the owning handles (`Context` / `Stream` / `Event`)
+expose `as_raw()` to hand out, and both `unsafe from_raw` (take ownership —
+baracuda destroys on drop) and `unsafe borrow_raw` (non-owning — baracuda never
+destroys, for a handle the other library still owns); `Device` has a plain
+`from_raw`. So you can run baracuda kernels on candle/cudarc's own stream with
+`Stream::borrow_raw(custream, &ctx)`, wait on its events, and hand baracuda's
+handles back via `as_raw()`. A common setup: keep candle-on-cudarc for your model
+and add baracuda's cuTENSOR / nvCOMP / CV-CUDA wrappers on the shared context.

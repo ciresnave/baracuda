@@ -16,6 +16,126 @@ nvcc -O3 -arch=sm_89 <outdir>/<harness>.cu -o <outdir>/<harness> && <outdir>/<ha
 
 ---
 
+## `unravel_bench.cu` — generated coord-unravel helper vs hand-written (Phase 1)
+
+The first **freestanding-helper** validation (IR-translation-hub roadmap, Phase 1,
+`docs/design/ir-translation-hub.md`): proves `baracuda-kernelgen` can emit a
+reusable `.cuh` helper — `baracuda::coord::gen::unravel_offset_1_r{N}`, produced by
+`emit_coord_unravel_helper` from the SAME `emit_unravel_decomp` routine that backs
+the inline strided kernels (single source of truth) — that is bit-identical to the
+hand-written `baracuda_coord_unravel.cuh` and faster. Compares the generated
+per-rank UNROLLED functions against the hand-written runtime-rank `unravel_offset_1`
+and a CPU reference (normal / stride-0 broadcast / negative-stride / empty-axis `%0`
+guard), then micro-benches both (compute-bound, REPEAT unravels/elem).
+
+Run (needs the bespoke include dir + the MSVC conforming preprocessor):
+
+```sh
+UNRAVEL_OUT=<outdir> cargo test -p baracuda-kernelgen dump_coord_unravel_helper -- --ignored --nocapture
+nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" \
+     -I <outdir> -I crates/baracuda-kernels-sys/kernels/include \
+     crates/baracuda-kernelgen/ondevice/unravel_bench.cu -o <outdir>/unravel_bench && <outdir>/unravel_bench
+```
+
+**Last run** (RTX 4070 Laptop / sm_89 / CUDA 13.3): PASSED — correctness
+`gen==hand==ref` on rank-4 normal / broadcast / negative / empty-axis guard, plus
+rank-8 (`gen==ref`) and the multi-stride `unravel_offsets_2` (both offsets == ref);
+bench rank-4, REPEAT=64 over 16.7M indices:
+**gen (unrolled) 15.83 ms vs hand (runtime rank) 20.79 ms = 1.31× faster**.
+
+The shared `emit_unravel_decomp` now also backs all four inline strided emitters
+(strided / scatter / strided-multi / reduction), byte-identically — so the win
+propagates to every generated strided kernel, not just the helper.
+
+---
+
+## `dtype_promote_validate.cu` — generated dtype-promote helper (Phase 2c)
+
+Exhaustively validates the **generated** dtype-promotion helper
+(`baracuda::dtype::gen::load_as_f32_{f16,bf16}` etc., from `emit_dtype_promote_helper`)
+against the hand-written `baracuda_dtype_promote.cuh`. Unlike coord-unravel this is
+a **de-duplication** win, not a speed win — both sides resolve to the same single
+hardware intrinsic (`__half2float` / `__float2half`, …) at compile time — so the
+proof is *exhaustive bit-exactness*: every one of the 65536 f16 codes and 65536
+bf16 codes, through generated-vs-hand-written promotion plus the lossless
+round-trip. The intrinsic pick is emitted from the same `promote_load_f32` /
+`demote_store_f32` routines the inline reduction load/store now route through
+(single source of truth).
+
+Run:
+
+```sh
+DTYPE_OUT=<outdir> cargo test -p baracuda-kernelgen dump_dtype_promote_helper -- --ignored --nocapture
+nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" \
+     -I <outdir> -I crates/baracuda-kernels-sys/kernels/include \
+     crates/baracuda-kernelgen/ondevice/dtype_promote_validate.cu -o <outdir>/dtype_promote_validate && <outdir>/dtype_promote_validate
+```
+
+**Last run** (RTX 4070 Laptop / sm_89 / CUDA 13.3): PASSED — all **131072** codes
+(f16 + bf16): generated load == hand-written, generated round-trip == hand-written,
+and lossless-identity round-trip for every non-NaN code. 0 mismatches.
+
+---
+
+## `lift_roundtrip_validate.cu` — CUDA→IR lift round-trip (Phase 4)
+
+Proves the **CUDA → IR `lift` frontend** re-emits FAITHFULLY: a hand-written
+grid-stride elementwise kernel is lifted to the neutral IR (`lift_elementwise`),
+then re-emitted with `generate()`, and the re-emitted kernel must produce
+**BIT-IDENTICAL** output to the original on device. Both compute
+`out[i] = in0[i]*in1[i] + in0[i]` as one `a*b+c` expression, so nvcc contracts
+both to the same fma — the round-trip is the SAME arithmetic, hence the check is
+whole-buffer `memcmp` (exact), not a tolerance. The dump test writes the pair
+(`lift_gen.cu` = re-emitted, `lift_orig.cu` = original) and prints the generated
+kernel's name; the harness `#include`s both, launches each over ~4.19M random f32
+inputs (signed-zero / ±Inf / NaN edge seeds), and bit-compares.
+
+Run:
+
+```sh
+LIFT_OUT=<outdir> cargo test -p baracuda-kernelgen --lib lift::tests::dump_lift_roundtrip -- --ignored --nocapture
+nvcc -O3 -arch=sm_89 -std=c++17 -I <outdir>      crates/baracuda-kernelgen/ondevice/lift_roundtrip_validate.cu -o <outdir>/lift_roundtrip_validate && <outdir>/lift_roundtrip_validate
+```
+
+**Last run** (RTX 4070 / sm_89 / CUDA 13.3): PASSED — all 4194304 elements
+bit-identical (re-emitted == original hand-written kernel).
+
+---
+
+## `cast_validate.cu` — generated cast helper (Phase 2c, cast pivot)
+
+Validates the **generated** elementwise dtype-cast helper
+(`baracuda::cast::gen::cast_<sin>_<sout>`, the full 8×8 dtype matrix from
+`emit_cast_helper`) against the hand-written `baracuda_cast.cuh`
+(`cast_value<TIn, TOut>`) plus an independent CPU `static_cast` reference.
+
+The **cast pivot** of the fp_bits/cast migration: `fp_bits` does *not* factor (the
+generator emits none of its mantissa/exponent/sign/TF32 logic — only inf/NaN
+sentinels, already single-sourced), so `cast` was migrated instead. Like
+dtype-promote it is a **de-duplication** win, not a speed win: each generated cast
+resolves to the same `static_cast` / half-intrinsic the hand-written `cast_value`
+does. The per-element conversion is emitted from the same `cast_scalar` routine the
+inline hetero store (`store_expr_of`) now routes through (which reuses
+`promote_load_f32` / `demote_store_f32`) — so the helper cannot drift. `cast` is a
+strict superset of dtype-promote (adds integer endpoints, cross-half, float↔int).
+
+Exhaustive over every 16-bit source (all 65536 f16 + 65536 bf16) and 8-bit integer
+source (all 256 i8 + 256 u8), each cast to all 8 destinations, plus curated
+`f32`/`f64`/`i32`/`i64` samples.
+
+Run:
+
+```sh
+CAST_OUT=<outdir> cargo test -p baracuda-kernelgen dump_cast_helper -- --ignored --nocapture
+nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17"      -I <outdir> -I crates/baracuda-kernels-sys/kernels/include      crates/baracuda-kernelgen/ondevice/cast_validate.cu -o <outdir>/cast_validate && <outdir>/cast_validate
+```
+
+**Last run** (RTX 4070 / sm_89 / CUDA 13.3): PASSED — every (source, destination)
+pair: generated == hand-written (0 mismatches) and == CPU `static_cast` for the
+arithmetic reference pairs.
+
+---
+
 ## `reduce_validate.cu` — general reduction path (item 03)
 
 Launches the general-path reduction kernels (`_reduce_{tag}_ax{hex}[_kd]`) with
@@ -189,6 +309,92 @@ irregular-K, and batched-many-tiny. Sixth measure-don't-assume instance.
 
 ---
 
+## `contract_bias_batched_validate.cu` — fused bias + batched contraction (B13/B14)
+
+On-device numeric proof for this session's contraction growth, whose NEW code the
+item-10 harness above does NOT cover:
+
+- **B13 — fused matmul + per-column `[N]` bias/activation epilogue** (the
+  `in2[col]` bias load + `relu(r0 + bias)` in `emit_contraction`). Cells
+  `matmul_bias` (bias alone) and `matmul_bias_relu` (fused bias + activation).
+- **B14 — batched `[B,M,K]·[B,K,N]`** (the `b = blockIdx.z` batch offset and the
+  per-operand batch strides `in0[b*m*k+…]` / `in1[b*k*n+…]` / `out[b*m*n+…]`).
+  Cells `bmm` (identity) and `bmm_relu` (batch strides + activation). Each batch
+  is filled with **distinct** data, so a batch-stride bug (e.g. reading batch 0
+  for all `b`) is caught.
+
+Method: diff the generated kernels vs a **host f64 reference** (matmul + optional
+bias + optional relu; per-batch loop). Two input regimes:
+
+- **Exactly-representable integer inputs, small K** (|partial sums| < 2²⁴) ⇒ the
+  kernel's f32 accumulation is **bit-exact** to `(float)`(the f64 reference),
+  asserted with `==` (max abs diff 0). This is the load/stride correctness proof:
+  a mis-indexed bias column or a wrong batch slice changes the exact value.
+- **Hashed pseudo-random inputs, large K** ⇒ f32 rounding genuinely diverges from
+  f64; asserted within a small relative tolerance (`< 1e-4`). Batched cases also
+  cross-check vs `cublasSgemmStridedBatched` (row-major via `C^T = B^T·A^T`,
+  strided over the batch dim).
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog. The
+companion example emits them (mirrors how the item-10 `_contract_tll` cells come
+from the catalog):
+
+```sh
+cargo run -p baracuda-kernelgen --example emit_bias_batched -- <outdir>
+cp crates/baracuda-kernelgen/ondevice/contract_bias_batched_validate.cu <outdir>/
+nvcc -O3 -arch=sm_89 <outdir>/contract_bias_batched_validate.cu -lcublas \
+     -o <outdir>/contract_bias_batched_validate
+<outdir>/contract_bias_batched_validate                          # correctness + cuBLAS + bench
+compute-sanitizer --tool memcheck  <outdir>/contract_bias_batched_validate san
+compute-sanitizer --tool initcheck <outdir>/contract_bias_batched_validate san
+```
+
+**Last run (RTX 4070 Laptop/sm_89, driver 610.62, CUDA 13.3 / nvcc 13.3) — ALL 23
+cases PASS**; `compute-sanitizer memcheck` = **0 errors**, `initcheck` = **0
+errors** (the `san` small-shape subset — the bias load, the batch-strided loads,
+and the output stores are all in-bounds and every read-back element is written).
+
+Bit-exact (integer inputs, `maxabs 0` / `0 ULP` — the index/stride proof):
+
+| cell | shapes (M×N×K, `B;M×N×K`) | result |
+| --- | --- | --- |
+| `matmul_bias` / `matmul_bias_relu` | 3×5×4, 8×37×16, 1×4096×64 | **maxabs 0, 0 ULP** |
+| `bmm` / `bmm_relu` | 3;2×3×4, 4;8×33×16, 8;1×5×8 | **maxabs 0, 0 ULP** |
+
+The 8×37×16 / 4;8×33×16 cases put M at the Tiny-M ceiling (8); 1×4096×64 exercises
+the grid-stride column loop; 8;1×5×8 stacks 8 distinct batches. The `_relu` cells
+use column-negative biases / cancelling sums so relu actually clamps.
+
+Tolerance (hashed random inputs, f32-vs-f64 divergence — the realistic regime):
+
+| cell | shape | maxabs | maxrel |
+| --- | --- | --- | --- |
+| `matmul_bias` | 8×4096×4096 | 2.4e-04 | 9.1e-05 |
+| `matmul_bias_relu` | 8×4096×4096 | 1.9e-04 | 7.2e-05 |
+| `bmm` | 8;8×1024×1024 | 4.8e-05 | 2.4e-05 |
+| `bmm` vs `cublasSgemmStridedBatched` | 8;8×1024×1024 | 5.3e-05 | 2.6e-05 |
+| `bmm` vs `cublasSgemmStridedBatched` | 16;4×512×512 | 2.9e-05 | 9.8e-06 |
+
+(Per-element ULP is not a meaningful figure for the tolerance cases — random-sign
+GEMM outputs cancel toward zero, where ULP spacing explodes; `maxabs`/`maxrel` are
+the precision figures there. The kernel's sequential-K f32 fold lands within a few
+parts-per-million of both f64 and cuBLAS.)
+
+**Negative control (harness sensitivity confirmed):** dropping the `b*k*n` batch
+stride from the `bmm` cell's rhs load (a simulated stride bug) makes exactly the
+distinct-per-batch cases **FAIL** (`maxabs` 12–25, 3 cases) while the untouched
+`bmm_relu`/bias cells still pass — the diff genuinely tests the batch strides, it
+does not pass trivially.
+
+**Bench (batched, `B=8, M=8, N=K=4096`):** `bmm` **215–230 GB/s** vs
+`cublasSgemmStridedBatched` **~229 GB/s** — **0.94–1.01×**, i.e. parity with the
+vendor's strided-batched decode path on this Tiny-M batched cell (the same
+"vendor keeps the plain cell" verdict as item 10; the generated node's edge is
+the fused epilogue / dequant regimes, not raw batched GEMM). **No device bug
+found** — the B13 bias load and the B14 batch strides are correct on device.
+
+---
+
 ## `audit_reduce_softmax.cu` — generated-vs-bespoke audit, round 1
 
 Generated cells vs the hand-written `baracuda-kernels-sys` kernels, called
@@ -234,7 +440,7 @@ library into `<outdir>`, then copy this harness beside them as usual:
 ```rust
 use baracuda_kernelgen::ir::BinaryOp;
 use baracuda_kernelgen::{generate, input, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 use ElementKind::{I32, S8, U8};
 
 let out = std::env::args().nth(1).expect("outdir");
@@ -302,7 +508,7 @@ them:
 ```rust
 use baracuda_kernelgen::ir::BinaryOp;
 use baracuda_kernelgen::{coord, generate, input, konst, param, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: baracuda_kernelgen::GeneratedKernel| {
@@ -381,7 +587,7 @@ Generate them into `<outdir>`, then copy the harness beside them:
 ```rust
 use baracuda_kernelgen::ir::BinaryOp;
 use baracuda_kernelgen::{generate, input, konst, reduced, Cuda, OpDef, ReduceOp, UnaryOp};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: baracuda_kernelgen::GeneratedKernel| {
@@ -600,7 +806,7 @@ Generate them into `<outdir>`, then copy the harness beside them:
 ```rust
 use baracuda_kernelgen::ir::View;
 use baracuda_kernelgen::{generate, input, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: baracuda_kernelgen::GeneratedKernel| {
@@ -725,7 +931,7 @@ Generate them into `<outdir>`, then copy the harness beside them:
 ```rust
 use baracuda_kernelgen::ir::OobPolicy;
 use baracuda_kernelgen::{generate, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: baracuda_kernelgen::GeneratedKernel| {
@@ -855,7 +1061,7 @@ Generate them into `<outdir>`, then copy the harness beside them:
 
 ```rust
 use baracuda_kernelgen::{generate, generate_variants, Cuda, OpDef};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernel_vocab::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 let out = std::env::args().nth(1).expect("outdir");
 let write = |k: &baracuda_kernelgen::GeneratedKernel| {

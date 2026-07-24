@@ -3,22 +3,24 @@
 //! An op is the *pure function* computed at each output coordinate ([`OpDef`]),
 //! described as a scalar-op DAG ([`ScalarExpr`]) over its input operands plus an
 //! access pattern ([`Access`]). The emitter lowers this to a concrete backend
-//! and *schedule* (chosen per [`baracuda_kernels_types::StructureKey`] cell).
+//! and *schedule* (chosen per [`baracuda_kernel_vocab::StructureKey`] cell).
 //! Describing the math here — rather than as opaque CUDA — is what lets the
 //! emitter vectorize, hoist, and fuse, because it can see the dataflow.
 
-use baracuda_kernels_types::{AxisMask, ElementKind};
+use baracuda_kernel_vocab::{AxisMask, ElementKind};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// A scalar compute expression — the per-output-coordinate math, as a typed DAG.
 ///
 /// Backend-agnostic: the emitter lowers it to CUDA today (and other backends
 /// later) by walking the tree with a per-backend accessor for the leaves.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ScalarExpr {
     /// The value of input operand `i` at the current coordinate.
     Input(u8),
     /// A compile-time scalar constant — the same value at every coordinate.
+    #[serde(with = "crate::text::f64_repr")]
     Const(f64),
     /// A runtime scalar parameter — the op's `p{i}` launch argument. Distinct
     /// from [`ScalarExpr::Const`]: a `Const` is folded into the kernel, a
@@ -121,7 +123,7 @@ pub enum ScalarExpr {
 /// which Fuel's `OpTag`/§4.1 vocabulary does not name yet: those lower and
 /// validate like any other op but are rejected by pattern derivation (an
 /// honest miss — no invented tags) until Fuel adds the vocabulary.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnaryOp {
     /// Negation `-x`.
     Neg,
@@ -257,7 +259,7 @@ pub enum UnaryOp {
 /// complement for `signed char` on every CUDA compiler, standardized by
 /// C++20). "Exact"/`correctly_rounded` for these ops means exact WRAPPING
 /// semantics, not infinite-precision arithmetic.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BinaryOp {
     /// Elementwise maximum — **NaN-propagating** (`torch.maximum`; commutative).
     /// Deliberately distinct from [`BinaryOp::FmaxIeee`] (NaN-suppressing).
@@ -801,7 +803,7 @@ fn node_children(n: &DagNode) -> Vec<NodeId> {
 /// The associative combine of an [`Access::Reduction`]. The identity is implied
 /// (`Sum`/`Mean` → 0; `Prod` → 1; `Max`/`Min` peel the first element, so no ±∞
 /// literal — that keeps the emitted source header-light under nvrtc).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ReduceOp {
     /// Sum over the reduced axis (`SumDim`).
     Sum,
@@ -830,7 +832,7 @@ pub enum ReduceOp {
 /// (PyTorch): NaN compares GREATER than every non-NaN, so ascending places the
 /// NaN block last and descending places it first. `-0.0`/`+0.0` and NaN-vs-NaN
 /// are key-ties, resolved by the (ascending) original index (stability).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SortOrder {
     /// Smallest key first (NaN block last).
     Asc,
@@ -860,7 +862,7 @@ pub enum SortOrder {
 /// stays body-derived = 1 even for `Both` (the second buffer is owned locally by
 /// this state + the 3-operand key, exactly as the emitter owns "argsort writes
 /// index vs value" today).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SortOut {
     /// Values output (raw-bit permutation, dtype-preserving) — today's `row_sort`.
     Values,
@@ -876,7 +878,7 @@ pub enum SortOut {
 /// `Desc` + `TopK` = top-k (largest first, torch.topk `largest=True`); `Asc` +
 /// `TopK` = bottom-k (smallest first, `largest=False`). `Full` reproduces today's
 /// sort byte-for-byte (single `k`, no store guard).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SortLimit {
     /// Sort the whole row; out extent == in extent (today's
     /// `row_sort`/`row_argsort`/`row_sort_indices`, single `long long k`).
@@ -1055,7 +1057,7 @@ impl Expr {
 /// pre-reduction expression) over the last axis with `op`. Stage `i` produces the
 /// scalar [`ScalarExpr::Reduced`]`(i)`; its `pre` may reference `Reduced(j)` for
 /// `j < i` (e.g. Softmax's exp-sum stage reads the row max from stage 0).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReduceStage {
     /// Per-element expression reduced along the last axis (`Input`/`Const`/`Param`
     /// and earlier-stage `Reduced(j)`).
@@ -1070,7 +1072,7 @@ pub struct ReduceStage {
 /// `#[non_exhaustive]`: windowed/stencil and gather patterns are still the growth
 /// path; arbitrary/multiple reduction axes, strided-input reductions, and keepdim
 /// layout extend [`Access::Reduction`] later.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum Access {
     /// Output coordinate equals input coordinate (a per-element map).
@@ -1089,6 +1091,7 @@ pub enum Access {
         op: ReduceOp,
         /// Canonical reduced-axis set (bit `i` ⇒ axis `i`). `AxisMask::EMPTY` ⇒
         /// the legacy last-axis default (`OpDef::reduction` preserves this).
+        #[serde(with = "crate::text::axis")]
         axes: AxisMask,
         /// Keep reduced axes as size-1 (broadcast-back) vs. collapse them.
         keepdim: bool,
@@ -1326,7 +1329,7 @@ pub enum Access {
 /// Per-axis role in a contraction — the `{Batch, FreeM, FreeN, ContractedK}`
 /// projection of the unified AxisRole vocabulary (`axis-role-vocabulary.md`;
 /// reductions carry the `{Reduced}` projection as `StructureKey::reduce_axes`).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AxisRole {
     /// Shared, iterated, not summed (lhs & rhs & out). v1: unused (rank-2).
     Batch,
@@ -1342,7 +1345,7 @@ pub enum AxisRole {
 /// matmul assignment; the constructor exists so the vocabulary (not a bare
 /// convention) is what the emitter and key read — general einsum role vectors
 /// are the growth path without reshaping this type's consumers.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContractionAxes {
     /// Roles of input 0's axes, in axis order.
     pub lhs: Vec<AxisRole>,
@@ -1359,10 +1362,21 @@ impl ContractionAxes {
             rhs: vec![AxisRole::ContractedK, AxisRole::FreeN],
         }
     }
+
+    /// The canonical rank-3 **batched** matmul: `lhs [B,M,K]`, `rhs [B,K,N]` →
+    /// `[B,M,N]` — a stack of `B` independent [`Self::matmul`] cells sharing a
+    /// leading `Batch` axis (the per-batch math is byte-identical to rank-2).
+    #[must_use]
+    pub fn batched_matmul() -> Self {
+        Self {
+            lhs: vec![AxisRole::Batch, AxisRole::FreeM, AxisRole::ContractedK],
+            rhs: vec![AxisRole::Batch, AxisRole::ContractedK, AxisRole::FreeN],
+        }
+    }
 }
 
 /// K-accumulation policy for a contraction.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AccumSpec {
     /// Accumulate in `float` (`double` for f64/f32-strict inputs) — the SIMT
     /// path, deterministic for a fixed schedule; the same widening discipline
@@ -1385,7 +1399,7 @@ pub enum AccumSpec {
 /// `Reshape` is carried for recognition + keying only (a reshape of a contiguous
 /// producer is the identity linear-index map — genuine rank-change emit belongs
 /// to items 03/10).
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub enum View {
     /// Read operand `i` at the iteration coordinate — no layout change (default).
     #[default]
@@ -1399,10 +1413,11 @@ pub enum View {
     },
     /// Broadcast a lower-rank / size-1 producer up to the iteration shape: `bcast`
     /// marks the iteration axes the producer does **not** vary along (stride 0).
-    /// The named IR form of what [`baracuda_kernels_types::OperandKey`]'s
+    /// The named IR form of what [`baracuda_kernel_vocab::OperandKey`]'s
     /// broadcast mask already encodes on the schedule side.
     Broadcast {
         /// Iteration axes along which the producer is broadcast (stride 0).
+        #[serde(with = "crate::text::axis")]
         bcast: AxisMask,
     },
     /// The producer is contiguous with a different logical rank but the **same**
@@ -1420,7 +1435,7 @@ impl View {
     /// always well-formed. Extent agreement between the declared view and the
     /// runtime `shape[]`/stride arrays is a *caller* precondition (the same trust
     /// level as the RowReduce `n_out`/`k` contract), because
-    /// [`baracuda_kernels_types::StructureKey`] deliberately abstracts numeric
+    /// [`baracuda_kernel_vocab::StructureKey`] deliberately abstracts numeric
     /// extents away.
     #[must_use]
     pub fn is_valid(&self, rank: u8) -> bool {
@@ -1472,7 +1487,7 @@ fn is_permutation(perm: &[u8], rank: u8) -> bool {
 /// all bounds-check `idx < 0 || idx >= extent` and skip / zero — confirmed per
 /// kernel. A from-end-wrap policy is a deliberate non-feature here (bespoke
 /// parity).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OobPolicy {
     /// Leave the output element **unwritten** when the index is out of range —
     /// the bespoke `gather` / `index_select` semantics (`continue;` before the
@@ -1506,7 +1521,7 @@ pub enum OobPolicy {
 /// which *coordinate* pairs with which stride; an `Indexed` read substitutes a
 /// runtime *value* for one coordinate. v1 keeps them mutually exclusive on the
 /// same input (a gathered-and-permuted operand is deferred — see the plan gate).
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub enum ReadIndex {
     /// Read operand `i` at the iteration coordinate — no indexing (default; every
     /// pre-increment-4 op). Byte-identical emission.
@@ -1535,6 +1550,7 @@ pub enum ReadIndex {
         /// Out-of-range behavior (bespoke-matched).
         oob: OobPolicy,
         /// Index element dtype — `I32` or `I64` (rides the op, not the key).
+        #[serde(with = "crate::text::ek")]
         index_dtype: ElementKind,
     },
 }
@@ -1564,7 +1580,7 @@ impl ReadIndex {
 /// exhaustive-match arms). Only the PRESENCE mask (which operands carry a
 /// `Runtime` offset) is compile-time; the offset VALUE never enters the IR or the
 /// structure key.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BaseOffset {
     /// No offset — the operand's base pointer is unchanged (byte-identical
     /// emission; every pre-increment operand).
@@ -1608,7 +1624,7 @@ impl BaseOffset {
 ///   floating cells ⇒ the accumulated result is deterministic. v1 supports the
 ///   native-atomic INTEGER cells only (float has no native `atomicMax`; a CAS
 ///   emulation is a follow-up) — the plan gate enforces this.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WriteCombine {
     /// Plain store. Deterministic only with unique target indices.
     Assign,
@@ -1662,7 +1678,7 @@ fn is_integer_kind(dt: ElementKind) -> bool {
 /// write-side mirror of gather's `gext`. Out-of-range indices are **skipped**
 /// (bespoke `scatter`/`scatter_add`/`index_add`/`bincount` all `continue;` — no
 /// negative-index wrap).
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub enum WriteIndex {
     /// Write the output at the iteration coordinate — no scatter (default; every
     /// pre-increment-5 op). Byte-identical emission.
@@ -1696,6 +1712,7 @@ pub enum WriteIndex {
         /// bespoke scatter/scatter_add/index_add/bincount skips an OOB target.
         oob: OobPolicy,
         /// Index element dtype — `I32` or `I64` (rides the op, not the key).
+        #[serde(with = "crate::text::ek")]
         index_dtype: ElementKind,
     },
 }
@@ -1730,8 +1747,8 @@ impl WriteIndex {
 ///
 /// Names the op, its input-operand count, the output expression, the accepted
 /// dtypes, and the access pattern. The generator fans one `OpDef` out across
-/// many [`baracuda_kernels_types::StructureKey`] cells (the schedule half).
-#[derive(Clone, Debug)]
+/// many [`baracuda_kernel_vocab::StructureKey`] cells (the schedule half).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OpDef {
     /// Stable op name — used in generated symbol names and the FKC contract.
     pub name: String,
@@ -1740,6 +1757,7 @@ pub struct OpDef {
     /// Output `= body` evaluated at each coordinate.
     pub body: ScalarExpr,
     /// Dtypes this op accepts.
+    #[serde(with = "crate::text::ek_vec")]
     pub dtypes: Vec<ElementKind>,
     /// Iteration pattern.
     pub access: Access,
@@ -1768,6 +1786,7 @@ pub struct OpDef {
     /// per the schema ("v1 assumes a uniform operand dtype; mixed-dtype folds
     /// in a follow-up"); the caller's output `OperandDesc` carries the hetero
     /// dtype, which only shapes that operand's own layout facts.
+    #[serde(with = "crate::text::ek_opt")]
     pub out_dtype: Option<ElementKind>,
     /// Additional output bodies for a **multi-output** elementwise op (increment
     /// 1). Output 0 is [`OpDef::body`]; each entry here is one further output,
@@ -1804,6 +1823,7 @@ pub struct OpDef {
     /// CALLER PRECONDITION (like buffer aliasing / exact extents), documented at
     /// `plan::assert_valid_multi_output`. Set only via
     /// [`OpDef::elementwise_multi_hetero`].
+    #[serde(with = "crate::text::ek_opt_vec")]
     pub extra_out_dtypes: Vec<Option<ElementKind>>,
     /// Per-input **data-dependent read role** (index `i` ↔ `Input(i)`; increment
     /// 4, GATHER). Empty ⇒ every input is [`ReadIndex::Direct`] (back-compat:
@@ -2183,6 +2203,40 @@ impl OpDef {
             dtypes: dtypes.to_vec(),
             access: Access::Contraction {
                 axes,
+                accum: AccumSpec::WideFloat,
+                epilogue: epilogue.0,
+            },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            base_offsets: Vec::new(),
+            out_base_offset: BaseOffset::Zero,
+            out_dtype: None,
+            extra_out_bodies: Vec::new(),
+            extra_out_dtypes: Vec::new(),
+        }
+    }
+
+    /// Build a **fused contraction + bias/activation** op — like
+    /// [`OpDef::contraction`] but the `epilogue` may also read `Input(2)`, a
+    /// per-column bias `[N]` broadcast over the M rows (the `nn.Linear` bias), so
+    /// `out[m,n] = epilogue(Σ_k lhs[m,k]·rhs[k,n], bias[n])` is one launch instead
+    /// of a GEMM followed by a separate bias/activation pass. `n_inputs = 3`
+    /// (lhs, rhs, bias); `body == epilogue` like [`OpDef::contraction`].
+    ///
+    /// Fixed to the rank-2 [`ContractionAxes::matmul`] cell: v1 does not combine a
+    /// fused bias with the batched form (that combination declines at
+    /// `derive_contraction`, which would then trip `build_plan`'s facts assert),
+    /// so hardwiring the axes makes the unsupported combo unconstructible.
+    #[must_use]
+    pub fn contraction_bias(name: &str, dtypes: &[ElementKind], epilogue: Expr) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs: 3,
+            body: epilogue.0.clone(),
+            dtypes: dtypes.to_vec(),
+            access: Access::Contraction {
+                axes: ContractionAxes::matmul(),
                 accum: AccumSpec::WideFloat,
                 epilogue: epilogue.0,
             },

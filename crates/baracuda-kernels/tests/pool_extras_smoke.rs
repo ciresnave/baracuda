@@ -1,7 +1,7 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke tests for the rest of the Phase 11.8 pool plans:
 //! AdaptiveAvgPool1d / 3d, AdaptiveMaxPool1d / 2d / 3d, and the stubbed
 //! FractionalMaxPool* / LpPool* plans (which assert `select()` rejects).
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

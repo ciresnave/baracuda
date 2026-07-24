@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.67-orange)
-![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2280%2B%2F0-success)
+![Status](https://img.shields.io/badge/status-alpha.77-orange)
+![CUDA](https://img.shields.io/badge/CUDA-12.x%2F13.x-76b900)
+![Tests](https://img.shields.io/badge/GPU%20regression-green-success)
 
 ## What baracuda is
 
@@ -38,13 +38,62 @@ workspace also ships idiomatic stand-alone wrappers for every CUDA library
 under `crates/baracuda-<lib>` if you want to skip the kernel facade and
 talk to one library directly.
 
+## Kernel generation ([`baracuda-kernelgen`])
+
+Newer in the workspace — and where the current development frontier sits —
+is [`baracuda-kernelgen`], a build-time **kernel-generation backend**. Where
+`baracuda-kernels` dispatches to hand-rolled `.cu` files and NVIDIA
+libraries, kernelgen describes an op as a **neutral IR** and *emits* the
+specialized kernel from it, so the same op definition can be lowered to more
+than one backend and transformed (vectorized, hoisted, fused) along the way.
+
+The pieces (see `crates/baracuda-kernelgen/src/lib.rs`):
+
+- **Neutral IR** (`ir.rs`) — a `ScalarExpr` DAG for the arithmetic plus an
+  `Access` enum for the schedule shape: `Elementwise`, `Reduction`,
+  `RowReduce`, `Contraction`, `Scan`, `Window`, `Im2Col`, `RowSort`. Fully
+  backend-agnostic.
+- **Plan** (`plan.rs`) — `build_plan` turns an op + a `StructureKey`
+  (schedule cell) into a `KernelPlan`.
+- **Backends** — a `Backend` trait with two implementations today: `cuda.rs`
+  (the CUDA emitter) and `cpu_c.rs` (a portable-C emitter that exists to prove
+  the IR is genuinely backend-neutral). A shared expression seam (`Lowering` +
+  `lower_dag`) is the only lowering-specific code.
+- **CPU correctness oracle** (`oracle.rs`) — an *independent* Rust
+  plan-interpreter that computes what a generated kernel should compute, from
+  the same IR but via a separate code path (sharing **zero** lowering code with
+  the emitters). It is a universal numeric reference and a GPU-free CI base.
+- **Precision-first variants** — `VariantFidelity::MorePrecise` emits a
+  double-precision serial fold that is both more accurate and bit-reproducible
+  across IEEE-754 hardware, for f32 `Sum`/`Mean` reductions and
+  softmax/norm row-reductions, alongside the default `BitIdentical` lowering.
+- **The FKC / kernel-seam to Fuel** — kernelgen's output (contracts + a live
+  JIT `Synthesizer`, behind the `seam` feature; the negotiation envelope lives
+  in [`baracuda-seam`]) feeds [Fuel](https://github.com/ciresnave/fuel), the
+  sibling ML library, which stays the runtime kernel selector. (The
+  capture-safe `gemv_dense_m1` + `gather_rows` decode kernels in
+  [`baracuda-kernels-sys`] are hand-authored bespoke `.cu`, not generator
+  output — kernelgen's emitted artifacts live behind the `seam`/AOT path.)
+
+This is alpha, generator-internal machinery: only the `seam` surface is
+treated as a stable contract with Fuel; the IR, plans, emitters, and
+optimizer are fluid across `alpha.N` bumps.
+
 ## Status
 
-**In active development — alpha.67.** **2280+ GPU tests passing,
-zero failures** across the 6 critical test crates on an RTX 4070
-(sm_89; the `baracuda-kernels` suite alone is 2180/0 across 513 test
-binaries). alpha.67 (Phase 74, Fuel-ask) ships the **plain dense FP
-GEMM family**: 12 cuBLAS-backed flat C symbols
+**In active development — alpha.77** (69 publishable crates). The GPU
+regression sweep runs green on an RTX 4070 (sm_89); the current frontier
+is the **kernel-specialization era** — the [`baracuda-kernelgen`] IR +
+multi-backend emitter, its CPU oracle and precision-first variants, and
+the FKC/JIT seam to the sibling [Fuel](https://github.com/ciresnave/fuel)
+library (see the [Kernel generation](#kernel-generation-baracuda-kernelgen)
+section above). The whole IR ramp — layout/shape, reductions, contraction,
+scan, window, sort, im2col — is shipped, with a `cpu_c` portable-C emitter
+now proving the IR is backend-neutral.
+
+The paragraphs below capture the earlier, still-accurate milestone history
+of the `baracuda-kernels` op facade. alpha.67 (Phase 74, Fuel-ask) shipped
+the **plain dense FP GEMM family**: 12 cuBLAS-backed flat C symbols
 (`baracuda_kernels_gemm_dense_{f32, f64, f16, bf16}_*`) with
 RRR / RCR / **CRR** layouts, flexible leading dims, and
 strided-batch folded into the base signature — plus the
@@ -207,8 +256,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.64", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.64"
+baracuda-kernels = { version = "0.0.1-alpha.77", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.77"
 ```
 
 A representative example — single-axis numerically stable softmax over a
@@ -269,8 +318,10 @@ The user-facing crates a typical caller will reach for:
 
 ```text
 baracuda-kernels             # the unified Plan-based ML op facade
+baracuda-kernelgen           # neutral-IR kernel-generation backend + CPU oracle + FKC seam
+baracuda-seam                # kernel-seam handshake envelope (Profile v1, frozen with Fuel)
 baracuda-kernels-types       # shared type vocabulary (Element, TensorRef, KernelSku, ...)
-baracuda-kernels-sys         # raw FFI to bespoke .cu kernels
+baracuda-kernels-sys         # raw FFI to bespoke + generated .cu kernels
 baracuda-kernels-bench       # criterion harness for sm_89 perf sweeps (not published)
 baracuda-cutlass             # safe wrapper for CUTLASS GEMM (float, int8 RCR, batched, grouped)
 baracuda-driver              # safe wrapper for the CUDA Driver API
@@ -595,3 +646,5 @@ the design lineage.
 
 [`baracuda-kernels`]: crates/baracuda-kernels
 [`baracuda-kernels-sys`]: crates/baracuda-kernels-sys
+[`baracuda-kernelgen`]: crates/baracuda-kernelgen
+[`baracuda-seam`]: crates/baracuda-seam

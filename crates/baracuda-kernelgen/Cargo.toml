@@ -21,9 +21,19 @@ nvrtc = ["dep:baracuda-nvrtc"]
 # the JIT region type AND the live-call envelope (`fuel_kernel_seam::Synthesizer`,
 # `JitRequest`/`JitResponse`) — the direct-Rust §5 endpoint Fuel calls.
 seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam"]
+# The source-language CONVERTERS (IR-hub Phase 4): tree-sitter frontends that lift
+# existing CUDA / Slang kernels into the neutral IR. Optional so the published
+# default build stays lean — the grammars compile C via the `cc` crate; enable with
+# `--features convert`.
+convert = ["dep:tree-sitter", "dep:tree-sitter-cuda", "dep:tree-sitter-slang"]
 
 [dependencies]
-baracuda-kernels-types = { workspace = true }
+baracuda-kernel-vocab = { workspace = true }
+# Accurate f64 transcendentals (erf/erfc) for the CPU oracle reference — a pure-Rust
+# (MUSL/fdlibm heritage) implementation INDEPENDENT of the emitter's device erf/erff,
+# so it remains a valid differential oracle. Replaces the v1 ~1e-7 rational that was
+# too loose to reference an f32/f64 erf/gelu kernel (adversarial review).
+libm = "0.2"
 baracuda-nvrtc = { workspace = true, optional = true }
 # Fuel's dependency-free std-POD grammar crate (OpTag / OpAttrs / PatternNode) — the
 # §5 shared wire vocabulary. crates.io version dep so the default build resolves
@@ -35,6 +45,21 @@ fuel-kernel-seam-types = { version = "0.10.3", optional = true }
 # handle (Synthesized{entry_point}); envelope SynthArtifact{artifact,kind(Ptx|Cubin),
 # link,contract}; JitRequest.budget.
 fuel-kernel-seam = { version = "0.10.3", optional = true }
+# Human-readable / -writable IR text form (IR-hub Phase 3): the neutral `OpDef`
+# IR derives Serialize/Deserialize so an op can be authored/inspected/diffed as
+# pretty JSON and round-tripped (see `src/text.rs`, `op_to_text`/`op_from_text`).
+# Plain (non-optional) deps: the round-trip surface is always available and the
+# `--lib` tests exercise it under the default feature set.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Converter frontends (`convert` feature): reuse mature tree-sitter grammars to lift
+# CUDA / Slang source into the IR instead of hand-writing parsers. Error-tolerant
+# CSTs — unrecognized constructs stay as residue (the "keep the rest in the source
+# language" contract). tree-sitter-cuda extends tree-sitter-cpp; tree-sitter-slang
+# extends tree-sitter-cpp + tree-sitter-hlsl.
+tree-sitter = { version = "0.26", optional = true }
+tree-sitter-cuda = { version = "0.21", optional = true }
+tree-sitter-slang = { version = "0.3", optional = true }
 
 [lints]
 workspace = true

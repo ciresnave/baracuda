@@ -1,5 +1,5 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke test for `AvgPool3dPlan` FW + BW.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

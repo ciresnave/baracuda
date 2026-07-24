@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke test for [`CtcLossCudnnPlan<T>`] — Phase 7 Milestone
 //! 7.4 sibling of the bespoke `CtcLossPlan`.
 //!
@@ -16,6 +15,7 @@
 //!   and cuDNN return gradients w.r.t. the implicit pre-softmax
 //!   logits (`exp(log_probs) − γ`), so each per-`(t, n)` row sums to
 //!   zero.
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

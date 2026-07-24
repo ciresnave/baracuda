@@ -40,26 +40,19 @@ node — i.e. this same frontier. The selection is ordered by the dependency-cri
 
 ## The briefs
 
+Briefs **01–08** and **10** (the ORDER-3 IR ramp) have shipped and their standalone brief files have been
+removed — see the **Status** section below. The live briefs are:
+
 | # | Brief | Blocked by | Effort | Prereqs | One-line |
 |---|---|---|---|---|---|
-| 01 | [Layout/shape IR nodes](01-layout-shape-ir-nodes.md) | design-open¹ | L | — | Per-operand `View` descriptor (BroadcastTo/Transpose/Permute/Reshape) so a fused op reads *through* a layout change in one pass; the keystone. |
-| 02 | [DAG IR with consumer counts](02-dag-ir-consumer-counts.md) | none | L | — | Turn `ScalarExpr` tree → value-numbered DAG (reuse optimize.rs hash-cons) so shared interiors emit once + honest `consumers:>1`. |
-| 03 | [Strided/multi-axis/keepdim reductions](03-strided-multiaxis-keepdim-reductions.md) | baracuda-internal | L | 01 | Extend `Access::Reduction` past contiguous-last-axis (adds `.axis`, strided inputs, keepdim broadcast-back, multi-input). |
-| 04 | [Integer accumulation for reductions](04-integer-accumulation-reductions.md) | none | M | — | Int-typed accumulator path (i32/i64 Sum/Max/Min in `long long`); unblocks count/argmax-class later. |
-| 05 | [RowReduce seam adoption + FKC contract](05-rowreduce-seam-adoption-fkc.md) | fuel | M | — (codegen done) | `region_to_op`→`Access::RowReduce` + FKC RowReduce contract so fused norms are seam-adoptable, not AOT-only. |
-| 06 | [Fused residual-add LayerNorm + catalog](06-fused-residual-add-layernorm-catalog.md) | baracuda-internal | M | — | 2nd row-streamed input (residual) added before the norm; collapse Add+LayerNorm/RMSNorm to one launch; broaden AOT catalog. |
-| 07 | [Per-arch dispatch table + bench-gate](07-perarch-dispatch-table-bench-gate.md) | none | L | — | §7 vendor-exclusion: per-`(op,structure-key,dtype,arch)` benchmark gate + committed dispatch-table artifact. |
-| 08 | [Telemetry variant-selection consumer](08-telemetry-variant-selection.md) | fuel² | L | 07 synergy | Top-K equivalent-form emission + JSONL DispatchRecord/MissRecord ingest → ranked build matrix. |
 | 09 | [f16/bf16 half2 packed-SIMD](09-half2-packed-simd.md) | none | M | coord. 01/03 | `half2`/`nv_bfloat162` packed lowering for f16/bf16 contiguous elementwise (Tier-A packed / Tier-B scalarize, determinism-safe). |
-| 10 | [MatMul/contraction design spike](10-matmul-contraction-design-spike.md) | design-open | L | 01+02 design | *Design only:* `Access::Contraction` grammar, schedule axes, `ContractionKey`, §7 vendor gate + the exact "01 must / 02 must" requirement list. |
+| 11 | [Variant generators: measured-tradeoff backlog](11-variant-generators-backlog.md) | none | — | 07 synergy | Phase-2 charter: the tradeoff transforms (help some cells / hurt others / change bits) on top of the shipped pure-wins generator pass. |
+| 12 | [IR expansion roadmap](12-ir-expansion-roadmap.md) | none | — | — | Expand the IR to express the full bespoke-kernel surface (cover, not call); the 13-agent inventory over all 23 kernel dirs. |
 
-¹ Brief 01 recommends ratifying its representation choice first (a per-operand `View` descriptor over a
-`ScalarExpr` node or a new `Access` variant — the blast radius on optimize.rs/pattern.rs/contract.rs differs).
-² Brief 08's *feed* is Fuel-blocked; the schema, extractor, and reducer (the Baracuda half) are buildable now.
+## Status
 
-## Also
-
-- `docs/design/kernel-specialization.md` is **stale** (still lists `ScalarExpr::Param` +
-  `AddScalar`/`MulScalar` as not-emittable though they shipped; ORDER-3 reductions/RowReduce have landed).
-  A 10-minute correction of the ORDER-3 status section is a foundational-hygiene quick win; several briefs
-  note it in their "definition of done."
+Briefs **01–08** and **10** have **shipped** (the ORDER-3 IR ramp — layout/shape, DAG, reductions,
+integer accumulation, RowReduce seam, fused residual-add norm, per-arch dispatch, telemetry, and the
+MatMul/contraction node via `Access::Contraction`) and their standalone brief files have been removed.
+The remaining live briefs are **09** (f16/bf16 half2 packed-SIMD) and **11**/**12**. `docs/design/
+kernel-specialization.md` was corrected (commit 351729b6) and now reflects the shipped ORDER-3 status.

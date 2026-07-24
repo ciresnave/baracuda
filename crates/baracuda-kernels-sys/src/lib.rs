@@ -77012,6 +77012,244 @@ mod gemm_dense_cublas_facade;
 pub use gemm_dense_cublas_facade::*;
 
 // =============================================================================
+// Capture-safe dense m=1 GEMV (f32 / f16 / bf16).
+// =============================================================================
+//
+// Bespoke CUDA kernel (`kernels/gemm/gemv_dense.cu`) — a plain custom
+// GEMV with NO vendor internal state, so a captured CUDA graph replays
+// byte-identical by construction. Unblocks Fuel's graph `CapturedRun`:
+// the cuBLAS-backed `gemm_dense` facade above is faster and batched, but
+// cuBLAS is not capture-safe (it can pick a different internal
+// implementation between launches). On the capture path only, Fuel
+// routes the decode-step matmuls (all m == 1) through these symbols.
+//
+// The parameter list is a literal symbol-swap of the strided-batch
+// `gemm_dense_*_run` signature (see gemm_dense_cublas_facade.rs): alpha /
+// beta are f32 for all three dtype SKUs; strides are element counts;
+// `stride_b == 0` broadcasts B across slots (GQA); `workspace` /
+// `workspace_bytes` are reserved-and-ignored; `layout` must be 0 (RRR,
+// the only layout this kernel implements). The matching safe plan is
+// `baracuda_kernels::GemvDensePlan`.
+//
+// Semantics (RRR, per slot g): D[g, 0, j] = alpha · Σ_kk A[g, 0, kk] ·
+// B[g, kk, j] + beta · D[g, 0, j]. Accumulation is f32 (true IEEE, NOT
+// TF32; f16 / bf16 widen to f32). No STRUCTURE_KEY implication — this is
+// kernel-capture semantics, not a contract.
+//
+// Status codes: `0` success, `2` invalid problem, `5` launch failure.
+// Gated on the arch feature set (same as the other bespoke default
+// kernels) — the `.cu` only compiles under sm80 / sm89 / sm90a.
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// Dense m=1 GEMV, f32. `D = alpha · A · B + beta · D` (RRR).
+    /// alpha / beta are f32; `stride_b == 0` broadcasts B (GQA);
+    /// `workspace` / `workspace_bytes` reserved-and-ignored.
+    pub fn baracuda_kernels_gemv_dense_m1_f32_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch: i32,
+        layout: i32,
+        alpha: f32,
+        beta: f32,
+        a: *const c_void,
+        lda: i64,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: i64,
+        stride_b: i64,
+        d: *mut c_void,
+        ldd: i64,
+        stride_d: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Host-side validity check for [`baracuda_kernels_gemv_dense_m1_f32_run`].
+    /// 0 = OK, 2 = INVALID.
+    pub fn baracuda_kernels_gemv_dense_m1_f32_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch: i32,
+        layout: i32,
+        lda: i64,
+        ldb: i64,
+        ldd: i64,
+        stride_a: i64,
+        stride_b: i64,
+        stride_d: i64,
+    ) -> i32;
+    /// Workspace query — always 0 (no split-K / staging at m == 1).
+    pub fn baracuda_kernels_gemv_dense_m1_f32_workspace_size(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch: i32,
+        layout: i32,
+    ) -> usize;
+
+    /// Dense m=1 GEMV, f16 storage (f32 accumulate). alpha / beta f32.
+    pub fn baracuda_kernels_gemv_dense_m1_f16_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch: i32,
+        layout: i32,
+        alpha: f32,
+        beta: f32,
+        a: *const c_void,
+        lda: i64,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: i64,
+        stride_b: i64,
+        d: *mut c_void,
+        ldd: i64,
+        stride_d: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Host-side validity check for [`baracuda_kernels_gemv_dense_m1_f16_run`].
+    pub fn baracuda_kernels_gemv_dense_m1_f16_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch: i32,
+        layout: i32,
+        lda: i64,
+        ldb: i64,
+        ldd: i64,
+        stride_a: i64,
+        stride_b: i64,
+        stride_d: i64,
+    ) -> i32;
+    /// Workspace query — always 0.
+    pub fn baracuda_kernels_gemv_dense_m1_f16_workspace_size(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch: i32,
+        layout: i32,
+    ) -> usize;
+
+    /// Dense m=1 GEMV, bf16 storage (f32 accumulate). alpha / beta f32.
+    pub fn baracuda_kernels_gemv_dense_m1_bf16_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch: i32,
+        layout: i32,
+        alpha: f32,
+        beta: f32,
+        a: *const c_void,
+        lda: i64,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: i64,
+        stride_b: i64,
+        d: *mut c_void,
+        ldd: i64,
+        stride_d: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Host-side validity check for [`baracuda_kernels_gemv_dense_m1_bf16_run`].
+    pub fn baracuda_kernels_gemv_dense_m1_bf16_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch: i32,
+        layout: i32,
+        lda: i64,
+        ldb: i64,
+        ldd: i64,
+        stride_a: i64,
+        stride_b: i64,
+        stride_d: i64,
+    ) -> i32;
+    /// Workspace query — always 0.
+    pub fn baracuda_kernels_gemv_dense_m1_bf16_workspace_size(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch: i32,
+        layout: i32,
+    ) -> usize;
+}
+
+// =============================================================================
+// Capture-safe decode-shaped row gather (embedding lookup).
+// =============================================================================
+//
+// Bespoke CUDA kernel (`kernels/indexing/gather_rows.cu`): `dest[r, :] =
+// table[idx[r], :]`, `table` `[V, H]` row-major, `idx` rank-1 U32
+// (device), `dest` `[n, H]`. Exists to unblock Fuel's graph `CapturedRun`
+// for the embedding lookup: `index_select` is correct warm but a captured
+// graph mis-computes its FIRST output element on cuGraphLaunch replay
+// (element 0 goes 1 -> 0). The audit found NO CUDA-C path that skips it,
+// so it sits in the driver / graph-node-replay layer; the leading suspect
+// is `index_select_kernel`'s 160-byte by-value POD param block. This
+// kernel removes it: ALL metadata by-value int64 scalars, native U32
+// index, every element written (strict `e < n*H`, OOB -> zero) so an
+// unwritten/mis-written element is unrepresentable. No STRUCTURE_KEY
+// implication (kernel-capture semantics). Arch-gated like the other
+// bespoke default kernels. Status: `0` OK, `2` invalid, `5` launch fail.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// Capture-safe row gather, f32: `dest[r, :] = table[idx[r], :]`.
+    /// `v` = table rows (vocab), `h` = row width (hidden), `n` = gathered
+    /// rows (decode: 1). `idx` is rank-1 **U32** (device).
+    pub fn baracuda_kernels_gather_rows_f32_run(
+        dest: *mut c_void,
+        table: *const c_void,
+        idx: *const c_void,
+        v: i64,
+        h: i64,
+        n: i64,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Host-side validity check for [`baracuda_kernels_gather_rows_f32_run`].
+    /// 0 = OK, 2 = INVALID.
+    pub fn baracuda_kernels_gather_rows_f32_can_implement(v: i64, h: i64, n: i64) -> i32;
+    /// Workspace query — always 0 (pure gather).
+    pub fn baracuda_kernels_gather_rows_f32_workspace_size(v: i64, h: i64, n: i64) -> usize;
+
+    /// Capture-safe row gather, f16 storage.
+    pub fn baracuda_kernels_gather_rows_f16_run(
+        dest: *mut c_void,
+        table: *const c_void,
+        idx: *const c_void,
+        v: i64,
+        h: i64,
+        n: i64,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Host-side validity check for [`baracuda_kernels_gather_rows_f16_run`].
+    pub fn baracuda_kernels_gather_rows_f16_can_implement(v: i64, h: i64, n: i64) -> i32;
+    /// Workspace query — always 0.
+    pub fn baracuda_kernels_gather_rows_f16_workspace_size(v: i64, h: i64, n: i64) -> usize;
+
+    /// Capture-safe row gather, bf16 storage.
+    pub fn baracuda_kernels_gather_rows_bf16_run(
+        dest: *mut c_void,
+        table: *const c_void,
+        idx: *const c_void,
+        v: i64,
+        h: i64,
+        n: i64,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Host-side validity check for [`baracuda_kernels_gather_rows_bf16_run`].
+    pub fn baracuda_kernels_gather_rows_bf16_can_implement(v: i64, h: i64, n: i64) -> i32;
+    /// Workspace query — always 0.
+    pub fn baracuda_kernels_gather_rows_bf16_workspace_size(v: i64, h: i64, n: i64) -> usize;
+}
+
+// =============================================================================
 // Phase 53 — bitsandbytes NF4 (NormalFloat 4-bit) dequant + GEMV.
 // =============================================================================
 //

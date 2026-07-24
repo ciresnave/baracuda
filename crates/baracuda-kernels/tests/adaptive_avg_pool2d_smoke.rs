@@ -1,4 +1,3 @@
-#![cfg(feature = "cudnn")]
 //! Real-GPU smoke test for `AdaptiveAvgPool2dPlan` FW.
 //!
 //! Verifies the **bit-exact PyTorch** bespoke kernel (Phase 16.1)
@@ -18,6 +17,7 @@
 //!   9 10 | 11 12                = 11.5         = 13.5
 //!  13 14 | 15 16
 //! ```
+#![cfg(feature = "cudnn")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
