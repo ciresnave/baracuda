@@ -839,4 +839,125 @@ mod tests {
         assert_eq!(eval_dim(&e, ops, &[]), Ok(DimValue::Known(4)));
         assert_eq!(windowed_extent(8, 2, 2, 1, 0, 0), 4);
     }
+
+    /// Row-major dense strides for `shape`.
+    fn dense_strides(shape: &[i64]) -> Vec<i64> {
+        let mut s = vec![1i64; shape.len()];
+        for d in (0..shape.len().saturating_sub(1)).rev() {
+            s[d] = s[d + 1] * shape[d + 1];
+        }
+        s
+    }
+
+    fn od(shape: &[i64]) -> baracuda_kernel_vocab::OperandDesc {
+        baracuda_kernel_vocab::OperandDesc::new(
+            shape.len(),
+            shape,
+            &dense_strides(shape),
+            ElementKind::F32,
+            256,
+        )
+    }
+
+    fn zeros(shape: &[i64]) -> crate::oracle::TypedBuffer {
+        let n: i64 = shape.iter().product();
+        crate::oracle::TypedBuffer::new(
+            ElementKind::F32,
+            shape.to_vec(),
+            dense_strides(shape),
+            vec![0u8; (n.max(0) as usize) * 4],
+        )
+    }
+
+    /// Run the CPU oracle for `op` over `in_shapes` with the AUTHORED
+    /// `out_shape`, and assert the shape it produced equals `output_shape`'s
+    /// derivation. The spec's §6 two-way pin.
+    fn assert_oracle_agrees(
+        op: &OpDef,
+        cat: baracuda_kernel_vocab::OpCategory,
+        in_shapes: &[Vec<i64>],
+        out_shape: &[i64],
+    ) {
+        // Derivation must match the authored golden first.
+        assert_eq!(
+            output_shape(op, in_shapes).as_deref(),
+            Ok(out_shape),
+            "{}: derivation vs authored golden",
+            op.name
+        );
+        // Then the oracle must accept that same shape and produce it.
+        let mut operands: Vec<_> = in_shapes.iter().map(|s| od(s)).collect();
+        operands.push(od(out_shape));
+        let key = baracuda_kernel_vocab::structure_key(
+            cat,
+            &operands,
+            baracuda_kernel_vocab::ArchSku::Sm89,
+        );
+        let plan = crate::plan::build_plan(op, &key);
+        let inputs: Vec<_> = in_shapes.iter().map(|s| zeros(s)).collect();
+        let produced = crate::oracle::evaluate(&plan, &operands, &inputs, &[]);
+        assert_eq!(
+            produced[0].shape, out_shape,
+            "{}: oracle-produced shape vs derivation",
+            op.name
+        );
+    }
+
+    #[test]
+    fn oracle_differential_agrees_on_every_supported_variant() {
+        use crate::ir::{ReduceStage, SortOrder, reduced};
+        use baracuda_kernel_vocab::OpCategory;
+
+        // Elementwise.
+        let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        assert_oracle_agrees(
+            &add,
+            OpCategory::BinaryElementwise,
+            &[vec![4, 8], vec![4, 8]],
+            &[4, 8],
+        );
+
+        // Reduction (last-axis, collapse).
+        let sum = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        assert_oracle_agrees(&sum, OpCategory::Reduction, &[vec![4, 8]], &[4]);
+
+        // Scan (shape-preserving).
+        let cs = OpDef::scan_simple(
+            "cumsum",
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+        );
+        assert_oracle_agrees(&cs, OpCategory::Scan, &[vec![4, 8]], &[4, 8]);
+
+        // RowReduce (full-width epilogue).
+        let stages = vec![ReduceStage {
+            pre: input(0).0,
+            op: ReduceOp::Sum,
+        }];
+        let rr = OpDef::row_reduce("rms", 1, &[ElementKind::F32], stages, reduced(0));
+        assert_oracle_agrees(&rr, OpCategory::Softmax, &[vec![8, 16]], &[8, 16]);
+
+        // Window (pooled axis downsamples) — the arithmetic case.
+        let pool = OpDef::window(
+            "maxpool",
+            1,
+            &[ElementKind::F32],
+            ReduceOp::Max,
+            1,
+            2,
+            2,
+            1,
+            0,
+            0,
+            true,
+            input(0),
+            reduced(0),
+        );
+        assert_oracle_agrees(&pool, OpCategory::Pooling, &[vec![4, 8]], &[4, 4]);
+
+        let _ = SortOrder::Asc; // (RowSort is not oracle-supported; see the coverage note.)
+    }
 }
