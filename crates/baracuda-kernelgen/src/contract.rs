@@ -1808,7 +1808,10 @@ mod tests {
             baracuda_kernel_vocab::dtype_token(acc)
         );
         let c = contract(&mm, &key, &generate(&mm, &key, &Cuda), "cuda").expect("contract");
-        assert!(c.contains(&want), "contract must declare the key's <acc>: {c}");
+        assert!(
+            c.contains(&want),
+            "contract must declare the key's <acc>: {c}"
+        );
         assert!(c.contains("  accumulation_type: f32\n"), "{c}");
         // The generated skinny kernel actually accumulates in that dtype (a
         // `float acc`, never `double` — the F32Strict/binary32 discipline).

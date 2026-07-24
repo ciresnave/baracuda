@@ -883,7 +883,13 @@ fn frame_work_class(operands: &[OperandDesc]) -> WorkClass {
         // the rank-aligned broadcast identity).
         let frame_d = operands
             .iter()
-            .map(|o| if d < o.rank as usize { o.shape[d].max(0) } else { 1 })
+            .map(|o| {
+                if d < o.rank as usize {
+                    o.shape[d].max(0)
+                } else {
+                    1
+                }
+            })
             .max()
             .unwrap_or(1);
         numel = numel.saturating_mul(frame_d);
