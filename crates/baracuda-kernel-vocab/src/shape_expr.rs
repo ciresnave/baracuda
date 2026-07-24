@@ -74,6 +74,10 @@ pub enum ShapeDecline {
     },
     /// A `Div` had a concrete zero divisor.
     DivByZero,
+    /// A `Div` was `i64::MIN / -1`: the mathematical quotient (`-i64::MIN`)
+    /// does not fit in `i64`. The lone input pair for which floor-division
+    /// itself would overflow.
+    DivOverflow,
 }
 
 /// A single-dimension expression (§6.20-0002 `DimExpr`).
@@ -135,7 +139,8 @@ fn resolve_axis(operand: u8, axis: Axis, rank: usize) -> Result<usize, ShapeDecl
 ///
 /// # Errors
 /// Returns a [`ShapeDecline`] for an out-of-range operand/axis/param, `last` on
-/// a rank-0 operand, or a concrete zero divisor. Never panics.
+/// a rank-0 operand, a concrete zero divisor, or the `i64::MIN / -1` overflow
+/// case. Never panics.
 pub fn eval_dim(
     e: &DimExpr,
     operands: &[&[Extent]],
@@ -176,6 +181,11 @@ pub fn eval_dim(
                 DimExpr::Div(..) => {
                     if y == 0 {
                         return Err(ShapeDecline::DivByZero);
+                    }
+                    if x == i64::MIN && y == -1 {
+                        // The only (x, y) pair for which div_euclid itself
+                        // would panic: the true quotient (-i64::MIN) overflows.
+                        return Err(ShapeDecline::DivOverflow);
                     }
                     // FLOOR division (toward −∞), never toward zero.
                     x.div_euclid(y) - i64::from(x.rem_euclid(y) != 0 && y < 0)
@@ -284,6 +294,18 @@ mod tests {
             eval_dim(&DimExpr::Param(3), ops, &[]),
             Err(ShapeDecline::ParamOutOfRange { field: 3 })
         );
+    }
+
+    #[test]
+    fn eval_div_declines_i64_min_over_neg_one_instead_of_panicking() {
+        // i64::MIN / -1 overflows i64 (the true quotient is -i64::MIN, which
+        // doesn't fit). div_euclid itself panics on this exact pair, so it
+        // must be intercepted before the call rather than let through.
+        let e = DimExpr::Div(
+            Box::new(DimExpr::Const(i64::MIN)),
+            Box::new(DimExpr::Const(-1)),
+        );
+        assert_eq!(eval_dim(&e, &[], &[]), Err(ShapeDecline::DivOverflow));
     }
 
     #[test]
