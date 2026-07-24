@@ -9,7 +9,7 @@
 //!
 //! See `docs/superpowers/specs/2026-07-23-shape-oracle-design.md`.
 
-use crate::ir::{Access, OpDef, WriteIndex};
+use crate::ir::{Access, AxisRole, OpDef, ReadIndex, WriteIndex};
 use baracuda_kernel_vocab::MAX_RANK;
 
 /// Sentinel marking a symbolic / data-dependent extent in a caller-supplied
@@ -64,6 +64,33 @@ pub fn output_shape(op: &OpDef, input_shapes: &[Vec<i64>]) -> Result<Vec<i64>, S
             reason: "in-place scatter: the destination is the output buffer, not an input operand",
         });
     }
+    // A data-dependent gather rides `read_index`, not an `Access` variant, and
+    // its output shape is the data shape with the gathered axis REPLACED by
+    // the index operand's shape (§6.20-0008 — the class the oracle most exists
+    // to catch; never `SameAs(data)`).
+    if let Some((data, index_operand, axis)) =
+        op.read_index.iter().enumerate().find_map(|(i, r)| match r {
+            ReadIndex::Indexed {
+                index_operand,
+                axis,
+                ..
+            } => Some((i, *index_operand as usize, *axis as usize)),
+            ReadIndex::Direct => None,
+        })
+    {
+        let data_shape = shape_of(input_shapes, data)?;
+        let index_shape = shape_of(input_shapes, index_operand)?;
+        if axis >= data_shape.len() {
+            return Err(ShapeError::AxisOutOfRange {
+                axis,
+                rank: data_shape.len(),
+            });
+        }
+        let mut out = data_shape[..axis].to_vec();
+        out.extend_from_slice(index_shape);
+        out.extend_from_slice(&data_shape[axis + 1..]);
+        return Ok(out);
+    }
     match &op.access {
         // Elementwise output = the broadcast frame: per-axis max across inputs
         // (the same frame-max rule the structure key's work class uses).
@@ -108,7 +135,39 @@ pub fn output_shape(op: &OpDef, input_shapes: &[Vec<i64>]) -> Result<Vec<i64>, S
             }
             Ok(out)
         }
-        // Contraction / Window / RowSort / Im2Col land in later tasks.
+        // A contraction's output shape is ROLE-derived (§6.20-0008): the shared
+        // batch dims, then [M, N]. M comes from the lhs axis tagged FreeM, N
+        // from the rhs axis tagged FreeN — read off the op's own ContractionAxes,
+        // so it holds for rank-2 and batched alike with no rank special-casing.
+        Access::Contraction { axes, .. } => {
+            let lhs = in0;
+            let rhs = shape_of(input_shapes, 1)?;
+            let pick = |shape: &Vec<i64>, roles: &[AxisRole], want: AxisRole| {
+                roles
+                    .iter()
+                    .position(|r| *r == want)
+                    .and_then(|d| shape.get(d).copied())
+            };
+            let mut out: Vec<i64> = axes
+                .lhs
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| **r == AxisRole::Batch)
+                .filter_map(|(d, _)| lhs.get(d).copied())
+                .collect();
+            let m = pick(lhs, &axes.lhs, AxisRole::FreeM).ok_or(ShapeError::AxisOutOfRange {
+                axis: 0,
+                rank: lhs.len(),
+            })?;
+            let n = pick(rhs, &axes.rhs, AxisRole::FreeN).ok_or(ShapeError::AxisOutOfRange {
+                axis: 0,
+                rank: rhs.len(),
+            })?;
+            out.push(m);
+            out.push(n);
+            Ok(out)
+        }
+        // Window / RowSort / Im2Col land in Task 5.
         _ => Err(ShapeError::NotDerivable {
             reason: "access variant not yet covered by the shape oracle",
         }),
@@ -248,5 +307,70 @@ mod tests {
             output_shape(&op, &[vec![SYMBOLIC, 256]]),
             Err(ShapeError::Gap)
         );
+    }
+
+    #[test]
+    fn contraction_output_is_role_derived() {
+        use crate::ir::{ContractionAxes, reduced};
+        // rank-2 matmul: lhs[M,K] · rhs[K,N] -> [M,N]
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        assert_eq!(
+            output_shape(&mm, &[vec![8, 4096], vec![4096, 4096]]),
+            Ok(vec![8, 4096])
+        );
+        // batched: lhs[B,M,K] · rhs[B,K,N] -> [B,M,N]
+        let bmm = OpDef::contraction(
+            "bmm",
+            &[ElementKind::F32],
+            ContractionAxes::batched_matmul(),
+            reduced(0),
+        );
+        assert_eq!(
+            output_shape(&bmm, &[vec![8, 8, 4096], vec![8, 4096, 4096]]),
+            Ok(vec![8, 8, 4096])
+        );
+    }
+
+    #[test]
+    fn gather_output_replaces_the_axis_with_the_index_shape() {
+        use crate::ir::OobPolicy;
+        // §6.20-0008: data[..axis] ++ index ++ data[axis+1..]
+        // rank-1 data[6], index[5], axis 0 -> [5]
+        let g0 = OpDef::gather(
+            "g0",
+            &[ElementKind::F32],
+            0,
+            OobPolicy::Clamp,
+            ElementKind::I64,
+        );
+        assert_eq!(output_shape(&g0, &[vec![6], vec![5]]), Ok(vec![5]));
+
+        // rank-2 data[4,6], index[3], axis 1 -> [4,3]
+        let g1 = OpDef::gather(
+            "g1",
+            &[ElementKind::F32],
+            1,
+            OobPolicy::Clamp,
+            ElementKind::I64,
+        );
+        assert_eq!(output_shape(&g1, &[vec![4, 6], vec![3]]), Ok(vec![4, 3]));
+
+        // An axis beyond the data rank is a typed decline, not a panic.
+        let g9 = OpDef::gather(
+            "g9",
+            &[ElementKind::F32],
+            9,
+            OobPolicy::Clamp,
+            ElementKind::I64,
+        );
+        assert!(matches!(
+            output_shape(&g9, &[vec![4, 6], vec![3]]),
+            Err(ShapeError::AxisOutOfRange { .. })
+        ));
     }
 }
