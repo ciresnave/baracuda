@@ -651,18 +651,18 @@ pub fn contract(
             Some(_) if n_ops == 1 && out_u8 => {
                 format!("op_kind: {}", cmp_dispatch_op_kind(&op.body))
             }
-            Some(p) if n_ops == 1 => match fuel_primitive_op_kind(&root_op_name(p)) {
-                Some(spelling) => format!("op_kind: {spelling}"),
+            Some(p) if n_ops == 1 => {
                 // A single-op root with no importable Fuel `OpKind` — e.g.
                 // `AddScalar`/`MulScalar`: Fuel has no scalar-param OpKind (it
                 // maps `Op::AddScalar`/`MulScalar` onto the `Affine` kernel
                 // `y = a*x + b`, whose op_params + `extract:` scalar routing
                 // live only inside a `pattern:`/`fused_op` block, not a bare
-                // primitive contract). Withheld rather than emit an unimportable
-                // name that would poison the bundle; the kernel still generates
-                // + lowers AOT.
-                None => return None,
-            },
+                // primitive contract). Withheld (`?` → `None`) rather than emit
+                // an unimportable name that would poison the bundle; the kernel
+                // still generates + lowers AOT.
+                let spelling = fuel_primitive_op_kind(&root_op_name(p))?;
+                format!("op_kind: {spelling}")
+            }
             // ≥2 graph ops (or a bare n_ops==0 copy) → a fused identity. A fusion
             // that genuinely maps to a Fuel FusedOp emits the exact SCREAMING_SNAKE
             // constant (so it imports through `bundle()`); otherwise it carries the

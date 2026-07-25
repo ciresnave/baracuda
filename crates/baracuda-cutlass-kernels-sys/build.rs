@@ -85,9 +85,28 @@ fn main() {
         builder = builder.compute_cap(80);
     }
 
-    builder
-        .build_lib(&lib_file)
-        .expect("baracuda-cutlass-kernels-sys: nvcc build failed");
+    // Build the kernels if a CUDA toolkit is present; DEGRADE GRACEFULLY if it
+    // is not. Missing nvcc / toolkit is not a build-script bug — it is the
+    // "no CUDA installed" machine — so mirror the DOCS_RS path: warn and skip
+    // the kernel compilation + the link directives. The crate's Rust source
+    // still compiles; the safe layer's `#[cfg(feature = "sm80")]` call sites
+    // only LINK these symbols in a target built WITH CUDA, so a driver-free
+    // build never references them (and the "Build without CUDA installed" CI
+    // job is scoped to non-CUDA crates). A *real* nvcc compile/link error still
+    // fails loudly — those are genuine bugs, not a missing toolkit.
+    use baracuda_forge::Error as ForgeError;
+    match builder.build_lib(&lib_file) {
+        Ok(()) => {}
+        Err(e @ (ForgeError::NvccNotFound(_) | ForgeError::CudaToolkitNotFound(_))) => {
+            println!(
+                "cargo:warning=baracuda-cutlass-kernels-sys: {e}; skipping the nvcc kernel \
+                 build. The CUDA GEMM kernels will be unavailable (the safe layer returns \
+                 Error::Unsupported); install the CUDA toolkit or set $NVCC to build them."
+            );
+            return;
+        }
+        Err(e) => panic!("baracuda-cutlass-kernels-sys: nvcc kernel build failed: {e}"),
+    }
 
     println!("cargo:rustc-link-search=native={out_dir}");
     println!("cargo:rustc-link-lib=static={lib_name}");
