@@ -35,7 +35,9 @@ jobs:
       # excluded, matching `cargo fmt --all`'s workspace-member scope.
       - name: cargo fmt (workspace, chunked)
         shell: bash
-        run: git ls-files '*.rs' | grep -v '^tools/' | xargs -n 40 rustfmt --check --edition 2024 --style-edition 2024
+        # NUL-delimited throughout (-z / -0) so paths with spaces or other
+        # shell-special characters are handled robustly, never word-split.
+        run: git ls-files -z -- '*.rs' | grep -zv '^tools/' | xargs -0 -n 40 rustfmt --check --edition 2024 --style-edition 2024
       # ---- The workspace steps below are scoped to the DRIVER-FREE surface.
       # This is a CUDA library: its `-sys` kernel crates compile `.cu` via nvcc
       # in their build scripts, so a full `--workspace` build genuinely cannot

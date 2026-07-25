@@ -19,6 +19,16 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=kernels");
     println!("cargo:rerun-if-env-changed=DOCS_RS");
+    // Re-run when the CUDA toolkit's location changes, UNCONDITIONALLY (before
+    // any early return). Without this, the graceful "no nvcc → skip" path below
+    // caches its skipped-kernels result, and cargo would NOT re-run the build
+    // script after the user later sets $NVCC / installs the toolkit — leaving
+    // the crate stuck kernel-less until a `cargo clean`. Emitting these here
+    // makes "set $NVCC (or CUDA_PATH), rebuild" pick up the kernels. (forge
+    // emits its own toolkit rerun-hints only on the SUCCESS path, which the
+    // skip path never reaches.)
+    println!("cargo:rerun-if-env-changed=NVCC");
+    println!("cargo:rerun-if-env-changed=CUDA_PATH");
 
     // docs.rs has no nvcc and no network. baracuda-cutlass-sys already
     // emits a stub include path in DOCS_RS mode; mirror that here by
@@ -86,14 +96,22 @@ fn main() {
     }
 
     // Build the kernels if a CUDA toolkit is present; DEGRADE GRACEFULLY if it
-    // is not. Missing nvcc / toolkit is not a build-script bug — it is the
-    // "no CUDA installed" machine — so mirror the DOCS_RS path: warn and skip
-    // the kernel compilation + the link directives. The crate's Rust source
-    // still compiles; the safe layer's `#[cfg(feature = "sm80")]` call sites
-    // only LINK these symbols in a target built WITH CUDA, so a driver-free
-    // build never references them (and the "Build without CUDA installed" CI
-    // job is scoped to non-CUDA crates). A *real* nvcc compile/link error still
-    // fails loudly — those are genuine bugs, not a missing toolkit.
+    // is not. Missing nvcc / toolkit is the "no CUDA installed" machine, not a
+    // build-script bug — so mirror the DOCS_RS path: warn and skip the kernel
+    // compilation + the link directives (no static lib is emitted).
+    //
+    // IMPORTANT — this skip does NOT make an `sm80`-enabled build link. `sm80`
+    // gates BOTH this kernel build AND the safe layer's call sites
+    // (`#[cfg(feature = "sm80")]` in baracuda-cutlass), so with `sm80` ON and no
+    // nvcc, a linked target that references a GEMM entry point still fails to
+    // LINK on the missing symbol — the correct, loud signal that CUTLASS
+    // kernels genuinely require CUDA (there is no stub library). What the skip
+    // enables is a build that does NOT reference those symbols: the
+    // arch-feature-OFF no-op path (the safe layer returns Error::Unsupported),
+    // and the driver-free crates that don't depend on baracuda-cutlass at all —
+    // exactly what the "Build without CUDA installed" CI job is now scoped to.
+    // A *real* nvcc compile/link error still fails loudly — a genuine bug, not
+    // a missing toolkit.
     use baracuda_forge::Error as ForgeError;
     match builder.build_lib(&lib_file) {
         Ok(()) => {}
