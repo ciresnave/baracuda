@@ -24,21 +24,40 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      # --style-edition is passed EXPLICITLY: cargo-fmt forwards --edition from the
-      # manifest but NOT the config's style_edition, so without this flag the check
-      # silently runs the pre-2024 style and disagrees with bare `rustfmt` (which
-      # honors rustfmt.toml). With the flag, cargo-fmt, bare rustfmt, and the
-      # rustfmt.toml pin all enforce the same strict-2024 style.
-      - name: cargo fmt
-        run: cargo fmt --all -- --check --style-edition 2024
-      - name: cargo build
-        run: cargo build --workspace
-      - name: cargo clippy
-        run: cargo clippy --workspace -- -D warnings
-      - name: cargo test (no GPU)
-        run: cargo test --workspace
-      - name: cargo doc
-        run: cargo doc --workspace --no-deps
+      # rustfmt directly (chunked) instead of `cargo fmt --all`: on Windows the
+      # latter spawns rustfmt with EVERY workspace file on one command line and
+      # overflows the arg-length limit (`os error 206`). `git ls-files | xargs`
+      # chunks the file list so it never overflows, cross-platform via `shell:
+      # bash` (Git Bash on windows-latest). `--edition 2024` matches the
+      # workspace edition (cargo-fmt would forward it from the manifest); the
+      # `--style-edition 2024` pin makes rustfmt honor the strict-2024 style +
+      # rustfmt.toml. `tools/` is a separate workspace (different edition) and is
+      # excluded, matching `cargo fmt --all`'s workspace-member scope.
+      - name: cargo fmt (workspace, chunked)
+        shell: bash
+        # NUL-delimited throughout (-z / -0) so paths with spaces or other
+        # shell-special characters are handled robustly, never word-split.
+        run: git ls-files -z -- '*.rs' | grep -zv '^tools/' | xargs -0 -n 40 rustfmt --check --edition 2024 --style-edition 2024
+      # ---- The workspace steps below are scoped to the DRIVER-FREE surface.
+      # This is a CUDA library: its `-sys` kernel crates compile `.cu` via nvcc
+      # in their build scripts, so a full `--workspace` build genuinely cannot
+      # succeed on a machine without the CUDA toolkit (the arch features that
+      # drive the nvcc build are default-on and deeply chained). The purpose of
+      # this job is to guard the crates that ARE designed to build anywhere —
+      # the classifier vocabulary and the kernel generator (the neutral IR /
+      # seam surface consumed cross-project) — for missing_docs, clippy, and
+      # tests. The CUDA-dependent crates are validated on the CUDA runner.
+      # (build.rs of baracuda-cutlass-kernels-sys now degrades gracefully when
+      # nvcc is absent, so an accidental CUDA-crate build here warns instead of
+      # panicking — but it is still not built by this job.)
+      - name: cargo build (driver-free surface)
+        run: cargo build -p baracuda-kernel-vocab -p baracuda-kernelgen
+      - name: cargo clippy (driver-free surface)
+        run: cargo clippy -p baracuda-kernel-vocab -p baracuda-kernelgen -- -D warnings
+      - name: cargo test (driver-free surface, no GPU)
+        run: cargo test -p baracuda-kernel-vocab -p baracuda-kernelgen
+      - name: cargo doc (driver-free surface)
+        run: cargo doc -p baracuda-kernel-vocab -p baracuda-kernelgen --no-deps
       # ---- feature-gated surfaces the default --workspace build never compiles.
       # These features are deliberately CI-safe: `cuvs` is a lazy dynamic loader
       # (no RAPIDS needed to build/test; GPU-touching tests are #[ignore]d), and
