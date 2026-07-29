@@ -62,6 +62,12 @@ mod text;
 #[cfg(test)]
 mod fuzz;
 
+// Temporary (Task 0 of the oracle→kiss-ref consolidation): compile-verifies the
+// kiss-ref 0.1.0 dev-deps resolve + eval_recipe runs. Replaced by `kiss_ref_diff`
+// in Task 1.
+#[cfg(test)]
+mod kiss_ref_smoke;
+
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, bundle_kisc, contract, front_matter};
 pub use cpu_c::CpuC;
