@@ -103,10 +103,10 @@ replacement); its PLUMBING self-tests (physical layout, int store-truncation, fr
 |---|---|---|---|
 | Elementwise (math) | **Retired (Task 2)** → kiss_ref_diff: add(+INF)/relu-signed-zero+NaN/affine/signed-zero-add/max_prop-min_prop-ties | raw-bit select, int8 store-trunc, strided/broadcast/flipped/permuted views, compute-dtype cmp/select, frame (fuzz leg) | **done** |
 | Elementwise (select, compute-dtype) | **Next pass** (kiss-ref covers today: `resolve.rs:58/67`) | — | kiss-ref's strengthened select bit-identity test lands green |
-| Reduction | **Prove-then-retire** value folds → kiss_ref_diff | int / strided reductions, frame | kiss-ref reduce covered; add differential first |
-| Scan | **Prove-then-retire** value scans → kiss_ref_diff | int / strided scans, frame | kiss-ref scan covered; add differential first |
-| RowReduce | **Prove-then-retire** (softmax/rmsnorm) → kiss_ref_diff | any layout/int edges | add differential first |
-| Contraction (matmul) | **Prove-then-retire** → kiss_ref_diff | any layout/int edges | add differential first |
+| Reduction | **Retired (Task 3)** sum/max-nan/mean/outer-axis → kiss_ref_diff | int / strided reductions, frame | done |
+| Scan | **Retired (Task 4)** cumsum fwd/excl → kiss_ref_diff. `scan_cummax` (reverse) KEPT | int / strided scans, reverse (honest miss) | done |
+| RowReduce | **Retired (Task 5)** softmax/layernorm → `oracle_and_kiss_ref` differential (tolerance + ported invariants) | any layout/int edges | done |
+| Contraction (matmul) | **Retired (Task 6)** identity/relu/bias/batched → `oracle_and_kiss_ref` differential (bit-exact) | any layout/int edges | done |
 | Window / Im2Col | **Keep whole** | — | kiss-ref doesn't cover (reserved `WithDim`/`Dims`) |
 | RowSort | **Keep (already deferred)** | — | kiss-ref/recipe don't cover sort |
 

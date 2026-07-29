@@ -242,7 +242,15 @@ git commit -m "refactor(oracle): retire elementwise semantics — kiss-ref is th
 
 ---
 
-### Task 5: Prove-then-retire rowreduce
+### Task 5: Prove-then-retire rowreduce — ✅ DONE (commit `a71b0257`)
+
+> **As executed (v2):** the `diff_vs_oracle` machinery ported in as
+> `kiss_ref_diff::oracle_and_kiss_ref` (returns both value vectors) + an
+> `assert_close` tolerance comparator. softmax + layernorm differentials assert
+> oracle ≈ kiss-ref within tolerance PLUS the ported independent invariants
+> (sums-to-1/monotone; zero-mean/hand-computed). Oracle `rowreduce_softmax`/
+> `_layernorm` deleted; the RowReduce arm stays exercised via leg 1.
+
 
 **Files:** Modify: `crates/baracuda-kernelgen/src/kiss_ref_diff.rs`, `src/oracle.rs`, `src/shape.rs`
 
@@ -253,7 +261,17 @@ git commit -m "refactor(oracle): retire elementwise semantics — kiss-ref is th
 
 ---
 
-### Task 6: Prove-then-retire matmul (contraction)
+### Task 6: Prove-then-retire matmul (contraction) — ✅ DONE (commit `a71b0257`)
+
+> **As executed (v2):** matmul identity / relu-epilogue / bias-relu / batched
+> differentials assert oracle ≡ kiss-ref BIT-for-bit over integer cells PLUS
+> kiss-ref == hand-computed. Oracle contraction_* self-tests + gemm cell
+> builders deleted; the Contraction arm stays exercised via leg 1.
+> **NOTE:** a raw-bit **select** retirement (`a7a81483`) also landed this sweep
+> (Task-2-deferred, unblocked once kiss-ref confirmed the select impl is in
+> `0.1.0`). Remaining non-value keeps: compute-dtype cmp/select, int8 wrap-value
+> (needs 0.1.1), Window/Im2Col/RowSort.
+
 
 **Files:** Modify: `crates/baracuda-kernelgen/src/kiss_ref_diff.rs`, `src/oracle.rs`, `src/shape.rs`
 
