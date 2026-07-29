@@ -23,7 +23,10 @@
 use std::collections::HashMap;
 
 use crate::ir::{OpDef, ReadIndex, WriteIndex};
+use crate::oracle::{self, TypedBuffer};
+use crate::plan::build_plan;
 use crate::recipe::semantics_dag;
+use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 use kiss_ops_vocab::Op;
 use kiss_ref_core::{
     Combine, FlatDag, IndexRef, Monoid, Node, OobPolicy, RecipeEval, Tensor, eval_recipe,
@@ -481,10 +484,104 @@ pub(crate) fn assert_conforming_eq(name: &str, reference: &[f32], candidate: &[f
     }
 }
 
+// ===========================================================================
+// The prove-then-retire oracle differential (Tasks 5–6). Runs an op through
+// BOTH the kernelgen CPU oracle AND kiss-ref, so a complex op (rowreduce,
+// matmul) can be shown oracle ≡ kiss-ref before its oracle value self-test
+// retires. The `Access::*` arms stay alive (permanent Baracuda plumbing), so
+// this keeps working as an ongoing cross-implementation differential.
+// ===========================================================================
+
+/// Row-major dense strides for `shape`.
+fn dense_strides(shape: &[i64]) -> Vec<i64> {
+    let mut s = vec![1i64; shape.len()];
+    for d in (0..shape.len().saturating_sub(1)).rev() {
+        s[d] = s[d + 1] * shape[d + 1];
+    }
+    s
+}
+
+fn f32_bytes(v: &[f32]) -> Vec<u8> {
+    v.iter().flat_map(|x| x.to_le_bytes()).collect()
+}
+
+fn bytes_f32(b: &[u8]) -> Vec<f32> {
+    b.chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect()
+}
+
+/// Run `op` over `inputs` through the kernelgen CPU oracle AND kiss-ref (via the
+/// converter), returning `(oracle_vals, kiss_ref_vals)` for the caller to
+/// compare — bit-exact where representable, tolerance for transcendentals.
+/// `in_shapes`/`out_shape` build the operand descriptions (inputs then output,
+/// dense row-major); `cat` is the op's structure-key category.
+pub(crate) fn oracle_and_kiss_ref(
+    op: &OpDef,
+    cat: OpCategory,
+    in_shapes: &[Vec<i64>],
+    out_shape: &[i64],
+    inputs: &[Vec<f32>],
+    params: &[f32],
+) -> (Vec<f32>, Vec<f32>) {
+    let mk = |sh: &[i64]| OperandDesc::new(sh.len(), sh, &dense_strides(sh), ElementKind::F32, 16);
+    let mut operands: Vec<OperandDesc> = in_shapes.iter().map(|s| mk(s)).collect();
+    operands.push(mk(out_shape));
+    let key = structure_key(cat, &operands, ArchSku::Sm89);
+
+    // Leg 1: the kernelgen CPU oracle (plan interpreter — no CUDA involved).
+    let plan = build_plan(op, &key);
+    let images: Vec<TypedBuffer> = inputs
+        .iter()
+        .zip(in_shapes)
+        .map(|(v, sh)| {
+            TypedBuffer::new(
+                ElementKind::F32,
+                sh.clone(),
+                dense_strides(sh),
+                f32_bytes(v),
+            )
+        })
+        .collect();
+    let params_f64: Vec<f64> = params.iter().map(|&p| f64::from(p)).collect();
+    let oracle_out = oracle::evaluate(&plan, &operands, &images, &params_f64);
+    let oracle_vals = bytes_f32(&oracle_out[0].bytes);
+
+    // Leg 2: kiss-ref via the converter.
+    let shapes_usize: Vec<Vec<usize>> = in_shapes
+        .iter()
+        .map(|s| s.iter().map(|&d| d as usize).collect())
+        .collect();
+    let r = eval_recipe_for(op, &shapes_usize, inputs, params);
+    let ref_vals: Vec<f32> = r.outputs[0].clone().into_data();
+    (oracle_vals, ref_vals)
+}
+
+/// Tolerance comparator for transcendental ops (softmax/layernorm) where the
+/// oracle's f64-domain math and kiss-ref's compute-dtype math agree only to a
+/// few ULP, not bit-for-bit. `rel`/`abs` mirror the oracle self-tests' bounds.
+pub(crate) fn assert_close(name: &str, reference: &[f32], candidate: &[f32], rel: f32, abs: f32) {
+    assert_eq!(reference.len(), candidate.len(), "{name}: length");
+    for (i, (r, c)) in reference.iter().zip(candidate).enumerate() {
+        if r.is_nan() && c.is_nan() {
+            continue;
+        }
+        let tol = abs + rel * r.abs();
+        assert!(
+            (r - c).abs() <= tol,
+            "{name}: [{i}] reference {r} vs candidate {c} (|Δ|={} > tol={tol})",
+            (r - c).abs()
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{BinaryOp, OpDef, ReduceOp, input, konst, param};
+    use crate::ir::{
+        BinaryOp, ContractionAxes, OpDef, ReduceOp, ReduceStage, UnaryOp, input, konst, param,
+        reduced,
+    };
     use baracuda_kernel_vocab::{AxisMask, ElementKind};
     use kiss_ref_core::DetClass;
 
@@ -804,5 +901,188 @@ mod tests {
         let r = eval_recipe_for(&op, &[vec![1usize]], &[vec![1.0f32]], &[]);
         let got: Vec<f32> = r.outputs[0].clone().into_data();
         assert_bits_eq("select_neg_zero", &[-0.0], &got);
+    }
+
+    // ---- Contraction (matmul) prove-then-retire differential (Task 6) -------
+    // oracle ≡ kiss-ref for matmul + epilogues over exactly-representable
+    // integer cells (bit-exact). Proves the pair agree BEFORE the oracle
+    // contraction value self-tests retire; stays as the ongoing differential.
+
+    /// [2,3]·[3,2] identity epilogue, integer cell -> [[58,64],[139,154]]. Ports
+    /// oracle.rs `contraction_matmul_identity_epilogue`.
+    #[test]
+    fn matmul_identity_oracle_eq_kiss_ref() {
+        let op = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let (o, k) = oracle_and_kiss_ref(
+            &op,
+            OpCategory::Gemm,
+            &[vec![2, 3], vec![3, 2]],
+            &[2, 2],
+            &[
+                vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0],
+                vec![7.0f32, 8.0, 9.0, 10.0, 11.0, 12.0],
+            ],
+            &[],
+        );
+        assert_bits_eq("matmul_identity_oracle_vs_kiss", &o, &k);
+        assert_bits_eq("matmul_identity_expect", &[58.0, 64.0, 139.0, 154.0], &k);
+    }
+
+    /// [1,2]·[2,2] with a relu epilogue over the K-sum: raw [-10,2] -> [0,2].
+    /// Ports oracle.rs `contraction_matmul_relu_epilogue_over_reduced0`.
+    #[test]
+    fn matmul_relu_epilogue_oracle_eq_kiss_ref() {
+        let op = OpDef::contraction(
+            "matmul_relu",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0).unary(UnaryOp::Relu),
+        );
+        let (o, k) = oracle_and_kiss_ref(
+            &op,
+            OpCategory::Gemm,
+            &[vec![1, 2], vec![2, 2]],
+            &[1, 2],
+            &[vec![1.0f32, -3.0], vec![2.0f32, 5.0, 4.0, 1.0]],
+            &[],
+        );
+        assert_bits_eq("matmul_relu_oracle_vs_kiss", &o, &k);
+        assert_bits_eq("matmul_relu_expect", &[0.0, 2.0], &k);
+    }
+
+    // ---- RowReduce prove-then-retire differential (Task 5) ------------------
+    // oracle ≈ kiss-ref for softmax / layernorm within tolerance (exp/div/rsqrt
+    // are transcendental — bit-exactness isn't expected between the oracle's
+    // f64-domain math and kiss-ref's compute-dtype math).
+
+    /// Softmax over [1,4]. Ports oracle.rs `rowreduce_softmax`.
+    #[test]
+    fn softmax_oracle_eq_kiss_ref() {
+        let stages = vec![
+            ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Max,
+            },
+            ReduceStage {
+                pre: (input(0) - reduced(0)).unary(UnaryOp::Exp).0,
+                op: ReduceOp::Sum,
+            },
+        ];
+        let epi = (input(0) - reduced(0)).unary(UnaryOp::Exp) / reduced(1);
+        let op = OpDef::row_reduce("softmax", 1, &[ElementKind::F32], stages, epi);
+        let (o, k) = oracle_and_kiss_ref(
+            &op,
+            OpCategory::Softmax,
+            &[vec![1, 4]],
+            &[1, 4],
+            &[vec![1.0f32, 2.0, 3.0, 4.0]],
+            &[],
+        );
+        assert_close("softmax", &o, &k, 1e-6, 1e-6);
+        // Independent invariants on the kiss-ref output (ported from the oracle
+        // test, so the differential is equal-or-better than a bare oracle≈kiss
+        // agreement): the row sums to 1 and is monotone in the logits.
+        let sum: f32 = k.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-5, "softmax row sums to 1, got {sum}");
+        assert!(
+            k[0] < k[1] && k[1] < k[2] && k[2] < k[3],
+            "softmax monotone"
+        );
+    }
+
+    /// Layernorm over [1,4]. Ports oracle.rs `rowreduce_layernorm`.
+    #[test]
+    fn layernorm_oracle_eq_kiss_ref() {
+        let eps = 1e-5;
+        let stages = vec![
+            ReduceStage {
+                pre: input(0).0,
+                op: ReduceOp::Mean,
+            },
+            ReduceStage {
+                pre: (input(0) - reduced(0)).unary(UnaryOp::Sqr).0,
+                op: ReduceOp::Mean,
+            },
+        ];
+        let epi = (input(0) - reduced(0)) * (reduced(1) + konst(eps)).unary(UnaryOp::Rsqrt);
+        let op = OpDef::row_reduce("layernorm", 1, &[ElementKind::F32], stages, epi);
+        let (o, k) = oracle_and_kiss_ref(
+            &op,
+            OpCategory::Normalization,
+            &[vec![1, 4]],
+            &[1, 4],
+            &[vec![1.0f32, 2.0, 3.0, 4.0]],
+            &[],
+        );
+        assert_close("layernorm", &o, &k, 1e-5, 1e-5);
+        // Independent invariants (ported): the hand-computed normalized values
+        // (mean 2.5, var 1.25) and zero-mean output.
+        let rstd = 1.0f64 / (1.25f64 + eps).sqrt();
+        for (i, x) in [1.0f64, 2.0, 3.0, 4.0].iter().enumerate() {
+            let expect = ((x - 2.5) * rstd) as f32;
+            assert!(
+                (k[i] - expect).abs() < 1e-5,
+                "layernorm[{i}] {} vs {expect}",
+                k[i]
+            );
+        }
+        let mean: f32 = k.iter().sum::<f32>() / 4.0;
+        assert!(mean.abs() < 1e-5, "layernorm zero-mean");
+    }
+
+    /// [1,2]·[2,2] + per-column bias + relu: K-sums [13,16] + bias [-100,1] ->
+    /// [-87,17] -> relu -> [0,17]. Ports oracle.rs
+    /// `contraction_matmul_bias_relu_epilogue`.
+    #[test]
+    fn matmul_bias_relu_oracle_eq_kiss_ref() {
+        let op = OpDef::contraction_bias(
+            "matmul_bias_relu",
+            &[ElementKind::F32],
+            (reduced(0) + input(2)).unary(UnaryOp::Relu),
+        );
+        let (o, k) = oracle_and_kiss_ref(
+            &op,
+            OpCategory::Gemm,
+            &[vec![1, 2], vec![2, 2], vec![2]],
+            &[1, 2],
+            &[
+                vec![1.0f32, 2.0],
+                vec![3.0f32, 4.0, 5.0, 6.0],
+                vec![-100.0f32, 1.0],
+            ],
+            &[],
+        );
+        assert_bits_eq("matmul_bias_relu_oracle_vs_kiss", &o, &k);
+        assert_bits_eq("matmul_bias_relu_expect", &[0.0, 17.0], &k);
+    }
+
+    /// Batched [2,1,2]·[2,2,2] -> [2,1,2] identity: batch0 [7,10], batch1
+    /// [43,50]. Ports oracle.rs `contraction_batched_matmul_identity_epilogue`.
+    #[test]
+    fn batched_matmul_oracle_eq_kiss_ref() {
+        let op = OpDef::contraction(
+            "bmm",
+            &[ElementKind::F32],
+            ContractionAxes::batched_matmul(),
+            reduced(0),
+        );
+        let (o, k) = oracle_and_kiss_ref(
+            &op,
+            OpCategory::Gemm,
+            &[vec![2, 1, 2], vec![2, 2, 2]],
+            &[2, 1, 2],
+            &[
+                vec![1.0f32, 2.0, 3.0, 4.0],
+                vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            ],
+            &[],
+        );
+        assert_bits_eq("batched_matmul_oracle_vs_kiss", &o, &k);
+        assert_bits_eq("batched_matmul_expect", &[7.0, 10.0, 43.0, 50.0], &k);
     }
 }

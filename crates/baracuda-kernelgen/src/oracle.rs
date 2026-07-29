@@ -2060,7 +2060,7 @@ pub fn compare(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{BinaryOp, OpDef, ReduceOp, ReduceStage, input, konst, reduced};
+    use crate::ir::{BinaryOp, OpDef, ReduceOp, input, konst};
     use crate::plan::build_plan;
     use baracuda_kernel_vocab::{ArchSku, OpCategory, StructureKey, structure_key};
 
@@ -2204,75 +2204,17 @@ mod tests {
     // value-DAG model does not cover those).
 
     // --- C. RowReduce (softmax, layernorm) ----------------------------------
-
-    #[test]
-    fn rowreduce_softmax() {
-        // 2-stage: stage0 = max, stage1 = sum(exp(x - r0)); epi = exp(x - r0)/r1.
-        let stages = vec![
-            ReduceStage {
-                pre: input(0).0,
-                op: ReduceOp::Max,
-            },
-            ReduceStage {
-                pre: (input(0) - reduced(0)).unary(UnaryOp::Exp).0,
-                op: ReduceOp::Sum,
-            },
-        ];
-        let epi = (input(0) - reduced(0)).unary(UnaryOp::Exp) / reduced(1);
-        let op = OpDef::row_reduce("softmax", 1, &[ElementKind::F32], stages, epi);
-        let ind = desc(&[1, 4], &[4, 1], ElementKind::F32);
-        let k = key(OpCategory::Softmax, &[ind, ind]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, ind];
-        let ins = [f32b(&[1, 4], &[1.0, 2.0, 3.0, 4.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        let got = f32s(&out[0]);
-        let sum: f32 = got.iter().sum();
-        assert!((sum - 1.0).abs() < 1e-5, "softmax row sums to 1, got {sum}");
-        // Monotone increasing for increasing logits.
-        assert!(got[0] < got[1] && got[1] < got[2] && got[2] < got[3]);
-        // Hand check largest value: exp(0)/Σexp(i-4).
-        let denom: f64 = (0..4).map(|i| ((i as f64) - 3.0).exp()).sum();
-        let expect3 = (0.0f64).exp() / denom;
-        assert!((f64::from(got[3]) - expect3).abs() < 1e-6);
-    }
-
-    #[test]
-    fn rowreduce_layernorm() {
-        // stage0 = mean(x); stage1 = mean((x-μ)^2); epi = (x-μ)*rsqrt(var+eps).
-        let eps = 1e-5;
-        let stages = vec![
-            ReduceStage {
-                pre: input(0).0,
-                op: ReduceOp::Mean,
-            },
-            ReduceStage {
-                pre: (input(0) - reduced(0)).unary(UnaryOp::Sqr).0,
-                op: ReduceOp::Mean,
-            },
-        ];
-        let epi = (input(0) - reduced(0)) * (reduced(1) + konst(eps)).unary(UnaryOp::Rsqrt);
-        let op = OpDef::row_reduce("layernorm", 1, &[ElementKind::F32], stages, epi);
-        let ind = desc(&[1, 4], &[4, 1], ElementKind::F32);
-        let k = key(OpCategory::Normalization, &[ind, ind]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, ind];
-        let ins = [f32b(&[1, 4], &[1.0, 2.0, 3.0, 4.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        let got = f32s(&out[0]);
-        // mean 2.5, var = 1.25, rstd = 1/sqrt(1.25+eps).
-        let rstd = 1.0f64 / (1.25f64 + eps).sqrt();
-        let expect: Vec<f64> = [1.0, 2.0, 3.0, 4.0]
-            .iter()
-            .map(|x| (x - 2.5) * rstd)
-            .collect();
-        for (g, e) in got.iter().zip(expect.iter()) {
-            assert!((f64::from(*g) - e).abs() < 1e-5, "layernorm {g} vs {e}");
-        }
-        // Output is zero-mean.
-        let m: f32 = got.iter().sum::<f32>() / 4.0;
-        assert!(m.abs() < 1e-5);
-    }
+    // NOTE (oracle→kiss-ref consolidation, Task 5 — prove-then-retire): the
+    // rowreduce VALUE self-tests `rowreduce_softmax` and `rowreduce_layernorm`
+    // were RETIRED into the `oracle_and_kiss_ref` DIFFERENTIALS in
+    // `kiss_ref_diff::tests` (softmax_oracle_eq_kiss_ref /
+    // layernorm_oracle_eq_kiss_ref). Each runs the op through BOTH the oracle
+    // AND kiss-ref, asserts they agree within tolerance (exp/div/rsqrt are
+    // transcendental, not bit-exact), AND asserts the ported independent
+    // invariants on kiss-ref (softmax sums-to-1 + monotone; layernorm zero-mean
+    // + hand-computed values). So the oracle RowReduce arm stays EXERCISED (leg 1)
+    // and the value stays independently checked — equal-or-better than the
+    // retired single-impl test.
 
     // --- D. Scan (cumsum, cummax; fwd/reverse/exclusive) --------------------
 
@@ -2466,147 +2408,16 @@ mod tests {
     // referenced against kiss-ref in `kiss_ref_diff::tests::signed_zero_add_through_kiss_ref`.)
 
     // --- H. Contraction (matmul) --------------------------------------------
-
-    // Cell/plan builder for a rank-2 dense row-major GEMM `[m,k]·[k,n] → [m,n]`.
-    fn gemm_cell(m: i64, k: i64, n: i64) -> (OperandDesc, OperandDesc, OperandDesc, StructureKey) {
-        let lhs = desc(&[m, k], &[k, 1], ElementKind::F32);
-        let rhs = desc(&[k, n], &[n, 1], ElementKind::F32);
-        let out = desc(&[m, n], &[n, 1], ElementKind::F32);
-        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
-        (lhs, rhs, out, key)
-    }
-
-    #[test]
-    fn contraction_matmul_identity_epilogue() {
-        use crate::ir::ContractionAxes;
-        // [2,3]·[3,2] → [2,2], exactly-representable small integers so the f64
-        // reference is exact (independent of accumulation width / tolerance).
-        //   lhs = [[1,2,3],[4,5,6]]   rhs = [[7,8],[9,10],[11,12]]
-        //   out = [[1·7+2·9+3·11, 1·8+2·10+3·12], [4·7+5·9+6·11, 4·8+5·10+6·12]]
-        //       = [[58, 64], [139, 154]]
-        let op = OpDef::contraction(
-            "matmul",
-            &[ElementKind::F32],
-            ContractionAxes::matmul(),
-            reduced(0),
-        );
-        let (lhs, rhs, out, key) = gemm_cell(2, 3, 2);
-        let plan = build_plan(&op, &key);
-        let ops = [lhs, rhs, out];
-        let ins = [
-            f32b(&[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
-            f32b(&[3, 2], &[7.0, 8.0, 9.0, 10.0, 11.0, 12.0]),
-        ];
-        let got = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&got[0]), vec![58.0, 64.0, 139.0, 154.0]);
-    }
-
-    #[test]
-    fn contraction_matmul_relu_epilogue_over_reduced0() {
-        use crate::ir::{ContractionAxes, UnaryOp};
-        // [1,2]·[2,2] → [1,2] with a relu epilogue over the K-sum (Reduced(0)).
-        //   lhs = [[1,-3]]   rhs = [[2,5],[4,1]]
-        //   raw K-sums = [1·2+(-3)·4, 1·5+(-3)·1] = [-10, 2]
-        //   relu       = [0, 2]  (the negative column clamps, exercising the epilogue)
-        let op = OpDef::contraction(
-            "matmul_relu",
-            &[ElementKind::F32],
-            ContractionAxes::matmul(),
-            reduced(0).unary(UnaryOp::Relu),
-        );
-        let (lhs, rhs, out, key) = gemm_cell(1, 2, 2);
-        let plan = build_plan(&op, &key);
-        let ops = [lhs, rhs, out];
-        let ins = [
-            f32b(&[1, 2], &[1.0, -3.0]),
-            f32b(&[2, 2], &[2.0, 5.0, 4.0, 1.0]),
-        ];
-        let got = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&got[0]), vec![0.0, 2.0]);
-    }
-
-    /// A rank-2 dense GEMM cell WITH a per-column `[n]` bias operand:
-    /// operands `[lhs, rhs, bias, out]` (inputs THEN output).
-    fn gemm_bias_cell(
-        m: i64,
-        k: i64,
-        n: i64,
-    ) -> (
-        OperandDesc,
-        OperandDesc,
-        OperandDesc,
-        OperandDesc,
-        StructureKey,
-    ) {
-        let lhs = desc(&[m, k], &[k, 1], ElementKind::F32);
-        let rhs = desc(&[k, n], &[n, 1], ElementKind::F32);
-        let bias = desc(&[n], &[1], ElementKind::F32);
-        let out = desc(&[m, n], &[n, 1], ElementKind::F32);
-        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, bias, out], ArchSku::Sm89);
-        (lhs, rhs, bias, out, key)
-    }
-
-    #[test]
-    fn contraction_matmul_bias_relu_epilogue() {
-        use crate::ir::UnaryOp;
-        // Fused matmul + per-column bias + relu: out = relu(Σ_k lhs·rhs + bias[n]).
-        //   lhs = [[1, 2]]   rhs = [[3,4],[5,6]]   bias = [-100, 1]
-        //   K-sums = [1·3+2·5, 1·4+2·6] = [13, 16]
-        //   +bias  = [13-100, 16+1] = [-87, 17]
-        //   relu   = [0, 17]   (the biased-negative column clamps)
-        let op = OpDef::contraction_bias(
-            "matmul_bias_relu",
-            &[ElementKind::F32],
-            (reduced(0) + input(2)).unary(UnaryOp::Relu),
-        );
-        let (lhs, rhs, bias, out, key) = gemm_bias_cell(1, 2, 2);
-        let plan = build_plan(&op, &key);
-        let ops = [lhs, rhs, bias, out];
-        let ins = [
-            f32b(&[1, 2], &[1.0, 2.0]),
-            f32b(&[2, 2], &[3.0, 4.0, 5.0, 6.0]),
-            f32b(&[2], &[-100.0, 1.0]),
-        ];
-        let got = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&got[0]), vec![0.0, 17.0]);
-    }
-
-    /// A rank-3 dense BATCHED GEMM cell `[B,M,K]·[B,K,N] → [B,M,N]`.
-    fn gemm_batched_cell(
-        b: i64,
-        m: i64,
-        k: i64,
-        n: i64,
-    ) -> (OperandDesc, OperandDesc, OperandDesc, StructureKey) {
-        let lhs = desc(&[b, m, k], &[m * k, k, 1], ElementKind::F32);
-        let rhs = desc(&[b, k, n], &[k * n, n, 1], ElementKind::F32);
-        let out = desc(&[b, m, n], &[m * n, n, 1], ElementKind::F32);
-        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
-        (lhs, rhs, out, key)
-    }
-
-    #[test]
-    fn contraction_batched_matmul_identity_epilogue() {
-        use crate::ir::ContractionAxes;
-        // Batched [2,1,2]·[2,2,2] → [2,1,2], identity epilogue.
-        //   batch0: [[1,2]] · [[1,2],[3,4]] = [1·1+2·3, 1·2+2·4] = [7, 10]
-        //   batch1: [[3,4]] · [[5,6],[7,8]] = [3·5+4·7, 3·6+4·8] = [43, 50]
-        let op = OpDef::contraction(
-            "bmm",
-            &[ElementKind::F32],
-            ContractionAxes::batched_matmul(),
-            reduced(0),
-        );
-        let (lhs, rhs, out, key) = gemm_batched_cell(2, 1, 2, 2);
-        let plan = build_plan(&op, &key);
-        let ops = [lhs, rhs, out];
-        let ins = [
-            f32b(&[2, 1, 2], &[1.0, 2.0, 3.0, 4.0]),
-            f32b(&[2, 2, 2], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
-        ];
-        let got = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&got[0]), vec![7.0, 10.0, 43.0, 50.0]);
-    }
+    // NOTE (oracle→kiss-ref consolidation, Task 6 — prove-then-retire): the
+    // matmul VALUE self-tests (identity / relu-epilogue / bias-relu / batched)
+    // and their gemm cell builders were RETIRED into the `oracle_and_kiss_ref`
+    // DIFFERENTIALS in `kiss_ref_diff::tests` (matmul_identity /
+    // matmul_relu_epilogue / matmul_bias_relu / batched_matmul, all suffixed
+    // `_oracle_eq_kiss_ref`). Each runs the op through BOTH the oracle AND
+    // kiss-ref over an exactly-representable integer cell, asserts they agree
+    // BIT-for-bit, AND asserts kiss-ref equals the hand-computed value. So the
+    // oracle Contraction arm stays EXERCISED (leg 1) and the value stays
+    // independently checked — equal-or-better than the retired single-impl tests.
 
     // --- compare helper -----------------------------------------------------
 
