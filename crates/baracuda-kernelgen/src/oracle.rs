@@ -2060,9 +2060,9 @@ pub fn compare(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{BinaryOp, OpDef, ReduceOp, ReduceStage, input, konst, param, reduced};
+    use crate::ir::{BinaryOp, OpDef, ReduceOp, input, konst};
     use crate::plan::build_plan;
-    use baracuda_kernel_vocab::{ArchSku, AxisMask, OpCategory, StructureKey, structure_key};
+    use baracuda_kernel_vocab::{ArchSku, OpCategory, StructureKey, structure_key};
 
     // --- plan/key builders --------------------------------------------------
 
@@ -2092,115 +2092,28 @@ mod tests {
 
     // --- A. Elementwise -----------------------------------------------------
 
-    #[test]
-    fn elementwise_add_contiguous() {
-        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
-        let a = desc(&[4], &[1], ElementKind::F32);
-        let k = key(OpCategory::BinaryElementwise, &[a, a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a, a];
-        let ins = [
-            f32b(&[4], &[1.0, -0.0, 2.5, f32::INFINITY]),
-            f32b(&[4], &[0.0, 0.0, -1.5, 1.0]),
-        ];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&out[0]), vec![1.0, 0.0, 1.0, f32::INFINITY]);
-    }
+    // NOTE (oracle→kiss-ref consolidation, 2026-07-29): the pure float
+    // VALUE-semantics elementwise self-tests that lived here —
+    // `elementwise_add_contiguous`, `elementwise_relu_neg_zero_and_nan`,
+    // `elementwise_maxmin_prop_signed_zero_ties_keep_a`,
+    // `elementwise_affine_with_params` (and `probe_classes_add_bit_exact_zeros`
+    // below) — were RETIRED. kiss-ref is now the single float value-semantics
+    // reference; each edge is asserted against it via the in-tree converter in
+    // `kiss_ref_diff::tests` (add_contiguous / relu signed-zero+NaN /
+    // max_prop-min_prop a-on-ties / affine-via-runtime_scalar / signed-zero-add).
+    // The `Access::Elementwise` arm and the PLUMBING tests below (raw-bit select,
+    // int8 store-truncation, strided/broadcast/flipped/permuted views,
+    // compute-dtype cmp/select) STAY — that is Baracuda emitter/layout territory
+    // kiss-ref's f32/dense value-DAG model does not cover (the locked boundary).
 
-    #[test]
-    fn elementwise_relu_neg_zero_and_nan() {
-        // Relu = x<0?0:x — NaN passes through; -0.0 is preserved (NOT max(x,0)).
-        let op = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu());
-        let a = desc(&[4], &[1], ElementKind::F32);
-        let k = key(OpCategory::UnaryElementwise, &[a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a];
-        let ins = [f32b(&[4], &[-3.0, -0.0, 2.0, f32::NAN])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        // -3 -> 0; -0.0 -> -0.0 (sign bit preserved); 2 -> 2; NaN -> NaN.
-        assert_eq!(bit32(&out[0], 0), 0.0f32.to_bits());
-        assert_eq!(
-            bit32(&out[0], 1),
-            (-0.0f32).to_bits(),
-            "-0.0 must survive Relu"
-        );
-        assert_eq!(bit32(&out[0], 2), 2.0f32.to_bits());
-        assert!(f32::from_bits(bit32(&out[0], 3)).is_nan());
-    }
-
-    #[test]
-    fn elementwise_maxmin_prop_signed_zero_ties_keep_a() {
-        // The KISS-Ops `max_prop`/`min_prop` normative decomposition selects A
-        // on numeric ties (`cmp_ge`/`cmp_le` → a) — the numpy/torch
-        // `where(a >= b, a, b)` semantics. Bit-visible ONLY on signed-zero
-        // ties: max_prop(-0.0, +0.0) = -0.0 and max_prop(+0.0, -0.0) = +0.0
-        // (keep a in both argument orders — never order-dependent-on-b).
-        // Caught by the kiss-ref recipe differential (step 2, 2026-07-23): a
-        // b-on-ties spelling diverged from the reference evaluator.
-        let a = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::BinaryElementwise, &[a, a, a]);
-        let ops = [a, a, a];
-        let ins = [
-            f32b(&[2], &[-0.0, 0.0]), // a-operand: (-0, +0)
-            f32b(&[2], &[0.0, -0.0]), // b-operand: (+0, -0)
-        ];
-        let maxp = OpDef::elementwise(
-            "maxp",
-            2,
-            &[ElementKind::F32],
-            input(0).binary(BinaryOp::Max, input(1)),
-        );
-        let out = evaluate(&build_plan(&maxp, &k), &ops, &ins, &[]);
-        assert_eq!(bit32(&out[0], 0), (-0.0f32).to_bits(), "max(-0,+0) keeps a");
-        assert_eq!(bit32(&out[0], 1), 0.0f32.to_bits(), "max(+0,-0) keeps a");
-        let minp = OpDef::elementwise(
-            "minp",
-            2,
-            &[ElementKind::F32],
-            input(0).binary(BinaryOp::Min, input(1)),
-        );
-        let out = evaluate(&build_plan(&minp, &k), &ops, &ins, &[]);
-        assert_eq!(bit32(&out[0], 0), (-0.0f32).to_bits(), "min(-0,+0) keeps a");
-        assert_eq!(bit32(&out[0], 1), 0.0f32.to_bits(), "min(+0,-0) keeps a");
-    }
-
-    #[test]
-    fn elementwise_affine_with_params() {
-        let op = OpDef::elementwise(
-            "affine",
-            1,
-            &[ElementKind::F32],
-            input(0) * param(0) + param(1),
-        );
-        let a = desc(&[3], &[1], ElementKind::F32);
-        let k = key(OpCategory::UnaryElementwise, &[a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a];
-        let ins = [f32b(&[3], &[1.0, 2.0, 3.0])];
-        let out = evaluate(&plan, &ops, &ins, &[2.0, 0.5]);
-        assert_eq!(f32s(&out[0]), vec![2.5, 4.5, 6.5]);
-    }
-
-    // KILL-test: Select moves the arm as raw bits (-0.0 survives).
-    #[test]
-    fn select_raw_bit_neg_zero_survives() {
-        // cond=false → picks arm b = Const(-0.0); the -0.0 sign must survive.
-        let body = input(0)
-            .binary(BinaryOp::CmpGt, konst(100.0)) // always false for our input
-            .select(input(0), konst(-0.0));
-        let op = OpDef::elementwise("sel", 1, &[ElementKind::F32], body);
-        let a = desc(&[1], &[1], ElementKind::F32);
-        let k = key(OpCategory::TernaryElementwise, &[a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a];
-        let ins = [f32b(&[1], &[1.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(
-            bit32(&out[0], 0),
-            (-0.0f32).to_bits(),
-            "Select must move -0.0 verbatim"
-        );
-    }
+    // NOTE (oracle→kiss-ref consolidation): `select_raw_bit_neg_zero_survives`
+    // was RETIRED. kiss-ref's raw-bit select (resolve.rs:58, byte-identical
+    // between 0.1.0 and the strengthened test at 5d0538b) is the equal-or-better
+    // reference; Baracuda's select round-trips through the converter and
+    // preserves -0.0 bit-for-bit, asserted in
+    // `kiss_ref_diff::tests::select_raw_bit_neg_zero_through_kiss_ref` (which
+    // also verified the previously-unproven select converter path). The
+    // Access::Elementwise arm + `cmp_and_select_decide_in_compute_dtype` stay.
 
     // KILL-test: i8 (S8) add wraps at 127 (mod-2^8 store truncation).
     #[test]
@@ -2279,166 +2192,41 @@ mod tests {
 
     // --- B. Reduction -------------------------------------------------------
 
-    #[test]
-    fn reduction_sum_last_axis() {
-        let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
-        let ind = desc(&[2, 3], &[3, 1], ElementKind::F32);
-        let outd = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::Reduction, &[ind, outd]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, outd];
-        let ins = [f32b(&[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&out[0]), vec![6.0, 15.0]);
-    }
-
-    // KILL-test: the have-flag NaN fold — a NaN in a reduction run sticks.
-    #[test]
-    fn reduction_max_nan_sticks() {
-        let op = OpDef::reduction("max", 1, &[ElementKind::F32], input(0), ReduceOp::Max);
-        let ind = desc(&[2, 3], &[3, 1], ElementKind::F32);
-        let outd = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::Reduction, &[ind, outd]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, outd];
-        let ins = [f32b(&[2, 3], &[1.0, f32::NAN, 3.0, 4.0, 5.0, 6.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert!(
-            f32::from_bits(out[0].bits_at(0) as u32).is_nan(),
-            "NaN must stick"
-        );
-        assert_eq!(f32::from_bits(out[0].bits_at(1) as u32), 6.0);
-    }
-
-    // KILL-test: the Mean divisor (product of reduced extents).
-    #[test]
-    fn reduction_mean_divisor() {
-        let op = OpDef::reduction("mean", 1, &[ElementKind::F32], input(0), ReduceOp::Mean);
-        let ind = desc(&[2, 4], &[4, 1], ElementKind::F32);
-        let outd = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::Reduction, &[ind, outd]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, outd];
-        let ins = [f32b(&[2, 4], &[1.0, 2.0, 3.0, 4.0, 10.0, 10.0, 10.0, 10.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&out[0]), vec![2.5, 10.0]);
-    }
+    // NOTE (oracle→kiss-ref consolidation, Task 3): the pure float
+    // VALUE-semantics reduction self-tests — `reduction_sum_last_axis`,
+    // `reduction_max_nan_sticks`, `reduction_mean_divisor`, and
+    // `reduction_outer_axis` (below) — were RETIRED. Each fold is asserted
+    // against kiss-ref via the in-tree converter in `kiss_ref_diff::tests`
+    // (reduce_sum_last / reduce_max_nan_sticks — pins kiss-ref's reduce-Max as
+    // NaN-propagating / reduce_mean_divisor / reduce_outer_axis). The
+    // `Access::Reduction` arm STAYS — exercised by shape.rs's oracle differential
+    // and reserved for physical/int reduction plumbing (kiss-ref's f32/dense
+    // value-DAG model does not cover those).
 
     // --- C. RowReduce (softmax, layernorm) ----------------------------------
-
-    #[test]
-    fn rowreduce_softmax() {
-        // 2-stage: stage0 = max, stage1 = sum(exp(x - r0)); epi = exp(x - r0)/r1.
-        let stages = vec![
-            ReduceStage {
-                pre: input(0).0,
-                op: ReduceOp::Max,
-            },
-            ReduceStage {
-                pre: (input(0) - reduced(0)).unary(UnaryOp::Exp).0,
-                op: ReduceOp::Sum,
-            },
-        ];
-        let epi = (input(0) - reduced(0)).unary(UnaryOp::Exp) / reduced(1);
-        let op = OpDef::row_reduce("softmax", 1, &[ElementKind::F32], stages, epi);
-        let ind = desc(&[1, 4], &[4, 1], ElementKind::F32);
-        let k = key(OpCategory::Softmax, &[ind, ind]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, ind];
-        let ins = [f32b(&[1, 4], &[1.0, 2.0, 3.0, 4.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        let got = f32s(&out[0]);
-        let sum: f32 = got.iter().sum();
-        assert!((sum - 1.0).abs() < 1e-5, "softmax row sums to 1, got {sum}");
-        // Monotone increasing for increasing logits.
-        assert!(got[0] < got[1] && got[1] < got[2] && got[2] < got[3]);
-        // Hand check largest value: exp(0)/Σexp(i-4).
-        let denom: f64 = (0..4).map(|i| ((i as f64) - 3.0).exp()).sum();
-        let expect3 = (0.0f64).exp() / denom;
-        assert!((f64::from(got[3]) - expect3).abs() < 1e-6);
-    }
-
-    #[test]
-    fn rowreduce_layernorm() {
-        // stage0 = mean(x); stage1 = mean((x-μ)^2); epi = (x-μ)*rsqrt(var+eps).
-        let eps = 1e-5;
-        let stages = vec![
-            ReduceStage {
-                pre: input(0).0,
-                op: ReduceOp::Mean,
-            },
-            ReduceStage {
-                pre: (input(0) - reduced(0)).unary(UnaryOp::Sqr).0,
-                op: ReduceOp::Mean,
-            },
-        ];
-        let epi = (input(0) - reduced(0)) * (reduced(1) + konst(eps)).unary(UnaryOp::Rsqrt);
-        let op = OpDef::row_reduce("layernorm", 1, &[ElementKind::F32], stages, epi);
-        let ind = desc(&[1, 4], &[4, 1], ElementKind::F32);
-        let k = key(OpCategory::Normalization, &[ind, ind]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, ind];
-        let ins = [f32b(&[1, 4], &[1.0, 2.0, 3.0, 4.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        let got = f32s(&out[0]);
-        // mean 2.5, var = 1.25, rstd = 1/sqrt(1.25+eps).
-        let rstd = 1.0f64 / (1.25f64 + eps).sqrt();
-        let expect: Vec<f64> = [1.0, 2.0, 3.0, 4.0]
-            .iter()
-            .map(|x| (x - 2.5) * rstd)
-            .collect();
-        for (g, e) in got.iter().zip(expect.iter()) {
-            assert!((f64::from(*g) - e).abs() < 1e-5, "layernorm {g} vs {e}");
-        }
-        // Output is zero-mean.
-        let m: f32 = got.iter().sum::<f32>() / 4.0;
-        assert!(m.abs() < 1e-5);
-    }
+    // NOTE (oracle→kiss-ref consolidation, Task 5 — prove-then-retire): the
+    // rowreduce VALUE self-tests `rowreduce_softmax` and `rowreduce_layernorm`
+    // were RETIRED into the `oracle_and_kiss_ref` DIFFERENTIALS in
+    // `kiss_ref_diff::tests` (softmax_oracle_eq_kiss_ref /
+    // layernorm_oracle_eq_kiss_ref). Each runs the op through BOTH the oracle
+    // AND kiss-ref, asserts they agree within tolerance (exp/div/rsqrt are
+    // transcendental, not bit-exact), AND asserts the ported independent
+    // invariants on kiss-ref (softmax sums-to-1 + monotone; layernorm zero-mean
+    // + hand-computed values). So the oracle RowReduce arm stays EXERCISED (leg 1)
+    // and the value stays independently checked — equal-or-better than the
+    // retired single-impl test.
 
     // --- D. Scan (cumsum, cummax; fwd/reverse/exclusive) --------------------
 
-    #[test]
-    fn scan_cumsum_forward() {
-        let op = OpDef::scan_simple(
-            "cumsum",
-            &[ElementKind::F32],
-            ReduceOp::Sum,
-            1,
-            false,
-            false,
-        );
-        let ind = desc(&[1, 4], &[4, 1], ElementKind::F32);
-        let k = key(OpCategory::Scan, &[ind, ind]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, ind];
-        let ins = [f32b(&[1, 4], &[1.0, 2.0, 3.0, 4.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&out[0]), vec![1.0, 3.0, 6.0, 10.0]);
-    }
-
-    // KILL-test: exclusive scan writes the identity at the first visited position.
-    #[test]
-    fn scan_cumsum_exclusive_first_pos_identity() {
-        let op = OpDef::scan_simple(
-            "cumsum_excl",
-            &[ElementKind::F32],
-            ReduceOp::Sum,
-            1,
-            false,
-            true,
-        );
-        let ind = desc(&[1, 4], &[4, 1], ElementKind::F32);
-        let k = key(OpCategory::Scan, &[ind, ind]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, ind];
-        let ins = [f32b(&[1, 4], &[1.0, 2.0, 3.0, 4.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(
-            f32s(&out[0]),
-            vec![0.0, 1.0, 3.0, 6.0],
-            "excl first pos = additive identity 0"
-        );
-    }
+    // NOTE (oracle→kiss-ref consolidation, Task 4): the portable float scan
+    // VALUE-semantics self-tests `scan_cumsum_forward` and
+    // `scan_cumsum_exclusive_first_pos_identity` were RETIRED — asserted against
+    // kiss-ref via the converter in `kiss_ref_diff::tests`
+    // (scan_cumsum_forward / scan_cumsum_exclusive). The `Access::Scan` arm STAYS
+    // (exercised by shape.rs + the cummax test below). `scan_cummax_*` is KEPT
+    // WHOLE: it exercises REVERSE scan, an emission-level honest miss (flip
+    // withdrawn — `semantics_dag` returns None) that kiss-ref cannot cover, so it
+    // has no equal-or-better replacement to retire against.
 
     #[test]
     fn scan_cummax_forward_and_reverse_and_exclusive() {
@@ -2616,162 +2404,20 @@ mod tests {
         assert!(bf16_to_f64(f32_to_bf16_bits(f32::NAN)).is_nan());
     }
 
-    #[test]
-    fn probe_classes_add_bit_exact_zeros() {
-        // +0 + -0 = +0 (IEEE); -0 + -0 = -0.
-        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
-        let a = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::BinaryElementwise, &[a, a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a, a];
-        let ins = [f32b(&[2], &[0.0, -0.0]), f32b(&[2], &[-0.0, -0.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(bit32(&out[0], 0), 0.0f32.to_bits(), "+0 + -0 = +0");
-        assert_eq!(bit32(&out[0], 1), (-0.0f32).to_bits(), "-0 + -0 = -0");
-    }
+    // (`probe_classes_add_bit_exact_zeros` retired here — signed-zero add is now
+    // referenced against kiss-ref in `kiss_ref_diff::tests::signed_zero_add_through_kiss_ref`.)
 
     // --- H. Contraction (matmul) --------------------------------------------
-
-    // Cell/plan builder for a rank-2 dense row-major GEMM `[m,k]·[k,n] → [m,n]`.
-    fn gemm_cell(m: i64, k: i64, n: i64) -> (OperandDesc, OperandDesc, OperandDesc, StructureKey) {
-        let lhs = desc(&[m, k], &[k, 1], ElementKind::F32);
-        let rhs = desc(&[k, n], &[n, 1], ElementKind::F32);
-        let out = desc(&[m, n], &[n, 1], ElementKind::F32);
-        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
-        (lhs, rhs, out, key)
-    }
-
-    #[test]
-    fn contraction_matmul_identity_epilogue() {
-        use crate::ir::ContractionAxes;
-        // [2,3]·[3,2] → [2,2], exactly-representable small integers so the f64
-        // reference is exact (independent of accumulation width / tolerance).
-        //   lhs = [[1,2,3],[4,5,6]]   rhs = [[7,8],[9,10],[11,12]]
-        //   out = [[1·7+2·9+3·11, 1·8+2·10+3·12], [4·7+5·9+6·11, 4·8+5·10+6·12]]
-        //       = [[58, 64], [139, 154]]
-        let op = OpDef::contraction(
-            "matmul",
-            &[ElementKind::F32],
-            ContractionAxes::matmul(),
-            reduced(0),
-        );
-        let (lhs, rhs, out, key) = gemm_cell(2, 3, 2);
-        let plan = build_plan(&op, &key);
-        let ops = [lhs, rhs, out];
-        let ins = [
-            f32b(&[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
-            f32b(&[3, 2], &[7.0, 8.0, 9.0, 10.0, 11.0, 12.0]),
-        ];
-        let got = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&got[0]), vec![58.0, 64.0, 139.0, 154.0]);
-    }
-
-    #[test]
-    fn contraction_matmul_relu_epilogue_over_reduced0() {
-        use crate::ir::{ContractionAxes, UnaryOp};
-        // [1,2]·[2,2] → [1,2] with a relu epilogue over the K-sum (Reduced(0)).
-        //   lhs = [[1,-3]]   rhs = [[2,5],[4,1]]
-        //   raw K-sums = [1·2+(-3)·4, 1·5+(-3)·1] = [-10, 2]
-        //   relu       = [0, 2]  (the negative column clamps, exercising the epilogue)
-        let op = OpDef::contraction(
-            "matmul_relu",
-            &[ElementKind::F32],
-            ContractionAxes::matmul(),
-            reduced(0).unary(UnaryOp::Relu),
-        );
-        let (lhs, rhs, out, key) = gemm_cell(1, 2, 2);
-        let plan = build_plan(&op, &key);
-        let ops = [lhs, rhs, out];
-        let ins = [
-            f32b(&[1, 2], &[1.0, -3.0]),
-            f32b(&[2, 2], &[2.0, 5.0, 4.0, 1.0]),
-        ];
-        let got = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&got[0]), vec![0.0, 2.0]);
-    }
-
-    /// A rank-2 dense GEMM cell WITH a per-column `[n]` bias operand:
-    /// operands `[lhs, rhs, bias, out]` (inputs THEN output).
-    fn gemm_bias_cell(
-        m: i64,
-        k: i64,
-        n: i64,
-    ) -> (
-        OperandDesc,
-        OperandDesc,
-        OperandDesc,
-        OperandDesc,
-        StructureKey,
-    ) {
-        let lhs = desc(&[m, k], &[k, 1], ElementKind::F32);
-        let rhs = desc(&[k, n], &[n, 1], ElementKind::F32);
-        let bias = desc(&[n], &[1], ElementKind::F32);
-        let out = desc(&[m, n], &[n, 1], ElementKind::F32);
-        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, bias, out], ArchSku::Sm89);
-        (lhs, rhs, bias, out, key)
-    }
-
-    #[test]
-    fn contraction_matmul_bias_relu_epilogue() {
-        use crate::ir::UnaryOp;
-        // Fused matmul + per-column bias + relu: out = relu(Σ_k lhs·rhs + bias[n]).
-        //   lhs = [[1, 2]]   rhs = [[3,4],[5,6]]   bias = [-100, 1]
-        //   K-sums = [1·3+2·5, 1·4+2·6] = [13, 16]
-        //   +bias  = [13-100, 16+1] = [-87, 17]
-        //   relu   = [0, 17]   (the biased-negative column clamps)
-        let op = OpDef::contraction_bias(
-            "matmul_bias_relu",
-            &[ElementKind::F32],
-            (reduced(0) + input(2)).unary(UnaryOp::Relu),
-        );
-        let (lhs, rhs, bias, out, key) = gemm_bias_cell(1, 2, 2);
-        let plan = build_plan(&op, &key);
-        let ops = [lhs, rhs, bias, out];
-        let ins = [
-            f32b(&[1, 2], &[1.0, 2.0]),
-            f32b(&[2, 2], &[3.0, 4.0, 5.0, 6.0]),
-            f32b(&[2], &[-100.0, 1.0]),
-        ];
-        let got = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&got[0]), vec![0.0, 17.0]);
-    }
-
-    /// A rank-3 dense BATCHED GEMM cell `[B,M,K]·[B,K,N] → [B,M,N]`.
-    fn gemm_batched_cell(
-        b: i64,
-        m: i64,
-        k: i64,
-        n: i64,
-    ) -> (OperandDesc, OperandDesc, OperandDesc, StructureKey) {
-        let lhs = desc(&[b, m, k], &[m * k, k, 1], ElementKind::F32);
-        let rhs = desc(&[b, k, n], &[k * n, n, 1], ElementKind::F32);
-        let out = desc(&[b, m, n], &[m * n, n, 1], ElementKind::F32);
-        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
-        (lhs, rhs, out, key)
-    }
-
-    #[test]
-    fn contraction_batched_matmul_identity_epilogue() {
-        use crate::ir::ContractionAxes;
-        // Batched [2,1,2]·[2,2,2] → [2,1,2], identity epilogue.
-        //   batch0: [[1,2]] · [[1,2],[3,4]] = [1·1+2·3, 1·2+2·4] = [7, 10]
-        //   batch1: [[3,4]] · [[5,6],[7,8]] = [3·5+4·7, 3·6+4·8] = [43, 50]
-        let op = OpDef::contraction(
-            "bmm",
-            &[ElementKind::F32],
-            ContractionAxes::batched_matmul(),
-            reduced(0),
-        );
-        let (lhs, rhs, out, key) = gemm_batched_cell(2, 1, 2, 2);
-        let plan = build_plan(&op, &key);
-        let ops = [lhs, rhs, out];
-        let ins = [
-            f32b(&[2, 1, 2], &[1.0, 2.0, 3.0, 4.0]),
-            f32b(&[2, 2, 2], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
-        ];
-        let got = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&got[0]), vec![7.0, 10.0, 43.0, 50.0]);
-    }
+    // NOTE (oracle→kiss-ref consolidation, Task 6 — prove-then-retire): the
+    // matmul VALUE self-tests (identity / relu-epilogue / bias-relu / batched)
+    // and their gemm cell builders were RETIRED into the `oracle_and_kiss_ref`
+    // DIFFERENTIALS in `kiss_ref_diff::tests` (matmul_identity /
+    // matmul_relu_epilogue / matmul_bias_relu / batched_matmul, all suffixed
+    // `_oracle_eq_kiss_ref`). Each runs the op through BOTH the oracle AND
+    // kiss-ref over an exactly-representable integer cell, asserts they agree
+    // BIT-for-bit, AND asserts kiss-ref equals the hand-computed value. So the
+    // oracle Contraction arm stays EXERCISED (leg 1) and the value stays
+    // independently checked — equal-or-better than the retired single-impl tests.
 
     // --- compare helper -----------------------------------------------------
 
@@ -2821,30 +2467,8 @@ mod tests {
         assert_eq!(f32s(&out[0]), vec![1.0, 3.0, 5.0, 2.0, 4.0, 6.0]);
     }
 
-    // ensure the unused AxisMask import is exercised (outer-axis reduction).
-    #[test]
-    fn reduction_outer_axis() {
-        let mut mask = AxisMask::EMPTY;
-        mask.set(0); // reduce axis 0
-        let op = OpDef::reduction_axes(
-            "sum0",
-            1,
-            &[ElementKind::F32],
-            input(0),
-            ReduceOp::Sum,
-            mask,
-            false,
-        );
-        let ind = desc(&[2, 3], &[3, 1], ElementKind::F32);
-        let outd = desc(&[3], &[1], ElementKind::F32);
-        let k = key(OpCategory::Reduction, &[ind, outd]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, outd];
-        let ins = [f32b(&[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        // column sums: [1+4, 2+5, 3+6] = [5,7,9].
-        assert_eq!(f32s(&out[0]), vec![5.0, 7.0, 9.0]);
-    }
+    // (`reduction_outer_axis` retired here — outer-axis fold is now referenced
+    // against kiss-ref in `kiss_ref_diff::tests::reduce_outer_axis_through_kiss_ref`.)
 
     // --- Adversarial-review regression kills (5 confirmed defects) -----------
 

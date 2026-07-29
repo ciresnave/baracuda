@@ -62,6 +62,12 @@ mod text;
 #[cfg(test)]
 mod fuzz;
 
+// The in-tree Baracuda ↔ kiss-ref differential converter + comparators (the
+// oracle→kiss-ref consolidation). `#[cfg(test)]`-only: migrated numerical tests
+// build kiss-ref DAGs from Baracuda OpDefs and assert against `eval_recipe`.
+#[cfg(test)]
+mod kiss_ref_diff;
+
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, bundle_kisc, contract, front_matter};
 pub use cpu_c::CpuC;

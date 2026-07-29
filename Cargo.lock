@@ -455,6 +455,9 @@ dependencies = [
  "baracuda-nvrtc",
  "fuel-kernel-seam",
  "fuel-kernel-seam-types",
+ "kiss-classify-vocab",
+ "kiss-ops-vocab",
+ "kiss-ref-core",
  "libm",
  "serde",
  "serde_json",
@@ -1232,6 +1235,30 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "kiss-classify-vocab"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e455f15f7d0b296dfd44dfda7b2360a8c1ebb62564894c3f51446b7b1d11004"
+
+[[package]]
+name = "kiss-ops-vocab"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bb2f7595af2dd146597ede0f1fb81ad0d39fb3324648d0b5dfc490fab54e94d"
+
+[[package]]
+name = "kiss-ref-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b25d19204d730a83f98f1a3c08134770ed0b07106227351cc27b50053ba52af"
+dependencies = [
+ "half",
+ "kiss-classify-vocab",
+ "kiss-ops-vocab",
+ "libm",
+]
 
 [[package]]
 name = "lazy_static"

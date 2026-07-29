@@ -61,5 +61,16 @@ tree-sitter = { version = "0.26", optional = true }
 tree-sitter-cuda = { version = "0.21", optional = true }
 tree-sitter-slang = { version = "0.3", optional = true }
 
+[dev-dependencies]
+# kiss-ref: the spec-exact KISS reference impl — the single source of truth this
+# crate's numerical tests assert against (the oracle.rs consolidation). DEV-only,
+# so it is NOT in the published lib's dependency graph and `cargo publish` / the
+# no-CUDA CI stay clean. Pinned; the API is additive since 0.1.0 (Error is
+# #[non_exhaustive]). The in-tree `kiss_ref_diff` #[cfg(test)] module converts a
+# Baracuda emitted recipe to a kiss-ref FlatDag and diffs eval_recipe.
+kiss-ref-core = "0.1.0"
+kiss-ops-vocab = "0.1.0"
+kiss-classify-vocab = "0.1.0"
+
 [lints]
 workspace = true
