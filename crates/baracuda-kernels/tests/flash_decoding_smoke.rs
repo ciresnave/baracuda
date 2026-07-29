@@ -516,3 +516,140 @@ fn flash_decoding_gqa_small_shapes() {
     // Sanity: small shapes through the GQA TC path.
     run_gqa_case_f16(2, 8, 2, 300, 64, 1e-1, "f16/gqa-group4-multisplit");
 }
+
+/// Cost of the OPTIONAL per-key attention-weight output: `a=None` (standard
+/// decode) vs `a=Some` (H2O/R-KV), amortized end-to-end wall-clock over the
+/// decode K sweep. This is the real per-step cost the consumer pays (launch +
+/// GPU). `#[ignore]` — run with `--ignored --nocapture`.
+#[ignore]
+#[test]
+fn flash_decoding_a_cost_sweep_f16() {
+    use std::time::Instant;
+    const B: i32 = 1;
+    const H: i32 = 32;
+    const D: i32 = 128;
+    const WARMUP: usize = 30;
+    const ITERS: usize = 400;
+
+    let (ctx, stream) = setup();
+    println!(
+        "\nflash_decoding a-cost (f16, B=1 H=32 D=128; amortized wall-clock, best of 3 x {ITERS}):"
+    );
+    for &k_len in &[1024_i32, 2048, 4096, 8192] {
+        let q_f32 = deterministic_f32((B * H * D) as usize, 0.013, -0.5);
+        let kv_f32 = deterministic_f32((B * H * k_len * D) as usize, 0.017, 0.2);
+        let q_h: Vec<f16> = q_f32.iter().map(|&x| f16::from_f32(x)).collect();
+        let kv_h: Vec<f16> = kv_f32.iter().map(|&x| f16::from_f32(x)).collect();
+        let dq = DeviceBuffer::from_slice(&ctx, &q_h).expect("q");
+        let dk = DeviceBuffer::from_slice(&ctx, &kv_h).expect("k");
+        let dv = DeviceBuffer::from_slice(&ctx, &kv_h).expect("v");
+        let mut dy: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (B * H * D) as usize).expect("y");
+        let mut da: DeviceBuffer<f32> =
+            DeviceBuffer::zeros(&ctx, (B * H * k_len) as usize).expect("a");
+
+        let desc = FlashDecodingDescriptor::new(B, H, k_len, D, ElementKind::F16);
+        let plan = FlashDecodingPlan::<f16>::select(&stream, &desc, PlanPreference::default())
+            .expect("select");
+        let mut ws: DeviceBuffer<u8> =
+            DeviceBuffer::zeros(&ctx, plan.workspace_size()).expect("ws");
+
+        let sq = [B, H, D];
+        let sk = [B, H, k_len, D];
+        let sv = sk;
+        let sy = sq;
+        let sa = [B, H, k_len];
+
+        let mut result = [0.0_f64; 2];
+        for (idx, &with_a) in [false, true].iter().enumerate() {
+            for _ in 0..WARMUP {
+                let a = if with_a {
+                    Some(TensorMut {
+                        data: da.as_slice_mut(),
+                        shape: sa,
+                        stride: contiguous_stride(sa),
+                    })
+                } else {
+                    None
+                };
+                let args = FlashDecodingArgs::<f16> {
+                    a,
+                    q: TensorRef {
+                        data: dq.as_slice(),
+                        shape: sq,
+                        stride: contiguous_stride(sq),
+                    },
+                    k: TensorRef {
+                        data: dk.as_slice(),
+                        shape: sk,
+                        stride: contiguous_stride(sk),
+                    },
+                    v: TensorRef {
+                        data: dv.as_slice(),
+                        shape: sv,
+                        stride: contiguous_stride(sv),
+                    },
+                    y: TensorMut {
+                        data: dy.as_slice_mut(),
+                        shape: sy,
+                        stride: contiguous_stride(sy),
+                    },
+                };
+                plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
+                    .expect("run");
+            }
+            stream.synchronize().expect("sync");
+            let mut best = f64::INFINITY;
+            for _ in 0..3 {
+                let t0 = Instant::now();
+                for _ in 0..ITERS {
+                    let a = if with_a {
+                        Some(TensorMut {
+                            data: da.as_slice_mut(),
+                            shape: sa,
+                            stride: contiguous_stride(sa),
+                        })
+                    } else {
+                        None
+                    };
+                    let args = FlashDecodingArgs::<f16> {
+                        a,
+                        q: TensorRef {
+                            data: dq.as_slice(),
+                            shape: sq,
+                            stride: contiguous_stride(sq),
+                        },
+                        k: TensorRef {
+                            data: dk.as_slice(),
+                            shape: sk,
+                            stride: contiguous_stride(sk),
+                        },
+                        v: TensorRef {
+                            data: dv.as_slice(),
+                            shape: sv,
+                            stride: contiguous_stride(sv),
+                        },
+                        y: TensorMut {
+                            data: dy.as_slice_mut(),
+                            shape: sy,
+                            stride: contiguous_stride(sy),
+                        },
+                    };
+                    plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
+                        .expect("run");
+                }
+                stream.synchronize().expect("sync");
+                let ns = t0.elapsed().as_nanos() as f64 / ITERS as f64;
+                if ns < best {
+                    best = ns;
+                }
+            }
+            result[idx] = best;
+        }
+        let (base, wa) = (result[0], result[1]);
+        println!(
+            "  K={k_len:>4}: baseline {base:>7.0} ns   +a {wa:>7.0} ns   delta {:+5.1}% ({:+.0} ns)",
+            100.0 * (wa - base) / base,
+            wa - base
+        );
+    }
+}
