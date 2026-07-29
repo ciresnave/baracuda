@@ -37,10 +37,13 @@ fn sdpa_decode_cpu(
     k_len: usize,
     d: usize,
     scale: f32,
-) -> Vec<f32> {
+) -> (Vec<f32>, Vec<f32>) {
     assert!(h_q % h_kv == 0);
     let group_size = h_q / h_kv;
     let mut y = vec![0.0_f32; b * h_q * d];
+    // Per-key attention weights a[b, h_q, k_len] = softmax(q·kᵀ·scale) over the
+    // keys, for the single decode query — the expected FlashDecoding `a` output.
+    let mut a = vec![0.0_f32; b * h_q * k_len];
     for bi in 0..b {
         for hi in 0..h_q {
             let h_k_idx = hi / group_size;
@@ -71,6 +74,10 @@ fn sdpa_decode_cpu(
             for s in &mut scores {
                 *s *= inv;
             }
+            // `scores` is now the normalized per-key weight vector — this IS the
+            // expected `a[bi, hi, :]`.
+            let a_off = (bi * h_q + hi) * k_len;
+            a[a_off..a_off + k_len].copy_from_slice(&scores);
             // Y[bi, hi] = Σ_ki scores[ki] * V[bi, h_k_idx, ki].
             let y_off = (bi * h_q + hi) * d;
             for di in 0..d {
@@ -83,7 +90,24 @@ fn sdpa_decode_cpu(
             }
         }
     }
-    y
+    (y, a)
+}
+
+/// Compare an f32 device output against an f32 reference with a relative
+/// tolerance and an absolute floor (attention weights are ≤1 and near 0 for
+/// masked-out keys, so the floor matters).
+fn assert_close_f32(actual: &[f32], expected: &[f32], tol: f32, abs_floor: f32, label: &str) {
+    assert_eq!(actual.len(), expected.len(), "len mismatch in {label}");
+    for (i, (&a, &e)) in actual.iter().zip(expected.iter()).enumerate() {
+        let diff = (a - e).abs();
+        let rel_bound = tol * e.abs().max(abs_floor);
+        if diff > rel_bound {
+            panic!(
+                "{label}: idx={i} actual={a:.6e} expected={e:.6e} \
+                 abs_diff={diff:.6e} bound={rel_bound:.6e}",
+            );
+        }
+    }
 }
 
 fn deterministic_f32(n: usize, seed_a: f32, seed_b: f32) -> Vec<f32> {
@@ -137,7 +161,7 @@ fn run_case_f16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let k_f32 = deterministic_f32((b * h * k_len * d) as usize, 0.017, 0.2);
     let v_f32 = deterministic_f32((b * h * k_len * d) as usize, 0.011, -0.1);
 
-    let expected = sdpa_decode_cpu(
+    let (expected, a_expected) = sdpa_decode_cpu(
         &q_f32,
         &k_f32,
         &v_f32,
@@ -170,6 +194,9 @@ fn run_case_f16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let sv = [b, h, k_len, d];
     let sy = [b, h, d];
 
+    let mut da: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (sy[0] * sy[1] * k_len) as usize).expect("alloc a");
+
     let args = FlashDecodingArgs::<f16> {
         q: TensorRef {
             data: dq.as_slice(),
@@ -191,10 +218,20 @@ fn run_case_f16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
             shape: sy,
             stride: contiguous_stride(sy),
         },
+        a: TensorMut {
+            data: da.as_slice_mut(),
+            shape: [sy[0], sy[1], k_len],
+            stride: contiguous_stride([sy[0], sy[1], k_len]),
+        },
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
         .expect("run");
     stream.synchronize().expect("sync");
+
+    // Verify the per-key attention-weight output against the CPU reference.
+    let mut a_host = vec![0.0_f32; (sy[0] * sy[1] * k_len) as usize];
+    da.copy_to_host(&mut a_host).expect("dl a");
+    assert_close_f32(&a_host, &a_expected, tol, 1e-3, label);
 
     let mut y_host = vec![f16::ZERO; (b * h * d) as usize];
     dy.copy_to_host(&mut y_host).expect("dl y");
@@ -210,7 +247,7 @@ fn run_case_bf16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let k_f32 = deterministic_f32((b * h * k_len * d) as usize, 0.017, 0.2);
     let v_f32 = deterministic_f32((b * h * k_len * d) as usize, 0.011, -0.1);
 
-    let expected = sdpa_decode_cpu(
+    let (expected, a_expected) = sdpa_decode_cpu(
         &q_f32,
         &k_f32,
         &v_f32,
@@ -243,6 +280,9 @@ fn run_case_bf16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     let sv = [b, h, k_len, d];
     let sy = [b, h, d];
 
+    let mut da: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (sy[0] * sy[1] * k_len) as usize).expect("alloc a");
+
     let args = FlashDecodingArgs::<bf16> {
         q: TensorRef {
             data: dq.as_slice(),
@@ -264,10 +304,20 @@ fn run_case_bf16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
             shape: sy,
             stride: contiguous_stride(sy),
         },
+        a: TensorMut {
+            data: da.as_slice_mut(),
+            shape: [sy[0], sy[1], k_len],
+            stride: contiguous_stride([sy[0], sy[1], k_len]),
+        },
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
         .expect("run");
     stream.synchronize().expect("sync");
+
+    // Verify the per-key attention-weight output against the CPU reference.
+    let mut a_host = vec![0.0_f32; (sy[0] * sy[1] * k_len) as usize];
+    da.copy_to_host(&mut a_host).expect("dl a");
+    assert_close_f32(&a_host, &a_expected, tol, 1e-3, label);
 
     let mut y_host = vec![bf16::ZERO; (b * h * d) as usize];
     dy.copy_to_host(&mut y_host).expect("dl y");
@@ -332,7 +382,7 @@ fn run_gqa_case_f16(b: i32, h_q: i32, h_kv: i32, k_len: i32, d: i32, tol: f32, l
     let k_f32 = deterministic_f32((b * h_kv * k_len * d) as usize, 0.017, 0.2);
     let v_f32 = deterministic_f32((b * h_kv * k_len * d) as usize, 0.011, -0.1);
 
-    let expected = sdpa_decode_cpu(
+    let (expected, a_expected) = sdpa_decode_cpu(
         &q_f32,
         &k_f32,
         &v_f32,
@@ -365,6 +415,9 @@ fn run_gqa_case_f16(b: i32, h_q: i32, h_kv: i32, k_len: i32, d: i32, tol: f32, l
     let sv = [b, h_kv, k_len, d];
     let sy = [b, h_q, d];
 
+    let mut da: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(&ctx, (sy[0] * sy[1] * k_len) as usize).expect("alloc a");
+
     let args = FlashDecodingArgs::<f16> {
         q: TensorRef {
             data: dq.as_slice(),
@@ -386,10 +439,20 @@ fn run_gqa_case_f16(b: i32, h_q: i32, h_kv: i32, k_len: i32, d: i32, tol: f32, l
             shape: sy,
             stride: contiguous_stride(sy),
         },
+        a: TensorMut {
+            data: da.as_slice_mut(),
+            shape: [sy[0], sy[1], k_len],
+            stride: contiguous_stride([sy[0], sy[1], k_len]),
+        },
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
         .expect("run");
     stream.synchronize().expect("sync");
+
+    // Verify the per-key attention-weight output against the CPU reference.
+    let mut a_host = vec![0.0_f32; (sy[0] * sy[1] * k_len) as usize];
+    da.copy_to_host(&mut a_host).expect("dl a");
+    assert_close_f32(&a_host, &a_expected, tol, 1e-3, label);
 
     let mut y_host = vec![f16::ZERO; (b * h_q * d) as usize];
     dy.copy_to_host(&mut y_host).expect("dl y");

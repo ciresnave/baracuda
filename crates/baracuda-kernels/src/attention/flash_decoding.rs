@@ -184,6 +184,13 @@ pub struct FlashDecodingArgs<'a, T: Element> {
     pub v: TensorRef<'a, T, 4>,
     /// Output tensor — shape `[B, H_q, D]`.
     pub y: TensorMut<'a, T, 3>,
+    /// Per-key attention-weight output — shape `[B, H_q, K_len]`, **f32**
+    /// (softmax weights accumulate in f32 regardless of `T`). Each cell
+    /// `a[b,h,k]` is the post-softmax weight key position `k` receives from
+    /// the single decode query = `exp(S_k - m_final) / l_final`. Feeds
+    /// attention-driven KV-cache eviction (H2O / R-KV). Must be **contiguous**
+    /// (the kernel derives its strides from `K_len`).
+    pub a: TensorMut<'a, f32, 3>,
 }
 
 /// FlashDecoding forward plan (Dao 2023).
@@ -293,6 +300,18 @@ impl<T: Element> FlashDecodingPlan<T> {
                 "FlashDecodingPlan: y.shape mismatch (expected [B, H_q, D])",
             ));
         }
+        if args.a.shape != [b, h_q, k] {
+            return Err(Error::InvalidProblem(
+                "FlashDecodingPlan: a.shape mismatch (expected [B, H_q, K_len])",
+            ));
+        }
+        // The kernel derives a's strides from K_len, so a must be contiguous
+        // [B, H_q, K_len] (row-major: [H_q*K_len, K_len, 1]).
+        if args.a.stride != [(h_q as i64) * (k as i64), k as i64, 1] {
+            return Err(Error::InvalidProblem(
+                "FlashDecodingPlan: a must be contiguous [B, H_q, K_len]",
+            ));
+        }
         if args.k.shape != [b, h_kv, k, d] {
             return Err(Error::InvalidProblem(
                 "FlashDecodingPlan: k.shape mismatch (expected [B, H_kv, K_len, D])",
@@ -365,6 +384,7 @@ impl<T: Element> FlashDecodingPlan<T> {
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
         let v_ptr = args.v.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let a_ptr = args.a.data.as_raw().0 as *mut c_void;
 
         let status = unsafe {
             match T::KIND {
@@ -373,6 +393,7 @@ impl<T: Element> FlashDecodingPlan<T> {
                     k_ptr,
                     v_ptr,
                     y_ptr,
+                    a_ptr,
                     ws_ptr,
                     ws_bytes,
                     self.desc.batch_size,
@@ -399,6 +420,7 @@ impl<T: Element> FlashDecodingPlan<T> {
                         k_ptr,
                         v_ptr,
                         y_ptr,
+                        a_ptr,
                         ws_ptr,
                         ws_bytes,
                         self.desc.batch_size,

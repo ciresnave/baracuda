@@ -113,6 +113,7 @@ __global__ void flash_decoding_split_kernel(
     float* __restrict__ partial_m,
     float* __restrict__ partial_l,
     float* __restrict__ partial_o,
+    float* __restrict__ a,        // [B,H,Sk] f32 per-key attention weights (H2O)
     int32_t batch, int32_t heads, int32_t k_len,
     int32_t head_dim,
     int32_t num_splits,
@@ -120,6 +121,7 @@ __global__ void flash_decoding_split_kernel(
     int64_t q_b_stride, int64_t q_h_stride,
     int64_t k_b_stride, int64_t k_h_stride, int64_t k_seq_stride,
     int64_t v_b_stride, int64_t v_h_stride, int64_t v_seq_stride,
+    int64_t a_b_stride, int64_t a_h_stride,
     float scale)
 {
     const int s = blockIdx.x;   // split idx
@@ -247,6 +249,12 @@ __global__ void flash_decoding_split_kernel(
         float p = expf(sS[ki] - chunk_max);
         sS[ki] = p;       // overwrite with softmax weight
         local_sum += p;
+        // H2O/R-KV attention-weight output: store the UN-normalized per-key
+        // weight exp(S_k - m_split); the combine kernel rescales it by
+        // exp(m_split - m_final) / l_final. Split-K key ranges are DISJOINT
+        // (this split owns [k_start, k_end)), so a[b,h,k_abs] is written
+        // exactly once — no per-split dimension and no accumulation hazard.
+        a[(int64_t)b * a_b_stride + (int64_t)h * a_h_stride + (k_start + ki)] = p;
     }
     float chunk_sum = block_reduce_sum_f32(local_sum, warp_buf);
 
@@ -671,10 +679,13 @@ __global__ void flash_decoding_combine_kernel(
     const float* __restrict__ partial_l,
     const float* __restrict__ partial_o,
     T* __restrict__ y,
+    float* __restrict__ a,        // [B,H,Sk] f32 per-key attention weights (H2O)
     int32_t batch, int32_t heads,
     int32_t head_dim,
     int32_t num_splits,
-    int64_t y_b_stride, int64_t y_h_stride)
+    int32_t k_len,
+    int64_t y_b_stride, int64_t y_h_stride,
+    int64_t a_b_stride, int64_t a_h_stride)
 {
     const int h = blockIdx.y;
     const int b = blockIdx.z;
@@ -705,6 +716,20 @@ __global__ void flash_decoding_combine_kernel(
     float global_l = block_reduce_sum_f32(local_l, warp_buf);
     // Guard against degenerate (all-masked) input.
     float inv_l = (global_l > 0.0f) ? (1.0f / global_l) : 0.0f;
+
+    // Phase 2b — finalize the H2O attention-weight output. The split kernel
+    // stored a[k] = exp(S_k - m_split); rescale in place to the exact
+    // normalized weight exp(S_k - m_final) / l_final by multiplying by
+    // exp(m_split - m_final) * inv_l. Key k's owning split is s = k / kChunkK
+    // (disjoint contiguous partition). Each a[k] is touched by exactly one
+    // combine block — deterministic, no atomics.
+    const int64_t a_base = (int64_t)b * a_b_stride + (int64_t)h * a_h_stride;
+    for (int kk = tid; kk < k_len; kk += nthreads) {
+        int s = kk / kChunkK;
+        float pm = partial_m[ml_base + s];
+        float alpha = (pm == -INFINITY) ? 0.0f : expf(pm - global_max);
+        a[a_base + kk] *= alpha * inv_l;
+    }
 
     // Phase 3 — per-d, accumulate weighted partial_o.
     const int64_t o_base = (((int64_t)b * heads + h)) * (int64_t)num_splits * (int64_t)head_dim;
@@ -790,6 +815,7 @@ __host__ inline bool flash_decoding_should_use_tc(
 template <typename T>
 __host__ inline int32_t launch_flash_decoding(
     const T* q, const T* k, const T* v, T* y,
+    float* a,                     // [B,H,Sk] f32 per-key attention weights (H2O)
     void* workspace, size_t workspace_bytes,
     int32_t batch, int32_t heads, int32_t num_kv_heads,
     int32_t k_len, int32_t head_dim,
@@ -811,6 +837,12 @@ __host__ inline int32_t launch_flash_decoding(
 
     const int32_t group_size = heads / num_kv_heads;
 
+    // The a[B,H,Sk] attention-weight output is contiguous (the H2O/R-KV use
+    // case); its strides derive from k_len. The Rust wrapper validates that the
+    // supplied `a` tensor is contiguous, so these match its layout.
+    const int64_t a_b_stride = (int64_t)heads * (int64_t)k_len;
+    const int64_t a_h_stride = (int64_t)k_len;
+
     int32_t num_splits = (int32_t)flash_decoding_num_splits(k_len);
     size_t need = (size_t)batch * (size_t)heads * (size_t)num_splits
                 * (size_t)(2 + head_dim) * sizeof(float);
@@ -830,6 +862,10 @@ __host__ inline int32_t launch_flash_decoding(
     {
         // TC path — one block per (split, h_kv, b). Each block batches
         // all group_size Q heads into the WMMA M-tile.
+        // NOTE (H2O `a` output): this path does NOT populate `a` and is
+        // currently UNREACHABLE (`flash_decoding_should_use_tc` returns false).
+        // Re-enabling TC requires adding the a-store to the TC split kernel
+        // (the `sScores[...] = expf(...)` spot) + threading `a`/strides here.
         dim3 grid_split((unsigned)num_splits, (unsigned)num_kv_heads, (unsigned)batch);
         flash_decoding_split_kernel_tc<T><<<grid_split, block, 0, stream>>>(
             q, k, v, partial_m, partial_l, partial_o,
@@ -845,11 +881,12 @@ __host__ inline int32_t launch_flash_decoding(
         // h_q / group_size inside the kernel.
         dim3 grid_split((unsigned)num_splits, (unsigned)heads, (unsigned)batch);
         flash_decoding_split_kernel<T><<<grid_split, block, 0, stream>>>(
-            q, k, v, partial_m, partial_l, partial_o,
+            q, k, v, partial_m, partial_l, partial_o, a,
             batch, heads, k_len, head_dim, num_splits, group_size,
             q_b_stride, q_h_stride,
             k_b_stride, k_h_stride, k_seq_stride,
             v_b_stride, v_h_stride, v_seq_stride,
+            a_b_stride, a_h_stride,
             scale);
     }
     cudaError_t err = cudaGetLastError();
@@ -859,9 +896,10 @@ __host__ inline int32_t launch_flash_decoding(
     // kernel ran.
     dim3 grid_comb(1, (unsigned)heads, (unsigned)batch);
     flash_decoding_combine_kernel<T><<<grid_comb, block, 0, stream>>>(
-        partial_m, partial_l, partial_o, y,
-        batch, heads, head_dim, num_splits,
-        y_b_stride, y_h_stride);
+        partial_m, partial_l, partial_o, y, a,
+        batch, heads, head_dim, num_splits, k_len,
+        y_b_stride, y_h_stride,
+        a_b_stride, a_h_stride);
     err = cudaGetLastError();
     if (err != cudaSuccess) return 1000 + (int32_t)err;
     return 0;
@@ -875,7 +913,7 @@ __host__ inline int32_t launch_flash_decoding(
 
 #define BARACUDA_KERNELS_FLASH_DECODING_INSTANTIATE(NAME, T)                                       \
     extern "C" int32_t baracuda_kernels_ ## NAME ## _run(                                           \
-        const void* q, const void* k, const void* v, void* y,                                       \
+        const void* q, const void* k, const void* v, void* y, void* a,                                       \
         void* workspace, size_t workspace_bytes,                                                    \
         int32_t batch, int32_t heads, int32_t num_kv_heads,                                         \
         int32_t k_len, int32_t head_dim,                                                            \
@@ -888,7 +926,7 @@ __host__ inline int32_t launch_flash_decoding(
     {                                                                                               \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                \
         return baracuda::flash_decoding::launch_flash_decoding<T>(                                  \
-            (const T*)q, (const T*)k, (const T*)v, (T*)y,                                           \
+            (const T*)q, (const T*)k, (const T*)v, (T*)y, (float*)a,                                \
             workspace, workspace_bytes,                                                             \
             batch, heads, num_kv_heads, k_len, head_dim,                                            \
             q_b_stride, q_h_stride,                                                                 \
