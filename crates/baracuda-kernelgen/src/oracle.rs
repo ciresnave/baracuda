@@ -2106,26 +2106,14 @@ mod tests {
     // compute-dtype cmp/select) STAY — that is Baracuda emitter/layout territory
     // kiss-ref's f32/dense value-DAG model does not cover (the locked boundary).
 
-    // KILL-test: Select moves the arm as raw bits (-0.0 survives).
-    #[test]
-    fn select_raw_bit_neg_zero_survives() {
-        // cond=false → picks arm b = Const(-0.0); the -0.0 sign must survive.
-        let body = input(0)
-            .binary(BinaryOp::CmpGt, konst(100.0)) // always false for our input
-            .select(input(0), konst(-0.0));
-        let op = OpDef::elementwise("sel", 1, &[ElementKind::F32], body);
-        let a = desc(&[1], &[1], ElementKind::F32);
-        let k = key(OpCategory::TernaryElementwise, &[a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a];
-        let ins = [f32b(&[1], &[1.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(
-            bit32(&out[0], 0),
-            (-0.0f32).to_bits(),
-            "Select must move -0.0 verbatim"
-        );
-    }
+    // NOTE (oracle→kiss-ref consolidation): `select_raw_bit_neg_zero_survives`
+    // was RETIRED. kiss-ref's raw-bit select (resolve.rs:58, byte-identical
+    // between 0.1.0 and the strengthened test at 5d0538b) is the equal-or-better
+    // reference; Baracuda's select round-trips through the converter and
+    // preserves -0.0 bit-for-bit, asserted in
+    // `kiss_ref_diff::tests::select_raw_bit_neg_zero_through_kiss_ref` (which
+    // also verified the previously-unproven select converter path). The
+    // Access::Elementwise arm + `cmp_and_select_decide_in_compute_dtype` stay.
 
     // KILL-test: i8 (S8) add wraps at 127 (mod-2^8 store truncation).
     #[test]

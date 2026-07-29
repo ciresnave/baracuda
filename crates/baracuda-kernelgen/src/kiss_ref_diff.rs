@@ -484,7 +484,7 @@ pub(crate) fn assert_conforming_eq(name: &str, reference: &[f32], candidate: &[f
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{BinaryOp, OpDef, ReduceOp, input, param};
+    use crate::ir::{BinaryOp, OpDef, ReduceOp, input, konst, param};
     use baracuda_kernel_vocab::{AxisMask, ElementKind};
     use kiss_ref_core::DetClass;
 
@@ -782,5 +782,27 @@ mod tests {
         let r = eval_recipe_for(&op, &[vec![1usize, 4]], &[vec![1.0f32, 2.0, 3.0, 4.0]], &[]);
         let got: Vec<f32> = r.outputs[0].clone().into_data();
         assert_bits_eq("cumsum_excl", &[0.0, 1.0, 3.0, 6.0], &got);
+    }
+
+    // ---- Select value guard ------------------------------------------------
+    // The select converter path was NOT in the fuzzer's safe palette, so this
+    // VERIFIES Baracuda's raw-bit select round-trips through the converter
+    // (select(cond,a,b) child order + cmp_gt token vs kiss-ref Op::Select /
+    // resolve.rs:58) before its oracle self-test retires. kiss-ref's select impl
+    // is byte-identical between 0.1.0 and the strengthened test at 5d0538b.
+
+    /// Raw-bit select preserves -0.0 verbatim: cond=false picks the b-arm
+    /// (-0.0), moved bit-for-bit (not arithmetic). Ports oracle.rs
+    /// `select_raw_bit_neg_zero_survives`.
+    #[test]
+    fn select_raw_bit_neg_zero_through_kiss_ref() {
+        // cmp_gt(in0, 100) is false for in0 = 1.0 -> select picks arm b = -0.0.
+        let body = input(0)
+            .binary(BinaryOp::CmpGt, konst(100.0))
+            .select(input(0), konst(-0.0));
+        let op = OpDef::elementwise("sel", 1, &[ElementKind::F32], body);
+        let r = eval_recipe_for(&op, &[vec![1usize]], &[vec![1.0f32]], &[]);
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        assert_bits_eq("select_neg_zero", &[-0.0], &got);
     }
 }
