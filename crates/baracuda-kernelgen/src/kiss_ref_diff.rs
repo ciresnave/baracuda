@@ -744,4 +744,43 @@ mod tests {
         // reduce axis 0 -> column sums [1+4, 2+5, 3+6].
         assert_bits_eq("reduce_outer_axis", &[5.0, 7.0, 9.0], &got);
     }
+
+    // ---- Scan value guards (Task 4) ----------------------------------------
+    // Forward + exclusive prefix scans (value semantics). REVERSE scan is an
+    // emission-level honest miss (flip withdrawn — `semantics_dag` returns None),
+    // so kiss-ref can't cover it: oracle.rs
+    // `scan_cummax_forward_and_reverse_and_exclusive` STAYS whole.
+
+    /// Forward inclusive cumsum over axis 1. Ports oracle.rs `scan_cumsum_forward`.
+    #[test]
+    fn scan_cumsum_forward_through_kiss_ref() {
+        let op = OpDef::scan_simple(
+            "cumsum",
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            false,
+        );
+        let r = eval_recipe_for(&op, &[vec![1usize, 4]], &[vec![1.0f32, 2.0, 3.0, 4.0]], &[]);
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        assert_bits_eq("cumsum_fwd", &[1.0, 3.0, 6.0, 10.0], &got);
+    }
+
+    /// Exclusive cumsum writes the additive identity (0) at the first position.
+    /// Ports oracle.rs `scan_cumsum_exclusive_first_pos_identity`.
+    #[test]
+    fn scan_cumsum_exclusive_through_kiss_ref() {
+        let op = OpDef::scan_simple(
+            "cumsum_excl",
+            &[ElementKind::F32],
+            ReduceOp::Sum,
+            1,
+            false,
+            true,
+        );
+        let r = eval_recipe_for(&op, &[vec![1usize, 4]], &[vec![1.0f32, 2.0, 3.0, 4.0]], &[]);
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        assert_bits_eq("cumsum_excl", &[0.0, 1.0, 3.0, 6.0], &got);
+    }
 }

@@ -2288,48 +2288,15 @@ mod tests {
 
     // --- D. Scan (cumsum, cummax; fwd/reverse/exclusive) --------------------
 
-    #[test]
-    fn scan_cumsum_forward() {
-        let op = OpDef::scan_simple(
-            "cumsum",
-            &[ElementKind::F32],
-            ReduceOp::Sum,
-            1,
-            false,
-            false,
-        );
-        let ind = desc(&[1, 4], &[4, 1], ElementKind::F32);
-        let k = key(OpCategory::Scan, &[ind, ind]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, ind];
-        let ins = [f32b(&[1, 4], &[1.0, 2.0, 3.0, 4.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&out[0]), vec![1.0, 3.0, 6.0, 10.0]);
-    }
-
-    // KILL-test: exclusive scan writes the identity at the first visited position.
-    #[test]
-    fn scan_cumsum_exclusive_first_pos_identity() {
-        let op = OpDef::scan_simple(
-            "cumsum_excl",
-            &[ElementKind::F32],
-            ReduceOp::Sum,
-            1,
-            false,
-            true,
-        );
-        let ind = desc(&[1, 4], &[4, 1], ElementKind::F32);
-        let k = key(OpCategory::Scan, &[ind, ind]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, ind];
-        let ins = [f32b(&[1, 4], &[1.0, 2.0, 3.0, 4.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(
-            f32s(&out[0]),
-            vec![0.0, 1.0, 3.0, 6.0],
-            "excl first pos = additive identity 0"
-        );
-    }
+    // NOTE (oracle→kiss-ref consolidation, Task 4): the portable float scan
+    // VALUE-semantics self-tests `scan_cumsum_forward` and
+    // `scan_cumsum_exclusive_first_pos_identity` were RETIRED — asserted against
+    // kiss-ref via the converter in `kiss_ref_diff::tests`
+    // (scan_cumsum_forward / scan_cumsum_exclusive). The `Access::Scan` arm STAYS
+    // (exercised by shape.rs + the cummax test below). `scan_cummax_*` is KEPT
+    // WHOLE: it exercises REVERSE scan, an emission-level honest miss (flip
+    // withdrawn — `semantics_dag` returns None) that kiss-ref cannot cover, so it
+    // has no equal-or-better replacement to retire against.
 
     #[test]
     fn scan_cummax_forward_and_reverse_and_exclusive() {
