@@ -94,6 +94,7 @@ where
 
         warmup(&stream, || {
             let args = FlashDecodingArgs::<T> {
+                a: None,
                 q: TensorRef {
                     data: dq.as_slice(),
                     shape: sq,
@@ -121,6 +122,7 @@ where
         });
         let fd_ns = measure_median_ns(&ctx, &stream, 11, 20, || {
             let args = FlashDecodingArgs::<T> {
+                a: None,
                 q: TensorRef {
                     data: dq.as_slice(),
                     shape: sq,
@@ -146,6 +148,50 @@ where
                 .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
                 .expect("fd run");
         });
+
+        // ---- Cost of the OPTIONAL H2O attention-weight output: a=Some vs the
+        //      a=None baseline measured above (same build, same shapes). ----
+        let mut da: DeviceBuffer<f32> =
+            match DeviceBuffer::zeros(&ctx, (BATCH * NUM_HEADS * k_len) as usize) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+        let fd_ns_a = measure_median_ns(&ctx, &stream, 11, 20, || {
+            let args = FlashDecodingArgs::<T> {
+                a: Some(TensorMut {
+                    data: da.as_slice_mut(),
+                    shape: [BATCH, NUM_HEADS, k_len],
+                    stride: contiguous_stride([BATCH, NUM_HEADS, k_len]),
+                }),
+                q: TensorRef {
+                    data: dq.as_slice(),
+                    shape: sq,
+                    stride: contiguous_stride(sq),
+                },
+                k: TensorRef {
+                    data: dk.as_slice(),
+                    shape: sk,
+                    stride: contiguous_stride(sk),
+                },
+                v: TensorRef {
+                    data: dv.as_slice(),
+                    shape: sv,
+                    stride: contiguous_stride(sv),
+                },
+                y: TensorMut {
+                    data: dy.as_slice_mut(),
+                    shape: sy,
+                    stride: contiguous_stride(sy),
+                },
+            };
+            fd_plan
+                .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
+                .expect("fd run +a");
+        });
+        eprintln!(
+            "flash_decoding a-cost {label}/{dtype_label}: baseline {fd_ns:.0} ns, +a {fd_ns_a:.0} ns, delta {:+.2}%",
+            100.0 * (fd_ns_a - fd_ns) / fd_ns
+        );
 
         // ---- FlashSdpaPlan reference (bespoke or FA2 depending on
         //      heuristic — at seq_q=1 it's bespoke unless K is huge). ----
@@ -324,6 +370,7 @@ where
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = FlashDecodingArgs::<T> {
+                        a: None,
                         q: TensorRef {
                             data: dq.as_slice(),
                             shape: sq,
@@ -427,6 +474,7 @@ where
 
             warmup(&stream, || {
                 let args = FlashDecodingArgs::<T> {
+                    a: None,
                     q: TensorRef {
                         data: dq.as_slice(),
                         shape: sq,
@@ -454,6 +502,7 @@ where
             });
             let fd_ns = measure_median_ns(&ctx, &stream, 11, 20, || {
                 let args = FlashDecodingArgs::<T> {
+                    a: None,
                     q: TensorRef {
                         data: dq.as_slice(),
                         shape: sq,
@@ -498,6 +547,7 @@ where
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = FlashDecodingArgs::<T> {
+                            a: None,
                             q: TensorRef {
                                 data: dq.as_slice(),
                                 shape: sq,

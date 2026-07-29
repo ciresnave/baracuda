@@ -249,12 +249,15 @@ __global__ void flash_decoding_split_kernel(
         float p = expf(sS[ki] - chunk_max);
         sS[ki] = p;       // overwrite with softmax weight
         local_sum += p;
-        // H2O/R-KV attention-weight output: store the UN-normalized per-key
-        // weight exp(S_k - m_split); the combine kernel rescales it by
-        // exp(m_split - m_final) / l_final. Split-K key ranges are DISJOINT
-        // (this split owns [k_start, k_end)), so a[b,h,k_abs] is written
-        // exactly once — no per-split dimension and no accumulation hazard.
-        a[(int64_t)b * a_b_stride + (int64_t)h * a_h_stride + (k_start + ki)] = p;
+        // H2O/R-KV attention-weight output (OPTIONAL — `a == nullptr` skips it,
+        // zero cost for standard decode). Stores the UN-normalized per-key weight
+        // exp(S_k - m_split); the combine kernel rescales by
+        // exp(m_split - m_final)/l_final. Split-K key ranges are DISJOINT (this
+        // split owns [k_start, k_end)), so a[b,h,k_abs] is written exactly once —
+        // no per-split dimension and no accumulation hazard.
+        if (a != nullptr) {
+            a[(int64_t)b * a_b_stride + (int64_t)h * a_h_stride + (k_start + ki)] = p;
+        }
     }
     float chunk_sum = block_reduce_sum_f32(local_sum, warp_buf);
 
@@ -717,18 +720,20 @@ __global__ void flash_decoding_combine_kernel(
     // Guard against degenerate (all-masked) input.
     float inv_l = (global_l > 0.0f) ? (1.0f / global_l) : 0.0f;
 
-    // Phase 2b — finalize the H2O attention-weight output. The split kernel
-    // stored a[k] = exp(S_k - m_split); rescale in place to the exact
-    // normalized weight exp(S_k - m_final) / l_final by multiplying by
-    // exp(m_split - m_final) * inv_l. Key k's owning split is s = k / kChunkK
-    // (disjoint contiguous partition). Each a[k] is touched by exactly one
-    // combine block — deterministic, no atomics.
-    const int64_t a_base = (int64_t)b * a_b_stride + (int64_t)h * a_h_stride;
-    for (int kk = tid; kk < k_len; kk += nthreads) {
-        int s = kk / kChunkK;
-        float pm = partial_m[ml_base + s];
-        float alpha = (pm == -INFINITY) ? 0.0f : expf(pm - global_max);
-        a[a_base + kk] *= alpha * inv_l;
+    // Phase 2b — finalize the H2O attention-weight output (OPTIONAL: `a ==
+    // nullptr` skips it). The split kernel stored a[k] = exp(S_k - m_split);
+    // rescale in place to the exact normalized weight exp(S_k - m_final)/l_final
+    // by multiplying by exp(m_split - m_final)*inv_l. Key k's owning split is
+    // s = k / kChunkK (disjoint contiguous partition). Each a[k] is touched by
+    // exactly one combine block — deterministic, no atomics.
+    if (a != nullptr) {
+        const int64_t a_base = (int64_t)b * a_b_stride + (int64_t)h * a_h_stride;
+        for (int kk = tid; kk < k_len; kk += nthreads) {
+            int s = kk / kChunkK;
+            float pm = partial_m[ml_base + s];
+            float alpha = (pm == -INFINITY) ? 0.0f : expf(pm - global_max);
+            a[a_base + kk] *= alpha * inv_l;
+        }
     }
 
     // Phase 3 — per-d, accumulate weighted partial_o.

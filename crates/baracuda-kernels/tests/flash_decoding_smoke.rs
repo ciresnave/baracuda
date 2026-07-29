@@ -218,11 +218,11 @@ fn run_case_f16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
             shape: sy,
             stride: contiguous_stride(sy),
         },
-        a: TensorMut {
+        a: Some(TensorMut {
             data: da.as_slice_mut(),
             shape: [sy[0], sy[1], k_len],
             stride: contiguous_stride([sy[0], sy[1], k_len]),
-        },
+        }),
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
         .expect("run");
@@ -304,11 +304,11 @@ fn run_case_bf16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
             shape: sy,
             stride: contiguous_stride(sy),
         },
-        a: TensorMut {
+        a: Some(TensorMut {
             data: da.as_slice_mut(),
             shape: [sy[0], sy[1], k_len],
             stride: contiguous_stride([sy[0], sy[1], k_len]),
-        },
+        }),
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
         .expect("run");
@@ -439,11 +439,11 @@ fn run_gqa_case_f16(b: i32, h_q: i32, h_kv: i32, k_len: i32, d: i32, tol: f32, l
             shape: sy,
             stride: contiguous_stride(sy),
         },
-        a: TensorMut {
+        a: Some(TensorMut {
             data: da.as_slice_mut(),
             shape: [sy[0], sy[1], k_len],
             stride: contiguous_stride([sy[0], sy[1], k_len]),
-        },
+        }),
     };
     plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
         .expect("run");
