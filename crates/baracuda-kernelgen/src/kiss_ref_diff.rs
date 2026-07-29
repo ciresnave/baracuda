@@ -434,6 +434,21 @@ pub(crate) fn eval_recipe_for(
     inputs: &[Vec<f32>],
     params: &[f32],
 ) -> RecipeEval<f32> {
+    // Preconditions (clearer than a bare `shapes[0]` index-OOB or a silent
+    // `.zip` truncation when a caller under-provisions tensors).
+    assert!(
+        !shapes.is_empty(),
+        "{}: eval_recipe_for needs at least the input-0 shape",
+        op.name
+    );
+    assert_eq!(
+        inputs.len(),
+        shapes.len(),
+        "{}: eval_recipe_for got {} input(s) for {} shape(s) — zip would truncate",
+        op.name,
+        inputs.len(),
+        shapes.len()
+    );
     let rank = shapes[0].len();
     let dag = recipe_to_flatdag(op, rank).unwrap_or_else(|e| panic!("{}: converter: {e}", op.name));
     let tensors: Vec<Tensor<f32>> = inputs
@@ -524,7 +539,11 @@ pub(crate) fn oracle_and_kiss_ref(
     inputs: &[Vec<f32>],
     params: &[f32],
 ) -> (Vec<f32>, Vec<f32>) {
-    let mk = |sh: &[i64]| OperandDesc::new(sh.len(), sh, &dense_strides(sh), ElementKind::F32, 16);
+    // Alignment 256 matches the oracle/shape test helpers (`desc`, `od`) so the
+    // structure-key classification + plan selection are consistent across the
+    // test harnesses (the value the oracle computes is alignment-independent, but
+    // this keeps the exercised plan variant identical to the retired tests').
+    let mk = |sh: &[i64]| OperandDesc::new(sh.len(), sh, &dense_strides(sh), ElementKind::F32, 256);
     let mut operands: Vec<OperandDesc> = in_shapes.iter().map(|s| mk(s)).collect();
     operands.push(mk(out_shape));
     let key = structure_key(cat, &operands, ArchSku::Sm89);
