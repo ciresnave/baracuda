@@ -62,11 +62,11 @@ mod text;
 #[cfg(test)]
 mod fuzz;
 
-// Temporary (Task 0 of the oracle→kiss-ref consolidation): compile-verifies the
-// kiss-ref 0.1.0 dev-deps resolve + eval_recipe runs. Replaced by `kiss_ref_diff`
-// in Task 1.
+// The in-tree Baracuda ↔ kiss-ref differential converter + comparators (the
+// oracle→kiss-ref consolidation). `#[cfg(test)]`-only: migrated numerical tests
+// build kiss-ref DAGs from Baracuda OpDefs and assert against `eval_recipe`.
 #[cfg(test)]
-mod kiss_ref_smoke;
+mod kiss_ref_diff;
 
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, bundle_kisc, contract, front_matter};
