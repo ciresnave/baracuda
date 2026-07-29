@@ -8,6 +8,18 @@
 
 **Tech Stack:** Rust 2024, `kiss-ref-core`/`kiss-ops-vocab`/`kiss-classify-vocab` `0.1.0` (crates.io, dev-only), `cargo test -p baracuda-kernelgen`.
 
+> **v2 amendment (2026-07-29):** Execution surfaced that oracle.rs is NOT fully redundant — it
+> is the permanent Baracuda **plumbing** reference (physical layout, int store-truncation, the
+> elementwise frame) that kiss-ref's value-DAG model structurally can't cover. Per Eric's
+> **retire-when-replaced** ruling + the locked kiss-ref boundary, every task below is narrowed:
+> retire ONLY the redundant **value-semantics** self-tests (each edge ported into
+> `kiss_ref_diff` as the proven equal-or-better replacement FIRST), and KEEP the `evaluate` arm
+> + all plumbing tests. **The `evaluate` arms are NEVER panicked.** fuzz.rs / shape.rs need NO
+> repoint (the arms stay alive, so their oracle legs keep working — and the fuzz leg tests the
+> Baracuda frame, which is a permanent keep). See the design doc's "Amendment v2" for the full
+> model. Task 2 landed under this discipline (commit `4195111c`); Tasks 3–6 follow it, gated on
+> kiss-ref's coverage of each value landing first.
+
 ## Global Constraints
 
 - **kiss-ref crates are `[dev-dependencies]` only** — the published `baracuda-kernelgen` lib's dependency graph and downstream consumers MUST stay unaffected; `cargo publish` / default CI stay clean.
@@ -161,7 +173,17 @@ git commit -m "test(kernelgen): port the kiss-ref differential converter in-tree
 
 ---
 
-### Task 2: Retire elementwise oracle semantics
+### Task 2: Retire elementwise VALUE-semantics self-tests — ✅ DONE (narrowed, commit `4195111c`)
+
+> **As executed (v2):** Steps 1–2 (repoint fuzz.rs / shape.rs) were **withdrawn** — the arm
+> stays alive, so both oracle legs keep working; the fuzz leg tests the Baracuda frame (a
+> permanent keep). Step 3 was narrowed to delete ONLY the 5 redundant value self-tests
+> (`elementwise_add_contiguous`, `_relu_neg_zero_and_nan`, `_maxmin_prop_signed_zero_ties_keep_a`,
+> `_affine_with_params`, `probe_classes_add_bit_exact_zeros`), each first ported into
+> `kiss_ref_diff::tests`. KEPT: the `Access::Elementwise` arm + all plumbing tests (select,
+> int8, strided/broadcast/flipped/permuted views, compute-dtype). The original v1 steps below
+> are retained for provenance.
+
 
 **Files:**
 - Modify: `crates/baracuda-kernelgen/src/oracle.rs`, `src/shape.rs`, `src/fuzz.rs`

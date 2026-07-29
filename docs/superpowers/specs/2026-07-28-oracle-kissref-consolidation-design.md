@@ -1,8 +1,36 @@
-# Design: oracle.rs → kiss-ref consolidation (v1)
+# Design: oracle.rs → kiss-ref consolidation (v2)
 
-**Date:** 2026-07-28
-**Status:** design approved; execution gated on kiss-ref publishing `0.1.0` to crates.io.
+**Date:** 2026-07-28 (v1); amended 2026-07-29 (v2, after execution).
+**Status:** in execution. Tasks 0–2 landed. v2 reshapes the model after a Task-2 finding.
 **Scope owner:** Baracuda (kernelgen), coordinated with kiss-ref (peer `3vgwagtz`).
+
+## Amendment v2 (2026-07-29) — the reshaped model, after execution
+
+Executing Task 2 surfaced that **oracle.rs is NOT fully redundant with kiss-ref**, and Eric
+ruled the discipline: **retire-when-replaced — discard nothing from the oracle without an
+equal-or-better equivalent already landed in kiss-ref (or another source); phase out the
+oracle only as it is replaced.** The boundary was then locked with kiss-ref (peer
+`3vgwagtz`, file-cited):
+
+- **kiss-ref = the LOGICAL / value-semantics reference** (KISS-Ops math over dense logical
+  tensors): elementwise math, folds, scans, matmul, gather/scatter, broadcast (logical
+  stride-0), flip, raw-bit select (`resolve.rs:58`), compute-dtype cmp/select
+  (`resolve.rs:67`, monomorphic `eval_op::<T>`), integer-lane WRAP values (`eval_int_op`,
+  i128→width; int-lane drain in flight).
+- **oracle.rs = the permanent Baracuda PLUMBING reference** for what a value-semantics
+  reference structurally cannot model: **physical host layout** (negative strides,
+  base_offset slices, axis-permuted consumer buffers), the **elementwise FRAME**
+  (output-shape-from-operand; a const/partial-input body broadcasts across the frame —
+  kiss-ref's value-DAG derives a const-only body as a *scalar*), and **float→int
+  STORE-TRUNCATION** (no KISS-Ops cast op exists, so narrowing-store is Baracuda codegen).
+
+**Consequence:** the consolidation collapses the duplicate **VALUE-semantics** reference
+(the real comprehension-correlation risk), NOT the whole oracle. oracle.rs is **not heading
+toward deletion** — it keeps a permanent plumbing role. Every retirement is gated: port the
+value edge into `kiss_ref_diff` as the proven equal-or-better replacement FIRST, then delete
+the redundant oracle self-test; keep the `evaluate` arm + all plumbing tests. This
+**supersedes** the "redundant parallel implementation / shrink toward deletion" framing in
+§1, §4, and §7 below.
 
 ## 1. Motivation
 
@@ -64,26 +92,32 @@ tests); the generator never uses the oracle at kernel-generation runtime. So thi
    <date>; use kiss-ref eval_recipe — see kiss_ref_diff")` so a stray caller gets a clear
    message rather than a silent gap.
 
-## 4. Precise retirement scope (v1)
+## 4. Precise retirement scope (v2 — value-vs-plumbing, retire-when-replaced)
 
-`oracle::evaluate` implements every `Access` variant **except `RowSort`** (which already
-panics as deferred): Elementwise, Reduction, RowReduce, Scan, Window, Im2Col, Contraction.
-kiss-ref (via the converter) covers: elementwise, reduce, scan, rowreduce, matmul,
-gather/scatter — but **not** Window / Im2Col (the reserved-constructor gap) or RowSort.
+Retirement operates on oracle **SELF-TESTS**, not the `evaluate` arms: each arm stays alive
+as long as ANY retained plumbing test needs it. For each op family, its VALUE-semantics
+self-tests retire (edges ported into `kiss_ref_diff` first, as the proven equal-or-better
+replacement); its PLUMBING self-tests (physical layout, int store-truncation, frame) stay.
 
-| Op | v1 action | Why |
-|---|---|---|
-| Elementwise | **Retire now** | harness proved oracle ≡ kiss-ref |
-| Reduction | **Retire now** | harness proved oracle ≡ kiss-ref |
-| Scan | **Retire now** | harness proved oracle ≡ kiss-ref |
-| RowReduce | **Prove-then-retire** | oracle + kiss-ref both cover; add a differential first |
-| Contraction (matmul) | **Prove-then-retire** | oracle + kiss-ref both cover; add a differential first |
-| Window | **Keep in oracle** | kiss-ref doesn't cover (needs reserved `WithDim`) |
-| Im2Col | **Keep in oracle** | kiss-ref doesn't cover (needs reserved `Dims`) |
-| RowSort | **Keep (already deferred)** | kiss-ref/recipe don't cover sort |
+| Op family | Value self-tests | Plumbing self-tests (permanent keep) | Gate |
+|---|---|---|---|
+| Elementwise (math) | **Retired (Task 2)** → kiss_ref_diff: add(+INF)/relu-signed-zero+NaN/affine/signed-zero-add/max_prop-min_prop-ties | raw-bit select, int8 store-trunc, strided/broadcast/flipped/permuted views, compute-dtype cmp/select, frame (fuzz leg) | **done** |
+| Elementwise (select, compute-dtype) | **Next pass** (kiss-ref covers today: `resolve.rs:58/67`) | — | kiss-ref's strengthened select bit-identity test lands green |
+| Reduction | **Prove-then-retire** value folds → kiss_ref_diff | int / strided reductions, frame | kiss-ref reduce covered; add differential first |
+| Scan | **Prove-then-retire** value scans → kiss_ref_diff | int / strided scans, frame | kiss-ref scan covered; add differential first |
+| RowReduce | **Prove-then-retire** (softmax/rmsnorm) → kiss_ref_diff | any layout/int edges | add differential first |
+| Contraction (matmul) | **Prove-then-retire** → kiss_ref_diff | any layout/int edges | add differential first |
+| Window / Im2Col | **Keep whole** | — | kiss-ref doesn't cover (reserved `WithDim`/`Dims`) |
+| RowSort | **Keep (already deferred)** | — | kiss-ref/recipe don't cover sort |
 
-**Always kept:** `TypedBuffer`, `Fidelity`, `compare` — still needed by the retained ops
-*and* the device differential.
+**Permanent Baracuda territory (never retired):** physical host layout (negative strides,
+base_offset, axis-permutation), the elementwise frame (const/partial-body broadcast),
+float→int store-truncation. **Always kept:** `TypedBuffer`, `Fidelity`, `compare`, and every
+`Access::*` arm.
+
+**Retire-when-replaced gate (Eric's ruling):** an op's value self-test is deleted ONLY after
+its edge is asserted against kiss-ref in `kiss_ref_diff` AND kiss-ref's coverage of that
+value has landed + is green. kiss-ref's landing gates Baracuda's deletion.
 
 ## 5. The prove-then-retire discipline (the safety gate)
 
