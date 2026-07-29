@@ -2062,7 +2062,7 @@ mod tests {
     use super::*;
     use crate::ir::{BinaryOp, OpDef, ReduceOp, ReduceStage, input, konst, reduced};
     use crate::plan::build_plan;
-    use baracuda_kernel_vocab::{ArchSku, AxisMask, OpCategory, StructureKey, structure_key};
+    use baracuda_kernel_vocab::{ArchSku, OpCategory, StructureKey, structure_key};
 
     // --- plan/key builders --------------------------------------------------
 
@@ -2204,50 +2204,16 @@ mod tests {
 
     // --- B. Reduction -------------------------------------------------------
 
-    #[test]
-    fn reduction_sum_last_axis() {
-        let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
-        let ind = desc(&[2, 3], &[3, 1], ElementKind::F32);
-        let outd = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::Reduction, &[ind, outd]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, outd];
-        let ins = [f32b(&[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&out[0]), vec![6.0, 15.0]);
-    }
-
-    // KILL-test: the have-flag NaN fold — a NaN in a reduction run sticks.
-    #[test]
-    fn reduction_max_nan_sticks() {
-        let op = OpDef::reduction("max", 1, &[ElementKind::F32], input(0), ReduceOp::Max);
-        let ind = desc(&[2, 3], &[3, 1], ElementKind::F32);
-        let outd = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::Reduction, &[ind, outd]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, outd];
-        let ins = [f32b(&[2, 3], &[1.0, f32::NAN, 3.0, 4.0, 5.0, 6.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert!(
-            f32::from_bits(out[0].bits_at(0) as u32).is_nan(),
-            "NaN must stick"
-        );
-        assert_eq!(f32::from_bits(out[0].bits_at(1) as u32), 6.0);
-    }
-
-    // KILL-test: the Mean divisor (product of reduced extents).
-    #[test]
-    fn reduction_mean_divisor() {
-        let op = OpDef::reduction("mean", 1, &[ElementKind::F32], input(0), ReduceOp::Mean);
-        let ind = desc(&[2, 4], &[4, 1], ElementKind::F32);
-        let outd = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::Reduction, &[ind, outd]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, outd];
-        let ins = [f32b(&[2, 4], &[1.0, 2.0, 3.0, 4.0, 10.0, 10.0, 10.0, 10.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&out[0]), vec![2.5, 10.0]);
-    }
+    // NOTE (oracle→kiss-ref consolidation, Task 3): the pure float
+    // VALUE-semantics reduction self-tests — `reduction_sum_last_axis`,
+    // `reduction_max_nan_sticks`, `reduction_mean_divisor`, and
+    // `reduction_outer_axis` (below) — were RETIRED. Each fold is asserted
+    // against kiss-ref via the in-tree converter in `kiss_ref_diff::tests`
+    // (reduce_sum_last / reduce_max_nan_sticks — pins kiss-ref's reduce-Max as
+    // NaN-propagating / reduce_mean_divisor / reduce_outer_axis). The
+    // `Access::Reduction` arm STAYS — exercised by shape.rs's oracle differential
+    // and reserved for physical/int reduction plumbing (kiss-ref's f32/dense
+    // value-DAG model does not cover those).
 
     // --- C. RowReduce (softmax, layernorm) ----------------------------------
 
@@ -2735,30 +2701,8 @@ mod tests {
         assert_eq!(f32s(&out[0]), vec![1.0, 3.0, 5.0, 2.0, 4.0, 6.0]);
     }
 
-    // ensure the unused AxisMask import is exercised (outer-axis reduction).
-    #[test]
-    fn reduction_outer_axis() {
-        let mut mask = AxisMask::EMPTY;
-        mask.set(0); // reduce axis 0
-        let op = OpDef::reduction_axes(
-            "sum0",
-            1,
-            &[ElementKind::F32],
-            input(0),
-            ReduceOp::Sum,
-            mask,
-            false,
-        );
-        let ind = desc(&[2, 3], &[3, 1], ElementKind::F32);
-        let outd = desc(&[3], &[1], ElementKind::F32);
-        let k = key(OpCategory::Reduction, &[ind, outd]);
-        let plan = build_plan(&op, &k);
-        let ops = [ind, outd];
-        let ins = [f32b(&[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        // column sums: [1+4, 2+5, 3+6] = [5,7,9].
-        assert_eq!(f32s(&out[0]), vec![5.0, 7.0, 9.0]);
-    }
+    // (`reduction_outer_axis` retired here — outer-axis fold is now referenced
+    // against kiss-ref in `kiss_ref_diff::tests::reduce_outer_axis_through_kiss_ref`.)
 
     // --- Adversarial-review regression kills (5 confirmed defects) -----------
 

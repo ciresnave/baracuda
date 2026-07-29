@@ -484,8 +484,8 @@ pub(crate) fn assert_conforming_eq(name: &str, reference: &[f32], candidate: &[f
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{BinaryOp, OpDef, input, param};
-    use baracuda_kernel_vocab::ElementKind;
+    use crate::ir::{BinaryOp, OpDef, ReduceOp, input, param};
+    use baracuda_kernel_vocab::{AxisMask, ElementKind};
     use kiss_ref_core::DetClass;
 
     /// relu(add(in0, in1)) built as a raw kiss-ref FlatDag (no converter) — the
@@ -667,5 +667,81 @@ mod tests {
         );
         let got: Vec<f32> = r.outputs[0].clone().into_data();
         assert_bits_eq("add_contiguous", &[1.0, 0.0, 1.0, f32::INFINITY], &got);
+    }
+
+    // ---- Reduction value guards (Task 3) -----------------------------------
+    // Value semantics of the logical-axis folds (dense, exactly-representable so
+    // bit-exact despite the OrderInvariant DetClass). Baracuda's physical/int
+    // reduction plumbing (if any) stays on the oracle.
+
+    /// Sum over the last axis: [2,3] row sums. Ports oracle.rs `reduction_sum_last_axis`.
+    #[test]
+    fn reduce_sum_last_axis_through_kiss_ref() {
+        let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        let r = eval_recipe_for(
+            &op,
+            &[vec![2usize, 3]],
+            &[vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]],
+            &[],
+        );
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        assert_bits_eq("reduce_sum_last", &[6.0, 15.0], &got);
+    }
+
+    /// Max reduction PROPAGATES NaN (a NaN in the run sticks). Ports oracle.rs
+    /// `reduction_max_nan_sticks` — pins kiss-ref's reduce-Max as NaN-propagating.
+    #[test]
+    fn reduce_max_nan_sticks_through_kiss_ref() {
+        let op = OpDef::reduction("max", 1, &[ElementKind::F32], input(0), ReduceOp::Max);
+        let r = eval_recipe_for(
+            &op,
+            &[vec![2usize, 3]],
+            &[vec![1.0f32, f32::NAN, 3.0, 4.0, 5.0, 6.0]],
+            &[],
+        );
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        // row 0 has a NaN -> NaN sticks; row 1 -> 6.
+        assert_conforming_eq("reduce_max_nan", &[f32::NAN, 6.0], &got);
+    }
+
+    /// Mean = sum ÷ reduced_count (the shape-derived divisor). Ports oracle.rs
+    /// `reduction_mean_divisor`.
+    #[test]
+    fn reduce_mean_divisor_through_kiss_ref() {
+        let op = OpDef::reduction("mean", 1, &[ElementKind::F32], input(0), ReduceOp::Mean);
+        let r = eval_recipe_for(
+            &op,
+            &[vec![2usize, 4]],
+            &[vec![1.0f32, 2.0, 3.0, 4.0, 10.0, 10.0, 10.0, 10.0]],
+            &[],
+        );
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        assert_bits_eq("reduce_mean", &[2.5, 10.0], &got);
+    }
+
+    /// Reduce over the OUTER axis (axis 0, a hex-bitmask axes token). Ports
+    /// oracle.rs `reduction_outer_axis`.
+    #[test]
+    fn reduce_outer_axis_through_kiss_ref() {
+        let mut mask = AxisMask::EMPTY;
+        mask.set(0);
+        let op = OpDef::reduction_axes(
+            "sum0",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            mask,
+            false,
+        );
+        let r = eval_recipe_for(
+            &op,
+            &[vec![2usize, 3]],
+            &[vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]],
+            &[],
+        );
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        // reduce axis 0 -> column sums [1+4, 2+5, 3+6].
+        assert_bits_eq("reduce_outer_axis", &[5.0, 7.0, 9.0], &got);
     }
 }
