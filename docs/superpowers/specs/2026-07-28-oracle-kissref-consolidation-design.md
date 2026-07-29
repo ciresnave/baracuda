@@ -1,7 +1,7 @@
 # Design: oracle.rs → kiss-ref consolidation (v2)
 
 **Date:** 2026-07-28 (v1); amended 2026-07-29 (v2, after execution).
-**Status:** in execution. Tasks 0–2 landed. v2 reshapes the model after a Task-2 finding.
+**Status:** value-retirement sweep COMPLETE — Tasks 0–6 + the select retirement landed (PR #6). v2 reshaped the model after a Task-2 finding.
 **Scope owner:** Baracuda (kernelgen), coordinated with kiss-ref (peer `3vgwagtz`).
 
 ## Amendment v2 (2026-07-29) — the reshaped model, after execution

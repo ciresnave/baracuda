@@ -40,9 +40,9 @@
 | `crates/baracuda-kernelgen/Cargo.toml` | add the 3 kiss-ref crates to `[dev-dependencies]` |
 | `crates/baracuda-kernelgen/src/kiss_ref_diff.rs` (create) | `#[cfg(test)]` module: the converter + diff helpers, ported from `tools/kiss-ref-diff/main.rs` |
 | `crates/baracuda-kernelgen/src/lib.rs` | `#[cfg(test)] mod kiss_ref_diff;` |
-| `crates/baracuda-kernelgen/src/oracle.rs` | delete `eval_elementwise`/`eval_reduction`/`eval_scan` (+ later `eval_row_reduce`/`eval_contraction`), their `evaluate()` arms → `panic!`, and their self-tests |
-| `crates/baracuda-kernelgen/src/shape.rs` | repoint the Task-7 differential's retired-op cases to kiss-ref |
-| `crates/baracuda-kernelgen/src/fuzz.rs` | repoint the numerical leg to the recipe→converter→kiss-ref path |
+| `crates/baracuda-kernelgen/src/oracle.rs` | **v2 (as executed):** delete only the redundant VALUE-semantics self-tests (elementwise/reduction/scan/select/rowreduce/matmul); the `evaluate()` arms **STAY** (never panicked — permanent plumbing). *(v1 said "arms → panic!" — superseded by the v2 amendment.)* |
+| `crates/baracuda-kernelgen/src/shape.rs` | **v2: UNCHANGED** — the arms stay alive, so the oracle differential keeps working (no repoint needed). |
+| `crates/baracuda-kernelgen/src/fuzz.rs` | **v2: UNCHANGED** — the oracle numerical leg tests the Baracuda *frame* (output-shape-from-operand + const/partial-body broadcast), a permanent keep; kiss-ref's value-DAG derives it differently, so a repoint would discard unique coverage. |
 
 ---
 
