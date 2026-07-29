@@ -2060,7 +2060,7 @@ pub fn compare(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{BinaryOp, OpDef, ReduceOp, ReduceStage, input, konst, param, reduced};
+    use crate::ir::{BinaryOp, OpDef, ReduceOp, ReduceStage, input, konst, reduced};
     use crate::plan::build_plan;
     use baracuda_kernel_vocab::{ArchSku, AxisMask, OpCategory, StructureKey, structure_key};
 
@@ -2092,94 +2092,19 @@ mod tests {
 
     // --- A. Elementwise -----------------------------------------------------
 
-    #[test]
-    fn elementwise_add_contiguous() {
-        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
-        let a = desc(&[4], &[1], ElementKind::F32);
-        let k = key(OpCategory::BinaryElementwise, &[a, a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a, a];
-        let ins = [
-            f32b(&[4], &[1.0, -0.0, 2.5, f32::INFINITY]),
-            f32b(&[4], &[0.0, 0.0, -1.5, 1.0]),
-        ];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&out[0]), vec![1.0, 0.0, 1.0, f32::INFINITY]);
-    }
-
-    #[test]
-    fn elementwise_relu_neg_zero_and_nan() {
-        // Relu = x<0?0:x — NaN passes through; -0.0 is preserved (NOT max(x,0)).
-        let op = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu());
-        let a = desc(&[4], &[1], ElementKind::F32);
-        let k = key(OpCategory::UnaryElementwise, &[a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a];
-        let ins = [f32b(&[4], &[-3.0, -0.0, 2.0, f32::NAN])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        // -3 -> 0; -0.0 -> -0.0 (sign bit preserved); 2 -> 2; NaN -> NaN.
-        assert_eq!(bit32(&out[0], 0), 0.0f32.to_bits());
-        assert_eq!(
-            bit32(&out[0], 1),
-            (-0.0f32).to_bits(),
-            "-0.0 must survive Relu"
-        );
-        assert_eq!(bit32(&out[0], 2), 2.0f32.to_bits());
-        assert!(f32::from_bits(bit32(&out[0], 3)).is_nan());
-    }
-
-    #[test]
-    fn elementwise_maxmin_prop_signed_zero_ties_keep_a() {
-        // The KISS-Ops `max_prop`/`min_prop` normative decomposition selects A
-        // on numeric ties (`cmp_ge`/`cmp_le` → a) — the numpy/torch
-        // `where(a >= b, a, b)` semantics. Bit-visible ONLY on signed-zero
-        // ties: max_prop(-0.0, +0.0) = -0.0 and max_prop(+0.0, -0.0) = +0.0
-        // (keep a in both argument orders — never order-dependent-on-b).
-        // Caught by the kiss-ref recipe differential (step 2, 2026-07-23): a
-        // b-on-ties spelling diverged from the reference evaluator.
-        let a = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::BinaryElementwise, &[a, a, a]);
-        let ops = [a, a, a];
-        let ins = [
-            f32b(&[2], &[-0.0, 0.0]), // a-operand: (-0, +0)
-            f32b(&[2], &[0.0, -0.0]), // b-operand: (+0, -0)
-        ];
-        let maxp = OpDef::elementwise(
-            "maxp",
-            2,
-            &[ElementKind::F32],
-            input(0).binary(BinaryOp::Max, input(1)),
-        );
-        let out = evaluate(&build_plan(&maxp, &k), &ops, &ins, &[]);
-        assert_eq!(bit32(&out[0], 0), (-0.0f32).to_bits(), "max(-0,+0) keeps a");
-        assert_eq!(bit32(&out[0], 1), 0.0f32.to_bits(), "max(+0,-0) keeps a");
-        let minp = OpDef::elementwise(
-            "minp",
-            2,
-            &[ElementKind::F32],
-            input(0).binary(BinaryOp::Min, input(1)),
-        );
-        let out = evaluate(&build_plan(&minp, &k), &ops, &ins, &[]);
-        assert_eq!(bit32(&out[0], 0), (-0.0f32).to_bits(), "min(-0,+0) keeps a");
-        assert_eq!(bit32(&out[0], 1), 0.0f32.to_bits(), "min(+0,-0) keeps a");
-    }
-
-    #[test]
-    fn elementwise_affine_with_params() {
-        let op = OpDef::elementwise(
-            "affine",
-            1,
-            &[ElementKind::F32],
-            input(0) * param(0) + param(1),
-        );
-        let a = desc(&[3], &[1], ElementKind::F32);
-        let k = key(OpCategory::UnaryElementwise, &[a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a];
-        let ins = [f32b(&[3], &[1.0, 2.0, 3.0])];
-        let out = evaluate(&plan, &ops, &ins, &[2.0, 0.5]);
-        assert_eq!(f32s(&out[0]), vec![2.5, 4.5, 6.5]);
-    }
+    // NOTE (oracle→kiss-ref consolidation, 2026-07-29): the pure float
+    // VALUE-semantics elementwise self-tests that lived here —
+    // `elementwise_add_contiguous`, `elementwise_relu_neg_zero_and_nan`,
+    // `elementwise_maxmin_prop_signed_zero_ties_keep_a`,
+    // `elementwise_affine_with_params` (and `probe_classes_add_bit_exact_zeros`
+    // below) — were RETIRED. kiss-ref is now the single float value-semantics
+    // reference; each edge is asserted against it via the in-tree converter in
+    // `kiss_ref_diff::tests` (add_contiguous / relu signed-zero+NaN /
+    // max_prop-min_prop a-on-ties / affine-via-runtime_scalar / signed-zero-add).
+    // The `Access::Elementwise` arm and the PLUMBING tests below (raw-bit select,
+    // int8 store-truncation, strided/broadcast/flipped/permuted views,
+    // compute-dtype cmp/select) STAY — that is Baracuda emitter/layout territory
+    // kiss-ref's f32/dense value-DAG model does not cover (the locked boundary).
 
     // KILL-test: Select moves the arm as raw bits (-0.0 survives).
     #[test]
@@ -2616,19 +2541,8 @@ mod tests {
         assert!(bf16_to_f64(f32_to_bf16_bits(f32::NAN)).is_nan());
     }
 
-    #[test]
-    fn probe_classes_add_bit_exact_zeros() {
-        // +0 + -0 = +0 (IEEE); -0 + -0 = -0.
-        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
-        let a = desc(&[2], &[1], ElementKind::F32);
-        let k = key(OpCategory::BinaryElementwise, &[a, a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a, a];
-        let ins = [f32b(&[2], &[0.0, -0.0]), f32b(&[2], &[-0.0, -0.0])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(bit32(&out[0], 0), 0.0f32.to_bits(), "+0 + -0 = +0");
-        assert_eq!(bit32(&out[0], 1), (-0.0f32).to_bits(), "-0 + -0 = -0");
-    }
+    // (`probe_classes_add_bit_exact_zeros` retired here — signed-zero add is now
+    // referenced against kiss-ref in `kiss_ref_diff::tests::signed_zero_add_through_kiss_ref`.)
 
     // --- H. Contraction (matmul) --------------------------------------------
 

@@ -484,7 +484,7 @@ pub(crate) fn assert_conforming_eq(name: &str, reference: &[f32], candidate: &[f
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{OpDef, input};
+    use crate::ir::{BinaryOp, OpDef, input, param};
     use baracuda_kernel_vocab::ElementKind;
     use kiss_ref_core::DetClass;
 
@@ -558,5 +558,114 @@ mod tests {
         let got: Vec<f32> = r.outputs[0].clone().into_data();
         // lane 0: relu(NaN + 0.5) = NaN (payload unpinned); 1: 1.5; 2: 0.0.
         assert_conforming_eq("relu_add_nan", &[f32::NAN, 1.5, 0.0], &got);
+    }
+
+    // ---- Ported float-value guards (oracle→kiss-ref consolidation, Task 2) --
+    // These are the equal-or-better replacements that must exist HERE before the
+    // matching oracle.rs elementwise self-tests are retired: kiss-ref is now the
+    // float value-semantics reference. Each pins a bit-visible edge the oracle
+    // test pinned, now asserted against kiss-ref via the converter.
+
+    /// relu's signed-zero + NaN edges: relu(-0.0) = -0.0 (NOT max(x,0)), relu(NaN)
+    /// = NaN. The §6.8 comparator keeps -0.0 bit-exact (signed zero is a value
+    /// distinction; only the NaN payload is classed). Ports oracle.rs
+    /// `elementwise_relu_neg_zero_and_nan`.
+    #[test]
+    fn relu_signed_zero_and_nan_through_kiss_ref() {
+        let op = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu());
+        let r = eval_recipe_for(
+            &op,
+            &[vec![4usize]],
+            &[vec![-3.0f32, -0.0, 2.0, f32::NAN]],
+            &[],
+        );
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        // -3 -> +0.0; -0.0 -> -0.0 (sign preserved); 2 -> 2; NaN -> NaN.
+        assert_conforming_eq("relu_edges", &[0.0, -0.0, 2.0, f32::NAN], &got);
+    }
+
+    /// Signed-zero add: +0.0 + -0.0 = +0.0, -0.0 + -0.0 = -0.0 (IEEE). Ports
+    /// oracle.rs `probe_classes_add_bit_exact_zeros`.
+    #[test]
+    fn signed_zero_add_through_kiss_ref() {
+        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let r = eval_recipe_for(
+            &op,
+            &[vec![2usize], vec![2usize]],
+            &[vec![0.0f32, -0.0], vec![-0.0f32, -0.0]],
+            &[],
+        );
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        assert_bits_eq("signed_zero_add", &[0.0, -0.0], &got);
+    }
+
+    /// `max_prop`/`min_prop` keep operand A on numeric ties — bit-visible only on
+    /// signed-zero ties: max_prop(-0,+0) = -0, max_prop(+0,-0) = +0 (never
+    /// order-dependent-on-b). The a-on-ties spelling the kiss-ref differential
+    /// caught (a b-on-ties spelling diverged). Ports oracle.rs
+    /// `elementwise_maxmin_prop_signed_zero_ties_keep_a`.
+    #[test]
+    fn max_prop_min_prop_signed_zero_ties_keep_a() {
+        let a = vec![-0.0f32, 0.0]; // a-operand: (-0, +0)
+        let b = vec![0.0f32, -0.0]; // b-operand: (+0, -0)
+        let shapes = [vec![2usize], vec![2usize]];
+        let maxp = OpDef::elementwise(
+            "maxp",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::Max, input(1)),
+        );
+        let rmax = eval_recipe_for(&maxp, &shapes, &[a.clone(), b.clone()], &[]);
+        assert_bits_eq(
+            "max_prop_ties",
+            &[-0.0, 0.0],
+            &rmax.outputs[0].clone().into_data(),
+        );
+        let minp = OpDef::elementwise(
+            "minp",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::Min, input(1)),
+        );
+        let rmin = eval_recipe_for(&minp, &shapes, &[a, b], &[]);
+        assert_bits_eq(
+            "min_prop_ties",
+            &[-0.0, 0.0],
+            &rmin.outputs[0].clone().into_data(),
+        );
+    }
+
+    /// Affine through `runtime_scalar` params: in*p0 + p1 — exercises the
+    /// converter's `runtime_scalar` node + `eval_recipe`'s param slots. Ports
+    /// oracle.rs `elementwise_affine_with_params`.
+    #[test]
+    fn affine_with_params_through_kiss_ref() {
+        let op = OpDef::elementwise(
+            "affine",
+            1,
+            &[ElementKind::F32],
+            input(0) * param(0) + param(1),
+        );
+        let r = eval_recipe_for(&op, &[vec![3usize]], &[vec![1.0f32, 2.0, 3.0]], &[2.0, 0.5]);
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        assert_bits_eq("affine", &[2.5, 4.5, 6.5], &got);
+    }
+
+    /// Dense add incl. INF and signed-zero lanes: 1+0=1, -0+0=+0, 2.5+(-1.5)=1,
+    /// INF+1=INF. Ports oracle.rs `elementwise_add_contiguous`.
+    #[test]
+    fn add_contiguous_through_kiss_ref() {
+        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let r = eval_recipe_for(
+            &op,
+            &[vec![4usize], vec![4usize]],
+            &[
+                vec![1.0f32, -0.0, 2.5, f32::INFINITY],
+                vec![0.0f32, 0.0, -1.5, 1.0],
+            ],
+            &[],
+        );
+        let got: Vec<f32> = r.outputs[0].clone().into_data();
+        assert_bits_eq("add_contiguous", &[1.0, 0.0, 1.0, f32::INFINITY], &got);
     }
 }
