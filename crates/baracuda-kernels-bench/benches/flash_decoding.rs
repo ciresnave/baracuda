@@ -373,6 +373,7 @@ where
             bb.iter_custom(|iters| {
                 time_with_events(&ctx, &stream, iters, || {
                     let args = FlashDecodingArgs::<T> {
+                        a_mean: None,
                         a: None,
                         q: TensorRef {
                             data: dq.as_slice(),
@@ -477,6 +478,7 @@ where
 
             warmup(&stream, || {
                 let args = FlashDecodingArgs::<T> {
+                    a_mean: None,
                     a: None,
                     q: TensorRef {
                         data: dq.as_slice(),
@@ -505,6 +507,7 @@ where
             });
             let fd_ns = measure_median_ns(&ctx, &stream, 11, 20, || {
                 let args = FlashDecodingArgs::<T> {
+                    a_mean: None,
                     a: None,
                     q: TensorRef {
                         data: dq.as_slice(),
@@ -550,6 +553,7 @@ where
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
                         let args = FlashDecodingArgs::<T> {
+                            a_mean: None,
                             a: None,
                             q: TensorRef {
                                 data: dq.as_slice(),
