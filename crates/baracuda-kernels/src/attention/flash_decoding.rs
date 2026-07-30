@@ -192,6 +192,13 @@ pub struct FlashDecodingArgs<'a, T: Element> {
     /// standard decode case. When `Some`, must be **contiguous** (the kernel
     /// derives its strides from `K_len`).
     pub a: Option<TensorMut<'a, f32, 3>>,
+    /// OPTIONAL head-mean output. `Some` → shape `[B, K_len]`, **f32** — the
+    /// head-average of `a`, `(1/H_q) Σ_h a[b,h,k]`, deterministic (fixed-order
+    /// sum, no atomics). This is the head-aggregated statistic H2O / R-KV consume
+    /// directly (their `attn_weights.mean(1)`). `Some(a_mean)` REQUIRES `a` be
+    /// `Some` — the per-head output is its input. `None` skips the extra
+    /// reduction launch. When `Some`, must be **contiguous** `[B, K_len]`.
+    pub a_mean: Option<TensorMut<'a, f32, 2>>,
 }
 
 /// FlashDecoding forward plan (Dao 2023).
@@ -315,6 +322,23 @@ impl<T: Element> FlashDecodingPlan<T> {
                 ));
             }
         }
+        if let Some(am) = &args.a_mean {
+            if args.a.is_none() {
+                return Err(Error::InvalidProblem(
+                    "FlashDecodingPlan: a_mean requires a (the per-head output is its input)",
+                ));
+            }
+            if am.shape != [b, k] {
+                return Err(Error::InvalidProblem(
+                    "FlashDecodingPlan: a_mean.shape mismatch (expected [B, K_len])",
+                ));
+            }
+            if am.stride != [k as i64, 1] {
+                return Err(Error::InvalidProblem(
+                    "FlashDecodingPlan: a_mean must be contiguous [B, K_len]",
+                ));
+            }
+        }
         if args.k.shape != [b, h_kv, k, d] {
             return Err(Error::InvalidProblem(
                 "FlashDecodingPlan: k.shape mismatch (expected [B, H_kv, K_len, D])",
@@ -393,6 +417,12 @@ impl<T: Element> FlashDecodingPlan<T> {
             .map_or(core::ptr::null_mut::<c_void>(), |a| {
                 a.data.as_raw().0 as *mut c_void
             });
+        let a_mean_ptr = args
+            .a_mean
+            .as_ref()
+            .map_or(core::ptr::null_mut::<c_void>(), |am| {
+                am.data.as_raw().0 as *mut c_void
+            });
 
         let status = unsafe {
             match T::KIND {
@@ -402,6 +432,7 @@ impl<T: Element> FlashDecodingPlan<T> {
                     v_ptr,
                     y_ptr,
                     a_ptr,
+                    a_mean_ptr,
                     ws_ptr,
                     ws_bytes,
                     self.desc.batch_size,
@@ -429,6 +460,7 @@ impl<T: Element> FlashDecodingPlan<T> {
                         v_ptr,
                         y_ptr,
                         a_ptr,
+                        a_mean_ptr,
                         ws_ptr,
                         ws_bytes,
                         self.desc.batch_size,

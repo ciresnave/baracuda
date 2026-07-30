@@ -752,6 +752,31 @@ __global__ void flash_decoding_combine_kernel(
 }
 
 // =============================================================================
+// Head-mean reduction — a_mean[b,k] = (1/H) * Σ_h a[b,h,k]. Reads the per-head
+// [B,H,Sk] attention-weight output, writes the head-AVERAGED [B,Sk] that
+// H2O/R-KV consume directly. DETERMINISTIC: fixed-order serial sum over H per
+// thread, no atomics — a reference statistic must be reproducible run-to-run.
+// One thread per (b,k); consecutive threads (k) read contiguous cells for a
+// fixed h, so the H strided passes are each coalesced. f32 throughout.
+// =============================================================================
+__global__ void flash_decoding_head_mean_kernel(
+    const float* __restrict__ a,        // [B, H, Sk], contiguous
+    float* __restrict__ a_mean,         // [B, Sk],    contiguous
+    int32_t batch, int32_t heads, int32_t k_len)
+{
+    const int b = blockIdx.y;
+    const int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (b >= batch || k >= k_len) return;
+    // a[b,h,k] index = b*(H*Sk) + h*Sk + k.
+    const int64_t base = (int64_t)b * heads * k_len + k;
+    float acc = 0.0f;
+    for (int h = 0; h < heads; ++h) {
+        acc += a[base + (int64_t)h * k_len];
+    }
+    a_mean[(int64_t)b * k_len + k] = acc / (float)heads;
+}
+
+// =============================================================================
 // Host launcher — workspace contract + 2-kernel dispatch.
 // =============================================================================
 //
@@ -821,6 +846,7 @@ template <typename T>
 __host__ inline int32_t launch_flash_decoding(
     const T* q, const T* k, const T* v, T* y,
     float* a,                     // [B,H,Sk] f32 per-key attention weights (H2O)
+    float* a_mean,                // [B,Sk]   f32 head-mean of `a` (nullptr = skip)
     void* workspace, size_t workspace_bytes,
     int32_t batch, int32_t heads, int32_t num_kv_heads,
     int32_t k_len, int32_t head_dim,
@@ -907,6 +933,18 @@ __host__ inline int32_t launch_flash_decoding(
         a_b_stride, a_h_stride);
     err = cudaGetLastError();
     if (err != cudaSuccess) return 1000 + (int32_t)err;
+
+    // Head-mean reduction (OPTIONAL): a_mean[b,k] = mean_h a[b,h,k]. Requires
+    // `a` (the per-head output) to have been produced above. One extra launch;
+    // deterministic (no atomics).
+    if (a_mean != nullptr) {
+        const int hm_block = 256;
+        dim3 grid_hm((unsigned)((k_len + hm_block - 1) / hm_block), (unsigned)batch);
+        flash_decoding_head_mean_kernel<<<grid_hm, hm_block, 0, stream>>>(
+            a, a_mean, batch, heads, k_len);
+        err = cudaGetLastError();
+        if (err != cudaSuccess) return 1000 + (int32_t)err;
+    }
     return 0;
 }
 
@@ -918,7 +956,7 @@ __host__ inline int32_t launch_flash_decoding(
 
 #define BARACUDA_KERNELS_FLASH_DECODING_INSTANTIATE(NAME, T)                                       \
     extern "C" int32_t baracuda_kernels_ ## NAME ## _run(                                           \
-        const void* q, const void* k, const void* v, void* y, void* a,                                       \
+        const void* q, const void* k, const void* v, void* y, void* a, void* a_mean,                          \
         void* workspace, size_t workspace_bytes,                                                    \
         int32_t batch, int32_t heads, int32_t num_kv_heads,                                         \
         int32_t k_len, int32_t head_dim,                                                            \
@@ -931,7 +969,7 @@ __host__ inline int32_t launch_flash_decoding(
     {                                                                                               \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                \
         return baracuda::flash_decoding::launch_flash_decoding<T>(                                  \
-            (const T*)q, (const T*)k, (const T*)v, (T*)y, (float*)a,                                \
+            (const T*)q, (const T*)k, (const T*)v, (T*)y, (float*)a, (float*)a_mean,                \
             workspace, workspace_bytes,                                                             \
             batch, heads, num_kv_heads, k_len, head_dim,                                            \
             q_b_stride, q_h_stride,                                                                 \
