@@ -899,3 +899,227 @@ fn flash_decoding_head_mean_f16() {
         );
     }
 }
+
+/// GQA-axis cost sweep for the optional per-head `a[B, H_q, Sk]` output.
+///
+/// Lightbulb's (pre-registered) prediction: the a-store overhead is
+/// `∝ H_q / (H_kv · D)`. The store is `B·H_q·Sk·4` bytes — linear in `H_q`
+/// (fixed here) — while the decode's dominant traffic is the K/V read,
+/// `∝ H_kv` (lower H_kv ⇒ more L2 reuse of shared K/V heads ⇒ cheaper
+/// baseline). So the *absolute* µs overhead should stay ~flat while the
+/// *percentage* grows as `H_q/H_kv` rises — worst toward MQA (`H_kv=1`),
+/// which is backwards from the "GQA is cheaper" intuition (GQA shrinks the
+/// baseline without shrinking the `a` store).
+///
+/// Sweeps `H_kv ∈ {32, 8, 4, 1}` at `H_q=32, D=128`, at two `Sk`, reporting
+/// both absolute ns and % so the mechanism is legible either way. Any
+/// unsupported `(H_q, H_kv)` point is skipped, not fatal. `#[ignore]` — run
+/// with `--ignored --nocapture`.
+///
+/// RESULT (RTX 4070, sm_89 — prediction FALSIFIED): the overhead does NOT
+/// grow toward MQA. It stays in a tight ~3.5–5.5% band across the whole
+/// axis (H_kv 32→1) at both Sk, and is flat-to-*decreasing* toward MQA at
+/// Sk=2048 (≈5% → 3.6%). The premise `baseline ∝ H_kv` is what breaks: the
+/// baseline scales with H_kv only in the DRAM-bound regime (H_kv=32); for
+/// H_kv≤8 the distinct K/V set is small enough that L2 reuse (32 Q-head
+/// blocks sharing few K/V heads) caps effective bandwidth and the baseline
+/// *plateaus* (~44µs @Sk=2048, ~74µs @Sk=4096) instead of shrinking. The
+/// absolute a-store overhead IS ~flat across the GQA range (∝ H_q, fixed)
+/// and ~linear in Sk, as expected. Net: "attention-eviction composes at a
+/// few percent" is robust across the GQA axis and needs NO MQA qualifier;
+/// MQA is not the pathological case. (The single H_kv=32/Sk=2048 point
+/// jitters run-to-run — it sits at the DRAM-saturation knee — so read it as
+/// a band, not a point.)
+#[ignore]
+#[test]
+fn flash_decoding_a_cost_gqa_sweep_f16() {
+    use std::time::Instant;
+    const B: i32 = 1;
+    const H_Q: i32 = 32;
+    const D: i32 = 128;
+    const WARMUP: usize = 30;
+    const ITERS: usize = 400;
+
+    let (ctx, stream) = setup();
+    println!(
+        "\nflash_decoding a-cost GQA sweep (f16, B=1 H_q=32 D=128; per-head a=[B,H_q,Sk]; best of 3 x {ITERS}):"
+    );
+    println!(
+        "  (Lightbulb prediction: a-store/baseline ∝ H_q/(H_kv·D) — abs µs ~flat, % grows as H_q/H_kv rises)"
+    );
+
+    for &k_len in &[2048_i32, 4096] {
+        println!("  --- Sk={k_len} ---");
+        for &h_kv in &[32_i32, 8, 4, 1] {
+            let q_f32 = deterministic_f32((B * H_Q * D) as usize, 0.013, -0.5);
+            let kv_f32 = deterministic_f32((B * h_kv * k_len * D) as usize, 0.017, 0.2);
+            let q_h: Vec<f16> = q_f32.iter().map(|&x| f16::from_f32(x)).collect();
+            let kv_h: Vec<f16> = kv_f32.iter().map(|&x| f16::from_f32(x)).collect();
+            let dq = DeviceBuffer::from_slice(&ctx, &q_h).expect("q");
+            let dk = DeviceBuffer::from_slice(&ctx, &kv_h).expect("k");
+            let dv = DeviceBuffer::from_slice(&ctx, &kv_h).expect("v");
+            let mut dy: DeviceBuffer<f16> =
+                DeviceBuffer::zeros(&ctx, (B * H_Q * D) as usize).expect("y");
+            let mut da: DeviceBuffer<f32> =
+                DeviceBuffer::zeros(&ctx, (B * H_Q * k_len) as usize).expect("a");
+
+            let desc = FlashDecodingDescriptor::new_gqa(B, H_Q, h_kv, k_len, D, ElementKind::F16);
+            let plan =
+                match FlashDecodingPlan::<f16>::select(&stream, &desc, PlanPreference::default()) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        println!(
+                            "  H_kv={h_kv:>2} (grp {:>2}): SKIP (select: {e:?})",
+                            H_Q / h_kv
+                        );
+                        continue;
+                    }
+                };
+            let mut ws: DeviceBuffer<u8> =
+                DeviceBuffer::zeros(&ctx, plan.workspace_size()).expect("ws");
+
+            let sq = [B, H_Q, D];
+            let sk = [B, h_kv, k_len, D];
+            let sv = sk;
+            let sy = sq;
+            let sa = [B, H_Q, k_len];
+
+            // Probe once: confirm this (H_q, H_kv) point is supported before we time it.
+            {
+                let args = FlashDecodingArgs::<f16> {
+                    a: Some(TensorMut {
+                        data: da.as_slice_mut(),
+                        shape: sa,
+                        stride: contiguous_stride(sa),
+                    }),
+                    a_mean: None,
+                    q: TensorRef {
+                        data: dq.as_slice(),
+                        shape: sq,
+                        stride: contiguous_stride(sq),
+                    },
+                    k: TensorRef {
+                        data: dk.as_slice(),
+                        shape: sk,
+                        stride: contiguous_stride(sk),
+                    },
+                    v: TensorRef {
+                        data: dv.as_slice(),
+                        shape: sv,
+                        stride: contiguous_stride(sv),
+                    },
+                    y: TensorMut {
+                        data: dy.as_slice_mut(),
+                        shape: sy,
+                        stride: contiguous_stride(sy),
+                    },
+                };
+                if let Err(e) = plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args) {
+                    println!(
+                        "  H_kv={h_kv:>2} (grp {:>2}): SKIP (run: {e:?})",
+                        H_Q / h_kv
+                    );
+                    continue;
+                }
+                stream.synchronize().expect("sync");
+            }
+
+            let mut result = [0.0_f64; 2];
+            for (idx, &with_a) in [false, true].iter().enumerate() {
+                for _ in 0..WARMUP {
+                    let a = if with_a {
+                        Some(TensorMut {
+                            data: da.as_slice_mut(),
+                            shape: sa,
+                            stride: contiguous_stride(sa),
+                        })
+                    } else {
+                        None
+                    };
+                    let args = FlashDecodingArgs::<f16> {
+                        a,
+                        a_mean: None,
+                        q: TensorRef {
+                            data: dq.as_slice(),
+                            shape: sq,
+                            stride: contiguous_stride(sq),
+                        },
+                        k: TensorRef {
+                            data: dk.as_slice(),
+                            shape: sk,
+                            stride: contiguous_stride(sk),
+                        },
+                        v: TensorRef {
+                            data: dv.as_slice(),
+                            shape: sv,
+                            stride: contiguous_stride(sv),
+                        },
+                        y: TensorMut {
+                            data: dy.as_slice_mut(),
+                            shape: sy,
+                            stride: contiguous_stride(sy),
+                        },
+                    };
+                    plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
+                        .expect("run");
+                }
+                stream.synchronize().expect("sync");
+                let mut best = f64::INFINITY;
+                for _ in 0..3 {
+                    let t0 = Instant::now();
+                    for _ in 0..ITERS {
+                        let a = if with_a {
+                            Some(TensorMut {
+                                data: da.as_slice_mut(),
+                                shape: sa,
+                                stride: contiguous_stride(sa),
+                            })
+                        } else {
+                            None
+                        };
+                        let args = FlashDecodingArgs::<f16> {
+                            a,
+                            a_mean: None,
+                            q: TensorRef {
+                                data: dq.as_slice(),
+                                shape: sq,
+                                stride: contiguous_stride(sq),
+                            },
+                            k: TensorRef {
+                                data: dk.as_slice(),
+                                shape: sk,
+                                stride: contiguous_stride(sk),
+                            },
+                            v: TensorRef {
+                                data: dv.as_slice(),
+                                shape: sv,
+                                stride: contiguous_stride(sv),
+                            },
+                            y: TensorMut {
+                                data: dy.as_slice_mut(),
+                                shape: sy,
+                                stride: contiguous_stride(sy),
+                            },
+                        };
+                        plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
+                            .expect("run");
+                    }
+                    stream.synchronize().expect("sync");
+                    let ns = t0.elapsed().as_nanos() as f64 / ITERS as f64;
+                    if ns < best {
+                        best = ns;
+                    }
+                }
+                result[idx] = best;
+            }
+            let (base, wa) = (result[0], result[1]);
+            println!(
+                "  H_kv={h_kv:>2} (grp {:>2}): baseline {base:>7.0} ns   +a {wa:>7.0} ns   \
+                 delta {:+5.1}% ({:+.0} ns)",
+                H_Q / h_kv,
+                100.0 * (wa - base) / base,
+                wa - base
+            );
+        }
+    }
+}
