@@ -32,6 +32,18 @@
 
 use core::ffi::c_void;
 
+// `fa2_backward` requires `fa2` (it exposes BW `extern "C"` decls whose
+// `.cu` sources build.rs only compiles under `fa2`). The Cargo feature
+// graph (`fa2_backward = ["fa2"]`) enforces this, so this guard is
+// unreachable today — it exists to fail loudly at compile time if that
+// implication is ever removed, instead of surfacing as undefined-symbol
+// link errors in a downstream crate. (Sourcery/Copilot PR #10.)
+#[cfg(all(feature = "fa2_backward", not(feature = "fa2")))]
+compile_error!(
+    "the `fa2_backward` feature requires `fa2`; enable `fa2` too \
+     (the Cargo feature graph is expected to imply this)"
+);
+
 // ============================================================================
 // int8 GEMM — RRR layout, sm_80 (Phase 1)
 // ============================================================================

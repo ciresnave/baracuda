@@ -60,11 +60,14 @@ fa2 = ["sm80"]
 # forward-only inference consumers (e.g. Fuel, which only calls
 # `fa2_sdpa_{,bf16_,f16_}{can_implement,run}_v2`) never need them. Off by
 # default; enable alongside `fa2` for autograd / training use of FA2.
-# NOTE: this feature only *builds* meaningfully when `fa2` is also
-# enabled (the BW `.cu` list is nested inside build.rs's `fa2` block) —
-# the `baracuda-kernels` crate enforces `fa2_backward` implying `fa2` at
-# its own feature-graph level; this crate keeps the raw building block.
-fa2_backward = []
+# `fa2_backward` implies `fa2`: the BW `.cu` list is nested inside
+# build.rs's `fa2` block, and this crate exposes the BW `extern "C"`
+# decls under `fa2_backward`. Without the implication, a direct consumer
+# of THIS crate enabling `fa2_backward` alone would get the BW symbol
+# declarations but no compiled `.cu` (build.rs is guarded on `fa2`) →
+# undefined-symbol link errors. So enforce it at this crate's own
+# feature graph too, not just in `baracuda-kernels` (Copilot PR #10).
+fa2_backward = ["fa2"]
 
 # Phase 43 — Vendored AndreSlavescu/mHC.cu (MIT). Compiles the
 # Manifold-Constrained Hyper-Connections layer (static-H FW Tier-1) and
