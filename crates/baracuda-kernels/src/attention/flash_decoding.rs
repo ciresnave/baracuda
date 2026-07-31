@@ -184,6 +184,21 @@ pub struct FlashDecodingArgs<'a, T: Element> {
     pub v: TensorRef<'a, T, 4>,
     /// Output tensor — shape `[B, H_q, D]`.
     pub y: TensorMut<'a, T, 3>,
+    /// OPTIONAL per-key attention-weight output. `Some` → shape `[B, H_q, K_len]`,
+    /// **f32** (softmax weights accumulate in f32 regardless of `T`). Each cell
+    /// `a[b,h,k]` is the post-softmax weight key position `k` receives from the
+    /// single decode query = `exp(S_k - m_final) / l_final`. Feeds attention-driven
+    /// KV-cache eviction (H2O / R-KV). `None` skips it entirely — zero cost, the
+    /// standard decode case. When `Some`, must be **contiguous** (the kernel
+    /// derives its strides from `K_len`).
+    pub a: Option<TensorMut<'a, f32, 3>>,
+    /// OPTIONAL head-mean output. `Some` → shape `[B, K_len]`, **f32** — the
+    /// head-average of `a`, `(1/H_q) Σ_h a[b,h,k]`, deterministic (fixed-order
+    /// sum, no atomics). This is the head-aggregated statistic H2O / R-KV consume
+    /// directly (their `attn_weights.mean(1)`). `Some(a_mean)` REQUIRES `a` be
+    /// `Some` — the per-head output is its input. `None` skips the extra
+    /// reduction launch. When `Some`, must be **contiguous** `[B, K_len]`.
+    pub a_mean: Option<TensorMut<'a, f32, 2>>,
 }
 
 /// FlashDecoding forward plan (Dao 2023).
@@ -293,6 +308,37 @@ impl<T: Element> FlashDecodingPlan<T> {
                 "FlashDecodingPlan: y.shape mismatch (expected [B, H_q, D])",
             ));
         }
+        if let Some(a) = &args.a {
+            if a.shape != [b, h_q, k] {
+                return Err(Error::InvalidProblem(
+                    "FlashDecodingPlan: a.shape mismatch (expected [B, H_q, K_len])",
+                ));
+            }
+            // The kernel derives a's strides from K_len, so a must be contiguous
+            // [B, H_q, K_len] (row-major: [H_q*K_len, K_len, 1]).
+            if a.stride != [(h_q as i64) * (k as i64), k as i64, 1] {
+                return Err(Error::InvalidProblem(
+                    "FlashDecodingPlan: a must be contiguous [B, H_q, K_len]",
+                ));
+            }
+        }
+        if let Some(am) = &args.a_mean {
+            if args.a.is_none() {
+                return Err(Error::InvalidProblem(
+                    "FlashDecodingPlan: a_mean requires a (the per-head output is its input)",
+                ));
+            }
+            if am.shape != [b, k] {
+                return Err(Error::InvalidProblem(
+                    "FlashDecodingPlan: a_mean.shape mismatch (expected [B, K_len])",
+                ));
+            }
+            if am.stride != [k as i64, 1] {
+                return Err(Error::InvalidProblem(
+                    "FlashDecodingPlan: a_mean must be contiguous [B, K_len]",
+                ));
+            }
+        }
         if args.k.shape != [b, h_kv, k, d] {
             return Err(Error::InvalidProblem(
                 "FlashDecodingPlan: k.shape mismatch (expected [B, H_kv, K_len, D])",
@@ -365,6 +411,18 @@ impl<T: Element> FlashDecodingPlan<T> {
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
         let v_ptr = args.v.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let a_ptr = args
+            .a
+            .as_ref()
+            .map_or(core::ptr::null_mut::<c_void>(), |a| {
+                a.data.as_raw().0 as *mut c_void
+            });
+        let a_mean_ptr = args
+            .a_mean
+            .as_ref()
+            .map_or(core::ptr::null_mut::<c_void>(), |am| {
+                am.data.as_raw().0 as *mut c_void
+            });
 
         let status = unsafe {
             match T::KIND {
@@ -373,6 +431,8 @@ impl<T: Element> FlashDecodingPlan<T> {
                     k_ptr,
                     v_ptr,
                     y_ptr,
+                    a_ptr,
+                    a_mean_ptr,
                     ws_ptr,
                     ws_bytes,
                     self.desc.batch_size,
@@ -399,6 +459,8 @@ impl<T: Element> FlashDecodingPlan<T> {
                         k_ptr,
                         v_ptr,
                         y_ptr,
+                        a_ptr,
+                        a_mean_ptr,
                         ws_ptr,
                         ws_bytes,
                         self.desc.batch_size,
