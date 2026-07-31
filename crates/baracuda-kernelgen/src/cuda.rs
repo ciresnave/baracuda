@@ -2222,7 +2222,10 @@ fn emit_reduction(
     // fixed order — bitwise-reproducible across hardware AND matching the CPU
     // oracle's fold order. Gated so the base lowering stays byte-identical.
     let prec = if precision { "_prec" } else { "" };
-    let int_acc = matches!(plan.dtype, ElementKind::I32 | ElementKind::I64);
+    let int_acc = matches!(
+        plan.dtype,
+        ElementKind::I32 | ElementKind::I64 | ElementKind::S8 | ElementKind::U8
+    );
     assert!(
         matches!(
             plan.dtype,
@@ -2232,7 +2235,7 @@ fn emit_reduction(
                 | ElementKind::F32Strict
                 | ElementKind::F64
         ) || int_acc,
-        "reduction: float or i32/i64 dtypes only (i8/u8 etc. not yet); got {:?}",
+        "reduction: float or integer (i8/u8/i32/i64) dtypes only; got {:?}",
         plan.dtype
     );
     // Integer Mean is a float-output (mixed-dtype) op — unrepresentable in a
@@ -9457,6 +9460,41 @@ mod tests {
         assert!(k.source.contains("long long acc = 1;"));
         assert!(k.source.contains("acc *= in0[idx];")); // native int, no float convert
         assert!(k.source.contains("long long r = block_prod_p_i32(acc);"));
+        assert!(!k.source.contains("float acc"));
+    }
+
+    #[test]
+    fn reduction_sum_s8_accumulates_in_long_long_and_wraps_at_store() {
+        use crate::ir::ReduceOp;
+        // S8 Sum: same `long long` widened-accumulate path as I32/I64 (reuse, no
+        // narrower accumulator). The native leaf load is `in0[idx]` (S8 hits the
+        // `_` arm of `promote_load_f32`, no half/bf16 widening detour). The store
+        // is homogeneous (out_dtype == dtype == S8), so `demote_store_f32` is a
+        // pass-through and the truncation to 8 bits happens via the `signed char*`
+        // output pointer's implicit (wrapping, two's-complement) assignment
+        // conversion — KISS-OPS-6.2-0002.
+        let op = OpDef::reduction("s", 1, &[ElementKind::S8], input(0), ReduceOp::Sum);
+        let k = generate(&op, &reduce_key(ElementKind::S8), &Cuda);
+        assert!(k.source.contains("const signed char* __restrict__ in0"));
+        assert!(k.source.contains("signed char* __restrict__ out")); // out == in dtype
+        assert!(k.source.contains("long long acc = 0;"));
+        assert!(k.source.contains("acc += in0[idx];")); // native int, no float convert
+        assert!(k.source.contains("long long r = block_sum_s_i8(acc);"));
+        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;")); // wraps via the signed char* store
+        assert!(!k.source.contains("float acc"));
+    }
+
+    #[test]
+    fn reduction_max_u8_accumulates_in_long_long_and_wraps_at_store() {
+        use crate::ir::ReduceOp;
+        // U8 Max: same widened-accumulate path, unsigned native load/store.
+        let op = OpDef::reduction("m", 1, &[ElementKind::U8], input(0), ReduceOp::Max);
+        let k = generate(&op, &reduce_key(ElementKind::U8), &Cuda);
+        assert!(k.source.contains("const unsigned char* __restrict__ in0"));
+        assert!(k.source.contains("unsigned char* __restrict__ out")); // out == in dtype
+        assert!(k.source.contains("long long acc = 0; int has = 0;"));
+        assert!(k.source.contains("long long e = in0[idx];")); // native int, no float convert
+        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;")); // wraps via the unsigned char* store
         assert!(!k.source.contains("float acc"));
     }
 
