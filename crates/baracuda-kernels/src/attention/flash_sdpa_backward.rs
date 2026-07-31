@@ -32,7 +32,8 @@
 //!
 //! - **Bespoke** (default) — the three-kernel deterministic pipeline
 //!   described above. f16 / bf16 / f32 / f64; `d_k ≤ 128`.
-//! - **FlashAttentionV2** (Phase 59b, requires `fa2` cargo feature) —
+//! - **FlashAttentionV2** (Phase 59b, requires `fa2_backward` cargo
+//!   feature; Phase 74 split it out of plain `fa2`) —
 //!   vendored Dao-AILab Flash Attention v2.8.3 BW kernels. Supports
 //!   head_dim ∈ {32, 64, 96, 128, 192, 256}, GQA, ALiBi, sliding
 //!   window, softcap. f16 / bf16 only. Non-deterministic
@@ -73,7 +74,7 @@ use super::map_status;
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum BackendChoice {
     Bespoke,
-    #[cfg(feature = "fa2")]
+    #[cfg(feature = "fa2_backward")]
     FlashAttentionV2,
 }
 
@@ -81,7 +82,7 @@ impl BackendChoice {
     fn as_public(self) -> BackendKind {
         match self {
             BackendChoice::Bespoke => BackendKind::Bespoke,
-            #[cfg(feature = "fa2")]
+            #[cfg(feature = "fa2_backward")]
             BackendChoice::FlashAttentionV2 => BackendKind::FlashAttentionV2,
         }
     }
@@ -109,10 +110,10 @@ impl BackendChoice {
 /// BW callers at hd160/hd224/hd512 fall back to baracuda's bespoke
 /// `SdpaBackwardPlan` automatically (the FA2 dispatch heuristic
 /// rejects them and the plan re-routes).
-#[cfg(feature = "fa2")]
+#[cfg(feature = "fa2_backward")]
 const FA2_BW_SUPPORTED_HEAD_DIMS: &[i32] = &[32, 64, 96, 128, 192, 256];
 
-#[cfg(feature = "fa2")]
+#[cfg(feature = "fa2_backward")]
 #[inline]
 fn fa2_bw_supports_head_dim(d: i32) -> bool {
     FA2_BW_SUPPORTED_HEAD_DIMS.contains(&d)
@@ -122,7 +123,7 @@ fn fa2_bw_supports_head_dim(d: i32) -> bool {
 /// BW is work-per-cell-bound rather than launch-overhead-bound, so we
 /// route to FA2 whenever it's eligible (supported head_dim, fp16/bf16,
 /// GQA divisibility) without a size threshold.
-#[cfg(feature = "fa2")]
+#[cfg(feature = "fa2_backward")]
 fn should_use_fa2_bw(desc: &FlashSdpaBackwardDescriptor, num_heads_k: i32) -> bool {
     if !fa2_bw_supports_head_dim(desc.d_k) || desc.d_k != desc.d_v {
         return false;
@@ -357,13 +358,13 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
         if matches!(backend, BackendChoice::Bespoke) && desc.d_k > FLASH_SDPA_MAX_D {
             return Err(Error::Unsupported(
                 "baracuda-kernels::FlashSdpaBackwardPlan: bespoke kernel requires d_k ≤ 128 \
-                 (enable `fa2` feature for d_k > 128)",
+                 (enable `fa2_backward` feature for d_k > 128)",
             ));
         }
         // Bespoke kernel doesn't honour Phase 59b extras.
-        #[cfg(feature = "fa2")]
+        #[cfg(feature = "fa2_backward")]
         let is_fa2 = matches!(backend, BackendChoice::FlashAttentionV2);
-        #[cfg(not(feature = "fa2"))]
+        #[cfg(not(feature = "fa2_backward"))]
         let is_fa2 = false;
         if !is_fa2 {
             if desc.window_size_left.is_some() || desc.window_size_right.is_some() {
@@ -424,9 +425,9 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
             ));
         }
         let is_gqa = num_heads_k != self.desc.num_heads;
-        #[cfg(feature = "fa2")]
+        #[cfg(feature = "fa2_backward")]
         let backend_is_fa2 = matches!(self.backend, BackendChoice::FlashAttentionV2);
-        #[cfg(not(feature = "fa2"))]
+        #[cfg(not(feature = "fa2_backward"))]
         let backend_is_fa2 = false;
         if is_gqa && !backend_is_fa2 {
             return Err(Error::Unsupported(
@@ -582,7 +583,7 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
     pub fn workspace_size(&self) -> usize {
         match self.backend {
             BackendChoice::Bespoke => 0,
-            #[cfg(feature = "fa2")]
+            #[cfg(feature = "fa2_backward")]
             BackendChoice::FlashAttentionV2 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_backward_workspace_size(
                     self.desc.batch_size,
@@ -619,7 +620,7 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
         }
 
         // Phase 59b — FA2 dispatch path.
-        #[cfg(feature = "fa2")]
+        #[cfg(feature = "fa2_backward")]
         if matches!(self.backend, BackendChoice::FlashAttentionV2) {
             let capturing = stream.is_capturing().unwrap_or(false);
             if !capturing {
@@ -754,7 +755,7 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
     }
 
     /// FA2 BW launch path (Phase 59b).
-    #[cfg(feature = "fa2")]
+    #[cfg(feature = "fa2_backward")]
     fn run_fa2_bw(
         &self,
         stream: &Stream,
@@ -885,12 +886,13 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
 
 /// Internal: pick backend for the BW descriptor + preference.
 fn pick_backend<T: Element>(
-    #[cfg_attr(not(feature = "fa2"), allow(unused_variables))] desc: &FlashSdpaBackwardDescriptor,
+    #[cfg_attr(not(feature = "fa2_backward"), allow(unused_variables))]
+    desc: &FlashSdpaBackwardDescriptor,
     pref: PlanPreference,
 ) -> BackendChoice {
     match pref.prefer_backend {
         Some(BackendKind::Bespoke) => BackendChoice::Bespoke,
-        #[cfg(feature = "fa2")]
+        #[cfg(feature = "fa2_backward")]
         Some(BackendKind::FlashAttentionV2) => {
             if fa2_bw_is_eligible::<T>(desc) {
                 BackendChoice::FlashAttentionV2
@@ -899,7 +901,7 @@ fn pick_backend<T: Element>(
             }
         }
         _ => {
-            #[cfg(feature = "fa2")]
+            #[cfg(feature = "fa2_backward")]
             {
                 if should_use_fa2_bw(desc, desc.num_heads) {
                     return BackendChoice::FlashAttentionV2;
@@ -911,7 +913,7 @@ fn pick_backend<T: Element>(
 }
 
 /// Hard eligibility check for FA2 BW.
-#[cfg(feature = "fa2")]
+#[cfg(feature = "fa2_backward")]
 fn fa2_bw_is_eligible<T: Element>(desc: &FlashSdpaBackwardDescriptor) -> bool {
     fa2_bw_supports_head_dim(desc.d_k)
         && desc.d_k == desc.d_v

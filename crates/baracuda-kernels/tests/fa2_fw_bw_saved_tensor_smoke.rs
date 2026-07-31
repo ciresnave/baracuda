@@ -24,10 +24,10 @@
 //!    leaves untested.)
 //!
 //! Marked `#[ignore]` per project convention; run with
-//! `cargo test -p baracuda-kernels --features fa2,sm89 \
+//! `cargo test -p baracuda-kernels --features fa2_backward,sm89 \
 //!    --test fa2_fw_bw_saved_tensor_smoke -- --include-ignored`.
 
-#![cfg(feature = "fa2")]
+#![cfg(feature = "fa2_backward")]
 
 use core::ffi::c_void;
 
