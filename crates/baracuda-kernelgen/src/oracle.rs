@@ -2472,44 +2472,18 @@ mod tests {
 
     // --- Adversarial-review regression kills (5 confirmed defects) -----------
 
-    // KILL (critical): a Cmp*/Select decides in the COMPUTE dtype, not raw f64.
-    // `x == 0.1` at x=0.1f: the kernel rounds both to float ((float)0.1f ==
-    // (float)0.1) → TRUE; the pre-fix oracle compared 0.10000000149.. == 0.1 in
-    // f64 → FALSE. Pin the fixed (kernel-matching) answer.
-    #[test]
-    fn cmp_and_select_decide_in_compute_dtype() {
-        // (a) bare mask: CmpEq(x, 0.1) at x=0.1f must be 1.0.
-        let op = OpDef::elementwise(
-            "cmpeq",
-            1,
-            &[ElementKind::F32],
-            input(0).binary(BinaryOp::CmpEq, konst(0.1)),
-        );
-        let a = desc(&[1], &[1], ElementKind::F32);
-        let k = key(OpCategory::UnaryElementwise, &[a, a]);
-        let plan = build_plan(&op, &k);
-        let ops = [a, a];
-        let ins = [f32b(&[1], &[0.1])];
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(
-            f32s(&out[0]),
-            vec![1.0],
-            "CmpEq must decide in f32, not f64"
-        );
-
-        // (b) the Select-condition shares the fix: cond true → arm a (11.0).
-        let op = OpDef::elementwise(
-            "selcmp",
-            1,
-            &[ElementKind::F32],
-            input(0)
-                .binary(BinaryOp::CmpEq, konst(0.1))
-                .select(konst(11.0), konst(22.0)),
-        );
-        let plan = build_plan(&op, &k);
-        let out = evaluate(&plan, &ops, &ins, &[]);
-        assert_eq!(f32s(&out[0]), vec![11.0], "Select cond must decide in f32");
-    }
+    // NOTE (oracle→kiss-ref consolidation, closeout): the compute-dtype
+    // cmp/select VALUE test `cmp_and_select_decide_in_compute_dtype` was RETIRED.
+    // kiss-ref is monomorphic on the compute dtype (`eval_op::<f32>`,
+    // resolve.rs:67), so it narrows the const into the f32 lane and decides the
+    // compare in f32 — matching the kernel (and Baracuda's oracle fix). VERIFIED
+    // + asserted against kiss-ref via the converter in
+    // `kiss_ref_diff::tests::cmp_select_decide_in_compute_dtype_through_kiss_ref`
+    // (the previously-unproven cmp/select-const converter path — no divergence).
+    // The compute-dtype `sign` underflow + F32Strict `nextafter` tests below STAY:
+    // the former is a compute-dtype-storage nuance kept on the oracle; the latter
+    // rides `F32Strict`, a Baracuda compute-precision distinction kiss-ref (single
+    // F32) does not model.
 
     // KILL (major): Sign/Step decide on the compute-dtype-rounded value. sign(a*b)
     // with a=b=1e-30f: the product underflows to 0.0f in f32 → sign 0; the pre-fix

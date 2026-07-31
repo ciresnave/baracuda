@@ -58,17 +58,23 @@ duplicated name table** (the drift the consolidation exists to kill).
 
 ## Building
 
-**NOT a workspace member** (deliberate): kiss-ref is a PRIVATE repo, so the
-git deps here cannot enter the published workspace or default CI. Requires
-GitHub auth for `ThinkersJournal/kiss-ref` and the CLI fetcher:
+**NOT a workspace member** (deliberate): this tool carries the on-device legs
+(NVRTC JIT + GPU launch), so it needs a CUDA toolkit + a GPU and can't ride
+default CI. kiss-ref is now public + on crates.io, so the deps are normal
+`0.1.0` version pins — no GitHub auth / git-CLI fetcher needed — the same pin the
+in-tree CPU converter rides:
 
 ```sh
-CARGO_NET_GIT_FETCH_WITH_CLI=true cargo run --manifest-path tools/kiss-ref-diff/Cargo.toml
+cargo run --manifest-path tools/kiss-ref-diff/Cargo.toml
 ```
 
 The 3a device leg needs a CUDA driver + NVRTC (it JITs for the detected
 compute capability). `POC_DUMP=1` prints each generated kernel's source.
 
-When kiss-ref publishes (or the converter's final in-tree home lands with the
-#67-consolidated grammar), this tool's converter is the reference
-implementation to promote.
+**The converter has been promoted in-tree**: `baracuda-kernelgen`'s
+`#[cfg(test)]` `kiss_ref_diff` module is now the CPU value-semantics reference
+(the oracle → kiss-ref consolidation, merged — see
+`docs/superpowers/specs/2026-07-28-oracle-kissref-consolidation-design.md`). This
+standalone tool keeps the **on-device** legs, which CPU CI can't run — invoke it
+on a CUDA box to validate the generated CUDA kernels against kiss-ref on real
+hardware.

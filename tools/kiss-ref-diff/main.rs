@@ -15,7 +15,8 @@
 //! Op-name resolution joins on `kiss_ops_vocab::Op::from_token` — the same
 //! closed KISS-Ops token set `semantics_dag` re-bases onto: NO duplicated
 //! name table (the drift the consolidation exists to kill). Targets the
-//! kiss-ref 2026-07-23 lock packet @ `004e1a4`.
+//! published kiss-ref `0.1.0` (crates.io) — the same pin the in-tree CPU
+//! converter (`baracuda-kernelgen`'s `kiss_ref_diff`) rides.
 //!
 //! Step-2b surface: `reduce[<monoid>,<axes>,<kd>]`, `prefix_scan[<monoid>,
 //! <axis>,<excl>]`, `matmul[<roles>]`, the `reduced_count(<axes>)` leaf
@@ -719,7 +720,7 @@ fn main() {
         1.0,
     ];
 
-    println!("step-2 elementwise differential (kernelgen oracle vs kiss-ref @ 004e1a4):");
+    println!("step-2 elementwise differential (kernelgen oracle vs kiss-ref 0.1.0):");
 
     // (1) relu_add — the loop-closure op: relu(add(in0, in1)). The -0.0 / NaN
     // rows are the §6.15 relu-vs-naive-max seam.

@@ -1599,4 +1599,38 @@ mod tests {
             "i32_sum_wrap_expect",
         );
     }
+
+    // ---- Compute-dtype cmp/select value guard ------------------------------
+    // VERIFIES the previously-unproven cmp/select-const converter path before
+    // its oracle self-test retires: cmp/select must decide in the COMPUTE dtype
+    // (f32), so the const 0.1 narrows into the f32 lane. kiss-ref is monomorphic
+    // on the compute dtype (eval_op::<f32>, resolve.rs:67), so it should agree.
+
+    /// `CmpEq(x, 0.1)` at x=0.1f decides in f32 → TRUE (1.0), NOT f64 (0.1f as
+    /// f64 != 0.1_f64 → 0.0). The Select condition shares the fix. Ports
+    /// oracle.rs `cmp_and_select_decide_in_compute_dtype`.
+    #[test]
+    fn cmp_select_decide_in_compute_dtype_through_kiss_ref() {
+        // (a) bare mask: the const must narrow to f32 before the compare.
+        let cmp = OpDef::elementwise(
+            "cmpeq",
+            1,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpEq, konst(0.1)),
+        );
+        let r = eval_recipe_for(&cmp, &[vec![1usize]], &[vec![0.1f32]], &[]);
+        assert_bits_eq("cmpeq_f32", &[1.0], &r.outputs[0].clone().into_data());
+
+        // (b) the Select condition shares the compute-dtype decision.
+        let sel = OpDef::elementwise(
+            "selcmp",
+            1,
+            &[ElementKind::F32],
+            input(0)
+                .binary(BinaryOp::CmpEq, konst(0.1))
+                .select(konst(11.0), konst(22.0)),
+        );
+        let r = eval_recipe_for(&sel, &[vec![1usize]], &[vec![0.1f32]], &[]);
+        assert_bits_eq("selcmp_f32", &[11.0], &r.outputs[0].clone().into_data());
+    }
 }

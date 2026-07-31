@@ -5,8 +5,12 @@ edition = "2021"
 publish = false
 
 # DELIBERATELY NOT a workspace member (the root members list is crates/*,
-# xtask, examples): kiss-ref is a PRIVATE repo, so this tool cannot ride the
-# published workspace or default CI. Build it explicitly — see README.md.
+# xtask, examples): this tool carries the ON-DEVICE differential legs (NVRTC JIT
+# + GPU launch), so it needs a CUDA toolkit + a GPU and cannot ride default CI.
+# kiss-ref is now PUBLIC + on crates.io, so its deps are normal version pins (the
+# in-tree CPU converter in baracuda-kernelgen shares the same 0.1.0 pin); this
+# tool adds the device legs on top. Build + run it explicitly on a CUDA box — see
+# README.md.
 [workspace]
 
 [[bin]]
@@ -14,11 +18,13 @@ name = "kiss-ref-diff"
 path = "main.rs"
 
 [dependencies]
-# 417cc2e = 004e1a4 surface + conformance/fuzz suites + Node::Flip + scatter
-# broadcast-updates (additive; Provisional pending the KISS ruling).
-kiss-ref-core = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "417cc2e" }
-kiss-ops-vocab = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "417cc2e" }
-kiss-classify-vocab = { git = "https://github.com/ThinkersJournal/kiss-ref", rev = "417cc2e" }
+# Published crates.io pin (was git rev 417cc2e, pre-publish). Matches the in-tree
+# converter's dev-dep so the CPU legs are byte-identical across both. Caret range
+# stays inside 0.1.x (0.2.0 is the deliberate breaking upgrade — see the
+# consolidation design doc).
+kiss-ref-core = "0.1.0"
+kiss-ops-vocab = "0.1.0"
+kiss-classify-vocab = "0.1.0"
 baracuda-kernelgen = { path = "../../crates/baracuda-kernelgen" }
 baracuda-kernel-vocab = { path = "../../crates/baracuda-kernel-vocab" }
 # Step-3a device leg: JIT the generated kernel via NVRTC, launch on the GPU.
