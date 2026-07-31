@@ -2360,37 +2360,35 @@ fn emit_reduction(
     // (no Cmp at the root — just `Input(0)`) never matches the `Binary(bop,
     // ..) if bop.is_cmp()` arm below and falls through to the unchanged
     // `lower_expr` call, so its emit stays byte-identical to pre-fix.
-    let int_cmp_operand = |e: &ScalarExpr,
-                            leaf: &dyn Fn(u8) -> String,
-                            red: &dyn Fn(u8) -> String|
-     -> String {
-        // The admission test is `ir::is_admissible_int_reduction_operand` —
-        // the SAME helper `plan::assert_int_op_admissibility` (rule 4) and
-        // `assert_no_int_div_or_const` (below) call, so this shape cannot
-        // drift from the gate again. This match only survives to pick the
-        // per-shape codegen string.
-        assert!(
-            is_admissible_int_reduction_operand(e),
-            "cuda backend: int-reduction Cmp* operand {e:?} is neither a \
+    let int_cmp_operand =
+        |e: &ScalarExpr, leaf: &dyn Fn(u8) -> String, red: &dyn Fn(u8) -> String| -> String {
+            // The admission test is `ir::is_admissible_int_reduction_operand` —
+            // the SAME helper `plan::assert_int_op_admissibility` (rule 4) and
+            // `assert_no_int_div_or_const` (below) call, so this shape cannot
+            // drift from the gate again. This match only survives to pick the
+            // per-shape codegen string.
+            assert!(
+                is_admissible_int_reduction_operand(e),
+                "cuda backend: int-reduction Cmp* operand {e:?} is neither a \
              leaf Input/Reduced nor an exact 0/1 Const — \
              plan::assert_int_op_admissibility rule 4 guarantees this shape at \
              the gate; a mismatch means the gate and this emitter have drifted"
-        );
-        match e {
-            ScalarExpr::Input(i) => leaf(*i),
-            ScalarExpr::Reduced(i) => red(*i),
-            ScalarExpr::Const(v) if *v == 0.0 => "0".to_string(),
-            ScalarExpr::Const(_) => "1".to_string(),
-            other => unreachable!(
-                "cuda backend: int-reduction Cmp* operand {other:?} passed the \
+            );
+            match e {
+                ScalarExpr::Input(i) => leaf(*i),
+                ScalarExpr::Reduced(i) => red(*i),
+                ScalarExpr::Const(v) if *v == 0.0 => "0".to_string(),
+                ScalarExpr::Const(_) => "1".to_string(),
+                other => unreachable!(
+                    "cuda backend: int-reduction Cmp* operand {other:?} passed the \
                  is_admissible_int_reduction_operand check above but matched no \
                  codegen arm — the admission helper and this match have drifted"
-            ),
-        }
-    };
+                ),
+            }
+        };
     let int_reduction_predicate = |e: &ScalarExpr,
-                                    leaf: &dyn Fn(u8) -> String,
-                                    red: &dyn Fn(u8) -> String|
+                                   leaf: &dyn Fn(u8) -> String,
+                                   red: &dyn Fn(u8) -> String|
      -> Option<String> {
         if !int_acc {
             return None;
@@ -2499,41 +2497,42 @@ fn emit_reduction(
             );
             "red0".to_string()
         };
-        let posted = int_reduction_predicate(post, &post_leaf, &post_reduced).unwrap_or_else(|| {
-            lower_expr(
-                post,
-                &Lowering {
-                    leaf: &post_leaf,
-                    reduced: &post_reduced,
-                    coord: &|d| {
-                        panic!(
-                            "cuda backend: reduction post-expr Coord({d}) is Elementwise-only"
-                        )
+        let posted =
+            int_reduction_predicate(post, &post_leaf, &post_reduced).unwrap_or_else(|| {
+                lower_expr(
+                    post,
+                    &Lowering {
+                        leaf: &post_leaf,
+                        reduced: &post_reduced,
+                        coord: &|d| {
+                            panic!(
+                                "cuda backend: reduction post-expr Coord({d}) is Elementwise-only"
+                            )
+                        },
+                        unary: &|op, x| {
+                            if dbl {
+                                unary_f64(op, x)
+                            } else {
+                                unary_f32(op, x)
+                            }
+                        },
+                        binary: &|op, a, b| {
+                            if dbl {
+                                binary_f64(op, a, b)
+                            } else {
+                                binary_f32(op, a, b)
+                            }
+                        },
+                        select: &|c, a, b| {
+                            if dbl {
+                                select_f64(c, a, b)
+                            } else {
+                                select_f32(c, a, b)
+                            }
+                        },
                     },
-                    unary: &|op, x| {
-                        if dbl {
-                            unary_f64(op, x)
-                        } else {
-                            unary_f32(op, x)
-                        }
-                    },
-                    binary: &|op, a, b| {
-                        if dbl {
-                            binary_f64(op, a, b)
-                        } else {
-                            binary_f32(op, a, b)
-                        }
-                    },
-                    select: &|c, a, b| {
-                        if dbl {
-                            select_f64(c, a, b)
-                        } else {
-                            select_f32(c, a, b)
-                        }
-                    },
-                },
-            )
-        });
+                )
+            });
         (Some(format!("{acc} red0 = {finalized};")), store(posted))
     };
 
@@ -9726,7 +9725,10 @@ mod tests {
         let k = generate(&op, &reduce_key(ElementKind::U8), &Cuda);
         assert!(k.source.contains("const unsigned char* __restrict__ in0"));
         assert!(k.source.contains("unsigned char* __restrict__ out")); // out == in dtype
-        assert!(k.source.contains("long long acc = ((unsigned char)0); int has = 0;"));
+        assert!(
+            k.source
+                .contains("long long acc = ((unsigned char)0); int has = 0;")
+        );
         assert!(k.source.contains("long long e = in0[idx];")); // native int, no float convert
         assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;")); // wraps via the unsigned char* store
         assert!(!k.source.contains("float acc"));
@@ -9754,7 +9756,10 @@ mod tests {
         let k = generate(&op, &reduce_key(ElementKind::S8), &Cuda);
         assert!(k.source.contains("acc += (in0[idx] != 0 ? 1 : 0);"));
         assert!(k.source.contains("long long* __restrict__ out")); // I64 hetero out
-        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = (long long)(r);"));
+        assert!(
+            k.source
+                .contains("if (threadIdx.x == 0) out[row] = (long long)(r);")
+        );
         // No float-precision predicate anywhere: no cast to float, no float
         // 1/0 literals — the double-math hazard Task 3b closes.
         assert!(!k.source.contains("(float)in0"));

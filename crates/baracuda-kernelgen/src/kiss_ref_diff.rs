@@ -1354,20 +1354,14 @@ mod tests {
     #[test]
     fn s8_sum_differential_normal_wrap_and_empty_axis() {
         // Normal: 1+2+3+4 = 10 (no wrap).
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::S8,
-            Monoid::Sum,
-            &[4],
-            &[0],
-            &[1, 2, 3, 4],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Sum, &[4], &[0], &[1, 2, 3, 4]);
         assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_sum_normal");
         assert_int_bits_eq(&[10], &k, ElementKind::S8, "s8_sum_normal_expect");
 
         // Signed-overflow-wrap: 100 + 100 = 200, wraps to -56 (the exact case
         // kiss-ref's own `tensor_int::int_reduce_sum_wraps` doctest pins).
-        let (e, k) =
-            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Sum, &[2], &[0], &[100, 100]);
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Sum, &[2], &[0], &[100, 100]);
         assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_sum_wrap");
         assert_int_bits_eq(&[-56], &k, ElementKind::S8, "s8_sum_wrap_expect");
 
@@ -1386,13 +1380,8 @@ mod tests {
 
         // Signed-overflow-wrap: 10*10*10 = 1000; 1000 mod 256 = 232, which as
         // signed 8-bit (>=128) is 232-256 = -24.
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::S8,
-            Monoid::Prod,
-            &[3],
-            &[0],
-            &[10, 10, 10],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Prod, &[3], &[0], &[10, 10, 10]);
         assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_prod_wrap");
         assert_int_bits_eq(&[-24], &k, ElementKind::S8, "s8_prod_wrap_expect");
 
@@ -1405,26 +1394,16 @@ mod tests {
     #[test]
     fn s8_max_differential_normal_boundary_and_empty_axis() {
         // Normal.
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::S8,
-            Monoid::Max,
-            &[3],
-            &[0],
-            &[-5, 3, -1],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Max, &[3], &[0], &[-5, 3, -1]);
         assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_max_normal");
         assert_int_bits_eq(&[3], &k, ElementKind::S8, "s8_max_normal_expect");
 
         // Boundary: the dtype minimum -128 (no positive counterpart in two's
         // complement) is present but NOT the max, proving the fold doesn't
         // mis-seed/mis-wrap the asymmetric extreme.
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::S8,
-            Monoid::Max,
-            &[3],
-            &[0],
-            &[-128, -100, -50],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Max, &[3], &[0], &[-128, -100, -50]);
         assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_max_boundary");
         assert_int_bits_eq(&[-50], &k, ElementKind::S8, "s8_max_boundary_expect");
 
@@ -1437,24 +1416,14 @@ mod tests {
     #[test]
     fn s8_min_differential_normal_boundary_and_empty_axis() {
         // Normal.
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::S8,
-            Monoid::Min,
-            &[3],
-            &[0],
-            &[-5, 3, -1],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Min, &[3], &[0], &[-5, 3, -1]);
         assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_min_normal");
         assert_int_bits_eq(&[-5], &k, ElementKind::S8, "s8_min_normal_expect");
 
         // Boundary: -128 present and IS the min — the lone-extreme footgun.
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::S8,
-            Monoid::Min,
-            &[3],
-            &[0],
-            &[-128, 127, 0],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Min, &[3], &[0], &[-128, 127, 0]);
         assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_min_boundary");
         assert_int_bits_eq(&[-128], &k, ElementKind::S8, "s8_min_boundary_expect");
 
@@ -1467,21 +1436,15 @@ mod tests {
     #[test]
     fn u8_sum_differential_normal_wrap_and_empty_axis() {
         // Normal: 10+20+30 = 60.
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::U8,
-            Monoid::Sum,
-            &[3],
-            &[0],
-            &[10, 20, 30],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Sum, &[3], &[0], &[10, 20, 30]);
         assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_sum_normal");
         assert_int_bits_eq(&[60], &k, ElementKind::U8, "u8_sum_normal_expect");
 
         // Overflow-wrap: 200+100 = 300, wraps (unsigned, no sign bit) to
         // 300 mod 256 = 44 — the same case kiss-ref's own `element_map`
         // U8-wrap doctest exercises via `add`.
-        let (e, k) =
-            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Sum, &[2], &[0], &[200, 100]);
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Sum, &[2], &[0], &[200, 100]);
         assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_sum_wrap");
         assert_int_bits_eq(&[44], &k, ElementKind::U8, "u8_sum_wrap_expect");
 
@@ -1500,13 +1463,8 @@ mod tests {
 
         // Overflow-wrap: 10*10*10 = 1000; unsigned 8-bit: 1000 mod 256 = 232
         // (no sign reinterpretation — stays 232, unlike the S8 case above).
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::U8,
-            Monoid::Prod,
-            &[3],
-            &[0],
-            &[10, 10, 10],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Prod, &[3], &[0], &[10, 10, 10]);
         assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_prod_wrap");
         assert_int_bits_eq(&[232], &k, ElementKind::U8, "u8_prod_wrap_expect");
 
@@ -1519,25 +1477,15 @@ mod tests {
     #[test]
     fn u8_max_differential_normal_boundary_and_empty_axis() {
         // Normal.
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::U8,
-            Monoid::Max,
-            &[3],
-            &[0],
-            &[10, 250, 5],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Max, &[3], &[0], &[10, 250, 5]);
         assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_max_normal");
         assert_int_bits_eq(&[250], &k, ElementKind::U8, "u8_max_normal_expect");
 
         // Boundary: 255 present (the value a buggy signed-compare would
         // misread as -1 and lose to 128).
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::U8,
-            Monoid::Max,
-            &[3],
-            &[0],
-            &[255, 0, 128],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Max, &[3], &[0], &[255, 0, 128]);
         assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_max_boundary");
         assert_int_bits_eq(&[255], &k, ElementKind::U8, "u8_max_boundary_expect");
 
@@ -1550,24 +1498,14 @@ mod tests {
     #[test]
     fn u8_min_differential_normal_boundary_and_empty_axis() {
         // Normal.
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::U8,
-            Monoid::Min,
-            &[3],
-            &[0],
-            &[10, 250, 5],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Min, &[3], &[0], &[10, 250, 5]);
         assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_min_normal");
         assert_int_bits_eq(&[5], &k, ElementKind::U8, "u8_min_normal_expect");
 
         // Boundary: 0 present and IS the min.
-        let (e, k) = oracle_and_kiss_ref_int(
-            ElementKind::U8,
-            Monoid::Min,
-            &[3],
-            &[0],
-            &[255, 0, 128],
-        );
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Min, &[3], &[0], &[255, 0, 128]);
         assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_min_boundary");
         assert_int_bits_eq(&[0], &k, ElementKind::U8, "u8_min_boundary_expect");
 

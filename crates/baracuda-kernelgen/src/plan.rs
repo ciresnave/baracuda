@@ -1938,7 +1938,15 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
         // call on the reduction body/post root. For every other Access arm
         // `in_reduction` is already `false`, so the value is moot there (the
         // Cmp* admission arm requires `in_reduction` regardless).
-        walk(e, &op.name, dtype, int_dt, elementwise, in_reduction, in_reduction);
+        walk(
+            e,
+            &op.name,
+            dtype,
+            int_dt,
+            elementwise,
+            in_reduction,
+            in_reduction,
+        );
     }
 }
 
