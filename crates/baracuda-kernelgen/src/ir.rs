@@ -450,6 +450,32 @@ impl BinaryOp {
     }
 }
 
+/// Whether `e` is an admissible operand of an int-reduction predicate `Cmp*`
+/// node — the any/all/count fused-predicate shape (`count = Sum(in != 0)`,
+/// `any`/`all`'s post cast-back). Admissible: a leaf [`ScalarExpr::Input`] or
+/// [`ScalarExpr::Reduced`], or a [`ScalarExpr::Const`] of EXACTLY `0.0`/`1.0`
+/// — the only values any/all/count ever compare against, and the only ones
+/// that round-trip losslessly through `Const`'s dtype-oblivious f64 spelling
+/// (see `backend::const_lit`; any other literal risks silently running double
+/// math in an integer kernel). Anything else — a different Const value, or a
+/// composed sub-expression — is out of scope for v1 and inadmissible.
+///
+/// SINGLE SOURCE OF TRUTH for this operand shape: this exact rule is checked
+/// independently by three call sites that must never disagree —
+/// `plan::assert_int_op_admissibility` (rule 4, the validating gate),
+/// `cuda::assert_no_int_div_or_const` (the emitter's independent backstop),
+/// and `cuda::emit_reduction`'s `int_reduction_predicate`/`int_cmp_operand`
+/// (the emitter that actually lowers the admitted shape to C). The rule
+/// already drifted once between the gate and the emitter before this helper
+/// existed (whole-branch-review finding, closing the composed-predicate
+/// float-launder) — all three now call this function instead of re-deriving
+/// the shape, so it cannot drift again.
+#[must_use]
+pub(crate) fn is_admissible_int_reduction_operand(e: &ScalarExpr) -> bool {
+    matches!(e, ScalarExpr::Input(_) | ScalarExpr::Reduced(_))
+        || matches!(e, ScalarExpr::Const(v) if *v == 0.0 || *v == 1.0)
+}
+
 // ===========================================================================
 // Value-numbered DAG (derived from the authored `ScalarExpr` tree)
 // ===========================================================================

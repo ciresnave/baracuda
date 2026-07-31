@@ -10,7 +10,10 @@ use crate::backend::{
     Backend, GeneratedKernel, Lowering, Variant, VariantFidelity, lower_dag, lower_dag_all,
     lower_dag_multi, lower_expr,
 };
-use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp};
+use crate::ir::{
+    Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
+    is_admissible_int_reduction_operand,
+};
 use crate::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use baracuda_kernel_vocab::{Contiguity, ElementKind, OperandKey};
 
@@ -2361,16 +2364,27 @@ fn emit_reduction(
                             leaf: &dyn Fn(u8) -> String,
                             red: &dyn Fn(u8) -> String|
      -> String {
+        // The admission test is `ir::is_admissible_int_reduction_operand` —
+        // the SAME helper `plan::assert_int_op_admissibility` (rule 4) and
+        // `assert_no_int_div_or_const` (below) call, so this shape cannot
+        // drift from the gate again. This match only survives to pick the
+        // per-shape codegen string.
+        assert!(
+            is_admissible_int_reduction_operand(e),
+            "cuda backend: int-reduction Cmp* operand {e:?} is neither a \
+             leaf Input/Reduced nor an exact 0/1 Const — \
+             plan::assert_int_op_admissibility rule 4 guarantees this shape at \
+             the gate; a mismatch means the gate and this emitter have drifted"
+        );
         match e {
             ScalarExpr::Input(i) => leaf(*i),
             ScalarExpr::Reduced(i) => red(*i),
             ScalarExpr::Const(v) if *v == 0.0 => "0".to_string(),
-            ScalarExpr::Const(v) if *v == 1.0 => "1".to_string(),
+            ScalarExpr::Const(_) => "1".to_string(),
             other => unreachable!(
-                "cuda backend: int-reduction Cmp* operand {other:?} is neither a \
-                 leaf Input/Reduced nor an exact 0/1 Const — \
-                 plan::assert_int_op_admissibility rule 4 guarantees this shape at \
-                 the gate; a mismatch means the gate and this emitter have drifted"
+                "cuda backend: int-reduction Cmp* operand {other:?} passed the \
+                 is_admissible_int_reduction_operand check above but matched no \
+                 codegen arm — the admission helper and this match have drifted"
             ),
         }
     };
@@ -7318,12 +7332,19 @@ pub(crate) fn assert_no_int_div_or_const(
             assert_no_int_div_or_const(a, dtype, in_reduction, false);
             assert_no_int_div_or_const(b, dtype, in_reduction, false);
         }
+        // The exemption test is `ir::is_admissible_int_reduction_operand` —
+        // the SAME helper `plan::assert_int_op_admissibility` (rule 4) and
+        // `cuda::emit_reduction`'s `int_reduction_predicate`/`int_cmp_operand`
+        // call, so this shape cannot drift from the gate/emitter again. An
+        // operand this helper doesn't admit still recurses into the general
+        // walk below (this backstop's job is narrower than the plan gate's —
+        // it only polices the Const/Div/Select double-math hazards, not
+        // composition — so a non-admitted operand isn't rejected here
+        // outright, just walked normally).
         ScalarExpr::Binary(bop, a, b) if in_reduction && at_reduction_root && bop.is_cmp() => {
             for operand in [&**a, &**b] {
-                match operand {
-                    ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => {}
-                    ScalarExpr::Const(v) if *v == 0.0 || *v == 1.0 => {}
-                    other => assert_no_int_div_or_const(other, dtype, in_reduction, false),
+                if !is_admissible_int_reduction_operand(operand) {
+                    assert_no_int_div_or_const(operand, dtype, in_reduction, false);
                 }
             }
         }

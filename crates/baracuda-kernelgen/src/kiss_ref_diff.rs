@@ -749,8 +749,8 @@ fn emitter_reduce_int(
             }
             let x = data[coord_to_lin(&coord, shape)];
             acc = match monoid {
-                Monoid::Sum => acc.wrapping_add(x),
-                Monoid::Prod => acc.wrapping_mul(x),
+                Monoid::Sum => acc + x,
+                Monoid::Prod => acc * x,
                 Monoid::Max => {
                     if x > acc {
                         x
@@ -826,7 +826,7 @@ pub(crate) fn assert_int_bits_eq(a: &[i128], b: &[i128], dtype: ElementKind, lab
         let wy = wrap_to_width(y, bits, signed);
         assert_eq!(
             wx, wy,
-            "{label}: int divergence at [{i}]: reference {x} (wrapped {wx}) vs candidate {y} (wrapped {wy})"
+            "{label}: int divergence at [{i}]: emitter {x} (wrapped {wx}) vs kiss-ref {y} (wrapped {wy})"
         );
     }
 }

@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <vector>
 #include <cuda_runtime.h>
 

@@ -8,7 +8,7 @@
 
 use crate::ir::{
     Access, BaseOffset, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortLimit, SortOrder,
-    SortOut, View, WriteCombine, WriteIndex,
+    SortOut, View, WriteCombine, WriteIndex, is_admissible_int_reduction_operand,
 };
 use baracuda_kernel_vocab::{
     AxisMask, Contiguity, ElementKind, MAX_OPERANDS, OperandKey, StructureKey, VecWidth,
@@ -1800,10 +1800,19 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                     // sub-expression, is a genuine authoring error smuggling
                     // float math into an int kernel and is rejected outright —
                     // this leaf-or-{0,1} pin is what keeps the lift surgical.
+                    // The admission test itself is centralized in
+                    // `ir::is_admissible_int_reduction_operand` — the SAME
+                    // helper `cuda::assert_no_int_div_or_const` and
+                    // `cuda::emit_reduction`'s `int_reduction_predicate`/
+                    // `int_cmp_operand` call, so this shape cannot drift
+                    // between the gate and the emitter again. This match only
+                    // survives to pick the right panic message for the two
+                    // ways an operand can be inadmissible.
                     for (side, operand) in [("lhs", &**a), ("rhs", &**b)] {
+                        if is_admissible_int_reduction_operand(operand) {
+                            continue;
+                        }
                         match operand {
-                            ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => {}
-                            ScalarExpr::Const(v) if *v == 0.0 || *v == 1.0 => {}
                             ScalarExpr::Const(v) => panic!(
                                 "op '{op_name}': int reduction-predicate {bop:?} \
                                  Const({v}) at {side} must be exactly 0 or 1 — any \
