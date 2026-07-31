@@ -2301,6 +2301,22 @@ fn emit_reduction(
     } else {
         "1.0f"
     };
+    // Int Max/Min empty-axis identity (KISS-OPS-6.11-0002): an empty reduced
+    // axis must fold to the dtype's monoid identity — dtype-MIN for Max,
+    // dtype-MAX for Min — not `0`. This reuses the scan emitter's
+    // `type_extreme_lit` (same exact per-dtype literals: S8 -128/127, U8
+    // 0/255, I32/I64 INT_MIN·MAX/LLONG_MIN·MAX). Seeding `acc` with this
+    // identity instead of `zero` is a no-op for any NON-empty fold: the
+    // `has`-flag logic below unconditionally overwrites `acc` with the first
+    // real element it sees, regardless of the seed. It only changes the
+    // result when the reduced extent is empty and the fold loop never runs —
+    // exactly the case this fixes. Strictly int-gated: the FP Max/Min path
+    // (zero-seeded) is unchanged by this variable.
+    let mm_seed = if int_acc && matches!(rop, ReduceOp::Max | ReduceOp::Min) {
+        type_extreme_lit(plan.dtype, matches!(rop, ReduceOp::Max))
+    } else {
+        zero.to_string()
+    };
     let load = |i: u8| match plan.dtype {
         ElementKind::F32Strict => format!("(double)in{i}[idx]"),
         // f16/bf16 widen via the shared promotion intrinsic; f32/f64/int native.
@@ -2500,8 +2516,12 @@ fn emit_reduction(
                     "min"
                 };
                 // `has` carries "this lane saw an element" so idle lanes inject nothing
-                // (no ±inf seed, headerless); a NaN sticks via `e != e`.
-                s.push_str(&format!("        {acc} acc = {zero}; int has = 0;\n"));
+                // (no ±inf seed, headerless); a NaN sticks via `e != e`. The seed
+                // itself only surfaces when `k == 0` (the fold loop never runs, so
+                // `acc` reaches the block-reduce unmodified): `mm_seed` is the dtype
+                // monoid identity for an int Max/Min (KISS-OPS-6.11-0002), `zero`
+                // (unchanged) for FP and for Sum/Prod.
+                s.push_str(&format!("        {acc} acc = {mm_seed}; int has = 0;\n"));
                 s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
                 s.push_str("            long long idx = base + j;\n");
                 s.push_str(&format!("            {acc} e = {elem};\n"));
@@ -2722,9 +2742,12 @@ fn emit_reduction(
             } else {
                 "<"
             };
-            // `has` seeds the first reduced element (all cr=0) without a ±∞ literal;
-            // an empty reduced extent leaves `acc = 0` (matching the fast path).
-            s.push_str(&format!("        {acc} acc = {zero};\n"));
+            // `has` seeds the first reduced element (all cr=0) without a ±∞ literal.
+            // An empty reduced extent leaves `acc` at its seed, unmodified (matching
+            // the fast path): `mm_seed` is the dtype monoid identity for an int
+            // Max/Min (KISS-OPS-6.11-0002) — dtype-MIN for Max, dtype-MAX for Min —
+            // and `zero` (unchanged) for FP.
+            s.push_str(&format!("        {acc} acc = {mm_seed};\n"));
             s.push_str("        int has = 0;\n");
             emit_reduced_nest(
                 &mut s,
@@ -9487,15 +9510,117 @@ mod tests {
     #[test]
     fn reduction_max_u8_accumulates_in_long_long_and_wraps_at_store() {
         use crate::ir::ReduceOp;
-        // U8 Max: same widened-accumulate path, unsigned native load/store.
+        // U8 Max: same widened-accumulate path, unsigned native load/store. The
+        // seed is now the U8 Max empty-axis identity `((unsigned char)0)`
+        // (KISS-OPS-6.11-0002) rather than a bare `0` — numerically the same
+        // value, but the explicit per-dtype literal is what makes an EMPTY
+        // reduced extent correct (see the dedicated empty-axis identity tests
+        // below); a non-empty fold is unaffected either way (`has` forces the
+        // first real element to overwrite the seed unconditionally).
         let op = OpDef::reduction("m", 1, &[ElementKind::U8], input(0), ReduceOp::Max);
         let k = generate(&op, &reduce_key(ElementKind::U8), &Cuda);
         assert!(k.source.contains("const unsigned char* __restrict__ in0"));
         assert!(k.source.contains("unsigned char* __restrict__ out")); // out == in dtype
-        assert!(k.source.contains("long long acc = 0; int has = 0;"));
+        assert!(k.source.contains("long long acc = ((unsigned char)0); int has = 0;"));
         assert!(k.source.contains("long long e = in0[idx];")); // native int, no float convert
         assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;")); // wraps via the unsigned char* store
         assert!(!k.source.contains("float acc"));
+    }
+
+    #[test]
+    fn reduction_max_s8_empty_axis_seeds_the_dtype_min_identity() {
+        use crate::ir::ReduceOp;
+        // S8 Max, contiguous last-axis (InnerContig fast path): an EMPTY reduced
+        // extent must fold to the dtype MINIMUM (KISS-OPS-6.11-0002), not 0 — so
+        // any real element in a non-empty fold still compares as `>` the
+        // identity. Signed case: -128.
+        let op = OpDef::reduction("m", 1, &[ElementKind::S8], input(0), ReduceOp::Max);
+        let k = generate(&op, &reduce_key(ElementKind::S8), &Cuda);
+        assert!(k.source.contains("const signed char* __restrict__ in0"));
+        assert!(
+            k.source
+                .contains("long long acc = ((signed char)-128); int has = 0;")
+        );
+        // Non-empty fold is untouched: `has` still forces the first element to
+        // overwrite the seed unconditionally.
+        assert!(
+            k.source
+                .contains("if (!has || e != e || e > acc) { acc = e; has = 1; }")
+        );
+    }
+
+    #[test]
+    fn reduction_min_u8_empty_axis_seeds_the_dtype_max_identity() {
+        use crate::ir::ReduceOp;
+        // U8 Min, contiguous last-axis (InnerContig fast path): an EMPTY reduced
+        // extent must fold to the dtype MAXIMUM, not 0. Unsigned case: 255.
+        let op = OpDef::reduction("m", 1, &[ElementKind::U8], input(0), ReduceOp::Min);
+        let k = generate(&op, &reduce_key(ElementKind::U8), &Cuda);
+        assert!(k.source.contains("const unsigned char* __restrict__ in0"));
+        assert!(
+            k.source
+                .contains("long long acc = ((unsigned char)255); int has = 0;")
+        );
+        assert!(
+            k.source
+                .contains("if (!has || e != e || e < acc) { acc = e; has = 1; }")
+        );
+    }
+
+    #[test]
+    fn reduction_max_general_axis_s8_empty_axis_seeds_the_dtype_min_identity() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernel_vocab::AxisMask;
+        // S8 Max over the OUTER (non-contiguous-last) axis: the general
+        // strided-fold path (the second emit site) — same empty-axis identity
+        // must apply here too, not just the InnerContig fast path.
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::S8, 256);
+        let out = OperandDesc::new(1, &[8], &[1], ElementKind::S8, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "m",
+            1,
+            &[ElementKind::S8],
+            input(0),
+            ReduceOp::Max,
+            AxisMask(0b01),
+            false,
+        );
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_m_i8_reduce_max_ax1");
+        assert!(k.source.contains("long long acc = ((signed char)-128);"));
+        assert!(k.source.contains("int has = 0;"));
+        assert!(
+            k.source
+                .contains("acc = has ? ((e != e || e > acc) ? e : acc) : e; has = 1;")
+        );
+    }
+
+    #[test]
+    fn reduction_min_general_axis_u8_empty_axis_seeds_the_dtype_max_identity() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernel_vocab::AxisMask;
+        // U8 Min over the OUTER axis: general path, unsigned case: 255.
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::U8, 256);
+        let out = OperandDesc::new(1, &[8], &[1], ElementKind::U8, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "m",
+            1,
+            &[ElementKind::U8],
+            input(0),
+            ReduceOp::Min,
+            AxisMask(0b01),
+            false,
+        );
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_m_u8_reduce_min_ax1");
+        assert!(k.source.contains("long long acc = ((unsigned char)255);"));
+        assert!(k.source.contains("int has = 0;"));
+        assert!(
+            k.source
+                .contains("acc = has ? ((e != e || e < acc) ? e : acc) : e; has = 1;")
+        );
     }
 
     #[test]
