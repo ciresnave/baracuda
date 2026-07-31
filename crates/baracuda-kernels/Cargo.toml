@@ -40,7 +40,25 @@ cudnn = ["baracuda-kernels-sys/cudnn"]
 # bespoke path stays the default for small / decode shapes. Off by
 # default because FA2's CUTLASS-heavy templates add significant build
 # time. Forwards to `baracuda-kernels-sys/fa2`.
+#
+# NOTE: `fa2` alone is now FORWARD-ONLY (Phase 74). It does not compile
+# FA2's backward kernels — see `fa2_backward` below for the autograd /
+# training path.
 fa2 = ["baracuda-kernels-sys/fa2"]
+
+# Phase 74 — opt-in FA2 BACKWARD compilation. Adds the FA2 backend to
+# `FlashSdpaBackwardPlan` (dense BW) and the `FlashSdpaVarlenBackwardPlan`
+# family (packed-batch BW), routing to the vendored FA2 v2.8.3 BW
+# kernels (`dQ`/`dK`/`dV`, ALiBi / sliding window / softcap, GQA).
+# Split out of `fa2` because the 24 backward `.cu` instantiations are
+# CUTLASS-heavy and add ~54 min / ~25 GB RAM on top of the forward build
+# — cost that forward-only inference consumers (e.g. Fuel, which only
+# calls the `fa2_sdpa_{,bf16_,f16_}{can_implement,run}_v2` forward
+# symbols) never need to pay. Implies `fa2` (the BW `.cu` list is nested
+# inside `baracuda-kernels-sys`'s `fa2` build.rs block — `fa2_backward`
+# alone would compile nothing). Off by default; enable alongside `fa2`
+# for autograd / training use of FA2.
+fa2_backward = ["baracuda-kernels-sys/fa2_backward", "fa2"]
 
 # Phase 43 — vendored AndreSlavescu/mHC.cu (MIT). Exposes the
 # `HyperConnectionPlan` op family (manifold-constrained

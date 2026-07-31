@@ -70,9 +70,9 @@ pub mod flash_decoding;
 pub mod flash_sdpa;
 pub mod flash_sdpa_backward;
 // Phase 59b — packed-batch (varlen) FlashAttention v2 plans (FW + BW).
-// Gated on the `fa2` cargo feature at runtime (descriptor compiles
-// unconditionally for API discoverability; the run path errors with
-// Unsupported when the feature is off).
+// FW gated on `fa2`; BW gated on `fa2_backward` (Phase 74 split; implies
+// `fa2`). Descriptor compiles unconditionally for API discoverability;
+// the run path errors with Unsupported when the relevant feature is off.
 #[cfg(feature = "sm89")]
 pub mod flash_sdpa_sm89;
 pub mod flash_sdpa_varlen;

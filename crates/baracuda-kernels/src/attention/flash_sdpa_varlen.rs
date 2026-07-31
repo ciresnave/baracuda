@@ -51,6 +51,14 @@
 //!
 //! BW workspace is `dq_accum + dsoftmax_d`, sized off
 //! `total_q + 128 * batch` rows. Use [`FlashSdpaVarlenBackwardPlan::workspace_size`].
+//!
+//! ## Cargo feature split (Phase 74)
+//!
+//! `FlashSdpaVarlenPlan` (FW) requires only the `fa2` cargo feature.
+//! `FlashSdpaVarlenBackwardPlan` (BW) requires `fa2_backward` (which
+//! implies `fa2`) — the BW kernels are CUTLASS-heavy and add
+//! significant nvcc build time on top of the forward build, so they're
+//! opt-in separately from plain `fa2`.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -516,7 +524,7 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
 
     /// Required workspace size in bytes.
     pub fn workspace_size(&self, total_q: i32) -> usize {
-        #[cfg(feature = "fa2")]
+        #[cfg(feature = "fa2_backward")]
         unsafe {
             baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_varlen_backward_workspace_size(
                 self.desc.batch_size,
@@ -526,7 +534,7 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
                 self.desc.d_k,
             )
         }
-        #[cfg(not(feature = "fa2"))]
+        #[cfg(not(feature = "fa2_backward"))]
         {
             let _ = total_q;
             0
@@ -652,14 +660,14 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
         if args.q.numel() == 0 {
             return Ok(());
         }
-        #[cfg(not(feature = "fa2"))]
+        #[cfg(not(feature = "fa2_backward"))]
         {
             let _ = (stream, workspace);
             return Err(Error::Unsupported(
-                "baracuda-kernels::FlashSdpaVarlenBackwardPlan: requires the `fa2` cargo feature",
+                "baracuda-kernels::FlashSdpaVarlenBackwardPlan: requires the `fa2_backward` cargo feature",
             ));
         }
-        #[cfg(feature = "fa2")]
+        #[cfg(feature = "fa2_backward")]
         {
             let total_q = args.q.shape[0];
             let total_k = args.k.shape[0];

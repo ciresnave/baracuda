@@ -270,6 +270,14 @@ fn main() {
         // {32, 64, 96, 128, 192, 256} × {fp16, bf16} × {causal, non-causal}
         // = 24 .cu files. Upstream FA2 v2.8.3 does NOT ship 160/224/512
         // — those are Tier-3-deferred forever (no upstream sources).
+        //
+        // Always compiled under `fa2` (forward-only default). The BW
+        // instantiations are gated separately below behind the opt-in
+        // `fa2_backward` feature (Phase 74) — they're CUTLASS-heavy and
+        // cost ~54 min / ~25 GB RAM on top of the FW build, which
+        // forward-only consumers (e.g. Fuel's inference path, which
+        // only calls `fa2_sdpa_{,bf16_,f16_}{can_implement,run}_v2`)
+        // never need.
         for f in &[
             // head_dim = 32 (Phase 59a)
             "vendor/flash-attention/src/flash_fwd_hdim32_fp16_sm80.cu",
@@ -318,59 +326,84 @@ fn main() {
             "vendor/flash-attention/src/flash_fwd_hdim512_bf16_causal_sm80.cu",
             // launcher (Phase 42 + extended in Phase 59a + 60)
             "kernels/attention/fa2_launcher.cu",
-            // ----- Phase 59b — backward .cu instantiations -----
-            // 24 BW files: 6 head_dims × 2 dtypes × 2 causal/non-causal.
-            // Upstream FA2 v2.8.3 ships BW for the same 6 head_dims as FW
-            // (32, 64, 96, 128, 192, 256). No separate "varlen" .cu files
-            // exist — varlen is gated by a runtime `cu_seqlens_q != nullptr`
-            // check inside the BW launch template.
-            // head_dim = 32
-            "vendor/flash-attention/src/flash_bwd_hdim32_fp16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim32_fp16_causal_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim32_bf16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim32_bf16_causal_sm80.cu",
-            // head_dim = 64
-            "vendor/flash-attention/src/flash_bwd_hdim64_fp16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim64_fp16_causal_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim64_bf16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim64_bf16_causal_sm80.cu",
-            // head_dim = 96
-            "vendor/flash-attention/src/flash_bwd_hdim96_fp16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim96_fp16_causal_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim96_bf16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim96_bf16_causal_sm80.cu",
-            // head_dim = 128
-            "vendor/flash-attention/src/flash_bwd_hdim128_fp16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim128_fp16_causal_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim128_bf16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim128_bf16_causal_sm80.cu",
-            // head_dim = 160 BW: NOT SUPPORTED — kernel_traits sets kBlockKSmem=32
-            // (160 % 64 != 0), which the BW kernel's atom_layout assumes to be 64.
-            // Upstream FA2 and Candle don't ship BW for hd160 either. Callers that
-            // need BW at hd160 must fall back to the bespoke SDPA BW path.
-            // head_dim = 192
-            "vendor/flash-attention/src/flash_bwd_hdim192_fp16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim192_fp16_causal_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim192_bf16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim192_bf16_causal_sm80.cu",
-            // head_dim = 224 BW: NOT SUPPORTED — same kBlockKSmem=32 issue as hd160
-            // (224 % 64 != 0). Caller falls back to bespoke SDPA BW.
-            // head_dim = 256
-            "vendor/flash-attention/src/flash_bwd_hdim256_fp16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim256_fp16_causal_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim256_bf16_sm80.cu",
-            "vendor/flash-attention/src/flash_bwd_hdim256_bf16_causal_sm80.cu",
-            // head_dim = 512 BW: NOT SUPPORTED — FA2's BW kernel assumes kBlockM >= 64,
-            // but hd512 needs kBlockM=32 to fit in any SMEM budget (even with opt-in).
-            // The kernel_traits static asserts fail. baracuda Phase 60 attempted hd512
-            // BW with 32x32 tiles but nvcc reports 7 errors. Caller falls back to
-            // bespoke SDPA BW for hd512.
-            // Phase 59b BW + varlen launchers.
-            "kernels/attention/fa2_backward_launcher.cu",
+            // Varlen FORWARD launcher (Phase 59b). `fa2_varlen_launcher.cu`
+            // is FW-only — it plumbs `baracuda_kernels_fa2_sdpa_varlen_*`
+            // through the same FW instantiations already compiled above
+            // (FA2 has no separate "varlen" .cu family; varlen is a
+            // runtime `cu_seqlens_* != nullptr` switch inside the shared
+            // dispatch template). The varlen BACKWARD entry points live
+            // in `fa2_backward_launcher.cu` instead (gated below under
+            // `fa2_backward`), so this file stays under plain `fa2`.
             "kernels/attention/fa2_varlen_launcher.cu",
         ] {
             if std::path::Path::new(f).exists() {
                 builder = builder.source_files([*f]);
+            }
+        }
+
+        // Phase 74 — FA2 BACKWARD .cu instantiations, gated behind the
+        // opt-in `fa2_backward` feature (implies `fa2` — enforced at the
+        // `baracuda-kernels` level; see that crate's Cargo.toml).
+        //
+        // 24 BW files: 6 head_dims × 2 dtypes × 2 causal/non-causal.
+        // Upstream FA2 v2.8.3 ships BW for the same 6 head_dims as FW
+        // (32, 64, 96, 128, 192, 256). No separate "varlen" .cu files
+        // exist — varlen is gated by a runtime `cu_seqlens_q != nullptr`
+        // check inside the BW launch template, so the varlen BACKWARD
+        // entry points ride along in `fa2_backward_launcher.cu` below
+        // rather than needing their own .cu family.
+        //
+        // These are CUTLASS-heavy (~54 min / ~25 GB RAM) and unused by
+        // forward-only inference consumers (e.g. Fuel) — hence opt-in.
+        if cfg!(feature = "fa2_backward") {
+            for f in &[
+                // head_dim = 32
+                "vendor/flash-attention/src/flash_bwd_hdim32_fp16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim32_fp16_causal_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim32_bf16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim32_bf16_causal_sm80.cu",
+                // head_dim = 64
+                "vendor/flash-attention/src/flash_bwd_hdim64_fp16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim64_fp16_causal_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim64_bf16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim64_bf16_causal_sm80.cu",
+                // head_dim = 96
+                "vendor/flash-attention/src/flash_bwd_hdim96_fp16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim96_fp16_causal_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim96_bf16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim96_bf16_causal_sm80.cu",
+                // head_dim = 128
+                "vendor/flash-attention/src/flash_bwd_hdim128_fp16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim128_fp16_causal_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim128_bf16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim128_bf16_causal_sm80.cu",
+                // head_dim = 160 BW: NOT SUPPORTED — kernel_traits sets kBlockKSmem=32
+                // (160 % 64 != 0), which the BW kernel's atom_layout assumes to be 64.
+                // Upstream FA2 and Candle don't ship BW for hd160 either. Callers that
+                // need BW at hd160 must fall back to the bespoke SDPA BW path.
+                // head_dim = 192
+                "vendor/flash-attention/src/flash_bwd_hdim192_fp16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim192_fp16_causal_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim192_bf16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim192_bf16_causal_sm80.cu",
+                // head_dim = 224 BW: NOT SUPPORTED — same kBlockKSmem=32 issue as hd160
+                // (224 % 64 != 0). Caller falls back to bespoke SDPA BW.
+                // head_dim = 256
+                "vendor/flash-attention/src/flash_bwd_hdim256_fp16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim256_fp16_causal_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim256_bf16_sm80.cu",
+                "vendor/flash-attention/src/flash_bwd_hdim256_bf16_causal_sm80.cu",
+                // head_dim = 512 BW: NOT SUPPORTED — FA2's BW kernel assumes kBlockM >= 64,
+                // but hd512 needs kBlockM=32 to fit in any SMEM budget (even with opt-in).
+                // The kernel_traits static asserts fail. baracuda Phase 60 attempted hd512
+                // BW with 32x32 tiles but nvcc reports 7 errors. Caller falls back to
+                // bespoke SDPA BW for hd512.
+                // Phase 59b BW launcher (dense BW + varlen BW entry points).
+                "kernels/attention/fa2_backward_launcher.cu",
+            ] {
+                if std::path::Path::new(f).exists() {
+                    builder = builder.source_files([*f]);
+                }
             }
         }
     }

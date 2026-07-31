@@ -9,9 +9,9 @@
 //!      ({64, 128, 192, 256} × {f16, bf16} × {causal, non-causal});
 //!      asserts the launch succeeds and writes a non-zero dQ.
 //!
-//! All tests are `#[ignore]`-gated. Build with `--features fa2,sm80`.
+//! All tests are `#[ignore]`-gated. Build with `--features fa2_backward,sm80`.
 
-#![cfg(feature = "fa2")]
+#![cfg(feature = "fa2_backward")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

@@ -10,9 +10,14 @@
 //!   4. End-to-end varlen BW launches: assert dQ is non-zero.
 //!   5. GQA × varlen combo.
 //!
-//! All `#[ignore]`-gated. Build with `--features fa2,sm80`.
+//! All `#[ignore]`-gated. Build with `--features fa2_backward,sm80`.
+//!
+//! Gated on `fa2_backward` (not just `fa2`) because this file exercises
+//! both the varlen FW plan AND `FlashSdpaVarlenBackwardPlan` (BW) in the
+//! GQA-combo test; `fa2_backward` implies `fa2` so the FW coverage here
+//! still runs whenever this file runs.
 
-#![cfg(feature = "fa2")]
+#![cfg(feature = "fa2_backward")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{

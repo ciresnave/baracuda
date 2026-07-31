@@ -78663,8 +78663,16 @@ unsafe extern "C" {
 //                    (cu_seqlens_q[0] = 0, cu_seqlens_q[batch] = total_q)
 //   - cu_seqlens_k : i32[batch + 1] — same convention
 //   - varlen LSE   : f32 [H, total_q + 128 * batch] (unpadded format).
+//
+// Phase 74 split: the symbols below are grouped into TWO extern blocks.
+// The BACKWARD symbols (dense BW + varlen BW — `fa2_backward_launcher.cu`)
+// are gated behind the opt-in `fa2_backward` feature (implies `fa2`,
+// enforced at the `baracuda-kernels` crate level). The varlen FORWARD
+// symbols (`fa2_varlen_launcher.cu` — packed-batch FW, no gradient
+// involved) stay under plain `fa2` since forward-only consumers may need
+// varlen packing without ever wanting the CUTLASS-heavy BW TUs.
 
-#[cfg(feature = "fa2")]
+#[cfg(feature = "fa2_backward")]
 unsafe extern "C" {
     /// FA2 backward, f16. Computes dQ, dK, dV given FW-saved O + LSE (f32)
     /// and upstream gradient dO. ALiBi / sliding window / softcap plumbed.
@@ -78793,7 +78801,13 @@ unsafe extern "C" {
         seq_q: i32,
         head_dim: i32,
     ) -> usize;
+}
 
+// Varlen FORWARD symbols — `fa2_varlen_launcher.cu` (Phase 59b), stays
+// under plain `fa2` (Phase 74 split). No gradient involved; packed-batch
+// FW is a forward-only capability a forward-only consumer may still need.
+#[cfg(feature = "fa2")]
+unsafe extern "C" {
     /// FA2 varlen forward, f16. Packed Q/K/V/O across `batch` sequences.
     /// Writes `out` (packed [total_q, H, D]) and `softmax_lse` (f32
     /// [H, total_q + 128 * batch]).
@@ -78893,7 +78907,12 @@ unsafe extern "C" {
         num_heads: i32,
         total_q: i32,
     ) -> usize;
+}
 
+// Varlen BACKWARD symbols — live in `fa2_backward_launcher.cu` alongside
+// the dense BW entry points (Phase 74 split: gated behind `fa2_backward`).
+#[cfg(feature = "fa2_backward")]
+unsafe extern "C" {
     /// FA2 varlen backward, f16. Same packed layout as varlen FW.
     /// Workspace size: `..._varlen_backward_workspace_size(...)`.
     pub fn baracuda_kernels_fa2_sdpa_varlen_backward_f16_run(
