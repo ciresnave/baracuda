@@ -860,6 +860,12 @@ __host__ inline int32_t launch_flash_decoding(
     if (batch <= 0 || heads <= 0 || num_kv_heads <= 0 || head_dim <= 0) return 2;
     if (heads % num_kv_heads != 0) return 2;
     if (head_dim > kMaxD) return 3;
+    // Defense-in-depth at the C-ABI boundary (the Rust wrapper's `can_implement`
+    // also enforces this): `a_mean` is a reduction OVER the per-head `a`, so it
+    // requires `a`. A direct FFI caller that bypasses the Rust validation and
+    // passes `a_mean` without `a` would make the head-mean kernel dereference a
+    // null `a`. Fail loud instead (2 → Error::InvalidProblem).
+    if (a_mean != nullptr && a == nullptr) return 2;
     if (k_len <= 0) {
         // No KV → write zeros + bail.
         // Caller is expected to zero-init y; nothing to do here.
@@ -897,6 +903,10 @@ __host__ inline int32_t launch_flash_decoding(
         // currently UNREACHABLE (`flash_decoding_should_use_tc` returns false).
         // Re-enabling TC requires adding the a-store to the TC split kernel
         // (the `sScores[...] = expf(...)` spot) + threading `a`/strides here.
+        // Until then, reject an `a`/`a_mean` request on this path so a future
+        // re-enable of the heuristic can't silently return all-zero weights
+        // (3 → Error::Unsupported).
+        if (a != nullptr || a_mean != nullptr) return 3;
         dim3 grid_split((unsigned)num_splits, (unsigned)num_kv_heads, (unsigned)batch);
         flash_decoding_split_kernel_tc<T><<<grid_split, block, 0, stream>>>(
             q, k, v, partial_m, partial_l, partial_o,

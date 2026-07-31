@@ -10,8 +10,8 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    ElementKind, FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan, PlanPreference,
-    TensorMut, TensorRef, Workspace, contiguous_stride,
+    ElementKind, Error, FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use half::{bf16, f16};
 
@@ -1122,4 +1122,170 @@ fn flash_decoding_a_cost_gqa_sweep_f16() {
             );
         }
     }
+}
+
+/// Negative-path coverage for the `a` / `a_mean` validation in
+/// `FlashDecodingPlan::can_implement` (the positive path is exercised by the
+/// correctness tests). Asserts each malformed request is rejected with
+/// `Error::InvalidProblem` rather than silently accepted:
+///   - `a_mean` requested without `a` (its input),
+///   - non-contiguous `a`,
+///   - non-contiguous `a_mean`,
+/// plus a positive control that a well-formed `a` + `a_mean` passes.
+/// `#[ignore]` — needs a device for `select` / buffer allocation.
+#[ignore]
+#[test]
+fn flash_decoding_a_mean_validation_rejects() {
+    let (ctx, stream) = setup();
+    const B: i32 = 1;
+    const H: i32 = 2;
+    const K: i32 = 64;
+    const D: i32 = 32;
+
+    let dq: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (B * H * D) as usize).expect("q");
+    let dk: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (B * H * K * D) as usize).expect("k");
+    let dv: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (B * H * K * D) as usize).expect("v");
+    let mut dy: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (B * H * D) as usize).expect("y");
+    let mut da: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (B * H * K) as usize).expect("a");
+    let mut dam: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (B * K) as usize).expect("am");
+
+    let desc = FlashDecodingDescriptor::new(B, H, K, D, ElementKind::F16);
+    let plan = FlashDecodingPlan::<f16>::select(&stream, &desc, PlanPreference::default())
+        .expect("select");
+
+    // The immutable q/k/v are the same for every case; only y/a/a_mean vary. Each
+    // case is a scoped block so the `&mut` borrows of dy/da/dam are released
+    // between cases.
+    macro_rules! qkv {
+        () => {
+            (
+                TensorRef {
+                    data: dq.as_slice(),
+                    shape: [B, H, D],
+                    stride: contiguous_stride([B, H, D]),
+                },
+                TensorRef {
+                    data: dk.as_slice(),
+                    shape: [B, H, K, D],
+                    stride: contiguous_stride([B, H, K, D]),
+                },
+                TensorRef {
+                    data: dv.as_slice(),
+                    shape: [B, H, K, D],
+                    stride: contiguous_stride([B, H, K, D]),
+                },
+            )
+        };
+    }
+
+    // Case 1: a_mean=Some but a=None → its input is missing.
+    {
+        let (q, k, v) = qkv!();
+        let args = FlashDecodingArgs::<f16> {
+            q,
+            k,
+            v,
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: [B, H, D],
+                stride: contiguous_stride([B, H, D]),
+            },
+            a: None,
+            a_mean: Some(TensorMut {
+                data: dam.as_slice_mut(),
+                shape: [B, K],
+                stride: contiguous_stride([B, K]),
+            }),
+        };
+        let r = plan.can_implement(&args);
+        assert!(
+            matches!(r, Err(Error::InvalidProblem(_))),
+            "a_mean without a must reject with InvalidProblem, got {r:?}",
+        );
+    }
+
+    // Case 2: non-contiguous a (last-dim stride 2 instead of 1).
+    {
+        let (q, k, v) = qkv!();
+        let args = FlashDecodingArgs::<f16> {
+            q,
+            k,
+            v,
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: [B, H, D],
+                stride: contiguous_stride([B, H, D]),
+            },
+            a: Some(TensorMut {
+                data: da.as_slice_mut(),
+                shape: [B, H, K],
+                stride: [(H * K) as i64, K as i64, 2],
+            }),
+            a_mean: None,
+        };
+        let r = plan.can_implement(&args);
+        assert!(
+            matches!(r, Err(Error::InvalidProblem(_))),
+            "non-contiguous a must reject with InvalidProblem, got {r:?}",
+        );
+    }
+
+    // Case 3: contiguous a, but non-contiguous a_mean (last-dim stride 2).
+    {
+        let (q, k, v) = qkv!();
+        let args = FlashDecodingArgs::<f16> {
+            q,
+            k,
+            v,
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: [B, H, D],
+                stride: contiguous_stride([B, H, D]),
+            },
+            a: Some(TensorMut {
+                data: da.as_slice_mut(),
+                shape: [B, H, K],
+                stride: contiguous_stride([B, H, K]),
+            }),
+            a_mean: Some(TensorMut {
+                data: dam.as_slice_mut(),
+                shape: [B, K],
+                stride: [K as i64, 2],
+            }),
+        };
+        let r = plan.can_implement(&args);
+        assert!(
+            matches!(r, Err(Error::InvalidProblem(_))),
+            "non-contiguous a_mean must reject with InvalidProblem, got {r:?}",
+        );
+    }
+
+    // Positive control: well-formed a + a_mean passes.
+    {
+        let (q, k, v) = qkv!();
+        let args = FlashDecodingArgs::<f16> {
+            q,
+            k,
+            v,
+            y: TensorMut {
+                data: dy.as_slice_mut(),
+                shape: [B, H, D],
+                stride: contiguous_stride([B, H, D]),
+            },
+            a: Some(TensorMut {
+                data: da.as_slice_mut(),
+                shape: [B, H, K],
+                stride: contiguous_stride([B, H, K]),
+            }),
+            a_mean: Some(TensorMut {
+                data: dam.as_slice_mut(),
+                shape: [B, K],
+                stride: contiguous_stride([B, K]),
+            }),
+        };
+        let r = plan.can_implement(&args);
+        assert!(r.is_ok(), "well-formed a + a_mean must pass, got {r:?}");
+    }
+
+    println!("a/a_mean validation: 3 negative cases rejected + positive control OK");
 }
