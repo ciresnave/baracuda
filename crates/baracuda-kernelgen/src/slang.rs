@@ -114,7 +114,12 @@ impl Backend for Slang {
         // hazard: infix `/` is device-UB at an int dtype, and a `Const` is an f64
         // literal). Mirrors CpuC::lower / Cuda::lower.
         if crate::plan::is_int_dtype(plan.dtype) {
-            assert_no_int_div_or_const(plan.body, plan.dtype);
+            // v1 is Elementwise/Scalar-only (panics below on any other
+            // schedule), so the reduction-predicate exemption never applies
+            // here — always `false` for both flags (inert; `in_reduction`
+            // false already excludes the exemption regardless of
+            // `at_reduction_root`), same coverage as before Task 3b.
+            assert_no_int_div_or_const(plan.body, plan.dtype, false, false);
         }
         match plan.schedule {
             Schedule::Scalar => emit_scalar_slang(plan, ctype),

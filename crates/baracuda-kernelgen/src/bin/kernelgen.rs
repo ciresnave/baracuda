@@ -12,6 +12,7 @@ use baracuda_kernel_vocab::{
     ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc,
     seed_winner, structure_key,
 };
+use baracuda_kernelgen::ir::BinaryOp;
 use baracuda_kernelgen::{
     Cuda, OpDef, ReduceOp, ReduceStage, UnaryOp, derive_pattern, emit_dispatch_table, generate,
     generate_variants, ingest_jsonl, input, konst, merge_reports, param, rank_matrix, reduced,
@@ -268,6 +269,68 @@ fn main() {
             k.name,
             key.to_token()
         );
+    }
+
+    // --- S8/U8 integer reductions (int8-reductions Task 5, on-device validation) ---
+    // Mirrors the i32 item-04 cells directly above: Sum/Max/Min/Prod (the
+    // `int_acc` long-long-accumulate + wrap-at-store path, ee66115d) plus the
+    // hetero-out `any` (-> U8 keep-mask) / `count` (-> I64) predicate folds
+    // (ba325509 admits the int Cmp*/Const predicate; 6fdfe478 lowers it to a
+    // genuine integer comparison so `count` stays exact past 2^24). Registered
+    // here so `ondevice/reduction_int8_validate.cu` can `#include` the emitted
+    // kernels the same way `reduce_validate.cu`/`reduction_upgrades_validate.cu`
+    // consume the i32/f32 cells above.
+    for dt in [ElementKind::S8, ElementKind::U8] {
+        let isum8 = OpDef::reduction("sum", 1, &[dt], input(0), ReduceOp::Sum);
+        let imax8 = OpDef::reduction("amax", 1, &[dt], input(0), ReduceOp::Max);
+        let imin8 = OpDef::reduction("amin", 1, &[dt], input(0), ReduceOp::Min);
+        let iprod8 = OpDef::reduction("prod", 1, &[dt], input(0), ReduceOp::Prod);
+        for op in [&isum8, &imax8, &imin8, &iprod8] {
+            let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], dt, 256);
+            let o = OperandDesc::new(1, &[4096], &[1], dt, 256);
+            let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+            let k = generate(op, &key, &Cuda);
+            fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+            println!(
+                "generated {out_dir}/{}.cu  (cell {})",
+                k.name,
+                key.to_token()
+            );
+        }
+
+        // any -> U8 (Sum fold + Cmp* post: `reduced(0) > 0`), count -> I64 (Sum
+        // fold + identity post) — both fold a Cmp*(in0, 0.0) predicate that
+        // lowers as a genuine integer comparison at S8/U8 input dtype (the
+        // Task 3b fix).
+        let mut any8 = OpDef::reduction_post(
+            "any",
+            1,
+            &[dt],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Sum,
+            reduced(0).binary(BinaryOp::CmpGt, konst(0.0)),
+        );
+        any8.out_dtype = Some(ElementKind::U8);
+        let mut count8 = OpDef::reduction(
+            "count",
+            1,
+            &[dt],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Sum,
+        );
+        count8.out_dtype = Some(ElementKind::I64);
+        for op in [&any8, &count8] {
+            let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+            let o = OperandDesc::new(1, &[256], &[1], op.out_dtype.unwrap(), 256);
+            let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+            let k = generate(op, &key, &Cuda);
+            fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+            println!(
+                "generated {out_dir}/{}.cu  (cell {})",
+                k.name,
+                key.to_token()
+            );
+        }
     }
 
     // Fused norms: RmsNorm / Softmax (single input), weighted-RmsNorm / LayerNorm

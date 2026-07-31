@@ -10,7 +10,10 @@ use crate::backend::{
     Backend, GeneratedKernel, Lowering, Variant, VariantFidelity, lower_dag, lower_dag_all,
     lower_dag_multi, lower_expr,
 };
-use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp};
+use crate::ir::{
+    Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
+    is_admissible_int_reduction_operand,
+};
 use crate::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use baracuda_kernel_vocab::{Contiguity, ElementKind, OperandKey};
 
@@ -135,6 +138,14 @@ impl Backend for Cuda {
         let bincount_shape =
             plan.write_index.scatter().is_some() && matches!(plan.body, ScalarExpr::Const(_));
         if crate::plan::is_int_dtype(plan.dtype) && !bincount_shape {
+            // Rule 4 mirror (`plan::assert_int_op_admissibility`'s any/all/count
+            // lift, ba325509): `true` only for `Access::Reduction` — NOT
+            // RowReduce/Contraction/Scan/Window, which stay out of scope for the
+            // fused-Cmp*-predicate exception, exactly like the plan gate. Passed
+            // uniformly to every expr below (for `Access::Reduction` every entry
+            // in `exprs` is `body` or `post`, both correctly in-scope; for every
+            // other access kind this stays `false`, so their walk is unchanged).
+            let in_reduction = matches!(plan.access, Access::Reduction { .. });
             // Every output body (multi-output: body + extra_out_bodies), plus the
             // reduction-class stages/epilogue — the same coverage as plan.rs.
             let mut exprs: Vec<&ScalarExpr> = plan.output_bodies();
@@ -170,7 +181,13 @@ impl Backend for Cuda {
                 Access::Elementwise => {}
             }
             for e in exprs {
-                assert_no_int_div_or_const(e, plan.dtype);
+                // `at_reduction_root: in_reduction` — this loop is the initial
+                // call on each expr in `exprs`, which is `[body, post]`
+                // precisely when `in_reduction` is true (see the match above:
+                // only `Access::Reduction` pushes `post`), mirroring
+                // `plan::assert_int_op_admissibility`'s same `in_reduction`-as-
+                // `at_reduction_root` initial call.
+                assert_no_int_div_or_const(e, plan.dtype, in_reduction, in_reduction);
             }
         }
         // Increment 0d: independent Coord emitter backstop, beside the int
@@ -2222,7 +2239,10 @@ fn emit_reduction(
     // fixed order — bitwise-reproducible across hardware AND matching the CPU
     // oracle's fold order. Gated so the base lowering stays byte-identical.
     let prec = if precision { "_prec" } else { "" };
-    let int_acc = matches!(plan.dtype, ElementKind::I32 | ElementKind::I64);
+    let int_acc = matches!(
+        plan.dtype,
+        ElementKind::I32 | ElementKind::I64 | ElementKind::S8 | ElementKind::U8
+    );
     assert!(
         matches!(
             plan.dtype,
@@ -2232,7 +2252,7 @@ fn emit_reduction(
                 | ElementKind::F32Strict
                 | ElementKind::F64
         ) || int_acc,
-        "reduction: float or i32/i64 dtypes only (i8/u8 etc. not yet); got {:?}",
+        "reduction: float or integer (i8/u8/i32/i64) dtypes only; got {:?}",
         plan.dtype
     );
     // Integer Mean is a float-output (mixed-dtype) op — unrepresentable in a
@@ -2298,93 +2318,113 @@ fn emit_reduction(
     } else {
         "1.0f"
     };
+    // Int Max/Min empty-axis identity (KISS-OPS-6.11-0002): an empty reduced
+    // axis must fold to the dtype's monoid identity — dtype-MIN for Max,
+    // dtype-MAX for Min — not `0`. This reuses the scan emitter's
+    // `type_extreme_lit` (same exact per-dtype literals: S8 -128/127, U8
+    // 0/255, I32/I64 INT_MIN·MAX/LLONG_MIN·MAX). Seeding `acc` with this
+    // identity instead of `zero` is a no-op for any NON-empty fold: the
+    // `has`-flag logic below unconditionally overwrites `acc` with the first
+    // real element it sees, regardless of the seed. It only changes the
+    // result when the reduced extent is empty and the fold loop never runs —
+    // exactly the case this fixes. Strictly int-gated: the FP Max/Min path
+    // (zero-seeded) is unchanged by this variable.
+    let mm_seed = if int_acc && matches!(rop, ReduceOp::Max | ReduceOp::Min) {
+        type_extreme_lit(plan.dtype, matches!(rop, ReduceOp::Max))
+    } else {
+        zero.to_string()
+    };
     let load = |i: u8| match plan.dtype {
         ElementKind::F32Strict => format!("(double)in{i}[idx]"),
         // f16/bf16 widen via the shared promotion intrinsic; f32/f64/int native.
         k => promote_load_f32(k, &format!("in{i}[idx]")),
     };
-    let elem = lower_expr(
-        plan.body,
-        &Lowering {
-            leaf: &load,
-            reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
-            coord: &|d| {
-                panic!(
-                    "cuda backend: Coord({d}) reached the reduction emitter — Coord is \
-                     Elementwise-only (a coordinate along a folded axis is ambiguous)"
-                )
-            },
-            unary: &|op, x| {
-                if dbl {
-                    unary_f64(op, x)
-                } else {
-                    unary_f32(op, x)
-                }
-            },
-            binary: &|op, a, b| {
-                if dbl {
-                    binary_f64(op, a, b)
-                } else {
-                    binary_f32(op, a, b)
-                }
-            },
-            select: &|c, a, b| {
-                if dbl {
-                    select_f64(c, a, b)
-                } else {
-                    select_f32(c, a, b)
-                }
-            },
-        },
-    );
-    // Convert an accumulator-width value to the output store. Uniform-dtype is
-    // byte-identical to pre-0e (f16/bf16 demote, else native). A 0e hetero-out
-    // converts the accumulator to the output dtype: U8 for a boolean any/all
-    // (the value is exactly 0.0/1.0 by the Cmp* post, so the cast is exact) and
-    // I64 for a count/sum-widening (exact for an int accumulator; exact for a
-    // float accumulator while count ≤ 2²⁴ — the documented caller precondition).
-    let store = |v: String| -> String {
-        if plan.out_dtype != plan.dtype {
-            return match plan.out_dtype {
-                ElementKind::U8 => format!("(unsigned char)({v})"),
-                ElementKind::I64 => format!("(long long)({v})"),
-                other => unreachable!("validated hetero out dtype {other:?}"),
-            };
+    // Int-reduction Cmp*/Const predicate lowering — the any/all/count fix.
+    // `binary_f32`/`binary_f64` spell `Cmp*` as a FLOAT predicate
+    // (`(float)a != (float)b ? 1.0f : 0.0f`) and `backend::const_lit` spells
+    // `Const` as an f64 literal (`0.0`/`1.0`), both dtype-oblivious by
+    // construction. Folding that FLOAT predicate into a `long long acc` (the
+    // `count` shape, `acc += elem`) silently promotes `acc` to `float` in C —
+    // an accumulator that stalls at 2^24 (16,777,216) for a count past it.
+    // `plan::assert_int_op_admissibility` rule 4 already guarantees an
+    // admitted int-reduction `Cmp*` node's operands are each a leaf
+    // `Input`/`Reduced` or an exact 0/1 `Const` (the only shape any/all/count
+    // ever author), so when this reduction's accumulator is integer
+    // (`int_acc`) and the body/post ROOT is exactly a `Cmp*` node, lower it
+    // here as a genuine INTEGER comparison (`a OP b ? 1 : 0` — no `(float)`
+    // casts, no `1.0f`/`0.0f` literals) instead of routing through
+    // `lower_expr`'s float spellers. Reachable ONLY when `int_acc` is true AND
+    // the node is this reduction's body/post ROOT — every other caller of
+    // `binary_f32`/`binary_f64`/`const_lit` (float reductions, every
+    // elementwise emitter) is untouched. A plain int Sum/Max/Min/Prod body
+    // (no Cmp at the root — just `Input(0)`) never matches the `Binary(bop,
+    // ..) if bop.is_cmp()` arm below and falls through to the unchanged
+    // `lower_expr` call, so its emit stays byte-identical to pre-fix.
+    let int_cmp_operand =
+        |e: &ScalarExpr, leaf: &dyn Fn(u8) -> String, red: &dyn Fn(u8) -> String| -> String {
+            // The admission test is `ir::is_admissible_int_reduction_operand` —
+            // the SAME helper `plan::assert_int_op_admissibility` (rule 4) and
+            // `assert_no_int_div_or_const` (below) call, so this shape cannot
+            // drift from the gate again. This match only survives to pick the
+            // per-shape codegen string.
+            assert!(
+                is_admissible_int_reduction_operand(e),
+                "cuda backend: int-reduction Cmp* operand {e:?} is neither a \
+             leaf Input/Reduced nor an exact 0/1 Const — \
+             plan::assert_int_op_admissibility rule 4 guarantees this shape at \
+             the gate; a mismatch means the gate and this emitter have drifted"
+            );
+            match e {
+                ScalarExpr::Input(i) => leaf(*i),
+                ScalarExpr::Reduced(i) => red(*i),
+                ScalarExpr::Const(v) if *v == 0.0 => "0".to_string(),
+                ScalarExpr::Const(_) => "1".to_string(),
+                other => unreachable!(
+                    "cuda backend: int-reduction Cmp* operand {other:?} passed the \
+                 is_admissible_int_reduction_operand check above but matched no \
+                 codegen arm — the admission helper and this match have drifted"
+                ),
+            }
+        };
+    let int_reduction_predicate = |e: &ScalarExpr,
+                                   leaf: &dyn Fn(u8) -> String,
+                                   red: &dyn Fn(u8) -> String|
+     -> Option<String> {
+        if !int_acc {
+            return None;
         }
-        demote_store_f32(plan.dtype, &v)
+        match e {
+            ScalarExpr::Binary(bop, a, b) if bop.is_cmp() => {
+                let a_s = int_cmp_operand(a, leaf, red);
+                let b_s = int_cmp_operand(b, leaf, red);
+                let c_op = match bop {
+                    BinaryOp::CmpEq => "==",
+                    BinaryOp::CmpNe => "!=",
+                    BinaryOp::CmpLt => "<",
+                    BinaryOp::CmpLe => "<=",
+                    BinaryOp::CmpGt => ">",
+                    BinaryOp::CmpGe => ">=",
+                    _ => unreachable!("is_cmp() guarantees one of the six Cmp* variants"),
+                };
+                Some(format!("({a_s} {c_op} {b_s} ? 1 : 0)"))
+            }
+            _ => None,
+        }
     };
-    // Apply the 0e fused post-expression (default = identity `Reduced(0)`) to the
-    // finalized fold result, then convert for the store. The post lowers through
-    // the SAME accumulator-width spellers as the fold body, with `Reduced(0)`
-    // bound to a hoisted `red0` register (so a post referencing it more than once
-    // — or the Mean quotient — is computed once). Returns `(optional red0 decl,
-    // store rhs)`: the identity post yields `(None, store(finalized))`, so the
-    // call site emits a single `<lvalue> = <rhs>;` byte-identical to pre-0e; a
-    // real post yields the `{acc} red0 = <finalized>;` decl plus the posted rhs.
-    let post_is_identity = matches!(post, ScalarExpr::Reduced(0));
-    let post_apply = |finalized: String| -> (Option<String>, String) {
-        if post_is_identity {
-            return (None, store(finalized));
-        }
-        let posted = lower_expr(
-            post,
+    let elem = int_reduction_predicate(plan.body, &load, &|i| {
+        unreachable!("no Reduced leaf outside RowReduce: red{i}")
+    })
+    .unwrap_or_else(|| {
+        lower_expr(
+            plan.body,
             &Lowering {
-                leaf: &|i| {
-                    panic!(
-                        "cuda backend: reduction post-expr Input({i}) reached the emitter \
-                         — the post reads Reduced(0)/Const/Param only (validated by \
-                         plan::assert_valid_reduction_post)"
-                    )
-                },
-                reduced: &|s| {
-                    assert_eq!(
-                        s, 0,
-                        "reduction post references Reduced({s}); only 0 exists"
-                    );
-                    "red0".to_string()
-                },
+                leaf: &load,
+                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
                 coord: &|d| {
-                    panic!("cuda backend: reduction post-expr Coord({d}) is Elementwise-only")
+                    panic!(
+                        "cuda backend: Coord({d}) reached the reduction emitter — Coord is \
+                         Elementwise-only (a coordinate along a folded axis is ambiguous)"
+                    )
                 },
                 unary: &|op, x| {
                     if dbl {
@@ -2408,7 +2448,91 @@ fn emit_reduction(
                     }
                 },
             },
-        );
+        )
+    });
+    // Convert an accumulator-width value to the output store. Uniform-dtype is
+    // byte-identical to pre-0e (f16/bf16 demote, else native). A 0e hetero-out
+    // converts the accumulator to the output dtype: U8 for a boolean any/all
+    // (the value is exactly 0.0/1.0 by the Cmp* post, so the cast is exact) and
+    // I64 for a count/sum-widening — exact for an int accumulator PRECISELY
+    // because `int_reduction_predicate` (above) lowers the folded `Cmp*` as an
+    // integer expression (`a != b ? 1 : 0`), so `acc += elem` is a true
+    // integer add with no magnitude limit; exact for a FLOAT accumulator
+    // (dtype F32/F64/F16/Bf16, out of scope for `int_reduction_predicate`)
+    // only while count ≤ 2²⁴ — the documented caller precondition.
+    let store = |v: String| -> String {
+        if plan.out_dtype != plan.dtype {
+            return match plan.out_dtype {
+                ElementKind::U8 => format!("(unsigned char)({v})"),
+                ElementKind::I64 => format!("(long long)({v})"),
+                other => unreachable!("validated hetero out dtype {other:?}"),
+            };
+        }
+        demote_store_f32(plan.dtype, &v)
+    };
+    // Apply the 0e fused post-expression (default = identity `Reduced(0)`) to the
+    // finalized fold result, then convert for the store. The post lowers through
+    // the SAME accumulator-width spellers as the fold body, with `Reduced(0)`
+    // bound to a hoisted `red0` register (so a post referencing it more than once
+    // — or the Mean quotient — is computed once). Returns `(optional red0 decl,
+    // store rhs)`: the identity post yields `(None, store(finalized))`, so the
+    // call site emits a single `<lvalue> = <rhs>;` byte-identical to pre-0e; a
+    // real post yields the `{acc} red0 = <finalized>;` decl plus the posted rhs.
+    let post_is_identity = matches!(post, ScalarExpr::Reduced(0));
+    let post_apply = |finalized: String| -> (Option<String>, String) {
+        if post_is_identity {
+            return (None, store(finalized));
+        }
+        let post_leaf = |i: u8| -> String {
+            panic!(
+                "cuda backend: reduction post-expr Input({i}) reached the emitter \
+                 — the post reads Reduced(0)/Const/Param only (validated by \
+                 plan::assert_valid_reduction_post)"
+            )
+        };
+        let post_reduced = |s: u8| -> String {
+            assert_eq!(
+                s, 0,
+                "reduction post references Reduced({s}); only 0 exists"
+            );
+            "red0".to_string()
+        };
+        let posted =
+            int_reduction_predicate(post, &post_leaf, &post_reduced).unwrap_or_else(|| {
+                lower_expr(
+                    post,
+                    &Lowering {
+                        leaf: &post_leaf,
+                        reduced: &post_reduced,
+                        coord: &|d| {
+                            panic!(
+                                "cuda backend: reduction post-expr Coord({d}) is Elementwise-only"
+                            )
+                        },
+                        unary: &|op, x| {
+                            if dbl {
+                                unary_f64(op, x)
+                            } else {
+                                unary_f32(op, x)
+                            }
+                        },
+                        binary: &|op, a, b| {
+                            if dbl {
+                                binary_f64(op, a, b)
+                            } else {
+                                binary_f32(op, a, b)
+                            }
+                        },
+                        select: &|c, a, b| {
+                            if dbl {
+                                select_f64(c, a, b)
+                            } else {
+                                select_f32(c, a, b)
+                            }
+                        },
+                    },
+                )
+            });
         (Some(format!("{acc} red0 = {finalized};")), store(posted))
     };
 
@@ -2497,8 +2621,12 @@ fn emit_reduction(
                     "min"
                 };
                 // `has` carries "this lane saw an element" so idle lanes inject nothing
-                // (no ±inf seed, headerless); a NaN sticks via `e != e`.
-                s.push_str(&format!("        {acc} acc = {zero}; int has = 0;\n"));
+                // (no ±inf seed, headerless); a NaN sticks via `e != e`. The seed
+                // itself only surfaces when `k == 0` (the fold loop never runs, so
+                // `acc` reaches the block-reduce unmodified): `mm_seed` is the dtype
+                // monoid identity for an int Max/Min (KISS-OPS-6.11-0002), `zero`
+                // (unchanged) for FP and for Sum/Prod.
+                s.push_str(&format!("        {acc} acc = {mm_seed}; int has = 0;\n"));
                 s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
                 s.push_str("            long long idx = base + j;\n");
                 s.push_str(&format!("            {acc} e = {elem};\n"));
@@ -2719,9 +2847,12 @@ fn emit_reduction(
             } else {
                 "<"
             };
-            // `has` seeds the first reduced element (all cr=0) without a ±∞ literal;
-            // an empty reduced extent leaves `acc = 0` (matching the fast path).
-            s.push_str(&format!("        {acc} acc = {zero};\n"));
+            // `has` seeds the first reduced element (all cr=0) without a ±∞ literal.
+            // An empty reduced extent leaves `acc` at its seed, unmodified (matching
+            // the fast path): `mm_seed` is the dtype monoid identity for an int
+            // Max/Min (KISS-OPS-6.11-0002) — dtype-MIN for Max, dtype-MAX for Min —
+            // and `zero` (unchanged) for FP.
+            s.push_str(&format!("        {acc} acc = {mm_seed};\n"));
             s.push_str("        int has = 0;\n");
             emit_reduced_nest(
                 &mut s,
@@ -7135,7 +7266,34 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
 /// f64-spelled Const injects double math into an int kernel (f64 cannot even
 /// represent all i64). Called from [`Cuda::lower`] over the body and every
 /// reduction-class stage/epilogue, independent of `assert_int_op_admissibility`.
-pub(crate) fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
+///
+/// `in_reduction` mirrors `plan::assert_int_op_admissibility`'s rule 4 (the
+/// any/all/count fused-predicate lift, ba325509/Task 3b): `true` only when the
+/// expression is this plan's `Access::Reduction` body/post — CpuC/Slang (v1,
+/// Elementwise-only) always pass `false`, so their coverage is unchanged.
+/// `at_reduction_root` mirrors `plan::assert_int_op_admissibility`'s
+/// `at_reduction_root` (whole-branch-review fix, closing the composed-
+/// predicate leak): `true` ONLY for the initial call on the reduction
+/// body/post root, `false` for every recursive descent — CpuC/Slang pass
+/// `false` for both parameters (inert, since `in_reduction` is already
+/// `false` there). Within that scope (`in_reduction && at_reduction_root`), a
+/// `Cmp*` node's operands (leaf `Input`/`Reduced` or an exact 0/1 `Const`)
+/// are exempted from the blanket `Const` panic below — that 0/1 `Const` is
+/// safe (it lowers as an INTEGER literal in `cuda::emit_reduction`'s
+/// `int_reduction_predicate`, which — like this gate — only inspects the
+/// body/post ROOT node, never a nested one), never the f64 C literal this
+/// backstop exists to catch); anything else in that position still recurses
+/// into the general check and panics as before. A `Cmp*` reached as a
+/// sub-node of Add/Sub/Mul (not the root) falls to the general
+/// `ScalarExpr::Binary(_, a, b)` arm below like any other binary node, so its
+/// own `Const`/`Div` operands are still policed by the blanket rules — it is
+/// never itself the leaf-or-{0,1} exemption target.
+pub(crate) fn assert_no_int_div_or_const(
+    e: &ScalarExpr,
+    dtype: ElementKind,
+    in_reduction: bool,
+    at_reduction_root: bool,
+) {
     match e {
         ScalarExpr::Input(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {}
         // A Coord at an int dtype is the SAME hazard class as Const (its
@@ -7166,14 +7324,86 @@ pub(crate) fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
              float-only (the 0c U8/I8 cond-observer question is unresolved); the \
              plan gate rejects this"
         ),
-        ScalarExpr::Unary(_, x) => assert_no_int_div_or_const(x, dtype),
-        ScalarExpr::Add(a, b)
-        | ScalarExpr::Sub(a, b)
-        | ScalarExpr::Mul(a, b)
-        | ScalarExpr::Binary(_, a, b) => {
-            assert_no_int_div_or_const(a, dtype);
-            assert_no_int_div_or_const(b, dtype);
+        ScalarExpr::Unary(_, x) => {
+            assert_no_int_div_or_const(x, dtype, in_reduction, false);
         }
+        ScalarExpr::Add(a, b) | ScalarExpr::Sub(a, b) | ScalarExpr::Mul(a, b) => {
+            assert_no_int_div_or_const(a, dtype, in_reduction, false);
+            assert_no_int_div_or_const(b, dtype, in_reduction, false);
+        }
+        // The exemption test is `ir::is_admissible_int_reduction_operand` —
+        // the SAME helper `plan::assert_int_op_admissibility` (rule 4) and
+        // `cuda::emit_reduction`'s `int_reduction_predicate`/`int_cmp_operand`
+        // call, so this shape cannot drift from the gate/emitter again. An
+        // operand this helper doesn't admit still recurses into the general
+        // walk below (this backstop's job is narrower than the plan gate's —
+        // it only polices the Const/Div/Select double-math hazards, not
+        // composition — so a non-admitted operand isn't rejected here
+        // outright, just walked normally).
+        ScalarExpr::Binary(bop, a, b) if in_reduction && at_reduction_root && bop.is_cmp() => {
+            for operand in [&**a, &**b] {
+                if !is_admissible_int_reduction_operand(operand) {
+                    assert_no_int_div_or_const(operand, dtype, in_reduction, false);
+                }
+            }
+        }
+        ScalarExpr::Binary(_, a, b) => {
+            assert_no_int_div_or_const(a, dtype, in_reduction, false);
+            assert_no_int_div_or_const(b, dtype, in_reduction, false);
+        }
+    }
+}
+
+#[cfg(test)]
+mod int_div_or_const_root_gate_validate {
+    //! Direct unit coverage for `assert_no_int_div_or_const`'s
+    //! `at_reduction_root` restriction (whole-branch-review fix, mirroring
+    //! `plan::int_reduction_predicate_gate_validate`). This backstop normally
+    //! only runs AFTER `plan::assert_int_op_admissibility` has already
+    //! validated the op at `build_plan` time, so a composed-predicate body
+    //! never reaches it via the `generate()`/`Cuda::lower` path — the plan
+    //! gate rejects it first. These tests call the function directly (it is
+    //! `pub(crate)`) to exercise it as an independent layer in its own right
+    //! (the "gate every layer" principle the surrounding code comments name
+    //! throughout this file), the same way the plan-gate tests bypass
+    //! `build_plan` to isolate `assert_int_op_admissibility`.
+    use super::assert_no_int_div_or_const;
+    use crate::ir::{BinaryOp, ScalarExpr, input, konst};
+    use baracuda_kernel_vocab::ElementKind;
+
+    // Root-Cmp positive case (mirrors the shipped `count` shape): a bare
+    // `Cmp*` IS the reduction body root — admitted (0/1 Const operand
+    // exempted from the blanket Const panic), must not panic.
+    #[test]
+    fn root_cmp_with_01_const_admitted() {
+        let body = input(0).binary(BinaryOp::CmpNe, konst(0.0)).0;
+        assert_no_int_div_or_const(&body, ElementKind::S8, true, true);
+    }
+
+    // Root-only guard: a COMPOSED predicate — `Add(Cmp*, Cmp*)` — reached as
+    // the reduction body root. The root itself is `Add`, not `Cmp`, so the
+    // exemption arm never matches at this level; the walk recurses into each
+    // `Cmp*` child with `at_reduction_root: false` (this fix), lands the
+    // nested Cmp on the general `Binary(_, a, b)` arm instead of the
+    // exemption arm, and its `Const(0.0)` operand then hits the ordinary
+    // blanket `Const` panic — closing the same composed-predicate leak this
+    // gate mirrors from `plan::assert_int_op_admissibility`. Before this fix
+    // the nested Cmp still matched `in_reduction && bop.is_cmp()`
+    // (unconditionally, no root check) and its 0/1 Const was wrongly
+    // exempted, so this call did NOT panic.
+    #[test]
+    fn composed_predicate_not_at_root_panics() {
+        let cmp = || input(0).binary(BinaryOp::CmpNe, konst(0.0)).0;
+        let body = ScalarExpr::Add(Box::new(cmp()), Box::new(cmp()));
+        let r = std::panic::catch_unwind(|| {
+            assert_no_int_div_or_const(&body, ElementKind::S8, true, true)
+        });
+        assert!(
+            r.is_err(),
+            "a Cmp* reached as a sub-node of Add (not the reduction body/post \
+             root) must still panic on its Const operand — admitting it here \
+             would mirror the plan-gate leak this fix closes"
+        );
     }
 }
 
@@ -9458,6 +9688,207 @@ mod tests {
         assert!(k.source.contains("acc *= in0[idx];")); // native int, no float convert
         assert!(k.source.contains("long long r = block_prod_p_i32(acc);"));
         assert!(!k.source.contains("float acc"));
+    }
+
+    #[test]
+    fn reduction_sum_s8_accumulates_in_long_long_and_wraps_at_store() {
+        use crate::ir::ReduceOp;
+        // S8 Sum: same `long long` widened-accumulate path as I32/I64 (reuse, no
+        // narrower accumulator). The native leaf load is `in0[idx]` (S8 hits the
+        // `_` arm of `promote_load_f32`, no half/bf16 widening detour). The store
+        // is homogeneous (out_dtype == dtype == S8), so `demote_store_f32` is a
+        // pass-through and the truncation to 8 bits happens via the `signed char*`
+        // output pointer's implicit (wrapping, two's-complement) assignment
+        // conversion — KISS-OPS-6.2-0002.
+        let op = OpDef::reduction("s", 1, &[ElementKind::S8], input(0), ReduceOp::Sum);
+        let k = generate(&op, &reduce_key(ElementKind::S8), &Cuda);
+        assert!(k.source.contains("const signed char* __restrict__ in0"));
+        assert!(k.source.contains("signed char* __restrict__ out")); // out == in dtype
+        assert!(k.source.contains("long long acc = 0;"));
+        assert!(k.source.contains("acc += in0[idx];")); // native int, no float convert
+        assert!(k.source.contains("long long r = block_sum_s_i8(acc);"));
+        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;")); // wraps via the signed char* store
+        assert!(!k.source.contains("float acc"));
+    }
+
+    #[test]
+    fn reduction_max_u8_accumulates_in_long_long_and_wraps_at_store() {
+        use crate::ir::ReduceOp;
+        // U8 Max: same widened-accumulate path, unsigned native load/store. The
+        // seed is now the U8 Max empty-axis identity `((unsigned char)0)`
+        // (KISS-OPS-6.11-0002) rather than a bare `0` — numerically the same
+        // value, but the explicit per-dtype literal is what makes an EMPTY
+        // reduced extent correct (see the dedicated empty-axis identity tests
+        // below); a non-empty fold is unaffected either way (`has` forces the
+        // first real element to overwrite the seed unconditionally).
+        let op = OpDef::reduction("m", 1, &[ElementKind::U8], input(0), ReduceOp::Max);
+        let k = generate(&op, &reduce_key(ElementKind::U8), &Cuda);
+        assert!(k.source.contains("const unsigned char* __restrict__ in0"));
+        assert!(k.source.contains("unsigned char* __restrict__ out")); // out == in dtype
+        assert!(
+            k.source
+                .contains("long long acc = ((unsigned char)0); int has = 0;")
+        );
+        assert!(k.source.contains("long long e = in0[idx];")); // native int, no float convert
+        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;")); // wraps via the unsigned char* store
+        assert!(!k.source.contains("float acc"));
+    }
+
+    #[test]
+    fn reduction_count_s8_predicate_lowers_as_integer_not_float() {
+        use crate::ir::{BinaryOp, ReduceOp, konst};
+        // count = Sum(in != 0), I64 out (the any/all/count hetero-out shape
+        // admitted by Task 3, ba325509). Positive evidence for the Task 3b
+        // fix: the predicate must lower as a genuine INTEGER comparison
+        // (`in0[idx] != 0 ? 1 : 0`) so `acc += elem` is a true `long long`
+        // add — exact for a count past 2^24 (16,777,216), unlike the float
+        // predicate `((float)in0[idx] != (float)0.0 ? 1.0f : 0.0f)` this
+        // replaces (which silently promotes `acc` to `float` in C and stalls
+        // at 2^24).
+        let mut op = OpDef::reduction(
+            "count_s8",
+            1,
+            &[ElementKind::S8],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Sum,
+        );
+        op.out_dtype = Some(ElementKind::I64);
+        let k = generate(&op, &reduce_key(ElementKind::S8), &Cuda);
+        assert!(k.source.contains("acc += (in0[idx] != 0 ? 1 : 0);"));
+        assert!(k.source.contains("long long* __restrict__ out")); // I64 hetero out
+        assert!(
+            k.source
+                .contains("if (threadIdx.x == 0) out[row] = (long long)(r);")
+        );
+        // No float-precision predicate anywhere: no cast to float, no float
+        // 1/0 literals — the double-math hazard Task 3b closes.
+        assert!(!k.source.contains("(float)in0"));
+        assert!(!k.source.contains("1.0f"));
+        assert!(!k.source.contains("0.0f"));
+    }
+
+    #[test]
+    fn reduction_any_u8_predicate_lowers_as_integer_body_and_post() {
+        use crate::ir::{BinaryOp, ReduceOp, konst, reduced};
+        // any = Max(in != 0) with post Cmp*(Reduced(0), 0) casting the fold
+        // back to a U8 boolean (the other any/all/count hetero-out shape).
+        // Exercises the Task 3b int-predicate fix in BOTH the fold body AND
+        // the post — any/all are numerically safe either way (Max/Min of 0/1
+        // never accumulates magnitude), but the emitted predicate must still
+        // be a true integer comparison, not the dtype-oblivious float one.
+        let mut op = OpDef::reduction_post(
+            "any_u8",
+            1,
+            &[ElementKind::U8],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Max,
+            reduced(0).binary(BinaryOp::CmpNe, konst(0.0)),
+        );
+        op.out_dtype = Some(ElementKind::U8);
+        let k = generate(&op, &reduce_key(ElementKind::U8), &Cuda);
+        assert!(k.source.contains("long long e = (in0[idx] != 0 ? 1 : 0);")); // body predicate
+        assert!(k.source.contains("long long red0 = r;"));
+        assert!(k.source.contains("out[row] = (red0 != 0 ? 1 : 0);")); // post predicate
+        assert!(!k.source.contains("(float)in0"));
+        assert!(!k.source.contains("(float)red0"));
+        assert!(!k.source.contains("1.0f"));
+        assert!(!k.source.contains("0.0f"));
+    }
+
+    #[test]
+    fn reduction_max_s8_empty_axis_seeds_the_dtype_min_identity() {
+        use crate::ir::ReduceOp;
+        // S8 Max, contiguous last-axis (InnerContig fast path): an EMPTY reduced
+        // extent must fold to the dtype MINIMUM (KISS-OPS-6.11-0002), not 0 — so
+        // any real element in a non-empty fold still compares as `>` the
+        // identity. Signed case: -128.
+        let op = OpDef::reduction("m", 1, &[ElementKind::S8], input(0), ReduceOp::Max);
+        let k = generate(&op, &reduce_key(ElementKind::S8), &Cuda);
+        assert!(k.source.contains("const signed char* __restrict__ in0"));
+        assert!(
+            k.source
+                .contains("long long acc = ((signed char)-128); int has = 0;")
+        );
+        // Non-empty fold is untouched: `has` still forces the first element to
+        // overwrite the seed unconditionally.
+        assert!(
+            k.source
+                .contains("if (!has || e != e || e > acc) { acc = e; has = 1; }")
+        );
+    }
+
+    #[test]
+    fn reduction_min_u8_empty_axis_seeds_the_dtype_max_identity() {
+        use crate::ir::ReduceOp;
+        // U8 Min, contiguous last-axis (InnerContig fast path): an EMPTY reduced
+        // extent must fold to the dtype MAXIMUM, not 0. Unsigned case: 255.
+        let op = OpDef::reduction("m", 1, &[ElementKind::U8], input(0), ReduceOp::Min);
+        let k = generate(&op, &reduce_key(ElementKind::U8), &Cuda);
+        assert!(k.source.contains("const unsigned char* __restrict__ in0"));
+        assert!(
+            k.source
+                .contains("long long acc = ((unsigned char)255); int has = 0;")
+        );
+        assert!(
+            k.source
+                .contains("if (!has || e != e || e < acc) { acc = e; has = 1; }")
+        );
+    }
+
+    #[test]
+    fn reduction_max_general_axis_s8_empty_axis_seeds_the_dtype_min_identity() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernel_vocab::AxisMask;
+        // S8 Max over the OUTER (non-contiguous-last) axis: the general
+        // strided-fold path (the second emit site) — same empty-axis identity
+        // must apply here too, not just the InnerContig fast path.
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::S8, 256);
+        let out = OperandDesc::new(1, &[8], &[1], ElementKind::S8, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "m",
+            1,
+            &[ElementKind::S8],
+            input(0),
+            ReduceOp::Max,
+            AxisMask(0b01),
+            false,
+        );
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_m_i8_reduce_max_ax1");
+        assert!(k.source.contains("long long acc = ((signed char)-128);"));
+        assert!(k.source.contains("int has = 0;"));
+        assert!(
+            k.source
+                .contains("acc = has ? ((e != e || e > acc) ? e : acc) : e; has = 1;")
+        );
+    }
+
+    #[test]
+    fn reduction_min_general_axis_u8_empty_axis_seeds_the_dtype_max_identity() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernel_vocab::AxisMask;
+        // U8 Min over the OUTER axis: general path, unsigned case: 255.
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::U8, 256);
+        let out = OperandDesc::new(1, &[8], &[1], ElementKind::U8, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "m",
+            1,
+            &[ElementKind::U8],
+            input(0),
+            ReduceOp::Min,
+            AxisMask(0b01),
+            false,
+        );
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_m_u8_reduce_min_ax1");
+        assert!(k.source.contains("long long acc = ((unsigned char)255);"));
+        assert!(k.source.contains("int has = 0;"));
+        assert!(
+            k.source
+                .contains("acc = has ? ((e != e || e < acc) ? e : acc) : e; has = 1;")
+        );
     }
 
     #[test]

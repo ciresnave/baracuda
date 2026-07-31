@@ -27,9 +27,11 @@ use crate::oracle::{self, TypedBuffer};
 use crate::plan::build_plan;
 use crate::recipe::semantics_dag;
 use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use kiss_classify_vocab::Dtype;
 use kiss_ops_vocab::Op;
 use kiss_ref_core::{
     Combine, FlatDag, IndexRef, Monoid, Node, OobPolicy, RecipeEval, Tensor, eval_recipe,
+    scalar_int, tensor_int,
 };
 
 // ===========================================================================
@@ -594,6 +596,241 @@ pub(crate) fn assert_close(name: &str, reference: &[f32], candidate: &[f32], rel
     }
 }
 
+// ===========================================================================
+// Integer reduction differential (S8/U8 sum/max/min/prod vs kiss-ref):
+// bit-exact, wrap + empty-axis. Host-side / i128-backed — a SEMANTICS
+// differential, NOT a CUDA run (the on-device leg is a separate later task).
+//
+// Dependency check (done before writing this section): the pinned dev-dep is
+// `kiss-ref-core = "0.1.0"` (Cargo.lock resolves exactly 0.1.0; a 0.2.0 is
+// present in the local registry cache but `^0.1.0` never selects it). NEITHER
+// 0.1.0 NOR 0.2.0 exposes `eval_recipe_int` (grepped both trees) — the
+// `FlatDag`/`Node`/`eval_recipe` machinery `recipe_to_flatdag`/
+// `eval_recipe_for` above ride is generic over `ScalarFloat` only, so there is
+// no int-flavored recipe DAG to build in the first place. The int lane's
+// directly-callable entry point is `tensor_int::reduce` (confirmed present in
+// 0.1.0, pinned by that crate's own `int_reduce_sum_wraps` unit test), so
+// that is what the kiss-ref leg below calls — the plan's documented fallback.
+//
+// The "emitter" leg does NOT call `crate::oracle::evaluate`: `oracle.rs`'s
+// `eval_reduction` hard-asserts int-accumulate reduction dtypes to
+// `I32`/`I64` only (see `oracle.rs` ~1180-1188, `assert!(matches!(plan.dtype,
+// ElementKind::I32 | ElementKind::I64), ...)`) — a gate that predates the
+// S8/U8 reduction-emitter admission (commit ee66115d) and would panic given
+// an S8/U8 plan. Patching that assert is out of this task's staged-file scope
+// (only `kiss_ref_diff.rs` + test files). Instead, `emitter_reduce_int` below
+// is a standalone reference implementing the documented emitted-kernel
+// algorithm directly (per this task's own spec): accumulate UNWRAPPED in
+// `i128` (models the CUDA kernel's widened `long long acc` running the WHOLE
+// reduced extent before ever truncating — cuda.rs's `long long acc = 0; acc
+// += in0[idx];` pattern for S8/U8 sum, same shape for max/min/prod), and only
+// the comparator (`assert_int_bits_eq`) applies the final wrap-to-dtype-width
+// truncation that the real kernel's `signed/unsigned char*` store performs.
+// This is a genuinely independent algorithm from kiss-ref's `tensor_int::
+// reduce` (which wraps to width at EVERY combine step, per KISS-OPS-6.2-0002
+// — see its own `int_reduce_sum_wraps` doctest: 100+100 wraps mid-fold to
+// -56) — the two agree on Sum/Prod because modular addition/multiplication
+// are associative (wrap-every-step ≡ wrap-once-at-the-end, mod 2^n), and
+// trivially agree on Max/Min (a monoid pick from within already-in-range
+// operands never itself goes out of range). Proving that agreement IS the
+// differential.
+// ===========================================================================
+
+/// `ElementKind` (Baracuda's dtype currency) -> `Dtype` (kiss-ref's), for the
+/// four int dtypes this differential covers. `I32`/`I64` are included even
+/// though only S8/U8 have dedicated tests below — the whole int lane
+/// (`emitter_reduce_int`/`oracle_and_kiss_ref_int`/`assert_int_bits_eq`) is
+/// dtype-generic, so I32/I64 fall out "for free" (per the task's "reuse for
+/// I32/I64 if trivial").
+fn to_kiss_int_dtype(dtype: ElementKind) -> Dtype {
+    match dtype {
+        ElementKind::S8 => Dtype::S8,
+        ElementKind::U8 => Dtype::U8,
+        ElementKind::I32 => Dtype::I32,
+        ElementKind::I64 => Dtype::I64,
+        other => panic!("kiss_ref_diff: no int Dtype mapping for {other:?} (S8/U8/I32/I64 only)"),
+    }
+}
+
+/// `(bit width, signed)` for `dtype`, sourced from kiss-ref's OWN spec table
+/// (`scalar_int::int_spec`) rather than a hand-duplicated copy — so the
+/// comparator's notion of "width" can never drift from the same table
+/// `tensor_int::reduce`'s internal wrap-to-width uses.
+fn int_width(dtype: ElementKind) -> (u32, bool) {
+    scalar_int::int_spec(to_kiss_int_dtype(dtype))
+        .unwrap_or_else(|| panic!("kiss_ref_diff: no int_spec for {dtype:?}"))
+}
+
+/// Row-major unravel of linear index `lin` into per-axis coordinates over
+/// `ext` (each axis' extent) — the usize/reduction-shape counterpart of this
+/// file's `dense_strides` (which is i64/dense-layout-shaped, for the f32 leg).
+fn unravel_coord(mut lin: usize, ext: &[usize]) -> Vec<usize> {
+    let mut c = vec![0usize; ext.len()];
+    for d in (0..ext.len()).rev() {
+        let e = ext[d].max(1);
+        c[d] = lin % e;
+        lin /= e;
+    }
+    c
+}
+
+/// Row-major linear index of `coord` in a dense buffer shaped `shape`.
+fn coord_to_lin(coord: &[usize], shape: &[usize]) -> usize {
+    let mut idx = 0usize;
+    let mut stride = 1usize;
+    for d in (0..shape.len()).rev() {
+        idx += coord[d] * stride;
+        stride *= shape[d];
+    }
+    idx
+}
+
+/// The emitter's documented int-reduction fold (see the section doc above for
+/// why this doesn't ride `crate::oracle::evaluate`): fold `axes` of `data`
+/// (shaped `shape`) with `monoid`, seeded at the KISS-OPS-6.11-0002 monoid
+/// identity (sum=0, prod=1, max=dtype-min, min=dtype-max — so an EMPTY
+/// reduced extent yields the identity untouched), accumulating UNWRAPPED in
+/// `i128` end-to-end (no intermediate width truncation).
+fn emitter_reduce_int(
+    data: &[i128],
+    shape: &[usize],
+    axes: &[usize],
+    monoid: Monoid,
+    dtype: ElementKind,
+) -> Vec<i128> {
+    let (bits, signed) = int_width(dtype);
+    let ident = match monoid {
+        Monoid::Sum => 0i128,
+        Monoid::Prod => 1i128,
+        Monoid::Max => {
+            if signed {
+                -(1i128 << (bits - 1))
+            } else {
+                0
+            }
+        }
+        Monoid::Min => {
+            if signed {
+                (1i128 << (bits - 1)) - 1
+            } else {
+                (1i128 << bits) - 1
+            }
+        }
+    };
+
+    let rank = shape.len();
+    let mut is_reduced = vec![false; rank];
+    for &a in axes {
+        assert!(
+            a < rank,
+            "emitter_reduce_int: axis {a} out of range for rank {rank}"
+        );
+        is_reduced[a] = true;
+    }
+    let kept: Vec<usize> = (0..rank).filter(|&d| !is_reduced[d]).collect();
+    let reduced: Vec<usize> = (0..rank).filter(|&d| is_reduced[d]).collect();
+    let kept_ext: Vec<usize> = kept.iter().map(|&d| shape[d]).collect();
+    let red_ext: Vec<usize> = reduced.iter().map(|&d| shape[d]).collect();
+    let n_kept: usize = kept_ext.iter().product();
+    let n_red: usize = red_ext.iter().product();
+
+    let mut out = Vec::with_capacity(n_kept);
+    for klin in 0..n_kept {
+        let kc = unravel_coord(klin, &kept_ext);
+        let mut acc = ident;
+        for rlin in 0..n_red {
+            let rc = unravel_coord(rlin, &red_ext);
+            let mut coord = vec![0usize; rank];
+            for (j, &a) in kept.iter().enumerate() {
+                coord[a] = kc[j];
+            }
+            for (j, &a) in reduced.iter().enumerate() {
+                coord[a] = rc[j];
+            }
+            let x = data[coord_to_lin(&coord, shape)];
+            acc = match monoid {
+                Monoid::Sum => acc + x,
+                Monoid::Prod => acc * x,
+                Monoid::Max => {
+                    if x > acc {
+                        x
+                    } else {
+                        acc
+                    }
+                }
+                Monoid::Min => {
+                    if x < acc {
+                        x
+                    } else {
+                        acc
+                    }
+                }
+            };
+        }
+        out.push(acc);
+    }
+    out
+}
+
+/// Run the same int reduction (`monoid` over `axes` of `data`/`shape`,
+/// `dtype`-typed) through BOTH legs: [0] the emitter reference
+/// (`emitter_reduce_int`, unwrapped i128 accumulate) and [1] kiss-ref
+/// (`tensor_int::reduce`, wraps every combine step). Returns
+/// `(emitter_vals, kiss_ref_vals)` for the caller to diff — bit-exact via
+/// `assert_int_bits_eq` (both legs' raw i128 values are only guaranteed equal
+/// AFTER masking to `dtype`'s stored width; see that comparator).
+pub(crate) fn oracle_and_kiss_ref_int(
+    dtype: ElementKind,
+    monoid: Monoid,
+    shape: &[usize],
+    axes: &[usize],
+    data: &[i128],
+) -> (Vec<i128>, Vec<i128>) {
+    let emitter_vals = emitter_reduce_int(data, shape, axes, monoid, dtype);
+    let kdtype = to_kiss_int_dtype(dtype);
+    let t = Tensor::from_vec(data.to_vec(), shape).expect("kiss_ref_diff: int tensor build");
+    let r = tensor_int::reduce(&t.view(), kdtype, monoid, axes)
+        .unwrap_or_else(|e| panic!("kiss_ref_diff: tensor_int::reduce: {e:?}"));
+    let kiss_vals: Vec<i128> = r.into_data();
+    (emitter_vals, kiss_vals)
+}
+
+/// Mask `x` to its low `bits` bits and reinterpret per `signed` — the "actual
+/// stored byte value" a `dtype`-width store would hold. Two i128s that differ
+/// only above `bits` (e.g. a raw `-1` and a raw `255` at `bits=8`) compare
+/// equal: both carry the byte pattern `0xff`, which is `-1` read as S8 or
+/// `255` read as U8 — exactly the wrap-to-width identification the emitted
+/// kernel's narrow-pointer store performs.
+fn wrap_to_width(x: i128, bits: u32, signed: bool) -> i128 {
+    if bits >= 128 {
+        return x;
+    }
+    let mask = (1i128 << bits) - 1;
+    let masked = x & mask;
+    if signed && masked & (1i128 << (bits - 1)) != 0 {
+        masked - (1i128 << bits)
+    } else {
+        masked
+    }
+}
+
+/// Bit-exact integer comparator: mask both `a` and `b` to `dtype`'s stored
+/// width (§6.2-0002 two's-complement wrap) before comparing — no tolerance,
+/// this is the KISS int lane (sum/prod/max/min are EXACT-BYTE, not
+/// ULP-tolerant).
+pub(crate) fn assert_int_bits_eq(a: &[i128], b: &[i128], dtype: ElementKind, label: &str) {
+    assert_eq!(a.len(), b.len(), "{label}: length");
+    let (bits, signed) = int_width(dtype);
+    for (i, (&x, &y)) in a.iter().zip(b).enumerate() {
+        let wx = wrap_to_width(x, bits, signed);
+        let wy = wrap_to_width(y, bits, signed);
+        assert_eq!(
+            wx, wy,
+            "{label}: int divergence at [{i}]: emitter {x} (wrapped {wx}) vs kiss-ref {y} (wrapped {wy})"
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1103,6 +1340,202 @@ mod tests {
         );
         assert_bits_eq("batched_matmul_oracle_vs_kiss", &o, &k);
         assert_bits_eq("batched_matmul_expect", &[7.0, 10.0, 43.0, 50.0], &k);
+    }
+
+    // ---- Integer reduction differential (Task 4): S8/U8 vs kiss-ref -------
+    // Bit-exact (mask-to-width), host-side. Each (dtype, monoid) pair below
+    // covers: a normal in-range case, a dtype-boundary edge case (the
+    // wrap-around overflow for Sum/Prod — where wrapping is meaningful; the
+    // dtype-extreme value for Max/Min — where wrapping can't occur but the
+    // asymmetric two's-complement range, e.g. S8's lone -128 with no +128
+    // counterpart, is the analogous footgun), and an EMPTY-AXIS case (reduced
+    // extent 0 -> the KISS-OPS-6.11-0002 monoid identity).
+
+    #[test]
+    fn s8_sum_differential_normal_wrap_and_empty_axis() {
+        // Normal: 1+2+3+4 = 10 (no wrap).
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Sum, &[4], &[0], &[1, 2, 3, 4]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_sum_normal");
+        assert_int_bits_eq(&[10], &k, ElementKind::S8, "s8_sum_normal_expect");
+
+        // Signed-overflow-wrap: 100 + 100 = 200, wraps to -56 (the exact case
+        // kiss-ref's own `tensor_int::int_reduce_sum_wraps` doctest pins).
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Sum, &[2], &[0], &[100, 100]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_sum_wrap");
+        assert_int_bits_eq(&[-56], &k, ElementKind::S8, "s8_sum_wrap_expect");
+
+        // Empty axis: reduced extent 0 -> identity 0.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Sum, &[0], &[0], &[]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_sum_empty");
+        assert_int_bits_eq(&[0], &k, ElementKind::S8, "s8_sum_empty_expect");
+    }
+
+    #[test]
+    fn s8_prod_differential_normal_wrap_and_empty_axis() {
+        // Normal: 2*3 = 6.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Prod, &[2], &[0], &[2, 3]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_prod_normal");
+        assert_int_bits_eq(&[6], &k, ElementKind::S8, "s8_prod_normal_expect");
+
+        // Signed-overflow-wrap: 10*10*10 = 1000; 1000 mod 256 = 232, which as
+        // signed 8-bit (>=128) is 232-256 = -24.
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Prod, &[3], &[0], &[10, 10, 10]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_prod_wrap");
+        assert_int_bits_eq(&[-24], &k, ElementKind::S8, "s8_prod_wrap_expect");
+
+        // Empty axis: identity 1.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Prod, &[0], &[0], &[]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_prod_empty");
+        assert_int_bits_eq(&[1], &k, ElementKind::S8, "s8_prod_empty_expect");
+    }
+
+    #[test]
+    fn s8_max_differential_normal_boundary_and_empty_axis() {
+        // Normal.
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Max, &[3], &[0], &[-5, 3, -1]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_max_normal");
+        assert_int_bits_eq(&[3], &k, ElementKind::S8, "s8_max_normal_expect");
+
+        // Boundary: the dtype minimum -128 (no positive counterpart in two's
+        // complement) is present but NOT the max, proving the fold doesn't
+        // mis-seed/mis-wrap the asymmetric extreme.
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Max, &[3], &[0], &[-128, -100, -50]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_max_boundary");
+        assert_int_bits_eq(&[-50], &k, ElementKind::S8, "s8_max_boundary_expect");
+
+        // Empty axis: identity = dtype minimum, -128.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Max, &[0], &[0], &[]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_max_empty");
+        assert_int_bits_eq(&[-128], &k, ElementKind::S8, "s8_max_empty_expect");
+    }
+
+    #[test]
+    fn s8_min_differential_normal_boundary_and_empty_axis() {
+        // Normal.
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Min, &[3], &[0], &[-5, 3, -1]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_min_normal");
+        assert_int_bits_eq(&[-5], &k, ElementKind::S8, "s8_min_normal_expect");
+
+        // Boundary: -128 present and IS the min — the lone-extreme footgun.
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Min, &[3], &[0], &[-128, 127, 0]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_min_boundary");
+        assert_int_bits_eq(&[-128], &k, ElementKind::S8, "s8_min_boundary_expect");
+
+        // Empty axis: identity = dtype maximum, 127.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::S8, Monoid::Min, &[0], &[0], &[]);
+        assert_int_bits_eq(&e, &k, ElementKind::S8, "s8_min_empty");
+        assert_int_bits_eq(&[127], &k, ElementKind::S8, "s8_min_empty_expect");
+    }
+
+    #[test]
+    fn u8_sum_differential_normal_wrap_and_empty_axis() {
+        // Normal: 10+20+30 = 60.
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Sum, &[3], &[0], &[10, 20, 30]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_sum_normal");
+        assert_int_bits_eq(&[60], &k, ElementKind::U8, "u8_sum_normal_expect");
+
+        // Overflow-wrap: 200+100 = 300, wraps (unsigned, no sign bit) to
+        // 300 mod 256 = 44 — the same case kiss-ref's own `element_map`
+        // U8-wrap doctest exercises via `add`.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Sum, &[2], &[0], &[200, 100]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_sum_wrap");
+        assert_int_bits_eq(&[44], &k, ElementKind::U8, "u8_sum_wrap_expect");
+
+        // Empty axis: identity 0.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Sum, &[0], &[0], &[]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_sum_empty");
+        assert_int_bits_eq(&[0], &k, ElementKind::U8, "u8_sum_empty_expect");
+    }
+
+    #[test]
+    fn u8_prod_differential_normal_wrap_and_empty_axis() {
+        // Normal: 2*3 = 6.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Prod, &[2], &[0], &[2, 3]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_prod_normal");
+        assert_int_bits_eq(&[6], &k, ElementKind::U8, "u8_prod_normal_expect");
+
+        // Overflow-wrap: 10*10*10 = 1000; unsigned 8-bit: 1000 mod 256 = 232
+        // (no sign reinterpretation — stays 232, unlike the S8 case above).
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Prod, &[3], &[0], &[10, 10, 10]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_prod_wrap");
+        assert_int_bits_eq(&[232], &k, ElementKind::U8, "u8_prod_wrap_expect");
+
+        // Empty axis: identity 1.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Prod, &[0], &[0], &[]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_prod_empty");
+        assert_int_bits_eq(&[1], &k, ElementKind::U8, "u8_prod_empty_expect");
+    }
+
+    #[test]
+    fn u8_max_differential_normal_boundary_and_empty_axis() {
+        // Normal.
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Max, &[3], &[0], &[10, 250, 5]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_max_normal");
+        assert_int_bits_eq(&[250], &k, ElementKind::U8, "u8_max_normal_expect");
+
+        // Boundary: 255 present (the value a buggy signed-compare would
+        // misread as -1 and lose to 128).
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Max, &[3], &[0], &[255, 0, 128]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_max_boundary");
+        assert_int_bits_eq(&[255], &k, ElementKind::U8, "u8_max_boundary_expect");
+
+        // Empty axis: identity = dtype minimum, 0.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Max, &[0], &[0], &[]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_max_empty");
+        assert_int_bits_eq(&[0], &k, ElementKind::U8, "u8_max_empty_expect");
+    }
+
+    #[test]
+    fn u8_min_differential_normal_boundary_and_empty_axis() {
+        // Normal.
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Min, &[3], &[0], &[10, 250, 5]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_min_normal");
+        assert_int_bits_eq(&[5], &k, ElementKind::U8, "u8_min_normal_expect");
+
+        // Boundary: 0 present and IS the min.
+        let (e, k) =
+            oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Min, &[3], &[0], &[255, 0, 128]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_min_boundary");
+        assert_int_bits_eq(&[0], &k, ElementKind::U8, "u8_min_boundary_expect");
+
+        // Empty axis: identity = dtype maximum, 255.
+        let (e, k) = oracle_and_kiss_ref_int(ElementKind::U8, Monoid::Min, &[0], &[0], &[]);
+        assert_int_bits_eq(&e, &k, ElementKind::U8, "u8_min_empty");
+        assert_int_bits_eq(&[255], &k, ElementKind::U8, "u8_min_empty_expect");
+    }
+
+    // ---- I32/I64 fall out "for free" (dtype-generic entry points) ---------
+    // Not required by the plan, but a cheap proof the S8/U8 differential
+    // machinery genuinely generalizes rather than being S8/U8-special-cased.
+
+    #[test]
+    fn i32_sum_differential_wraps_at_32_bits() {
+        // i32::MAX + 1 wraps to i32::MIN.
+        let (e, k) = oracle_and_kiss_ref_int(
+            ElementKind::I32,
+            Monoid::Sum,
+            &[2],
+            &[0],
+            &[i128::from(i32::MAX), 1],
+        );
+        assert_int_bits_eq(&e, &k, ElementKind::I32, "i32_sum_wrap");
+        assert_int_bits_eq(
+            &[i128::from(i32::MIN)],
+            &k,
+            ElementKind::I32,
+            "i32_sum_wrap_expect",
+        );
     }
 
     // ---- Compute-dtype cmp/select value guard ------------------------------
