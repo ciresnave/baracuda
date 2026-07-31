@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernelgen"
-version = "0.0.1-alpha.77"
+version = "0.0.1-alpha.78"
 description = "Kernel generator + the live JIT synthesizer for the Fuel kernel seam. The SUPPORTED surface is the `seam` feature (BaracudaSynthesizer, the fuel-kernel-seam Synthesizer impl); the generator internals (IR, emitters, contracts, dispatch artifacts) are alpha-fluid — pin exact versions."
 edition.workspace = true
 rust-version.workspace = true
