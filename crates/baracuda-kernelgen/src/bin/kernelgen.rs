@@ -298,9 +298,10 @@ fn main() {
             );
         }
 
-        // any -> U8 (Max fold + Cmp* post), count -> I64 (Sum fold + identity
-        // post) — both fold a Cmp*(in0, 0.0) predicate that lowers as a genuine
-        // integer comparison at S8/U8 input dtype (the Task 3b fix).
+        // any -> U8 (Sum fold + Cmp* post: `reduced(0) > 0`), count -> I64 (Sum
+        // fold + identity post) — both fold a Cmp*(in0, 0.0) predicate that
+        // lowers as a genuine integer comparison at S8/U8 input dtype (the
+        // Task 3b fix).
         let mut any8 = OpDef::reduction_post(
             "any",
             1,

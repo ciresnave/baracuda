@@ -178,7 +178,13 @@ impl Backend for Cuda {
                 Access::Elementwise => {}
             }
             for e in exprs {
-                assert_no_int_div_or_const(e, plan.dtype, in_reduction);
+                // `at_reduction_root: in_reduction` — this loop is the initial
+                // call on each expr in `exprs`, which is `[body, post]`
+                // precisely when `in_reduction` is true (see the match above:
+                // only `Access::Reduction` pushes `post`), mirroring
+                // `plan::assert_int_op_admissibility`'s same `in_reduction`-as-
+                // `at_reduction_root` initial call.
+                assert_no_int_div_or_const(e, plan.dtype, in_reduction, in_reduction);
             }
         }
         // Increment 0d: independent Coord emitter backstop, beside the int
@@ -7252,13 +7258,29 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
 /// any/all/count fused-predicate lift, ba325509/Task 3b): `true` only when the
 /// expression is this plan's `Access::Reduction` body/post — CpuC/Slang (v1,
 /// Elementwise-only) always pass `false`, so their coverage is unchanged.
-/// Within that scope, a `Cmp*` node's operands (leaf `Input`/`Reduced` or an
-/// exact 0/1 `Const`) are exempted from the blanket `Const` panic below — that
-/// 0/1 `Const` is safe (it lowers as an INTEGER literal in
-/// `cuda::emit_reduction`'s `int_reduction_predicate`, never the f64 C literal
-/// this backstop exists to catch); anything else in that position still
-/// recurses into the general check and panics as before.
-pub(crate) fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind, in_reduction: bool) {
+/// `at_reduction_root` mirrors `plan::assert_int_op_admissibility`'s
+/// `at_reduction_root` (whole-branch-review fix, closing the composed-
+/// predicate leak): `true` ONLY for the initial call on the reduction
+/// body/post root, `false` for every recursive descent — CpuC/Slang pass
+/// `false` for both parameters (inert, since `in_reduction` is already
+/// `false` there). Within that scope (`in_reduction && at_reduction_root`), a
+/// `Cmp*` node's operands (leaf `Input`/`Reduced` or an exact 0/1 `Const`)
+/// are exempted from the blanket `Const` panic below — that 0/1 `Const` is
+/// safe (it lowers as an INTEGER literal in `cuda::emit_reduction`'s
+/// `int_reduction_predicate`, which — like this gate — only inspects the
+/// body/post ROOT node, never a nested one), never the f64 C literal this
+/// backstop exists to catch); anything else in that position still recurses
+/// into the general check and panics as before. A `Cmp*` reached as a
+/// sub-node of Add/Sub/Mul (not the root) falls to the general
+/// `ScalarExpr::Binary(_, a, b)` arm below like any other binary node, so its
+/// own `Const`/`Div` operands are still policed by the blanket rules — it is
+/// never itself the leaf-or-{0,1} exemption target.
+pub(crate) fn assert_no_int_div_or_const(
+    e: &ScalarExpr,
+    dtype: ElementKind,
+    in_reduction: bool,
+    at_reduction_root: bool,
+) {
     match e {
         ScalarExpr::Input(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {}
         // A Coord at an int dtype is the SAME hazard class as Const (its
@@ -7289,24 +7311,79 @@ pub(crate) fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind, in_
              float-only (the 0c U8/I8 cond-observer question is unresolved); the \
              plan gate rejects this"
         ),
-        ScalarExpr::Unary(_, x) => assert_no_int_div_or_const(x, dtype, in_reduction),
-        ScalarExpr::Add(a, b) | ScalarExpr::Sub(a, b) | ScalarExpr::Mul(a, b) => {
-            assert_no_int_div_or_const(a, dtype, in_reduction);
-            assert_no_int_div_or_const(b, dtype, in_reduction);
+        ScalarExpr::Unary(_, x) => {
+            assert_no_int_div_or_const(x, dtype, in_reduction, false);
         }
-        ScalarExpr::Binary(bop, a, b) if in_reduction && bop.is_cmp() => {
+        ScalarExpr::Add(a, b) | ScalarExpr::Sub(a, b) | ScalarExpr::Mul(a, b) => {
+            assert_no_int_div_or_const(a, dtype, in_reduction, false);
+            assert_no_int_div_or_const(b, dtype, in_reduction, false);
+        }
+        ScalarExpr::Binary(bop, a, b) if in_reduction && at_reduction_root && bop.is_cmp() => {
             for operand in [&**a, &**b] {
                 match operand {
                     ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => {}
                     ScalarExpr::Const(v) if *v == 0.0 || *v == 1.0 => {}
-                    other => assert_no_int_div_or_const(other, dtype, in_reduction),
+                    other => assert_no_int_div_or_const(other, dtype, in_reduction, false),
                 }
             }
         }
         ScalarExpr::Binary(_, a, b) => {
-            assert_no_int_div_or_const(a, dtype, in_reduction);
-            assert_no_int_div_or_const(b, dtype, in_reduction);
+            assert_no_int_div_or_const(a, dtype, in_reduction, false);
+            assert_no_int_div_or_const(b, dtype, in_reduction, false);
         }
+    }
+}
+
+#[cfg(test)]
+mod int_div_or_const_root_gate_validate {
+    //! Direct unit coverage for `assert_no_int_div_or_const`'s
+    //! `at_reduction_root` restriction (whole-branch-review fix, mirroring
+    //! `plan::int_reduction_predicate_gate_validate`). This backstop normally
+    //! only runs AFTER `plan::assert_int_op_admissibility` has already
+    //! validated the op at `build_plan` time, so a composed-predicate body
+    //! never reaches it via the `generate()`/`Cuda::lower` path — the plan
+    //! gate rejects it first. These tests call the function directly (it is
+    //! `pub(crate)`) to exercise it as an independent layer in its own right
+    //! (the "gate every layer" principle the surrounding code comments name
+    //! throughout this file), the same way the plan-gate tests bypass
+    //! `build_plan` to isolate `assert_int_op_admissibility`.
+    use super::assert_no_int_div_or_const;
+    use crate::ir::{BinaryOp, ScalarExpr, input, konst};
+    use baracuda_kernel_vocab::ElementKind;
+
+    // Root-Cmp positive case (mirrors the shipped `count` shape): a bare
+    // `Cmp*` IS the reduction body root — admitted (0/1 Const operand
+    // exempted from the blanket Const panic), must not panic.
+    #[test]
+    fn root_cmp_with_01_const_admitted() {
+        let body = input(0).binary(BinaryOp::CmpNe, konst(0.0)).0;
+        assert_no_int_div_or_const(&body, ElementKind::S8, true, true);
+    }
+
+    // Root-only guard: a COMPOSED predicate — `Add(Cmp*, Cmp*)` — reached as
+    // the reduction body root. The root itself is `Add`, not `Cmp`, so the
+    // exemption arm never matches at this level; the walk recurses into each
+    // `Cmp*` child with `at_reduction_root: false` (this fix), lands the
+    // nested Cmp on the general `Binary(_, a, b)` arm instead of the
+    // exemption arm, and its `Const(0.0)` operand then hits the ordinary
+    // blanket `Const` panic — closing the same composed-predicate leak this
+    // gate mirrors from `plan::assert_int_op_admissibility`. Before this fix
+    // the nested Cmp still matched `in_reduction && bop.is_cmp()`
+    // (unconditionally, no root check) and its 0/1 Const was wrongly
+    // exempted, so this call did NOT panic.
+    #[test]
+    fn composed_predicate_not_at_root_panics() {
+        let cmp = || input(0).binary(BinaryOp::CmpNe, konst(0.0)).0;
+        let body = ScalarExpr::Add(Box::new(cmp()), Box::new(cmp()));
+        let r = std::panic::catch_unwind(|| {
+            assert_no_int_div_or_const(&body, ElementKind::S8, true, true)
+        });
+        assert!(
+            r.is_err(),
+            "a Cmp* reached as a sub-node of Add (not the reduction body/post \
+             root) must still panic on its Const operand — admitting it here \
+             would mirror the plan-gate leak this fix closes"
+        );
     }
 }
 

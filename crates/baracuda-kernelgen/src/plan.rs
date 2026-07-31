@@ -1660,6 +1660,22 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
     // `count = in != 0` predicate) and `post` (the any/all boolean cast) —
     // both are pushed into `exprs` below and walked with the same flag.
     let in_reduction = matches!(op.access, Access::Reduction { .. });
+    // `at_reduction_root` is `true` ONLY for the initial `walk` call on
+    // `op.body` and on the reduction `post` (the `for e in exprs` loop
+    // below), and `false` for every recursive descent (whole-branch-review
+    // finding, closing the composed-predicate leak: rule 4's Cmp*/Const
+    // lift must admit exactly what `cuda::emit_reduction`'s
+    // `int_reduction_predicate` can integer-lower — the body/post ROOT
+    // only. A `Cmp*` reached as a sub-node of Add/Sub/Mul (e.g.
+    // `Add(Cmp(..), Cmp(..))`) is NOT the root, so without this flag the
+    // `in_reduction && bop.is_cmp()` arm below would wrongly admit it here
+    // while the emitter falls through to the FLOAT `binary_f32` speller for
+    // that same non-root Cmp — reopening the `long long acc += float`
+    // double-math hazard commit 6fdfe478 closed. Restricting admission to
+    // the root keeps every SHIPPED catalog shape (`count`: Cmp at body
+    // root; `any`/`all`: Cmp at body root AND post root) admitted while a
+    // nested Cmp falls to the existing fail-closed `else` reject below —
+    // the same behavior as before rule 4 existed.
     fn walk(
         e: &ScalarExpr,
         op_name: &str,
@@ -1667,6 +1683,7 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
         int_dt: bool,
         elementwise: bool,
         in_reduction: bool,
+        at_reduction_root: bool,
     ) {
         match e {
             ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => {}
@@ -1696,7 +1713,7 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                      unary elementwise surface is float-only, so int dtype {dtype:?} \
                      must miss honestly"
                 );
-                walk(x, op_name, dtype, int_dt, elementwise, in_reduction);
+                walk(x, op_name, dtype, int_dt, elementwise, in_reduction, false);
             }
             ScalarExpr::Div(a, b) => {
                 assert!(
@@ -1706,8 +1723,8 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                      float-only) and C `/` division by zero is device-undefined; \
                      miss honestly"
                 );
-                walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
-                walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
+                walk(a, op_name, dtype, int_dt, elementwise, in_reduction, false);
+                walk(b, op_name, dtype, int_dt, elementwise, in_reduction, false);
             }
             ScalarExpr::Binary(bop, a, b) => {
                 if bop.is_int_only() {
@@ -1750,13 +1767,22 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                             );
                         }
                     }
-                    walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
-                    walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
-                } else if int_dt && in_reduction && bop.is_cmp() {
+                    walk(a, op_name, dtype, int_dt, elementwise, in_reduction, false);
+                    walk(b, op_name, dtype, int_dt, elementwise, in_reduction, false);
+                } else if int_dt && in_reduction && at_reduction_root && bop.is_cmp() {
                     // Rule 4: an int-dtype Cmp* is admitted HERE ONLY — the
                     // reduction body/post predicate position of any/all/count
                     // (`in_reduction` is false for Access::Elementwise, so the
-                    // elementwise int Cmp* rejection below is untouched).
+                    // elementwise int Cmp* rejection below is untouched), AND
+                    // only when this Cmp* IS the body/post ROOT
+                    // (`at_reduction_root`) — a Cmp* reached as a sub-node of
+                    // Add/Sub/Mul (a composed predicate like `Add(Cmp(..),
+                    // Cmp(..))`) falls through to the fail-closed `else` below,
+                    // because `cuda::emit_reduction`'s `int_reduction_predicate`
+                    // only integer-lowers a Cmp* at that same root position —
+                    // admitting a non-root Cmp here would let it fall through to
+                    // the FLOAT `binary_f32` speller at emit time (whole-branch-
+                    // review finding: the composed-predicate float-launder).
                     //
                     // Double-math hazard close-out: `ScalarExpr::Const` always
                     // lowers via `backend::const_lit` as an f64 C literal
@@ -1796,20 +1822,35 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                         }
                     }
                 } else {
+                    // Fail-closed default — also the landing spot for a
+                    // reduction-position Cmp* that is NOT at the body/post root
+                    // (`in_reduction` true but `at_reduction_root` false): same
+                    // reject as pre-rule-4, so a composed predicate misses
+                    // honestly instead of being laundered through the float
+                    // speller.
                     assert!(
                         !int_dt,
                         "op '{op_name}': {bop:?} has no integer lowering — the \
                          bespoke elementwise surface instantiates it for float \
-                         dtypes only, so int dtype {dtype:?} must miss honestly"
+                         dtypes only, so int dtype {dtype:?} must miss honestly \
+                         (a reduction-predicate Cmp* only lowers to integer at \
+                         the body/post ROOT — nested inside Add/Sub/Mul it is \
+                         out of scope for the any/all/count fused-predicate lift)"
                     );
-                    walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
-                    walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
+                    walk(a, op_name, dtype, int_dt, elementwise, in_reduction, false);
+                    walk(b, op_name, dtype, int_dt, elementwise, in_reduction, false);
                 }
             }
             ScalarExpr::Add(a, b) | ScalarExpr::Sub(a, b) | ScalarExpr::Mul(a, b) => {
-                // Wrapping two's-complement at int dtypes — the audited-legal set.
-                walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
-                walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
+                // Wrapping two's-complement at int dtypes — the audited-legal
+                // set. Neither operand is the reduction body/post root anymore
+                // (this node IS the root, if anything is), so both recurse with
+                // `at_reduction_root: false` — this is precisely what closes the
+                // composed-predicate leak: a Cmp* nested here (e.g. `Add(Cmp(..),
+                // Cmp(..))`) now falls to the fail-closed reject above instead of
+                // being admitted.
+                walk(a, op_name, dtype, int_dt, elementwise, in_reduction, false);
+                walk(b, op_name, dtype, int_dt, elementwise, in_reduction, false);
             }
             ScalarExpr::Select(c, a, b) => {
                 // G1 (WHERE/SELECT): select is rejected OUTRIGHT at every int
@@ -1832,9 +1873,9 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                      miss honestly (the 0c U8/I8 cond-observer question is unresolved \
                      and bespoke where int coverage is a later increment)"
                 );
-                walk(c, op_name, dtype, int_dt, elementwise, in_reduction);
-                walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
-                walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
+                walk(c, op_name, dtype, int_dt, elementwise, in_reduction, false);
+                walk(a, op_name, dtype, int_dt, elementwise, in_reduction, false);
+                walk(b, op_name, dtype, int_dt, elementwise, in_reduction, false);
             }
         }
     }
@@ -1881,7 +1922,14 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
         Access::Elementwise => exprs.extend(op.extra_out_bodies.iter()),
     }
     for e in exprs {
-        walk(e, &op.name, dtype, int_dt, elementwise, in_reduction);
+        // `at_reduction_root: in_reduction` — true here exactly because
+        // `exprs` is `[body, post]` precisely when `op.access` is
+        // `Access::Reduction` (the only branch that pushes `post` instead of
+        // an epilogue/stage; see the match above), i.e. this IS the initial
+        // call on the reduction body/post root. For every other Access arm
+        // `in_reduction` is already `false`, so the value is moot there (the
+        // Cmp* admission arm requires `in_reduction` regardless).
+        walk(e, &op.name, dtype, int_dt, elementwise, in_reduction, in_reduction);
     }
 }
 
@@ -1991,6 +2039,39 @@ mod int_reduction_predicate_gate_validate {
             r.is_err(),
             "a composed Cmp* operand must still decline in the reduction \
              predicate position — v1 pins operands to leaves or 0/1 Consts"
+        );
+    }
+
+    // Root-only guard (whole-branch-review finding): a COMPOSED predicate —
+    // two Cmp* nodes combined by Add, i.e. the Cmp is reached as a SUB-node
+    // of the reduction body rather than the body's own root — must still
+    // decline. Rule 4's lift is scoped to exactly the body/post ROOT (the
+    // only shape `count = Sum(in != 0)` / `any`/`all` ever author); a Cmp
+    // nested inside Add/Sub/Mul is NOT admitted by the emitter's
+    // `int_reduction_predicate` (which only inspects the root node), so if
+    // the gate admitted it here, the nested Cmp would fall through to the
+    // FLOAT `binary_f32` speller and get folded into the `long long`
+    // integer accumulator — the exact double-math hazard commit 6fdfe478
+    // closed, reopened for the composed-Cmp case. Before this fix this
+    // panic did NOT fire (the nested Cmp was wrongly admitted).
+    #[test]
+    fn int_reduction_predicate_rejects_composed_cmp_not_at_root() {
+        let op = OpDef::reduction(
+            "composed_predicate_s8",
+            1,
+            &[ElementKind::S8],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0))
+                + input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Sum,
+        );
+        let r = std::panic::catch_unwind(|| assert_int_op_admissibility(&op, ElementKind::S8));
+        assert!(
+            r.is_err(),
+            "a Cmp* reached as a sub-node of Add/Sub/Mul (not the reduction \
+             body/post ROOT) must decline — the emitter only integer-lowers a \
+             Cmp* at the root, so a nested Cmp admitted here would silently \
+             fall through to the float speller and launder float math into the \
+             int accumulator"
         );
     }
 }
