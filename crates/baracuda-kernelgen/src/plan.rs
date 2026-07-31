@@ -1625,6 +1625,21 @@ pub(crate) fn is_int_dtype(dt: ElementKind) -> bool {
 ///    truncating speller is the follow-up that lifts this. At `I32`/`I64`
 ///    compositions stay legal: integer promotion never widens past the
 ///    compute width there, so no un-truncated wider value exists to observe.
+/// 4. **int8 any/all/count reduction-predicate lift (this increment):** rule 2
+///    rejects `Cmp*`/`Const` at every int dtype UNCONDITIONALLY — but
+///    `any`/`all`/`count` are exactly a `Sum`/`Max`/`Min` fold over a fused
+///    `Cmp*` predicate (`count = Sum(in != 0)`, `I64` out; `any`/`all` = a
+///    `Max`/`Min` fold whose `post` casts back through `Cmp*(Reduced(0),
+///    Const)`, `U8` out — see `assert_valid_out_dtype`'s `U8`/`I64` branches,
+///    the two authored shapes). So rule 2's `Cmp*`/`Const` rejection is lifted
+///    **only** while walking an [`Access::Reduction`]'s `body` or `post` at an
+///    int dtype (`in_reduction` below) — the ELEMENTWISE arm is untouched and
+///    keeps rejecting outright. The lift is further pinned to keep the
+///    double-math hazard closed: every admitted `Cmp*`'s operands must be a
+///    leaf `Input`/`Reduced` or a `Const` of EXACTLY `0.0`/`1.0` (the only
+///    values `any`/`all`/`count` ever compare against, and the only values
+///    that round-trip losslessly through `Const`'s dtype-oblivious f64
+///    spelling — see `backend::const_lit`); anything else still declines.
 fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
     // Increment 5 — bincount exemption: a scatter with a bare `Const` body is the
     // integer-count histogram (`out[x[i]] += 1`). The `Const(1)` is NOT compute
@@ -1638,7 +1653,21 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
     }
     let int_dt = is_int_dtype(dtype);
     let elementwise = matches!(op.access, Access::Elementwise);
-    fn walk(e: &ScalarExpr, op_name: &str, dtype: ElementKind, int_dt: bool, elementwise: bool) {
+    // Rule 4: true while walking an `Access::Reduction`'s `body`/`post` — the
+    // any/all/count fused-predicate lift is scoped to exactly this Access arm
+    // (NOT RowReduce/Contraction/Scan/Window, which stay float-only/out of
+    // scope per the design spec), and covers BOTH `body` (the per-element
+    // `count = in != 0` predicate) and `post` (the any/all boolean cast) —
+    // both are pushed into `exprs` below and walked with the same flag.
+    let in_reduction = matches!(op.access, Access::Reduction { .. });
+    fn walk(
+        e: &ScalarExpr,
+        op_name: &str,
+        dtype: ElementKind,
+        int_dt: bool,
+        elementwise: bool,
+        in_reduction: bool,
+    ) {
         match e {
             ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => {}
             // Coord's own gate (`assert_coord_admissibility`, which also runs
@@ -1667,7 +1696,7 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                      unary elementwise surface is float-only, so int dtype {dtype:?} \
                      must miss honestly"
                 );
-                walk(x, op_name, dtype, int_dt, elementwise);
+                walk(x, op_name, dtype, int_dt, elementwise, in_reduction);
             }
             ScalarExpr::Div(a, b) => {
                 assert!(
@@ -1677,8 +1706,8 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                      float-only) and C `/` division by zero is device-undefined; \
                      miss honestly"
                 );
-                walk(a, op_name, dtype, int_dt, elementwise);
-                walk(b, op_name, dtype, int_dt, elementwise);
+                walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
+                walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
             }
             ScalarExpr::Binary(bop, a, b) => {
                 if bop.is_int_only() {
@@ -1721,6 +1750,51 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                             );
                         }
                     }
+                    walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
+                    walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
+                } else if int_dt && in_reduction && bop.is_cmp() {
+                    // Rule 4: an int-dtype Cmp* is admitted HERE ONLY — the
+                    // reduction body/post predicate position of any/all/count
+                    // (`in_reduction` is false for Access::Elementwise, so the
+                    // elementwise int Cmp* rejection below is untouched).
+                    //
+                    // Double-math hazard close-out: `ScalarExpr::Const` always
+                    // lowers via `backend::const_lit` as an f64 C literal
+                    // (`format!("{v:?}")`) REGARDLESS of dtype — that spelling
+                    // is dtype-oblivious by construction and cannot be fixed
+                    // from this gate alone. So every operand admitted here must
+                    // be a LEAF `Input`/`Reduced` (the real per-element or
+                    // folded value) or a `Const` whose value is EXACTLY `0.0`
+                    // or `1.0` — the only values any/all/count ever compare
+                    // against (the fixed zero threshold; the implicit 0/1
+                    // keep-mask), and the only ones that round-trip losslessly
+                    // through the f64 spelling into int compute (no precision
+                    // loss is possible for a 1-bit value, unlike an arbitrary
+                    // literal). Any other Const value, or any composed
+                    // sub-expression, is a genuine authoring error smuggling
+                    // float math into an int kernel and is rejected outright —
+                    // this leaf-or-{0,1} pin is what keeps the lift surgical.
+                    for (side, operand) in [("lhs", &**a), ("rhs", &**b)] {
+                        match operand {
+                            ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => {}
+                            ScalarExpr::Const(v) if *v == 0.0 || *v == 1.0 => {}
+                            ScalarExpr::Const(v) => panic!(
+                                "op '{op_name}': int reduction-predicate {bop:?} \
+                                 Const({v}) at {side} must be exactly 0 or 1 — any \
+                                 other value risks the f64-literal double-math \
+                                 hazard this gate exists to prevent (Const always \
+                                 lowers as an f64 C literal; 0/1 are the only \
+                                 values that round-trip exactly into int compute)"
+                            ),
+                            other => panic!(
+                                "op '{op_name}': int reduction-predicate {bop:?} at \
+                                 {side} requires a leaf Input/Reduced or a 0/1 \
+                                 Const, got {other:?} — composed operands are out \
+                                 of scope for the any/all/count fused-predicate \
+                                 shape"
+                            ),
+                        }
+                    }
                 } else {
                     assert!(
                         !int_dt,
@@ -1728,14 +1802,14 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                          bespoke elementwise surface instantiates it for float \
                          dtypes only, so int dtype {dtype:?} must miss honestly"
                     );
+                    walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
+                    walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
                 }
-                walk(a, op_name, dtype, int_dt, elementwise);
-                walk(b, op_name, dtype, int_dt, elementwise);
             }
             ScalarExpr::Add(a, b) | ScalarExpr::Sub(a, b) | ScalarExpr::Mul(a, b) => {
                 // Wrapping two's-complement at int dtypes — the audited-legal set.
-                walk(a, op_name, dtype, int_dt, elementwise);
-                walk(b, op_name, dtype, int_dt, elementwise);
+                walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
+                walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
             }
             ScalarExpr::Select(c, a, b) => {
                 // G1 (WHERE/SELECT): select is rejected OUTRIGHT at every int
@@ -1758,9 +1832,9 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
                      miss honestly (the 0c U8/I8 cond-observer question is unresolved \
                      and bespoke where int coverage is a later increment)"
                 );
-                walk(c, op_name, dtype, int_dt, elementwise);
-                walk(a, op_name, dtype, int_dt, elementwise);
-                walk(b, op_name, dtype, int_dt, elementwise);
+                walk(c, op_name, dtype, int_dt, elementwise, in_reduction);
+                walk(a, op_name, dtype, int_dt, elementwise, in_reduction);
+                walk(b, op_name, dtype, int_dt, elementwise, in_reduction);
             }
         }
     }
@@ -1807,7 +1881,117 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
         Access::Elementwise => exprs.extend(op.extra_out_bodies.iter()),
     }
     for e in exprs {
-        walk(e, &op.name, dtype, int_dt, elementwise);
+        walk(e, &op.name, dtype, int_dt, elementwise, in_reduction);
+    }
+}
+
+#[cfg(test)]
+mod int_reduction_predicate_gate_validate {
+    //! Rule 4 (`assert_int_op_admissibility`, above): the int8 any/all/count
+    //! admissibility lift. Two directions, both required: the elementwise int
+    //! `Cmp*` rejection must survive UNCHANGED (negative control), and the
+    //! reduction-predicate `Cmp*`/`Const` shape (`count = Sum(in != 0)`) must
+    //! now be admitted (positive case). Calls `assert_int_op_admissibility`
+    //! directly (it is private to this module) rather than `build_plan`, to
+    //! isolate the gate from unrelated key/shape plumbing.
+    use super::assert_int_op_admissibility;
+    use crate::ir::{BinaryOp, OpDef, ReduceOp, input, konst, reduced};
+    use baracuda_kernel_vocab::ElementKind;
+
+    // Negative control: an elementwise int Cmp* op (the FKC "comparison → U8
+    // mask" shape, `OpDef::elementwise_pred`) must still decline at U8 — the
+    // reduction-predicate lift must NOT loosen the Elementwise arm.
+    #[test]
+    fn int_elementwise_cmp_still_declines() {
+        let op = OpDef::elementwise_pred(
+            "elem_ne_u8",
+            1,
+            &[ElementKind::U8],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+        );
+        let r = std::panic::catch_unwind(|| assert_int_op_admissibility(&op, ElementKind::U8));
+        assert!(
+            r.is_err(),
+            "elementwise int Cmp must still decline after the reduction-post lift"
+        );
+    }
+
+    // Positive case: the `count` shape — `reduce-Sum` over a `Cmp*` predicate
+    // (`in != 0`) on an S8 input, with a hetero `I64` count output (the
+    // `assert_valid_out_dtype` I64 branch: `Sum` + identity `Reduced(0)`
+    // post). Must be admitted — this is exactly what was blocked before the
+    // rule-4 lift.
+    #[test]
+    fn int_reduction_predicate_cmp_admitted() {
+        let mut op = OpDef::reduction(
+            "count_s8",
+            1,
+            &[ElementKind::S8],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Sum,
+        );
+        op.out_dtype = Some(ElementKind::I64);
+        assert_int_op_admissibility(&op, ElementKind::S8); // must not panic
+    }
+
+    // Positive case, the other authored shape: `any` — a Max fold over a
+    // per-element keep-mask predicate, with `post` casting the folded result
+    // back through `Cmp*(Reduced(0), Const)` (the `assert_valid_out_dtype` U8
+    // branch: post ROOT must be Cmp*). Exercises Cmp*/Const admission in BOTH
+    // the reduction body AND post in the same op.
+    #[test]
+    fn int_reduction_any_body_and_post_cmp_admitted() {
+        let mut op = OpDef::reduction_post(
+            "any_u8",
+            1,
+            &[ElementKind::U8],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Max,
+            reduced(0).binary(BinaryOp::CmpNe, konst(0.0)),
+        );
+        op.out_dtype = Some(ElementKind::U8);
+        assert_int_op_admissibility(&op, ElementKind::U8); // must not panic
+    }
+
+    // Double-math-hazard guard: a Cmp* Const in the admitted reduction
+    // position must be exactly 0/1 — any other literal is still rejected,
+    // even though the surrounding shape (Sum-fold over a Cmp* predicate) is
+    // otherwise the admitted count/any/all pattern.
+    #[test]
+    fn int_reduction_predicate_cmp_rejects_non_01_const() {
+        let op = OpDef::reduction(
+            "bad_threshold_s8",
+            1,
+            &[ElementKind::S8],
+            input(0).binary(BinaryOp::CmpGt, konst(5.0)),
+            ReduceOp::Sum,
+        );
+        let r = std::panic::catch_unwind(|| assert_int_op_admissibility(&op, ElementKind::S8));
+        assert!(
+            r.is_err(),
+            "a non-0/1 Const threshold must still decline — the leaf-or-{{0,1}} \
+             pin is what keeps the lift from reopening the double-math hazard"
+        );
+    }
+
+    // Composition guard: a Cmp* operand that is itself a composed expression
+    // (not a leaf Input/Reduced or a 0/1 Const) must still decline in the
+    // reduction predicate position — composition is out of scope for v1.
+    #[test]
+    fn int_reduction_predicate_cmp_rejects_composed_operand() {
+        let op = OpDef::reduction(
+            "composed_operand_s8",
+            1,
+            &[ElementKind::S8],
+            (input(0) + input(0)).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Sum,
+        );
+        let r = std::panic::catch_unwind(|| assert_int_op_admissibility(&op, ElementKind::S8));
+        assert!(
+            r.is_err(),
+            "a composed Cmp* operand must still decline in the reduction \
+             predicate position — v1 pins operands to leaves or 0/1 Consts"
+        );
     }
 }
 
