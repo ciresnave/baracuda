@@ -318,8 +318,10 @@ impl LayoutOrder {
 /// The lhs/rhs `LayoutOrder` fields (item 1 of the layout/shape ramp) are
 /// additive like `batch`: an identity order serializes byte-identically to
 /// the pre-order codec, so only a transposed/permuted operand adds a token
-/// component (Task 2 populates non-identity values; v1 `derive_contraction`
-/// always derives identity here).
+/// component. `derive_contraction` derives real (possibly non-identity)
+/// values via [`classify_mat_layout`] — a packed transpose/permutation of
+/// lhs/rhs is accepted (sub-spec A); a genuinely non-packed operand still
+/// declines the whole cell to `None` (sub-spec D).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ContractionKey {
     /// Size class of M (lhs rows / out rows).
@@ -668,11 +670,52 @@ const fn contraction_mp(primary: ElementKind) -> MpCode {
     }
 }
 
+/// Classify a contraction operand's storage order from its strides. Returns the
+/// permutation `perm` such that role/logical axis `d` reads storage axis `perm[d]`,
+/// iff the operand is a PACKED permutation of a contiguous tensor (every axis'
+/// |stride| equals the product of the extents storage-inner to it). `None` if
+/// genuinely non-packed (arbitrary strides → sub-spec D).
+///
+/// Role-agnostic: storage order derives from strides alone, so this takes no
+/// `AxisRole`/`ContractionAxes` argument (roles enter at the plan/emitter layer).
+/// Rank-generic — subsumes both the rank-2 and rank-3 `dense` checks below: a
+/// canonical row-major operand's axes already sort into ascending order, so
+/// `perm` comes out as the identity permutation (byte-identity with the
+/// pre-Task-2 codec for every canonical cell).
+fn classify_mat_layout(od: &OperandDesc) -> Option<LayoutOrder> {
+    let rank = od.rank as usize;
+    // Storage order = axes sorted by descending |stride| (outermost first).
+    let mut axes: Vec<usize> = (0..rank).collect();
+    axes.sort_by_key(|&d| core::cmp::Reverse(od.strides[d].abs()));
+    // Verify packed: walking storage-inner→outer, |stride| must equal the running
+    // extent product.
+    let mut acc: i64 = 1;
+    for &d in axes.iter().rev() {
+        if od.strides[d].abs() != acc {
+            return None; // non-packed → decline
+        }
+        acc = acc.saturating_mul(od.shape[d]);
+    }
+    // perm[logical d] = storage position of axis d. Here logical == operand axis
+    // index; storage position is `axes.iter().position(|&a| a == d)`.
+    let mut perm = [0u8; MAX_RANK];
+    for (d, p) in perm.iter_mut().enumerate().take(rank) {
+        *p = axes.iter().position(|&a| a == d).unwrap() as u8;
+    }
+    Some(LayoutOrder {
+        perm,
+        rank: od.rank,
+    })
+}
+
 /// [item 10] Derive contraction structure facts for the canonical rank-2
-/// row-major dense GEMM cell: `operands = [lhs [M,K], rhs [K,N], out [M,N]]`,
-/// all contiguous. Any other shape/layout/arity yields `None` — an honest
-/// "no contraction facts", never a guess. (Batched / transposed / strided
-/// contraction classes join with the node's growth.)
+/// row-major dense GEMM cell: `operands = [lhs [M,K], rhs [K,N], out [M,N]]`.
+/// `out` stays required-canonical (row-major) in v1 — output views are
+/// sub-spec B's scope. `lhs`/`rhs` classify through [`classify_mat_layout`]:
+/// a packed transpose/permutation now derives real `lhs_order`/`rhs_order`
+/// facts instead of being rejected outright; a genuinely non-packed operand
+/// still declines (`None`) to sub-spec D. Any other shape/arity yields `None`
+/// — an honest "no contraction facts", never a guess.
 fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<ContractionKey> {
     // 3 operands = plain `[lhs, rhs, out]`; 4 = fused bias `[lhs, rhs, bias, out]`
     // (the per-column `[N]` bias the epilogue reads). The bias rides the existing
@@ -703,15 +746,11 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
             let (m, k) = (lhs.shape[0], lhs.shape[1]);
             let (k2, n) = (rhs.shape[0], rhs.shape[1]);
             let dense = |o: &OperandDesc| o.strides[0] == o.shape[1] && o.strides[1] == 1;
-            if k != k2
-                || out.shape[0] != m
-                || out.shape[1] != n
-                || !dense(lhs)
-                || !dense(rhs)
-                || !dense(out)
-            {
+            if k != k2 || out.shape[0] != m || out.shape[1] != n || !dense(out) {
                 return None;
             }
+            let lhs_order = classify_mat_layout(lhs)?;
+            let rhs_order = classify_mat_layout(rhs)?;
             // A fused bias must be the DENSE per-column `[N]` vector (unit stride,
             // broadcast over M). The emitter reads a hardcoded `in2[col]`, so a
             // strided or broadcast (stride-0) bias would silently mis-read / read
@@ -728,8 +767,8 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
                 k: SizeClass::of(k),
                 k_div: div_bucket(k),
                 batch: None,
-                lhs_order: LayoutOrder::identity(rank),
-                rhs_order: LayoutOrder::identity(rank),
+                lhs_order,
+                rhs_order,
                 wdt,
                 acc,
                 out: out_dt,
@@ -755,20 +794,20 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
                 || out.shape[0] != b
                 || out.shape[1] != m
                 || out.shape[2] != n
-                || !dense3(lhs)
-                || !dense3(rhs)
                 || !dense3(out)
             {
                 return None;
             }
+            let lhs_order = classify_mat_layout(lhs)?;
+            let rhs_order = classify_mat_layout(rhs)?;
             Some(ContractionKey {
                 m: SizeClass::of(m),
                 n: SizeClass::of(n),
                 k: SizeClass::of(k),
                 k_div: div_bucket(k),
                 batch: Some(SizeClass::of(b)),
-                lhs_order: LayoutOrder::identity(rank),
-                rhs_order: LayoutOrder::identity(rank),
+                lhs_order,
+                rhs_order,
                 wdt,
                 acc,
                 out: out_dt,
@@ -1533,6 +1572,35 @@ mod contraction_key_tests {
     }
 
     #[test]
+    fn derive_contraction_accepts_transposed_rhs() {
+        // rhs logical [K,N]=[16,4] but physically stored [N,K]: K unit-stride,
+        // N strided by k=16 → transposed. lhs canonical [M,K].
+        let lhs = OperandDesc::new(2, &[8, 16], &[16, 1], ElementKind::F32, 256); // [M,K] row-major
+        let rhs = OperandDesc::new(2, &[16, 4], &[1, 16], ElementKind::F32, 256); // [K,N] but N strided by k=16, K unit → transposed store
+        let out = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256); // [M,N] row-major
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let c = key
+            .contraction
+            .expect("transposed rhs must still be a contraction");
+        assert!(c.lhs_order.is_identity(), "canonical lhs stays identity");
+        assert_eq!(c.rhs_order.perm(), &[1, 0], "transposed rhs order = [1,0]");
+    }
+
+    #[test]
+    fn derive_contraction_declines_nonpacked() {
+        // rhs with a stride that is neither unit nor an extent-product of the other axis
+        // (a genuine non-packed slice) → declines to sub-spec D (None).
+        let lhs = OperandDesc::new(2, &[8, 16], &[16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[16, 4], &[9, 1], ElementKind::F32, 256); // K-stride 9 ≠ n(=4), N-stride 1 → non-packed
+        let out = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        assert!(
+            key.contraction.is_none(),
+            "non-packed operand declines in v1 (sub-spec D)"
+        );
+    }
+
+    #[test]
     fn gemm_strict_and_tf32_f32_cells_hold_distinct_tokens_via_mp() {
         // The D4/D1 collision fix: SIMT-f32 (F32Strict operands, full binary32)
         // and TF32-f32 (plain F32 operands, reduced mantissa) are numerically
@@ -1718,10 +1786,19 @@ mod contraction_key_tests {
             Some(k),
             "batched round-trips"
         );
-        // A non-dense rank-3 lhs declines (v1 is dense row-major only).
-        let nd = OperandDesc::new(3, &[8, 8, 4096], &[1, 8, 64], ElementKind::F32, 256);
+        // A genuinely non-packed rank-3 lhs still declines (Task 2: only a PACKED
+        // permutation now derives lhs_order/rhs_order — arbitrary strides still
+        // decline to sub-spec D). Note strides `[1, 8, 64]` would NOT qualify as
+        // "non-dense" any more: axis0 stride 1, axis1 stride 8 (=shape[0]),
+        // axis2 stride 64 (=shape[0]*shape[1]) is a valid packed permutation
+        // that Task 2 now accepts — this fixture instead perturbs the middle
+        // stride (9, not 8) so it fails the packed check.
+        let nd = OperandDesc::new(3, &[8, 8, 4096], &[1, 9, 64], ElementKind::F32, 256);
         let knd = structure_key(OpCategory::Gemm, &[nd, rhs, out], ArchSku::Sm89);
-        assert!(knd.contraction.is_none(), "non-dense rank-3 declines");
+        assert!(
+            knd.contraction.is_none(),
+            "genuinely non-packed rank-3 declines"
+        );
     }
 
     #[test]
