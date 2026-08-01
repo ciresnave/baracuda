@@ -224,7 +224,19 @@ pub enum MpCode {
 /// Storage-order class of a contraction operand: `perm[d]` is the storage axis
 /// read at role/logical position `d` (identity = canonical row-major). Copy,
 /// heap-free; the identity default serializes byte-identically (additive codec).
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+///
+/// `Eq`/`Hash` are HAND-WRITTEN, not derived, and are keyed on `(rank,
+/// perm())` only — the don't-care tail of `perm` past `rank` is excluded.
+/// `identity(rank)` fills the *entire* `[u8; MAX_RANK]` array with
+/// `[0,1,…,MAX_RANK-1]`, while `from_perm(p)` fills only `perm[..p.len()]`
+/// and leaves the tail zeroed; the two constructors can therefore produce
+/// byte-different arrays for the SAME logical permutation (e.g. `identity(2)`
+/// = `[0,1,2,3,4,5,6,7]` vs `from_perm(&[0,1])` = `[0,1,0,0,0,0,0,0]`), and a
+/// derived `Eq`/`Hash` (which compares/hashes the full array) would wrongly
+/// treat them as distinct. `ContractionKey` embeds this type and derives
+/// `Eq`/`Hash` itself for dispatch-table keying, so padding-invariance here
+/// is load-bearing for the whole key.
+#[derive(Copy, Clone, Debug)]
 pub struct LayoutOrder {
     perm: [u8; MAX_RANK],
     rank: u8,
@@ -232,6 +244,18 @@ pub struct LayoutOrder {
 impl Default for LayoutOrder {
     fn default() -> Self {
         Self::identity(0)
+    }
+}
+impl PartialEq for LayoutOrder {
+    fn eq(&self, other: &Self) -> bool {
+        self.rank == other.rank && self.perm() == other.perm()
+    }
+}
+impl Eq for LayoutOrder {}
+impl std::hash::Hash for LayoutOrder {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.rank.hash(state);
+        self.perm().hash(state);
     }
 }
 impl LayoutOrder {
@@ -245,8 +269,18 @@ impl LayoutOrder {
         Self { perm, rank }
     }
     /// Build a `LayoutOrder` from an explicit permutation.
+    ///
+    /// # Panics (debug only)
+    /// Debug-asserts `p.len() <= MAX_RANK`; a release build silently panics
+    /// later on the slice-index copy instead (unchanged from before — this is
+    /// a clearer diagnostic for a miscall, not a new invariant).
     #[must_use]
     pub fn from_perm(p: &[u8]) -> Self {
+        debug_assert!(
+            p.len() <= MAX_RANK,
+            "LayoutOrder::from_perm: permutation length {} exceeds MAX_RANK {MAX_RANK}",
+            p.len()
+        );
         let mut perm = [0u8; MAX_RANK];
         perm[..p.len()].copy_from_slice(p);
         Self {
@@ -1326,6 +1360,119 @@ mod contraction_key_tests {
         let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
         structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn layout_order_eq_and_hash_are_padding_invariant() {
+        // `identity(2)` fills the WHOLE [u8; MAX_RANK] array ([0,1,2,3,4,5,6,7]);
+        // `from_perm(&[0,1])` fills only perm[..2] and leaves the tail zeroed
+        // ([0,1,0,0,0,0,0,0]). Both spell the same logical rank-2 identity
+        // permutation and MUST compare/hash equal — a derived Eq/Hash over the
+        // full array would wrongly treat them as distinct, which would silently
+        // break ContractionKey dispatch-table dedup (it derives Eq/Hash and
+        // embeds LayoutOrder).
+        use std::collections::HashSet;
+        let a = LayoutOrder::identity(2);
+        let b = LayoutOrder::from_perm(&[0, 1]);
+        assert_eq!(
+            a, b,
+            "identity(2) and from_perm(&[0,1]) are the same logical permutation"
+        );
+        let mut set = HashSet::new();
+        assert!(set.insert(a), "first insert always succeeds");
+        assert!(
+            !set.insert(b),
+            "b must hash+eq into a's bucket — inserting it must be a no-op"
+        );
+        assert_eq!(
+            set.len(),
+            1,
+            "padding-invariant Eq/Hash collapse both to one entry"
+        );
+    }
+
+    #[test]
+    fn contraction_layout_order_lhs_only_transposed_round_trips() {
+        // lhs storage order [1,0], rhs stays identity → only `/ol10` appears.
+        let canon = sample_matmul_key();
+        let mut lhs_trans = canon;
+        lhs_trans.contraction.as_mut().unwrap().lhs_order = LayoutOrder::from_perm(&[1, 0]);
+        let tok = lhs_trans.to_token();
+        assert!(tok.contains("/ol10"), "transposed lhs emits /ol10: {tok}");
+        assert!(
+            !tok.contains("/or"),
+            "rhs stays identity, no /or component: {tok}"
+        );
+        assert_eq!(
+            StructureKey::from_token(&tok).unwrap(),
+            lhs_trans,
+            "lhs-only transposed round-trips"
+        );
+    }
+
+    #[test]
+    fn contraction_layout_order_batch_and_both_orders_round_trip() {
+        // Same batched shapes as `gemm_batched_derives_and_round_trips_with_batch_class`,
+        // with BOTH operands additionally transposed — batch + lhs_order +
+        // rhs_order all present together in the token's geometry tail.
+        let lhs = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let rhs = OperandDesc::new(
+            3,
+            &[8, 4096, 4096],
+            &[4096 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let out = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let mut k = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let c = k.contraction.as_mut().expect("batched gemm derives facts");
+        assert_eq!(c.batch, Some(SizeClass::Tiny));
+        c.lhs_order = LayoutOrder::from_perm(&[0, 2, 1]);
+        c.rhs_order = LayoutOrder::from_perm(&[1, 0, 2]);
+        let tok = k.to_token();
+        assert!(
+            tok.ends_with("|ctll/d16/bt/ol021/or102/f32/f32/f32/rm"),
+            "batch, lhs_order, rhs_order all present in the fixed order: {tok}"
+        );
+        assert_eq!(
+            StructureKey::from_token(&tok),
+            Some(k),
+            "batch + both orders round-trip together"
+        );
+    }
+
+    #[test]
+    fn from_token_declines_reordered_and_duplicated_layout_order_components() {
+        let base = "sk3|gem|f32|cuda:sm89|ix32|grid|r2|\
+                    co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-";
+        // `/or...` before `/ol...` violates the fixed emission order (batch,
+        // then lhs_order, then rhs_order) the position-driven parser walks —
+        // it must decline rather than silently accept an out-of-order
+        // geometry tail.
+        assert_eq!(
+            StructureKey::from_token(&format!("{base}|ctll/d16/or10/ol10/f32/f32/f32/rm")),
+            None,
+            "reordered or-before-ol declines"
+        );
+        // A duplicated `/ol...` component: the second one is unconsumed
+        // leftover after the (single) lhs_order slot is filled — declines.
+        assert_eq!(
+            StructureKey::from_token(&format!("{base}|ctll/d16/ol10/ol10/f32/f32/f32/rm")),
+            None,
+            "duplicated ol component declines"
+        );
     }
 
     #[test]
