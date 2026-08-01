@@ -1805,6 +1805,34 @@ fn op_from_code(s: &str) -> Option<OpCategory> {
 mod tests {
     use super::*;
 
+    /// spec/namespaces/cuda.md §4 — BACKS the "a `cuda:` capability-set is a single
+    /// scalar, no variable-length list" claim (which makes the §6.8-0007 digest
+    /// structurally unreachable) with a test rather than prose: every emitted token is a
+    /// single scalar, and a list-shaped token does not parse. A future range/list token
+    /// fails HERE rather than silently falsifying the annex.
+    #[test]
+    fn cuda_tokens_are_single_scalar() {
+        for v in [ArchSku::Sm80, ArchSku::Sm89, ArchSku::Sm90a] {
+            let t = arch_code(v);
+            let body = t
+                .strip_prefix("cuda:sm")
+                .unwrap_or_else(|| panic!("token {t} must start with `cuda:sm`"));
+            let digits = body.strip_suffix('a').unwrap_or(body);
+            assert!(
+                !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()),
+                "token {t}: sm-number must be non-empty ASCII digits, got {digits:?}"
+            );
+            assert!(
+                !t.bytes()
+                    .any(|b| matches!(b, b'+' | b',' | b'|' | b' ' | b'-')),
+                "token {t} carries a list/range separator; cuda: sets are single scalars (annex §4)"
+            );
+        }
+        // A list-shaped token must not parse — there is no multi-arch cuda: token.
+        assert!(arch_from_code("cuda:sm80+sm90a").is_none());
+        assert!(arch_from_code("cuda:sm80,sm90a").is_none());
+    }
+
     fn od(shape: &[i64], strides: &[i64], dtype: ElementKind, align: u32) -> OperandDesc {
         OperandDesc::new(shape.len(), shape, strides, dtype, align)
     }
