@@ -74,7 +74,7 @@ $ErrorActionPreference = 'Stop'
 # once, the exact failure this prevents (same trap as Local\ vs Global\). Version
 # skew is surfaced by $GpuRunVersion (logged, not enforced), never by the name.
 $MutexName     = 'Global\gpu-run'                   # MUST be Global\ (machine-wide), not Local\ — DO NOT VERSION
-$GpuRunVersion = 2                                  # bump on behavioral change; written to the log + lockfile so drift is visible
+$GpuRunVersion = 3                                  # bump on behavioral change; written to the log + lockfile so drift is visible
 $LockPath  = Join-Path $env:TEMP 'gpu-run.lock'     # metadata only, cleared on reboot (a lock must not survive one)
 $LogPath   = Join-Path $env:TEMP 'gpu-run.log'
 
@@ -169,6 +169,42 @@ try {
 
     $waited = [int]((Get-Date) - $t0).TotalSeconds
     if ($holderBefore -and $waited -ge 1) { Write-GpuLog "acquired after ${waited}s wait" }
+
+    # --- UNCONTENDED stale-holder detection (v3) ------------------------------
+    # The AbandonedMutexException path above is LOUD, but it only fires when the
+    # mutex object OUTLIVES the dead holder — i.e. someone else already held a
+    # handle (a waiter). In the UNCONTENDED case — holder dies with nobody
+    # waiting — the last handle closes with it, the kernel object is DESTROYED,
+    # and a later `New-Object Mutex` creates a BRAND-NEW mutex carrying no
+    # abandoned state. So `WaitOne(0)` succeeds cleanly and the crash is
+    # invisible. That is not a missing log line: once the object is gone the
+    # mutex structurally CANNOT carry the signal, so the lockfile is the only
+    # surviving evidence and a pid-liveness check is the only way to read it.
+    #
+    # Found by Baracuda's shakedown (2026-08-05), deliberately killing an
+    # uncontended holder: recovery was functionally sound but silent. It matters
+    # because "previous run crashed" vs "clean start" are exactly the two states
+    # this wrapper exists to distinguish after a bugcheck — the 2026-07-31
+    # host-aperture incident is a crash nobody could attribute afterwards.
+    #
+    # A clean exit DELETES the lockfile, so a surviving lockfile naming a dead
+    # pid means the holder died without cleanup. Pid reuse can mask it (an
+    # unrelated live process now owning that pid keeps us quiet) — a
+    # false-NEGATIVE, never a false alarm.
+    if ($holderBefore) {
+        $stalePid = $null
+        try { $stalePid = ([regex]::Match($holderBefore, '"pid"\s*:\s*(\d+)')).Groups[1].Value } catch {}
+        if ($stalePid) {
+            $alive = $null
+            try { $alive = Get-Process -Id ([int]$stalePid) -ErrorAction Stop } catch { $alive = $null }
+            if (-not $alive) {
+                $msg = "RECLAIMED stale GPU lock from DEAD pid=$stalePid (uncontended crash - no " +
+                       "AbandonedMutexException is raised when the mutex object dies with its last " +
+                       "handle). Stale lockfile: $holderBefore"
+                [Console]::Error.WriteLine("gpu-run: $msg"); Write-GpuLog $msg
+            }
+        }
+    }
 
     # --- Metadata lockfile (NOT the exclusion primitive) ----------------------
     $meta = [ordered]@{
