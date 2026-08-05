@@ -815,6 +815,19 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
             }
             let lhs_order = classify_mat_layout(lhs)?;
             let rhs_order = classify_mat_layout(rhs)?;
+            // The v1 emitter binds the batch axis as the OUTERMOST storage stride
+            // (`blockIdx.z`), so `operand_stride_binding` never treats batch as a
+            // stride FACTOR (`ext(Batch)` is `unreachable!`). `classify_mat_layout`
+            // is role-agnostic and admits any packed permutation, including one that
+            // sorts a real batch axis storage-inner — decline that honestly here
+            // (sub-spec D) rather than let it reach the emitter's `ext(Batch)` panic.
+            // A BROADCAST batch (stride 0) is exempt: the emitter filters bcast axes
+            // before the factor loop, so it never reaches `ext(Batch)` either.
+            if (lhs.strides[0] != 0 && lhs_order.perm()[0] != 0)
+                || (rhs.strides[0] != 0 && rhs_order.perm()[0] != 0)
+            {
+                return None;
+            }
             Some(ContractionKey {
                 m: SizeClass::of(m),
                 n: SizeClass::of(n),
@@ -1724,6 +1737,29 @@ mod contraction_key_tests {
         assert!(
             key.contraction.is_none(),
             "broadcast admission must not admit an operand non-packed among its non-broadcast axes"
+        );
+    }
+
+    #[test]
+    fn derive_contraction_declines_batch_inner_packed_layout() {
+        // A PACKED batched operand that stores the batch axis storage-INNER (not
+        // outermost) is out of v1 scope: the emitter binds batch as blockIdx.z
+        // (outermost), so a batch-inner batch would reach ext(Batch)'s
+        // `unreachable!`. classify_mat_layout is role-agnostic and ADMITS it
+        // (packed), so derive_contraction must decline it honestly (sub-spec D)
+        // rather than let it reach the emitter's panic.
+        //
+        // lhs [B,M,K]=[2,8,16] strides [16,32,1]: storage order M-outer (32),
+        // batch-middle (16), K-inner (1). classify is packed (max offset
+        // 7*32+1*16+15 = 255 < 256) and yields perm=[1,0,2] — batch (axis 0) at
+        // storage position 1, NOT 0 — so the guard declines. rhs/out canonical.
+        let lhs = OperandDesc::new(3, &[2, 8, 16], &[16, 32, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(3, &[2, 16, 4], &[16 * 4, 4, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(3, &[2, 8, 4], &[8 * 4, 4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        assert!(
+            key.contraction.is_none(),
+            "a packed-but-batch-inner batched operand must decline (else it panics at the emitter's ext(Batch))"
         );
     }
 
