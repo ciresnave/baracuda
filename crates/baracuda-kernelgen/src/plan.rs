@@ -664,6 +664,53 @@ fn contraction_epilogue_admissible(e: &crate::ir::ScalarExpr, n_inputs: u8) -> b
     }
 }
 
+/// Validate that a [`crate::ir::ContractionAxes`] role assignment is legal for
+/// operands of the given ranks: the role vector must match the operand's rank,
+/// each side must carry exactly the free role it's allowed to produce (`lhs` ⇒
+/// one `FreeM`, no `FreeN`; `rhs` ⇒ one `FreeN`, no `FreeM`), exactly one
+/// `ContractedK` per operand (multi-K-group contraction is deferred past v1),
+/// and `lhs`/`rhs` must agree on how many `Batch` axes they carry. A pure
+/// predicate over roles only — it does not look at concrete extents/strides,
+/// and (as of this function) it is not yet consulted by [`build_plan`]'s
+/// `Access::Contraction` arm; that wiring is a later increment.
+// `#[allow(dead_code)]`: exercised by `contraction_role_validate::role_legality`
+// today; a later increment calls this from `build_plan`'s `Access::Contraction`
+// arm, at which point this attribute comes off.
+#[allow(dead_code)]
+pub(crate) fn validate_contraction_roles(
+    axes: &crate::ir::ContractionAxes,
+    lhs_rank: usize,
+    rhs_rank: usize,
+) -> Result<(), String> {
+    use crate::ir::AxisRole::*;
+    if axes.lhs.len() != lhs_rank || axes.rhs.len() != rhs_rank {
+        return Err("role vector length must equal operand rank".into());
+    }
+    let count =
+        |v: &[crate::ir::AxisRole], r: crate::ir::AxisRole| v.iter().filter(|&&x| x == r).count();
+    if count(&axes.lhs, FreeM) != 1 {
+        return Err("lhs must have exactly one FreeM".into());
+    }
+    if count(&axes.lhs, FreeN) != 0 {
+        return Err("lhs must not carry FreeN".into());
+    }
+    if count(&axes.rhs, FreeN) != 1 {
+        return Err("rhs must have exactly one FreeN".into());
+    }
+    if count(&axes.rhs, FreeM) != 0 {
+        return Err("rhs must not carry FreeM".into());
+    }
+    // single K-group in v1
+    if count(&axes.lhs, ContractedK) != 1 || count(&axes.rhs, ContractedK) != 1 {
+        return Err("v1: exactly one ContractedK per operand (multi-group deferred)".into());
+    }
+    // batch correspondence
+    if count(&axes.lhs, Batch) != count(&axes.rhs, Batch) {
+        return Err("lhs and rhs must share the same batch-axis count".into());
+    }
+    Ok(())
+}
+
 /// The access role of a [`Access::RowReduce`] input operand, from its layout.
 ///
 /// The three roles are the three broadcast geometries a row-reduce operand can
@@ -3309,6 +3356,61 @@ fn vec_width_elems(v: VecWidth) -> u32 {
         VecWidth::V4 => 4,
         VecWidth::V2 => 2,
         VecWidth::Scalar => 1,
+    }
+}
+
+#[cfg(test)]
+mod contraction_role_validate {
+    //! `validate_contraction_roles` unit tests: role-vector length, per-operand
+    //! role-count legality (exactly one FreeM/FreeN on the correct side, exactly
+    //! one ContractedK — multi-group deferred to v2), and lhs/rhs batch-count
+    //! agreement. Pure predicate, not yet wired into `build_plan` (Task 4).
+    use super::validate_contraction_roles;
+
+    #[test]
+    fn role_legality() {
+        use crate::ir::{AxisRole::*, ContractionAxes};
+        // canonical constructors pass
+        assert!(validate_contraction_roles(&ContractionAxes::matmul(), 2, 2).is_ok());
+        assert!(validate_contraction_roles(&ContractionAxes::batched_matmul(), 3, 3).is_ok());
+        // transposed role order passes (rhs [N,K] → roles [FreeN, ContractedK])
+        let t = ContractionAxes {
+            lhs: vec![FreeM, ContractedK],
+            rhs: vec![FreeN, ContractedK],
+        };
+        assert!(validate_contraction_roles(&t, 2, 2).is_ok());
+        // batch axis in the middle passes
+        let mid = ContractionAxes {
+            lhs: vec![FreeM, Batch, ContractedK],
+            rhs: vec![Batch, ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&mid, 3, 3).is_ok());
+        // illegal: two FreeM
+        let bad_m = ContractionAxes {
+            lhs: vec![FreeM, FreeM],
+            rhs: vec![ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&bad_m, 2, 2).is_err());
+        // illegal: FreeN on lhs
+        let bad_n = ContractionAxes {
+            lhs: vec![FreeN, ContractedK],
+            rhs: vec![ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&bad_n, 2, 2).is_err());
+        // illegal: mismatched batch count
+        let bad_b = ContractionAxes {
+            lhs: vec![Batch, FreeM, ContractedK],
+            rhs: vec![ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&bad_b, 3, 2).is_err());
+        // illegal: two K (multi-group deferred)
+        let bad_k = ContractionAxes {
+            lhs: vec![FreeM, ContractedK, ContractedK],
+            rhs: vec![ContractedK, ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&bad_k, 3, 3).is_err());
+        // illegal: role-vector length != rank
+        assert!(validate_contraction_roles(&ContractionAxes::matmul(), 3, 2).is_err());
     }
 }
 
