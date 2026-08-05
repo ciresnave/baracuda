@@ -672,9 +672,18 @@ const fn contraction_mp(primary: ElementKind) -> MpCode {
 
 /// Classify a contraction operand's storage order from its strides. Returns the
 /// permutation `perm` such that role/logical axis `d` reads storage axis `perm[d]`,
-/// iff the operand is a PACKED permutation of a contiguous tensor (every axis'
-/// |stride| equals the product of the extents storage-inner to it). `None` if
-/// genuinely non-packed (arbitrary strides → sub-spec D).
+/// iff the operand is a PACKED permutation of a contiguous tensor over its
+/// NON-broadcast axes (every non-broadcast axis' |stride| equals the product of
+/// the non-broadcast extents storage-inner to it). `None` if genuinely non-packed
+/// among its non-broadcast axes (arbitrary strides → sub-spec D).
+///
+/// Stride-0 (broadcast) axes are ADMITTED: they occupy no storage extent, so they
+/// are excluded from both the packed check and the running extent product — a
+/// GQA broadcast-KV operand (e.g. batch broadcast over `[B,K,N]`) classifies
+/// successfully as long as its remaining (real) axes are packed. The storage
+/// order this returns is over those non-broadcast axes; a broadcast axis still
+/// gets a deterministic (but address-irrelevant) `perm` slot, since the emitter's
+/// `operand_stride_binding` filters broadcast axes out before consuming `perm`.
 ///
 /// Role-agnostic: storage order derives from strides alone, so this takes no
 /// `AxisRole`/`ContractionAxes` argument (roles enter at the plan/emitter layer).
@@ -684,13 +693,19 @@ const fn contraction_mp(primary: ElementKind) -> MpCode {
 /// pre-Task-2 codec for every canonical cell).
 fn classify_mat_layout(od: &OperandDesc) -> Option<LayoutOrder> {
     let rank = od.rank as usize;
-    // Storage order = axes sorted by descending |stride| (outermost first).
+    // Storage order = axes sorted by descending |stride| (outermost first). A
+    // stride-0 (broadcast) axis sorts smallest (innermost).
     let mut axes: Vec<usize> = (0..rank).collect();
     axes.sort_by_key(|&d| core::cmp::Reverse(od.strides[d].abs()));
-    // Verify packed: walking storage-inner→outer, |stride| must equal the running
-    // extent product.
+    // Verify packed over the non-broadcast axes: walking storage-inner→outer,
+    // |stride| must equal the running extent product. Broadcast axes occupy no
+    // storage extent, so they are skipped — neither packedness-checked nor
+    // multiplied into `acc`.
     let mut acc: i64 = 1;
     for &d in axes.iter().rev() {
+        if od.strides[d] == 0 {
+            continue; // broadcast axis: no storage extent — not part of the packed layout
+        }
         if od.strides[d].abs() != acc {
             return None; // non-packed → decline
         }
@@ -1597,6 +1612,118 @@ mod contraction_key_tests {
         assert!(
             key.contraction.is_none(),
             "non-packed operand declines in v1 (sub-spec D)"
+        );
+    }
+
+    #[test]
+    fn derive_contraction_accepts_broadcast_batch_rhs() {
+        // Batched matmul, rhs KV broadcast over the batch/head axis (stride 0):
+        // GQA broadcast-KV. lhs [B,M,K] real batch; rhs [B,K,N] with B broadcast.
+        let lhs = OperandDesc::new(3, &[2, 8, 16], &[8 * 16, 16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(3, &[2, 16, 4], &[0, 4, 1], ElementKind::F32, 256); // B stride 0
+        let out = OperandDesc::new(3, &[2, 8, 4], &[8 * 4, 4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let c = key
+            .contraction
+            .expect("broadcast-batch rhs must still derive a contraction");
+        // Hand-trace (rhs strides [0,4,1]): sort desc |stride| -> axes=[1,2,0]
+        // (axis1 stride 4, axis2 stride 1, axis0 stride 0). Walk reversed
+        // [0,2,1]: d=0 (axis0, stride 0) -> skipped (broadcast). d=2 (axis2,
+        // stride 1): |1|==acc(1) ok, acc=1*shape[2]=4. d=1 (axis1, stride 4):
+        // |4|==acc(4) ok, acc=4*shape[1]=64. No decline -> admitted.
+        // perm[0]=pos(axis0 in [1,2,0])=2; perm[1]=pos(axis1)=0;
+        // perm[2]=pos(axis2)=1 -> perm=[2,0,1].
+        assert_eq!(
+            c.rhs_order.perm(),
+            &[2, 0, 1],
+            "broadcast-batch rhs storage order"
+        );
+        // lhs is a real (non-broadcast) canonical batched operand -> identity order.
+        assert!(c.lhs_order.is_identity(), "real-batch lhs stays identity");
+    }
+
+    #[test]
+    fn derive_contraction_broadcast_batch_rhs_round_trips() {
+        let lhs = OperandDesc::new(3, &[2, 8, 16], &[8 * 16, 16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(3, &[2, 16, 4], &[0, 4, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(3, &[2, 8, 4], &[8 * 4, 4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        assert!(
+            key.contraction.is_some(),
+            "broadcast-batch rhs derives a contraction"
+        );
+        // The rhs operand's bcast mask marks axis 0 (batch broadcast) — an
+        // existing, already-tokenized per-operand class (item 03/OperandKey).
+        assert!(
+            key.operands[1].bcast.is_set(0),
+            "rhs operand carries the /bcast mask for axis 0"
+        );
+        let tok = key.to_token();
+        assert!(
+            tok.contains("/or"),
+            "non-identity rhs order emits an /or component: {tok}"
+        );
+        assert_eq!(
+            StructureKey::from_token(&tok),
+            Some(key),
+            "broadcast-batch rhs round-trips: both /or (order) and /bcast (mask) survive"
+        );
+    }
+
+    #[test]
+    fn classify_mat_layout_broadcast_admission_is_byte_identical_for_canonical_cells() {
+        // Rank-2: same fixture and pinned token suffix as
+        // `gemm_rank2_dense_derives_and_round_trips` — no stride-0 axis anywhere,
+        // so the new broadcast skip never fires and the token must be unchanged.
+        let canon2 = sample_matmul_key();
+        let tok2 = canon2.to_token();
+        assert!(
+            tok2.ends_with("|ctll/d16/f32/f32/f32/rm"),
+            "rank-2 canonical token unchanged by broadcast admission: {tok2}"
+        );
+        // Rank-3: same fixture and pinned token suffix as
+        // `gemm_batched_derives_and_round_trips_with_batch_class`.
+        let lhs = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let rhs = OperandDesc::new(
+            3,
+            &[8, 4096, 4096],
+            &[4096 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let out = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let canon3 = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let tok3 = canon3.to_token();
+        assert!(
+            tok3.ends_with("|ctll/d16/bt/f32/f32/f32/rm"),
+            "rank-3 canonical token unchanged by broadcast admission: {tok3}"
+        );
+    }
+
+    #[test]
+    fn derive_contraction_declines_nonpacked_among_nonbroadcast_axes() {
+        // rhs [2,16,4] broadcast batch (stride 0) but K-stride 9 != n(=4) among
+        // the non-broadcast axes -> genuinely non-packed there. Broadcast
+        // admission must not accidentally admit this: still declines.
+        let lhs = OperandDesc::new(3, &[2, 8, 16], &[8 * 16, 16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(3, &[2, 16, 4], &[0, 9, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(3, &[2, 8, 4], &[8 * 4, 4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        assert!(
+            key.contraction.is_none(),
+            "broadcast admission must not admit an operand non-packed among its non-broadcast axes"
         );
     }
 
