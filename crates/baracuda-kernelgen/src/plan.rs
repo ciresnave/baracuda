@@ -357,18 +357,14 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
             ref epilogue,
             ..
         } => {
-            // v1 admissibility: the canonical rank-2 dense matmul cell OR its
-            // rank-3 batched form, keyed with contraction facts and an epilogue
-            // over the K-sum (+ optional fused bias) only.
-            let m2 = crate::ir::ContractionAxes::matmul();
-            let m3 = crate::ir::ContractionAxes::batched_matmul();
-            let ax = (axes.lhs.as_slice(), axes.rhs.as_slice());
-            assert!(
-                ax == (m2.lhs.as_slice(), m2.rhs.as_slice())
-                    || ax == (m3.lhs.as_slice(), m3.rhs.as_slice()),
-                "contraction v1: canonical rank-2 matmul or rank-3 batched-matmul \
-                 axis roles only"
-            );
+            // v1 admissibility: role-validated (general predicate over axis
+            // roles, not just the two canonical rank-2/rank-3 constructors),
+            // keyed with contraction facts and an epilogue over the K-sum
+            // (+ optional fused bias) only.
+            let (lhs_rank, rhs_rank) = (axes.lhs.len(), axes.rhs.len());
+            if let Err(msg) = validate_contraction_roles(axes, lhs_rank, rhs_rank) {
+                panic!("contraction roles: {msg}");
+            }
             assert!(
                 key.contraction.is_some(),
                 "contraction cell must carry ContractionKey facts (rank-2 dense \
@@ -670,13 +666,8 @@ fn contraction_epilogue_admissible(e: &crate::ir::ScalarExpr, n_inputs: u8) -> b
 /// one `FreeM`, no `FreeN`; `rhs` ⇒ one `FreeN`, no `FreeM`), exactly one
 /// `ContractedK` per operand (multi-K-group contraction is deferred past v1),
 /// and `lhs`/`rhs` must agree on how many `Batch` axes they carry. A pure
-/// predicate over roles only — it does not look at concrete extents/strides,
-/// and (as of this function) it is not yet consulted by [`build_plan`]'s
-/// `Access::Contraction` arm; that wiring is a later increment.
-// `#[allow(dead_code)]`: exercised by `contraction_role_validate::role_legality`
-// today; a later increment calls this from `build_plan`'s `Access::Contraction`
-// arm, at which point this attribute comes off.
-#[allow(dead_code)]
+/// predicate over roles only — it does not look at concrete extents/strides.
+/// Consulted by [`build_plan`]'s `Access::Contraction` arm.
 pub(crate) fn validate_contraction_roles(
     axes: &crate::ir::ContractionAxes,
     lhs_rank: usize,
@@ -1088,11 +1079,11 @@ fn assert_valid_views(op: &OpDef, key: &StructureKey) {
     }
     // From here at least one real (address- or recognition-bearing) view.
     assert!(
-        matches!(op.access, Access::Elementwise),
-        "OpDef '{name}': a non-Identity View is Access::Elementwise-only in v1 — a \
-         {}-class op has its own axis machinery (reduced/contracted/feature axes) \
-         that a per-input read-through would double-count; a view on it must be \
-         Identity",
+        matches!(op.access, Access::Elementwise | Access::Contraction { .. }),
+        "OpDef '{name}': a non-Identity View is admitted only on Access::Elementwise \
+         or Access::Contraction in v1 — a {}-class op has its own axis machinery \
+         (reduced/feature axes) that a per-input read-through would double-count; a \
+         view on it must be Identity",
         access_tag(&op.access)
     );
     assert!(
@@ -3364,7 +3355,8 @@ mod contraction_role_validate {
     //! `validate_contraction_roles` unit tests: role-vector length, per-operand
     //! role-count legality (exactly one FreeM/FreeN on the correct side, exactly
     //! one ContractedK — multi-group deferred to v2), and lhs/rhs batch-count
-    //! agreement. Pure predicate, not yet wired into `build_plan` (Task 4).
+    //! agreement. Pure predicate, wired into `build_plan`'s `Access::Contraction`
+    //! arm (Task 4).
     use super::validate_contraction_roles;
 
     #[test]
@@ -3986,10 +3978,12 @@ mod view_gate_validate {
     }
 
     #[test]
-    #[should_panic(expected = "Elementwise-only")]
+    #[should_panic(expected = "admitted only on Access::Elementwise")]
     fn permute_view_on_reduction_rejected() {
         // A non-Identity view on a Reduction op: rejected (reductions own their
-        // axis machinery). Build the OpDef with a view via with_views.
+        // axis machinery). Build the OpDef with a view via with_views. Task 4
+        // widened Gate B's admitted set to Elementwise|Contraction and updated
+        // its message accordingly — Reduction is still outside that set.
         let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum)
             .with_views(vec![View::Permute { perm: vec![1, 0] }]);
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
@@ -4070,6 +4064,53 @@ mod view_gate_validate {
         let o = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
         let _ = build_plan(&op, &key); // no panic — trivially-Identity pass-through
+    }
+
+    #[test]
+    fn contraction_admits_permute_view_on_rhs() {
+        use crate::ir::{ContractionAxes, View, reduced};
+        // matmul with a Permute (transpose) view on rhs; lhs Identity.
+        // views.len() MUST equal n_inputs (== 2 for a bias-free matmul).
+        let op = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        )
+        .with_views(vec![View::Identity, View::Permute { perm: vec![1, 0] }]);
+        // Transposed-rhs key from Task 2's fixture: rhs physically [N,K] (K unit-stride).
+        let lhs = OperandDesc::new(2, &[8, 16], &[16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[16, 4], &[1, 16], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let plan = build_plan(&op, &key);
+        assert!(
+            matches!(plan.schedule, Schedule::Contraction),
+            "permute-viewed contraction must route to Schedule::Contraction, got {:?}",
+            plan.schedule
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "exactly one FreeM")]
+    fn contraction_rejects_illegal_roles() {
+        use crate::ir::{AxisRole::*, ContractionAxes, reduced};
+        // Illegal: two FreeM on lhs. OpDef::contraction takes axes directly.
+        let op = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes {
+                lhs: vec![FreeM, FreeM],
+                rhs: vec![ContractedK, FreeN],
+            },
+            reduced(0),
+        );
+        // Canonical key is fine — role validation panics before the key assert.
+        let lhs = OperandDesc::new(2, &[8, 16], &[16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[16, 4], &[4, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
     }
 }
 
