@@ -1279,8 +1279,13 @@ fn eval_reduction(
 /// comparator (`Fidelity::Tolerant`), while an exactly-representable cell (small
 /// integers) matches bit-for-bit.
 ///
-/// v1 scope mirrors the emitter and `derive_contraction`: matmul axes only, no
-/// batch/transpose, and the epilogue reads only `Reduced(0)` (no `Input`/`Coord`).
+/// v1 scope mirrors the emitter and `derive_contraction`: each operand is read
+/// by its PHYSICAL strides at the logical (role) coordinate, so transposed/
+/// permuted (`lhs_order`/`rhs_order` non-identity), batched, and broadcast-batch
+/// operands all index correctly — the layout lives in the strides, not in a
+/// second permutation applied on top of them (see [`read_strided`] and the
+/// module's independence discipline). The epilogue reads only `Reduced(0)` (no
+/// `Input`/`Coord`), plus the optional fused per-column bias.
 fn eval_contraction(
     plan: &KernelPlan<'_>,
     operands: &[OperandDesc],
@@ -1321,8 +1326,8 @@ fn eval_contraction(
                     } else {
                         (vec![mi, kk], vec![kk, ni])
                     };
-                    let a = read_strided(inputs, operands, 0, &lc, input_perm(plan, 0)).f64();
-                    let b = read_strided(inputs, operands, 1, &rc, input_perm(plan, 1)).f64();
+                    let a = read_strided(inputs, operands, 0, &lc, None).f64();
+                    let b = read_strided(inputs, operands, 1, &rc, None).f64();
                     acc += a * b;
                 }
                 // Epilogue over Reduced(0) = the accumulator, plus the optional
@@ -2418,6 +2423,243 @@ mod tests {
     // BIT-for-bit, AND asserts kiss-ref equals the hand-computed value. So the
     // oracle Contraction arm stays EXERCISED (leg 1) and the value stays
     // independently checked — equal-or-better than the retired single-impl tests.
+
+    // Task 6: `eval_contraction` reads operand layout by PHYSICAL strides (the
+    // ground truth, matching the emitter's `operand_stride_binding`), not by
+    // re-applying the op's `View::Permute` on top of already-transposed strides
+    // (that would double-transpose). This is a VIEWED contraction — the op
+    // carries `View::Permute` on rhs — so it exercises the `input_perm` path.
+    #[test]
+    fn oracle_matches_reference_transposed_rhs_f32() {
+        use crate::ir::{ContractionAxes, View, reduced};
+        let (m, k, n) = (2usize, 3usize, 2usize);
+        // lhs [M,K] row-major; rhs LOGICAL [K,N] but stored transposed ([N,K], K unit).
+        let lhs_d = desc(&[m as i64, k as i64], &[k as i64, 1], ElementKind::F32);
+        let rhs_d = desc(&[k as i64, n as i64], &[1, k as i64], ElementKind::F32); // transposed
+        let out_d = desc(&[m as i64, n as i64], &[n as i64, 1], ElementKind::F32);
+        let op = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        )
+        .with_views(vec![View::Identity, View::Permute { perm: vec![1, 0] }]);
+        let kk = key(OpCategory::Gemm, &[lhs_d, rhs_d, out_d]);
+        let plan = build_plan(&op, &kk);
+        // lhs data: logical [M,K] row-major = [[1,2,3],[4,5,6]].
+        let lhs = f32b(&[m as i64, k as i64], &[1., 2., 3., 4., 5., 6.]);
+        // rhs LOGICAL [K,N]=[[10,11],[12,13],[14,15]] stored transposed [N,K] row-major
+        // = flatten([[10,12,14],[11,13,15]]) so physical strides [1,k] read it back.
+        let rhs = f32b(&[k as i64, n as i64], &[10., 12., 14., 11., 13., 15.]);
+        let got = f32s(&evaluate(&plan, &[lhs_d, rhs_d, out_d], &[lhs, rhs], &[])[0]);
+        // from-scratch [M,K]·[K,N], K ascending: want[m][n] = Σ_k lhsL[m][k]·rhsL[k][n]
+        let lhs_l = [[1., 2., 3.], [4., 5., 6.]];
+        let rhs_l = [[10., 11.], [12., 13.], [14., 15.]];
+        let mut want = vec![0f32; m * n];
+        for mi in 0..m {
+            for ni in 0..n {
+                let mut a = 0f32;
+                for ki in 0..k {
+                    a += lhs_l[mi][ki] * rhs_l[ki][ni];
+                }
+                want[mi * n + ni] = a;
+            }
+        }
+        assert_eq!(
+            got, want,
+            "oracle transposed-rhs must equal the logical matmul reference"
+        );
+    }
+
+    // Task 6 differential matrix: {lhs_order, rhs_order} x {rank-2, rank-3
+    // batched}, each vs a from-scratch `[M,K]·[K,N]` (or batched) reference.
+    //
+    // Broadcast-batch rhs (stride 0) is deliberately NOT a matrix cell here:
+    // `classify_mat_layout` (Task 1/2, already shipped on this branch)
+    // declines ANY zero-stride axis as non-packed regardless of position, so
+    // `derive_contraction` returns `None` for a stride-0 batch axis and
+    // `build_plan` panics ("contraction cell must carry ContractionKey
+    // facts") before a plan can even be built — verified directly with a
+    // throwaway probe during development, not guessed. That gate sits
+    // upstream of Task 6 (in the vocab crate) and is out of this task's
+    // surgical scope to relax; a broadcast-batch cell needs a Task 1-4
+    // follow-up to admit a non-packed batch axis first.
+
+    /// Realize a (possibly batched) operand's PHYSICAL storage for a chosen
+    /// storage order: `logical[b]` is batch `b`'s row-major `rows*cols`
+    /// logical matrix (`logical.len()==1` for the unbatched case). Batch, when
+    /// present, is the OUTERMOST storage axis (v1 convention, per the Task 5
+    /// emitter). `transposed=false` -> canonical row-major (`strides=
+    /// [cols,1]`, physical == logical); `transposed=true` -> physically
+    /// `[cols,rows]` row-major per batch (`strides=[1,rows]`), so reading
+    /// logical `(r,c)` through the returned strides reproduces
+    /// `logical[b][r*cols+c]`. Returns `(strides, physical_flat_data)`.
+    fn layout_matrix(
+        rows: i64,
+        cols: i64,
+        logical: &[Vec<f32>],
+        transposed: bool,
+    ) -> (Vec<i64>, Vec<f32>) {
+        let (r, c) = (rows as usize, cols as usize);
+        let mut strides = Vec::new();
+        if logical.len() > 1 {
+            strides.push(rows * cols); // batch stride: outermost, packed
+        }
+        if transposed {
+            strides.extend_from_slice(&[1, rows]);
+        } else {
+            strides.extend_from_slice(&[cols, 1]);
+        }
+        let mut phys = Vec::with_capacity(logical.len() * r * c);
+        for slice in logical {
+            if transposed {
+                let mut buf = vec![0f32; r * c];
+                for ri in 0..r {
+                    for ci in 0..c {
+                        buf[ci * r + ri] = slice[ri * c + ci];
+                    }
+                }
+                phys.extend(buf);
+            } else {
+                phys.extend_from_slice(slice);
+            }
+        }
+        (strides, phys)
+    }
+
+    // Hand-verification of `layout_matrix`'s transposed branch: the rank-2
+    // case reuses the EXACT rhs fixture from
+    // `oracle_matches_reference_transposed_rhs_f32` above (hand-verified
+    // against the brief: rhs LOGICAL [K,N]=[[10,11],[12,13],[14,15]] stored
+    // transposed [N,K] row-major = [10,12,14,11,13,15], strides=[1,k]) as a
+    // golden case, plus a from-scratch batched hand trace.
+    #[test]
+    fn layout_matrix_matches_hand_verified_fixtures() {
+        // rank-2 transposed: matches the RED fixture above exactly.
+        let (strides, phys) = layout_matrix(3, 2, &[vec![10., 11., 12., 13., 14., 15.]], true);
+        assert_eq!(strides, vec![1, 3]);
+        assert_eq!(phys, vec![10., 12., 14., 11., 13., 15.]);
+        // canonical (identity) is a pass-through.
+        let (strides, phys) = layout_matrix(3, 2, &[vec![10., 11., 12., 13., 14., 15.]], false);
+        assert_eq!(strides, vec![2, 1]);
+        assert_eq!(phys, vec![10., 11., 12., 13., 14., 15.]);
+        // batched (B=2, rows=2, cols=2), transposed: batch stays outermost.
+        // logical batch0=[[1,2],[3,4]], batch1=[[5,6],[7,8]]; transposed
+        // per-batch physical [cols,rows] row-major = [[1,3],[2,4]] /
+        // [[5,7],[6,8]] -> flat [1,3,2,4, 5,7,6,8]; strides=[rows*cols,1,rows]
+        // = [4,1,2]. Hand-check logical(b=0,r=1,c=0)=3: offset =
+        // 0*4 + 1*1 + 0*2 = 1 -> phys[1] = 3. ✓
+        let (strides, phys) =
+            layout_matrix(2, 2, &[vec![1., 2., 3., 4.], vec![5., 6., 7., 8.]], true);
+        assert_eq!(strides, vec![4, 1, 2]);
+        assert_eq!(phys, vec![1., 3., 2., 4., 5., 7., 6., 8.]);
+    }
+
+    /// One matrix cell: build a (possibly batched, possibly layout-permuted)
+    /// contraction through the REAL `build_plan`/`evaluate` pipeline and
+    /// assert it equals a from-scratch `[M,K]·[K,N]` reference (K ascending).
+    fn assert_contraction_matches_reference(
+        batched: bool,
+        lhs_transposed: bool,
+        rhs_transposed: bool,
+    ) {
+        use crate::ir::{ContractionAxes, View, reduced};
+        let (m, k, n): (i64, i64, i64) = (2, 3, 2);
+        let bdim: i64 = if batched { 2 } else { 1 };
+
+        // Small distinct-per-batch integer data (exact in f32).
+        let lhs_logical: Vec<Vec<f32>> = (0..bdim)
+            .map(|bi| (0..m * k).map(|idx| (bi * 100 + idx + 1) as f32).collect())
+            .collect();
+        let rhs_logical: Vec<Vec<f32>> = (0..bdim)
+            .map(|bi| (0..k * n).map(|idx| (bi * 100 + idx + 1) as f32).collect())
+            .collect();
+
+        let (lhs_strides, lhs_phys) = layout_matrix(m, k, &lhs_logical, lhs_transposed);
+        let (rhs_strides, rhs_phys) = layout_matrix(k, n, &rhs_logical, rhs_transposed);
+
+        let (lhs_shape, rhs_shape, out_shape): (Vec<i64>, Vec<i64>, Vec<i64>) = if batched {
+            (vec![bdim, m, k], vec![bdim, k, n], vec![bdim, m, n])
+        } else {
+            (vec![m, k], vec![k, n], vec![m, n])
+        };
+        let out_strides = if batched {
+            vec![m * n, n, 1]
+        } else {
+            vec![n, 1]
+        };
+        let rank = lhs_shape.len();
+
+        let lhs_d = desc(&lhs_shape, &lhs_strides, ElementKind::F32);
+        let rhs_d = desc(&rhs_shape, &rhs_strides, ElementKind::F32);
+        let out_d = desc(&out_shape, &out_strides, ElementKind::F32);
+
+        // The permutation `classify_mat_layout` itself derives for "swap the
+        // last two axes, batch (if any) stays outermost": [1,0] at rank-2,
+        // [0,2,1] at rank-3 (hand-derived and cross-checked against
+        // `classify_mat_layout`'s algorithm for these exact strides). Not
+        // cross-checked BY `build_plan` (a caller precondition per the
+        // module docs — `read_strided` ignores it after Edit 1 regardless),
+        // but kept truthful to what a real planner would emit.
+        let perm_for = |transposed: bool| -> View {
+            if !transposed {
+                View::Identity
+            } else if rank == 2 {
+                View::Permute { perm: vec![1, 0] }
+            } else {
+                View::Permute {
+                    perm: vec![0, 2, 1],
+                }
+            }
+        };
+        let views = vec![perm_for(lhs_transposed), perm_for(rhs_transposed)];
+
+        let axes = if batched {
+            ContractionAxes::batched_matmul()
+        } else {
+            ContractionAxes::matmul()
+        };
+        let op =
+            OpDef::contraction("matmul", &[ElementKind::F32], axes, reduced(0)).with_views(views);
+        let kk = key(OpCategory::Gemm, &[lhs_d, rhs_d, out_d]);
+        let plan = build_plan(&op, &kk);
+
+        let lhs_buf = f32b(&lhs_shape, &lhs_phys);
+        let rhs_buf = f32b(&rhs_shape, &rhs_phys);
+        let got = f32s(&evaluate(&plan, &[lhs_d, rhs_d, out_d], &[lhs_buf, rhs_buf], &[])[0]);
+
+        // From-scratch reference, K ascending — independent of `eval_contraction`.
+        let mut want = vec![0f32; (bdim * m * n) as usize];
+        for bi in 0..bdim {
+            for mi in 0..m {
+                for ni in 0..n {
+                    let mut acc = 0f32;
+                    for ki in 0..k {
+                        let a = lhs_logical[bi as usize][(mi * k + ki) as usize];
+                        let b = rhs_logical[bi as usize][(ki * n + ni) as usize];
+                        acc += a * b;
+                    }
+                    want[(bi * m * n + mi * n + ni) as usize] = acc;
+                }
+            }
+        }
+        assert_eq!(
+            got, want,
+            "contraction matrix cell mismatch: batched={batched} \
+             lhs_transposed={lhs_transposed} rhs_transposed={rhs_transposed}"
+        );
+    }
+
+    #[test]
+    fn oracle_contraction_layout_batch_differential_matrix() {
+        for &batched in &[false, true] {
+            for &lhs_t in &[false, true] {
+                for &rhs_t in &[false, true] {
+                    assert_contraction_matches_reference(batched, lhs_t, rhs_t);
+                }
+            }
+        }
+    }
 
     // --- compare helper -----------------------------------------------------
 
