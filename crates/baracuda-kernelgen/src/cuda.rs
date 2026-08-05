@@ -11,11 +11,12 @@ use crate::backend::{
     lower_dag_multi, lower_expr,
 };
 use crate::ir::{
-    Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
+    Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
     is_admissible_int_reduction_operand,
 };
 use crate::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
-use baracuda_kernel_vocab::{Contiguity, ElementKind, OperandKey};
+use baracuda_kernel_vocab::structure_key::LayoutOrder;
+use baracuda_kernel_vocab::{AxisMask, Contiguity, ElementKind, OperandKey};
 
 /// The CUDA C++ backend. Lowers a [`KernelPlan`] to `.cu` source.
 #[derive(Copy, Clone, Debug, Default)]
@@ -1752,9 +1753,13 @@ fn assert_views_lowerable(plan: &KernelPlan<'_>) {
     }
     let name = plan.op_name;
     assert!(
-        matches!(plan.access, Access::Elementwise),
-        "cuda backend: viewed op '{name}' must be Access::Elementwise (item 01 \
-         views are Elementwise-only)"
+        matches!(
+            plan.access,
+            Access::Elementwise | Access::Contraction { .. }
+        ),
+        "cuda backend: viewed op '{name}' must be Access::Elementwise or \
+         Access::Contraction (item 01 views are Elementwise-only, sub-spec A \
+         additionally admits a Contraction operand view)"
     );
     assert!(
         plan.n_outputs == 1,
@@ -1763,10 +1768,12 @@ fn assert_views_lowerable(plan: &KernelPlan<'_>) {
         plan.n_outputs
     );
     assert!(
-        matches!(plan.schedule, Schedule::Strided),
+        matches!(plan.schedule, Schedule::Strided | Schedule::Contraction),
         "cuda backend: viewed op '{name}' must lower on the Strided schedule (a \
          viewed read is non-contiguous; only the strided emitter folds the \
-         per-operand stride remap), got {:?}",
+         per-operand stride remap) OR the Contraction schedule (a viewed \
+         contraction operand folds its stride remap in \
+         `operand_stride_binding` instead), got {:?}",
         plan.schedule
     );
     let rank = plan.key.rank;
@@ -3250,6 +3257,64 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     })
 }
 
+/// The flat address expression `Σ coord(role)·stride(role)` for ONE contraction
+/// operand, given its per-axis roles (logical/iteration order) and its physical
+/// storage order (`LayoutOrder`, from `ContractionKey::lhs_order`/`rhs_order` —
+/// Tasks 1–2). Terms are iterated **storage-order** (ascending `order.perm()[d]`,
+/// outermost-first), NOT logical order: for the canonical (identity-perm) case
+/// the two coincide, so the emitted string is byte-identical to the pre-layout
+/// hardcoded offsets; for a transposed/permuted operand, storage order is what
+/// puts the terms in the physically-correct outer→inner sequence (e.g. a
+/// `[N,K]`-stored rhs binds `col * k + kk`, not `kk * n + col`). Broadcast axes
+/// (`bcast`) are dropped (stride-0 — contribute no term); `Batch` is the
+/// outermost storage axis in v1, so its stride is the product of every other
+/// (non-batch) extent and it is never itself a stride FACTOR (`ext(Batch)` is
+/// unreachable). An empty operand (rank 0, or every axis broadcast) binds `"0"`.
+fn operand_stride_binding(
+    roles: &[AxisRole],
+    order: &LayoutOrder,
+    bcast: AxisMask,
+    ext: &dyn Fn(AxisRole) -> &'static str,
+) -> String {
+    let rank = roles.len();
+    // Iterate axes OUTERMOST-STORAGE-FIRST (ascending storage position), skipping
+    // stride-0 broadcast axes. This makes canonical emit byte-identically AND puts
+    // transposed terms in canonical outer→inner order.
+    let mut axes: Vec<usize> = (0..rank).filter(|&d| !bcast.is_set(d as u8)).collect();
+    axes.sort_by_key(|&d| order.perm()[d]); // ascending storage position (lower = outer)
+    let coord = |r: AxisRole| match r {
+        AxisRole::FreeM => "mm",
+        AxisRole::FreeN => "col",
+        AxisRole::ContractedK => "kk",
+        AxisRole::Batch => "b",
+    };
+    let mut terms: Vec<String> = Vec::new();
+    for &d in &axes {
+        let sp = order.perm()[d] as usize;
+        // stride = product of extents of axes storage-INNER to d (greater storage
+        // position), excluding broadcast axes.
+        let factors: Vec<&str> = (0..rank)
+            .filter(|&e| (order.perm()[e] as usize) > sp && !bcast.is_set(e as u8))
+            .map(|e| ext(roles[e]))
+            .collect();
+        let stride = if factors.is_empty() {
+            "1".to_string()
+        } else {
+            factors.join(" * ")
+        };
+        terms.push(if stride == "1" {
+            coord(roles[d]).to_string()
+        } else {
+            format!("{} * {stride}", coord(roles[d]))
+        });
+    }
+    if terms.is_empty() {
+        "0".into()
+    } else {
+        terms.join(" + ")
+    }
+}
+
 /// Emit a **contraction** ([`Access::Contraction`]) — the terminal ORDER-3
 /// node, v1 = the **skinny SIMT** schedule for the `Tiny`-M long-tail cell
 /// (decode / FlashDecoding++ flat-GEMM): `out[mm,col] = epi(Σ_k lhs[mm,k] ·
@@ -3267,7 +3332,7 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
 /// schedules join as bench-gated variants; all-`Large` cells route to the
 /// vendor via the §7 gate and are never generated.
 fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
-    let Access::Contraction { epilogue, .. } = plan.access else {
+    let Access::Contraction { epilogue, axes, .. } = plan.access else {
         unreachable!("emit_contraction requires Access::Contraction");
     };
     let c = plan
@@ -3380,14 +3445,33 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         _ => epi,
     };
 
-    // Batched cells (`c.batch` set) stride each operand by the batch index
-    // `b = blockIdx.z`; the per-batch col/mm/kk math is byte-identical to rank-2,
-    // so a rank-2 cell emits empty offsets (unchanged source).
-    let (lb, rb, ob) = if c.batch.is_some() {
-        ("b * m * k + ", "b * k * n + ", "b * m * n + ")
+    // Batched cells (`c.batch` set) stride the OUTPUT by the batch index
+    // `b = blockIdx.z`; `out` stays canonical row-major (output views are
+    // sub-spec B — not routed through the binding below), so it keeps its own
+    // explicit prefix. The operand batch prefixes are subsumed by
+    // `operand_stride_binding`: `Batch` is a role like any other, and it is
+    // the outermost storage axis in v1, so its stride (the product of every
+    // other extent) reproduces `lb`/`rb` byte-for-byte automatically.
+    let ob = if c.batch.is_some() {
+        "b * m * n + "
     } else {
-        ("", "", "")
+        ""
     };
+    let ext = |r: AxisRole| -> &'static str {
+        match r {
+            AxisRole::FreeM => "m",
+            AxisRole::FreeN => "n",
+            AxisRole::ContractedK => "k",
+            // Batch is the outermost axis in v1 → never a stride FACTOR (nothing
+            // is storage-inner to it that references it), so ext(Batch) is never
+            // called. A batch-not-outermost layout is out of v1 scope.
+            AxisRole::Batch => unreachable!(
+                "ext(Batch): batch is outermost in v1; a batch-inner layout is out of scope"
+            ),
+        }
+    };
+    let lhs_off = operand_stride_binding(&axes.lhs, &c.lhs_order, plan.key.operands[0].bcast, &ext);
+    let rhs_off = operand_stride_binding(&axes.rhs, &c.rhs_order, plan.key.operands[1].bcast, &ext);
 
     let mut s = header(plan, &name);
     s.push_str(&format!("    const {ctype}* __restrict__ in0,\n")); // lhs [m,k]
@@ -3414,13 +3498,13 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     s.push_str("        for (long long kk = 0; kk < k; ++kk) {\n");
     s.push_str(&format!(
         "            {acc} w = {};\n",
-        load(format!("in1[{rb}kk * n + col]"))
+        load(format!("in1[{rhs_off}]"))
     ));
     s.push_str("            #pragma unroll\n");
     s.push_str("            for (int mm = 0; mm < 8; ++mm) {\n");
     s.push_str(&format!(
         "                if (mm < m) accs[mm] += {} * w;\n",
-        load(format!("in0[{lb}mm * k + kk]"))
+        load(format!("in0[{lhs_off}]"))
     ));
     s.push_str("            }\n        }\n");
     s.push_str("        #pragma unroll\n");
@@ -3460,6 +3544,12 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     }
     // build_plan admissibility already ran; these mirror emit_contraction.
     let c = plan.key.contraction?;
+    // v1: the split-K variant is row-major-only. A non-identity operand layout
+    // (transposed/permuted) is emitted correctly by the BASE skinny kernel; the
+    // coalesced split-K schedule for permuted operands is a deferred variant.
+    if !c.lhs_order.is_identity() || !c.rhs_order.is_identity() {
+        return None;
+    }
     // Batched cells decline the split-K variant in v1 (the split-K workspace +
     // combine kernels have no batch dimension yet) — a batched cell gets the base
     // per-batch skinny kernel only.
@@ -8683,6 +8773,98 @@ mod tests {
                 .contains("float w = __half2float(in1[kk * n + col]);")
         );
         assert!(kh.source.contains("out[mm * n + col] = __float2half(r0);"));
+    }
+
+    #[test]
+    fn emit_contraction_canonical_byte_identical() {
+        use crate::ir::{ContractionAxes, reduced};
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let src = generate(&mm, &key, &Cuda).source;
+        assert_eq!(
+            src,
+            include_str!("goldens/contract_canonical_f32.cu"),
+            "canonical contraction emission must be byte-identical (load-bearing Global Constraint)"
+        );
+    }
+
+    #[test]
+    fn emit_contraction_batched_canonical_byte_identical() {
+        use crate::ir::{ContractionAxes, reduced};
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::batched_matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(
+            3,
+            &[2, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let rhs = OperandDesc::new(
+            3,
+            &[2, 4096, 4096],
+            &[4096 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let out = OperandDesc::new(
+            3,
+            &[2, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let src = generate(&mm, &key, &Cuda).source;
+        assert_eq!(
+            src,
+            include_str!("goldens/contract_canonical_batched_f32.cu"),
+            "batched canonical emission must be byte-identical (the risky batch-prefix fold)"
+        );
+    }
+
+    #[test]
+    fn emit_contraction_transposed_rhs_binding() {
+        use crate::ir::{ContractionAxes, View, reduced};
+        // rhs physically [N,K] (K unit-stride) → key rhs_order = [1,0]; op carries the
+        // Permute view (Task 4 admits it). Binding must be col*k+kk, NOT kk*n+col.
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        )
+        .with_views(vec![View::Identity, View::Permute { perm: vec![1, 0] }]);
+        let lhs = OperandDesc::new(2, &[8, 16], &[16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[16, 4], &[1, 16], ElementKind::F32, 256); // transposed store
+        let out = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let src = generate(&mm, &key, &Cuda).source;
+        assert!(
+            src.contains("in1[col * k + kk]"),
+            "transposed rhs binding col*k+kk; got:\n{src}"
+        );
+        assert!(
+            !src.contains("in1[kk * n + col]"),
+            "must NOT use the canonical rhs binding"
+        );
+        // lhs stays canonical
+        assert!(
+            src.contains("in0[mm * k + kk]"),
+            "canonical lhs binding unchanged"
+        );
     }
 
     #[test]
