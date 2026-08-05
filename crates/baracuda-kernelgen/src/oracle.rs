@@ -2475,15 +2475,21 @@ mod tests {
     // batched}, each vs a from-scratch `[M,K]·[K,N]` (or batched) reference.
     //
     // Broadcast-batch rhs (stride 0) is deliberately NOT a matrix cell here:
-    // `classify_mat_layout` (Task 1/2, already shipped on this branch)
-    // declines ANY zero-stride axis as non-packed regardless of position, so
-    // `derive_contraction` returns `None` for a stride-0 batch axis and
-    // `build_plan` panics ("contraction cell must carry ContractionKey
-    // facts") before a plan can even be built — verified directly with a
-    // throwaway probe during development, not guessed. That gate sits
-    // upstream of Task 6 (in the vocab crate) and is out of this task's
-    // surgical scope to relax; a broadcast-batch cell needs a Task 1-4
-    // follow-up to admit a non-packed batch axis first.
+    // at the time this matrix was written, `classify_mat_layout` (Task 1/2,
+    // already shipped on this branch) declined ANY zero-stride axis as
+    // non-packed regardless of position, so `derive_contraction` returned
+    // `None` for a stride-0 batch axis and `build_plan` panicked
+    // ("contraction cell must carry ContractionKey facts") before a plan
+    // could even be built — verified directly with a throwaway probe during
+    // development, not guessed. That gate sat upstream of Task 6 (in the
+    // vocab crate) and was out of this task's surgical scope to relax.
+    //
+    // UPDATE (Task 8, commit 2203bcfb): `classify_mat_layout` now admits a
+    // stride-0 axis (skips it in the packedness walk instead of declining),
+    // so a broadcast-KV rhs is constructible. Task 9 adds the two
+    // now-possible broadcast-KV (GQA) cells in a DEDICATED helper below
+    // (`assert_broadcast_kv_matches_reference`) rather than folding them into
+    // this matrix/helper, to keep this committed 8-cell matrix untouched.
 
     /// Realize a (possibly batched) operand's PHYSICAL storage for a chosen
     /// storage order: `logical[b]` is batch `b`'s row-major `rows*cols`
@@ -2659,6 +2665,131 @@ mod tests {
                 }
             }
         }
+    }
+
+    // --- Task 9: broadcast-KV (GQA) differential cells ----------------------
+    //
+    // View-requirement probe (empirical, run before writing the fixtures
+    // below): a throwaway `build_plan` call with the Cell-1 broadcast rhs
+    // key/operands and a VIEW-FREE op (no `.with_views(...)`) succeeded —
+    // `assert_valid_views` returns immediately when `op.views.is_empty()`
+    // (plan.rs:1066), and `build_plan`'s `Access::Contraction` arm only
+    // requires `key.contraction.is_some()` (plan.rs:369), which
+    // `derive_contraction` now supplies via `classify_mat_layout`'s stride-0
+    // admission (Task 8) — no view of any kind is consulted. Independently,
+    // `eval_contraction` calls `read_strided(.., i, &coords, None)` for BOTH
+    // lhs (index 0) and rhs (index 1) with a HARD-CODED `None` perm
+    // (oracle.rs:1329-1330) — `input_perm` is only ever applied to a fused
+    // BIAS operand (index >= 2) inside the epilogue, never to lhs/rhs — so a
+    // `View::Permute`/`View::Broadcast` on lhs/rhs would not even be read by
+    // the oracle. The same is true for the transposed-broadcast Cell 2: its
+    // rhs strides `[0, 1, k]` are read directly off `OperandDesc::strides` by
+    // logical coordinate, with no view involved. Conclusion: BOTH cells are
+    // VIEW-FREE — no `.with_views(...)` call on either `OpDef`.
+
+    /// One broadcast-KV (GQA) matrix cell: rhs is LOGICAL `[B,K,N]` with a
+    /// stride-0 BATCH axis — the physical buffer holds exactly ONE `K·N`
+    /// slice, read for every batch index (`bi*0 == 0`). lhs is a REAL batched
+    /// `[B,M,K]` dense operand (GQA broadcasts KV=rhs; broadcast-LHS is not a
+    /// real use case and is out of scope). Built through the REAL
+    /// `build_plan`/`evaluate` pipeline — constructible since Task 8 made
+    /// `classify_mat_layout` admit the stride-0 rhs batch axis — and checked
+    /// against a from-scratch reference (K ascending) that reads the SAME
+    /// rhs slice for every `bi`. `rhs_transposed=false` -> canonical `[K,N]`
+    /// rhs slice (Cell 1, strides `[0,n,1]`); `rhs_transposed=true` ->
+    /// physically `[N,K]` per slice (Cell 2, the real Kᵀ+GQA case, strides
+    /// `[0,1,k]`). Reuses `layout_matrix` (already hand-verified in
+    /// `layout_matrix_matches_hand_verified_fixtures` above) for the K,N
+    /// slice's physical strides/data, then prepends the broadcast batch
+    /// stride `0`.
+    fn assert_broadcast_kv_matches_reference(rhs_transposed: bool) {
+        use crate::ir::{ContractionAxes, reduced};
+        let (b, m, k, n): (i64, i64, i64, i64) = (2, 2, 3, 2);
+
+        // lhs: REAL batched [B,M,K] dense, distinct per-batch small integers.
+        let lhs_logical: Vec<Vec<f32>> = (0..b)
+            .map(|bi| (0..m * k).map(|idx| (bi * 100 + idx + 1) as f32).collect())
+            .collect();
+        let lhs_strides = vec![m * k, k, 1];
+        let lhs_phys: Vec<f32> = lhs_logical.iter().flatten().copied().collect();
+
+        // rhs: ONE [K,N] logical slice (not one per batch), broadcast via a
+        // stride-0 batch axis prepended to the K,N strides `layout_matrix`
+        // derives for the chosen orientation.
+        let rhs_logical_slice: Vec<f32> = (0..k * n).map(|idx| (idx + 10) as f32).collect();
+        let (kn_strides, rhs_phys) = layout_matrix(
+            k,
+            n,
+            std::slice::from_ref(&rhs_logical_slice),
+            rhs_transposed,
+        );
+        let mut rhs_strides = vec![0i64];
+        rhs_strides.extend(kn_strides);
+
+        let lhs_shape = vec![b, m, k];
+        let rhs_shape = vec![b, k, n];
+        let out_shape = vec![b, m, n];
+        let out_strides = vec![m * n, n, 1];
+
+        let lhs_d = desc(&lhs_shape, &lhs_strides, ElementKind::F32);
+        let rhs_d = desc(&rhs_shape, &rhs_strides, ElementKind::F32);
+        let out_d = desc(&out_shape, &out_strides, ElementKind::F32);
+
+        // View-free (see the probe note above): no `.with_views(...)` call.
+        let op = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::batched_matmul(),
+            reduced(0),
+        );
+        let kk_key = key(OpCategory::Gemm, &[lhs_d, rhs_d, out_d]);
+        let plan = build_plan(&op, &kk_key);
+
+        let lhs_buf = f32b(&lhs_shape, &lhs_phys);
+        // Buffer shape is a storage convenience (only `.bytes`/`.base_offset`
+        // are read by `read_strided`; the OperandDesc `rhs_d` above supplies
+        // the strides that actually drive address math) — [k, n] holds
+        // exactly the one slice's `k*n` elements, matching Task 6's
+        // convention of sizing the buffer to the logical (here: per-slice)
+        // element count.
+        let rhs_buf = f32b(&[k, n], &rhs_phys);
+        let got = f32s(&evaluate(&plan, &[lhs_d, rhs_d, out_d], &[lhs_buf, rhs_buf], &[])[0]);
+
+        // From-scratch reference, independent of `eval_contraction`: the SAME
+        // rhs slice for every batch, K ascending.
+        let mut want = vec![0f32; (b * m * n) as usize];
+        for bi in 0..b {
+            for mi in 0..m {
+                for ni in 0..n {
+                    let mut acc = 0f32;
+                    for ki in 0..k {
+                        let a = lhs_logical[bi as usize][(mi * k + ki) as usize];
+                        let rv = rhs_logical_slice[(ki * n + ni) as usize];
+                        acc += a * rv;
+                    }
+                    want[(bi * m * n + mi * n + ni) as usize] = acc;
+                }
+            }
+        }
+        assert_eq!(
+            got, want,
+            "broadcast-KV cell mismatch: rhs_transposed={rhs_transposed} \
+             (the SAME rhs slice must be read for every batch)"
+        );
+    }
+
+    // Cell 1: broadcast-batch rhs, canonical [K,N] storage order (strides
+    // [0,n,1]) — the plain GQA broadcast-KV case.
+    #[test]
+    fn oracle_broadcast_kv_canonical_rhs_matches_reference() {
+        assert_broadcast_kv_matches_reference(false);
+    }
+
+    // Cell 2: broadcast-batch rhs, transposed [K,N] storage order (physically
+    // [N,K] per slice, strides [0,1,k]) — the real Kᵀ+GQA cell.
+    #[test]
+    fn oracle_broadcast_kv_transposed_rhs_matches_reference() {
+        assert_broadcast_kv_matches_reference(true);
     }
 
     // --- compare helper -----------------------------------------------------
