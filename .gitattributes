@@ -1,0 +1,5 @@
+# Golden CUDA source is compared byte-for-byte against the emitter's LF output
+# (`include_str!` in the contraction byte-identity tests). The emitter always
+# writes '\n'; force these goldens to LF on checkout so byte-identity holds on
+# Windows too (autocrlf would otherwise convert them to CRLF and fail the test).
+crates/baracuda-kernelgen/src/goldens/*.cu text eol=lf

@@ -17,12 +17,14 @@ use baracuda_cuda_sys::{CUevent, CUstream};
 /// runtime-side `cudaStream_t`. Non-owning — the driver Stream still owns
 /// the underlying CUDA resource.
 pub trait DriverStreamExt {
+    /// Returns the underlying `cudaStream_t` handle. Non-owning.
     fn as_raw_runtime(&self) -> cudaStream_t;
 }
 
 /// Extension trait: view a driver-side [`baracuda_driver::Event`] as a
 /// runtime-side `cudaEvent_t`.
 pub trait DriverEventExt {
+    /// Returns the underlying `cudaEvent_t` handle. Non-owning.
     fn as_raw_runtime(&self) -> cudaEvent_t;
 }
 

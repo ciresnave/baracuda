@@ -357,18 +357,18 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
             ref epilogue,
             ..
         } => {
-            // v1 admissibility: the canonical rank-2 dense matmul cell OR its
-            // rank-3 batched form, keyed with contraction facts and an epilogue
-            // over the K-sum (+ optional fused bias) only.
-            let m2 = crate::ir::ContractionAxes::matmul();
-            let m3 = crate::ir::ContractionAxes::batched_matmul();
-            let ax = (axes.lhs.as_slice(), axes.rhs.as_slice());
-            assert!(
-                ax == (m2.lhs.as_slice(), m2.rhs.as_slice())
-                    || ax == (m3.lhs.as_slice(), m3.rhs.as_slice()),
-                "contraction v1: canonical rank-2 matmul or rank-3 batched-matmul \
-                 axis roles only"
-            );
+            // v1 admissibility: role-validated (general predicate over axis
+            // roles, not just the two canonical rank-2/rank-3 constructors),
+            // keyed with contraction facts and an epilogue over the K-sum
+            // (+ optional fused bias) only.
+            // Expected role-vector length = the StructureKey's operand rank, NOT
+            // `axes.*.len()` (which would make the length check vacuous). This
+            // rejects a malformed OpDef whose contraction role vectors disagree
+            // with the keyed operand rank before it can panic downstream.
+            let expect_rank = key.rank as usize;
+            if let Err(msg) = validate_contraction_roles(axes, expect_rank, expect_rank) {
+                panic!("contraction roles: {msg}");
+            }
             assert!(
                 key.contraction.is_some(),
                 "contraction cell must carry ContractionKey facts (rank-2 dense \
@@ -662,6 +662,63 @@ fn contraction_epilogue_admissible(e: &crate::ir::ScalarExpr, n_inputs: u8) -> b
                 && contraction_epilogue_admissible(b, n_inputs)
         }
     }
+}
+
+/// Validate that a [`crate::ir::ContractionAxes`] role assignment is legal for
+/// operands of the given ranks: the role vector must match the operand's rank,
+/// each side must carry exactly the free role it's allowed to produce (`lhs` ⇒
+/// one `FreeM`, no `FreeN`; `rhs` ⇒ one `FreeN`, no `FreeM`), exactly one
+/// `ContractedK` per operand (multi-K-group contraction is deferred past v1),
+/// and `lhs`/`rhs` must agree on how many `Batch` axes they carry. A pure
+/// predicate over roles only — it does not look at concrete extents/strides.
+/// Consulted by [`build_plan`]'s `Access::Contraction` arm.
+pub(crate) fn validate_contraction_roles(
+    axes: &crate::ir::ContractionAxes,
+    lhs_rank: usize,
+    rhs_rank: usize,
+) -> Result<(), String> {
+    use crate::ir::AxisRole::*;
+    if axes.lhs.len() != lhs_rank || axes.rhs.len() != rhs_rank {
+        return Err("role vector length must equal operand rank".into());
+    }
+    let count =
+        |v: &[crate::ir::AxisRole], r: crate::ir::AxisRole| v.iter().filter(|&&x| x == r).count();
+    if count(&axes.lhs, FreeM) != 1 {
+        return Err("lhs must have exactly one FreeM".into());
+    }
+    if count(&axes.lhs, FreeN) != 0 {
+        return Err("lhs must not carry FreeN".into());
+    }
+    if count(&axes.rhs, FreeN) != 1 {
+        return Err("rhs must have exactly one FreeN".into());
+    }
+    if count(&axes.rhs, FreeM) != 0 {
+        return Err("rhs must not carry FreeM".into());
+    }
+    // single K-group in v1
+    if count(&axes.lhs, ContractedK) != 1 || count(&axes.rhs, ContractedK) != 1 {
+        return Err("v1: exactly one ContractedK per operand (multi-group deferred)".into());
+    }
+    // Batch structure — v1 lowers a SINGLE batch coordinate (`blockIdx.z`), so a
+    // contraction operand is rank-2 (no Batch) or rank-3 (exactly one Batch); 2+
+    // Batch axes (rank >= 4) cannot be emitted (the emitter's `ext(Batch)` has no
+    // second batch coordinate). Each operand's Batch count must equal `rank - 2`,
+    // and lhs/rhs must agree — a batched matmul needs BOTH operands batched (a
+    // rank-3 · rank-2 pair is illegal).
+    if !matches!(lhs_rank, 2 | 3) || !matches!(rhs_rank, 2 | 3) {
+        return Err("v1: contraction operands must be rank-2 or rank-3".into());
+    }
+    let lhs_batch = count(&axes.lhs, Batch);
+    let rhs_batch = count(&axes.rhs, Batch);
+    if lhs_batch != lhs_rank - 2 || rhs_batch != rhs_rank - 2 {
+        return Err(
+            "v1: rank-3 carries exactly one Batch and rank-2 none (single batch coord)".into(),
+        );
+    }
+    if lhs_batch != rhs_batch {
+        return Err("lhs and rhs must share the same batch-axis count".into());
+    }
+    Ok(())
 }
 
 /// The access role of a [`Access::RowReduce`] input operand, from its layout.
@@ -1041,11 +1098,11 @@ fn assert_valid_views(op: &OpDef, key: &StructureKey) {
     }
     // From here at least one real (address- or recognition-bearing) view.
     assert!(
-        matches!(op.access, Access::Elementwise),
-        "OpDef '{name}': a non-Identity View is Access::Elementwise-only in v1 — a \
-         {}-class op has its own axis machinery (reduced/contracted/feature axes) \
-         that a per-input read-through would double-count; a view on it must be \
-         Identity",
+        matches!(op.access, Access::Elementwise | Access::Contraction { .. }),
+        "OpDef '{name}': a non-Identity View is admitted only on Access::Elementwise \
+         or Access::Contraction in v1 — a {}-class op has its own axis machinery \
+         (reduced/feature axes) that a per-input read-through would double-count; a \
+         view on it must be Identity",
         access_tag(&op.access)
     );
     assert!(
@@ -3313,6 +3370,72 @@ fn vec_width_elems(v: VecWidth) -> u32 {
 }
 
 #[cfg(test)]
+mod contraction_role_validate {
+    //! `validate_contraction_roles` unit tests: role-vector length, per-operand
+    //! role-count legality (exactly one FreeM/FreeN on the correct side, exactly
+    //! one ContractedK — multi-group deferred to v2), and lhs/rhs batch-count
+    //! agreement. Pure predicate, wired into `build_plan`'s `Access::Contraction`
+    //! arm (Task 4).
+    use super::validate_contraction_roles;
+
+    #[test]
+    fn role_legality() {
+        use crate::ir::{AxisRole::*, ContractionAxes};
+        // canonical constructors pass
+        assert!(validate_contraction_roles(&ContractionAxes::matmul(), 2, 2).is_ok());
+        assert!(validate_contraction_roles(&ContractionAxes::batched_matmul(), 3, 3).is_ok());
+        // transposed role order passes (rhs [N,K] → roles [FreeN, ContractedK])
+        let t = ContractionAxes {
+            lhs: vec![FreeM, ContractedK],
+            rhs: vec![FreeN, ContractedK],
+        };
+        assert!(validate_contraction_roles(&t, 2, 2).is_ok());
+        // batch axis in the middle passes
+        let mid = ContractionAxes {
+            lhs: vec![FreeM, Batch, ContractedK],
+            rhs: vec![Batch, ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&mid, 3, 3).is_ok());
+        // illegal: two FreeM
+        let bad_m = ContractionAxes {
+            lhs: vec![FreeM, FreeM],
+            rhs: vec![ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&bad_m, 2, 2).is_err());
+        // illegal: FreeN on lhs
+        let bad_n = ContractionAxes {
+            lhs: vec![FreeN, ContractedK],
+            rhs: vec![ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&bad_n, 2, 2).is_err());
+        // illegal: mismatched batch count
+        let bad_b = ContractionAxes {
+            lhs: vec![Batch, FreeM, ContractedK],
+            rhs: vec![ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&bad_b, 3, 2).is_err());
+        // illegal: two K (multi-group deferred)
+        let bad_k = ContractionAxes {
+            lhs: vec![FreeM, ContractedK, ContractedK],
+            rhs: vec![ContractedK, ContractedK, FreeN],
+        };
+        assert!(validate_contraction_roles(&bad_k, 3, 3).is_err());
+        // illegal: 2+ Batch axes (rank-4) — v1 lowers a SINGLE batch coordinate
+        // (blockIdx.z); the old matched-count-only check wrongly accepted this.
+        let two_batch = ContractionAxes {
+            lhs: vec![Batch, Batch, FreeM, ContractedK],
+            rhs: vec![Batch, Batch, ContractedK, FreeN],
+        };
+        assert!(
+            validate_contraction_roles(&two_batch, 4, 4).is_err(),
+            "2+ Batch (rank-4) is out of v1's single-batch-coord scope"
+        );
+        // illegal: role-vector length != rank
+        assert!(validate_contraction_roles(&ContractionAxes::matmul(), 3, 2).is_err());
+    }
+}
+
+#[cfg(test)]
 mod multi_output_validate {
     //! Increment-1 multi-output gate-rejection tests + the hetero (dropout-class)
     //! per-output-dtype gates (G1/G3/G4). Per the house rule these call
@@ -3884,10 +4007,12 @@ mod view_gate_validate {
     }
 
     #[test]
-    #[should_panic(expected = "Elementwise-only")]
+    #[should_panic(expected = "admitted only on Access::Elementwise")]
     fn permute_view_on_reduction_rejected() {
         // A non-Identity view on a Reduction op: rejected (reductions own their
-        // axis machinery). Build the OpDef with a view via with_views.
+        // axis machinery). Build the OpDef with a view via with_views. Task 4
+        // widened Gate B's admitted set to Elementwise|Contraction and updated
+        // its message accordingly — Reduction is still outside that set.
         let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum)
             .with_views(vec![View::Permute { perm: vec![1, 0] }]);
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
@@ -3968,6 +4093,53 @@ mod view_gate_validate {
         let o = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
         let _ = build_plan(&op, &key); // no panic — trivially-Identity pass-through
+    }
+
+    #[test]
+    fn contraction_admits_permute_view_on_rhs() {
+        use crate::ir::{ContractionAxes, View, reduced};
+        // matmul with a Permute (transpose) view on rhs; lhs Identity.
+        // views.len() MUST equal n_inputs (== 2 for a bias-free matmul).
+        let op = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        )
+        .with_views(vec![View::Identity, View::Permute { perm: vec![1, 0] }]);
+        // Transposed-rhs key from Task 2's fixture: rhs physically [N,K] (K unit-stride).
+        let lhs = OperandDesc::new(2, &[8, 16], &[16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[16, 4], &[1, 16], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let plan = build_plan(&op, &key);
+        assert!(
+            matches!(plan.schedule, Schedule::Contraction),
+            "permute-viewed contraction must route to Schedule::Contraction, got {:?}",
+            plan.schedule
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "exactly one FreeM")]
+    fn contraction_rejects_illegal_roles() {
+        use crate::ir::{AxisRole::*, ContractionAxes, reduced};
+        // Illegal: two FreeM on lhs. OpDef::contraction takes axes directly.
+        let op = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes {
+                lhs: vec![FreeM, FreeM],
+                rhs: vec![ContractedK, FreeN],
+            },
+            reduced(0),
+        );
+        // Canonical key is fine — role validation panics before the key assert.
+        let lhs = OperandDesc::new(2, &[8, 16], &[16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[16, 4], &[4, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
     }
 }
 

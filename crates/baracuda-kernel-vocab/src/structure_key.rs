@@ -221,6 +221,85 @@ pub enum MpCode {
     Rm,
 }
 
+/// Storage-order class of a contraction operand: `perm[d]` is the storage axis
+/// read at role/logical position `d` (identity = canonical row-major). Copy,
+/// heap-free; the identity default serializes byte-identically (additive codec).
+///
+/// `Eq`/`Hash` are HAND-WRITTEN, not derived, and are keyed on `(rank,
+/// perm())` only — the don't-care tail of `perm` past `rank` is excluded.
+/// `identity(rank)` fills the *entire* `[u8; MAX_RANK]` array with
+/// `[0,1,…,MAX_RANK-1]`, while `from_perm(p)` fills only `perm[..p.len()]`
+/// and leaves the tail zeroed; the two constructors can therefore produce
+/// byte-different arrays for the SAME logical permutation (e.g. `identity(2)`
+/// = `[0,1,2,3,4,5,6,7]` vs `from_perm(&[0,1])` = `[0,1,0,0,0,0,0,0]`), and a
+/// derived `Eq`/`Hash` (which compares/hashes the full array) would wrongly
+/// treat them as distinct. `ContractionKey` embeds this type and derives
+/// `Eq`/`Hash` itself for dispatch-table keying, so padding-invariance here
+/// is load-bearing for the whole key.
+#[derive(Copy, Clone, Debug)]
+pub struct LayoutOrder {
+    perm: [u8; MAX_RANK],
+    rank: u8,
+}
+impl Default for LayoutOrder {
+    fn default() -> Self {
+        Self::identity(0)
+    }
+}
+impl PartialEq for LayoutOrder {
+    fn eq(&self, other: &Self) -> bool {
+        self.rank == other.rank && self.perm() == other.perm()
+    }
+}
+impl Eq for LayoutOrder {}
+impl std::hash::Hash for LayoutOrder {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.rank.hash(state);
+        self.perm().hash(state);
+    }
+}
+impl LayoutOrder {
+    /// The identity (canonical row-major) order for a `rank`-dimensional operand.
+    #[must_use]
+    pub fn identity(rank: u8) -> Self {
+        let mut perm = [0u8; MAX_RANK];
+        for (i, p) in perm.iter_mut().enumerate() {
+            *p = i as u8;
+        }
+        Self { perm, rank }
+    }
+    /// Build a `LayoutOrder` from an explicit permutation.
+    ///
+    /// # Panics (debug only)
+    /// Debug-asserts `p.len() <= MAX_RANK`; a release build silently panics
+    /// later on the slice-index copy instead (unchanged from before — this is
+    /// a clearer diagnostic for a miscall, not a new invariant).
+    #[must_use]
+    pub fn from_perm(p: &[u8]) -> Self {
+        debug_assert!(
+            p.len() <= MAX_RANK,
+            "LayoutOrder::from_perm: permutation length {} exceeds MAX_RANK {MAX_RANK}",
+            p.len()
+        );
+        let mut perm = [0u8; MAX_RANK];
+        perm[..p.len()].copy_from_slice(p);
+        Self {
+            perm,
+            rank: p.len() as u8,
+        }
+    }
+    /// `true` if this order is the canonical row-major identity.
+    #[must_use]
+    pub fn is_identity(&self) -> bool {
+        (0..self.rank as usize).all(|i| self.perm[i] as usize == i)
+    }
+    /// The permutation (`perm[d]` = storage axis at logical position `d`).
+    #[must_use]
+    pub fn perm(&self) -> &[u8] {
+        &self.perm[..self.rank as usize]
+    }
+}
+
 /// Contraction-only structure facts (design §5.4 / the item-10 spike), carried
 /// as `StructureKey::contraction` — `None` for every non-contraction cell so
 /// non-GEMM tokens serialize **byte-identically** to the pre-contraction codec
@@ -235,6 +314,14 @@ pub enum MpCode {
 /// `out`/`mp` — the RFC's fix for the §6.6-0018 collision (a mixed-input FP8
 /// GEMM and a homogeneous one, or SIMT-f32 and TF32-f32, previously derived
 /// byte-identical tokens).
+///
+/// The lhs/rhs `LayoutOrder` fields (item 1 of the layout/shape ramp) are
+/// additive like `batch`: an identity order serializes byte-identically to
+/// the pre-order codec, so only a transposed/permuted operand adds a token
+/// component. `derive_contraction` derives real (possibly non-identity)
+/// values via [`classify_mat_layout`] — a packed transpose/permutation of
+/// lhs/rhs is accepted (sub-spec A); a genuinely non-packed operand still
+/// declines the whole cell to `None` (sub-spec D).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ContractionKey {
     /// Size class of M (lhs rows / out rows).
@@ -252,6 +339,10 @@ pub struct ContractionKey {
     /// precision group, per the RFC: batch is an iteration-structure fact, so
     /// it sits with the geometry).
     pub batch: Option<SizeClass>,
+    /// Storage-order class of the lhs operand (identity = canonical row-major).
+    pub lhs_order: LayoutOrder,
+    /// Storage-order class of the rhs operand (identity = canonical row-major).
+    pub rhs_order: LayoutOrder,
     /// Operand-1 (weight) dtype — canonical (never `F32Strict`; the strict axis
     /// rides [`ContractionKey::mp`]).
     pub wdt: ElementKind,
@@ -579,11 +670,75 @@ const fn contraction_mp(primary: ElementKind) -> MpCode {
     }
 }
 
+/// Classify a contraction operand's storage order from its strides. Returns the
+/// permutation `perm` such that role/logical axis `d` reads storage axis `perm[d]`,
+/// iff the operand is a PACKED permutation of a contiguous tensor over its
+/// NON-broadcast axes (every non-broadcast axis' |stride| equals the product of
+/// the non-broadcast extents storage-inner to it). `None` if genuinely non-packed
+/// among its non-broadcast axes (arbitrary strides → sub-spec D).
+///
+/// Stride-0 (broadcast) axes are ADMITTED: they occupy no storage extent, so they
+/// are excluded from both the packed check and the running extent product — a
+/// GQA broadcast-KV operand (e.g. batch broadcast over `[B,K,N]`) classifies
+/// successfully as long as its remaining (real) axes are packed. The storage
+/// order this returns is over those non-broadcast axes; a broadcast axis still
+/// gets a deterministic (but address-irrelevant) `perm` slot, since the emitter's
+/// `operand_stride_binding` filters broadcast axes out before consuming `perm`.
+///
+/// Role-agnostic: storage order derives from strides alone, so this takes no
+/// `AxisRole`/`ContractionAxes` argument (roles enter at the plan/emitter layer).
+/// Rank-generic — subsumes both the rank-2 and rank-3 `dense` checks below: a
+/// canonical row-major operand's axes already sort into ascending order, so
+/// `perm` comes out as the identity permutation (byte-identity with the
+/// pre-Task-2 codec for every canonical cell).
+fn classify_mat_layout(od: &OperandDesc) -> Option<LayoutOrder> {
+    let rank = od.rank as usize;
+    // Storage order = axes sorted by descending |stride| (outermost first). A
+    // stride-0 (broadcast) axis sorts smallest (innermost). Ties (equal |stride|
+    // — extent-1 axes, or multiple stride-0 broadcast axes) break on the axis
+    // index so equivalent layouts canonicalize to the SAME order deterministically
+    // (a bare `sort_by_key` is already stable, so this only makes the tie-break
+    // explicit + robust to a future switch to an unstable sort).
+    let mut axes: Vec<usize> = (0..rank).collect();
+    axes.sort_by(|&a, &b| {
+        core::cmp::Reverse(od.strides[a].abs())
+            .cmp(&core::cmp::Reverse(od.strides[b].abs()))
+            .then(a.cmp(&b))
+    });
+    // Verify packed over the non-broadcast axes: walking storage-inner→outer,
+    // |stride| must equal the running extent product. Broadcast axes occupy no
+    // storage extent, so they are skipped — neither packedness-checked nor
+    // multiplied into `acc`.
+    let mut acc: i64 = 1;
+    for &d in axes.iter().rev() {
+        if od.strides[d] == 0 {
+            continue; // broadcast axis: no storage extent — not part of the packed layout
+        }
+        if od.strides[d].abs() != acc {
+            return None; // non-packed → decline
+        }
+        acc = acc.saturating_mul(od.shape[d]);
+    }
+    // perm[logical d] = storage position of axis d. Here logical == operand axis
+    // index; storage position is `axes.iter().position(|&a| a == d)`.
+    let mut perm = [0u8; MAX_RANK];
+    for (d, p) in perm.iter_mut().enumerate().take(rank) {
+        *p = axes.iter().position(|&a| a == d).unwrap() as u8;
+    }
+    Some(LayoutOrder {
+        perm,
+        rank: od.rank,
+    })
+}
+
 /// [item 10] Derive contraction structure facts for the canonical rank-2
-/// row-major dense GEMM cell: `operands = [lhs [M,K], rhs [K,N], out [M,N]]`,
-/// all contiguous. Any other shape/layout/arity yields `None` — an honest
-/// "no contraction facts", never a guess. (Batched / transposed / strided
-/// contraction classes join with the node's growth.)
+/// row-major dense GEMM cell: `operands = [lhs [M,K], rhs [K,N], out [M,N]]`.
+/// `out` stays required-canonical (row-major) in v1 — output views are
+/// sub-spec B's scope. `lhs`/`rhs` classify through [`classify_mat_layout`]:
+/// a packed transpose/permutation now derives real `lhs_order`/`rhs_order`
+/// facts instead of being rejected outright; a genuinely non-packed operand
+/// still declines (`None`) to sub-spec D. Any other shape/arity yields `None`
+/// — an honest "no contraction facts", never a guess.
 fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<ContractionKey> {
     // 3 operands = plain `[lhs, rhs, out]`; 4 = fused bias `[lhs, rhs, bias, out]`
     // (the per-column `[N]` bias the epilogue reads). The bias rides the existing
@@ -614,15 +769,11 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
             let (m, k) = (lhs.shape[0], lhs.shape[1]);
             let (k2, n) = (rhs.shape[0], rhs.shape[1]);
             let dense = |o: &OperandDesc| o.strides[0] == o.shape[1] && o.strides[1] == 1;
-            if k != k2
-                || out.shape[0] != m
-                || out.shape[1] != n
-                || !dense(lhs)
-                || !dense(rhs)
-                || !dense(out)
-            {
+            if k != k2 || out.shape[0] != m || out.shape[1] != n || !dense(out) {
                 return None;
             }
+            let lhs_order = classify_mat_layout(lhs)?;
+            let rhs_order = classify_mat_layout(rhs)?;
             // A fused bias must be the DENSE per-column `[N]` vector (unit stride,
             // broadcast over M). The emitter reads a hardcoded `in2[col]`, so a
             // strided or broadcast (stride-0) bias would silently mis-read / read
@@ -639,6 +790,8 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
                 k: SizeClass::of(k),
                 k_div: div_bucket(k),
                 batch: None,
+                lhs_order,
+                rhs_order,
                 wdt,
                 acc,
                 out: out_dt,
@@ -664,9 +817,22 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
                 || out.shape[0] != b
                 || out.shape[1] != m
                 || out.shape[2] != n
-                || !dense3(lhs)
-                || !dense3(rhs)
                 || !dense3(out)
+            {
+                return None;
+            }
+            let lhs_order = classify_mat_layout(lhs)?;
+            let rhs_order = classify_mat_layout(rhs)?;
+            // The v1 emitter binds the batch axis as the OUTERMOST storage stride
+            // (`blockIdx.z`), so `operand_stride_binding` never treats batch as a
+            // stride FACTOR (`ext(Batch)` is `unreachable!`). `classify_mat_layout`
+            // is role-agnostic and admits any packed permutation, including one that
+            // sorts a real batch axis storage-inner — decline that honestly here
+            // (sub-spec D) rather than let it reach the emitter's `ext(Batch)` panic.
+            // A BROADCAST batch (stride 0) is exempt: the emitter filters bcast axes
+            // before the factor loop, so it never reaches `ext(Batch)` either.
+            if (lhs.strides[0] != 0 && lhs_order.perm()[0] != 0)
+                || (rhs.strides[0] != 0 && rhs_order.perm()[0] != 0)
             {
                 return None;
             }
@@ -676,6 +842,8 @@ fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<Contra
                 k: SizeClass::of(k),
                 k_div: div_bucket(k),
                 batch: Some(SizeClass::of(b)),
+                lhs_order,
+                rhs_order,
                 wdt,
                 acc,
                 out: out_dt,
@@ -938,7 +1106,7 @@ impl StructureKey {
     /// Form: `sk<ver>|<op>|<dtype>|<arch>|<idx>|<work>|r<rank>|<op0>;…|<reduce>`
     /// where each operand is `<contig>/<bcasthex>/<vec>/<div>/<flip>`; a gem
     /// cell appends the contraction field
-    /// `c<m><n><k>/<kdiv>[/b<class>]/<wdt>/<acc>/<out>/<mp>`.
+    /// `c<m><n><k>/<kdiv>[/b<class>][/ol<digits>][/or<digits>]/<wdt>/<acc>/<out>/<mp>`.
     #[must_use]
     pub fn to_token(&self) -> String {
         let mut ops = String::new();
@@ -994,9 +1162,22 @@ impl StructureKey {
             if let Some(b) = c.batch {
                 token.push_str(&format!("/b{}", size_code(b)));
             }
+            // lhs/rhs `LayoutOrder` (item 1 of the layout/shape ramp): additive
+            // like `batch` — emitted only when non-identity, so a canonical
+            // (row-major) operand pair adds no token component. Each is
+            // independent (only rhs transposed ⇒ only `/or...` appears).
+            // Ordered lhs-then-rhs, both after `/b<class>` and before the
+            // precision group (geometry facts sit together).
+            if !c.lhs_order.is_identity() {
+                token.push_str(&format!("/ol{}", order_digits(&c.lhs_order)));
+            }
+            if !c.rhs_order.is_identity() {
+                token.push_str(&format!("/or{}", order_digits(&c.rhs_order)));
+            }
             // sk3 (D1+D4+D5): the REQUIRED trailing precision group
-            // `/<wdt>/<acc>/<out>/<mp>`. `<mp>` codes never begin with `b`, so
-            // the batch and precision groups never collide in spelling.
+            // `/<wdt>/<acc>/<out>/<mp>`. `<mp>` codes never begin with `b`, and
+            // no dtype/mp code begins with `ol`/`or` either, so the geometry
+            // (batch + order) and precision groups never collide in spelling.
             token.push_str(&format!(
                 "/{}/{}/{}/{}",
                 dtype_code(c.wdt),
@@ -1080,26 +1261,74 @@ impl StructureKey {
         let contraction = match parts.get(9) {
             None => None,
             Some(f) => {
-                // sk3 grammar: `c<m><n><k>/<kdiv>[/b<class>]/<wdt>/<acc>/<out>/<mp>`
-                // — e.g. `ctll/d16/f32/f32/f32/rm` or `ctll/d16/bt/f32/f32/f32/rm`.
-                // The parse is COMPONENT-COUNT-driven: 6 components = non-batched,
-                // 7 = batched (the third MUST then parse as `b<class>`). The
-                // precision group is REQUIRED — an sk2-shaped gem field (2 or 3
-                // components) is a typed decline, never a silent partial accept.
+                // sk3 grammar: `c<m><n><k>/<kdiv>[/b<class>][/ol<digits>]
+                // [/or<digits>]/<wdt>/<acc>/<out>/<mp>` — e.g. `ctll/d16/f32/
+                // f32/f32/rm`, `ctll/d16/bt/f32/f32/f32/rm`, or
+                // `ctll/d16/or10/f32/f32/f32/rm` (rhs transposed, no batch).
+                // The precision group is REQUIRED and is always the trailing 4
+                // components; the geometry tail between `<kdiv>` and the
+                // precision group holds 0-3 OPTIONAL components in the fixed
+                // order batch, lhs_order, rhs_order (mirroring emission order)
+                // — a component in the wrong slot, or a leftover unrecognized
+                // one, is a typed decline, never a silent partial accept.
                 let rest = f.strip_prefix('c')?;
                 let comps: Vec<&str> = rest.split('/').collect();
-                let (batch, prec) = match comps.len() {
-                    6 => (None, &comps[2..6]),
-                    7 => {
-                        let mut bcs = comps[2].strip_prefix('b')?.chars();
+                if comps.len() < 6 {
+                    return None;
+                }
+                let prec = &comps[comps.len() - 4..];
+                let mut mid = comps[2..comps.len() - 4].iter();
+                let mut cur = mid.next();
+
+                let batch = if let Some(comp) = cur {
+                    if let Some(b_rest) = comp.strip_prefix('b') {
+                        let mut bcs = b_rest.chars();
                         let b = size_from_code(bcs.next()?)?;
                         if bcs.next().is_some() {
                             return None;
                         }
-                        (Some(b), &comps[3..7])
+                        cur = mid.next();
+                        Some(b)
+                    } else {
+                        None
                     }
-                    _ => return None,
+                } else {
+                    None
                 };
+                // A batched cell is rank-3, a plain cell rank-2 (the same rule
+                // `derive_contraction` uses) — the rank an absent `/ol`/`/or`
+                // must reconstruct as its identity order, so the struct
+                // round-trips byte-for-byte through a canonical cell.
+                let contraction_rank: u8 = if batch.is_some() { 3 } else { 2 };
+
+                let lhs_order = if let Some(comp) = cur {
+                    if let Some(digits) = comp.strip_prefix("ol") {
+                        let o = order_from_digits(digits, contraction_rank)?;
+                        cur = mid.next();
+                        o
+                    } else {
+                        LayoutOrder::identity(contraction_rank)
+                    }
+                } else {
+                    LayoutOrder::identity(contraction_rank)
+                };
+                let rhs_order = if let Some(comp) = cur {
+                    if let Some(digits) = comp.strip_prefix("or") {
+                        let o = order_from_digits(digits, contraction_rank)?;
+                        cur = mid.next();
+                        o
+                    } else {
+                        LayoutOrder::identity(contraction_rank)
+                    }
+                } else {
+                    LayoutOrder::identity(contraction_rank)
+                };
+                // Anything left unconsumed is a malformed/out-of-order geometry
+                // component.
+                if cur.is_some() {
+                    return None;
+                }
+
                 let mut cs = comps[0].chars();
                 let m = size_from_code(cs.next()?)?;
                 let n = size_from_code(cs.next()?)?;
@@ -1113,6 +1342,8 @@ impl StructureKey {
                     k,
                     k_div: div_from_code(comps[1])?,
                     batch,
+                    lhs_order,
+                    rhs_order,
                     wdt: dtype_from_code(prec[0])?,
                     acc: dtype_from_code(prec[1])?,
                     out: dtype_from_code(prec[2])?,
@@ -1168,10 +1399,254 @@ fn div_from_code(s: &str) -> Option<DivBucket> {
     })
 }
 
+/// Encode a [`LayoutOrder`]'s permutation as the token's `<digits>` component
+/// — one decimal digit per axis. `MAX_RANK` (8) keeps every value a single
+/// digit (0-7), so no separator between axes is needed.
+fn order_digits(o: &LayoutOrder) -> String {
+    o.perm().iter().map(u8::to_string).collect()
+}
+
+/// Decode a token's `<digits>` component (the [`order_digits`] encoding) back
+/// into a [`LayoutOrder`] for an operand of rank `expect_rank`. This parses an
+/// UNTRUSTED wire token, so it fully validates that the digits form a true
+/// permutation of `0..expect_rank` and returns `None` otherwise — a malformed
+/// order (wrong digit count for the contraction's rank, an out-of-range digit,
+/// or a duplicate) would build an inconsistent key that later panics when the
+/// emitter indexes `perm()[d]` past the operand's axes. Rejects, rather than
+/// panicking on the `[u8; MAX_RANK]` write, on:
+/// - a non-digit character;
+/// - a digit count `!= expect_rank` (a rank-2 order inside a rank-3 cell, etc.);
+/// - a digit `>= expect_rank` (out of range for a `0..rank` permutation);
+/// - a repeated digit (not a permutation).
+fn order_from_digits(s: &str, expect_rank: u8) -> Option<LayoutOrder> {
+    let n = s.chars().count();
+    let rank = expect_rank as usize;
+    if n == 0 || n > MAX_RANK || n != rank {
+        return None;
+    }
+    let mut perm = [0u8; MAX_RANK];
+    let mut seen: u16 = 0; // bitset of digits already used — rejects duplicates
+    for (i, ch) in s.chars().enumerate() {
+        let d = ch.to_digit(10)? as u8;
+        if (d as usize) >= rank {
+            return None; // out of range for a 0..rank permutation
+        }
+        let bit = 1u16 << d;
+        if seen & bit != 0 {
+            return None; // duplicate digit → not a permutation
+        }
+        seen |= bit;
+        perm[i] = d;
+    }
+    Some(LayoutOrder::from_perm(&perm[..n]))
+}
+
 #[cfg(test)]
 mod contraction_key_tests {
     use super::*;
     use crate::{ArchSku, ElementKind, OpCategory};
+
+    /// Canonical rank-2 dense matmul key (dense row-major lhs/rhs/out) — the
+    /// exact operand shapes/strides of [`gemm_rank2_dense_derives_and_round_trips`],
+    /// factored out so layout-order tests can build on it.
+    fn sample_matmul_key() -> StructureKey {
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn layout_order_eq_and_hash_are_padding_invariant() {
+        // `identity(2)` fills the WHOLE [u8; MAX_RANK] array ([0,1,2,3,4,5,6,7]);
+        // `from_perm(&[0,1])` fills only perm[..2] and leaves the tail zeroed
+        // ([0,1,0,0,0,0,0,0]). Both spell the same logical rank-2 identity
+        // permutation and MUST compare/hash equal — a derived Eq/Hash over the
+        // full array would wrongly treat them as distinct, which would silently
+        // break ContractionKey dispatch-table dedup (it derives Eq/Hash and
+        // embeds LayoutOrder).
+        use std::collections::HashSet;
+        let a = LayoutOrder::identity(2);
+        let b = LayoutOrder::from_perm(&[0, 1]);
+        assert_eq!(
+            a, b,
+            "identity(2) and from_perm(&[0,1]) are the same logical permutation"
+        );
+        let mut set = HashSet::new();
+        assert!(set.insert(a), "first insert always succeeds");
+        assert!(
+            !set.insert(b),
+            "b must hash+eq into a's bucket — inserting it must be a no-op"
+        );
+        assert_eq!(
+            set.len(),
+            1,
+            "padding-invariant Eq/Hash collapse both to one entry"
+        );
+    }
+
+    #[test]
+    fn contraction_layout_order_lhs_only_transposed_round_trips() {
+        // lhs storage order [1,0], rhs stays identity → only `/ol10` appears.
+        let canon = sample_matmul_key();
+        let mut lhs_trans = canon;
+        lhs_trans.contraction.as_mut().unwrap().lhs_order = LayoutOrder::from_perm(&[1, 0]);
+        let tok = lhs_trans.to_token();
+        assert!(tok.contains("/ol10"), "transposed lhs emits /ol10: {tok}");
+        assert!(
+            !tok.contains("/or"),
+            "rhs stays identity, no /or component: {tok}"
+        );
+        assert_eq!(
+            StructureKey::from_token(&tok).unwrap(),
+            lhs_trans,
+            "lhs-only transposed round-trips"
+        );
+    }
+
+    #[test]
+    fn contraction_layout_order_batch_and_both_orders_round_trip() {
+        // Same batched shapes as `gemm_batched_derives_and_round_trips_with_batch_class`,
+        // with BOTH operands additionally transposed — batch + lhs_order +
+        // rhs_order all present together in the token's geometry tail.
+        let lhs = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let rhs = OperandDesc::new(
+            3,
+            &[8, 4096, 4096],
+            &[4096 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let out = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let mut k = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let c = k.contraction.as_mut().expect("batched gemm derives facts");
+        assert_eq!(c.batch, Some(SizeClass::Tiny));
+        c.lhs_order = LayoutOrder::from_perm(&[0, 2, 1]);
+        c.rhs_order = LayoutOrder::from_perm(&[1, 0, 2]);
+        let tok = k.to_token();
+        assert!(
+            tok.ends_with("|ctll/d16/bt/ol021/or102/f32/f32/f32/rm"),
+            "batch, lhs_order, rhs_order all present in the fixed order: {tok}"
+        );
+        assert_eq!(
+            StructureKey::from_token(&tok),
+            Some(k),
+            "batch + both orders round-trip together"
+        );
+    }
+
+    #[test]
+    fn from_token_declines_reordered_and_duplicated_layout_order_components() {
+        let base = "sk3|gem|f32|cuda:sm89|ix32|grid|r2|\
+                    co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-";
+        // `/or...` before `/ol...` violates the fixed emission order (batch,
+        // then lhs_order, then rhs_order) the position-driven parser walks —
+        // it must decline rather than silently accept an out-of-order
+        // geometry tail.
+        assert_eq!(
+            StructureKey::from_token(&format!("{base}|ctll/d16/or10/ol10/f32/f32/f32/rm")),
+            None,
+            "reordered or-before-ol declines"
+        );
+        // A duplicated `/ol...` component: the second one is unconsumed
+        // leftover after the (single) lhs_order slot is filled — declines.
+        assert_eq!(
+            StructureKey::from_token(&format!("{base}|ctll/d16/ol10/ol10/f32/f32/f32/rm")),
+            None,
+            "duplicated ol component declines"
+        );
+    }
+
+    #[test]
+    fn from_token_declines_malformed_order_digits() {
+        // A valid order component's digits must be a TRUE permutation of the
+        // contraction's `0..rank`. `from_token` parses an untrusted wire token, so
+        // malformed digits must decline rather than build an inconsistent key that
+        // panics when the emitter indexes `perm()[d]`.
+        let r2 = "sk3|gem|f32|cuda:sm89|ix32|grid|r2|\
+                  co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-";
+        // out-of-range digit (7 >= rank 2)
+        assert_eq!(
+            StructureKey::from_token(&format!("{r2}|ctll/d16/or77/f32/f32/f32/rm")),
+            None,
+            "out-of-range order digit declines"
+        );
+        // duplicate digit — not a permutation
+        assert_eq!(
+            StructureKey::from_token(&format!("{r2}|ctll/d16/or00/f32/f32/f32/rm")),
+            None,
+            "duplicate order digit declines"
+        );
+        // digit count != contraction rank (3 digits in a rank-2 cell)
+        assert_eq!(
+            StructureKey::from_token(&format!("{r2}|ctll/d16/or102/f32/f32/f32/rm")),
+            None,
+            "order digit-count must match rank-2"
+        );
+        // A rank-3 (batched) cell with a rank-2 (2-digit) order — the `/bt/ol10`
+        // case: a rank-2 LayoutOrder inside a rank-3 contraction would later panic
+        // at `perm()[2]`. Must decline on the digit-count/rank mismatch.
+        let r3 = "sk3|gem|f32|cuda:sm89|ix32|grid|r3|\
+                  co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-";
+        assert_eq!(
+            StructureKey::from_token(&format!("{r3}|ctll/d16/bt/ol10/f32/f32/f32/rm")),
+            None,
+            "a 2-digit order in a rank-3 batched cell declines"
+        );
+        // Guard against over-rejection: a genuine 2-digit permutation still parses
+        // in a rank-2 cell, and a genuine 3-digit one in a rank-3 batched cell.
+        assert!(
+            StructureKey::from_token(&format!("{r2}|ctll/d16/or10/f32/f32/f32/rm")).is_some(),
+            "a valid 2-digit permutation order still parses (rank-2)"
+        );
+        assert!(
+            StructureKey::from_token(&format!("{r3}|ctll/d16/bt/or201/f32/f32/f32/rm")).is_some(),
+            "a valid 3-digit permutation order still parses (rank-3 batched)"
+        );
+    }
+
+    #[test]
+    fn contraction_layout_order_token_is_additive() {
+        // A canonical rank-2 matmul key: both orders identity → token unchanged.
+        let canon = sample_matmul_key();
+        let tok_canon = canon.to_token();
+        assert!(
+            !tok_canon.contains("/ol") && !tok_canon.contains("/or"),
+            "identity layout must emit no order component: {tok_canon}"
+        );
+        assert_eq!(
+            StructureKey::from_token(&tok_canon).unwrap(),
+            canon,
+            "canonical round-trips"
+        );
+
+        // A transposed-rhs key: rhs storage order [1,0] → adds `/or10`, round-trips.
+        let mut trans = canon;
+        trans.contraction.as_mut().unwrap().rhs_order = LayoutOrder::from_perm(&[1, 0]);
+        let tok_trans = trans.to_token();
+        assert!(
+            tok_trans.contains("/or10"),
+            "transposed rhs emits /or10: {tok_trans}"
+        );
+        assert_eq!(
+            StructureKey::from_token(&tok_trans).unwrap(),
+            trans,
+            "transposed round-trips"
+        );
+        assert_ne!(tok_trans, tok_canon, "transposed cell re-keys");
+    }
 
     #[test]
     fn gemm_rank2_dense_derives_and_round_trips() {
@@ -1197,6 +1672,170 @@ mod contraction_key_tests {
             "optional trailing field carries the required precision group: {tok}"
         );
         assert_eq!(StructureKey::from_token(&tok), Some(k), "round-trips");
+    }
+
+    #[test]
+    fn derive_contraction_accepts_transposed_rhs() {
+        // rhs logical [K,N]=[16,4] but physically stored [N,K]: K unit-stride,
+        // N strided by k=16 → transposed. lhs canonical [M,K].
+        let lhs = OperandDesc::new(2, &[8, 16], &[16, 1], ElementKind::F32, 256); // [M,K] row-major
+        let rhs = OperandDesc::new(2, &[16, 4], &[1, 16], ElementKind::F32, 256); // [K,N] but N strided by k=16, K unit → transposed store
+        let out = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256); // [M,N] row-major
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let c = key
+            .contraction
+            .expect("transposed rhs must still be a contraction");
+        assert!(c.lhs_order.is_identity(), "canonical lhs stays identity");
+        assert_eq!(c.rhs_order.perm(), &[1, 0], "transposed rhs order = [1,0]");
+    }
+
+    #[test]
+    fn derive_contraction_declines_nonpacked() {
+        // rhs with a stride that is neither unit nor an extent-product of the other axis
+        // (a genuine non-packed slice) → declines to sub-spec D (None).
+        let lhs = OperandDesc::new(2, &[8, 16], &[16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[16, 4], &[9, 1], ElementKind::F32, 256); // K-stride 9 ≠ n(=4), N-stride 1 → non-packed
+        let out = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        assert!(
+            key.contraction.is_none(),
+            "non-packed operand declines in v1 (sub-spec D)"
+        );
+    }
+
+    #[test]
+    fn derive_contraction_accepts_broadcast_batch_rhs() {
+        // Batched matmul, rhs KV broadcast over the batch/head axis (stride 0):
+        // GQA broadcast-KV. lhs [B,M,K] real batch; rhs [B,K,N] with B broadcast.
+        let lhs = OperandDesc::new(3, &[2, 8, 16], &[8 * 16, 16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(3, &[2, 16, 4], &[0, 4, 1], ElementKind::F32, 256); // B stride 0
+        let out = OperandDesc::new(3, &[2, 8, 4], &[8 * 4, 4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let c = key
+            .contraction
+            .expect("broadcast-batch rhs must still derive a contraction");
+        // Hand-trace (rhs strides [0,4,1]): sort desc |stride| -> axes=[1,2,0]
+        // (axis1 stride 4, axis2 stride 1, axis0 stride 0). Walk reversed
+        // [0,2,1]: d=0 (axis0, stride 0) -> skipped (broadcast). d=2 (axis2,
+        // stride 1): |1|==acc(1) ok, acc=1*shape[2]=4. d=1 (axis1, stride 4):
+        // |4|==acc(4) ok, acc=4*shape[1]=64. No decline -> admitted.
+        // perm[0]=pos(axis0 in [1,2,0])=2; perm[1]=pos(axis1)=0;
+        // perm[2]=pos(axis2)=1 -> perm=[2,0,1].
+        assert_eq!(
+            c.rhs_order.perm(),
+            &[2, 0, 1],
+            "broadcast-batch rhs storage order"
+        );
+        // lhs is a real (non-broadcast) canonical batched operand -> identity order.
+        assert!(c.lhs_order.is_identity(), "real-batch lhs stays identity");
+    }
+
+    #[test]
+    fn derive_contraction_broadcast_batch_rhs_round_trips() {
+        let lhs = OperandDesc::new(3, &[2, 8, 16], &[8 * 16, 16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(3, &[2, 16, 4], &[0, 4, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(3, &[2, 8, 4], &[8 * 4, 4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        assert!(
+            key.contraction.is_some(),
+            "broadcast-batch rhs derives a contraction"
+        );
+        // The rhs operand's bcast mask marks axis 0 (batch broadcast) — an
+        // existing, already-tokenized per-operand class (item 03/OperandKey).
+        assert!(
+            key.operands[1].bcast.is_set(0),
+            "rhs operand carries the /bcast mask for axis 0"
+        );
+        let tok = key.to_token();
+        assert!(
+            tok.contains("/or"),
+            "non-identity rhs order emits an /or component: {tok}"
+        );
+        assert_eq!(
+            StructureKey::from_token(&tok),
+            Some(key),
+            "broadcast-batch rhs round-trips: both /or (order) and /bcast (mask) survive"
+        );
+    }
+
+    #[test]
+    fn classify_mat_layout_broadcast_admission_is_byte_identical_for_canonical_cells() {
+        // Rank-2: same fixture and pinned token suffix as
+        // `gemm_rank2_dense_derives_and_round_trips` — no stride-0 axis anywhere,
+        // so the new broadcast skip never fires and the token must be unchanged.
+        let canon2 = sample_matmul_key();
+        let tok2 = canon2.to_token();
+        assert!(
+            tok2.ends_with("|ctll/d16/f32/f32/f32/rm"),
+            "rank-2 canonical token unchanged by broadcast admission: {tok2}"
+        );
+        // Rank-3: same fixture and pinned token suffix as
+        // `gemm_batched_derives_and_round_trips_with_batch_class`.
+        let lhs = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let rhs = OperandDesc::new(
+            3,
+            &[8, 4096, 4096],
+            &[4096 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let out = OperandDesc::new(
+            3,
+            &[8, 8, 4096],
+            &[8 * 4096, 4096, 1],
+            ElementKind::F32,
+            256,
+        );
+        let canon3 = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let tok3 = canon3.to_token();
+        assert!(
+            tok3.ends_with("|ctll/d16/bt/f32/f32/f32/rm"),
+            "rank-3 canonical token unchanged by broadcast admission: {tok3}"
+        );
+    }
+
+    #[test]
+    fn derive_contraction_declines_nonpacked_among_nonbroadcast_axes() {
+        // rhs [2,16,4] broadcast batch (stride 0) but K-stride 9 != n(=4) among
+        // the non-broadcast axes -> genuinely non-packed there. Broadcast
+        // admission must not accidentally admit this: still declines.
+        let lhs = OperandDesc::new(3, &[2, 8, 16], &[8 * 16, 16, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(3, &[2, 16, 4], &[0, 9, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(3, &[2, 8, 4], &[8 * 4, 4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        assert!(
+            key.contraction.is_none(),
+            "broadcast admission must not admit an operand non-packed among its non-broadcast axes"
+        );
+    }
+
+    #[test]
+    fn derive_contraction_declines_batch_inner_packed_layout() {
+        // A PACKED batched operand that stores the batch axis storage-INNER (not
+        // outermost) is out of v1 scope: the emitter binds batch as blockIdx.z
+        // (outermost), so a batch-inner batch would reach ext(Batch)'s
+        // `unreachable!`. classify_mat_layout is role-agnostic and ADMITS it
+        // (packed), so derive_contraction must decline it honestly (sub-spec D)
+        // rather than let it reach the emitter's panic.
+        //
+        // lhs [B,M,K]=[2,8,16] strides [16,32,1]: storage order M-outer (32),
+        // batch-middle (16), K-inner (1). classify is packed (max offset
+        // 7*32+1*16+15 = 255 < 256) and yields perm=[1,0,2] — batch (axis 0) at
+        // storage position 1, NOT 0 — so the guard declines. rhs/out canonical.
+        let lhs = OperandDesc::new(3, &[2, 8, 16], &[16, 32, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(3, &[2, 16, 4], &[16 * 4, 4, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(3, &[2, 8, 4], &[8 * 4, 4, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        assert!(
+            key.contraction.is_none(),
+            "a packed-but-batch-inner batched operand must decline (else it panics at the emitter's ext(Batch))"
+        );
     }
 
     #[test]
@@ -1385,10 +2024,19 @@ mod contraction_key_tests {
             Some(k),
             "batched round-trips"
         );
-        // A non-dense rank-3 lhs declines (v1 is dense row-major only).
-        let nd = OperandDesc::new(3, &[8, 8, 4096], &[1, 8, 64], ElementKind::F32, 256);
+        // A genuinely non-packed rank-3 lhs still declines (Task 2: only a PACKED
+        // permutation now derives lhs_order/rhs_order — arbitrary strides still
+        // decline to sub-spec D). Note strides `[1, 8, 64]` would NOT qualify as
+        // "non-dense" any more: axis0 stride 1, axis1 stride 8 (=shape[0]),
+        // axis2 stride 64 (=shape[0]*shape[1]) is a valid packed permutation
+        // that Task 2 now accepts — this fixture instead perturbs the middle
+        // stride (9, not 8) so it fails the packed check.
+        let nd = OperandDesc::new(3, &[8, 8, 4096], &[1, 9, 64], ElementKind::F32, 256);
         let knd = structure_key(OpCategory::Gemm, &[nd, rhs, out], ArchSku::Sm89);
-        assert!(knd.contraction.is_none(), "non-dense rank-3 declines");
+        assert!(
+            knd.contraction.is_none(),
+            "genuinely non-packed rank-3 declines"
+        );
     }
 
     #[test]
@@ -1804,6 +2452,34 @@ fn op_from_code(s: &str) -> Option<OpCategory> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// spec/namespaces/cuda.md §4 — BACKS the "a `cuda:` capability-set is a single
+    /// scalar, no variable-length list" claim (which makes the §6.8-0007 digest
+    /// structurally unreachable) with a test rather than prose: every emitted token is a
+    /// single scalar, and a list-shaped token does not parse. A future range/list token
+    /// fails HERE rather than silently falsifying the annex.
+    #[test]
+    fn cuda_tokens_are_single_scalar() {
+        for v in [ArchSku::Sm80, ArchSku::Sm89, ArchSku::Sm90a] {
+            let t = arch_code(v);
+            let body = t
+                .strip_prefix("cuda:sm")
+                .unwrap_or_else(|| panic!("token {t} must start with `cuda:sm`"));
+            let digits = body.strip_suffix('a').unwrap_or(body);
+            assert!(
+                !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()),
+                "token {t}: sm-number must be non-empty ASCII digits, got {digits:?}"
+            );
+            assert!(
+                !t.bytes()
+                    .any(|b| matches!(b, b'+' | b',' | b'|' | b' ' | b'-')),
+                "token {t} carries a list/range separator; cuda: sets are single scalars (annex §4)"
+            );
+        }
+        // A list-shaped token must not parse — there is no multi-arch cuda: token.
+        assert!(arch_from_code("cuda:sm80+sm90a").is_none());
+        assert!(arch_from_code("cuda:sm80,sm90a").is_none());
+    }
 
     fn od(shape: &[i64], strides: &[i64], dtype: ElementKind, align: u32) -> OperandDesc {
         OperandDesc::new(shape.len(), shape, strides, dtype, align)
