@@ -2588,3 +2588,80 @@ ADVERTISED** (ride an existing Fuel `Conv2D` OpKind), a much larger fused-op sto
 would flip im2col from AOT-only to contract-carrying (needs the Fuel propose-first). The
 `(H_in,W_in)→(oH,oW)` conv arithmetic is a **runtime-launch-arg caller precondition**
 (the key carries no numeric extents — on-device-validated via initcheck).
+
+---
+
+## `contract_layout_validate.cu` — transposed rhs + GQA broadcast-KV (sub-spec A)
+
+On-device numeric proof for the sub-spec A contraction LAYOUT classes (Tasks
+1-9, `feat/ir-contraction-roles-layout`): the operand STRIDE pattern derives a
+discrete storage-order class via `classify_mat_layout`
+(`baracuda-kernel-vocab::structure_key`), and `emit_contraction` (`cuda.rs`)
+follows that class through extent-product address math — a broadcast
+(stride-0) axis is dropped from the binding entirely. Tasks 5/8 emit that
+address math; Tasks 6/9 proved it against the CPU oracle; this harness proves
+the **emitted kernels** on the RTX 4070:
+
+- **`bmm_transposed`** — batched `[B,M,K]·[B,K,N]`, rhs physically stored
+  `[B,N,K]` (K inner per slice): the SDPA `Q·Kᵀ` core. Proves the TRANSPOSED
+  binding `in1[b*k*n + col*k + kk]` (NOT the canonical `b*k*n + kk*n + col`).
+- **`bmm_gqa`** — batched `[B,M,K]·[B,K,N]`, rhs BROADCAST over batch (stride
+  0): GQA broadcast-KV, one KV slice shared by every batch/head group. Proves
+  the batch term is DROPPED — `in1[kk*n + col]`, no `b*k*n` prefix.
+- **`bmm_gqa_t`** (bonus third cell) — both at once (broadcast-batch AND
+  transposed rhs), the combined GQA+Kᵀ cell Task 9's CPU oracle validated:
+  `in1[col*k + kk]` (no batch term, transposed form).
+
+Method: diff the generated kernels vs a **host f64 reference**, same
+two-regime protocol as `contract_bias_batched_validate.cu`:
+
+- **Exactly-representable integer inputs, small K** (|partial sums| < 2²⁴) ⇒
+  the kernel's f32 accumulation is **bit-exact** to `(float)`(the f64
+  reference), asserted with `==` (max abs diff 0) — the load/stride
+  correctness proof: a mis-transposed or mis-broadcast rhs read changes the
+  exact value.
+- **Hashed pseudo-random inputs, large K** ⇒ f32 rounding genuinely diverges
+  from f64; asserted within a small relative tolerance (`< 1e-4`).
+
+**Negative controls (required — proves the harness bites):** two hand-written
+`extern "C"` kernels in the harness itself (NOT generated, deliberately WRONG
+bindings), diffed against the SAME correct reference:
+
+- `bmm_transposed_neg_canonical` reads the transposed-stored rhs with the
+  CANONICAL (non-transposed) binding — must diverge.
+- `bmm_gqa_neg_realstride` reads rhs with a REAL per-batch stride (as if the
+  broadcast axis were mishandled) over a buffer where batches `1..B-1` hold
+  DISTINCT decoy data a correct broadcast kernel must never read — must
+  diverge for those batches, while the real `bmm_gqa` kernel (which never
+  touches the decoy region) still passes on the identical buffer. The
+  `bmm_gqa` positive test itself doubles as a robustness check for exactly
+  this: it runs against the same decoy-filled buffer, so a passing result
+  already proves the kernel never reads batches `1..B-1`.
+
+A dedicated `check_neg` comparator asserts the OPPOSITE of `check` — it
+requires a LARGE divergence (`max_abs >= 1e-2`) and fails the harness
+(`g_fails++`) if a negative control does NOT diverge (the diff would then be
+blind to that bug class). No cuBLAS cross-check in this harness (self-contained,
+no `-lcublas` needed).
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+The companion example emits them (mirrors `emit_bias_batched`):
+
+```sh
+pwsh scripts/gpu-run.ps1 -Project baracuda -- powershell -Command "
+  cargo run -p baracuda-kernelgen --example emit_contract_layout -- <outdir>;
+  cp crates/baracuda-kernelgen/ondevice/contract_layout_validate.cu <outdir>/;
+  nvcc -O3 -arch=sm_89 <outdir>/contract_layout_validate.cu -o <outdir>/contract_layout_validate;
+  & <outdir>/contract_layout_validate;
+  compute-sanitizer --tool memcheck  <outdir>/contract_layout_validate san;
+  compute-sanitizer --tool initcheck <outdir>/contract_layout_validate san
+"
+```
+
+(Run from a Visual Studio dev shell so `nvcc` finds `cl.exe`; `gpu-run.ps1`
+serializes every GPU-touching step under the machine-wide `Global\gpu-run`
+lock — the whole generate→build→run→sanitize sequence should run as ONE
+wrapped invocation so the lock is held for the full session, not
+re-acquired per step.)
+
+**Last run:** TBD (controller runs on-device).
