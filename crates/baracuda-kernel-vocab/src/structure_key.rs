@@ -694,9 +694,17 @@ const fn contraction_mp(primary: ElementKind) -> MpCode {
 fn classify_mat_layout(od: &OperandDesc) -> Option<LayoutOrder> {
     let rank = od.rank as usize;
     // Storage order = axes sorted by descending |stride| (outermost first). A
-    // stride-0 (broadcast) axis sorts smallest (innermost).
+    // stride-0 (broadcast) axis sorts smallest (innermost). Ties (equal |stride|
+    // — extent-1 axes, or multiple stride-0 broadcast axes) break on the axis
+    // index so equivalent layouts canonicalize to the SAME order deterministically
+    // (a bare `sort_by_key` is already stable, so this only makes the tie-break
+    // explicit + robust to a future switch to an unstable sort).
     let mut axes: Vec<usize> = (0..rank).collect();
-    axes.sort_by_key(|&d| core::cmp::Reverse(od.strides[d].abs()));
+    axes.sort_by(|&a, &b| {
+        core::cmp::Reverse(od.strides[a].abs())
+            .cmp(&core::cmp::Reverse(od.strides[b].abs()))
+            .then(a.cmp(&b))
+    });
     // Verify packed over the non-broadcast axes: walking storage-inner→outer,
     // |stride| must equal the running extent product. Broadcast axes occupy no
     // storage extent, so they are skipped — neither packedness-checked nor
@@ -1295,7 +1303,7 @@ impl StructureKey {
 
                 let lhs_order = if let Some(comp) = cur {
                     if let Some(digits) = comp.strip_prefix("ol") {
-                        let o = order_from_digits(digits)?;
+                        let o = order_from_digits(digits, contraction_rank)?;
                         cur = mid.next();
                         o
                     } else {
@@ -1306,7 +1314,7 @@ impl StructureKey {
                 };
                 let rhs_order = if let Some(comp) = cur {
                     if let Some(digits) = comp.strip_prefix("or") {
-                        let o = order_from_digits(digits)?;
+                        let o = order_from_digits(digits, contraction_rank)?;
                         cur = mid.next();
                         o
                     } else {
@@ -1399,17 +1407,36 @@ fn order_digits(o: &LayoutOrder) -> String {
 }
 
 /// Decode a token's `<digits>` component (the [`order_digits`] encoding) back
-/// into a [`LayoutOrder`]. `None` on a non-digit character or a permutation
-/// longer than `MAX_RANK` (rather than panicking on the `[u8; MAX_RANK]`
-/// write) — this parses an untrusted wire token.
-fn order_from_digits(s: &str) -> Option<LayoutOrder> {
+/// into a [`LayoutOrder`] for an operand of rank `expect_rank`. This parses an
+/// UNTRUSTED wire token, so it fully validates that the digits form a true
+/// permutation of `0..expect_rank` and returns `None` otherwise — a malformed
+/// order (wrong digit count for the contraction's rank, an out-of-range digit,
+/// or a duplicate) would build an inconsistent key that later panics when the
+/// emitter indexes `perm()[d]` past the operand's axes. Rejects, rather than
+/// panicking on the `[u8; MAX_RANK]` write, on:
+/// - a non-digit character;
+/// - a digit count `!= expect_rank` (a rank-2 order inside a rank-3 cell, etc.);
+/// - a digit `>= expect_rank` (out of range for a `0..rank` permutation);
+/// - a repeated digit (not a permutation).
+fn order_from_digits(s: &str, expect_rank: u8) -> Option<LayoutOrder> {
     let n = s.chars().count();
-    if n == 0 || n > MAX_RANK {
+    let rank = expect_rank as usize;
+    if n == 0 || n > MAX_RANK || n != rank {
         return None;
     }
     let mut perm = [0u8; MAX_RANK];
+    let mut seen: u16 = 0; // bitset of digits already used — rejects duplicates
     for (i, ch) in s.chars().enumerate() {
-        perm[i] = ch.to_digit(10)? as u8;
+        let d = ch.to_digit(10)? as u8;
+        if (d as usize) >= rank {
+            return None; // out of range for a 0..rank permutation
+        }
+        let bit = 1u16 << d;
+        if seen & bit != 0 {
+            return None; // duplicate digit → not a permutation
+        }
+        seen |= bit;
+        perm[i] = d;
     }
     Some(LayoutOrder::from_perm(&perm[..n]))
 }
@@ -1539,6 +1566,54 @@ mod contraction_key_tests {
             StructureKey::from_token(&format!("{base}|ctll/d16/ol10/ol10/f32/f32/f32/rm")),
             None,
             "duplicated ol component declines"
+        );
+    }
+
+    #[test]
+    fn from_token_declines_malformed_order_digits() {
+        // A valid order component's digits must be a TRUE permutation of the
+        // contraction's `0..rank`. `from_token` parses an untrusted wire token, so
+        // malformed digits must decline rather than build an inconsistent key that
+        // panics when the emitter indexes `perm()[d]`.
+        let r2 = "sk3|gem|f32|cuda:sm89|ix32|grid|r2|\
+                  co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-";
+        // out-of-range digit (7 >= rank 2)
+        assert_eq!(
+            StructureKey::from_token(&format!("{r2}|ctll/d16/or77/f32/f32/f32/rm")),
+            None,
+            "out-of-range order digit declines"
+        );
+        // duplicate digit — not a permutation
+        assert_eq!(
+            StructureKey::from_token(&format!("{r2}|ctll/d16/or00/f32/f32/f32/rm")),
+            None,
+            "duplicate order digit declines"
+        );
+        // digit count != contraction rank (3 digits in a rank-2 cell)
+        assert_eq!(
+            StructureKey::from_token(&format!("{r2}|ctll/d16/or102/f32/f32/f32/rm")),
+            None,
+            "order digit-count must match rank-2"
+        );
+        // A rank-3 (batched) cell with a rank-2 (2-digit) order — the `/bt/ol10`
+        // case: a rank-2 LayoutOrder inside a rank-3 contraction would later panic
+        // at `perm()[2]`. Must decline on the digit-count/rank mismatch.
+        let r3 = "sk3|gem|f32|cuda:sm89|ix32|grid|r3|\
+                  co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-";
+        assert_eq!(
+            StructureKey::from_token(&format!("{r3}|ctll/d16/bt/ol10/f32/f32/f32/rm")),
+            None,
+            "a 2-digit order in a rank-3 batched cell declines"
+        );
+        // Guard against over-rejection: a genuine 2-digit permutation still parses
+        // in a rank-2 cell, and a genuine 3-digit one in a rank-3 batched cell.
+        assert!(
+            StructureKey::from_token(&format!("{r2}|ctll/d16/or10/f32/f32/f32/rm")).is_some(),
+            "a valid 2-digit permutation order still parses (rank-2)"
+        );
+        assert!(
+            StructureKey::from_token(&format!("{r3}|ctll/d16/bt/or201/f32/f32/f32/rm")).is_some(),
+            "a valid 3-digit permutation order still parses (rank-3 batched)"
         );
     }
 

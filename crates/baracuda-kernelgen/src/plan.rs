@@ -361,8 +361,12 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
             // roles, not just the two canonical rank-2/rank-3 constructors),
             // keyed with contraction facts and an epilogue over the K-sum
             // (+ optional fused bias) only.
-            let (lhs_rank, rhs_rank) = (axes.lhs.len(), axes.rhs.len());
-            if let Err(msg) = validate_contraction_roles(axes, lhs_rank, rhs_rank) {
+            // Expected role-vector length = the StructureKey's operand rank, NOT
+            // `axes.*.len()` (which would make the length check vacuous). This
+            // rejects a malformed OpDef whose contraction role vectors disagree
+            // with the keyed operand rank before it can panic downstream.
+            let expect_rank = key.rank as usize;
+            if let Err(msg) = validate_contraction_roles(axes, expect_rank, expect_rank) {
                 panic!("contraction roles: {msg}");
             }
             assert!(
@@ -695,8 +699,23 @@ pub(crate) fn validate_contraction_roles(
     if count(&axes.lhs, ContractedK) != 1 || count(&axes.rhs, ContractedK) != 1 {
         return Err("v1: exactly one ContractedK per operand (multi-group deferred)".into());
     }
-    // batch correspondence
-    if count(&axes.lhs, Batch) != count(&axes.rhs, Batch) {
+    // Batch structure — v1 lowers a SINGLE batch coordinate (`blockIdx.z`), so a
+    // contraction operand is rank-2 (no Batch) or rank-3 (exactly one Batch); 2+
+    // Batch axes (rank >= 4) cannot be emitted (the emitter's `ext(Batch)` has no
+    // second batch coordinate). Each operand's Batch count must equal `rank - 2`,
+    // and lhs/rhs must agree — a batched matmul needs BOTH operands batched (a
+    // rank-3 · rank-2 pair is illegal).
+    if !matches!(lhs_rank, 2 | 3) || !matches!(rhs_rank, 2 | 3) {
+        return Err("v1: contraction operands must be rank-2 or rank-3".into());
+    }
+    let lhs_batch = count(&axes.lhs, Batch);
+    let rhs_batch = count(&axes.rhs, Batch);
+    if lhs_batch != lhs_rank - 2 || rhs_batch != rhs_rank - 2 {
+        return Err(
+            "v1: rank-3 carries exactly one Batch and rank-2 none (single batch coord)".into(),
+        );
+    }
+    if lhs_batch != rhs_batch {
         return Err("lhs and rhs must share the same batch-axis count".into());
     }
     Ok(())
@@ -3401,6 +3420,16 @@ mod contraction_role_validate {
             rhs: vec![ContractedK, ContractedK, FreeN],
         };
         assert!(validate_contraction_roles(&bad_k, 3, 3).is_err());
+        // illegal: 2+ Batch axes (rank-4) — v1 lowers a SINGLE batch coordinate
+        // (blockIdx.z); the old matched-count-only check wrongly accepted this.
+        let two_batch = ContractionAxes {
+            lhs: vec![Batch, Batch, FreeM, ContractedK],
+            rhs: vec![Batch, Batch, ContractedK, FreeN],
+        };
+        assert!(
+            validate_contraction_roles(&two_batch, 4, 4).is_err(),
+            "2+ Batch (rank-4) is out of v1's single-batch-coord scope"
+        );
         // illegal: role-vector length != rank
         assert!(validate_contraction_roles(&ContractionAxes::matmul(), 3, 2).is_err());
     }
