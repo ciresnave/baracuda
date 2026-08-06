@@ -62,16 +62,22 @@ fn fkc_backend_token(backend: &str) -> &str {
 /// The `backend` token is canonicalized to Fuel's capitalized spelling via
 /// [`fkc_backend_token`] (`"cuda"` → `Cuda`).
 #[must_use]
-pub fn front_matter(backend_name: &str, revision_base: &str) -> String {
+pub fn front_matter(provider: &str, backend_name: &str, revision_base: &str) -> String {
     let backend = fkc_backend_token(backend_name);
+    // `provider` is the identity of WHO supplies these kernels (a neutral
+    // generator can't hardcode it) — Baracuda's CUDA backend passes "baracuda"
+    // (byte-identical to the pre-abstraction literals); the in-tree reference
+    // backends pass the generator's name. Both the provenance fields AND the
+    // link-registry symbol name derive from it, so a bundle can never announce a
+    // provider in its header that its per-kernel contracts contradict.
     format!(
         "---\n\
          fkc_version: 1\n\
          provider:\n  \
-         name: baracuda\n  \
+         name: {provider}\n  \
          backend: {backend}\n  \
-         kernel_source: baracuda\n  \
-         link_registry: baracuda_link_registry\n  \
+         kernel_source: {provider}\n  \
+         link_registry: {provider}_link_registry\n  \
          revision_base: \"{revision_base}\"\n\
          seam_profiles: [1]\n\
          ---\n"
@@ -100,8 +106,13 @@ pub fn front_matter(backend_name: &str, revision_base: &str) -> String {
 /// `art.contract` with the provider identity + heading at adopt time (their
 /// 2026-07-08 answer (a)), so the seam ships the bare [`contract`] block.
 #[must_use]
-pub fn bundle(backend_name: &str, revision_base: &str, contracts: &[String]) -> String {
-    let mut s = front_matter(backend_name, revision_base);
+pub fn bundle(
+    provider: &str,
+    backend_name: &str,
+    revision_base: &str,
+    contracts: &[String],
+) -> String {
+    let mut s = front_matter(provider, backend_name, revision_base);
     for c in contracts {
         // Withhold a fused contract whose `fused_op:` name is NOT one of Fuel's
         // FusedOps SCREAMING_SNAKE constants — an unknown fused_op is BUNDLE-FATAL
@@ -150,12 +161,13 @@ pub fn bundle(backend_name: &str, revision_base: &str, contracts: &[String]) -> 
 /// structure are PROVISIONAL (see [`crate::kisc`]).
 #[must_use]
 pub fn bundle_kisc(
+    provider: &str,
     backend_name: &str,
     revision_base: &str,
     contracts: &[String],
     recipe_import: bool,
 ) -> String {
-    let mut s = front_matter(backend_name, revision_base);
+    let mut s = front_matter(provider, backend_name, revision_base);
     for c in contracts {
         if !contract_admissible(c, recipe_import) {
             continue;
@@ -1938,7 +1950,7 @@ mod tests {
     fn bundle_kisc_frames_each_admitted_contract_and_drops_the_heading() {
         let c1 = "kernel: relu\nop_kind: ReluElementwise\naccept: sk3|une|f32\n".to_string();
         let c2 = "kernel: add\nop_kind: AddElementwise\naccept: sk3|bin|f32\n".to_string();
-        let b = bundle_kisc("cuda", "rev0", &[c1.clone(), c2.clone()], false);
+        let b = bundle_kisc("baracuda", "cuda", "rev0", &[c1.clone(), c2.clone()], false);
         // Provider front-matter still leads the file.
         assert!(b.starts_with("---\n"), "front matter leads: {b}");
         // Each contract is its own KISC document; NO `## ` heading framing.
@@ -1962,7 +1974,13 @@ mod tests {
         // a free-form fused name is withheld (non-importable by the closed vocab).
         let ok = "kernel: softmax\nfused_op: SOFTMAX_LAST_DIM\n".to_string();
         let bad = "kernel: relu_add\nfused_op: RELU_ADD\n".to_string();
-        let b = bundle_kisc("cuda", "rev0", &[ok.clone(), bad.clone()], false);
+        let b = bundle_kisc(
+            "baracuda",
+            "cuda",
+            "rev0",
+            &[ok.clone(), bad.clone()],
+            false,
+        );
         assert!(
             b.contains(&crate::kisc::kisc_frame(&ok)),
             "an admitted Fuel FusedOp is framed: {b}"
@@ -1980,7 +1998,7 @@ mod tests {
         // Semantics op-DAG), so `contract_carries_recipe` is false and the free-form
         // fused op stays withheld. This pins the "retire in lockstep" contract.
         let bad = "kernel: relu_add\nfused_op: RELU_ADD\n".to_string();
-        let b = bundle_kisc("cuda", "rev0", std::slice::from_ref(&bad), true);
+        let b = bundle_kisc("baracuda", "cuda", "rev0", std::slice::from_ref(&bad), true);
         assert!(
             !b.contains(&crate::kisc::kisc_frame(&bad)),
             "recipe-import peer + no recipe emitted yet ⇒ still withheld: {b}"
@@ -2004,12 +2022,24 @@ mod tests {
         // live. The same contract stays withheld from a pre-recipe peer.
         let recipe_fusion =
             "kernel: relu_add\nfused_op: RELU_ADD\nsemantics: add(relu(in0), in1)\n".to_string();
-        let live = bundle_kisc("cuda", "rev0", std::slice::from_ref(&recipe_fusion), true);
+        let live = bundle_kisc(
+            "baracuda",
+            "cuda",
+            "rev0",
+            std::slice::from_ref(&recipe_fusion),
+            true,
+        );
         assert!(
             live.contains(&crate::kisc::kisc_frame(&recipe_fusion)),
             "recipe-carrying fusion is admitted for a recipe-import peer: {live}"
         );
-        let old = bundle_kisc("cuda", "rev0", std::slice::from_ref(&recipe_fusion), false);
+        let old = bundle_kisc(
+            "baracuda",
+            "cuda",
+            "rev0",
+            std::slice::from_ref(&recipe_fusion),
+            false,
+        );
         assert!(
             !old.contains(&crate::kisc::kisc_frame(&recipe_fusion)),
             "still withheld from a pre-recipe peer: {old}"

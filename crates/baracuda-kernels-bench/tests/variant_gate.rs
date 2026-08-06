@@ -216,7 +216,7 @@ fn variant_gate_loop_end_to_end() {
     assert_eq!(routed.provenance, Provenance::Measured, "seed upgraded");
     assert_eq!(routed.winner_entry.as_deref(), Some(partial_name.as_str()));
 
-    let artifact = emit_dispatch_table(&table);
+    let artifact = emit_dispatch_table("baracuda", &table);
     assert!(
         artifact.contains(&partial_name),
         "artifact names the winning variant's entry point"

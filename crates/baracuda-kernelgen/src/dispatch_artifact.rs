@@ -29,7 +29,7 @@ use baracuda_kernel_vocab::{DispatchEntry, DispatchTable, Implementor, Provenanc
 /// cell token — and `margin` is `second_best_ns / winner_ns` formatted to fixed
 /// precision (byte-stable).
 #[must_use]
-pub fn emit_dispatch_table(table: &DispatchTable) -> String {
+pub fn emit_dispatch_table(provider: &str, table: &DispatchTable) -> String {
     // Reverse before the stable sort so `dedup_by` (which keeps the first of each
     // equal-token run) retains the LAST writer of a duplicated token — the same
     // last-writer-wins semantics as `DispatchTable::normalize`, so a raw table
@@ -47,7 +47,10 @@ pub fn emit_dispatch_table(table: &DispatchTable) -> String {
     s.push_str(
         "/// `(structure_key, winner, winner_entry, margin, provenance)` for every routed cell.\n",
     );
-    s.push_str("pub static BARACUDA_DISPATCH_TABLE: &[(&str, &str, &str, f64, &str)] = &[\n");
+    s.push_str(&format!(
+        "pub static {}_DISPATCH_TABLE: &[(&str, &str, &str, f64, &str)] = &[\n",
+        provider.to_uppercase()
+    ));
     for e in sorted {
         // Defense in depth: `merge` already rejects a non-finite margin, but clamp
         // here too so a hand-built table can never emit a bare `NaN`/`inf` — those
@@ -201,7 +204,7 @@ mod tests {
             measured(at.clone(), Implementor::Generated, 1.5),
             measured(at.clone(), Implementor::Bespoke, 3.0), // dup token → collapses
         ]);
-        let src = emit_dispatch_table(&table);
+        let src = emit_dispatch_table("baracuda", &table);
         assert!(
             src.contains(
                 "pub static BARACUDA_DISPATCH_TABLE: &[(&str, &str, &str, f64, &str)] = &["
@@ -228,7 +231,7 @@ mod tests {
                 measured(tok.clone(), Implementor::Generated, 2.0), // last writer
             ],
         };
-        let src = emit_dispatch_table(&table);
+        let src = emit_dispatch_table("baracuda", &table);
         assert_eq!(src.matches(&tok).count(), 1, "one row survives");
         assert!(src.contains("\"gen\""), "last writer (Generated) survives");
         assert!(!src.contains("\"cublas\""), "first writer dropped");
@@ -241,7 +244,7 @@ mod tests {
             measured(ew_token(ElementKind::F16), Implementor::Generated, 1.25),
             DispatchEntry::seeded(ew_token(ElementKind::Bf16), Implementor::Cutlass),
         ]);
-        let src = emit_dispatch_table(&table);
+        let src = emit_dispatch_table("baracuda", &table);
         let parsed = parse_dispatch_table(&src);
 
         let mut want: Vec<DispatchEntry> = table.entries.iter().map(project).collect();
@@ -264,7 +267,7 @@ mod tests {
             Implementor::Generated,
             2.0,
         )]);
-        let src = emit_dispatch_table(&table);
+        let src = emit_dispatch_table("baracuda", &table);
         for e in parse_dispatch_table(&src) {
             let key = StructureKey::from_token(&e.structure_key).expect("token parses");
             assert_eq!(key.to_token(), e.structure_key, "token is codec-stable");
@@ -285,7 +288,10 @@ mod tests {
             measured(f16, Implementor::Generated, 1.5),
             measured(f32, Implementor::Cublas, 2.0),
         ]);
-        assert_eq!(emit_dispatch_table(&a), emit_dispatch_table(&b));
+        assert_eq!(
+            emit_dispatch_table("baracuda", &a),
+            emit_dispatch_table("baracuda", &b)
+        );
     }
 
     #[test]
@@ -320,7 +326,7 @@ mod tests {
                 measured_on: None,
             }],
         };
-        let src = emit_dispatch_table(&table);
+        let src = emit_dispatch_table("baracuda", &table);
         assert!(!src.contains("inf"), "no bare `inf` literal");
         assert!(!src.contains("NaN"), "no bare `NaN` literal");
         assert!(src.contains("1.000000"), "clamped to no-contest margin");
@@ -330,7 +336,7 @@ mod tests {
 
     #[test]
     fn empty_table_emits_valid_empty_static() {
-        let src = emit_dispatch_table(&DispatchTable::new());
+        let src = emit_dispatch_table("baracuda", &DispatchTable::new());
         assert!(src.contains("BARACUDA_DISPATCH_TABLE"));
         assert!(src.trim_end().ends_with("];"));
         assert!(parse_dispatch_table(&src).is_empty());

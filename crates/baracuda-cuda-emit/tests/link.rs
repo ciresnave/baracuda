@@ -30,7 +30,7 @@ fn registry_is_sorted_deduped_valid_rust() {
     let mut es = vec![entry("zeta"), entry("alpha"), entry("alpha")];
     // shuffle so sorting is observable.
     es.reverse();
-    let src = emit_link_registry(&es);
+    let src = emit_link_registry("baracuda", &es);
     assert!(src.contains("pub static BARACUDA_LINK_REGISTRY: &[(&str, &str, u64)] = &["));
     // alpha sorts before zeta; the duplicate alpha collapses.
     let a = src.find("alpha").unwrap();

@@ -655,7 +655,7 @@ fn main() {
     }
 
     let dpath = format!("{out_dir}/dispatch_table.rs");
-    fs::write(&dpath, emit_dispatch_table(&table)).expect("write dispatch table");
+    fs::write(&dpath, emit_dispatch_table("baracuda", &table)).expect("write dispatch table");
     println!(
         "emitted dispatch table -> {dpath}  ({} routed cell(s))",
         table.entries.len()

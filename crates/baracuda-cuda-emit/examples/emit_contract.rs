@@ -54,11 +54,16 @@ fn main() {
     }
     print!(
         "{}",
-        bundle("cuda", "feat/kernel-specialization@e3907f6", &contracts)
+        bundle(
+            "baracuda",
+            "cuda",
+            "feat/kernel-specialization@e3907f6",
+            &contracts
+        )
     );
     println!();
 
     // The link registry that resolves these entry_points at module load.
     println!("<!-- generated link_registry.rs -->");
-    print!("{}", emit_link_registry(&registry));
+    print!("{}", emit_link_registry("baracuda", &registry));
 }

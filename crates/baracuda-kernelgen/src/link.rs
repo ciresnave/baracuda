@@ -43,9 +43,11 @@ pub fn link_entry(_op: &OpDef, key: &StructureKey, kernel: &GeneratedKernel) -> 
 
 /// Emit the generated Rust `link_registry` source — a static roster the runtime
 /// resolves to `KernelRef`s at load. Entries are sorted by `entry_point` and
-/// de-duplicated for a stable, diff-friendly artifact.
+/// de-duplicated for a stable, diff-friendly artifact. `provider` names the
+/// static (`{PROVIDER}_LINK_REGISTRY`) — the neutral generator does not hardcode
+/// a vendor; the provider compiles + consumes its own registry symbol.
 #[must_use]
-pub fn emit_link_registry(entries: &[LinkEntry]) -> String {
+pub fn emit_link_registry(provider: &str, entries: &[LinkEntry]) -> String {
     let mut sorted: Vec<&LinkEntry> = entries.iter().collect();
     sorted.sort_by(|a, b| a.entry_point.cmp(&b.entry_point));
     sorted.dedup_by(|a, b| a.entry_point == b.entry_point);
@@ -56,7 +58,10 @@ pub fn emit_link_registry(entries: &[LinkEntry]) -> String {
     s.push_str("//! serves. The runtime resolves each `entry_point` to a `KernelRef` at module\n");
     s.push_str("//! load (FKC \u{a7}12.6) and registers it under its `structure_key` token.\n\n");
     s.push_str("/// `(entry_point, structure_key, revision_hash)` for every generated kernel.\n");
-    s.push_str("pub static BARACUDA_LINK_REGISTRY: &[(&str, &str, u64)] = &[\n");
+    s.push_str(&format!(
+        "pub static {}_LINK_REGISTRY: &[(&str, &str, u64)] = &[\n",
+        provider.to_uppercase()
+    ));
     for e in sorted {
         s.push_str(&format!(
             "    (\"{}\", \"{}\", {:#018x}),\n",

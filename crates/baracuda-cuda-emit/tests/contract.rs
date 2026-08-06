@@ -237,9 +237,9 @@ fn rowreduce_advertises_a_recipe_carrying_contract() {
     );
     // End-to-end at the bundle seam: `bundle` (recipe_import=false) withholds the
     // free-form fused op; `bundle_kisc` admits it ONLY to a recipe-import peer.
-    let withheld = bundle("cuda", "rev0", std::slice::from_ref(&c));
+    let withheld = bundle("baracuda", "cuda", "rev0", std::slice::from_ref(&c));
     assert!(!withheld.contains("fused_op: softmax"), "{withheld}");
-    let admitted = bundle_kisc("cuda", "rev0", std::slice::from_ref(&c), true);
+    let admitted = bundle_kisc("baracuda", "cuda", "rev0", std::slice::from_ref(&c), true);
     assert!(
         admitted.contains(&baracuda_kernelgen::kisc::kisc_frame(&c)),
         "recipe-carrying RowReduce admitted for a recipe-import peer: {admitted}"
@@ -735,9 +735,9 @@ fn i32_gather_advertises_a_recipe_carrying_contract() {
     );
     // End-to-end at the bundle seam: `bundle` (recipe_import=false) withholds it;
     // `bundle_kisc` admits it ONLY to a recipe-import peer.
-    let withheld = bundle("cuda", "rev0", std::slice::from_ref(&c));
+    let withheld = bundle("baracuda", "cuda", "rev0", std::slice::from_ref(&c));
     assert!(!withheld.contains("fused_op: gather"), "{withheld}");
-    let admitted = bundle_kisc("cuda", "rev0", std::slice::from_ref(&c), true);
+    let admitted = bundle_kisc("baracuda", "cuda", "rev0", std::slice::from_ref(&c), true);
     assert!(
         admitted.contains(&baracuda_kernelgen::kisc::kisc_frame(&c)),
         "recipe-carrying i32 gather admitted for a recipe-import peer: {admitted}"
@@ -1205,7 +1205,7 @@ fn prod_and_hetero_out_reductions_advertise_recipe_carrying_contracts() {
 
 #[test]
 fn front_matter_has_provider_and_seam_profiles() {
-    let fm = front_matter("cuda", "abc123");
+    let fm = front_matter("baracuda", "cuda", "abc123");
     assert!(fm.contains("fkc_version: 1"));
     assert!(fm.contains("name: baracuda"));
     assert!(fm.contains("link_registry: baracuda_link_registry"));
@@ -1230,7 +1230,7 @@ fn bundle_frames_each_contract_under_a_heading() {
     let key = key_for(3, OpCategory::BinaryElementwise);
     let kernel = generate(&add, &key, &Cuda);
     let c = contract(&add, &key, &kernel, &Cuda).unwrap();
-    let b = bundle("cuda", "rev0", std::slice::from_ref(&c));
+    let b = bundle("baracuda", "cuda", "rev0", std::slice::from_ref(&c));
     // Front matter first, then a `## <kernel>` heading, then the block.
     assert!(b.starts_with("---\n"), "front matter leads: {b}");
     let kname = format!("add_{}", cell_suffix(&key));
@@ -1407,7 +1407,7 @@ fn fused_activation_uses_fused_op_with_pattern() {
     let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
     let ka = key_for(3, OpCategory::BinaryElementwise);
     let ca = contract(&add, &ka, &generate(&add, &ka, &Cuda), &Cuda).unwrap();
-    let b = bundle("cuda", "rev0", &[ca.clone(), c.clone()]);
+    let b = bundle("baracuda", "cuda", "rev0", &[ca.clone(), c.clone()]);
     assert!(
         b.contains("op_kind: AddElementwise"),
         "primitive survives: {b}"
