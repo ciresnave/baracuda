@@ -16,10 +16,12 @@ use baracuda_kernel_vocab::{
 
 /// How the kernel iterates the data — the backend-neutral schedule.
 ///
-/// Strided / broadcast / reduction schedules are the growth path; the lockstep
-/// backends (CUDA lives in the sibling `baracuda-cuda-emit`) match every variant
-/// exhaustively, so a new schedule is a compile-time prompt to lower it.
+/// `#[non_exhaustive]`: strided / broadcast / reduction schedules are the growth
+/// path. Out-of-crate backends (CUDA lives in the sibling `baracuda-cuda-emit`)
+/// match with a trailing wildcard arm, so a new schedule is a minor-version
+/// addition that declines at the backend's `_` arm, not a breaking change.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Schedule {
     /// Linear access, `width` elements at a time (e.g. `float4` for width 4).
     Vectorized {

@@ -126,7 +126,14 @@ pub struct Recipe {
 }
 
 /// Why a region can't be synthesized.
+///
+/// `#[non_exhaustive]`: the typed-decline taxonomy (KISS-Synth §6.6) always grows,
+/// and Fuel's PagedAttn probe proved decline-specificity is load-bearing
+/// (`Declined{MixedDtype}` was the single most useful byte in that investigation) —
+/// so [`MixedDtype`](Self::MixedDtype) stays its own reason and never folds into a
+/// generic decline. Out-of-crate matchers on this enum carry a wildcard arm.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum JitError {
     /// A region op name outside the increment-1 IR vocabulary.
     UnsupportedOp(String),

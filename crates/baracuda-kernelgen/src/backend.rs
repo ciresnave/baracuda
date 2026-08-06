@@ -12,7 +12,13 @@ use crate::ir::{BinaryOp, DagNode, ExprDag, NodeId, ScalarExpr, UnaryOp};
 use baracuda_kernel_vocab::ElementKind;
 
 /// A generated kernel: its exported symbol name and source text.
+///
+/// `#[non_exhaustive]`: a backend artifact grows a structured payload later (the
+/// Vulkane review's #1/#2 — a SPIR-V `[u32]` word stream + an ABI/binding manifest
+/// can't ride a `String`). Reserving the shape now lets that land in a minor
+/// version. Out-of-crate backends build kernels through [`GeneratedKernel::new`].
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct GeneratedKernel {
     /// The exported (`extern "C"` or backend-equivalent) symbol name.
     pub name: String,
@@ -20,11 +26,24 @@ pub struct GeneratedKernel {
     pub source: String,
 }
 
+impl GeneratedKernel {
+    /// The canonical constructor — the only way an out-of-crate [`Backend`] builds
+    /// a `GeneratedKernel` (the struct is `#[non_exhaustive]`).
+    #[must_use]
+    pub fn new(name: String, source: String) -> Self {
+        Self { name, source }
+    }
+}
+
 /// How a schedule variant's computed bits relate to the cell's default lowering.
 /// Drives the selection policy (variants backlog doc): a [`VariantFidelity::BitIdentical`]
 /// variant may be selected silently; anything else is selectable only through an
 /// honest FKC contract (the caller's precision policy decides), never silently.
+/// `#[non_exhaustive]`: the 3-way accumulator/order/compensated split (the
+/// deferred fidelity work) adds variants; core matches them, backends only
+/// produce them, so reserving room here is free.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum VariantFidelity {
     /// Same result bits as the default lowering for every input.
     BitIdentical,
@@ -95,7 +114,12 @@ impl VariantFidelity {
 /// variant ships with its own contract under the same `accept.structure_key`;
 /// the dispatch table records Baracuda's measured default, and Fuel remains the
 /// runtime selector.
+///
+/// `#[non_exhaustive]`: a richer per-variant artifact (the Vulkane review's #1/#2
+/// binding/ABI manifest) attaches here later; out-of-crate backends build variants
+/// through [`Variant::new`] so that addition stays a minor version.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Variant {
     /// Short stable tag (`"base"`, `"splitk"`, `"unroll4"`, …). Rides in the
     /// generated symbol names and, eventually, contract front-matter (opaque on
@@ -107,6 +131,25 @@ pub struct Variant {
     pub fidelity: VariantFidelity,
     /// Launch protocol (grids, workspace sizing, chunking) — contract-facing.
     pub launch_note: String,
+}
+
+impl Variant {
+    /// The canonical constructor — the only way an out-of-crate [`Backend`] builds
+    /// a `Variant` (the struct is `#[non_exhaustive]`).
+    #[must_use]
+    pub fn new(
+        tag: &'static str,
+        kernels: Vec<GeneratedKernel>,
+        fidelity: VariantFidelity,
+        launch_note: String,
+    ) -> Self {
+        Self {
+            tag,
+            kernels,
+            fidelity,
+            launch_note,
+        }
+    }
 }
 
 /// Lowers a neutral [`crate::plan::KernelPlan`] to concrete kernel source.

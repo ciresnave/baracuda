@@ -67,10 +67,7 @@ fn key_dtype(dt: ElementKind, n_operands: usize) -> StructureKey {
 // The dtype-classification tests don't exercise CUDA codegen (which rightly
 // rejects Bool/Complex), only the contract's dtype channel — a stand-in kernel.
 fn stub_kernel() -> GeneratedKernel {
-    GeneratedKernel {
-        name: "k".into(),
-        source: "s".into(),
-    }
+    GeneratedKernel::new("k".into(), "s".into())
 }
 
 fn pred_key() -> StructureKey {

@@ -1095,12 +1095,14 @@ pub struct ReduceStage {
 /// Iteration / access pattern of an op — tells the emitter the loop-nest shape
 /// and which schedules are legal.
 ///
-/// Windowed/stencil and gather patterns are still the growth path; arbitrary/
-/// multiple reduction axes, strided-input reductions, and keepdim layout extend
-/// [`Access::Reduction`] later. Lowered by the lockstep backends (CUDA lives in
-/// the sibling `baracuda-cuda-emit`), which match it exhaustively — a new variant
-/// is a compile-time prompt to lower it, not a silent reject.
+/// `#[non_exhaustive]`: windowed/stencil and gather patterns are still the growth
+/// path; arbitrary/multiple reduction axes, strided-input reductions, and keepdim
+/// layout extend [`Access::Reduction`] later. Out-of-crate backends (CUDA lives in
+/// the sibling `baracuda-cuda-emit`) match with a trailing wildcard arm, so adding
+/// a variant is a minor-version change — a new pattern declines at the backend's
+/// `_` arm rather than breaking every downstream compile.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum Access {
     /// Output coordinate equals input coordinate (a per-element map).
     Elementwise,

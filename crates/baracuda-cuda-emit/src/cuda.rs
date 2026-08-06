@@ -203,6 +203,13 @@ impl Backend for Cuda {
                 // arithmetic), so nothing extra to gate — the arm keeps the walk total.
                 Access::Im2Col { .. } => {}
                 Access::Elementwise => {}
+                // `Access` is `#[non_exhaustive]`: a future neutral pattern must teach
+                // this gate its accumulator-dtype sub-exprs. Until then, fail loud
+                // rather than silently under-gate an int Div/Const in a new variant.
+                _ => unreachable!(
+                    "cuda backend: unhandled Access variant in the int-div-admissibility gate — \
+                     teach baracuda-cuda-emit the new pattern's accumulator-dtype sub-exprs"
+                ),
             }
             for e in exprs {
                 // `at_reduction_root: in_reduction` — this loop is the initial
@@ -253,6 +260,12 @@ impl Backend for Cuda {
                 // extra to walk here.
                 Access::Im2Col { .. } => {}
                 Access::Elementwise => {}
+                // `Access` is `#[non_exhaustive]`: a future neutral pattern must teach
+                // this Coord backstop its accumulator-dtype sub-exprs. Fail loud.
+                _ => unreachable!(
+                    "cuda backend: unhandled Access variant in the Coord backstop gate — \
+                     teach baracuda-cuda-emit the new pattern's accumulator-dtype sub-exprs"
+                ),
             }
             for e in exprs {
                 assert_coord_lowerable(e, plan);
@@ -403,6 +416,13 @@ impl Backend for Cuda {
             // zero for an OOB tap) — no fold, no variant (each output is an
             // independent read-or-zero + store, BitIdentical).
             Schedule::Im2Col { .. } => emit_im2col(plan, ctype),
+            // `Schedule` is `#[non_exhaustive]`: a new neutral schedule must be taught
+            // an emitter here. Fail loud rather than silently emit the wrong kernel.
+            _ => panic!(
+                "cuda backend: unhandled Schedule variant {:?} — a new neutral schedule \
+                 must be taught an emitter in baracuda-cuda-emit",
+                plan.schedule
+            ),
         }
     }
 }
@@ -626,7 +646,7 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
         }
     }
     s.push_str("        out[i] = vo;\n    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Emit a **packed** f16/bf16 vectorized elementwise kernel: one `width`-halves
@@ -724,7 +744,7 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
         }
     }
     s.push_str("        out[i] = vo;\n    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
@@ -778,7 +798,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("        out[i] = {store};\n    }}\n"));
     }
     s.push_str("}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
@@ -1114,7 +1134,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         }
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Spell a [`WriteCombine`] store of the lowered body `root` into `out[oo]`,
@@ -1417,11 +1437,11 @@ fn scatter_atomic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let ctype = scalar_ctype(plan.dtype)?;
     let atomic = emit_strided(plan, ctype);
     let entry = atomic.name.clone();
-    Some(Variant {
-        tag: "atomic",
-        kernels: vec![atomic],
-        fidelity: VariantFidelity::Nondeterministic,
-        launch_note: format!(
+    Some(Variant::new(
+        "atomic",
+        vec![atomic],
+        VariantFidelity::Nondeterministic,
+        format!(
             "single-launch FP-atomicAdd scatter ({entry}<<<ceil(n_upd/B), B>>>): iterates \
              the UPDATE domain (n_upd threads), atomicAdd's each value into out[scatter \
              index]; pass `sext` = destination extent along the scattered axis. \
@@ -1432,7 +1452,7 @@ fn scatter_atomic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
              treats the atomics as legitimate; memcheck must report 0 OOB.",
             det = VariantFidelity::Nondeterministic.determinism_str(),
         ),
-    })
+    ))
 }
 
 /// Emit the DETERMINISTIC **gather-sum** base kernel for an FP `atomicAdd` scatter
@@ -1583,7 +1603,7 @@ fn emit_scatter_gathersum(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel
         store_acc(format!("({existing} + acc)"))
     ));
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Independent emitter backstop for a multi-output plan (increment 1), beside
@@ -1808,7 +1828,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         ));
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Emit a **multi-output strided** elementwise kernel (increment 1): the
@@ -1928,7 +1948,7 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         ));
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Backstop for the multi-output VECTORIZED emitters (native + packed): each
@@ -2023,7 +2043,7 @@ fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Ge
         s.push_str(&format!("        out{j}[i] = vo{j};\n"));
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Emit a **multi-output packed** f16/bf16 vectorized kernel (increment 1): the
@@ -2119,7 +2139,7 @@ fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> Gener
         s.push_str(&format!("        out{j}[i] = vo{j};\n"));
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Emit a **reduction** (one thread per output element, sequential fold). Two
@@ -2578,7 +2598,7 @@ fn emit_reduction(
             }
         }
         s.push_str("    }\n}\n");
-        return GeneratedKernel { name, source: s };
+        return GeneratedKernel::new(name, s);
     }
 
     // ---------- General path: outer / middle / multi axis, strided input, keepdim. ----------
@@ -2809,7 +2829,7 @@ fn emit_reduction(
     }
     s.push_str(&format!("        out[oo] = {rhs};\n"));
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Precision-first variant ([`VariantFidelity::MorePrecise`]) — a `double`-
@@ -2869,11 +2889,11 @@ fn precision_first_reduction(plan: &KernelPlan<'_>, rop: ReduceOp) -> Option<Var
     let ctype = scalar_ctype(plan.dtype)?;
     let kernel = emit_reduction(plan, ctype, rop, true);
     let det = VariantFidelity::MorePrecise.determinism_str();
-    Some(Variant {
-        tag: "prec",
-        kernels: vec![kernel],
-        fidelity: VariantFidelity::MorePrecise,
-        launch_note: format!(
+    Some(Variant::new(
+        "prec",
+        vec![kernel],
+        VariantFidelity::MorePrecise,
+        format!(
             "Precision-first {} reduction: double accumulator, serial per-output fold \
              (1-D grid over n_out, one thread per output, grid-stride). MORE ACCURATE \
              than the f32-accumulate base — ~0.5 ULP(f32) of the correctly-rounded \
@@ -2886,7 +2906,7 @@ fn precision_first_reduction(plan: &KernelPlan<'_>, rop: ReduceOp) -> Option<Var
                 _ => "sum",
             }
         ),
-    })
+    ))
 }
 
 /// Precision-first arm for a fused [`Schedule::RowReduce`] cell
@@ -2927,11 +2947,11 @@ fn precision_first_rowreduce(plan: &KernelPlan<'_>) -> Option<Variant> {
     let ctype = scalar_ctype(plan.dtype)?;
     let kernel = emit_row_reduce_impl(plan, ctype, false, true);
     let det = VariantFidelity::MorePrecise.determinism_str();
-    Some(Variant {
-        tag: "prec",
-        kernels: vec![kernel],
-        fidelity: VariantFidelity::MorePrecise,
-        launch_note: format!(
+    Some(Variant::new(
+        "prec",
+        vec![kernel],
+        VariantFidelity::MorePrecise,
+        format!(
             "Precision-first {} rowreduce: double accumulator, serial per-row fold \
              (1-D grid over n_out, one thread per row, grid-stride). MORE ACCURATE than \
              the f32 base (double accumulation of the sum/mean/variance stages); \
@@ -2940,7 +2960,7 @@ fn precision_first_rowreduce(plan: &KernelPlan<'_>) -> Option<Variant> {
              reproducibility.",
             plan.op_name
         ),
-    })
+    ))
 }
 
 /// Split-K schedule **variant** for the outer-axis reduction cell
@@ -3150,20 +3170,14 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     };
     k.push_str(&format!("    out[c] = {};\n}}\n", store(finalized)));
 
-    Some(Variant {
-        tag: "splitk",
-        kernels: vec![
-            GeneratedKernel {
-                name: pname.clone(),
-                source: p,
-            },
-            GeneratedKernel {
-                name: cname.clone(),
-                source: k,
-            },
+    Some(Variant::new(
+        "splitk",
+        vec![
+            GeneratedKernel::new(pname.clone(), p),
+            GeneratedKernel::new(cname.clone(), k),
         ],
-        fidelity: VariantFidelity::ReassociatedDeterministic,
-        launch_note: format!(
+        VariantFidelity::ReassociatedDeterministic,
+        format!(
             "two-launch protocol: (1) {pname}<<<dim3(ceil(cols/B), n_chunks), B>>>(in0, ws, \
              rows, cols, chunk_rows) with chunk_rows = ceil(rows/n_chunks) and workspace ws \
              of n_chunks*cols `{acc}` elements; (2) {cname}<<<ceil(cols/B), B>>>(ws, out, \
@@ -3171,7 +3185,7 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
              from the single-pass baseline.",
             if mean { ", rows" } else { "" }
         ),
-    })
+    ))
 }
 
 /// The flat address expression `Σ coord(role)·stride(role)` for ONE contraction
@@ -3432,7 +3446,7 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         "                out[{ob}mm * n + col] = {stored};\n"
     ));
     s.push_str("            }\n        }\n    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Split-K schedule **variant** for the contraction cell — the fix for the
@@ -3605,20 +3619,14 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     kk.push_str(&format!("            out[mm * n + col] = {stored};\n"));
     kk.push_str("        }\n    }\n}\n");
 
-    Some(Variant {
-        tag: "splitk",
-        kernels: vec![
-            GeneratedKernel {
-                name: pname.clone(),
-                source: p,
-            },
-            GeneratedKernel {
-                name: cname.clone(),
-                source: kk,
-            },
+    Some(Variant::new(
+        "splitk",
+        vec![
+            GeneratedKernel::new(pname.clone(), p),
+            GeneratedKernel::new(cname.clone(), kk),
         ],
-        fidelity: VariantFidelity::ReassociatedDeterministic,
-        launch_note: format!(
+        VariantFidelity::ReassociatedDeterministic,
+        format!(
             "two-launch protocol: (1) {pname}<<<dim3(ceil(n/B), n_chunks), B>>>(in0, in1, ws, \
              m, n, k, chunk_k) with chunk_k = ceil(k/n_chunks) and workspace ws of \
              n_chunks*m*n `{acc}` elements; (2) {cname}<<<ceil(n/B), B>>>(ws, out, m, n, \
@@ -3626,7 +3634,7 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
              Deterministic for a fixed chunk_k; association differs from the base's \
              sequential K fold."
         ),
-    })
+    ))
 }
 
 /// One-letter tag for a [`baracuda_kernel_vocab::SizeClass`] in symbol names.
@@ -3704,17 +3712,17 @@ fn row_reduce_materialize_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let (acc, asz) = if dbl { ("double", 8) } else { ("float", 4) };
     let k = emit_row_reduce_impl(plan, ctype, true, false);
     let kname = k.name.clone();
-    Some(Variant {
-        tag: "smemrow",
-        kernels: vec![k],
-        fidelity: VariantFidelity::BitIdentical,
-        launch_note: format!(
+    Some(Variant::new(
+        "smemrow",
+        vec![k],
+        VariantFidelity::BitIdentical,
+        format!(
             "same launch shape as the base rowreduce ({kname}<<<n_out, B>>> with B a \
              multiple of 32, <= 1024) PLUS dynamic shared memory = k * {asz} bytes \
              (`{acc}` per element); requires k within the device per-block shared-memory \
              ceiling. Bit-identical to the base kernel; the tradeoff is occupancy."
         ),
-    })
+    ))
 }
 
 /// `true` if `t` occurs as a subexpression of `e` (structural equality).
@@ -4122,7 +4130,7 @@ fn emit_row_reduce_impl(
     s.push_str(&format!("            out[idx] = {stored};\n"));
     s.push_str("        }\n");
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Append the warp/block tree-reduce device helpers for the `ops` actually used,
@@ -4791,7 +4799,7 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     }
 
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Block-scan schedule VARIANT for the scan cell — a Kogge-Stone warp scan +
@@ -4902,11 +4910,11 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
              device memcmp==0",
         )
     };
-    Some(Variant {
-        tag: "blockscan",
-        kernels: vec![k],
+    Some(Variant::new(
+        "blockscan",
+        vec![k],
         fidelity,
-        launch_note: format!(
+        format!(
             "block-scan (Kogge-Stone warp scan via __shfl_up_sync + cross-warp \
              exclusive-offset carry, re-emitted inline): one block per row, \
              <<<min(n_out, maxblocks), B>>> with B a multiple of 32 and <= 1024 \
@@ -4920,7 +4928,7 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
              Determinism: {det}.",
             det = fidelity.determinism_str()
         ),
-    })
+    ))
 }
 
 // ============================================================================
@@ -5265,7 +5273,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     }
 
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 // ============================================================================
@@ -5407,7 +5415,7 @@ fn emit_im2col(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     s.push_str(&format!("            out[t] = {typed_zero};\n"));
     s.push_str("        }\n");
     s.push_str("    }\n}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 // ============================================================================
@@ -5852,7 +5860,7 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
 
     s.push_str("}\n");
     let _ = acc_sz;
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Emit the **PARTIAL-SELECT streaming tiled-bitonic top-k** kernel — a wholly
@@ -6134,7 +6142,7 @@ fn emit_row_sort_partial(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel 
     s.push_str("    }\n");
 
     s.push_str("}\n");
-    GeneratedKernel { name, source: s }
+    GeneratedKernel::new(name, s)
 }
 
 /// Bitonic-pair-sort schedule VARIANT for the [`Schedule::RowSort`] cell — one
@@ -6223,12 +6231,12 @@ fn row_sort_bitonic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
             VariantFidelity::BitIdentical.determinism_str()
         ),
     };
-    Some(Variant {
-        tag: "bitonic",
-        kernels: vec![k],
-        fidelity: VariantFidelity::BitIdentical,
+    Some(Variant::new(
+        "bitonic",
+        vec![k],
+        VariantFidelity::BitIdentical,
         launch_note,
-    })
+    ))
 }
 
 /// PARTIAL-SELECT streaming tiled-bitonic **top-k** schedule VARIANT for the
@@ -6327,12 +6335,12 @@ fn partial_select_topk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         acc_sz,
         VariantFidelity::BitIdentical.determinism_str()
     );
-    Some(Variant {
-        tag: "psel",
-        kernels: vec![k],
-        fidelity: VariantFidelity::BitIdentical,
+    Some(Variant::new(
+        "psel",
+        vec![k],
+        VariantFidelity::BitIdentical,
         launch_note,
-    })
+    ))
 }
 
 /// `true` if every iteration axis of `o` is a broadcast axis — its offset is
