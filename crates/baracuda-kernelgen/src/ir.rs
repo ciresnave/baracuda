@@ -1142,6 +1142,12 @@ pub enum Access {
         /// scalar-expr emitter as the fold body, so all 0a–0d vocabulary
         /// composes in it.
         post: ScalarExpr,
+        /// **Accumulator policy** (the sk4 seam — see [`ReductionAccum`]). Default
+        /// [`ReductionAccum::Auto`] defers to the emitter's current hardcoded
+        /// widen policy, so every existing reduction is byte-identical; the field
+        /// reserves the sk4 non-contraction (accumulator-dtype/math-precision)
+        /// coordinate slot so the cosigned schema is not a breaking field add.
+        accum: ReductionAccum,
     },
     /// Fused **reduce → broadcast → elementwise** over the contiguous last axis:
     /// the `stages` fold per-row reduced scalars (`Reduced(0..n)`), then `epilogue`
@@ -1412,6 +1418,28 @@ pub enum AccumSpec {
     /// as [`Access::Reduction`]. Tensor-core/TF32 policies join as variants
     /// with honest contract flips (see the item-10 spike §5.3).
     WideFloat,
+}
+
+/// Accumulator policy for a **non-contraction reduction** ([`Access::Reduction`])
+/// — the **sk4 seam** (KISS-CLASSIFY §6.7-0012's parked forward-requirement).
+///
+/// Reserves the sk4 non-contraction (accumulator-dtype, math-precision-mode)
+/// identity coordinate — `/`-delimited gem-symmetric on the wire, paired with the
+/// MX element+scale, per the sk4 cosign (head `4ef5619`) — so the coordinated
+/// schema slots into a struct-variant field that already exists, not a breaking
+/// field addition. (`#[non_exhaustive]` on the enum does NOT protect struct-variant
+/// FIELDS, so the field itself is reserved here now; the explicit acc/mp
+/// coordinates land as [`ReductionAccum`] variants at the synchronized sk4 cut, not
+/// before — hence the byte-visible value-setting is held.)
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum ReductionAccum {
+    /// The pre-sk4 default: DEFER to the emitter's current hardcoded accumulator
+    /// policy (a float reduction widens to `f64` under the strict/precision-first
+    /// discipline; an integer reduction long-accumulates). **Behavior-preserving**
+    /// — a `Reduction` carrying `Auto` emits byte-identically to the pre-field
+    /// generator and its FKC `accumulation_type:` line is unchanged.
+    Auto,
 }
 
 /// How input operand `i` is read relative to the op's iteration space — a
@@ -2126,6 +2154,7 @@ impl OpDef {
                 axes,
                 keepdim,
                 post: ScalarExpr::Reduced(0),
+                accum: ReductionAccum::Auto,
             },
             views: Vec::new(),
             read_index: Vec::new(),
@@ -2167,6 +2196,7 @@ impl OpDef {
                 axes: AxisMask::EMPTY,
                 keepdim: false,
                 post: post.0,
+                accum: ReductionAccum::Auto,
             },
             views: Vec::new(),
             read_index: Vec::new(),
@@ -3272,6 +3302,7 @@ mod reduction_axes_tests {
                 axes,
                 keepdim,
                 post,
+                accum: _,
             } => {
                 assert_eq!(op, ReduceOp::Sum);
                 assert!(axes.is_empty());
@@ -3302,6 +3333,7 @@ mod reduction_axes_tests {
                 axes,
                 keepdim,
                 post,
+                accum: _,
             } => {
                 assert_eq!(op, ReduceOp::Mean);
                 assert!(axes.is_set(0));
@@ -3332,6 +3364,7 @@ mod reduction_axes_tests {
                 axes,
                 keepdim,
                 post,
+                accum: _,
             } => {
                 assert_eq!(op, ReduceOp::Sum);
                 assert!(axes.is_empty());

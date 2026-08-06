@@ -76,7 +76,8 @@ pub use cpu_c::CpuC;
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
     Access, AccumSpec, AxisRole, ContractionAxes, DagNode, Expr, ExprDag, NodeId, OpDef, ReduceOp,
-    ReduceStage, ScalarExpr, SortOrder, SortOut, UnaryOp, coord, input, konst, param, reduced,
+    ReduceStage, ReductionAccum, ScalarExpr, SortOrder, SortOut, UnaryOp, coord, input, konst,
+    param, reduced,
 };
 pub use jit::{
     ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe, StubCompiler,

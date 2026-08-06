@@ -331,6 +331,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
             axes,
             keepdim,
             post: _,
+            accum: _,
         } => {
             // `class`/`keepdim` are consumed by the emitter in step 3; today all
             // classes lower to the same sequential fold, so the legacy last-axis

@@ -1148,6 +1148,7 @@ fn eval_reduction(
             axes,
             keepdim,
             post,
+            accum: _,
         } => (*op, *axes, *keepdim, post),
         _ => unreachable!(),
     };

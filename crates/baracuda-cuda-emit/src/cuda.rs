@@ -11688,6 +11688,7 @@ mod tests {
             axes: AxisMask::EMPTY,
             keepdim: false,
             post: baracuda_kernelgen::ir::ScalarExpr::Reduced(0),
+            accum: baracuda_kernelgen::ir::ReductionAccum::Auto,
         };
         let plan = KernelPlan {
             op_name: "backstop",
@@ -12297,6 +12298,7 @@ mod tests {
             axes: AxisMask::EMPTY,
             keepdim: false,
             post: baracuda_kernelgen::ir::ScalarExpr::Reduced(0),
+            accum: baracuda_kernelgen::ir::ReductionAccum::Auto,
         };
         let plan = KernelPlan {
             op_name: "backstop",

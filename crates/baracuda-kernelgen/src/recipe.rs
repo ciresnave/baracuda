@@ -90,6 +90,7 @@ pub fn semantics_dag(op: &OpDef) -> Option<String> {
             axes,
             keepdim,
             post,
+            accum: _,
         } => {
             let pre = expr_to_recipe(&op.body, &[])?;
             let axes_code = reduce_axes_code(axes);
