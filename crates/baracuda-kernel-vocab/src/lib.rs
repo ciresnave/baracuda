@@ -26,9 +26,9 @@
 //! → `baracuda-cuda-sys` (the CUDA driver FFI). Neutral consumers — the kernel
 //! generator, kernel selectors, Fuel's seam — need only the *vocabulary*, not
 //! the driver. Depending on this leaf crate drops that transitive CUDA-driver
-//! pull entirely; the plain enums and POD structs here need only
-//! `baracuda-types` (for the [`DeviceRepr`](baracuda_types::DeviceRepr) memory
-//! marker) plus `half` / `float8`.
+//! pull entirely; this crate now **owns** the [`DeviceRepr`](crate::DeviceRepr)
+//! memory-layout marker (formerly borrowed from `baracuda-types`) and otherwise
+//! needs only `half` / `float8` — no `baracuda-*` dependency at all.
 //!
 //! `baracuda-kernels-types` re-exports this crate wholesale, so its public API —
 //! both flat items and `::element` / `::layout` / … module paths — is unchanged
@@ -49,6 +49,7 @@
 
 #![deny(missing_docs)]
 
+pub mod device_repr;
 pub mod dispatch;
 pub mod element;
 pub mod layout;
@@ -58,6 +59,7 @@ pub mod shape_expr;
 pub mod sku;
 pub mod structure_key;
 
+pub use device_repr::DeviceRepr;
 pub use dispatch::{
     CandidateResult, DispatchEntry, DispatchTable, HwStamp, Implementor, MIN_FLIP_MARGIN,
     Provenance, ReportedCandidate, merge, reported_entry, seed_winner, winner_of,

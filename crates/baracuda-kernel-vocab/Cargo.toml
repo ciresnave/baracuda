@@ -12,11 +12,10 @@ keywords = ["cuda", "ml", "kernel", "types", "vocabulary"]
 categories = ["api-bindings", "science"]
 
 [dependencies]
-# DeviceRepr (the memory-layout marker the KernelDtype hierarchy bounds on) plus
-# the half / float8 dtype primitives. baracuda-types is itself driver-free — the
-# CUDA-driver pull this crate exists to shed lived only in baracuda-kernels-types'
-# device-view modules, never here.
-baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
+# The memory-layout marker (DeviceRepr, owned here in `device_repr`) plus the
+# half / float8 dtype primitives the KernelDtype hierarchy is built on. This
+# crate has NO `baracuda-*` dependency — it is the neutral vocabulary that both
+# `baracuda-types` (which re-exports DeviceRepr) and the kernel generator build on.
 half = { workspace = true }
 float8 = { workspace = true }
 

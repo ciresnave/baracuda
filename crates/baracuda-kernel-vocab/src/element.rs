@@ -59,7 +59,7 @@
 //! across the wider kernel facade — `baracuda-cutlass` keeps the
 //! `CutlassElement` name available as a re-export for back-compat.
 
-use baracuda_types::DeviceRepr;
+use crate::DeviceRepr;
 use half::{bf16, f16};
 
 mod sealed {
