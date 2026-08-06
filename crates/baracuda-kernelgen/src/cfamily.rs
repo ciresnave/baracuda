@@ -42,7 +42,7 @@ use baracuda_kernel_vocab::ElementKind;
 /// COMPUTE dtype (wrapping mod-256 C semantics), same class as the i32/i64
 /// arms. `S8` (FKC `I8`, increment 0c) is `signed char` — two's-complement
 /// wrapping via integer promotion + store truncation (see the ir.rs table).
-pub(crate) fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
+pub fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
     Some(match dt {
         ElementKind::F32 | ElementKind::F32Strict => "float",
         ElementKind::F64 => "double",
@@ -64,7 +64,7 @@ pub(crate) fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
 
 /// Short dtype tag for generated symbol names. Only called for dtypes that pass
 /// [`scalar_ctype`].
-pub(crate) fn dtype_tag(dt: ElementKind) -> &'static str {
+pub fn dtype_tag(dt: ElementKind) -> &'static str {
     match dt {
         ElementKind::F32 => "f32",
         ElementKind::F32Strict => "f32s",
@@ -89,7 +89,7 @@ pub(crate) fn dtype_tag(dt: ElementKind) -> &'static str {
 /// pre-generalization `out_ctype` (output 0's dtype is `plan.out_dtype`), so every
 /// single-output + uniform-multi emitter that passes `j = 0`/a uniform `j` is
 /// unchanged.
-pub(crate) fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str {
+pub fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str {
     let d = plan.out_dtype_of(j);
     if d == plan.dtype {
         ctype
@@ -112,7 +112,7 @@ pub(crate) fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) 
 /// and 1.0/0.0 round-trip f32→half→f32 bit-exactly, so the conversion pair is
 /// value-exact (and folded by ptxas). `store_expr_of(plan, 0, root)` is
 /// byte-identical to the pre-generalization `store_expr`.
-pub(crate) fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> String {
+pub fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> String {
     let d = plan.out_dtype_of(j);
     if d == plan.dtype {
         return root;
@@ -133,7 +133,7 @@ pub(crate) fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> St
 /// or `None` for a dtype loaded without one. The ONE place the generator names
 /// the half→float promotion — shared by the inline load sites and the generated
 /// dtype-promote helper (`emit_dtype_promote_helper`).
-pub(crate) fn half_load_intrinsic(kind: ElementKind) -> Option<&'static str> {
+pub fn half_load_intrinsic(kind: ElementKind) -> Option<&'static str> {
     match kind {
         ElementKind::F16 => Some("__half2float"),
         ElementKind::Bf16 => Some("__bfloat162float"),
@@ -144,7 +144,7 @@ pub(crate) fn half_load_intrinsic(kind: ElementKind) -> Option<&'static str> {
 /// The f32 → f16/bf16 narrowing intrinsic (`__float2half` / `__float2bfloat16`),
 /// or `None` for a dtype stored without one. Counterpart of
 /// [`half_load_intrinsic`].
-pub(crate) fn half_store_intrinsic(kind: ElementKind) -> Option<&'static str> {
+pub fn half_store_intrinsic(kind: ElementKind) -> Option<&'static str> {
     match kind {
         ElementKind::F16 => Some("__float2half"),
         ElementKind::Bf16 => Some("__float2bfloat16"),
@@ -154,7 +154,7 @@ pub(crate) fn half_store_intrinsic(kind: ElementKind) -> Option<&'static str> {
 
 /// Widen a loaded `inner` expression to `float`: the half/bf16 intrinsic, else
 /// the value unchanged (already ≥ f32, or an integer loaded natively).
-pub(crate) fn promote_load_f32(kind: ElementKind, inner: &str) -> String {
+pub fn promote_load_f32(kind: ElementKind, inner: &str) -> String {
     match half_load_intrinsic(kind) {
         Some(f) => format!("{f}({inner})"),
         None => inner.to_string(),
@@ -163,7 +163,7 @@ pub(crate) fn promote_load_f32(kind: ElementKind, inner: &str) -> String {
 
 /// Narrow a `float`-valued `inner` expression to the storage dtype: the
 /// half/bf16 intrinsic, else the value unchanged (the caller adds any cast).
-pub(crate) fn demote_store_f32(kind: ElementKind, inner: &str) -> String {
+pub fn demote_store_f32(kind: ElementKind, inner: &str) -> String {
     match half_store_intrinsic(kind) {
         Some(f) => format!("{f}({inner})"),
         None => inner.to_string(),
@@ -185,7 +185,7 @@ pub(crate) fn demote_store_f32(kind: ElementKind, inner: &str) -> String {
 ///   * f16/bf16 → arithmetic → widen to `float`, then a C-style cast to the target.
 ///   * arithmetic → f16/bf16 → cast to `float` (unless already `float`), then narrow.
 ///   * arithmetic → arithmetic → a plain C-style cast.
-pub(crate) fn cast_scalar(from: ElementKind, to: ElementKind, expr: &str) -> String {
+pub fn cast_scalar(from: ElementKind, to: ElementKind, expr: &str) -> String {
     if from == to {
         return expr.to_string();
     }
@@ -222,7 +222,7 @@ pub(crate) fn cast_scalar(from: ElementKind, to: ElementKind, expr: &str) -> Str
 /// extra wrapping; the operator forms wrap themselves. (`Sigmoid`/`Gelu`/`Silu`
 /// reference the inner twice — fine for an atomic load; a temp-binding pass to
 /// avoid recompute on compound inners is a follow-up.)
-pub(crate) fn unary_f32(op: UnaryOp, x: String) -> String {
+pub fn unary_f32(op: UnaryOp, x: String) -> String {
     match op {
         UnaryOp::Neg => format!("(-{x})"),
         UnaryOp::Abs => format!("fabsf({x})"),
@@ -272,7 +272,7 @@ pub(crate) fn unary_f32(op: UnaryOp, x: String) -> String {
 }
 
 /// Same as [`unary_f32`] but with f64 math-function names and double literals.
-pub(crate) fn unary_f64(op: UnaryOp, x: String) -> String {
+pub fn unary_f64(op: UnaryOp, x: String) -> String {
     match op {
         UnaryOp::Neg => format!("(-{x})"),
         UnaryOp::Abs => format!("fabs({x})"),
@@ -326,7 +326,7 @@ pub(crate) fn unary_f64(op: UnaryOp, x: String) -> String {
 /// as [`BinaryOp::FmaxIeee`]/[`BinaryOp::FminIeee`] below — so `Max`/`Min` emit
 /// the compare-select, never `fmaxf`. (Operands appear 3× — the deferred
 /// temp-binding pass, cf. relu/sigmoid, removes the recompute on compound inners.)
-pub(crate) fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
+pub fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
     match op {
         // A ON TIES (`>=`/`<=`): the KISS-Ops `max_prop`/`min_prop` normative
         // decomposition (`cmp_ge`/`cmp_le` select a) and numpy/torch
@@ -391,7 +391,7 @@ pub(crate) fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
 }
 
 /// Same as [`binary_f32`] but with f64 math-function names.
-pub(crate) fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
+pub fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
     match op {
         // A ON TIES (`>=`/`<=`) — see [`binary_f32`]'s Max/Min note.
         BinaryOp::Max => {
@@ -473,7 +473,7 @@ pub(crate) fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
 /// The final `other` arm is the second half of the emitter backstop: a float
 /// fn / cmp op that reaches the int speller (i.e. bypassed the plan gate at an
 /// int dtype) panics rather than emitting C that happens to compile.
-pub(crate) fn binary_int(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
+pub fn binary_int(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
     if op.is_logical() {
         assert!(
             dtype == ElementKind::U8,
@@ -512,17 +512,17 @@ pub(crate) fn binary_int(op: BinaryOp, a: String, b: String, dtype: ElementKind)
 /// No arithmetic ever touches an arm: the ternary is data movement
 /// (setp+selp), so ±0 signs and NaN payloads (quiet and signaling) move
 /// intact — byte-for-byte the bespoke `keep ? input[k] : zero_of<T>()`.
-pub(crate) fn select_f32(c: String, a: String, b: String) -> String {
+pub fn select_f32(c: String, a: String, b: String) -> String {
     format!("(((float)({c})) != 0.0f ? (float)({a}) : (float)({b}))")
 }
 
 /// [`select_f32`] with double literals/casts (the `binary_f64` cmp precedent).
-pub(crate) fn select_f64(c: String, a: String, b: String) -> String {
+pub fn select_f64(c: String, a: String, b: String) -> String {
     format!("(((double)({c})) != 0.0 ? (double)({a}) : (double)({b}))")
 }
 
 /// Runtime scalar-param indices used by `e`, ascending + unique.
-pub(crate) fn params_used(e: &ScalarExpr) -> Vec<u8> {
+pub fn params_used(e: &ScalarExpr) -> Vec<u8> {
     fn rec(e: &ScalarExpr, out: &mut std::collections::BTreeSet<u8>) {
         match e {
             ScalarExpr::Param(i) => {
@@ -585,7 +585,7 @@ pub(crate) fn params_used(e: &ScalarExpr) -> Vec<u8> {
 /// `ScalarExpr::Binary(_, a, b)` arm below like any other binary node, so its
 /// own `Const`/`Div` operands are still policed by the blanket rules — it is
 /// never itself the leaf-or-{0,1} exemption target.
-pub(crate) fn assert_no_int_div_or_const(
+pub fn assert_no_int_div_or_const(
     e: &ScalarExpr,
     dtype: ElementKind,
     in_reduction: bool,
@@ -660,7 +660,7 @@ pub(crate) fn assert_no_int_div_or_const(
 /// never `vty`/`octype`. The `Cuda::lower` param assert (see the `matches!` on
 /// `plan.dtype` above) guarantees a param-bearing plan has a spellable scalar
 /// ctype, so the `expect` is unreachable for any op that actually declares a param.
-pub(crate) fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
+pub fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
     scalar_ctype(plan.dtype).expect("param dtype checked by the Cuda::lower param assert")
 }
 
@@ -672,7 +672,7 @@ pub(crate) fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
 /// `float4`/`double2`) the declaration stays `double p0`, NOT `double2 p0` — so
 /// callers pass the SCALAR compute ctype, never `vty`/`octype` (the F64-param
 /// increment's load-bearing distinction).
-pub(crate) fn param_args(e: &ScalarExpr, param_ctype: &str) -> String {
+pub fn param_args(e: &ScalarExpr, param_ctype: &str) -> String {
     params_used(e)
         .iter()
         .map(|i| format!(", {param_ctype} p{i}"))

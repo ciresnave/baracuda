@@ -96,6 +96,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-cuda-emit"
+version = "0.0.1-alpha.78"
+dependencies = [
+ "baracuda-kernel-vocab",
+ "baracuda-kernelgen",
+ "baracuda-nvrtc",
+ "fuel-kernel-seam",
+ "fuel-kernel-seam-types",
+]
+
+[[package]]
 name = "baracuda-cuda-sys"
 version = "0.0.1-alpha.78"
 dependencies = [

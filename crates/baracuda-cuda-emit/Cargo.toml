@@ -1,0 +1,31 @@
+[package]
+name = "baracuda-cuda-emit"
+version = "0.0.1-alpha.78"
+description = "CUDA backend for the neutral baracuda kernel generator: the `Cuda` `Backend` (IR -> .cu emitter), the NVRTC on-demand JIT compiler (`NvrtcCompiler`), and `BaracudaSynthesizer` (the Fuel kernel-seam `Synthesizer` impl). Depends on the neutral generator `baracuda-kernelgen` and supplies the CUDA-specific final emit + compile stage from OUTSIDE the neutral core (the swappable backend model)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+# The real on-demand nvrtc compiler (`NvrtcCompiler`). Off by default so the crate
+# builds/tests without a CUDA toolchain; the Fuel synthesizer falls back to StubCompiler.
+nvrtc = ["dep:baracuda-nvrtc"]
+# The live Fuel kernel-seam Synthesizer endpoint (`BaracudaSynthesizer`) — wires the
+# fuel-kernel-seam `Synthesizer` trait + envelope. Pulls the neutral generator's own
+# `seam` feature for the PatternNode region grammar the request carries.
+seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam", "baracuda-kernelgen/seam"]
+
+[dependencies]
+baracuda-kernelgen = { workspace = true }
+baracuda-kernel-vocab = { workspace = true }
+baracuda-nvrtc = { workspace = true, optional = true }
+# The §5 shared wire grammar + live-call envelope Fuel calls — see baracuda-kernelgen's
+# Cargo.toml for the version rationale; BaracudaSynthesizer implements the Synthesizer trait.
+fuel-kernel-seam-types = { version = "0.10.3", optional = true }
+fuel-kernel-seam = { version = "0.10.3", optional = true }
+
+[lints]
+workspace = true
