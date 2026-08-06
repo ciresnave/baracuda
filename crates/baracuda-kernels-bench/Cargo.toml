@@ -88,9 +88,12 @@ baracuda-cutlass-sys = { workspace = true }
 criterion = { workspace = true }
 # The automated variant-gate loop (tests/variant_gate.rs): generate variants ->
 # nvrtc-compile -> driver-launch -> oracle-check -> gate_cell -> merge ->
-# committed artifact. Dev-only: kernelgen is the publish=false build tool; the
-# loop is an #[ignore]d on-device integration test, never a shipped dependency.
-baracuda-kernelgen = { path = "../baracuda-kernelgen", features = ["nvrtc"] }
+# committed artifact. Dev-only: the neutral generator + its CUDA backend are the
+# publish=false build tools; the loop is an #[ignore]d on-device integration test,
+# never a shipped dependency. `Cuda`/`NvrtcCompiler` live in `baracuda-cuda-emit`
+# (the carve); `generate_variants`/`OpDef`/etc. in the neutral `baracuda-kernelgen`.
+baracuda-kernelgen = { path = "../baracuda-kernelgen" }
+baracuda-cuda-emit = { path = "../baracuda-cuda-emit", features = ["nvrtc"] }
 
 # Criterion's `#[bench]` story requires explicit `[[bench]]` entries
 # with `harness = false`. Each entry maps to one file under `benches/`.

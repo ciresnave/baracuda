@@ -7,8 +7,8 @@
 
 #[cfg(feature = "nvrtc")]
 use crate::nvrtc::NvrtcCompiler;
-use baracuda_kernelgen::ArtifactKind;
 use baracuda_kernel_vocab::{OpCategory, OperandDesc};
+use baracuda_kernelgen::ArtifactKind;
 use fuel_kernel_seam_types::PatternNode as SeamNode;
 
 // ===== The live §5 call — the `fuel_kernel_seam::Synthesizer` Fuel invokes =====
@@ -181,12 +181,12 @@ fn region_op_id(region: &SeamNode, operands: &[OperandDesc]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use baracuda_kernelgen::{JitError, StubCompiler};
-    use baracuda_kernelgen::jit::seam::synthesize;
     use baracuda_kernel_vocab::{ArchSku, ElementKind};
-    use fuel_kernel_seam_types::OpTag;
+    use baracuda_kernelgen::jit::seam::synthesize;
+    use baracuda_kernelgen::{JitError, StubCompiler};
     use fuel_kernel_seam::JitBudget;
     use fuel_kernel_seam_types::OpAttrs;
+    use fuel_kernel_seam_types::OpTag;
 
     fn op(op: OpTag, operands: Vec<SeamNode>) -> SeamNode {
         SeamNode::Op {

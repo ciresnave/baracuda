@@ -461,7 +461,6 @@ dependencies = [
 name = "baracuda-kernelgen"
 version = "0.0.1-alpha.78"
 dependencies = [
- "baracuda-cuda-emit",
  "baracuda-kernel-vocab",
  "fuel-kernel-seam-types",
  "kiss-classify-vocab",
@@ -503,6 +502,7 @@ version = "0.0.1-alpha.78"
 dependencies = [
  "baracuda-cublas",
  "baracuda-cublas-sys",
+ "baracuda-cuda-emit",
  "baracuda-cudnn",
  "baracuda-cutlass",
  "baracuda-cutlass-sys",

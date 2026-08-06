@@ -18,10 +18,11 @@
 //!   - `bmm_gqa_t` both at once: broadcast-batch AND transposed rhs — the
 //!     combined GQA+Kᵀ cell (Task 9's CPU-oracle cell).
 //!
-//! `cargo run -p baracuda-kernelgen --example emit_contract_layout -- <out-dir>`
+//! `cargo run -p baracuda-cuda-emit --example emit_contract_layout -- <out-dir>`
 
+use baracuda_cuda_emit::Cuda;
 use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::{ContractionAxes, Cuda, OpDef, generate, reduced};
+use baracuda_kernelgen::{ContractionAxes, OpDef, generate, reduced};
 use std::fs;
 
 fn main() {

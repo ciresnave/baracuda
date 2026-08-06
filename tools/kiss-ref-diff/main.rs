@@ -448,7 +448,7 @@ fn device_reduce_leg(dc: &DeviceCtx, op: &OpDef, rows: i64, cols: i64, input: &[
     let ind = OperandDesc::new(2, &[rows, cols], &[cols, 1], ElementKind::F32, 16);
     let outd = OperandDesc::new(1, &[rows], &[1], ElementKind::F32, 16);
     let key = structure_key(OpCategory::Reduction, &[ind, outd], ArchSku::Sm89);
-    let kernel = baracuda_kernelgen::generate(op, &key, &baracuda_kernelgen::Cuda);
+    let kernel = baracuda_kernelgen::generate(op, &key, &baracuda_cuda_emit::Cuda);
     if std::env::var_os("POC_DUMP").is_some() {
         eprintln!("--- {} ({}) ---\n{}", op.name, kernel.name, kernel.source);
     }
@@ -650,7 +650,7 @@ fn device_leg(
     let od = OperandDesc::new(1, &[n], &[1], ElementKind::F32, 4);
     let operands: Vec<OperandDesc> = std::iter::repeat(od).take(inputs.len() + 1).collect();
     let key = structure_key(cat, &operands, ArchSku::Sm89);
-    let kernel = baracuda_kernelgen::generate(op, &key, &baracuda_kernelgen::Cuda);
+    let kernel = baracuda_kernelgen::generate(op, &key, &baracuda_cuda_emit::Cuda);
     if std::env::var_os("POC_DUMP").is_some() {
         eprintln!("--- {} ({}) ---\n{}", op.name, kernel.name, kernel.source);
     }

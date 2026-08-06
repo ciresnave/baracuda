@@ -12,10 +12,11 @@
 //!   - `bmm`               rank-3, `out[b] = Σ_k lhs[b]·rhs[b]`      (batch strides alone)
 //!   - `bmm_relu`          rank-3, `out[b] = relu(Σ_k lhs[b]·rhs[b])` (batch + epilogue)
 //!
-//! `cargo run -p baracuda-kernelgen --example emit_bias_batched -- <out-dir>`
+//! `cargo run -p baracuda-cuda-emit --example emit_bias_batched -- <out-dir>`
 
+use baracuda_cuda_emit::Cuda;
 use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::{ContractionAxes, Cuda, OpDef, UnaryOp, generate, input, reduced};
+use baracuda_kernelgen::{ContractionAxes, OpDef, UnaryOp, generate, input, reduced};
 use std::fs;
 
 fn main() {

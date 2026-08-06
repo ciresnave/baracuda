@@ -17,6 +17,11 @@ nvrtc = ["dep:baracuda-nvrtc"]
 # fuel-kernel-seam `Synthesizer` trait + envelope. Pulls the neutral generator's own
 # `seam` feature for the PatternNode region grammar the request carries.
 seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam", "baracuda-kernelgen/seam"]
+# Enable the neutral generator's `convert` feature (tree-sitter CUDA/Slang lifters)
+# so the relocated lifter round-trip tests (`tests/convert.rs`) can reach
+# `baracuda_kernelgen::convert::*`. Test-only passthrough; no cuda-emit lib code
+# depends on it. Included in `--all-features`, which the carve validates against.
+convert = ["baracuda-kernelgen/convert"]
 
 [dependencies]
 baracuda-kernelgen = { workspace = true }

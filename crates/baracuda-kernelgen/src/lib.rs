@@ -60,8 +60,9 @@ pub mod slang;
 pub mod telemetry;
 mod text;
 
-#[cfg(test)]
-mod fuzz;
+// The cross-backend IR fuzzer (`fuzz.rs`) moved to `baracuda-cuda-emit`'s
+// integration tests during the Unpopped carve — it drives `generate(&Cuda)`
+// (plus CpuC/Slang), so it lives with the CUDA backend crate.
 
 // The in-tree Baracuda ↔ kiss-ref differential converter + comparators (the
 // oracle→kiss-ref consolidation). `#[cfg(test)]`-only: migrated numerical tests

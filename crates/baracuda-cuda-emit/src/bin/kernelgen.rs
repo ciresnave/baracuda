@@ -8,11 +8,11 @@
 //! byte-identical (backward-compatible). The spec-driven matrix (ops × structure
 //! cells) and a `--backend` selector replace the hardcoded pilot next.
 
+use baracuda_cuda_emit::Cuda;
 use baracuda_kernel_vocab::{
     ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc,
     seed_winner, structure_key,
 };
-use baracuda_cuda_emit::Cuda;
 use baracuda_kernelgen::ir::BinaryOp;
 use baracuda_kernelgen::{
     OpDef, ReduceOp, ReduceStage, UnaryOp, derive_pattern, emit_dispatch_table, generate,

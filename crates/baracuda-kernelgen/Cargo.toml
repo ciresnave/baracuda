@@ -13,13 +13,6 @@ homepage.workspace = true
 # lockstep means no cross-version API stability is implied anywhere.
 
 [features]
-# Test-selection flag for the on-device nvrtc tests. `NvrtcCompiler` itself moved
-# to `baracuda-cuda-emit` (carve step 2); this crate no longer depends on
-# `baracuda-nvrtc`. Left as an (empty) feature so `--features nvrtc` still gates
-# the `#[cfg(feature = "nvrtc")]` on-device tests here (which reach the moved
-# `NvrtcCompiler` through the transitional dev-dep), and so `--all-features` is a
-# no-op rather than an unknown-feature error.
-nvrtc = []
 # Wire Fuel's frozen kernel-seam grammar (`fuel_kernel_seam_types::PatternNode`) as
 # the neutral seam front-end's JIT region type. The live-call envelope
 # (`fuel_kernel_seam::Synthesizer`, `BaracudaSynthesizer`) moved to
@@ -68,14 +61,12 @@ tree-sitter-slang = { version = "0.3", optional = true }
 kiss-ref-core = "0.1.0"
 kiss-ops-vocab = "0.1.0"
 kiss-classify-vocab = "0.1.0"
-# Transitional dev-dep cycle (carve step 2): the CUDA backend (`Cuda`,
-# `NvrtcCompiler`, `BaracudaSynthesizer`) moved to `baracuda-cuda-emit`, which
-# depends on this crate normally. This crate's Cuda-using TESTS (contract.rs,
-# jit.rs, fuzz.rs, lift.rs, convert.rs, link.rs) reach the moved emitter through
-# this dev-only edge — a cargo-legal dev-dependency cycle. A later step migrates
-# those tests out. `nvrtc`/`seam` are enabled so the on-device + seam tests here
-# can construct `NvrtcCompiler`/`BaracudaSynthesizer`.
-baracuda-cuda-emit = { workspace = true, features = ["nvrtc", "seam"] }
+# NOTE (carve step 3, done): the transitional `baracuda-cuda-emit` dev-dependency
+# cycle is GONE. Every Cuda-using test (the former contract.rs / jit.rs / fuzz.rs /
+# lift.rs / convert.rs / link.rs `#[cfg(test)]` arms) moved OUT to
+# `baracuda-cuda-emit`'s integration tests (`crates/baracuda-cuda-emit/tests/`),
+# which deps this crate the normal way. This crate is now genuinely backend-neutral:
+# it has NO `baracuda-*` backend dependency in any profile.
 
 [lints]
 workspace = true

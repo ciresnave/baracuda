@@ -631,7 +631,37 @@ mod tests {
         lift_elementwise_cuda(src, "x", F32).unwrap().op.body
     }
 
-    // --- CUDA ---
+    const SLANG_MUL: &str = "StructuredBuffer<float> input0;\n\
+        StructuredBuffer<float> input1;\n\
+        RWStructuredBuffer<float> output;\n\
+        [numthreads(256, 1, 1)]\n\
+        void mul(uint3 tid : SV_DispatchThreadID) {\n\
+            uint i = tid.x;\n\
+            output[i] = input0[i] * input1[i];\n\
+        }";
+
+    fn reduce_op(l: &Lifted) -> Option<ReduceOp> {
+        if let crate::ir::Access::Reduction { op, .. } = &l.op.access {
+            Some(*op)
+        } else {
+            None
+        }
+    }
+
+    fn scan_info(l: &Lifted) -> Option<(ReduceOp, &ScalarExpr, bool, bool)> {
+        if let crate::ir::Access::Scan {
+            op,
+            pre,
+            reverse,
+            exclusive,
+            ..
+        } = &l.op.access
+        {
+            Some((*op, pre, *reverse, *exclusive))
+        } else {
+            None
+        }
+    }
 
     #[test]
     fn grammars_load_and_parse() {
@@ -709,17 +739,6 @@ mod tests {
         ));
     }
 
-    // --- Slang (the SAME walk, different conventions) ---
-
-    const SLANG_MUL: &str = "StructuredBuffer<float> input0;\n\
-        StructuredBuffer<float> input1;\n\
-        RWStructuredBuffer<float> output;\n\
-        [numthreads(256, 1, 1)]\n\
-        void mul(uint3 tid : SV_DispatchThreadID) {\n\
-            uint i = tid.x;\n\
-            output[i] = input0[i] * input1[i];\n\
-        }";
-
     #[test]
     fn slang_lifts_multiply() {
         let lifted = lift_elementwise_slang(SLANG_MUL, "slang_mul", F32).unwrap();
@@ -751,31 +770,6 @@ mod tests {
         let c = lift_elementwise_cuda(cuda, "m", F32).unwrap();
         let s = lift_elementwise_slang(SLANG_MUL, "m", F32).unwrap();
         assert_eq!(c.op.body, s.op.body);
-    }
-
-    #[test]
-    fn round_trip_reemits_to_cuda_and_cpuc() {
-        use crate::{CpuC, generate};
-        use baracuda_cuda_emit::Cuda;
-        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
-        // Lift a Slang kernel, re-emit to CUDA AND portable-C — cross-language port.
-        let lifted = lift_elementwise_slang(SLANG_MUL, "ported", F32).unwrap();
-        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 4);
-        let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
-        let cuda = generate(&lifted.op, &key, &Cuda);
-        let cpuc = generate(&lifted.op, &key, &CpuC);
-        assert!(cuda.source.contains("in0[") && cuda.source.contains("in1["));
-        assert!(cpuc.source.contains("for (long long i"));
-    }
-
-    // --- Reductions (naive accumulator loop → OpDef::reduction) ---
-
-    fn reduce_op(l: &Lifted) -> Option<ReduceOp> {
-        if let crate::ir::Access::Reduction { op, .. } = &l.op.access {
-            Some(*op)
-        } else {
-            None
-        }
     }
 
     #[test]
@@ -844,39 +838,6 @@ mod tests {
         let lifted = lift_reduction_slang(src, "rsum", F32).unwrap();
         assert_eq!(lifted.op.body, ScalarExpr::Input(0));
         assert_eq!(reduce_op(&lifted), Some(ReduceOp::Sum));
-    }
-
-    #[test]
-    fn reduction_round_trips_to_cuda() {
-        use crate::generate;
-        use baracuda_cuda_emit::Cuda;
-        use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
-        // Lift a naive sum reduction and re-emit — the generator produces the
-        // optimized cooperative reduce (`baracuda_gen_<name>_f32_reduce_sum`).
-        let src = "__global__ void sum(const float* in0, float* out, long long n){ float acc = 0.0f; for (long long i=0;i<n;i++) acc += in0[i]; out[0] = acc; }";
-        let lifted = lift_reduction_cuda(src, "sum", F32).unwrap();
-        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
-        let out = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
-        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
-        let k = generate(&lifted.op, &key, &Cuda);
-        assert!(k.name.contains("reduce_sum"), "name was {}", k.name);
-    }
-
-    // --- Scans (running accumulator stored in-loop at out[i] → OpDef::scan) ---
-
-    fn scan_info(l: &Lifted) -> Option<(ReduceOp, &ScalarExpr, bool, bool)> {
-        if let crate::ir::Access::Scan {
-            op,
-            pre,
-            reverse,
-            exclusive,
-            ..
-        } = &l.op.access
-        {
-            Some((*op, pre, *reverse, *exclusive))
-        } else {
-            None
-        }
     }
 
     #[test]

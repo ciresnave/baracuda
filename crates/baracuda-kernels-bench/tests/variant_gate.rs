@@ -14,12 +14,11 @@
 //! Ignored by default (needs a CUDA device + nvrtc); run with:
 //! `cargo test -p baracuda-kernels-bench --test variant_gate -- --ignored`
 
+use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
 use baracuda_driver::{Device, Module};
 use baracuda_kernelgen::emit_dispatch_table;
-use baracuda_kernelgen::{
-    Compiler, Cuda, NvrtcCompiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input,
-};
+use baracuda_kernelgen::{Compiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input};
 use baracuda_kernels_bench::{current_hwstamp, gate_cell, setup_device};
 use baracuda_kernels_types::{
     ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, Implementor, OpCategory,

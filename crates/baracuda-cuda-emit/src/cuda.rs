@@ -6,6 +6,8 @@
 //! — and reused verbatim across dtypes, because CUDA overloads `+ - * /` for
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
+use baracuda_kernel_vocab::structure_key::LayoutOrder;
+use baracuda_kernel_vocab::{AxisMask, Contiguity, ElementKind, OperandKey};
 use baracuda_kernelgen::backend::{
     Backend, GeneratedKernel, Lowering, Variant, VariantFidelity, lower_dag, lower_dag_all,
     lower_dag_multi, lower_expr,
@@ -20,8 +22,6 @@ use baracuda_kernelgen::ir::{
     is_admissible_int_reduction_operand,
 };
 use baracuda_kernelgen::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
-use baracuda_kernel_vocab::structure_key::LayoutOrder;
-use baracuda_kernel_vocab::{AxisMask, Contiguity, ElementKind, OperandKey};
 
 /// The CUDA C++ backend. Lowers a [`KernelPlan`] to `.cu` source.
 #[derive(Copy, Clone, Debug, Default)]
@@ -1217,7 +1217,8 @@ fn assert_gather_lowerable(plan: &KernelPlan<'_>) {
         plan.schedule
     );
     let (g, index_operand, axis, _oob, index_dtype) =
-        baracuda_kernelgen::plan::gather_of(plan.read_index).expect("gather present (checked above)");
+        baracuda_kernelgen::plan::gather_of(plan.read_index)
+            .expect("gather present (checked above)");
     assert!(
         (index_operand as usize) < plan.n_inputs as usize && index_operand as usize != g,
         "cuda backend: gathered op '{name}' index_operand ({index_operand}) invalid \
@@ -1660,7 +1661,11 @@ fn assert_multi_output_lowerable(plan: &KernelPlan<'_>) {
 ///   is empty, a `Broadcast` view agrees with the key, a `Reshape` is same-rank —
 ///   the same rules as the plan gate, held independently here.
 fn assert_views_lowerable(plan: &KernelPlan<'_>) {
-    if !plan.views.iter().any(baracuda_kernelgen::plan::view_is_addressing) {
+    if !plan
+        .views
+        .iter()
+        .any(baracuda_kernelgen::plan::view_is_addressing)
+    {
         return; // view-free / all-identity — the established path, unchanged.
     }
     let name = plan.op_name;
@@ -6909,10 +6914,10 @@ fn param_args_multi(exprs: &[&ScalarExpr], param_ctype: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use baracuda_kernelgen::ir::{OpDef, input, param};
     use crate::Cuda;
-    use baracuda_kernelgen::{generate};
     use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+    use baracuda_kernelgen::generate;
+    use baracuda_kernelgen::ir::{OpDef, input, param};
 
     fn add_op(dtypes: &[ElementKind]) -> OpDef {
         OpDef::elementwise("add", 2, dtypes, input(0) + input(1))
@@ -7450,7 +7455,10 @@ mod tests {
             1,
             "integer scatter_add ships one unconditional base"
         );
-        assert_eq!(vs[0].fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
+        assert_eq!(
+            vs[0].fidelity,
+            baracuda_kernelgen::VariantFidelity::BitIdentical
+        );
     }
 
     #[test]
@@ -7488,7 +7496,10 @@ mod tests {
                 .contains("if (!soob) atomicAdd(&out[oo], (int)(1.0));")
         );
         // Deterministic integer counts ⇒ ships unconditionally (no variant).
-        assert_eq!(baracuda_kernelgen::generate_variants(&op, &key, &Cuda).len(), 1);
+        assert_eq!(
+            baracuda_kernelgen::generate_variants(&op, &key, &Cuda).len(),
+            1
+        );
     }
 
     #[test]
@@ -7518,15 +7529,22 @@ mod tests {
         // The FP-atomic scatter ships ONLY as a Nondeterministic variant beside the
         // deterministic gather-sum base — never the silent default.
         let op = OpDef::scatter_add("scatter_add", &[ElementKind::F32], 0, ElementKind::I32);
-        let vs = baracuda_kernelgen::generate_variants(&op, &scatter_2d_key(ElementKind::I32), &Cuda);
+        let vs =
+            baracuda_kernelgen::generate_variants(&op, &scatter_2d_key(ElementKind::I32), &Cuda);
         assert_eq!(vs.len(), 2, "base (gather-sum) + atomic variant");
         // Base is the deterministic gather-sum.
-        assert_eq!(vs[0].fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
+        assert_eq!(
+            vs[0].fidelity,
+            baracuda_kernelgen::VariantFidelity::BitIdentical
+        );
         assert!(vs[0].kernels[0].name.contains("_scatter_gathersum_"));
         // The atomic variant is Nondeterministic + carries the honest determinism flip.
         let atomic = &vs[1];
         assert_eq!(atomic.tag, "atomic");
-        assert_eq!(atomic.fidelity, baracuda_kernelgen::VariantFidelity::Nondeterministic);
+        assert_eq!(
+            atomic.fidelity,
+            baracuda_kernelgen::VariantFidelity::Nondeterministic
+        );
         assert!(
             atomic.kernels[0]
                 .source
@@ -7944,9 +7962,9 @@ mod tests {
 
     #[test]
     fn splitk_variant_offered_for_outer_sum() {
+        use baracuda_kernel_vocab::AxisMask;
         use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernelgen::{VariantFidelity, generate_variants};
-        use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "sum",
             1,
@@ -7999,9 +8017,9 @@ mod tests {
 
     #[test]
     fn splitk_mean_divides_in_combine_only() {
+        use baracuda_kernel_vocab::AxisMask;
         use baracuda_kernelgen::generate_variants;
         use baracuda_kernelgen::ir::ReduceOp;
-        use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "mean",
             1,
@@ -8450,9 +8468,9 @@ mod tests {
 
     #[test]
     fn splitk_gate_refuses_flipped_param_and_malformed_cells() {
+        use baracuda_kernel_vocab::AxisMask;
         use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernelgen::{Backend, generate_variants};
-        use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "sum",
             1,
@@ -8511,9 +8529,9 @@ mod tests {
 
     #[test]
     fn splitk_not_offered_for_lastaxis_max_or_int() {
+        use baracuda_kernel_vocab::AxisMask;
         use baracuda_kernelgen::generate_variants;
         use baracuda_kernelgen::ir::ReduceOp;
-        use baracuda_kernel_vocab::AxisMask;
         // Last-axis (InnerContig): already block-parallel — no split-K.
         let last = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
         let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
@@ -8961,8 +8979,8 @@ mod tests {
 
     #[test]
     fn reduction_outer_axis_collapses() {
-        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Reduce axis 0 of a contiguous [4,8] input → collapse to [8].
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(1, &[8], &[1], ElementKind::F32, 256);
@@ -9007,8 +9025,8 @@ mod tests {
 
     #[test]
     fn reduction_multi_axis_mean_divisor_is_the_extent_product() {
-        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Reduce axes {0,1} of [2,3,4] → [4], Mean: divisor = shape0 * shape1.
         let a = OperandDesc::new(3, &[2, 3, 4], &[12, 4, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(1, &[4], &[1], ElementKind::F32, 256);
@@ -9042,8 +9060,8 @@ mod tests {
 
     #[test]
     fn reduction_keepdim_outer_axis_uses_input_axis_output_stride() {
-        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Reduce axis 0 of [4,8] with keepdim → [1,8]: the output stride is indexed
         // by INPUT axis (kept axis 1), not a collapsed position.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -9065,8 +9083,8 @@ mod tests {
 
     #[test]
     fn reduction_general_max_seeds_and_propagates_nan() {
-        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Max over a non-last axis still uses the NaN-propagating select, seeded via
         // the `has` flag (no ±∞ literal, empty extent leaves acc = 0).
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -9093,8 +9111,8 @@ mod tests {
 
     #[test]
     fn reduction_strided_last_axis_takes_the_general_path() {
-        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Reduce the last axis of a column-major (transposed, strided) [8,4] input:
         // the trailing axis over a non-contiguous input is NOT the contiguous fast
         // path, so it routes to the strided general fold.
@@ -9121,8 +9139,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "output store must be injective")]
     fn reduction_broadcast_output_is_rejected() {
-        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
+        use baracuda_kernelgen::ir::ReduceOp;
         // A broadcast (stride-0) output would collapse every result onto one slot —
         // the general path must reject it, not emit an aliasing store.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -9329,8 +9347,8 @@ mod tests {
 
     #[test]
     fn reduction_max_general_axis_s8_empty_axis_seeds_the_dtype_min_identity() {
-        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
+        use baracuda_kernelgen::ir::ReduceOp;
         // S8 Max over the OUTER (non-contiguous-last) axis: the general
         // strided-fold path (the second emit site) — same empty-axis identity
         // must apply here too, not just the InnerContig fast path.
@@ -9358,8 +9376,8 @@ mod tests {
 
     #[test]
     fn reduction_min_general_axis_u8_empty_axis_seeds_the_dtype_max_identity() {
-        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
+        use baracuda_kernelgen::ir::ReduceOp;
         // U8 Min over the OUTER axis: general path, unsigned case: 255.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::U8, 256);
         let out = OperandDesc::new(1, &[8], &[1], ElementKind::U8, 256);
@@ -9385,8 +9403,8 @@ mod tests {
 
     #[test]
     fn reduction_prod_general_axis_folds_from_one() {
-        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Prod over the outer axis (general path): identity 1, `acc *= elem`,
         // no Mean divisor.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -11651,10 +11669,10 @@ mod tests {
     #[test]
     #[should_panic(expected = "under a non-Elementwise access")]
     fn coord_under_reduction_access_is_refused_by_the_emitter_backstop() {
+        use baracuda_kernel_vocab::AxisMask;
         use baracuda_kernelgen::backend::Backend;
         use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernelgen::plan::{KernelPlan, ReduceAxisClass, Schedule};
-        use baracuda_kernel_vocab::AxisMask;
         let key = reduce_key(ElementKind::F32);
         let body = (input(0) * coord(0)).0;
         let access = baracuda_kernelgen::ir::Access::Reduction {
@@ -12260,10 +12278,10 @@ mod tests {
     #[test]
     #[should_panic(expected = "Elementwise-only")]
     fn offset_under_a_non_elementwise_access_is_refused_by_the_backstop() {
+        use baracuda_kernel_vocab::AxisMask;
         use baracuda_kernelgen::backend::Backend;
         use baracuda_kernelgen::ir::{BaseOffset, ReduceOp};
         use baracuda_kernelgen::plan::{KernelPlan, ReduceAxisClass, Schedule};
-        use baracuda_kernel_vocab::AxisMask;
         let key = reduce_key(ElementKind::F32);
         let body = input(0).0;
         let access = baracuda_kernelgen::ir::Access::Reduction {
@@ -12305,12 +12323,12 @@ mod multi_output_tests {
     //! / an interior product emitted ONCE). Single-output emission stays
     //! byte-identical (extra_out_bodies empty) — pinned by
     //! `single_body_multi_matches_elementwise`.
-    use baracuda_kernelgen::ir::{BinaryOp, OpDef, UnaryOp, input, konst};
     use crate::Cuda;
-    use baracuda_kernelgen::{generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
+    use baracuda_kernelgen::generate;
+    use baracuda_kernelgen::ir::{BinaryOp, OpDef, UnaryOp, input, konst};
 
     /// N contiguous 1D operands. `even` picks the vectorizable extent (V4 f32 /
     /// V8 f16) vs an odd extent that forces the Scalar schedule.
@@ -12674,14 +12692,16 @@ mod dropout_hetero_tests {
     //! SITE, never on the shared node (M9). On-device numeric proof is
     //! `ondevice/dropout_validate.cu`; these pin the source shape + the per-output
     //! ptr type / store cast.
-    use baracuda_kernelgen::backend::Backend;
-    use baracuda_kernelgen::ir::{Access, BaseOffset, BinaryOp, OpDef, WriteIndex, input, konst, param};
-    use baracuda_kernelgen::plan::{KernelPlan, Schedule};
     use crate::Cuda;
-    use baracuda_kernelgen::{build_plan, generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
+    use baracuda_kernelgen::backend::Backend;
+    use baracuda_kernelgen::ir::{
+        Access, BaseOffset, BinaryOp, OpDef, WriteIndex, input, konst, param,
+    };
+    use baracuda_kernelgen::plan::{KernelPlan, Schedule};
+    use baracuda_kernelgen::{build_plan, generate};
 
     // dropout_fw: inputs x=in0, rand=in1; params keep_prob=p0, scale=p1.
     //   output 0 (value, `dt`): x·(rand<keep_prob ? scale : 0)
@@ -13198,13 +13218,13 @@ mod scan_tests {
     //! Increment-6 SCAN emitter tests: the serial-fold BASE + the block-scan
     //! VARIANT generate valid, structurally-correct CUDA. On-device numeric proof
     //! is `ondevice/scan_validate.cu`; these are source-shape + variant-wiring pins.
-    use baracuda_kernelgen::ir::{Access, OpDef, ReduceOp};
-    use baracuda_kernelgen::plan::Schedule;
     use crate::Cuda;
-    use baracuda_kernelgen::{build_plan, generate, generate_variants};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
+    use baracuda_kernelgen::ir::{Access, OpDef, ReduceOp};
+    use baracuda_kernelgen::plan::Schedule;
+    use baracuda_kernelgen::{build_plan, generate, generate_variants};
 
     fn scan_key(dt: ElementKind) -> StructureKey {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
@@ -13278,7 +13298,10 @@ mod scan_tests {
         );
         let vs = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda);
         assert_eq!(vs[0].tag, "base");
-        assert_eq!(vs[0].fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
+        assert_eq!(
+            vs[0].fidelity,
+            baracuda_kernelgen::VariantFidelity::BitIdentical
+        );
     }
 
     #[test]
@@ -13510,8 +13533,8 @@ mod scan_tests {
     #[test]
     #[ignore = "manual regeneration tool for ondevice/relu_propagating_validate.cu"]
     fn dump_relu_sources() {
-        use baracuda_kernelgen::ir::input;
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernelgen::ir::input;
         let out = std::env::var("RELU_OUT").unwrap_or_else(|_| ".".to_string());
         for dt in [
             ElementKind::F32,
@@ -13546,8 +13569,8 @@ mod scan_tests {
     #[test]
     #[ignore = "manual regeneration tool for ondevice/offset_validate.cu"]
     fn dump_offset_sources() {
-        use baracuda_kernelgen::ir::{BaseOffset, input};
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernelgen::ir::{BaseOffset, input};
         let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
         let write = |k: baracuda_kernelgen::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
@@ -13683,8 +13706,8 @@ mod scan_tests {
     #[test]
     #[ignore = "manual regeneration tool for ondevice/offset_validate.cu (rope E2E)"]
     fn dump_rope_pair_sources() {
-        use baracuda_kernelgen::ir::{BaseOffset, input};
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
+        use baracuda_kernelgen::ir::{BaseOffset, input};
         let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
         let write = |k: baracuda_kernelgen::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
@@ -13837,13 +13860,13 @@ mod window_tests {
     //! Increment-7 WINDOW emitter tests: the one-thread-per-output pooling base
     //! generates valid, structurally-correct CUDA. On-device numeric proof is
     //! `ondevice/window_validate.cu`; these are source-shape + geometry pins.
-    use baracuda_kernelgen::ir::{Access, OpDef, ReduceOp};
-    use baracuda_kernelgen::plan::Schedule;
     use crate::Cuda;
-    use baracuda_kernelgen::{build_plan, generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
+    use baracuda_kernelgen::ir::{Access, OpDef, ReduceOp};
+    use baracuda_kernelgen::plan::Schedule;
+    use baracuda_kernelgen::{build_plan, generate};
 
     // input [8, k_in] contiguous, output [8, k_out] contiguous (downsampled).
     fn window_key(dt: ElementKind, k_in: i64, k_out: i64) -> StructureKey {
@@ -14233,12 +14256,12 @@ mod im2col_tests {
     //! oracle) is `ondevice/im2col_validate.cu`; these are source-shape + closed-form
     //! index-map + raw-bit-copy pins. Goldens call `generate` (the full pipeline);
     //! gate mutations are covered `build_plan`-DIRECT in `plan::im2col_gate_validate`.
-    use baracuda_kernelgen::plan::{KernelPlan, Schedule};
     use crate::Cuda;
-    use baracuda_kernelgen::{generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
+    use baracuda_kernelgen::generate;
+    use baracuda_kernelgen::plan::{KernelPlan, Schedule};
 
     // rank-4 NCHW input [2,3,4,4] dense + rank-3 output [2,8,8] dense (the extent is
     // a runtime precondition — only rank + layout are keyed).
@@ -14251,8 +14274,14 @@ mod im2col_tests {
     #[test]
     fn im2col_base_golden_f32() {
         // 3x3, stride 1, pad 1, dilation 1 — the canonical conv geometry.
-        let p =
-            baracuda_kernelgen::ir::OpDef::im2col_2d("unfold", ElementKind::F32, (3, 3), (1, 1), (1, 1), (1, 1));
+        let p = baracuda_kernelgen::ir::OpDef::im2col_2d(
+            "unfold",
+            ElementKind::F32,
+            (3, 3),
+            (1, 1),
+            (1, 1),
+            (1, 1),
+        );
         let k = generate(&p, &im2col_key(ElementKind::F32), &Cuda);
         assert_eq!(k.name, "baracuda_gen_unfold_f32_im2col");
         let s = &k.source;
@@ -14306,8 +14335,14 @@ mod im2col_tests {
     fn im2col_golden_f16() {
         // f16: the copied value is a RAW-BIT __half move (NO __float2half round-trip on
         // the copy — that would change NaN payloads); only the OOB zero is constructed.
-        let p =
-            baracuda_kernelgen::ir::OpDef::im2col_2d("unfold", ElementKind::F16, (2, 2), (1, 1), (0, 0), (1, 1));
+        let p = baracuda_kernelgen::ir::OpDef::im2col_2d(
+            "unfold",
+            ElementKind::F16,
+            (2, 2),
+            (1, 1),
+            (0, 0),
+            (1, 1),
+        );
         let k = generate(&p, &im2col_key(ElementKind::F16), &Cuda);
         assert_eq!(k.name, "baracuda_gen_unfold_f16_im2col");
         let s = &k.source;
@@ -14347,8 +14382,14 @@ mod im2col_tests {
         // dilation != 1 bakes + ki*dh / + kj*dw; non-square kernel (kh != kw) + stride
         // + pad all baked as distinct literals (a ki/kj or H/W swap fails the memcmp
         // on the on-device non-square cells; here it fails the baked literals).
-        let p =
-            baracuda_kernelgen::ir::OpDef::im2col_2d("unfold", ElementKind::F32, (3, 5), (2, 1), (2, 0), (2, 3));
+        let p = baracuda_kernelgen::ir::OpDef::im2col_2d(
+            "unfold",
+            ElementKind::F32,
+            (3, 5),
+            (2, 1),
+            (2, 0),
+            (2, 3),
+        );
         let k = generate(&p, &im2col_key(ElementKind::F32), &Cuda);
         let s = &k.source;
         assert!(
@@ -14370,8 +14411,14 @@ mod im2col_tests {
     #[test]
     fn im2col_symbol_is_distinct() {
         // The _im2col symbol collides with no other family (window/sort/scan).
-        let p =
-            baracuda_kernelgen::ir::OpDef::im2col_2d("conv", ElementKind::F32, (3, 3), (1, 1), (1, 1), (1, 1));
+        let p = baracuda_kernelgen::ir::OpDef::im2col_2d(
+            "conv",
+            ElementKind::F32,
+            (3, 3),
+            (1, 1),
+            (1, 1),
+            (1, 1),
+        );
         let k = generate(&p, &im2col_key(ElementKind::F32), &Cuda);
         assert_eq!(k.name, "baracuda_gen_conv_f32_im2col");
         assert!(!k.source.contains("_window_"), "{}", k.source);
@@ -14459,7 +14506,9 @@ mod im2col_tests {
             // dtypes, gname distinguishes geometries, so each (dtype, geometry) cell is
             // a unique entry point (no redefinition when all are #included together).
             for &(gname, (kernel, stride, pad, dilation)) in geos {
-                let p = baracuda_kernelgen::ir::OpDef::im2col_2d(gname, dt, kernel, stride, pad, dilation);
+                let p = baracuda_kernelgen::ir::OpDef::im2col_2d(
+                    gname, dt, kernel, stride, pad, dilation,
+                );
                 write(generate(&p, &im2col_key(dt), &Cuda));
             }
         }
@@ -14472,12 +14521,12 @@ mod sort_tests {
     //! cooperative smem BITONIC pair-sort VARIANT generate valid, structurally-
     //! correct CUDA. On-device numeric proof is `ondevice/sort_validate.cu`; these
     //! are source-shape + variant-wiring + no-INFINITY pins.
-    use baracuda_kernelgen::ir::{OpDef, SortOrder};
     use crate::Cuda;
-    use baracuda_kernelgen::{generate, generate_variants};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
+    use baracuda_kernelgen::ir::{OpDef, SortOrder};
+    use baracuda_kernelgen::{generate, generate_variants};
 
     fn sort_key(dt: ElementKind) -> StructureKey {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
@@ -14670,7 +14719,10 @@ mod sort_tests {
             "{}",
             bt.launch_note
         ); // float(4)+int(4)
-        assert_eq!(bt.fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
+        assert_eq!(
+            bt.fidelity,
+            baracuda_kernelgen::VariantFidelity::BitIdentical
+        );
     }
 
     #[test]
@@ -14746,7 +14798,10 @@ mod sort_tests {
         let vs = generate_variants(&sc, &sort_key(ElementKind::F32), &Cuda);
         let tags: Vec<&str> = vs.iter().map(|v| v.tag).collect();
         assert_eq!(tags, vec!["base", "bitonic"]);
-        assert_eq!(vs[0].fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
+        assert_eq!(
+            vs[0].fidelity,
+            baracuda_kernelgen::VariantFidelity::BitIdentical
+        );
     }
 
     // ---- Increment 9 FUSED_ARGSORT: the two-output `Both` goldens ----
@@ -14840,7 +14895,10 @@ mod sort_tests {
             "{}",
             src
         );
-        assert_eq!(bt.fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
+        assert_eq!(
+            bt.fidelity,
+            baracuda_kernelgen::VariantFidelity::BitIdentical
+        );
     }
 
     #[test]
@@ -15059,7 +15117,10 @@ mod sort_tests {
             src
         );
         assert!(src.contains("out_idx[out_base + p] = sidx[p];"), "{}", src);
-        assert_eq!(bt.fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
+        assert_eq!(
+            bt.fidelity,
+            baracuda_kernelgen::VariantFidelity::BitIdentical
+        );
         // The launch_note metadata must name the (k_in, k_out) TopK ABI — the
         // variant reads `limit`, so a stale Full note here (`next_pow2(k)`,
         // `REQUIRES k <= 1024`) would mis-describe the smem/occupancy contract.
@@ -15306,7 +15367,8 @@ mod sort_tests {
         let sc = OpDef::row_topk("topk", ElementKind::F32);
         let k = generate(&sc, &topk_both_key(ElementKind::F32, 64), &Cuda);
         assert!(
-            baracuda_kernelgen::contract(&sc, &topk_both_key(ElementKind::F32, 64), &k, &Cuda).is_none(),
+            baracuda_kernelgen::contract(&sc, &topk_both_key(ElementKind::F32, 64), &k, &Cuda)
+                .is_none(),
             "a topk must emit NO contract (no Fuel top_k OpTag; AOT-only)"
         );
         assert!(matches!(
@@ -15441,7 +15503,10 @@ mod sort_tests {
             .iter()
             .find(|v| v.tag == "psel")
             .expect("psel variant present for a TopK cell");
-        assert_eq!(ps.fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
+        assert_eq!(
+            ps.fidelity,
+            baracuda_kernelgen::VariantFidelity::BitIdentical
+        );
         assert_eq!(ps.kernels.len(), 1);
         assert!(
             ps.kernels[0].name.ends_with("_topk_psel"),
@@ -15805,12 +15870,12 @@ mod select_tests {
     //! and the `#[ignore]`d source dump for `ondevice/select_validate.cu`.
     //! On-device numeric proof (triu/tril memcmp vs bespoke, NaN payloads,
     //! signed zeros) lives in that harness; these pin the source text.
-    use baracuda_kernelgen::ir::{BinaryOp, OpDef, coord, input, konst, reduced};
     use crate::Cuda;
-    use baracuda_kernelgen::{generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
+    use baracuda_kernelgen::generate;
+    use baracuda_kernelgen::ir::{BinaryOp, OpDef, coord, input, konst, reduced};
 
     /// `n_operands` contiguous rank-1 operands of `dt` at `align` (align 4/2/8
     /// defeats vectorization ⇒ the scalar golden; 256 keys V4/V8).

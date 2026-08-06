@@ -9,12 +9,12 @@
 //! only the `add` primitive — the fusions still generate + run AOT and ride the
 //! JIT seam as bare blocks. See `contract::bundle`.
 //!
-//! `cargo run -p baracuda-kernelgen --example emit_contract`
+//! `cargo run -p baracuda-cuda-emit --example emit_contract`
 
+use baracuda_cuda_emit::Cuda;
 use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 use baracuda_kernelgen::{
-    Cuda, LinkEntry, OpDef, bundle, contract, emit_link_registry, generate, input, link_entry,
-    param,
+    LinkEntry, OpDef, bundle, contract, emit_link_registry, generate, input, link_entry, param,
 };
 
 fn cell(n_operands: usize, op: OpCategory) -> baracuda_kernel_vocab::StructureKey {
