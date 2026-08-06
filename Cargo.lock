@@ -442,7 +442,6 @@ dependencies = [
 name = "baracuda-kernel-vocab"
 version = "0.0.1-alpha.78"
 dependencies = [
- "baracuda-types",
  "float8",
  "half",
 ]
@@ -834,6 +833,7 @@ dependencies = [
 name = "baracuda-types"
 version = "0.0.1-alpha.78"
 dependencies = [
+ "baracuda-kernel-vocab",
  "baracuda-types-derive",
  "bytemuck",
  "float8",
