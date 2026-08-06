@@ -31,6 +31,11 @@ impl Backend for Cuda {
     fn name(&self) -> &str {
         "cuda"
     }
+    fn provider(&self) -> &str {
+        // Baracuda genuinely provides the CUDA backend — the correct value, not a
+        // compatibility dodge; keeps every CUDA contract + goldens byte-identical.
+        "baracuda"
+    }
 
     /// The unit of the emitted elementwise kernel's `n` argument for this plan:
     /// `w > 1` means the kernel counts `w`-element **vectors** (a vectorized or

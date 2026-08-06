@@ -58,6 +58,11 @@ impl Backend for CpuC {
     fn name(&self) -> &str {
         "cpu_c"
     }
+    fn provider(&self) -> &str {
+        // The in-tree portable-C reference backend is provided by the generator
+        // itself, not by any vendor — so it reports the generator's name.
+        "unpopped"
+    }
 
     fn supports_dtype(&self, dtype: ElementKind) -> bool {
         // Portable C has a real scalar type for every compute dtype the CUDA
@@ -127,7 +132,7 @@ impl Backend for CpuC {
 /// `for (long long i = 0; i < n; ++i)` loop instead of the `extern "C" __global__`
 /// header and the grid-stride prologue.
 fn emit_scalar_cpu(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
-    let name = format!("baracuda_cpu_{}_{}", plan.op_name, dtype_tag(plan.dtype));
+    let name = format!("unpopped_cpu_{}_{}", plan.op_name, dtype_tag(plan.dtype));
     let n = plan.n_inputs;
     let octype = out_ctype_of(plan, 0, ctype);
     let mut s = String::new();
@@ -288,14 +293,14 @@ mod tests {
         let k = generate(&op, &binary_scalar_key(ElementKind::F32, 4), &CpuC);
         let src = &k.source;
         // Exported symbol distinct from the CUDA `baracuda_gen_*`.
-        assert_eq!(k.name, "baracuda_cpu_affine_f32");
+        assert_eq!(k.name, "unpopped_cpu_affine_f32");
         // Portable C structure.
         assert!(
             src.contains("#include <math.h>"),
             "missing math.h in:\n{src}"
         );
         assert!(
-            src.contains("void baracuda_cpu_affine_f32("),
+            src.contains("void unpopped_cpu_affine_f32("),
             "missing plain void signature in:\n{src}"
         );
         assert!(

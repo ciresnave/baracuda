@@ -708,7 +708,11 @@ pub fn contract(
     // token is canonicalized to Fuel's capitalized spelling (`cuda` → `Cuda`;
     // see `fkc_backend_token`) so the block imports through `lower_backend`.
     s.push_str(&format!("backend: {}\n", fkc_backend_token(backend.name())));
-    s.push_str("kernel_source: baracuda\n");
+    // `kernel_source:` is the PROVIDER identity (provenance), supplied by the
+    // backend — a neutral generator cannot hardcode who provides it. Baracuda's
+    // CUDA backend reports `baracuda` (byte-identical to the pre-abstraction
+    // literal); the in-tree reference backends report the generator's name.
+    s.push_str(&format!("kernel_source: {}\n", backend.provider()));
     s.push_str(&format!("dtypes: [{dtype}]\n"));
     s.push_str(&format!("entry_point: {}\n", kernel.name));
     s.push_str(&format!(

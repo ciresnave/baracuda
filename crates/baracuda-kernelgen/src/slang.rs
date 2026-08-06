@@ -76,6 +76,10 @@ impl Backend for Slang {
     fn name(&self) -> &str {
         "slang"
     }
+    fn provider(&self) -> &str {
+        // The in-tree Slang reference emitter is provided by the generator itself.
+        "unpopped"
+    }
 
     fn supports_dtype(&self, dtype: ElementKind) -> bool {
         slang_ctype(dtype).is_some()

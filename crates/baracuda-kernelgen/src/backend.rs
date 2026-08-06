@@ -154,8 +154,19 @@ impl Variant {
 
 /// Lowers a neutral [`crate::plan::KernelPlan`] to concrete kernel source.
 pub trait Backend {
-    /// Short backend identifier (e.g. `"cuda"`).
+    /// Short backend identifier / target language (e.g. `"cuda"`, `"cpu_c"`,
+    /// `"slang"`). Canonicalized into the FKC `backend:` field.
     fn name(&self) -> &str;
+    /// The **provider identity** — WHO supplies this backend, emitted verbatim as
+    /// the FKC contract's `kernel_source:` provenance field (a field consumers may
+    /// parse). This is distinct from [`Backend::name`] (the target language): the
+    /// same neutral generator can be provided by different vendors, and a neutral
+    /// core cannot know who its provider is, so each backend declares it. Required
+    /// (no default) precisely so a new backend can't silently inherit the wrong
+    /// provenance — the identity must be stated, not defaulted. Baracuda's CUDA
+    /// backend returns `"baracuda"`; the generator's own in-tree reference backends
+    /// (CpuC / Slang) return the generator's name.
+    fn provider(&self) -> &str;
     /// Lower a kernel plan to source.
     fn lower(&self, plan: &crate::plan::KernelPlan<'_>) -> GeneratedKernel;
     /// Whether the backend can lower `dtype` to a scalar type at all. The JIT
