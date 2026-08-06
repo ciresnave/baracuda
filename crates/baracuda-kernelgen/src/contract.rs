@@ -274,7 +274,7 @@ fn kernel_name_of(contract: &str) -> Option<&str> {
 
 /// Emit the per-kernel FKC contract block (a ```` ```fkc ```` fenced section) for
 /// `kernel`, generated for `op` at structure cell `key` and lowered by
-/// `backend_name`.
+/// `backend`.
 ///
 /// A single graph-`Op` body advertises as a primitive (`op_kind`); a multi-op
 /// body advertises as a recognized fusion (`fused_op` + a `pattern:` block).
@@ -283,7 +283,7 @@ pub fn contract(
     op: &OpDef,
     key: &StructureKey,
     kernel: &GeneratedKernel,
-    backend_name: &str,
+    backend: &dyn crate::backend::Backend,
 ) -> Option<String> {
     // Skip a cell whose dtype has no FKC §5 base-dtype spelling — an unbindable
     // contract would corrupt the planner's honest miss signal (§4.3).
@@ -706,7 +706,7 @@ pub fn contract(
     // ImplId tuple (FKC §4.11), kept as five separable fields. The backend
     // token is canonicalized to Fuel's capitalized spelling (`cuda` → `Cuda`;
     // see `fkc_backend_token`) so the block imports through `lower_backend`.
-    s.push_str(&format!("backend: {}\n", fkc_backend_token(backend_name)));
+    s.push_str(&format!("backend: {}\n", fkc_backend_token(backend.name())));
     s.push_str("kernel_source: baracuda\n");
     s.push_str(&format!("dtypes: [{dtype}]\n"));
     s.push_str(&format!("entry_point: {}\n", kernel.name));
@@ -892,7 +892,7 @@ pub fn contract(
     // today — launches are provider-internal — but load-bearing for their
     // declared-cost trampoline, and an 8x launch/cost hazard if ever assumed).
     let plan = crate::plan::build_plan(op, key);
-    let cw = crate::cuda::effective_count_width(&plan);
+    let cw = backend.effective_count_width(&plan);
     if cw > 1 {
         s.push_str(&format!("  count_unit: vectors_x{cw}\n"));
     } else {
@@ -1757,7 +1757,7 @@ mod tests {
         let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
         let kernel = generate(&mm, &key, &Cuda);
-        let c = contract(&mm, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        let c = contract(&mm, &key, &kernel, &Cuda).expect("recipe-carrying contract");
         assert!(c.contains("fused_op: matmul"), "{c}");
         assert!(c.contains("semantics: matmul[mk.kn](in0, in1)"), "{c}");
         // The matmul output shape ≠ any input → no FKC shape_rule form fits, so
@@ -1807,7 +1807,7 @@ mod tests {
             "  accumulation_type: {}\n",
             baracuda_kernel_vocab::dtype_token(acc)
         );
-        let c = contract(&mm, &key, &generate(&mm, &key, &Cuda), "cuda").expect("contract");
+        let c = contract(&mm, &key, &generate(&mm, &key, &Cuda), &Cuda).expect("contract");
         assert!(
             c.contains(&want),
             "contract must declare the key's <acc>: {c}"
@@ -1826,7 +1826,7 @@ mod tests {
         let ro = OperandDesc::new(1, &[256], &[1], ElementKind::F32Strict, 256);
         let rk = structure_key(OpCategory::Reduction, &[x, ro], ArchSku::Sm89);
         let red = OpDef::reduction("s", 1, &[ElementKind::F32Strict], input(0), ReduceOp::Sum);
-        let cr = contract(&red, &rk, &generate(&red, &rk, &Cuda), "cuda").expect("contract");
+        let cr = contract(&red, &rk, &generate(&red, &rk, &Cuda), &Cuda).expect("contract");
         assert!(
             cr.contains("  accumulation_type: f64\n"),
             "strict reduce declares its double fold: {cr}"
@@ -1835,7 +1835,7 @@ mod tests {
         // A pure elementwise cell has no fold — the field is ABSENT.
         let ew = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         let ek = key_for(3, OpCategory::BinaryElementwise);
-        let ce = contract(&ew, &ek, &generate(&ew, &ek, &Cuda), "cuda").expect("contract");
+        let ce = contract(&ew, &ek, &generate(&ew, &ek, &Cuda), &Cuda).expect("contract");
         assert!(
             !ce.contains("accumulation_type"),
             "no fold, no declaration: {ce}"
@@ -1869,7 +1869,7 @@ mod tests {
         let o = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Softmax, &[a, o], ArchSku::Sm89);
         let kernel = generate(&sm, &key, &Cuda);
-        let c = contract(&sm, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        let c = contract(&sm, &key, &kernel, &Cuda).expect("recipe-carrying contract");
         assert!(c.contains("fused_op: softmax"), "{c}");
         assert!(
             c.contains(
@@ -1932,7 +1932,7 @@ mod tests {
         let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
         let kernel = generate(&sc, &key, &Cuda);
-        let c = contract(&sc, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        let c = contract(&sc, &key, &kernel, &Cuda).expect("recipe-carrying contract");
         assert!(c.contains("fused_op: cumsum"), "{c}");
         assert!(c.contains("semantics: prefix_scan[sum,1,incl](in0)"), "{c}");
         // Shape rides the recipe (omitted); a scan's dtype is uniform → passthrough.
@@ -1979,7 +1979,7 @@ mod tests {
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
         let kernel = generate(&p, &key, &Cuda);
         assert!(
-            contract(&p, &key, &kernel, "cuda").is_none(),
+            contract(&p, &key, &kernel, &Cuda).is_none(),
             "a window (pool) must emit NO contract (no Fuel Pool/Window OpKind; AOT-only honest miss)"
         );
         assert!(matches!(
@@ -2004,7 +2004,7 @@ mod tests {
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
         let kernel = generate(&sc, &key, &Cuda);
         assert!(
-            contract(&sc, &key, &kernel, "cuda").is_none(),
+            contract(&sc, &key, &kernel, &Cuda).is_none(),
             "a sort must emit NO contract (no Fuel Sort OpTag; AOT-only honest miss)"
         );
         assert!(matches!(
@@ -2025,7 +2025,7 @@ mod tests {
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
         let kernel = generate(&sc, &key, &Cuda);
         assert!(
-            contract(&sc, &key, &kernel, "cuda").is_none(),
+            contract(&sc, &key, &kernel, &Cuda).is_none(),
             "an argsort must emit NO contract (no Fuel ArgSort OpTag; AOT-only honest miss)"
         );
         assert!(matches!(
@@ -2051,7 +2051,7 @@ mod tests {
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
         let kernel = generate(&sc, &key, &Cuda);
         assert!(
-            contract(&sc, &key, &kernel, "cuda").is_none(),
+            contract(&sc, &key, &kernel, &Cuda).is_none(),
             "an im2col must emit NO contract (no Fuel Im2Col/Unfold OpKind — conv is a \
              first-class primitive; AOT-only honest miss)"
         );
@@ -2074,7 +2074,7 @@ mod tests {
         let key = key_for(2, OpCategory::UnaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
         assert!(
-            contract(&op, &key, &kernel, "cuda").is_none(),
+            contract(&op, &key, &kernel, &Cuda).is_none(),
             "a viewed op must emit NO contract (the transpose is inexpressible)"
         );
         assert!(matches!(
@@ -2111,7 +2111,7 @@ mod tests {
         let key = gather_key(ElementKind::I32, false);
         let kernel = generate(&op, &key, &Cuda);
         assert!(
-            contract(&op, &key, &kernel, "cuda").is_none(),
+            contract(&op, &key, &kernel, &Cuda).is_none(),
             "a fused-body gather must emit NO contract (v1 covers the identity gather only)"
         );
         assert_eq!(crate::recipe::semantics_dag(&op), None);
@@ -2136,7 +2136,7 @@ mod tests {
         ] {
             let kernel = generate(&op, &key, &Cuda);
             assert!(
-                contract(&op, &key, &kernel, "cuda").is_none(),
+                contract(&op, &key, &kernel, &Cuda).is_none(),
                 "a scattered op must emit NO contract"
             );
             assert!(matches!(
@@ -2171,7 +2171,7 @@ mod tests {
             kernel.name
         );
         assert!(
-            contract(&op, &key, &kernel, "cuda").is_none(),
+            contract(&op, &key, &kernel, &Cuda).is_none(),
             "an offsetted op must emit NO contract (the off-arg ABI is inexpressible)"
         );
         assert!(matches!(
@@ -2211,7 +2211,7 @@ mod tests {
             kernel.name
         );
         assert!(
-            contract(&op, &key, &kernel, "cuda").is_none(),
+            contract(&op, &key, &kernel, &Cuda).is_none(),
             "an offsetted u32 gather must emit NO contract (the gather advert \
              must not bypass the offset guard)"
         );
@@ -2260,7 +2260,7 @@ mod tests {
         );
         let key = gather_key(ElementKind::U32, false);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         // Verified Fuel op_kind (fuel-dispatch fkc/lower.rs lower_op_kind).
         assert!(c.contains("op_kind: Gather"), "{c}");
         // oob_policy field present + skip.
@@ -2302,7 +2302,7 @@ mod tests {
         );
         let key = gather_key(ElementKind::U32, true);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         assert!(c.contains("op_kind: IndexSelect"), "{c}");
         assert!(c.contains("oob_policy: skip"), "{c}");
         assert!(c.contains("    - name: in1\n      dtypes: [U32]\n"), "{c}");
@@ -2320,7 +2320,7 @@ mod tests {
         let op = OpDef::embedding("emb", &[ElementKind::F32], ElementKind::U32);
         let key = gather_key(ElementKind::U32, true);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         assert!(c.contains("op_kind: IndexSelect"), "{c}");
         assert!(c.contains("oob_policy: zero_fill"), "{c}");
         // Output = index shape ≠ data shape ⇒ shape_rule omitted; dtype = data.
@@ -2348,7 +2348,7 @@ mod tests {
         );
         let key = gather_key(ElementKind::U32, false);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         // Still the op_kind primitive advert (unchanged).
         assert!(c.contains("op_kind: Gather"), "{c}");
         // Output shape = index shape ≠ data shape ⇒ NO same_as(in0) claim.
@@ -2381,7 +2381,7 @@ mod tests {
         );
         let key = gather_key(ElementKind::I32, false);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        let c = contract(&op, &key, &kernel, &Cuda).expect("recipe-carrying contract");
         // Recipe advert, NOT the u32 op_kind primitive.
         assert!(c.contains("fused_op: gather"), "{c}");
         assert!(
@@ -2450,7 +2450,7 @@ mod tests {
         let key = key_for(4, OpCategory::TernaryElementwise);
         let kernel = generate(&sel, &key, &Cuda);
         assert!(
-            contract(&sel, &key, &kernel, "cuda").is_none(),
+            contract(&sel, &key, &kernel, &Cuda).is_none(),
             "a select body must emit NO contract"
         );
         // The pattern side misses typed too — but the miss does NOT
@@ -2471,7 +2471,7 @@ mod tests {
         );
         let key5 = key_for(5, OpCategory::TernaryElementwise);
         let kf = generate(&fused, &key5, &Cuda);
-        assert!(contract(&fused, &key5, &kf, "cuda").is_none());
+        assert!(contract(&fused, &key5, &kf, &Cuda).is_none());
         // (c) The LOAD-BEARING path: the Model-A u32-index gather advert
         // derives its op_kind STRUCTURALLY (never consults the pattern), so
         // WITHOUT the expr_contains_select guard a select body inside a
@@ -2489,7 +2489,7 @@ mod tests {
         let gkey = gather_key(ElementKind::U32, false);
         let gk = generate(&gsel, &gkey, &Cuda);
         assert!(
-            contract(&gsel, &gkey, &gk, "cuda").is_none(),
+            contract(&gsel, &gkey, &gk, &Cuda).is_none(),
             "a select body inside a u32 gather must NOT advertise (the gather \
              op_kind path never consults the pattern — the select guard is the \
              only layer)"
@@ -2503,7 +2503,7 @@ mod tests {
         );
         let pk = generate(&plain, &gkey, &Cuda);
         assert!(
-            contract(&plain, &gkey, &pk, "cuda").is_some(),
+            contract(&plain, &gkey, &pk, &Cuda).is_some(),
             "the select-free gather sibling must still advertise (the None above \
              comes from the select guard, not some other withhold)"
         );
@@ -2540,7 +2540,7 @@ mod tests {
             let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, dt);
             let key = gather_key(dt, false);
             let kernel = generate(&op, &key, &Cuda);
-            let c = contract(&op, &key, &kernel, "cuda").unwrap_or_else(|| {
+            let c = contract(&op, &key, &kernel, &Cuda).unwrap_or_else(|| {
                 panic!("{dt:?} gather must advertise a recipe-carrying contract")
             });
             assert!(c.contains("fused_op: gather"), "{c}");
@@ -2573,7 +2573,7 @@ mod tests {
         ] {
             let kernel = generate(&op, &key3, &Cuda);
             assert!(
-                contract(&op, &key3, &kernel, "cuda").is_none(),
+                contract(&op, &key3, &kernel, &Cuda).is_none(),
                 "a u32 scatter/scatter_add/index_add must stay an honest miss"
             );
         }
@@ -2584,7 +2584,7 @@ mod tests {
         let bc = OpDef::bincount("bincount", ElementKind::U32);
         let bkern = generate(&bc, &bk, &Cuda);
         assert!(
-            contract(&bc, &bk, &bkern, "cuda").is_none(),
+            contract(&bc, &bk, &bkern, &Cuda).is_none(),
             "bincount stays a miss"
         );
     }
@@ -2598,7 +2598,7 @@ mod tests {
         let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         assert!(
             !c.contains("oob_policy"),
             "no oob_policy on a uniform op: {c}"
@@ -2630,7 +2630,7 @@ mod tests {
             );
             let key = gather_key(ElementKind::U32, one_d);
             let kernel = generate(&op, &key, &Cuda);
-            let c = contract(&op, &key, &kernel, "cuda").unwrap();
+            let c = contract(&op, &key, &kernel, &Cuda).unwrap();
             let line = c
                 .lines()
                 .find(|l| l.starts_with("op_kind: "))
@@ -2654,7 +2654,7 @@ mod tests {
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
         assert!(
-            contract(&op, &key, &kernel, "cuda").is_some(),
+            contract(&op, &key, &kernel, &Cuda).is_some(),
             "an all-Identity view must not suppress the contract"
         );
     }
@@ -2691,7 +2691,7 @@ mod tests {
             );
             assert!(!kernel.source.is_empty(), "the kernel still lowers (AOT)");
             assert!(
-                contract(&op, &key, &kernel, "cuda").is_none(),
+                contract(&op, &key, &kernel, &Cuda).is_none(),
                 "a baked-broadcast bias-add cell must emit NO contract (strides {strides:?})"
             );
         }
@@ -2711,7 +2711,7 @@ mod tests {
         let kernel = generate(&op, &key, &Cuda);
         assert!(!kernel.source.is_empty(), "the kernel still lowers (AOT)");
         assert!(
-            contract(&op, &key, &kernel, "cuda").is_none(),
+            contract(&op, &key, &kernel, &Cuda).is_none(),
             "a flipped-operand cell must emit NO contract"
         );
     }
@@ -2731,7 +2731,7 @@ mod tests {
             Contiguity::InnerContig | Contiguity::Strided
         ));
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         assert!(
             c.contains(
                 "layout: { contiguous: accepted, strided: accepted, \
@@ -2773,7 +2773,7 @@ mod tests {
             "index keys Broadcast"
         );
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         // The index (in1) slot: U32 dtype, contiguous-required layout.
         assert!(
             c.contains(
@@ -2794,7 +2794,7 @@ mod tests {
         use crate::{Cuda, generate};
         let c = |op: &OpDef, key: &StructureKey| {
             let k = generate(op, key, &Cuda);
-            contract(op, key, &k, "cuda").unwrap()
+            contract(op, key, &k, &Cuda).unwrap()
         };
         let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         // f32 contiguous/aligned → float4 kernel: n counts 4-element vectors.
@@ -2856,7 +2856,7 @@ mod tests {
             false,
         );
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").expect("recipe-carrying contract");
+        let c = contract(&op, &key, &kernel, &Cuda).expect("recipe-carrying contract");
         assert!(c.contains("fused_op: sum"), "{c}");
         assert!(c.contains("semantics: reduce[sum,0x1,nokd](in0)"), "{c}");
         assert!(
@@ -2894,7 +2894,7 @@ mod tests {
         let prod_out = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
         let pk = structure_key(OpCategory::Reduction, &[a, prod_out], ArchSku::Sm89);
         let prod = OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod);
-        let cp = contract(&prod, &pk, &generate(&prod, &pk, &Cuda), "cuda")
+        let cp = contract(&prod, &pk, &generate(&prod, &pk, &Cuda), &Cuda)
             .expect("recipe-carrying contract");
         assert!(cp.contains("fused_op: p"), "{cp}");
         assert!(
@@ -2917,7 +2917,7 @@ mod tests {
             reduced(0).binary(BinaryOp::CmpGt, konst(0.0)),
         );
         any.out_dtype = Some(ElementKind::U8);
-        let ca = contract(&any, &ak, &generate(&any, &ak, &Cuda), "cuda")
+        let ca = contract(&any, &ak, &generate(&any, &ak, &Cuda), &Cuda)
             .expect("recipe-carrying contract");
         assert!(ca.contains("fused_op: any"), "{ca}");
         assert!(
@@ -2959,7 +2959,7 @@ mod tests {
         let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&add, &key, &Cuda);
-        let c = contract(&add, &key, &kernel, "cuda").unwrap();
+        let c = contract(&add, &key, &kernel, &Cuda).unwrap();
         let b = bundle("cuda", "rev0", std::slice::from_ref(&c));
         // Front matter first, then a `## <kernel>` heading, then the block.
         assert!(b.starts_with("---\n"), "front matter leads: {b}");
@@ -3032,7 +3032,7 @@ mod tests {
         let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&add, &key, &Cuda);
-        let c = contract(&add, &key, &kernel, "cuda").unwrap();
+        let c = contract(&add, &key, &kernel, &Cuda).unwrap();
         assert!(
             c.contains("semantics: add(in0, in1)\n"),
             "the neutral KISS-Ops recipe is emitted: {c}"
@@ -3073,7 +3073,7 @@ mod tests {
         let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
 
         // primitive → op_kind, no fused_op, no pattern block. The emitted
         // spelling is the Fuel-importer DISPATCH name (`AddElementwise`), not
@@ -3206,7 +3206,7 @@ mod tests {
         );
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         // The BARE contract still names the fusion (`relu_add` has no Fuel FusedOp
         // constant) — it rides the JIT seam, where Fuel stores the text unparsed.
         assert!(c.contains("fused_op: relu_add"));
@@ -3218,7 +3218,7 @@ mod tests {
         // must contain only the primitive (never fail import).
         let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         let ka = key_for(3, OpCategory::BinaryElementwise);
-        let ca = contract(&add, &ka, &generate(&add, &ka, &Cuda), "cuda").unwrap();
+        let ca = contract(&add, &ka, &generate(&add, &ka, &Cuda), &Cuda).unwrap();
         let b = bundle("cuda", "rev0", &[ca.clone(), c.clone()]);
         assert!(
             b.contains("op_kind: AddElementwise"),
@@ -3245,7 +3245,7 @@ mod tests {
         );
         let key = key_for(2, OpCategory::UnaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         assert!(c.contains("op_params:"));
         assert!(c.contains("name: param0"));
         assert!(c.contains("name: param1"));
@@ -3281,7 +3281,7 @@ mod tests {
         );
         let key = key_dtype(ElementKind::F64, 2);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         assert!(c.contains("op_params:"), "{c}");
         assert!(
             c.contains("  - name: param0\n    dtype: F64\n"),
@@ -3320,7 +3320,7 @@ mod tests {
         // §5 (B5/E5): Fuel has no Bool dtype — a provider's Bool rides as U8.
         let op = OpDef::elementwise("eq", 2, &[ElementKind::Bool], input(0) + input(1));
         let key = key_dtype(ElementKind::Bool, 3);
-        let c = contract(&op, &key, &stub_kernel(), "cuda").unwrap();
+        let c = contract(&op, &key, &stub_kernel(), &Cuda).unwrap();
         assert!(c.contains("dtypes: [U8]"));
         assert!(!c.contains("Bool"));
     }
@@ -3331,7 +3331,7 @@ mod tests {
         // never emit an unbindable `dtypes: [C64]` contract.
         let op = OpDef::elementwise("add", 2, &[ElementKind::Complex64], input(0) + input(1));
         let key = key_dtype(ElementKind::Complex64, 3);
-        assert!(contract(&op, &key, &stub_kernel(), "cuda").is_none());
+        assert!(contract(&op, &key, &stub_kernel(), &Cuda).is_none());
     }
 
     #[test]
@@ -3410,7 +3410,7 @@ mod tests {
             k.source.contains("(in0[i] & in1[i])"),
             "the kernel still lowers"
         );
-        let c = contract(&band, &ki, &k, "cuda").expect("recipe-carrying contract");
+        let c = contract(&band, &ki, &k, &Cuda).expect("recipe-carrying contract");
         assert!(c.contains("fused_op: band"), "{c}");
         assert!(c.contains("semantics: bit_and(in0, in1)"), "{c}");
         assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
@@ -3436,7 +3436,7 @@ mod tests {
         let ku = key_dtype(ElementKind::U8, 3);
         let kl = generate(&land, &ku, &Cuda);
         assert!(kl.source.contains("!= 0 &&"), "the kernel still lowers");
-        let cl = contract(&land, &ku, &kl, "cuda").expect("recipe-carrying contract");
+        let cl = contract(&land, &ku, &kl, &Cuda).expect("recipe-carrying contract");
         assert!(cl.contains("fused_op: land"), "{cl}");
         assert!(cl.contains("semantics: logical_and(in0, in1)"), "{cl}");
         assert!(cl.contains("shape_rule: same_as(in0)"), "{cl}");
@@ -3456,7 +3456,7 @@ mod tests {
         let addu = OpDef::elementwise("add", 2, &[ElementKind::U8], input(0) + input(1));
         let ku = key_dtype(ElementKind::U8, 3);
         let k = generate(&addu, &ku, &Cuda);
-        let c = contract(&addu, &ku, &k, "cuda").unwrap();
+        let c = contract(&addu, &ku, &k, &Cuda).unwrap();
         assert!(c.contains("op_kind: AddElementwise"), "{c}");
         assert!(c.contains("dtypes: [U8]"));
         // correctly-rounded wrapping ⇒ bit-stable + max_ulp 0 (Fuel PrecisionBlock).
@@ -3468,7 +3468,7 @@ mod tests {
         let adds = OpDef::elementwise("add", 2, &[ElementKind::S8], input(0) + input(1));
         let ks = key_dtype(ElementKind::S8, 3);
         let k8 = generate(&adds, &ks, &Cuda);
-        let c8 = contract(&adds, &ks, &k8, "cuda").unwrap();
+        let c8 = contract(&adds, &ks, &k8, &Cuda).unwrap();
         assert!(c8.contains("dtypes: [I8]"), "S8 spells I8 on the FKC wire");
         assert!(c8.contains("count_unit: elements"));
     }
@@ -3517,7 +3517,7 @@ mod tests {
         );
         let key = pred_key();
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        let c = contract(&op, &key, &kernel, &Cuda).unwrap();
         // Primitive identity: the DISPATCH OpKind spelling — the exact string
         // Fuel's lower_op_kind table accepts (`op_kind: Lt` would typed-reject
         // and fail the whole bundle import).
@@ -3571,7 +3571,7 @@ mod tests {
             "the kernel still lowers"
         );
         assert!(
-            contract(&op, &key, &kernel, "cuda").is_none(),
+            contract(&op, &key, &kernel, &Cuda).is_none(),
             "but no contract"
         );
         assert!(
@@ -3604,7 +3604,7 @@ mod tests {
             "the kernel still lowers"
         );
         assert!(
-            contract(&op, &key, &kernel, "cuda").is_none(),
+            contract(&op, &key, &kernel, &Cuda).is_none(),
             "nested-cmp fused contract is withheld (missing-Cast pattern gap)"
         );
         assert!(
@@ -3637,7 +3637,7 @@ mod tests {
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89);
         let k = generate(&triu, &key, &Cuda);
         assert!(k.source.contains("(float)c1"), "the kernel still lowers");
-        let c = contract(&triu, &key, &k, "cuda").expect("recipe-carrying contract");
+        let c = contract(&triu, &key, &k, &Cuda).expect("recipe-carrying contract");
         assert!(c.contains("fused_op: triu_mask"), "{c}");
         assert!(
             c.contains("semantics: mul(in0, cmp_ge(iota(1), add(iota(0), const(0))))"),
@@ -3676,7 +3676,7 @@ mod tests {
         let ukey = key_for(2, OpCategory::UnaryElementwise);
         let uk = generate(&erfc, &ukey, &Cuda);
         assert!(uk.source.contains("erfcf("), "the kernel still lowers");
-        let c = contract(&erfc, &ukey, &uk, "cuda").expect("recipe-carrying contract");
+        let c = contract(&erfc, &ukey, &uk, &Cuda).expect("recipe-carrying contract");
         assert!(c.contains("fused_op: erfc"), "{c}");
         assert!(c.contains("semantics: erfc(in0)"), "{c}");
         assert!(c.contains("dtype_rule: passthrough(in0)"), "{c}");
@@ -3697,7 +3697,7 @@ mod tests {
         );
         let bkey = key_for(3, OpCategory::BinaryElementwise);
         let bk = generate(&at2, &bkey, &Cuda);
-        let cb = contract(&at2, &bkey, &bk, "cuda").expect("recipe-carrying contract");
+        let cb = contract(&at2, &bkey, &bk, &Cuda).expect("recipe-carrying contract");
         assert!(cb.contains("fused_op: atan2"), "{cb}");
         assert!(cb.contains("semantics: atan2(in0, in1)"), "{cb}");
         assert!(cb.contains("shape_rule: same_as(in0)"), "{cb}");
@@ -3970,7 +3970,7 @@ mod tests {
             let op = OpDef::elementwise("u", 1, &[ElementKind::F32], input(0).unary(*uop));
             let key = key_for(2, OpCategory::UnaryElementwise);
             let kernel = generate(&op, &key, &Cuda);
-            let c = contract(&op, &key, &kernel, "cuda")
+            let c = contract(&op, &key, &kernel, &Cuda)
                 .unwrap_or_else(|| panic!("{uop:?} must emit a contract"));
             assert!(
                 c.contains(&format!("op_kind: {want}\n")),
@@ -3992,7 +3992,7 @@ mod tests {
             let op = OpDef::elementwise("b", 2, &[ElementKind::F32], body.clone());
             let key = key_for(3, OpCategory::BinaryElementwise);
             let kernel = generate(&op, &key, &Cuda);
-            let c = contract(&op, &key, &kernel, "cuda")
+            let c = contract(&op, &key, &kernel, &Cuda)
                 .unwrap_or_else(|| panic!("want {want} must emit a contract"));
             assert!(
                 c.contains(&format!("op_kind: {want}\n")),
@@ -4014,7 +4014,7 @@ mod tests {
         let kernel = generate(&add_p, &key, &Cuda);
         assert!(!kernel.source.is_empty(), "the kernel still lowers");
         assert!(
-            contract(&add_p, &key, &kernel, "cuda").is_none(),
+            contract(&add_p, &key, &kernel, &Cuda).is_none(),
             "standalone AddScalar must be an honest miss (no poison op_kind line)"
         );
         // Prove the root really IS the unmapped AddScalar (so the miss is the
@@ -4025,7 +4025,7 @@ mod tests {
 
         let mul_p = OpDef::elementwise("mul_p", 1, &[ElementKind::F32], input(0) * param(0));
         let km = generate(&mul_p, &key, &Cuda);
-        assert!(contract(&mul_p, &key, &km, "cuda").is_none());
+        assert!(contract(&mul_p, &key, &km, &Cuda).is_none());
         assert_eq!(
             root_op_name(&crate::derive_pattern(&mul_p).unwrap()),
             "MulScalar"
@@ -4042,7 +4042,7 @@ mod tests {
         let copy = OpDef::elementwise("copy", 1, &[ElementKind::F32], input(0));
         let key = key_for(2, OpCategory::UnaryElementwise);
         let kernel = generate(&copy, &key, &Cuda);
-        let c = contract(&copy, &key, &kernel, "cuda").expect("a bare copy still contracts");
+        let c = contract(&copy, &key, &kernel, &Cuda).expect("a bare copy still contracts");
         assert!(
             !c.contains("op_kind:"),
             "a Bind/Identity root must not emit op_kind: {c}"

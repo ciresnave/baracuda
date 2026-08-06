@@ -408,8 +408,7 @@ fn synthesize_op(
     let artifact = compiler
         .compile(&kernel.source, &kernel.name, max_compile_ms)
         .map_err(JitError::Compile)?;
-    let contract =
-        contract(&op, &key, &kernel, backend.name()).ok_or(JitError::UnsupportedDtype)?;
+    let contract = contract(&op, &key, &kernel, backend).ok_or(JitError::UnsupportedDtype)?;
 
     // Both recipe halves come from the SINGLE canonical pattern node, so they are
     // structurally identical and decompose carries the scalar `extract:` routing.

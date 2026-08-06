@@ -32,6 +32,24 @@ impl Backend for Cuda {
         "cuda"
     }
 
+    /// The unit of the emitted elementwise kernel's `n` argument for this plan:
+    /// `w > 1` means the kernel counts `w`-element **vectors** (a vectorized or
+    /// packed lowering, `n = elements / w`); `1` means elements. Must mirror
+    /// [`Cuda::lower`]'s `Schedule::Vectorized` dispatch exactly — the contract's
+    /// `count_unit:` documents the ABI the emitter actually built, including the
+    /// scalar fallbacks (unpackable dtype, const/param f16 body).
+    fn effective_count_width(&self, plan: &KernelPlan<'_>) -> u32 {
+        match plan.schedule {
+            Schedule::Vectorized { width }
+                if vector_type(plan.dtype, width).is_some()
+                    || (packed_kind(plan.dtype, width).is_some() && bodies_pack(plan)) =>
+            {
+                width
+            }
+            _ => 1,
+        }
+    }
+
     fn supports_dtype(&self, dtype: ElementKind) -> bool {
         // Increment 0c replaced the 0b uniform-u8 hold with the audited int
         // story: U8 and S8 are now COMPUTE dtypes (wrapping add/sub/mul via
@@ -407,24 +425,6 @@ fn vector_type(dt: ElementKind, width: u32) -> Option<(&'static str, &'static [&
         (ElementKind::F32 | ElementKind::F32Strict, 2) => Some(("float2", &["x", "y"])),
         (ElementKind::F64, 2) => Some(("double2", &["x", "y"])),
         _ => None,
-    }
-}
-
-/// The unit of the emitted elementwise kernel's `n` argument for this plan:
-/// `w > 1` means the kernel counts `w`-element **vectors** (a vectorized or
-/// packed lowering, `n = elements / w`); `1` means elements. Must mirror
-/// [`Cuda::lower`]'s `Schedule::Vectorized` dispatch exactly — the contract's
-/// `count_unit:` documents the ABI the emitter actually built, including the
-/// scalar fallbacks (unpackable dtype, const/param f16 body).
-pub(crate) fn effective_count_width(plan: &KernelPlan<'_>) -> u32 {
-    match plan.schedule {
-        Schedule::Vectorized { width }
-            if vector_type(plan.dtype, width).is_some()
-                || (packed_kind(plan.dtype, width).is_some() && bodies_pack(plan)) =>
-        {
-            width
-        }
-        _ => 1,
     }
 }
 
@@ -15279,7 +15279,7 @@ mod sort_tests {
         let sc = OpDef::row_sort_indices("fused", ElementKind::F32, SortOrder::Asc);
         let k = generate(&sc, &both_key(ElementKind::F32), &Cuda);
         assert!(
-            crate::contract(&sc, &both_key(ElementKind::F32), &k, "cuda").is_none(),
+            crate::contract(&sc, &both_key(ElementKind::F32), &k, &Cuda).is_none(),
             "a fused two-output sort must emit NO contract (no Fuel Sort OpTag; AOT-only)"
         );
         assert!(matches!(
@@ -15299,7 +15299,7 @@ mod sort_tests {
         let sc = OpDef::row_topk("topk", ElementKind::F32);
         let k = generate(&sc, &topk_both_key(ElementKind::F32, 64), &Cuda);
         assert!(
-            crate::contract(&sc, &topk_both_key(ElementKind::F32, 64), &k, "cuda").is_none(),
+            crate::contract(&sc, &topk_both_key(ElementKind::F32, 64), &k, &Cuda).is_none(),
             "a topk must emit NO contract (no Fuel top_k OpTag; AOT-only)"
         );
         assert!(matches!(

@@ -120,6 +120,16 @@ pub trait Backend {
     /// dtype is a typed decline, not a lowering panic. (AOT op authoring is
     /// trusted, so `lower` itself may still panic on a dtype it can't spell.)
     fn supports_dtype(&self, dtype: ElementKind) -> bool;
+    /// The count-unit width the backend's emitter actually builds for `plan`:
+    /// `1` means the kernel's `n` argument counts **elements** (a scalar
+    /// lowering); `w > 1` means it counts `w`-element **vectors** (a vectorized
+    /// or packed lowering, `n = elements / w`). Feeds the FKC contract's
+    /// `count_unit:` line. Default `1` (scalar / element-counted); a vectorizing
+    /// backend overrides it to mirror its emitter's dispatch exactly. CPU-C and
+    /// Slang emit scalar kernels today, so they inherit the default.
+    fn effective_count_width(&self, _plan: &crate::plan::KernelPlan<'_>) -> u32 {
+        1
+    }
     /// Alternative schedule variants for this plan's cell, beyond the default
     /// [`Backend::lower`] kernel. Default: none. Every returned variant must
     /// pass the same validation gate as the default (nvrtc/nvcc compile +
