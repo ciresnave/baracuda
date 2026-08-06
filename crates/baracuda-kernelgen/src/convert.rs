@@ -755,7 +755,8 @@ mod tests {
 
     #[test]
     fn round_trip_reemits_to_cuda_and_cpuc() {
-        use crate::{CpuC, Cuda, generate};
+        use crate::{CpuC, generate};
+        use baracuda_cuda_emit::Cuda;
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         // Lift a Slang kernel, re-emit to CUDA AND portable-C — cross-language port.
         let lifted = lift_elementwise_slang(SLANG_MUL, "ported", F32).unwrap();
@@ -847,7 +848,8 @@ mod tests {
 
     #[test]
     fn reduction_round_trips_to_cuda() {
-        use crate::{Cuda, generate};
+        use crate::generate;
+        use baracuda_cuda_emit::Cuda;
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         // Lift a naive sum reduction and re-emit — the generator produces the
         // optimized cooperative reduce (`baracuda_gen_<name>_f32_reduce_sum`).

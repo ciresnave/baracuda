@@ -31,9 +31,11 @@
 
 use crate::ir::BinaryOp;
 use crate::{
-    CpuC, Cuda, Fidelity, OpDef, ScalarExpr, Slang, TypedBuffer, UnaryOp, build_plan, compare,
-    evaluate, generate, input, konst, lift_elementwise, param,
+    CpuC, Fidelity, OpDef, ScalarExpr, Slang, TypedBuffer, UnaryOp, build_plan, compare, evaluate,
+    generate, input, konst, lift_elementwise, param,
 };
+// `Cuda` moved to the sibling `baracuda-cuda-emit`; reached via the dev-dep cycle.
+use baracuda_cuda_emit::Cuda;
 use baracuda_kernel_vocab::{
     ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
 };

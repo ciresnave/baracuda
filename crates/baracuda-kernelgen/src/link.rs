@@ -71,7 +71,8 @@ pub fn emit_link_registry(entries: &[LinkEntry]) -> String {
 mod tests {
     use super::*;
     use crate::ir::{OpDef, input};
-    use crate::{Cuda, generate};
+    use crate::generate;
+    use baracuda_cuda_emit::Cuda;
     use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn entry(name: &str) -> LinkEntry {

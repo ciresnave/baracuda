@@ -518,7 +518,8 @@ mod tests {
 
     #[test]
     fn round_trip_reemits_to_cuda_and_cpuc() {
-        use crate::{CpuC, Cuda, generate};
+        use crate::{CpuC, generate};
+        use baracuda_cuda_emit::Cuda;
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         // A hand-written CUDA elementwise kernel a "copy-paster" might have.
         let src = "__global__ void mul(const float* in0, const float* in1, float* out, long long n) {\n\
@@ -577,7 +578,8 @@ mod tests {
     #[test]
     #[ignore = "writes the lift round-trip pair for the on-device differential validator"]
     fn dump_lift_roundtrip() {
-        use crate::{Cuda, generate};
+        use crate::generate;
+        use baracuda_cuda_emit::Cuda;
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
 
         let out = std::env::var("LIFT_OUT").unwrap_or_else(|_| ".".to_string());

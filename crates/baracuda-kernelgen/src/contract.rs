@@ -1728,7 +1728,8 @@ pub(crate) fn revision_hash(src: &str) -> u64 {
 mod tests {
     use super::*;
     use crate::ir::{OpDef, input, param};
-    use crate::{Cuda, generate};
+    use crate::generate;
+    use baracuda_cuda_emit::Cuda;
     use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn key_for(n_operands: usize, op_cat: OpCategory) -> StructureKey {
@@ -2791,7 +2792,8 @@ mod tests {
 
     #[test]
     fn count_unit_matches_the_emitted_abi() {
-        use crate::{Cuda, generate};
+        use crate::generate;
+        use baracuda_cuda_emit::Cuda;
         let c = |op: &OpDef, key: &StructureKey| {
             let k = generate(op, key, &Cuda);
             contract(op, key, &k, &Cuda).unwrap()

@@ -16,10 +16,10 @@ use baracuda_kernel_vocab::{
 
 /// How the kernel iterates the data — the backend-neutral schedule.
 ///
-/// `#[non_exhaustive]`: strided / broadcast / reduction schedules are the
-/// growth path; backends match what they support and reject the rest.
+/// Strided / broadcast / reduction schedules are the growth path; the lockstep
+/// backends (CUDA lives in the sibling `baracuda-cuda-emit`) match every variant
+/// exhaustively, so a new schedule is a compile-time prompt to lower it.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
 pub enum Schedule {
     /// Linear access, `width` elements at a time (e.g. `float4` for width 4).
     Vectorized {
@@ -738,7 +738,7 @@ pub(crate) fn validate_contraction_roles(
 /// (a saved per-row statistic — μ, rstd, lse) is constant *along the feature
 /// axis* and varies *across rows*.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub(crate) enum RrRole {
+pub enum RrRole {
     /// A reduced/streamed tensor ([n_out, k], full / empty bcast) — `in_i[base+j]`.
     /// Input 0 (`x`) is always this; a second streamed input (softmax-bw's `dy`
     /// beside `y`) is now also legal (the increment-2 lift).
@@ -766,7 +766,7 @@ pub(crate) enum RrRole {
 /// Which *specific* broadcast masks are legal for each role (every outer axis for
 /// a column, no outer axis for a row-scalar, contiguity for a streamed input) is
 /// validate's job, so the classification here is deliberately coarse and total.
-pub(crate) fn rr_role(o: OperandKey, last: u8) -> RrRole {
+pub fn rr_role(o: OperandKey, last: u8) -> RrRole {
     if o.bcast.is_empty() {
         RrRole::RowStreamed
     } else if o.bcast.is_set(last) {
@@ -1035,7 +1035,7 @@ fn access_tag(a: &Access) -> &'static str {
 /// identity linear-index map) are NOT addressing: they read at the iteration
 /// coordinate exactly like a view-free operand, so an all-identity op stays
 /// byte-identical to a view-free one.
-pub(crate) fn view_is_addressing(v: &View) -> bool {
+pub fn view_is_addressing(v: &View) -> bool {
     matches!(v, View::Permute { .. } | View::Broadcast { .. })
 }
 
@@ -1168,7 +1168,7 @@ fn assert_valid_views(op: &OpDef, key: &StructureKey) {
 /// `assert_valid_gather` rejects more), so the first match is the only one; the
 /// emitter and its backstop read the gather off this one accessor to stay in
 /// lockstep.
-pub(crate) fn gather_of(
+pub fn gather_of(
     read_index: &[ReadIndex],
 ) -> Option<(usize, u8, u8, crate::ir::OobPolicy, ElementKind)> {
     read_index.iter().enumerate().find_map(|(i, r)| match r {
@@ -1335,7 +1335,7 @@ pub(crate) fn op_has_scatter(op: &OpDef) -> bool {
 /// `(index_operand, axis, combine, oob, index_dtype)`, or `None` for a
 /// [`WriteIndex::Direct`] op. The emitter and its backstop read the scatter off
 /// this one accessor to stay in lockstep (mirror of [`gather_of`]).
-pub(crate) fn scatter_of(
+pub fn scatter_of(
     write_index: &WriteIndex,
 ) -> Option<(u8, u8, WriteCombine, crate::ir::OobPolicy, ElementKind)> {
     write_index.scatter()
@@ -1351,7 +1351,7 @@ pub(crate) fn scatter_of(
 ///   can't include — deferred. u8/s8 need a sub-word CAS — deferred.
 /// - `AtomicMax`/`AtomicMin` — **integer only** in v1 (`i32`/`i64`); float has no
 ///   native `atomicMax`/`atomicMin` (a CAS emulation is a follow-up).
-pub(crate) fn combine_legal_for_dtype(combine: WriteCombine, out_dtype: ElementKind) -> bool {
+pub fn combine_legal_for_dtype(combine: WriteCombine, out_dtype: ElementKind) -> bool {
     match combine {
         WriteCombine::Assign => true,
         WriteCombine::AtomicAdd => matches!(
@@ -1638,7 +1638,7 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
 
 /// The integer compute dtypes of increment 0c: `I32`/`I64` (already lowering
 /// pre-0c) plus the newly-promoted `S8` (FKC `I8`) and `U8`.
-pub(crate) fn is_int_dtype(dt: ElementKind) -> bool {
+pub fn is_int_dtype(dt: ElementKind) -> bool {
     matches!(
         dt,
         ElementKind::I32 | ElementKind::I64 | ElementKind::S8 | ElementKind::U8

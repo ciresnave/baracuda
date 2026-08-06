@@ -122,7 +122,7 @@ impl Backend for CpuC {
 }
 
 /// The scalar contiguous Elementwise emitter — the CPU twin of
-/// [`crate::cuda`]'s `emit_scalar`. Same body math ([`lower_dag`] over the shared
+/// `baracuda_cuda_emit::cuda`'s `emit_scalar`. Same body math ([`lower_dag`] over the shared
 /// seam), but a plain `void` signature + `#include <math.h>` + a SERIAL
 /// `for (long long i = 0; i < n; ++i)` loop instead of the `extern "C" __global__`
 /// header and the grid-stride prologue.
@@ -187,7 +187,7 @@ fn emit_scalar_cpu(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     GeneratedKernel { name, source: s }
 }
 
-/// Lower a unary op for `dtype` on the CPU — the twin of [`crate::cuda`]'s
+/// Lower a unary op for `dtype` on the CPU — the twin of `baracuda_cuda_emit::cuda`'s
 /// `cuda_unary`, minus the f16/bf16 promote arms (declined in v1). f32/f64 route
 /// to the CpuC unary spellers ([`unary_f32_cpu`]/[`unary_f64_cpu`]); an integer
 /// dtype has no unary math (the ir admissibility table rejects it), so the panic

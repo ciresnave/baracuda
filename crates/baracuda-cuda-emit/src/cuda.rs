@@ -2,24 +2,24 @@
 //!
 //! Everything CUDA-shaped (the vector types, `__global__`, the
 //! `blockIdx`/`blockDim` launch indexing, the fp16/bf16 headers) lives here. The
-//! math itself is lowered by the language-neutral [`crate::backend::lower_expr`]
+//! math itself is lowered by the language-neutral [`baracuda_kernelgen::backend::lower_expr`]
 //! — and reused verbatim across dtypes, because CUDA overloads `+ - * /` for
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
-use crate::backend::{
+use baracuda_kernelgen::backend::{
     Backend, GeneratedKernel, Lowering, Variant, VariantFidelity, lower_dag, lower_dag_all,
     lower_dag_multi, lower_expr,
 };
-use crate::cfamily::{
+use baracuda_kernelgen::cfamily::{
     assert_no_int_div_or_const, binary_f32, binary_f64, binary_int, cast_scalar, demote_store_f32,
     dtype_tag, out_ctype_of, param_args, param_ctype, params_used, promote_load_f32, scalar_ctype,
     select_f32, select_f64, store_expr_of, unary_f32, unary_f64,
 };
-use crate::ir::{
+use baracuda_kernelgen::ir::{
     Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
     is_admissible_int_reduction_operand,
 };
-use crate::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
+use baracuda_kernelgen::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use baracuda_kernel_vocab::structure_key::LayoutOrder;
 use baracuda_kernel_vocab::{AxisMask, Contiguity, ElementKind, OperandKey};
 
@@ -123,8 +123,8 @@ impl Backend for Cuda {
         let is_indexed = plan
             .read_index
             .iter()
-            .any(|r| !matches!(r, crate::ir::ReadIndex::Direct))
-            || !matches!(plan.write_index, crate::ir::WriteIndex::Direct);
+            .any(|r| !matches!(r, baracuda_kernelgen::ir::ReadIndex::Direct))
+            || !matches!(plan.write_index, baracuda_kernelgen::ir::WriteIndex::Direct);
         assert!(
             !matches!(plan.dtype, ElementKind::U32) || is_indexed,
             "cuda backend: U32 is an index/address dtype only — a U32 value/key \
@@ -161,7 +161,7 @@ impl Backend for Cuda {
         // int compute — the double-math hazard this walk polices does not apply.
         let bincount_shape =
             plan.write_index.scatter().is_some() && matches!(plan.body, ScalarExpr::Const(_));
-        if crate::plan::is_int_dtype(plan.dtype) && !bincount_shape {
+        if baracuda_kernelgen::plan::is_int_dtype(plan.dtype) && !bincount_shape {
             // Rule 4 mirror (`plan::assert_int_op_admissibility`'s any/all/count
             // lift, ba325509): `true` only for `Access::Reduction` — NOT
             // RowReduce/Contraction/Scan/Window, which stay out of scope for the
@@ -517,7 +517,7 @@ fn pair_parts(dt: ElementKind) -> (&'static str, &'static str, &'static str) {
 /// scalar float-round-trip. Everything else is **Tier B**: split the pair, run
 /// the *existing* scalar speller on each half (identical text ⇒ identical bits),
 /// and re-join. Operand strings are always leaf refs or hoisted `tmp` names
-/// ([`crate::backend::lower_dag_all`]), so the `{x}` duplication below never
+/// ([`baracuda_kernelgen::backend::lower_dag_all`]), so the `{x}` duplication below never
 /// duplicates a computation.
 fn packed_unary(op: UnaryOp, x: String, dt: ElementKind) -> String {
     match op {
@@ -788,13 +788,13 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // `(g, idx_op, axis, oob, index_dtype)`: `g` reads its `axis` coordinate from
     // integer operand `idx_op`. Index-free ⇒ every branch below collapses to the
     // pre-increment-4 string (byte-identical emission).
-    let gather = crate::plan::gather_of(plan.read_index);
+    let gather = baracuda_kernelgen::plan::gather_of(plan.read_index);
     // Increment 5: the SCATTERED output (or `None` for a write-Direct op).
     // `(idx_op, axis, combine, oob, index_dtype)`: the output writes its `axis`
     // coordinate from integer operand `idx_op`, combined by `combine`. The plan
     // gate pins gather ⊥ scatter (at most one is `Some`). Write-Direct ⇒ every
     // branch below collapses to the pre-increment-5 string (byte-identical).
-    let scatter = crate::plan::scatter_of(plan.write_index);
+    let scatter = baracuda_kernelgen::plan::scatter_of(plan.write_index);
     // The single INDEX-operand slot + its integer dtype, from EITHER a gather
     // (read side) or a scatter (write side) — they share the index-load machinery
     // (integer pointer type, own strided offset). At most one is present.
@@ -950,7 +950,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         );
         if matches!(
             oob,
-            crate::ir::OobPolicy::Skip | crate::ir::OobPolicy::ZeroFill
+            baracuda_kernelgen::ir::OobPolicy::Skip | baracuda_kernelgen::ir::OobPolicy::ZeroFill
         ) {
             s.push_str("        bool goob = (gidx_raw < 0) || (gidx_raw >= gext);\n");
         }
@@ -1098,10 +1098,10 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         //   - ZeroFill  → store 0 on OOB, else the value (bespoke embedding).
         // Index-free ops take the plain store — byte-identical.
         match gather {
-            Some((_, _, _, crate::ir::OobPolicy::Skip, _)) => {
+            Some((_, _, _, baracuda_kernelgen::ir::OobPolicy::Skip, _)) => {
                 s.push_str(&format!("        if (!goob) out[oo] = {stored};\n"));
             }
-            Some((_, _, _, crate::ir::OobPolicy::ZeroFill, _)) => {
+            Some((_, _, _, baracuda_kernelgen::ir::OobPolicy::ZeroFill, _)) => {
                 let zero = zero_store_literal(octype);
                 s.push_str(&format!(
                     "        out[oo] = goob ? ({zero}) : ({stored});\n"
@@ -1128,12 +1128,12 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 /// narrow but NOT its u8-only arm). The plan gate + `assert_scatter_lowerable` pin
 /// the combine/dtype pair, so an unreachable pairing panics (a mis-route).
 fn scatter_combine_store(
-    combine: crate::ir::WriteCombine,
+    combine: baracuda_kernelgen::ir::WriteCombine,
     octype: &str,
     root: &str,
     hetero: bool,
 ) -> String {
-    use crate::ir::WriteCombine;
+    use baracuda_kernelgen::ir::WriteCombine;
     match combine {
         WriteCombine::Assign => {
             let val = if hetero {
@@ -1188,7 +1188,7 @@ fn scatter_atomic_minmax(op: &str, octype: &str, val: &str) -> String {
 ///   integer `index_dtype`, `axis < rank`, the index operand is not itself
 ///   gathered — the same rules as the plan gate, held independently here.
 fn assert_gather_lowerable(plan: &KernelPlan<'_>) {
-    if crate::plan::gather_of(plan.read_index).is_none() {
+    if baracuda_kernelgen::plan::gather_of(plan.read_index).is_none() {
         return; // index-free / all-Direct — the established path, unchanged.
     }
     let name = plan.op_name;
@@ -1217,7 +1217,7 @@ fn assert_gather_lowerable(plan: &KernelPlan<'_>) {
         plan.schedule
     );
     let (g, index_operand, axis, _oob, index_dtype) =
-        crate::plan::gather_of(plan.read_index).expect("gather present (checked above)");
+        baracuda_kernelgen::plan::gather_of(plan.read_index).expect("gather present (checked above)");
     assert!(
         (index_operand as usize) < plan.n_inputs as usize && index_operand as usize != g,
         "cuda backend: gathered op '{name}' index_operand ({index_operand}) invalid \
@@ -1267,7 +1267,7 @@ fn assert_scatter_lowerable(plan: &KernelPlan<'_>) {
         plan.n_outputs
     );
     assert!(
-        crate::plan::gather_of(plan.read_index).is_none(),
+        baracuda_kernelgen::plan::gather_of(plan.read_index).is_none(),
         "cuda backend: scattered op '{name}' must not also be a gather (a fused \
          gather+scatter is a deferred composition)"
     );
@@ -1297,7 +1297,7 @@ fn assert_scatter_lowerable(plan: &KernelPlan<'_>) {
         plan.key.rank
     );
     assert!(
-        crate::plan::combine_legal_for_dtype(combine, plan.out_dtype),
+        baracuda_kernelgen::plan::combine_legal_for_dtype(combine, plan.out_dtype),
         "cuda backend: scattered op '{name}' combine {combine:?} illegal for output \
          dtype {:?}",
         plan.out_dtype
@@ -1305,7 +1305,7 @@ fn assert_scatter_lowerable(plan: &KernelPlan<'_>) {
 }
 
 /// The BASE_OFFSET SLICE presence + operand list for a plan: the ascending input
-/// indices carrying a [`crate::ir::BaseOffset::Runtime`] offset, and whether the
+/// indices carrying a [`baracuda_kernelgen::ir::BaseOffset::Runtime`] offset, and whether the
 /// output does. Empty vec + `false` for an offset-free plan (byte-identical). THE
 /// single place the emitter derives the entry-point name suffix, the launch args,
 /// and the pointer bumps from — so they can never disagree; the backstop reads
@@ -1660,7 +1660,7 @@ fn assert_multi_output_lowerable(plan: &KernelPlan<'_>) {
 ///   is empty, a `Broadcast` view agrees with the key, a `Reshape` is same-rank —
 ///   the same rules as the plan gate, held independently here.
 fn assert_views_lowerable(plan: &KernelPlan<'_>) {
-    if !plan.views.iter().any(crate::plan::view_is_addressing) {
+    if !plan.views.iter().any(baracuda_kernelgen::plan::view_is_addressing) {
         return; // view-free / all-identity — the established path, unchanged.
     }
     let name = plan.op_name;
@@ -1697,21 +1697,21 @@ fn assert_views_lowerable(plan: &KernelPlan<'_>) {
         );
         let o = plan.key.operands[i];
         match v {
-            crate::ir::View::Identity => {}
-            crate::ir::View::Permute { .. } => assert!(
+            baracuda_kernelgen::ir::View::Identity => {}
+            baracuda_kernelgen::ir::View::Permute { .. } => assert!(
                 o.bcast.is_empty(),
                 "cuda backend: viewed op '{name}' input {i} Permute view with a \
                  broadcast mask ({:#04x}) — Permute ⊥ Broadcast in v1",
                 o.bcast.0
             ),
-            crate::ir::View::Broadcast { bcast } => assert!(
+            baracuda_kernelgen::ir::View::Broadcast { bcast } => assert!(
                 bcast.0 & !o.bcast.0 == 0,
                 "cuda backend: viewed op '{name}' input {i} Broadcast view declares \
                  axes ({:#04x}) the key does not broadcast ({:#04x})",
                 bcast.0,
                 o.bcast.0
             ),
-            crate::ir::View::Reshape { producer_rank } => assert!(
+            baracuda_kernelgen::ir::View::Reshape { producer_rank } => assert!(
                 *producer_rank == rank,
                 "cuda backend: viewed op '{name}' input {i} rank-change Reshape \
                  (producer_rank {producer_rank} != rank {rank}) is out of item-01 \
@@ -1742,7 +1742,7 @@ fn multi_coord_panic(op_name: &str) -> impl Fn(u8) -> String + '_ {
 /// Emit a **multi-output scalar** elementwise kernel (increment 1): one linear
 /// grid-stride kernel that writes `n_outputs` contiguous outputs from a shared
 /// body-DAG. All output bodies are interned into ONE [`ExprDag`]
-/// ([`crate::ir::ExprDag::from_exprs`]) so a value shared between outputs — the
+/// ([`baracuda_kernelgen::ir::ExprDag::from_exprs`]) so a value shared between outputs — the
 /// `dy` load, an interior product — is emitted once (hoisted `tmp` / shared load)
 /// and referenced by each store: strictly fewer global loads than N separate
 /// kernels. The store loop grows to N `out{j}[i] = …;`.
@@ -4234,13 +4234,13 @@ fn emit_block_reducers(
 // ============================================================================
 
 /// The monoid identity literal for a scan combine at `dt`, header-light (the
-/// `INFINITY` FP extremes are already emitted by [`crate::backend::const_lit`], so
+/// `INFINITY` FP extremes are already emitted by [`baracuda_kernelgen::backend::const_lit`], so
 /// they compile under nvrtc/nvcc without a `<math.h>` include; the integer extremes
 /// are plain C literals). `Sum → 0`, `Prod → 1`, `Max → the type MINIMUM` (an
 /// empty-set max), `Min → the type MAXIMUM`. Used for the exclusive scan's first
 /// position (the identity probe) and the block-scan's out-of-range lane padding.
 fn scan_identity(sop: ReduceOp, dt: ElementKind) -> String {
-    let int_acc = crate::plan::is_int_dtype(dt);
+    let int_acc = baracuda_kernelgen::plan::is_int_dtype(dt);
     let dbl = matches!(dt, ElementKind::F64 | ElementKind::F32Strict);
     match sop {
         ReduceOp::Sum => if int_acc {
@@ -4316,7 +4316,7 @@ fn type_extreme_lit(dt: ElementKind, most_negative: bool) -> String {
     }
 }
 
-/// The serial-fold scan BASE (`block = false`) — [`crate::backend::VariantFidelity::BitIdentical`].
+/// The serial-fold scan BASE (`block = false`) — [`baracuda_kernelgen::backend::VariantFidelity::BitIdentical`].
 fn emit_scan(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     emit_scan_impl(plan, ctype, false)
 }
@@ -4365,7 +4365,7 @@ fn emit_block_scanners(s: &mut String, acc: &str, sop: ReduceOp, stem: &str, is_
 }
 
 /// Emit a scan kernel — the serial-fold BASE (`block = false`) or the cooperative
-/// block-scan VARIANT (`block = true`). See [`crate::ir::Access::Scan`] and §3/§4
+/// block-scan VARIANT (`block = true`). See [`baracuda_kernelgen::ir::Access::Scan`] and §3/§4
 /// of the increment-6 brief.
 ///
 /// The BASE is a plain per-row serial fold (thread 0 walks the axis in order — the
@@ -4443,7 +4443,7 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     }
 
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
-    let int_acc = crate::plan::is_int_dtype(plan.dtype);
+    let int_acc = baracuda_kernelgen::plan::is_int_dtype(plan.dtype);
     // Base: float/double for FP, the native ctype (wrapping) for integers. Variant:
     // FP-only (asserted), so float/double.
     let acc = if dbl {
@@ -4801,7 +4801,7 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
 /// and `U8` DECLINE to the serial base — `__shfl_up_sync` has no 8-bit overload and
 /// promoting to an int acc would break the base's native 8-bit modular wrap (a
 /// different domain, not bit-identical). This is an explicit allowlist, NOT
-/// [`crate::plan::is_int_dtype`] (which admits S8/U8).
+/// [`baracuda_kernelgen::plan::is_int_dtype`] (which admits S8/U8).
 ///
 /// **Bits (per op):** FP `Sum`/`Prod` reassociate (a two-level warp/cross-warp tree
 /// vs the base's sequential fold), so [`VariantFidelity::ReassociatedDeterministic`]
@@ -4923,7 +4923,7 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
 // ============================================================================
 
 /// The serial-fold pooling emitter (`Schedule::Window`) —
-/// [`crate::backend::VariantFidelity::BitIdentical`]. One thread per OUTPUT
+/// [`baracuda_kernelgen::backend::VariantFidelity::BitIdentical`]. One thread per OUTPUT
 /// element (grid-stride over `n_out * k_out`): each thread computes its
 /// `(row, o)`, walks the local window of `size` taps at input position
 /// `p = o*stride - pad_lo + kk*dilation`, reduces the in-bounds taps with `op`
@@ -5012,7 +5012,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     }
 
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
-    let int_acc = crate::plan::is_int_dtype(plan.dtype);
+    let int_acc = baracuda_kernelgen::plan::is_int_dtype(plan.dtype);
     // Accumulator: double for f64/f32-strict, native ctype for integers (wrapping
     // sum-pool / exact max-pool), float otherwise (incl. f16/bf16 up-convert).
     let acc = if dbl {
@@ -5268,7 +5268,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 // ============================================================================
 
 /// The 2-D im2col emitter (`Schedule::Im2Col`) —
-/// [`crate::backend::VariantFidelity::BitIdentical`]. One thread per OUTPUT cell
+/// [`baracuda_kernelgen::backend::VariantFidelity::BitIdentical`]. One thread per OUTPUT cell
 /// (grid-stride over `N*C*kh*kw*oH*oW`): each thread unravels its linear
 /// column-matrix index into `(n, c, ki, kj, oh, ow)`, computes the closed-form
 /// source coord (`in_h = oh*stride_h - pad_h + ki*dilation_h`, `in_w` symmetric),
@@ -5444,7 +5444,7 @@ fn sort_pad_lit(dt: ElementKind, order: SortOrder) -> String {
 }
 
 /// The per-output RANK-sort BASE (`bitonic = false`) —
-/// [`crate::backend::VariantFidelity::BitIdentical`], any `k`, no smem/barriers.
+/// [`baracuda_kernelgen::backend::VariantFidelity::BitIdentical`], any `k`, no smem/barriers.
 fn emit_row_sort(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     emit_row_sort_impl(plan, ctype, false)
 }
@@ -5453,7 +5453,7 @@ fn emit_row_sort(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 /// cooperative smem **bitonic** pair-sort (`bitonic = true`). Both compute the
 /// same UNIQUE permutation under a total order on `(key, original-index)` pairs
 /// (index tie-break), so they are byte-identical (`BitIdentical`). See
-/// [`crate::ir::Access::RowSort`] and §4 of the increment-8 brief.
+/// [`baracuda_kernelgen::ir::Access::RowSort`] and §4 of the increment-8 brief.
 ///
 /// The comparator is emitted per `stem` (base + variant + multiple dtype/order
 /// cells concatenate into one validator TU without `__device__` collision). Both
@@ -5472,7 +5472,7 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
     // BYTE-FOR-BYTE (single `long long k`, base = row*k, no store guard, no `_topk`
     // suffix) — every split below is GATED on this so the existing sort/argsort/Both
     // emission is unchanged.
-    let topk = matches!(limit, crate::ir::SortLimit::TopK);
+    let topk = matches!(limit, baracuda_kernelgen::ir::SortLimit::TopK);
 
     // ---- Independent emitter backstops (belt-and-suspenders; validate_row_sort
     // validates the same — the 0a lesson: gate every layer). cuda-prefixed
@@ -5529,7 +5529,7 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
     }
 
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
-    let int_acc = crate::plan::is_int_dtype(plan.dtype);
+    let int_acc = baracuda_kernelgen::plan::is_int_dtype(plan.dtype);
     let is_fp = !int_acc;
     // Comparator/staging accumulator: double for f64/f32-strict, native ctype for
     // integers, float otherwise (f32/f16/bf16 up-convert). Its byte size drives the
@@ -5573,8 +5573,8 @@ fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> Gene
     // the full-sort kernels in the validator TU. `Full` keeps today's exact symbols
     // (byte-identity).
     let limit_suf = match limit {
-        crate::ir::SortLimit::Full => "",
-        crate::ir::SortLimit::TopK => "_topk",
+        baracuda_kernelgen::ir::SortLimit::Full => "",
+        baracuda_kernelgen::ir::SortLimit::TopK => "_topk",
     };
     let bt_suf = if bitonic { "_bt" } else { "" };
     // Device-helper stem: base+variant + every dtype/order/out cell of one op get a
@@ -5890,7 +5890,7 @@ fn emit_row_sort_partial(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel 
     // Emitter backstop (dual-gate; the variant gate is primary): the streaming
     // top-k serves ONLY the runtime-k cap. A Full cell has no k_out to stream to.
     assert!(
-        matches!(limit, crate::ir::SortLimit::TopK),
+        matches!(limit, baracuda_kernelgen::ir::SortLimit::TopK),
         "cuda backend: emit_row_sort_partial serves only SortLimit::TopK (the \
          streaming top-k has no whole-row Full form)"
     );
@@ -5942,7 +5942,7 @@ fn emit_row_sort_partial(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel 
     }
 
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
-    let int_acc = crate::plan::is_int_dtype(plan.dtype);
+    let int_acc = baracuda_kernelgen::plan::is_int_dtype(plan.dtype);
     let is_fp = !int_acc;
     // Comparator/staging accumulator — EXACTLY as emit_row_sort_impl (double for
     // f64/f32-strict, native ctype for integers, float otherwise).
@@ -6187,7 +6187,7 @@ fn row_sort_bitonic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     // Full note is kept byte-identical (its launch_note goldens pin it); the TopK
     // note names the correct `(k_in, k_out)` ABI so the metadata is not stale.
     let launch_note = match limit {
-        crate::ir::SortLimit::Full => format!(
+        baracuda_kernelgen::ir::SortLimit::Full => format!(
             "bitonic pair-sort (one block per row, grid-stride over rows; the whole \
              next_pow2(k)-padded row staged in dynamic shared memory as (key, index) \
              pairs and sorted by a bitonic network under the (key, original-index) \
@@ -6201,7 +6201,7 @@ fn row_sort_bitonic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
             acc_sz,
             VariantFidelity::BitIdentical.determinism_str()
         ),
-        crate::ir::SortLimit::TopK => format!(
+        baracuda_kernelgen::ir::SortLimit::TopK => format!(
             "bitonic top-k (one block per row, grid-stride over rows; the whole \
              next_pow2(k_in)-padded INPUT row staged in dynamic shared memory as \
              (key, index) pairs and sorted by a bitonic network under the (key, \
@@ -6267,7 +6267,7 @@ fn partial_select_topk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         return None;
     };
     // TopK only — the streaming best-buffer has no whole-row Full form.
-    if !matches!(limit, crate::ir::SortLimit::TopK) {
+    if !matches!(limit, baracuda_kernelgen::ir::SortLimit::TopK) {
         return None;
     }
     // out ∈ {Values, Indices, Both} — all served (index rides in the pair). (The
@@ -6339,7 +6339,7 @@ fn is_fully_broadcast(o: OperandKey, rank: usize) -> bool {
 /// Element-offset expression for an operand, dropping the terms for broadcast
 /// axes (whose stride is known 0 at compile time).
 ///
-/// `perm` (item 01) is the [`crate::ir::View::Permute`] this input is read
+/// `perm` (item 01) is the [`baracuda_kernelgen::ir::View::Permute`] this input is read
 /// through: iteration axis `d` reads the producer stride at `perm[d]`, so the
 /// term becomes `c{d}·stride[perm[d]]` (a transposed read — the §1 fused-view
 /// win, no materialized contiguize copy). `None` (Identity / Broadcast /
@@ -6655,12 +6655,12 @@ fn offset_expr_coord(o: OperandKey, stride_arr: &str, coord: &str, rank: usize) 
 
 /// The permutation input operand `k` is read through, or `None` for an identity
 /// read (`Identity` / `Broadcast` / same-rank `Reshape` / a view-free plan).
-/// Only a [`crate::ir::View::Permute`] remaps stride indices in [`offset_expr`];
+/// Only a [`baracuda_kernelgen::ir::View::Permute`] remaps stride indices in [`offset_expr`];
 /// `plan.views` is empty for every pre-item-01 op, so this is always `None` there
 /// (`.get(k)` on the empty slice) and emission is byte-identical.
 fn input_perm<'a>(plan: &'a KernelPlan<'_>, k: usize) -> Option<&'a [u8]> {
     match plan.views.get(k) {
-        Some(crate::ir::View::Permute { perm }) => Some(perm.as_slice()),
+        Some(baracuda_kernelgen::ir::View::Permute { perm }) => Some(perm.as_slice()),
         _ => None,
     }
 }
@@ -6909,8 +6909,9 @@ fn param_args_multi(exprs: &[&ScalarExpr], param_ctype: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::ir::{OpDef, input, param};
-    use crate::{Cuda, generate};
+    use baracuda_kernelgen::ir::{OpDef, input, param};
+    use crate::Cuda;
+    use baracuda_kernelgen::{generate};
     use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
     fn add_op(dtypes: &[ElementKind]) -> OpDef {
@@ -7191,7 +7192,7 @@ mod tests {
 
     #[test]
     fn gather_skip_substitutes_the_index_value_for_the_gathered_axis() {
-        use crate::ir::OobPolicy;
+        use baracuda_kernelgen::ir::OobPolicy;
         // torch-gather along axis 0: out[c] = data[idx[c], c1], skip OOB.
         let op = OpDef::gather(
             "gather",
@@ -7267,7 +7268,7 @@ mod tests {
 
     #[test]
     fn gather_clamp_has_no_store_predicate() {
-        use crate::ir::OobPolicy;
+        use baracuda_kernelgen::ir::OobPolicy;
         // Clamp: gidx_clamped IS the effective index; always store, no goob.
         let op = OpDef::gather(
             "gclamp",
@@ -7289,7 +7290,7 @@ mod tests {
 
     #[test]
     fn index_select_1d_index_degenerates_to_the_axis_coordinate() {
-        use crate::ir::OobPolicy;
+        use baracuda_kernelgen::ir::OobPolicy;
         // index_select axis 0: the index is 1-D (broadcast on axis 1, stride 0), so
         // its offset drops the axis-1 term ⇒ `gidx_off = c0*s1_0` — the bespoke
         // `index_select` 1-D lookup by `coord[select_dim]`.
@@ -7322,8 +7323,8 @@ mod tests {
 
     #[test]
     fn gather_forces_strided_off_the_vectorized_path() {
-        use crate::ir::OobPolicy;
-        use crate::plan::{Schedule, build_plan};
+        use baracuda_kernelgen::ir::OobPolicy;
+        use baracuda_kernelgen::plan::{Schedule, build_plan};
         // A fully-contiguous cell that a non-gather copy would VECTORIZE.
         let data = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
         let idx = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::I32, 256);
@@ -7358,7 +7359,7 @@ mod tests {
     fn index_free_op_emits_byte_identical_to_pre_increment4() {
         // An all-Direct read_index vec must emit the exact same source + name as the
         // index-free op — the byte-identical guarantee.
-        use crate::ir::ReadIndex;
+        use baracuda_kernelgen::ir::ReadIndex;
         let key = binary_key(ElementKind::F32);
         let free = generate(&add_op(&[ElementKind::F32]), &key, &Cuda);
         let with = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1))
@@ -7443,13 +7444,13 @@ mod tests {
                 .contains("if (!soob) atomicAdd(&out[oo], (int)(in0[o0]));")
         );
         // Deterministic combine ⇒ no variant offered.
-        let vs = crate::generate_variants(&op, &key, &Cuda);
+        let vs = baracuda_kernelgen::generate_variants(&op, &key, &Cuda);
         assert_eq!(
             vs.len(),
             1,
             "integer scatter_add ships one unconditional base"
         );
-        assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
+        assert_eq!(vs[0].fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
     }
 
     #[test]
@@ -7487,7 +7488,7 @@ mod tests {
                 .contains("if (!soob) atomicAdd(&out[oo], (int)(1.0));")
         );
         // Deterministic integer counts ⇒ ships unconditionally (no variant).
-        assert_eq!(crate::generate_variants(&op, &key, &Cuda).len(), 1);
+        assert_eq!(baracuda_kernelgen::generate_variants(&op, &key, &Cuda).len(), 1);
     }
 
     #[test]
@@ -7517,15 +7518,15 @@ mod tests {
         // The FP-atomic scatter ships ONLY as a Nondeterministic variant beside the
         // deterministic gather-sum base — never the silent default.
         let op = OpDef::scatter_add("scatter_add", &[ElementKind::F32], 0, ElementKind::I32);
-        let vs = crate::generate_variants(&op, &scatter_2d_key(ElementKind::I32), &Cuda);
+        let vs = baracuda_kernelgen::generate_variants(&op, &scatter_2d_key(ElementKind::I32), &Cuda);
         assert_eq!(vs.len(), 2, "base (gather-sum) + atomic variant");
         // Base is the deterministic gather-sum.
-        assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
+        assert_eq!(vs[0].fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
         assert!(vs[0].kernels[0].name.contains("_scatter_gathersum_"));
         // The atomic variant is Nondeterministic + carries the honest determinism flip.
         let atomic = &vs[1];
         assert_eq!(atomic.tag, "atomic");
-        assert_eq!(atomic.fidelity, crate::VariantFidelity::Nondeterministic);
+        assert_eq!(atomic.fidelity, baracuda_kernelgen::VariantFidelity::Nondeterministic);
         assert!(
             atomic.kernels[0]
                 .source
@@ -7563,7 +7564,7 @@ mod tests {
 
     #[test]
     fn scatter_forces_strided_off_the_vectorized_path() {
-        use crate::plan::{Schedule, build_plan};
+        use baracuda_kernelgen::plan::{Schedule, build_plan};
         // A fully-contiguous 1-D cell a non-scatter copy would VECTORIZE.
         let upd = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
         let idx = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::I32, 256);
@@ -7583,7 +7584,7 @@ mod tests {
         let key = binary_key(ElementKind::F32);
         let free = generate(&add_op(&[ElementKind::F32]), &key, &Cuda);
         let with = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1))
-            .with_scatter(crate::ir::WriteIndex::Direct);
+            .with_scatter(baracuda_kernelgen::ir::WriteIndex::Direct);
         let k = generate(&with, &key, &Cuda);
         assert_eq!(free.name, k.name);
         assert_eq!(
@@ -7595,9 +7596,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "must lower on the Strided schedule")]
     fn scattered_op_on_a_non_strided_schedule_is_refused_by_the_backstop() {
-        use crate::backend::Backend;
-        use crate::ir::{OobPolicy, WriteCombine, WriteIndex};
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::{OobPolicy, WriteCombine, WriteIndex};
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         // A scatter manually paired with the Vectorized schedule (build_plan never
         // produces this) — the independent emitter backstop must refuse it.
         let key = scatter_2d_key(ElementKind::I32);
@@ -7620,12 +7621,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
             write_index: &wi,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -7633,9 +7634,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "must lower on the Strided schedule")]
     fn gathered_op_on_a_non_strided_schedule_is_refused_by_the_backstop() {
-        use crate::backend::Backend;
-        use crate::ir::{OobPolicy, ReadIndex};
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::{OobPolicy, ReadIndex};
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         // A gather manually paired with the Vectorized schedule (build_plan never
         // produces this) — the independent emitter backstop must refuse it.
         let key = gather_2d_key();
@@ -7660,12 +7661,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &ri,
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -7685,7 +7686,7 @@ mod tests {
 
     #[test]
     fn maximum_propagates_nan_and_step_excludes_zero() {
-        use crate::ir::UnaryOp;
+        use baracuda_kernelgen::ir::UnaryOp;
         // Maximum: NaN-propagating compare-select, not fmaxf (the house convention).
         let max = OpDef::elementwise("m", 2, &[ElementKind::F32], input(0).max(input(1)));
         let km = generate(&max, &binary_key(ElementKind::F32), &Cuda);
@@ -7758,7 +7759,7 @@ mod tests {
 
     #[test]
     fn f16_const_body_stays_scalar_for_bit_exactness() {
-        use crate::ir::konst;
+        use baracuda_kernelgen::ir::konst;
         // A Const participates in double-promoted math on the scalar path
         // (`__half + 1.5` promotes through float to double); a packed pair splat
         // would pre-round it to f16 and change bits → gated to scalar.
@@ -7787,8 +7788,8 @@ mod tests {
 
     #[test]
     fn precision_first_variant_offered_for_f32_sum() {
-        use crate::ir::ReduceOp;
-        use crate::{VariantFidelity, generate_variants};
+        use baracuda_kernelgen::ir::ReduceOp;
+        use baracuda_kernelgen::{VariantFidelity, generate_variants};
         // Last-axis (empty-axes default) f32 Sum: base = InnerContig block-tree,
         // prec = the serial double general nest (split-K declines — not Outer).
         let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
@@ -7828,8 +7829,8 @@ mod tests {
 
     #[test]
     fn precision_first_variant_declines_non_f32_and_order_exact() {
-        use crate::generate_variants;
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::generate_variants;
+        use baracuda_kernelgen::ir::ReduceOp;
         let vs_of = |op: &OpDef, dt: ElementKind| {
             let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], dt, 256);
             let o = OperandDesc::new(1, &[128], &[1], dt, 256);
@@ -7860,7 +7861,7 @@ mod tests {
 
     #[test]
     fn precision_first_rowreduce_offered_for_f32_softmax() {
-        use crate::{VariantFidelity, generate_variants};
+        use baracuda_kernelgen::{VariantFidelity, generate_variants};
         // Numerically-stable f32 softmax: max stage + exp-sum stage + divide
         // epilogue. The exp-sum denominator is the length-growing FP sum the
         // serial double fold fixes.
@@ -7906,8 +7907,8 @@ mod tests {
 
     #[test]
     fn precision_first_rowreduce_declines_f16_and_max_only() {
-        use crate::generate_variants;
-        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        use baracuda_kernelgen::generate_variants;
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, reduced};
         // f16 softmax: declined — the low-mantissa store rounds the wider
         // accumulation away, so a double rowreduce variant isn't worth an offer.
         let sm16 = softmax_op(ElementKind::F16);
@@ -7943,8 +7944,8 @@ mod tests {
 
     #[test]
     fn splitk_variant_offered_for_outer_sum() {
-        use crate::ir::ReduceOp;
-        use crate::{VariantFidelity, generate_variants};
+        use baracuda_kernelgen::ir::ReduceOp;
+        use baracuda_kernelgen::{VariantFidelity, generate_variants};
         use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "sum",
@@ -7998,8 +7999,8 @@ mod tests {
 
     #[test]
     fn splitk_mean_divides_in_combine_only() {
-        use crate::generate_variants;
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::generate_variants;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "mean",
@@ -8026,7 +8027,7 @@ mod tests {
 
     #[test]
     fn contraction_emits_skinny_simt_kernel() {
-        use crate::ir::{ContractionAxes, UnaryOp, reduced};
+        use baracuda_kernelgen::ir::{ContractionAxes, UnaryOp, reduced};
         // The decode / flat-GEMM cell: [8,4096]·[4096,4096] → [8,4096], f32.
         let mm = OpDef::contraction(
             "matmul",
@@ -8086,7 +8087,7 @@ mod tests {
 
     #[test]
     fn emit_contraction_canonical_byte_identical() {
-        use crate::ir::{ContractionAxes, reduced};
+        use baracuda_kernelgen::ir::{ContractionAxes, reduced};
         let mm = OpDef::contraction(
             "matmul",
             &[ElementKind::F32],
@@ -8107,7 +8108,7 @@ mod tests {
 
     #[test]
     fn emit_contraction_batched_canonical_byte_identical() {
-        use crate::ir::{ContractionAxes, reduced};
+        use baracuda_kernelgen::ir::{ContractionAxes, reduced};
         let mm = OpDef::contraction(
             "matmul",
             &[ElementKind::F32],
@@ -8146,7 +8147,7 @@ mod tests {
 
     #[test]
     fn emit_contraction_transposed_rhs_binding() {
-        use crate::ir::{ContractionAxes, View, reduced};
+        use baracuda_kernelgen::ir::{ContractionAxes, View, reduced};
         // rhs physically [N,K] (K unit-stride) → key rhs_order = [1,0]; op carries the
         // Permute view (Task 4 admits it). Binding must be col*k+kk, NOT kk*n+col.
         let mm = OpDef::contraction(
@@ -8178,8 +8179,8 @@ mod tests {
 
     #[test]
     fn contraction_bias_emits_bias_param_and_column_load() {
-        use crate::generate_variants;
-        use crate::ir::{ContractionAxes, UnaryOp, input, reduced};
+        use baracuda_kernelgen::generate_variants;
+        use baracuda_kernelgen::ir::{ContractionAxes, UnaryOp, input, reduced};
         // Fused matmul + per-column bias + relu: out = relu(Σ_k lhs·rhs + bias[n]).
         let mb = OpDef::contraction_bias(
             "matmul_bias_relu",
@@ -8239,8 +8240,8 @@ mod tests {
 
     #[test]
     fn contraction_batched_emits_batch_offset_and_declines_splitk() {
-        use crate::generate_variants;
-        use crate::ir::{ContractionAxes, reduced};
+        use baracuda_kernelgen::generate_variants;
+        use baracuda_kernelgen::ir::{ContractionAxes, reduced};
         // Batched [8,8,4096]·[8,4096,4096] → [8,8,4096], f32 (B/M Tiny).
         let bmm = OpDef::contraction(
             "bmm",
@@ -8326,8 +8327,8 @@ mod tests {
 
     #[test]
     fn contraction_splitk_variant_offered_for_tiny_m_cell() {
-        use crate::ir::{ContractionAxes, reduced};
-        use crate::{VariantFidelity, generate_variants};
+        use baracuda_kernelgen::ir::{ContractionAxes, reduced};
+        use baracuda_kernelgen::{VariantFidelity, generate_variants};
         let mm = OpDef::contraction(
             "matmul",
             &[ElementKind::F32],
@@ -8368,8 +8369,8 @@ mod tests {
 
     #[test]
     fn smemrow_variant_materializes_softmax_shared_exp() {
-        use crate::ir::{ReduceOp, ReduceStage, reduced};
-        use crate::{VariantFidelity, generate_variants};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, reduced};
+        use baracuda_kernelgen::{VariantFidelity, generate_variants};
         // Softmax: stage-2 pre = exp(x - r0) is recomputed verbatim in the
         // epilogue — the cross-pass shared value the variant caches.
         let softmax = OpDef::row_reduce(
@@ -8422,8 +8423,8 @@ mod tests {
 
     #[test]
     fn smemrow_not_offered_when_epilogue_does_not_recompute() {
-        use crate::generate_variants;
-        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
+        use baracuda_kernelgen::generate_variants;
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
         // RmsNorm: stage pre = x², epilogue = x·rsqrt(r0+eps) — the epilogue
         // never recomputes x², so there is nothing to materialize.
         let rmsnorm = OpDef::row_reduce(
@@ -8449,8 +8450,8 @@ mod tests {
 
     #[test]
     fn splitk_gate_refuses_flipped_param_and_malformed_cells() {
-        use crate::ir::ReduceOp;
-        use crate::{Backend, generate_variants};
+        use baracuda_kernelgen::ir::ReduceOp;
+        use baracuda_kernelgen::{Backend, generate_variants};
         use baracuda_kernel_vocab::AxisMask;
         let op = OpDef::reduction_axes(
             "sum",
@@ -8482,7 +8483,7 @@ mod tests {
             "wsum",
             1,
             &[ElementKind::F32],
-            input(0) * crate::ir::param(0),
+            input(0) * baracuda_kernelgen::ir::param(0),
             ReduceOp::Sum,
             AxisMask(0b1),
             false,
@@ -8501,7 +8502,7 @@ mod tests {
         // (Exercised via lower_variants directly; generate() itself would also
         // reject such a key downstream.)
         let k_one = structure_key(OpCategory::Reduction, &[a], ArchSku::Sm89);
-        let plan = crate::build_plan(&op, &k_one);
+        let plan = baracuda_kernelgen::build_plan(&op, &k_one);
         assert!(
             Cuda.lower_variants(&plan).is_empty(),
             "1-operand key: no variant"
@@ -8510,8 +8511,8 @@ mod tests {
 
     #[test]
     fn splitk_not_offered_for_lastaxis_max_or_int() {
-        use crate::generate_variants;
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::generate_variants;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // Last-axis (InnerContig): already block-parallel — no split-K.
         let last = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
@@ -8589,7 +8590,7 @@ mod tests {
 
     #[test]
     fn transpose_fused_elementwise_reads_input_through_swapped_strides() {
-        use crate::ir::View;
+        use baracuda_kernelgen::ir::View;
         // out[i,j] = relu(x[j,i]): input 0 read through Permute{[1,0]}.
         let op = OpDef::elementwise("relu_t", 1, &[ElementKind::F32], input(0).relu())
             .with_views(vec![View::Permute { perm: vec![1, 0] }]);
@@ -8611,7 +8612,7 @@ mod tests {
 
     #[test]
     fn two_input_view_transposed_plus_identity() {
-        use crate::ir::View;
+        use baracuda_kernelgen::ir::View;
         // out[i,j] = x[j,i] + b[i,j]: in0 transposed, in1 identity.
         let op = OpDef::elementwise("add_t", 2, &[ElementKind::F32], input(0) + input(1))
             .with_views(vec![View::Permute { perm: vec![1, 0] }, View::Identity]);
@@ -8624,7 +8625,7 @@ mod tests {
 
     #[test]
     fn rank3_nontrivial_permute_uses_the_direct_stride_remap() {
-        use crate::ir::View;
+        use baracuda_kernelgen::ir::View;
         // Review #3: every other perm golden uses [1,0], an INVOLUTION
         // (perm == perm^-1), so no rank-2 test can distinguish the direct remap
         // (c{d}*stride[perm[d]]) from the inverse — an inverse mutation passed all
@@ -8661,7 +8662,7 @@ mod tests {
 
     #[test]
     fn identity_view_is_byte_identical_to_view_free() {
-        use crate::ir::View;
+        use baracuda_kernelgen::ir::View;
         // The byte-identical guarantee: an all-Identity views vec emits the exact
         // same source (and name) as the view-free op at the same key.
         let key = view_2d_key(3);
@@ -8679,9 +8680,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "must lower on the Strided schedule")]
     fn viewed_op_on_a_non_strided_schedule_is_refused_by_the_backstop() {
-        use crate::backend::Backend;
-        use crate::ir::View;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::View;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         // Construct a plan manually that pairs a Permute view with the Vectorized
         // schedule (which build_plan would never produce) — the independent emitter
         // backstop must refuse it (the vector emitter ignores views).
@@ -8699,19 +8700,19 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &views,
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
 
     #[test]
     fn shared_interior_is_hoisted_to_one_tmp() {
-        use crate::ir::konst;
+        use baracuda_kernelgen::ir::konst;
         // g = a*b; out = g / (g + 1). The shared product must be emitted ONCE as a
         // named tmp and referenced twice — not re-rendered (the recompute + source
         // blow-up the DAG rewrite exists to kill).
@@ -8851,7 +8852,7 @@ mod tests {
 
     #[test]
     fn reduction_mean_of_squares_f32() {
-        use crate::ir::{ReduceOp, UnaryOp};
+        use baracuda_kernelgen::ir::{ReduceOp, UnaryOp};
         // mean(x²) over the last axis — the RmsNorm core.
         let op = OpDef::reduction(
             "ms",
@@ -8884,7 +8885,7 @@ mod tests {
 
     #[test]
     fn reduction_max_peels_first_and_propagates_nan() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         let op = OpDef::reduction("amax", 1, &[ElementKind::F32], input(0), ReduceOp::Max);
         let k = generate(&op, &reduce_key(ElementKind::F32), &Cuda);
         assert_eq!(k.name, "baracuda_gen_amax_f32_reduce_max");
@@ -8905,7 +8906,7 @@ mod tests {
 
     #[test]
     fn reduction_f16_accumulates_in_float() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // f16 input/output, but the fold runs in float — precision + no __half2 sum.
         let op = OpDef::reduction("s", 1, &[ElementKind::F16], input(0), ReduceOp::Sum);
         let k = generate(&op, &reduce_key(ElementKind::F16), &Cuda);
@@ -8922,7 +8923,7 @@ mod tests {
 
     #[test]
     fn reduction_f32strict_folds_in_double() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Strict precision mode folds in double (a plain-float fold isn't reproducible
         // / correctly-rounded), then stores the single-rounded result to the f32 out.
         let op = OpDef::reduction("s", 1, &[ElementKind::F32Strict], input(0), ReduceOp::Sum);
@@ -8935,7 +8936,7 @@ mod tests {
 
     #[test]
     fn reduction_int_accumulates_in_long_long() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // i32 Sum reduces natively into a `long long` accumulator (exact); no float.
         let op = OpDef::reduction("s", 1, &[ElementKind::I32], input(0), ReduceOp::Sum);
         let k = generate(&op, &reduce_key(ElementKind::I32), &Cuda);
@@ -8950,7 +8951,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "integer Mean is out of scope")]
     fn reduction_int_mean_is_rejected() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // int Mean is float-output (mixed-dtype) — rejected, not silently mis-typed.
         let op = OpDef::reduction("m", 1, &[ElementKind::I32], input(0), ReduceOp::Mean);
         let _ = generate(&op, &reduce_key(ElementKind::I32), &Cuda);
@@ -8960,7 +8961,7 @@ mod tests {
 
     #[test]
     fn reduction_outer_axis_collapses() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // Reduce axis 0 of a contiguous [4,8] input → collapse to [8].
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
@@ -9006,7 +9007,7 @@ mod tests {
 
     #[test]
     fn reduction_multi_axis_mean_divisor_is_the_extent_product() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // Reduce axes {0,1} of [2,3,4] → [4], Mean: divisor = shape0 * shape1.
         let a = OperandDesc::new(3, &[2, 3, 4], &[12, 4, 1], ElementKind::F32, 256);
@@ -9041,7 +9042,7 @@ mod tests {
 
     #[test]
     fn reduction_keepdim_outer_axis_uses_input_axis_output_stride() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // Reduce axis 0 of [4,8] with keepdim → [1,8]: the output stride is indexed
         // by INPUT axis (kept axis 1), not a collapsed position.
@@ -9064,7 +9065,7 @@ mod tests {
 
     #[test]
     fn reduction_general_max_seeds_and_propagates_nan() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // Max over a non-last axis still uses the NaN-propagating select, seeded via
         // the `has` flag (no ±∞ literal, empty extent leaves acc = 0).
@@ -9092,7 +9093,7 @@ mod tests {
 
     #[test]
     fn reduction_strided_last_axis_takes_the_general_path() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // Reduce the last axis of a column-major (transposed, strided) [8,4] input:
         // the trailing axis over a non-contiguous input is NOT the contiguous fast
@@ -9120,7 +9121,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "output store must be injective")]
     fn reduction_broadcast_output_is_rejected() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // A broadcast (stride-0) output would collapse every result onto one slot —
         // the general path must reject it, not emit an aliasing store.
@@ -9144,7 +9145,7 @@ mod tests {
 
     #[test]
     fn reduction_prod_fp_folds_from_one() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Prod over the last axis: identity 1, `acc *= elem`, block_prod tree,
         // pass-through finalize (no divisor). Matches bespoke reduce_prod_fp.cu.
         let op = OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod);
@@ -9168,7 +9169,7 @@ mod tests {
 
     #[test]
     fn reduction_prod_int_accumulates_in_long_long() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // i32 Prod: widened `long long` accumulator (the bespoke i64 reduce_prod_int
         // accumulator), native int multiply, store truncates back to i32 (wrap).
         let op = OpDef::reduction("p", 1, &[ElementKind::I32], input(0), ReduceOp::Prod);
@@ -9183,7 +9184,7 @@ mod tests {
 
     #[test]
     fn reduction_sum_s8_accumulates_in_long_long_and_wraps_at_store() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // S8 Sum: same `long long` widened-accumulate path as I32/I64 (reuse, no
         // narrower accumulator). The native leaf load is `in0[idx]` (S8 hits the
         // `_` arm of `promote_load_f32`, no half/bf16 widening detour). The store
@@ -9204,7 +9205,7 @@ mod tests {
 
     #[test]
     fn reduction_max_u8_accumulates_in_long_long_and_wraps_at_store() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // U8 Max: same widened-accumulate path, unsigned native load/store. The
         // seed is now the U8 Max empty-axis identity `((unsigned char)0)`
         // (KISS-OPS-6.11-0002) rather than a bare `0` — numerically the same
@@ -9227,7 +9228,7 @@ mod tests {
 
     #[test]
     fn reduction_count_s8_predicate_lowers_as_integer_not_float() {
-        use crate::ir::{BinaryOp, ReduceOp, konst};
+        use baracuda_kernelgen::ir::{BinaryOp, ReduceOp, konst};
         // count = Sum(in != 0), I64 out (the any/all/count hetero-out shape
         // admitted by Task 3, ba325509). Positive evidence for the Task 3b
         // fix: the predicate must lower as a genuine INTEGER comparison
@@ -9260,7 +9261,7 @@ mod tests {
 
     #[test]
     fn reduction_any_u8_predicate_lowers_as_integer_body_and_post() {
-        use crate::ir::{BinaryOp, ReduceOp, konst, reduced};
+        use baracuda_kernelgen::ir::{BinaryOp, ReduceOp, konst, reduced};
         // any = Max(in != 0) with post Cmp*(Reduced(0), 0) casting the fold
         // back to a U8 boolean (the other any/all/count hetero-out shape).
         // Exercises the Task 3b int-predicate fix in BOTH the fold body AND
@@ -9288,7 +9289,7 @@ mod tests {
 
     #[test]
     fn reduction_max_s8_empty_axis_seeds_the_dtype_min_identity() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // S8 Max, contiguous last-axis (InnerContig fast path): an EMPTY reduced
         // extent must fold to the dtype MINIMUM (KISS-OPS-6.11-0002), not 0 — so
         // any real element in a non-empty fold still compares as `>` the
@@ -9310,7 +9311,7 @@ mod tests {
 
     #[test]
     fn reduction_min_u8_empty_axis_seeds_the_dtype_max_identity() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // U8 Min, contiguous last-axis (InnerContig fast path): an EMPTY reduced
         // extent must fold to the dtype MAXIMUM, not 0. Unsigned case: 255.
         let op = OpDef::reduction("m", 1, &[ElementKind::U8], input(0), ReduceOp::Min);
@@ -9328,7 +9329,7 @@ mod tests {
 
     #[test]
     fn reduction_max_general_axis_s8_empty_axis_seeds_the_dtype_min_identity() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // S8 Max over the OUTER (non-contiguous-last) axis: the general
         // strided-fold path (the second emit site) — same empty-axis identity
@@ -9357,7 +9358,7 @@ mod tests {
 
     #[test]
     fn reduction_min_general_axis_u8_empty_axis_seeds_the_dtype_max_identity() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // U8 Min over the OUTER axis: general path, unsigned case: 255.
         let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::U8, 256);
@@ -9384,7 +9385,7 @@ mod tests {
 
     #[test]
     fn reduction_prod_general_axis_folds_from_one() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         use baracuda_kernel_vocab::AxisMask;
         // Prod over the outer axis (general path): identity 1, `acc *= elem`,
         // no Mean divisor.
@@ -9410,7 +9411,7 @@ mod tests {
 
     #[test]
     fn reduction_post_norm2_applies_sqrt_after_the_sum() {
-        use crate::ir::{ReduceOp, UnaryOp, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, UnaryOp, reduced};
         // norm2 = Sqrt(Sum(Sqr(x))): the pre-body squares (already worked), the
         // 0e post applies Sqrt to the fold result via a hoisted `red0` register.
         let op = OpDef::reduction_post(
@@ -9433,7 +9434,7 @@ mod tests {
 
     #[test]
     fn reduction_post_sees_the_post_mean_value() {
-        use crate::ir::{ReduceOp, UnaryOp, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, UnaryOp, reduced};
         // Ordering pin (documented): Mean divides FIRST, then the post applies to
         // the mean. So `red0` binds the ALREADY-divided block_sum/k, and Sqrt sees
         // sqrt(mean), not mean(sqrt).
@@ -9456,7 +9457,7 @@ mod tests {
 
     #[test]
     fn reduction_post_identity_is_byte_identical_to_plain() {
-        use crate::ir::{ReduceOp, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, reduced};
         // The default post (`Reduced(0)`) must emit exactly like OpDef::reduction —
         // no red0 binding, no extra braces — the 0e no-regression guarantee.
         let plain = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
@@ -9483,7 +9484,7 @@ mod tests {
 
     #[test]
     fn reduction_hetero_out_u8_any() {
-        use crate::ir::{BinaryOp, ReduceOp, konst, reduced};
+        use baracuda_kernelgen::ir::{BinaryOp, ReduceOp, konst, reduced};
         // any = Sum(x != 0) with a Cmp* post `Reduced(0) > 0` → exactly 0/1,
         // stored to a u8 mask. Input dtype stays f32 (the key dtype); the output
         // pointer + store convert to u8 (the 0b hetero pattern, on a reduction).
@@ -9509,7 +9510,7 @@ mod tests {
 
     #[test]
     fn reduction_hetero_out_i64_count() {
-        use crate::ir::{BinaryOp, ReduceOp, konst};
+        use baracuda_kernelgen::ir::{BinaryOp, ReduceOp, konst};
         // count = Sum(x != 0) with the identity post, stored to i64. The float
         // accumulator converts to a long long store (exact while count ≤ 2^24).
         let mut op = OpDef::reduction(
@@ -9538,7 +9539,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "must not read Input")]
     fn reduction_post_reading_input_is_rejected_at_the_plan_gate() {
-        use crate::ir::{ReduceOp, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, reduced};
         // The reduced axis is gone; an Input at the output coordinate is a
         // different, ambiguous tensor — rejected (mirrors the contraction epilogue).
         let op = OpDef::reduction_post(
@@ -9549,13 +9550,13 @@ mod tests {
             ReduceOp::Sum,
             reduced(0) + input(0),
         );
-        let _ = crate::build_plan(&op, &reduce_key(ElementKind::F32));
+        let _ = baracuda_kernelgen::build_plan(&op, &reduce_key(ElementKind::F32));
     }
 
     #[test]
     #[should_panic(expected = "requires the POST-expr ROOT to be a comparison")]
     fn reduction_u8_out_non_cmp_post_is_rejected_at_the_plan_gate() {
-        use crate::ir::{ReduceOp, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, reduced};
         // U8 out with a non-cmp (identity) post stores the raw accumulator — a
         // silent truncation. The gate demands a Cmp* post (exact 0/1).
         let mut op = OpDef::reduction_post(
@@ -9567,24 +9568,24 @@ mod tests {
             reduced(0),
         );
         op.out_dtype = Some(ElementKind::U8);
-        let _ = crate::build_plan(&op, &reduce_key_hetero(ElementKind::U8));
+        let _ = baracuda_kernelgen::build_plan(&op, &reduce_key_hetero(ElementKind::U8));
     }
 
     #[test]
     #[should_panic(expected = "requires op = Sum")]
     fn reduction_i64_out_non_sum_is_rejected_at_the_plan_gate() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // I64 out is the count/sum-widening shape — Max → i64 is not an exact
         // integer store shape, so it rejects.
         let mut op = OpDef::reduction("m", 1, &[ElementKind::F32], input(0), ReduceOp::Max);
         op.out_dtype = Some(ElementKind::I64);
-        let _ = crate::build_plan(&op, &reduce_key_hetero(ElementKind::I64));
+        let _ = baracuda_kernelgen::build_plan(&op, &reduce_key_hetero(ElementKind::I64));
     }
 
     #[test]
     #[should_panic(expected = "Prod combiner is not supported in the fused")]
     fn rowreduce_prod_stage_is_rejected_at_the_plan_gate() {
-        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, reduced};
         // Prod is a 0e Access::Reduction combiner only; the fused row path has no
         // block_prod, so a Prod stage misses honestly at the gate.
         let op = OpDef::row_reduce(
@@ -9597,7 +9598,7 @@ mod tests {
             }],
             reduced(0),
         );
-        let _ = crate::build_plan(&op, &rr_key(ElementKind::F32, OpCategory::Softmax));
+        let _ = baracuda_kernelgen::build_plan(&op, &rr_key(ElementKind::F32, OpCategory::Softmax));
     }
 
     fn rr_key(dt: ElementKind, cat: OpCategory) -> baracuda_kernel_vocab::StructureKey {
@@ -9607,7 +9608,7 @@ mod tests {
     }
 
     fn rmsnorm_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
         // x * rsqrt(mean(x^2) + eps), eps baked as a finite Const.
         OpDef::row_reduce(
             "rmsnorm",
@@ -9622,7 +9623,7 @@ mod tests {
     }
 
     fn softmax_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, reduced};
         // exp(x - rowmax) / sum(exp(x - rowmax)) — numerically stable.
         OpDef::row_reduce(
             "softmax",
@@ -9730,7 +9731,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "references a stage not yet produced")]
     fn rowreduce_forward_reduced_ref_panics() {
-        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, reduced};
         // A stage 0 `pre` referencing Reduced(0) (its own not-yet-produced result)
         // is a mis-authored op — validate_row_reduce must reject it at build_plan.
         let bad = OpDef::row_reduce(
@@ -9765,7 +9766,7 @@ mod tests {
     }
 
     fn wrmsnorm_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
         // x * rsqrt(mean(x^2) + eps) * weight; in0=x (row), in1=weight [k] (column).
         OpDef::row_reduce(
             "wrmsnorm",
@@ -9780,7 +9781,7 @@ mod tests {
     }
 
     fn layernorm_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
         // (x-mean)*rsqrt(var+eps)*weight + bias; in0=x, in1=weight[k], in2=bias[k].
         OpDef::row_reduce(
             "layernorm",
@@ -9872,7 +9873,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "epilogue-only")]
     fn rowreduce_column_input_in_stage_rejected() {
-        use crate::ir::{ReduceOp, ReduceStage};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage};
         // Reducing a per-column operand is nonsense — a stage.pre referencing the
         // column weight (Input1) must be rejected.
         let bad = OpDef::row_reduce(
@@ -9899,7 +9900,7 @@ mod tests {
     }
 
     fn softmax_bw_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, reduced};
         // in0=y, in1=dy (both row-streamed). dx = y*(dy - Σ_j y[j]·dy[j]).
         OpDef::row_reduce(
             "softmax_bw",
@@ -9926,7 +9927,7 @@ mod tests {
     }
 
     fn layer_norm_bw_op(dt: ElementKind) -> OpDef {
-        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, reduced};
         // in0=x, in1=dy (row-streamed); in2=mean, in3=rstd (per-row scalars).
         // x_hat=(x-mean)*rstd; dx = rstd*(dy - mean(dy) - x_hat*mean(dy*x_hat)).
         let x_hat = (input(0) - input(2)) * input(3);
@@ -10051,7 +10052,7 @@ mod tests {
 
     #[test]
     fn vocab_unary_emission_goldens_f32_f64_f16() {
-        use crate::ir::UnaryOp;
+        use baracuda_kernelgen::ir::UnaryOp;
         // One golden per new unary fn (Erf pre-existed; pinned here so the whole
         // sweep is asserted in one place): exact C call per dtype — f32 device
         // math, f64 device math, f16 promote→f32-fn→demote.
@@ -10116,7 +10117,7 @@ mod tests {
 
     #[test]
     fn vocab_binary_emission_goldens_f32_f64_f16() {
-        use crate::ir::BinaryOp;
+        use baracuda_kernelgen::ir::BinaryOp;
         // (op, f32 fn, f64 fn, f16 promote path expected?) — Nextafter has NO
         // half lowering (gated; separate test).
         let cases: &[(BinaryOp, &str, &str, bool)] = &[
@@ -10171,7 +10172,7 @@ mod tests {
 
     #[test]
     fn fmax_ieee_is_fmaxf_and_distinct_from_nan_propagating_maximum() {
-        use crate::ir::BinaryOp;
+        use baracuda_kernelgen::ir::BinaryOp;
         // The two ops must never alias: FmaxIeee/FminIeee are the NaN-SUPPRESSING
         // fmaxf/fminf; Max/Min stay the NaN-propagating compare-selects.
         let key = binary_scalar_key(ElementKind::F32, 4);
@@ -10221,7 +10222,7 @@ mod tests {
 
     #[test]
     fn remtrunc_is_fmodf_and_rem_stays_floored() {
-        use crate::ir::BinaryOp;
+        use baracuda_kernelgen::ir::BinaryOp;
         // RemTrunc = C fmodf (sign-of-dividend); Rem stays the floored form
         // (sign-of-divisor). Distinct spellings, never merged.
         let key = binary_scalar_key(ElementKind::F32, 4);
@@ -10300,7 +10301,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "no half-precision lowering")]
     fn nextafter_f16_is_refused_at_the_emitter() {
-        use crate::ir::BinaryOp;
+        use baracuda_kernelgen::ir::BinaryOp;
         // The promote-to-f32 half path would compute the f32-lattice neighbor
         // (which demotes right back to `a`) — silently wrong, so the emitter
         // refuses rather than lowers. (The JIT gates this in dtype_compatible.)
@@ -10316,7 +10317,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "no half-precision lowering")]
     fn nextafter_bf16_is_refused_at_the_emitter() {
-        use crate::ir::BinaryOp;
+        use baracuda_kernelgen::ir::BinaryOp;
         let op = OpDef::elementwise(
             "nextafter",
             2,
@@ -10335,7 +10336,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "must miss honestly")]
     fn nextafter_f16_is_refused_in_a_reduction_body() {
-        use crate::ir::{BinaryOp, ReduceOp, konst};
+        use baracuda_kernelgen::ir::{BinaryOp, ReduceOp, konst};
         let op = OpDef::reduction(
             "na_sum",
             1,
@@ -10349,7 +10350,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "must miss honestly")]
     fn nextafter_f16_is_refused_in_a_row_reduce_epilogue() {
-        use crate::ir::{BinaryOp, ReduceOp, ReduceStage, reduced};
+        use baracuda_kernelgen::ir::{BinaryOp, ReduceOp, ReduceStage, reduced};
         let op = OpDef::row_reduce(
             "na_rr",
             1,
@@ -10368,7 +10369,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "must miss honestly")]
     fn nextafter_f16_is_refused_in_a_contraction_epilogue() {
-        use crate::ir::{BinaryOp, ContractionAxes, konst, reduced};
+        use baracuda_kernelgen::ir::{BinaryOp, ContractionAxes, konst, reduced};
         let op = OpDef::contraction(
             "na_mm",
             &[ElementKind::F16],
@@ -10384,7 +10385,7 @@ mod tests {
 
     #[test]
     fn vocab_f16_packed_falls_back_to_tier_b_pair_scalarization() {
-        use crate::ir::UnaryOp;
+        use baracuda_kernelgen::ir::UnaryOp;
         // A new transcendental at an aligned f16 cell takes the PACKED schedule
         // but the fn itself is Tier B: pair-split through the same scalar f32
         // spelling (bit-identical to the scalar sibling), never a fake packed
@@ -10407,7 +10408,7 @@ mod tests {
     // Increment-0b comparison predicates + u8 mask output
     // =======================================================================
 
-    use crate::ir::{BinaryOp, konst};
+    use baracuda_kernelgen::ir::{BinaryOp, konst};
 
     /// Fully-aligned binary cell with a **U8 output** operand (inputs `dt`):
     /// the caller-side key shape of an `elementwise_pred` op. Note the aligned
@@ -10560,9 +10561,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "hetero output")]
     fn hetero_out_vectorized_schedule_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::ir::BinaryOp;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::BinaryOp;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         // build_plan never produces this plan (it forces Scalar/Strided for
         // u8-out) — but the backstop must hold INDEPENDENTLY of the plan gate
         // (the 0a lesson: gate every layer). A future schedule-selection
@@ -10581,12 +10582,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -10625,7 +10626,7 @@ mod tests {
 
     #[test]
     fn int_compute_dtypes_are_supported_after_the_0c_audit() {
-        use crate::backend::Backend;
+        use baracuda_kernelgen::backend::Backend;
         // Increment 0c replaced the 0b uniform-u8 hold: U8 and S8 are audited
         // COMPUTE dtypes now (wrapping semantics + the int-only op set), so
         // supports_dtype says yes — and the per-OP legality lives in
@@ -10747,7 +10748,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "requires the POST-expr ROOT to be a comparison")]
     fn u8_out_reduction_with_non_cmp_post_is_rejected() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // count(x > 0) stored as u8 with the IDENTITY post: the store is the raw
         // ACCUMULATOR (a count up to 1024), not a 0/1 predicate — u8 would
         // truncate silently. 0e admits a U8-out reduction ONLY when the POST-expr
@@ -10777,7 +10778,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "stores its accumulator")]
     fn u8_out_under_contraction_is_rejected() {
-        use crate::ir::{ContractionAxes, reduced};
+        use baracuda_kernelgen::ir::{ContractionAxes, reduced};
         let mut op = OpDef::contraction(
             "mm",
             &[ElementKind::F32],
@@ -11030,7 +11031,7 @@ mod tests {
     // ---- plan-gate validate-rejects (assert_int_op_admissibility): both
     // directions of the ir.rs admissibility table, every class of illegal cell.
     //
-    // These call crate::build_plan DIRECTLY, not generate(): the panic must
+    // These call baracuda_kernelgen::build_plan DIRECTLY, not generate(): the panic must
     // originate from the PLAN gate. Via generate() five of these rejections
     // also passed on the EMITTER backstops (empirically: widening plan.rs's
     // logical U8-only arm to all int dtypes left the whole suite green —
@@ -11043,7 +11044,7 @@ mod tests {
     fn bitand_at_f32_is_rejected_at_the_plan_gate() {
         let op = int_op("band", BinaryOp::BitAnd, ElementKind::F32);
         let key = binary_scalar_key(ElementKind::F32, 4);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11051,7 +11052,7 @@ mod tests {
     fn shl_at_f16_is_rejected_at_the_plan_gate() {
         let op = int_op("shl", BinaryOp::Shl, ElementKind::F16);
         let key = binary_scalar_key(ElementKind::F16, 2);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11060,7 +11061,7 @@ mod tests {
         // Bespoke logical instantiates ONLY uint8_t — wider ints miss honestly.
         let op = int_op("land", BinaryOp::LogicalAnd, ElementKind::I32);
         let key = binary_scalar_key(ElementKind::I32, 4);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11070,7 +11071,7 @@ mod tests {
         // Div must not ride in on the 0c dtype flip.
         let op = OpDef::elementwise("div", 2, &[ElementKind::U8], input(0) / input(1));
         let key = binary_scalar_key(ElementKind::U8, 1);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11078,7 +11079,7 @@ mod tests {
     fn float_fn_at_u8_is_rejected_at_the_plan_gate() {
         let op = OpDef::elementwise("m", 2, &[ElementKind::U8], input(0).max(input(1)));
         let key = binary_scalar_key(ElementKind::U8, 1);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11087,19 +11088,19 @@ mod tests {
         // Bespoke cmp is fp-only (binary_cmp_*_fp.cu) — int cmp misses honestly.
         let op = int_op("lt", BinaryOp::CmpLt, ElementKind::I32);
         let key = binary_scalar_key(ElementKind::I32, 4);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
     #[should_panic(expected = "has no integer lowering")]
     fn unary_at_int_is_rejected_at_the_plan_gate() {
-        use crate::ir::UnaryOp;
+        use baracuda_kernelgen::ir::UnaryOp;
         // The bespoke unary elementwise surface is fp-only — Abs at i32 must
         // miss honestly at the PLAN gate (not just cuda_unary's panic, which
         // the reduction-class paths bypass — the 0a lesson).
         let op = OpDef::elementwise("a", 1, &[ElementKind::I32], input(0).unary(UnaryOp::Abs));
         let key = unary_scalar_key(ElementKind::I32, 4);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11109,13 +11110,13 @@ mod tests {
         // run double math (f64 cannot represent all i64). Reject, don't drift.
         let op = OpDef::elementwise("addk", 1, &[ElementKind::I64], input(0) + konst(2.0));
         let key = unary_scalar_key(ElementKind::I64, 8);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
     #[should_panic(expected = "Elementwise-only")]
     fn bitand_under_reduction_is_rejected_at_the_plan_gate() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Int-only ops are Elementwise-only in 0c: the reduction pre-body
         // lowers through the FLOAT accumulator spellers (binary_f32/f64),
         // which have no int arms — the gate must fire before the emitter.
@@ -11127,7 +11128,7 @@ mod tests {
             ReduceOp::Sum,
         );
         let key = reduce_key(ElementKind::I32);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     // ---- 8-bit composition pin (plan-gate rule 3): at U8/S8 every operand
@@ -11148,7 +11149,7 @@ mod tests {
             (input(0) + input(1)).binary(BinaryOp::Shr, input(1)),
         );
         let key = binary_scalar_key(ElementKind::U8, 1);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11163,7 +11164,7 @@ mod tests {
             (input(0) + input(1)).binary(BinaryOp::LogicalAnd, input(1)),
         );
         let key = binary_scalar_key(ElementKind::U8, 1);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11178,7 +11179,7 @@ mod tests {
             input(0).binary(BinaryOp::Shl, input(0) + input(1)),
         );
         let key = binary_scalar_key(ElementKind::S8, 1);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11229,8 +11230,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "has no f32 lowering")]
     fn int_only_op_at_float_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let key = binary_scalar_key(ElementKind::F32, 4);
         let body = input(0).binary(BinaryOp::BitAnd, input(1)).0;
         let plan = KernelPlan {
@@ -11244,12 +11245,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -11257,8 +11258,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "must miss honestly at the plan gate")]
     fn float_fn_at_int_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let key = binary_scalar_key(ElementKind::U8, 1);
         let body = input(0).binary(BinaryOp::FmaxIeee, input(1)).0;
         let plan = KernelPlan {
@@ -11272,12 +11273,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -11285,8 +11286,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "bespoke logical surface")]
     fn logical_at_wide_int_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let key = binary_scalar_key(ElementKind::I64, 8);
         let body = input(0).binary(BinaryOp::LogicalXor, input(1)).0;
         let plan = KernelPlan {
@@ -11300,12 +11301,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -11313,8 +11314,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "infix Div has no integer lowering")]
     fn int_div_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         // Div is spelled by the shared dtype-blind lower_expr (`a / b` for
         // every dtype) — no per-op speller exists to panic, so Cuda::lower's
         // body-walk is the ONLY emitter-level guard against a plan-gate
@@ -11332,12 +11333,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -11345,8 +11346,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "Const at an integer dtype")]
     fn int_const_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         // A Const is spelled as an f64 C literal by the shared backend code —
         // without this backstop a plan-gate bypass would silently run double
         // math inside an i64 kernel (f64 cannot represent all i64).
@@ -11363,19 +11364,19 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
 
     // ===== increment 0d: Coord(axis) — the iota/coordinate leaf =============
 
-    use crate::ir::coord;
+    use baracuda_kernelgen::ir::coord;
 
     /// Rank-2 contiguous, fully aligned cell — the shape whose ALIGNED inputs
     /// would normally vectorize (V4 at f32): exactly the cell the Coord
@@ -11503,14 +11504,14 @@ mod tests {
 
     #[test]
     fn coord_body_never_vectorizes_aligned_v4_cell_takes_strided() {
-        use crate::plan::Schedule;
+        use baracuda_kernelgen::plan::Schedule;
         // The routing pin, via build_plan DIRECTLY: a fully-aligned contiguous
         // f32 cell (which vectorizes to float4 for a coord-free body — see
         // f32_contiguous_vectorizes_to_float4) must take Strided when the body
         // contains a Coord; Scalar is equally illegal (no c{d}s there).
         let op = triu_mask_op("triu_mask", ElementKind::F32, 0.0);
         let key = coord_key_2d(ElementKind::F32, 2);
-        let plan = crate::build_plan(&op, &key);
+        let plan = baracuda_kernelgen::build_plan(&op, &key);
         assert!(
             matches!(plan.schedule, Schedule::Strided),
             "Coord body must route Strided, got {:?}",
@@ -11520,7 +11521,7 @@ mod tests {
         // the routing is keyed on the body, not the cell.
         let plain = OpDef::elementwise("scale", 1, &[ElementKind::F32], input(0) * konst(2.0));
         assert!(matches!(
-            crate::build_plan(&plain, &key).schedule,
+            baracuda_kernelgen::build_plan(&plain, &key).schedule,
             Schedule::Vectorized { width: 4 }
         ));
     }
@@ -11536,7 +11537,7 @@ mod tests {
         // exceed it, so a half coordinate would silently round.
         let op = triu_mask_op("triu_mask", ElementKind::F16, 0.0);
         let key = coord_key_2d(ElementKind::F16, 2);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11546,13 +11547,13 @@ mod tests {
         // hazard as Const/Param at int dtypes (int-literal spelling queued).
         let op = OpDef::elementwise("shift_by_col", 1, &[ElementKind::I32], input(0) + coord(1));
         let key = coord_key_2d(ElementKind::I32, 2);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
     #[should_panic(expected = "Elementwise-only in 0d")]
     fn coord_in_a_reduction_body_is_rejected_at_the_plan_gate() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // A coordinate along a folded axis is ambiguous — which fold
         // iteration produced the output element?
         let op = OpDef::reduction(
@@ -11563,13 +11564,13 @@ mod tests {
             ReduceOp::Sum,
         );
         let key = reduce_key(ElementKind::F32);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
     #[should_panic(expected = "Elementwise-only in 0d")]
     fn coord_in_a_row_reduce_epilogue_is_rejected_at_the_plan_gate() {
-        use crate::ir::{ReduceOp, ReduceStage, reduced};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, reduced};
         // The RowReduce epilogue iterates the (row, j) space, not the
         // elementwise output coordinate space.
         let op = OpDef::row_reduce(
@@ -11583,13 +11584,13 @@ mod tests {
             reduced(0) + coord(0),
         );
         let key = rr_key(ElementKind::F32, OpCategory::Normalization);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
     #[should_panic(expected = "Elementwise-only in 0d")]
     fn coord_in_a_contraction_epilogue_is_rejected_at_the_plan_gate() {
-        use crate::ir::{ContractionAxes, reduced};
+        use baracuda_kernelgen::ir::{ContractionAxes, reduced};
         // The contraction epilogue iterates (m, n), not an elementwise cell.
         let op = OpDef::contraction(
             "mm_coord",
@@ -11601,7 +11602,7 @@ mod tests {
         let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
@@ -11611,7 +11612,7 @@ mod tests {
         let op = OpDef::elementwise("iota2", 0, &[ElementKind::F32], coord(2));
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a], ArchSku::Sm89);
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     // ---- emitter backstops, independent of the plan gate (hand-built plans:
@@ -11622,8 +11623,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "at non-float dtype")]
     fn coord_at_int_dtype_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let key = coord_key_2d(ElementKind::I32, 2);
         let body = (input(0) + coord(1)).0;
         let plan = KernelPlan {
@@ -11637,12 +11638,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -11650,17 +11651,17 @@ mod tests {
     #[test]
     #[should_panic(expected = "under a non-Elementwise access")]
     fn coord_under_reduction_access_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::ir::ReduceOp;
-        use crate::plan::{KernelPlan, ReduceAxisClass, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::ReduceOp;
+        use baracuda_kernelgen::plan::{KernelPlan, ReduceAxisClass, Schedule};
         use baracuda_kernel_vocab::AxisMask;
         let key = reduce_key(ElementKind::F32);
         let body = (input(0) * coord(0)).0;
-        let access = crate::ir::Access::Reduction {
+        let access = baracuda_kernelgen::ir::Access::Reduction {
             op: ReduceOp::Sum,
             axes: AxisMask::EMPTY,
             keepdim: false,
-            post: crate::ir::ScalarExpr::Reduced(0),
+            post: baracuda_kernelgen::ir::ScalarExpr::Reduced(0),
         };
         let plan = KernelPlan {
             op_name: "backstop",
@@ -11680,9 +11681,9 @@ mod tests {
             access: &access,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -11690,8 +11691,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "coordinate exists to read")]
     fn coord_axis_out_of_range_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let key = coord_key_2d(ElementKind::F32, 2);
         let body = coord(5).0; // rank is 2 — no c5 exists
         let plan = KernelPlan {
@@ -11705,12 +11706,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -11718,8 +11719,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "reached the scalar emitter")]
     fn coord_misrouted_to_scalar_is_refused_by_the_per_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         // A plan that passes the dtype/access/axis backstop but carries the
         // WRONG schedule (a future schedule-selection change): the scalar
         // emitter's coord closure is the layer that refuses — a linear-index
@@ -11737,12 +11738,12 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -11783,7 +11784,7 @@ mod tests {
 
     #[test]
     fn offset_input_forces_strided_and_emits_suffix_arg_and_bump() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // add op, input 0 Runtime-offsetted, on a cell that would float4-vectorize.
         // The runtime offset invalidates the keyed alignment fact ⇒ forced Strided;
         // the emitter appends `_off0`, a `long long off0` launch arg (after so_,
@@ -11828,7 +11829,7 @@ mod tests {
 
     #[test]
     fn offset_output_emits_offo_suffix_arg_and_bumps_out() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // Output-only offset: name `_offo`, `long long offo` arg, `out += offo;`.
         let op = OpDef::elementwise("copy", 1, &[ElementKind::F32], input(0))
             .with_base_offsets(vec![BaseOffset::Zero], BaseOffset::Runtime);
@@ -11849,7 +11850,7 @@ mod tests {
 
     #[test]
     fn offset_input1_and_output_emits_off1o_in_frozen_arg_order() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // in1 Runtime + output Runtime — the rope ODD-lane kernel's offset shape.
         // Frozen ABI: `long long off1,` (ascending Runtime input) then `long long
         // offo,` then `long long n)`; bumps `in1 += off1;` then `out += offo;`.
@@ -11880,7 +11881,7 @@ mod tests {
 
     #[test]
     fn all_zero_offsets_are_byte_identical_to_offset_free() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // G6 identity: a NON-EMPTY all-Zero base_offsets (+ Zero output) normalizes
         // to offset-free — no suffix, no args, no bumps, no forcing. The additive
         // guarantee at the SOURCE level (memcmp of emitted source).
@@ -11897,7 +11898,7 @@ mod tests {
 
     #[test]
     fn multi_offset_inputs_emit_ascending_frozen_abi_off02o() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // TWO Runtime inputs (0 and 2) + Runtime output on a ternary fma — THE
         // multi-offset ABI pin (review: previously a fully surviving-mutant
         // surface — no artifact anywhere carried two Runtime inputs, so a
@@ -11943,7 +11944,7 @@ mod tests {
 
     #[test]
     fn offset_bump_precedes_broadcast_hoist_and_loop() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // THE load-bearing ordering (review: previously pinned only by the
         // manual GPU harness's bcastoff cell): a fully-broadcast (stride-0)
         // operand's hoist `h0 = in0[0]` must read element off0, so the entry
@@ -11983,7 +11984,7 @@ mod tests {
 
     #[test]
     fn offset_composes_with_gather_bump_before_index_pre_pass() {
-        use crate::ir::{BaseOffset, OobPolicy};
+        use baracuda_kernelgen::ir::{BaseOffset, OobPolicy};
         // Offset on the gathered DATA operand (in0): the entry bump `in0 += off0;`
         // precedes the gather pre-pass, so `o0 = gidx_clamped*s0_0` is relative to
         // the bumped base — the gather window shifts by off0 (caller precondition).
@@ -12022,7 +12023,7 @@ mod tests {
 
     #[test]
     fn offset_composes_with_scatter_bump_before_index_pre_pass() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // Offsets on the scatter VALUE input (in0) and the OUTPUT: bumps precede the
         // scatter pre-pass; `out[oo]` (oo = sidx_clamped*so_0) is relative to the
         // bumped out base. Assign combine (deterministic) — the FP-atomicAdd scatter
@@ -12053,7 +12054,7 @@ mod tests {
 
     #[test]
     fn offset_composes_with_permute_view() {
-        use crate::ir::{BaseOffset, View};
+        use baracuda_kernelgen::ir::{BaseOffset, View};
         // Offset + Permute on the same input: the bump precedes the loop, and the
         // per-element offset uses the SWAPPED strides relative to the bumped base
         // (the offset is the view ORIGIN — applied before the remapped stride walk).
@@ -12079,7 +12080,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "FP-atomicAdd scatter")]
     fn offset_on_an_fp_atomic_scatter_is_refused_by_the_backstop() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // An FP `atomicAdd` scatter's BASE lowering reroutes to the deterministic
         // gather-sum (`emit_scatter_gathersum`) — a different Strided emitter that
         // never bumps the base pointer. An offset there would be silently dropped;
@@ -12094,12 +12095,12 @@ mod tests {
 
     #[test]
     fn offset_base_variant_carries_the_oob_launch_note() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // The OOB story is a CALLER PRECONDITION (k/n_out trust model): the base
         // variant's launch_note must state it for an offsetted op, and stay EMPTY
         // for an offset-free op (byte-stable pre-increment behavior).
         let key = binary_key(ElementKind::F32);
-        let free = crate::generate_variants(&add_op(&[ElementKind::F32]), &key, &Cuda);
+        let free = baracuda_kernelgen::generate_variants(&add_op(&[ElementKind::F32]), &key, &Cuda);
         assert!(
             free[0].launch_note.is_empty(),
             "offset-free note stays empty"
@@ -12108,7 +12109,7 @@ mod tests {
             vec![BaseOffset::Runtime, BaseOffset::Zero],
             BaseOffset::Zero,
         );
-        let vs = crate::generate_variants(&op, &key, &Cuda);
+        let vs = baracuda_kernelgen::generate_variants(&op, &key, &Cuda);
         assert!(
             vs[0].launch_note.contains("offset launch contract")
                 && vs[0].launch_note.contains("off >= 0"),
@@ -12123,7 +12124,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "base_offsets.len()")]
     fn offset_arity_mismatch_is_rejected_at_the_plan_gate() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // G1: a non-empty base_offsets whose length != n_inputs. Built as a struct
         // literal to bypass `with_base_offsets`' debug_assert — the plan gate is the
         // release-build (author-error) backstop.
@@ -12131,24 +12132,24 @@ mod tests {
             base_offsets: vec![BaseOffset::Runtime],
             ..add_op(&[ElementKind::F32])
         };
-        let _ = crate::build_plan(&op, &binary_key(ElementKind::F32));
+        let _ = baracuda_kernelgen::build_plan(&op, &binary_key(ElementKind::F32));
     }
 
     #[test]
     #[should_panic(expected = "Elementwise-only")]
     fn offset_on_a_reduction_is_rejected_at_the_plan_gate() {
-        use crate::ir::{BaseOffset, ReduceOp};
+        use baracuda_kernelgen::ir::{BaseOffset, ReduceOp};
         // G2: a runtime offset on a non-Elementwise (Reduction) op — role-aware
         // addressing needs per-role offset semantics (de-scoped).
         let op = OpDef::reduction("rsum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum)
             .with_base_offsets(vec![BaseOffset::Runtime], BaseOffset::Zero);
-        let _ = crate::build_plan(&op, &reduce_key(ElementKind::F32));
+        let _ = baracuda_kernelgen::build_plan(&op, &reduce_key(ElementKind::F32));
     }
 
     #[test]
     #[should_panic(expected = "multi-output")]
     fn offset_on_a_multi_output_op_is_rejected_at_the_plan_gate() {
-        use crate::ir::BaseOffset;
+        use baracuda_kernelgen::ir::BaseOffset;
         // G3: a runtime offset on a multi-output op (the multi-store DAG × the bump
         // is unproven). The op is otherwise a valid multi-output elementwise op, so
         // it passes `assert_valid_multi_output` and reaches `assert_valid_offsets`.
@@ -12165,13 +12166,13 @@ mod tests {
             vec![BaseOffset::Runtime, BaseOffset::Zero, BaseOffset::Zero],
             BaseOffset::Zero,
         );
-        let _ = crate::build_plan(&op, &key);
+        let _ = baracuda_kernelgen::build_plan(&op, &key);
     }
 
     #[test]
     fn runtime_offset_forces_strided_on_a_would_be_vectorized_cell() {
-        use crate::ir::BaseOffset;
-        use crate::plan::{Schedule, build_plan};
+        use baracuda_kernelgen::ir::BaseOffset;
+        use baracuda_kernelgen::plan::{Schedule, build_plan};
         // G4 (positive): the SAME contiguous vec-width-4 cell is Vectorized{4}
         // offset-free but MUST be Strided under a runtime offset — even a
         // width-multiple offset value (the gate keys on presence, not value).
@@ -12200,9 +12201,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "must lower on the Strided schedule")]
     fn offset_on_a_non_strided_schedule_is_refused_by_the_backstop() {
-        use crate::backend::Backend;
-        use crate::ir::BaseOffset;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::BaseOffset;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let key = binary_key(ElementKind::F32);
         let body = (input(0) + input(1)).0;
         let plan = KernelPlan {
@@ -12216,10 +12217,10 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[BaseOffset::Runtime, BaseOffset::Zero],
             out_base_offset: BaseOffset::Zero,
         };
@@ -12229,9 +12230,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "single-output")]
     fn offset_on_a_multi_output_plan_is_refused_by_the_backstop() {
-        use crate::backend::Backend;
-        use crate::ir::BaseOffset;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::BaseOffset;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let key = binary_key(ElementKind::F32);
         let body = (input(0) + input(1)).0;
         let extra = [(input(0) * input(1)).0];
@@ -12246,10 +12247,10 @@ mod tests {
             n_outputs: 2, // WRONG: an offset needs single-output.
             extra_out_bodies: &extra,
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[BaseOffset::Runtime, BaseOffset::Zero],
             out_base_offset: BaseOffset::Zero,
         };
@@ -12259,17 +12260,17 @@ mod tests {
     #[test]
     #[should_panic(expected = "Elementwise-only")]
     fn offset_under_a_non_elementwise_access_is_refused_by_the_backstop() {
-        use crate::backend::Backend;
-        use crate::ir::{BaseOffset, ReduceOp};
-        use crate::plan::{KernelPlan, ReduceAxisClass, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::{BaseOffset, ReduceOp};
+        use baracuda_kernelgen::plan::{KernelPlan, ReduceAxisClass, Schedule};
         use baracuda_kernel_vocab::AxisMask;
         let key = reduce_key(ElementKind::F32);
         let body = input(0).0;
-        let access = crate::ir::Access::Reduction {
+        let access = baracuda_kernelgen::ir::Access::Reduction {
             op: ReduceOp::Sum,
             axes: AxisMask::EMPTY,
             keepdim: false,
-            post: crate::ir::ScalarExpr::Reduced(0),
+            post: baracuda_kernelgen::ir::ScalarExpr::Reduced(0),
         };
         let plan = KernelPlan {
             op_name: "backstop",
@@ -12289,7 +12290,7 @@ mod tests {
             access: &access,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[BaseOffset::Runtime], // WRONG: offset is Elementwise-only.
             out_base_offset: BaseOffset::Zero,
         };
@@ -12304,8 +12305,9 @@ mod multi_output_tests {
     //! / an interior product emitted ONCE). Single-output emission stays
     //! byte-identical (extra_out_bodies empty) — pinned by
     //! `single_body_multi_matches_elementwise`.
-    use crate::ir::{BinaryOp, OpDef, UnaryOp, input, konst};
-    use crate::{Cuda, generate};
+    use baracuda_kernelgen::ir::{BinaryOp, OpDef, UnaryOp, input, konst};
+    use crate::Cuda;
+    use baracuda_kernelgen::{generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -12647,8 +12649,8 @@ mod multi_output_tests {
         // and the interning still collapses a subexpression shared between the
         // (independently-optimized) bodies. b0 = dy*b; b1 = (dy*b)*a share dy*b;
         // after optimize (a no-op here) from_exprs keeps them sharing one node.
-        use crate::ir::ExprDag;
-        use crate::optimize::optimize;
+        use baracuda_kernelgen::ir::ExprDag;
+        use baracuda_kernelgen::optimize::optimize;
         let b0 = (input(0) * input(2)).0;
         let b1 = ((input(0) * input(2)) * input(1)).0;
         let o0 = optimize(&b0);
@@ -12672,10 +12674,11 @@ mod dropout_hetero_tests {
     //! SITE, never on the shared node (M9). On-device numeric proof is
     //! `ondevice/dropout_validate.cu`; these pin the source shape + the per-output
     //! ptr type / store cast.
-    use crate::backend::Backend;
-    use crate::ir::{Access, BaseOffset, BinaryOp, OpDef, WriteIndex, input, konst, param};
-    use crate::plan::{KernelPlan, Schedule};
-    use crate::{Cuda, build_plan, generate};
+    use baracuda_kernelgen::backend::Backend;
+    use baracuda_kernelgen::ir::{Access, BaseOffset, BinaryOp, OpDef, WriteIndex, input, konst, param};
+    use baracuda_kernelgen::plan::{KernelPlan, Schedule};
+    use crate::Cuda;
+    use baracuda_kernelgen::{build_plan, generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -13091,8 +13094,8 @@ mod dropout_hetero_tests {
 
     fn hetero_plan_slots<'a>(
         key: &'a StructureKey,
-        body0: &'a crate::ir::ScalarExpr,
-        extra_bodies: &'a [crate::ir::ScalarExpr],
+        body0: &'a baracuda_kernelgen::ir::ScalarExpr,
+        extra_bodies: &'a [baracuda_kernelgen::ir::ScalarExpr],
         extra_dtypes: &'a [Option<ElementKind>],
         schedule: Schedule,
     ) -> KernelPlan<'a> {
@@ -13158,7 +13161,7 @@ mod dropout_hetero_tests {
     #[ignore = "writes generated sources for the on-device dropout harness"]
     fn dump_dropout_sources() {
         let out = std::env::var("DROPOUT_OUT").expect("set DROPOUT_OUT=<outdir>");
-        let write = |k: crate::GeneratedKernel| {
+        let write = |k: baracuda_kernelgen::GeneratedKernel| {
             let path = format!("{out}/{}.cu", k.name);
             std::fs::write(&path, &k.source).unwrap();
             println!("wrote {path}");
@@ -13195,9 +13198,10 @@ mod scan_tests {
     //! Increment-6 SCAN emitter tests: the serial-fold BASE + the block-scan
     //! VARIANT generate valid, structurally-correct CUDA. On-device numeric proof
     //! is `ondevice/scan_validate.cu`; these are source-shape + variant-wiring pins.
-    use crate::ir::{Access, OpDef, ReduceOp};
-    use crate::plan::Schedule;
-    use crate::{Cuda, build_plan, generate, generate_variants};
+    use baracuda_kernelgen::ir::{Access, OpDef, ReduceOp};
+    use baracuda_kernelgen::plan::Schedule;
+    use crate::Cuda;
+    use baracuda_kernelgen::{build_plan, generate, generate_variants};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -13274,7 +13278,7 @@ mod scan_tests {
         );
         let vs = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda);
         assert_eq!(vs[0].tag, "base");
-        assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
+        assert_eq!(vs[0].fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
     }
 
     #[test]
@@ -13288,7 +13292,7 @@ mod scan_tests {
                 .expect("blockscan variant");
             assert_eq!(
                 bs.fidelity,
-                crate::VariantFidelity::ReassociatedDeterministic,
+                baracuda_kernelgen::VariantFidelity::ReassociatedDeterministic,
                 "FP Sum/Prod block-scan reassociates -> same_hardware_bitwise"
             );
             let src = &bs.kernels[0].source;
@@ -13313,7 +13317,7 @@ mod scan_tests {
                 .expect("reverse FP Sum/Prod now offers a blockscan variant");
             assert_eq!(
                 bs.fidelity,
-                crate::VariantFidelity::ReassociatedDeterministic,
+                baracuda_kernelgen::VariantFidelity::ReassociatedDeterministic,
                 "reverse FP Sum/Prod block-scan reassociates like forward"
             );
             assert!(bs.kernels[0].source.contains("long long j = k - 1 - p;"));
@@ -13345,7 +13349,7 @@ mod scan_tests {
                 .unwrap_or_else(|| panic!("block-scan must offer {op:?}/{dt:?}"));
             assert_eq!(
                 bs.fidelity,
-                crate::VariantFidelity::BitIdentical,
+                baracuda_kernelgen::VariantFidelity::BitIdentical,
                 "FP Max/Min + integer block-scan is bit-identical to the base ({op:?}/{dt:?})"
             );
         }
@@ -13385,7 +13389,7 @@ mod scan_tests {
                 .find(|v| v.tag == "blockscan")
                 .map(|v| v.fidelity)
         };
-        use crate::VariantFidelity::{BitIdentical, ReassociatedDeterministic};
+        use baracuda_kernelgen::VariantFidelity::{BitIdentical, ReassociatedDeterministic};
         // FP Sum/Prod -> reassociated (the ONLY reassociating case).
         assert_eq!(
             blockscan_fidelity(ReduceOp::Sum, ElementKind::F32),
@@ -13506,7 +13510,7 @@ mod scan_tests {
     #[test]
     #[ignore = "manual regeneration tool for ondevice/relu_propagating_validate.cu"]
     fn dump_relu_sources() {
-        use crate::ir::input;
+        use baracuda_kernelgen::ir::input;
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("RELU_OUT").unwrap_or_else(|_| ".".to_string());
         for dt in [
@@ -13542,10 +13546,10 @@ mod scan_tests {
     #[test]
     #[ignore = "manual regeneration tool for ondevice/offset_validate.cu"]
     fn dump_offset_sources() {
-        use crate::ir::{BaseOffset, input};
+        use baracuda_kernelgen::ir::{BaseOffset, input};
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
-        let write = |k: crate::GeneratedKernel| {
+        let write = |k: baracuda_kernelgen::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
         };
@@ -13613,7 +13617,7 @@ mod scan_tests {
         // Permute view on the same input (the offset is the view ORIGIN, applied
         // before the swapped-stride walk). ---
         {
-            use crate::ir::View;
+            use baracuda_kernelgen::ir::View;
             let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
             let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
             let op = OpDef::elementwise("permoff", 1, &[ElementKind::F32], input(0))
@@ -13625,7 +13629,7 @@ mod scan_tests {
         // gathered DATA operand (off0) and, separately, on the INDEX operand (off1)
         // — the dual-pointer independence proof. rank-1, i32 index. ---
         {
-            use crate::ir::OobPolicy;
+            use baracuda_kernelgen::ir::OobPolicy;
             let d = OperandDesc::new(1, &[1 << 12], &[1], ElementKind::F32, 256);
             let ix = OperandDesc::new(1, &[1 << 12], &[1], ElementKind::I32, 256);
             let key = structure_key(OpCategory::BinaryElementwise, &[d, ix, d], ArchSku::Sm89);
@@ -13679,10 +13683,10 @@ mod scan_tests {
     #[test]
     #[ignore = "manual regeneration tool for ondevice/offset_validate.cu (rope E2E)"]
     fn dump_rope_pair_sources() {
-        use crate::ir::{BaseOffset, input};
+        use baracuda_kernelgen::ir::{BaseOffset, input};
         use baracuda_kernel_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
         let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
-        let write = |k: crate::GeneratedKernel| {
+        let write = |k: baracuda_kernelgen::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
         };
@@ -13762,7 +13766,7 @@ mod scan_tests {
     #[ignore = "manual regeneration tool for ondevice/scan_validate.cu"]
     fn dump_scan_sources() {
         let out = std::env::var("SCAN_OUT").unwrap_or_else(|_| ".".to_string());
-        let write = |k: crate::GeneratedKernel| {
+        let write = |k: baracuda_kernelgen::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
         };
@@ -13833,9 +13837,10 @@ mod window_tests {
     //! Increment-7 WINDOW emitter tests: the one-thread-per-output pooling base
     //! generates valid, structurally-correct CUDA. On-device numeric proof is
     //! `ondevice/window_validate.cu`; these are source-shape + geometry pins.
-    use crate::ir::{Access, OpDef, ReduceOp};
-    use crate::plan::Schedule;
-    use crate::{Cuda, build_plan, generate};
+    use baracuda_kernelgen::ir::{Access, OpDef, ReduceOp};
+    use baracuda_kernelgen::plan::Schedule;
+    use crate::Cuda;
+    use baracuda_kernelgen::{build_plan, generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -14090,7 +14095,7 @@ mod window_tests {
     #[ignore = "manual regeneration tool for ondevice/window_validate.cu"]
     fn dump_window_sources() {
         let out = std::env::var("WINDOW_OUT").unwrap_or_else(|_| ".".to_string());
-        let write = |k: crate::GeneratedKernel| {
+        let write = |k: baracuda_kernelgen::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
         };
@@ -14228,8 +14233,9 @@ mod im2col_tests {
     //! oracle) is `ondevice/im2col_validate.cu`; these are source-shape + closed-form
     //! index-map + raw-bit-copy pins. Goldens call `generate` (the full pipeline);
     //! gate mutations are covered `build_plan`-DIRECT in `plan::im2col_gate_validate`.
-    use crate::plan::{KernelPlan, Schedule};
-    use crate::{Cuda, generate};
+    use baracuda_kernelgen::plan::{KernelPlan, Schedule};
+    use crate::Cuda;
+    use baracuda_kernelgen::{generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -14246,7 +14252,7 @@ mod im2col_tests {
     fn im2col_base_golden_f32() {
         // 3x3, stride 1, pad 1, dilation 1 — the canonical conv geometry.
         let p =
-            crate::ir::OpDef::im2col_2d("unfold", ElementKind::F32, (3, 3), (1, 1), (1, 1), (1, 1));
+            baracuda_kernelgen::ir::OpDef::im2col_2d("unfold", ElementKind::F32, (3, 3), (1, 1), (1, 1), (1, 1));
         let k = generate(&p, &im2col_key(ElementKind::F32), &Cuda);
         assert_eq!(k.name, "baracuda_gen_unfold_f32_im2col");
         let s = &k.source;
@@ -14301,7 +14307,7 @@ mod im2col_tests {
         // f16: the copied value is a RAW-BIT __half move (NO __float2half round-trip on
         // the copy — that would change NaN payloads); only the OOB zero is constructed.
         let p =
-            crate::ir::OpDef::im2col_2d("unfold", ElementKind::F16, (2, 2), (1, 1), (0, 0), (1, 1));
+            baracuda_kernelgen::ir::OpDef::im2col_2d("unfold", ElementKind::F16, (2, 2), (1, 1), (0, 0), (1, 1));
         let k = generate(&p, &im2col_key(ElementKind::F16), &Cuda);
         assert_eq!(k.name, "baracuda_gen_unfold_f16_im2col");
         let s = &k.source;
@@ -14322,7 +14328,7 @@ mod im2col_tests {
 
     #[test]
     fn im2col_bf16_oob_zero_is_typed() {
-        let p = crate::ir::OpDef::im2col_2d(
+        let p = baracuda_kernelgen::ir::OpDef::im2col_2d(
             "unfold",
             ElementKind::Bf16,
             (2, 2),
@@ -14342,7 +14348,7 @@ mod im2col_tests {
         // + pad all baked as distinct literals (a ki/kj or H/W swap fails the memcmp
         // on the on-device non-square cells; here it fails the baked literals).
         let p =
-            crate::ir::OpDef::im2col_2d("unfold", ElementKind::F32, (3, 5), (2, 1), (2, 0), (2, 3));
+            baracuda_kernelgen::ir::OpDef::im2col_2d("unfold", ElementKind::F32, (3, 5), (2, 1), (2, 0), (2, 3));
         let k = generate(&p, &im2col_key(ElementKind::F32), &Cuda);
         let s = &k.source;
         assert!(
@@ -14365,7 +14371,7 @@ mod im2col_tests {
     fn im2col_symbol_is_distinct() {
         // The _im2col symbol collides with no other family (window/sort/scan).
         let p =
-            crate::ir::OpDef::im2col_2d("conv", ElementKind::F32, (3, 3), (1, 1), (1, 1), (1, 1));
+            baracuda_kernelgen::ir::OpDef::im2col_2d("conv", ElementKind::F32, (3, 3), (1, 1), (1, 1), (1, 1));
         let k = generate(&p, &im2col_key(ElementKind::F32), &Cuda);
         assert_eq!(k.name, "baracuda_gen_conv_f32_im2col");
         assert!(!k.source.contains("_window_"), "{}", k.source);
@@ -14379,11 +14385,11 @@ mod im2col_tests {
         // Tier-2: a hand-built Im2Col plan with a FLIPPED output (build_plan never
         // produces this — validate_im2col rejects it) must be refused independently by
         // the emitter backstop.
-        use crate::backend::Backend;
+        use baracuda_kernelgen::backend::Backend;
         let a = OperandDesc::new(4, &[2, 3, 4, 4], &[48, 16, 4, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(3, &[2, 8, 8], &[64, 8, -1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
-        let body = crate::ir::input(0).0;
+        let body = baracuda_kernelgen::ir::input(0).0;
         let plan = KernelPlan {
             op_name: "sneaky",
             n_inputs: 1,
@@ -14400,7 +14406,7 @@ mod im2col_tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Im2Col {
+            access: &baracuda_kernelgen::ir::Access::Im2Col {
                 kernel: (3, 3),
                 stride: (1, 1),
                 pad: (1, 1),
@@ -14408,9 +14414,9 @@ mod im2col_tests {
             },
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -14422,7 +14428,7 @@ mod im2col_tests {
     #[ignore = "manual regeneration tool for ondevice/im2col_validate.cu"]
     fn dump_im2col_sources() {
         let out = std::env::var("IM2COL_OUT").unwrap_or_else(|_| ".".to_string());
-        let write = |k: crate::GeneratedKernel| {
+        let write = |k: baracuda_kernelgen::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
         };
@@ -14453,7 +14459,7 @@ mod im2col_tests {
             // dtypes, gname distinguishes geometries, so each (dtype, geometry) cell is
             // a unique entry point (no redefinition when all are #included together).
             for &(gname, (kernel, stride, pad, dilation)) in geos {
-                let p = crate::ir::OpDef::im2col_2d(gname, dt, kernel, stride, pad, dilation);
+                let p = baracuda_kernelgen::ir::OpDef::im2col_2d(gname, dt, kernel, stride, pad, dilation);
                 write(generate(&p, &im2col_key(dt), &Cuda));
             }
         }
@@ -14466,8 +14472,9 @@ mod sort_tests {
     //! cooperative smem BITONIC pair-sort VARIANT generate valid, structurally-
     //! correct CUDA. On-device numeric proof is `ondevice/sort_validate.cu`; these
     //! are source-shape + variant-wiring + no-INFINITY pins.
-    use crate::ir::{OpDef, SortOrder};
-    use crate::{Cuda, generate, generate_variants};
+    use baracuda_kernelgen::ir::{OpDef, SortOrder};
+    use crate::Cuda;
+    use baracuda_kernelgen::{generate, generate_variants};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -14663,7 +14670,7 @@ mod sort_tests {
             "{}",
             bt.launch_note
         ); // float(4)+int(4)
-        assert_eq!(bt.fidelity, crate::VariantFidelity::BitIdentical);
+        assert_eq!(bt.fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
     }
 
     #[test]
@@ -14739,7 +14746,7 @@ mod sort_tests {
         let vs = generate_variants(&sc, &sort_key(ElementKind::F32), &Cuda);
         let tags: Vec<&str> = vs.iter().map(|v| v.tag).collect();
         assert_eq!(tags, vec!["base", "bitonic"]);
-        assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
+        assert_eq!(vs[0].fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
     }
 
     // ---- Increment 9 FUSED_ARGSORT: the two-output `Both` goldens ----
@@ -14833,7 +14840,7 @@ mod sort_tests {
             "{}",
             src
         );
-        assert_eq!(bt.fidelity, crate::VariantFidelity::BitIdentical);
+        assert_eq!(bt.fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
     }
 
     #[test]
@@ -15052,7 +15059,7 @@ mod sort_tests {
             src
         );
         assert!(src.contains("out_idx[out_base + p] = sidx[p];"), "{}", src);
-        assert_eq!(bt.fidelity, crate::VariantFidelity::BitIdentical);
+        assert_eq!(bt.fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
         // The launch_note metadata must name the (k_in, k_out) TopK ABI — the
         // variant reads `limit`, so a stale Full note here (`next_pow2(k)`,
         // `REQUIRES k <= 1024`) would mis-describe the smem/occupancy contract.
@@ -15110,7 +15117,7 @@ mod sort_tests {
         // single `float* out` pointer, the guarded `out[out_base + r] = in0[in_base +
         // i];` store — so the capped single-output path is tested, not dead. Built by
         // capping a Desc values-sort (no public ctor in v1).
-        use crate::ir::{Access, SortLimit, SortOut};
+        use baracuda_kernelgen::ir::{Access, SortLimit, SortOut};
         let mut sc = OpDef::row_sort("topk", ElementKind::F32, SortOrder::Desc);
         sc.access = Access::RowSort {
             order: SortOrder::Desc,
@@ -15228,14 +15235,14 @@ mod sort_tests {
         // layout backstop (width-agnostic; it covers TopK too) must refuse it. If a
         // mutation gated the backstop on `limit == Full`, this TopK path would slip
         // through — this pins that it does not.
-        use crate::backend::Backend;
-        use crate::ir::{Access, BaseOffset, SortLimit, SortOut, WriteIndex};
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::{Access, BaseOffset, SortLimit, SortOut, WriteIndex};
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let ov = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
         let oi = OperandDesc::new(2, &[256, 64], &[0, 1], ElementKind::I32, 256); // broadcast
         let key = structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89);
-        let body = crate::ir::input(0).0;
+        let body = baracuda_kernelgen::ir::input(0).0;
         let access = Access::RowSort {
             order: SortOrder::Desc,
             stable: true,
@@ -15275,15 +15282,15 @@ mod sort_tests {
         // NotElementwise BEFORE any body walk and `contract()` returns None. (This
         // lives here, not in contract.rs, to keep that file's diff empty — the
         // withhold path is a property of the RowSort access, unchanged by the state.)
-        use crate::pattern::PatternError;
+        use baracuda_kernelgen::pattern::PatternError;
         let sc = OpDef::row_sort_indices("fused", ElementKind::F32, SortOrder::Asc);
         let k = generate(&sc, &both_key(ElementKind::F32), &Cuda);
         assert!(
-            crate::contract(&sc, &both_key(ElementKind::F32), &k, &Cuda).is_none(),
+            baracuda_kernelgen::contract(&sc, &both_key(ElementKind::F32), &k, &Cuda).is_none(),
             "a fused two-output sort must emit NO contract (no Fuel Sort OpTag; AOT-only)"
         );
         assert!(matches!(
-            crate::derive_pattern(&sc),
+            baracuda_kernelgen::derive_pattern(&sc),
             Err(PatternError::NotElementwise)
         ));
     }
@@ -15295,15 +15302,15 @@ mod sort_tests {
         // NotElementwise and `contract()` returns None — the SAME withhold path,
         // ZERO contract.rs/pattern.rs change. Fuel has no top_k OpKind (MoE routes
         // densely), so AOT-only is the correct posture, not a limitation.
-        use crate::pattern::PatternError;
+        use baracuda_kernelgen::pattern::PatternError;
         let sc = OpDef::row_topk("topk", ElementKind::F32);
         let k = generate(&sc, &topk_both_key(ElementKind::F32, 64), &Cuda);
         assert!(
-            crate::contract(&sc, &topk_both_key(ElementKind::F32, 64), &k, &Cuda).is_none(),
+            baracuda_kernelgen::contract(&sc, &topk_both_key(ElementKind::F32, 64), &k, &Cuda).is_none(),
             "a topk must emit NO contract (no Fuel top_k OpTag; AOT-only)"
         );
         assert!(matches!(
-            crate::derive_pattern(&sc),
+            baracuda_kernelgen::derive_pattern(&sc),
             Err(PatternError::NotElementwise)
         ));
     }
@@ -15315,11 +15322,11 @@ mod sort_tests {
         // with a 2-operand key (missing out_idx) — build_plan's G2 would reject it,
         // but the emitter must ALSO refuse it (the two-pointer signature assumes the
         // third operand). Bypass build_plan and hand it straight to Cuda::lower.
-        use crate::backend::Backend;
-        use crate::ir::{Access, BaseOffset, SortLimit, SortOut, WriteIndex};
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::{Access, BaseOffset, SortLimit, SortOut, WriteIndex};
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let key = sort_key(ElementKind::F32); // only [in0, out_val] — 2 operands
-        let body = crate::ir::input(0).0;
+        let body = baracuda_kernelgen::ir::input(0).0;
         let access = Access::RowSort {
             order: SortOrder::Asc,
             stable: true,
@@ -15360,14 +15367,14 @@ mod sort_tests {
         // it, but the emitter must ALSO refuse it (the forward-dense out_idx[base+r]
         // store assumes a full-width contiguous target). Pins the emitter's out_idx
         // LAYOUT re-check independently of the plan gate.
-        use crate::backend::Backend;
-        use crate::ir::{Access, BaseOffset, SortLimit, SortOut, WriteIndex};
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::ir::{Access, BaseOffset, SortLimit, SortOut, WriteIndex};
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let ov = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let oi = OperandDesc::new(2, &[256, 128], &[0, 1], ElementKind::I32, 256); // broadcast
         let key = structure_key(OpCategory::UnaryElementwise, &[a, ov, oi], ArchSku::Sm89);
-        let body = crate::ir::input(0).0;
+        let body = baracuda_kernelgen::ir::input(0).0;
         let access = Access::RowSort {
             order: SortOrder::Asc,
             stable: true,
@@ -15406,7 +15413,7 @@ mod sort_tests {
         let sc = OpDef::scan_simple(
             "cum",
             &[ElementKind::F32],
-            crate::ir::ReduceOp::Sum,
+            baracuda_kernelgen::ir::ReduceOp::Sum,
             1,
             false,
             false,
@@ -15434,7 +15441,7 @@ mod sort_tests {
             .iter()
             .find(|v| v.tag == "psel")
             .expect("psel variant present for a TopK cell");
-        assert_eq!(ps.fidelity, crate::VariantFidelity::BitIdentical);
+        assert_eq!(ps.fidelity, baracuda_kernelgen::VariantFidelity::BitIdentical);
         assert_eq!(ps.kernels.len(), 1);
         assert!(
             ps.kernels[0].name.ends_with("_topk_psel"),
@@ -15516,7 +15523,7 @@ mod sort_tests {
             let ps = vs.iter().find(|v| v.tag == "psel").expect("psel present");
             assert_eq!(
                 ps.fidelity,
-                crate::VariantFidelity::BitIdentical,
+                baracuda_kernelgen::VariantFidelity::BitIdentical,
                 "psel is BitIdentical to the full-sort top-k_out (composition lemma)"
             );
             // The launch_note names the k_out-bounded smem contract (NOT k_in) and
@@ -15668,7 +15675,7 @@ mod sort_tests {
     #[ignore = "manual regeneration tool for ondevice/sort_validate.cu"]
     fn dump_sort_sources() {
         let out = std::env::var("SORT_OUT").unwrap_or_else(|_| ".".to_string());
-        let write = |k: crate::GeneratedKernel| {
+        let write = |k: baracuda_kernelgen::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
         };
@@ -15798,8 +15805,9 @@ mod select_tests {
     //! and the `#[ignore]`d source dump for `ondevice/select_validate.cu`.
     //! On-device numeric proof (triu/tril memcmp vs bespoke, NaN payloads,
     //! signed zeros) lives in that harness; these pin the source text.
-    use crate::ir::{BinaryOp, OpDef, coord, input, konst, reduced};
-    use crate::{Cuda, generate};
+    use baracuda_kernelgen::ir::{BinaryOp, OpDef, coord, input, konst, reduced};
+    use crate::Cuda;
+    use baracuda_kernelgen::{generate};
     use baracuda_kernel_vocab::{
         ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
     };
@@ -16106,7 +16114,7 @@ mod select_tests {
 
     #[test]
     fn select_in_reduction_pre_body_emits_ordered_f32_and_f64() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // A masked pre-fold select (emit_reduction pre closure): the fold
         // accumulates `select(in0 > 0.5, 7.5, 9.25)` per element.
         let cond = input(0).binary(BinaryOp::CmpGt, konst(0.5));
@@ -16143,7 +16151,7 @@ mod select_tests {
 
     #[test]
     fn select_in_reduction_post_body_emits_ordered_f32() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // A masked epilogue select (emit_reduction post closure): the post reads
         // Reduced(0), so the cond derives from the fold result; arms are Const.
         let post = reduced(0)
@@ -16163,7 +16171,7 @@ mod select_tests {
 
     #[test]
     fn select_in_row_reduce_epilogue_emits_ordered_f32() {
-        use crate::ir::{ReduceOp, ReduceStage};
+        use baracuda_kernelgen::ir::{ReduceOp, ReduceStage};
         // A masked row-reduce epilogue select (emit_row_reduce_impl closure): one
         // Sum stage, epilogue `select(in0 > 0.5, 7.5, 9.25)` (reads Input(0)).
         let op = OpDef::row_reduce(
@@ -16184,7 +16192,7 @@ mod select_tests {
 
     #[test]
     fn select_in_scan_pre_and_post_emits_ordered_f32() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Scan PRE closure (emit_scan_impl pre): masked cumulative sum, pre =
         // select(in0 > 0.5, 7.5, 9.25), post = reduced(0).
         let pre = OpDef::scan(
@@ -16223,7 +16231,7 @@ mod select_tests {
 
     #[test]
     fn select_in_window_pre_and_post_emits_ordered_f32() {
-        use crate::ir::ReduceOp;
+        use baracuda_kernelgen::ir::ReduceOp;
         // Window PRE closure (emit_window pre): masked pooling, pre =
         // select(in0 > 0.5, 7.5, 9.25), post = reduced(0).
         let pre = OpDef::window(
@@ -16323,8 +16331,8 @@ mod select_tests {
     #[test]
     #[should_panic(expected = "Select at an integer dtype")]
     fn int_dtype_select_is_refused_by_the_emitter_backstop() {
-        use crate::backend::Backend;
-        use crate::plan::{KernelPlan, Schedule};
+        use baracuda_kernelgen::backend::Backend;
+        use baracuda_kernelgen::plan::{KernelPlan, Schedule};
         // build_plan never produces this plan (G1 rejects int select) — but
         // the backstop must hold INDEPENDENTLY (the 0a lesson: gate every
         // layer): a hand-built int-dtype select plan handed straight to
@@ -16343,12 +16351,12 @@ mod select_tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             extra_out_dtypes: &[],
-            access: &crate::ir::Access::Elementwise,
+            access: &baracuda_kernelgen::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
-            write_index: &crate::ir::WriteIndex::Direct,
+            write_index: &baracuda_kernelgen::ir::WriteIndex::Direct,
             base_offsets: &[],
-            out_base_offset: crate::ir::BaseOffset::Zero,
+            out_base_offset: baracuda_kernelgen::ir::BaseOffset::Zero,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -16362,7 +16370,7 @@ mod select_tests {
     #[ignore = "writes generated sources for the on-device select harness"]
     fn dump_select_sources() {
         let out = std::env::var("SELECT_OUT").expect("set SELECT_OUT=<outdir>");
-        let write = |k: crate::GeneratedKernel| {
+        let write = |k: baracuda_kernelgen::GeneratedKernel| {
             let path = format!("{out}/{}.cu", k.name);
             std::fs::write(&path, &k.source).unwrap();
             println!("wrote {path}");

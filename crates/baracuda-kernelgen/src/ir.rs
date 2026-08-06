@@ -471,7 +471,7 @@ impl BinaryOp {
 /// float-launder) — all three now call this function instead of re-deriving
 /// the shape, so it cannot drift again.
 #[must_use]
-pub(crate) fn is_admissible_int_reduction_operand(e: &ScalarExpr) -> bool {
+pub fn is_admissible_int_reduction_operand(e: &ScalarExpr) -> bool {
     matches!(e, ScalarExpr::Input(_) | ScalarExpr::Reduced(_))
         || matches!(e, ScalarExpr::Const(v) if *v == 0.0 || *v == 1.0)
 }
@@ -1095,11 +1095,12 @@ pub struct ReduceStage {
 /// Iteration / access pattern of an op — tells the emitter the loop-nest shape
 /// and which schedules are legal.
 ///
-/// `#[non_exhaustive]`: windowed/stencil and gather patterns are still the growth
-/// path; arbitrary/multiple reduction axes, strided-input reductions, and keepdim
-/// layout extend [`Access::Reduction`] later.
+/// Windowed/stencil and gather patterns are still the growth path; arbitrary/
+/// multiple reduction axes, strided-input reductions, and keepdim layout extend
+/// [`Access::Reduction`] later. Lowered by the lockstep backends (CUDA lives in
+/// the sibling `baracuda-cuda-emit`), which match it exhaustively — a new variant
+/// is a compile-time prompt to lower it, not a silent reject.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub enum Access {
     /// Output coordinate equals input coordinate (a per-element map).
     Elementwise,
@@ -1667,7 +1668,7 @@ impl WriteCombine {
     /// for `out_dtype` — the one order-nondeterministic case (FP `atomicAdd`).
     /// Integer `AtomicAdd`, `Assign`, and `AtomicMax`/`AtomicMin` all produce an
     /// order-independent result ⇒ `false`. Drives the base-vs-variant split in
-    /// [`crate::cuda`] (an FP-atomic scatter lowers its deterministic gather-sum
+    /// `baracuda_cuda_emit::cuda` (an FP-atomic scatter lowers its deterministic gather-sum
     /// as the base and the atomic as the `Nondeterministic` variant).
     #[must_use]
     pub fn is_fp_atomic_add(self, out_dtype: ElementKind) -> bool {
@@ -2827,7 +2828,7 @@ impl OpDef {
     /// output accumulates order-independently (deterministic, ships
     /// unconditionally); a FLOATING output is run-to-run non-deterministic (ships
     /// as the gated variant, with the gather-sum default as the base — see
-    /// [`crate::cuda`]). Bespoke `indexing/index_add.cu`
+    /// `baracuda_cuda_emit::cuda`). Bespoke `indexing/index_add.cu`
     /// (`scatter_add`)/[`OobPolicy::Skip`].
     #[must_use]
     pub fn scatter_add(

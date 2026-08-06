@@ -19,8 +19,9 @@
 //! - [`ir`] — the op IR (a [`ScalarExpr`] DAG). Backend-neutral.
 //! - [`plan`] — the schedule decision (`StructureKey` → [`KernelPlan`]). Neutral.
 //! - [`backend`] — the [`Backend`] trait + the neutral [`backend::lower_expr`].
-//! - [`cuda`] — the **only** backend-specific module today. Slang / SPIR-V /
-//!   Metal / CPU backends are additional [`Backend`] impls, no core changes.
+//! - The CUDA backend (`Cuda`) now lives in the sibling `baracuda-cuda-emit`
+//!   crate; Slang / SPIR-V / Metal / CPU backends are additional [`Backend`]
+//!   impls, no core changes.
 //!
 //! Op logic is described as IR rather than opaque CUDA precisely so the emitter
 //! can *see the dataflow* and transform it (vectorize, hoist, fuse) — and so the
@@ -43,7 +44,6 @@ pub mod contract;
 #[cfg(feature = "convert")]
 pub mod convert;
 pub mod cpu_c;
-pub mod cuda;
 pub mod dispatch_artifact;
 pub mod ir;
 pub mod jit;
@@ -72,14 +72,11 @@ mod kiss_ref_diff;
 pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{bundle, bundle_kisc, contract, front_matter};
 pub use cpu_c::CpuC;
-pub use cuda::{Cuda, emit_cast_helper, emit_coord_unravel_helper, emit_dtype_promote_helper};
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
     Access, AccumSpec, AxisRole, ContractionAxes, DagNode, Expr, ExprDag, NodeId, OpDef, ReduceOp,
     ReduceStage, ScalarExpr, SortOrder, SortOut, UnaryOp, coord, input, konst, param, reduced,
 };
-#[cfg(feature = "nvrtc")]
-pub use jit::NvrtcCompiler;
 pub use jit::{
     ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe, StubCompiler,
     SynthKernel, synthesize,
