@@ -230,7 +230,7 @@ pub struct KernelPlan<'a> {
     /// same-rank `Reshape` read at the iteration coordinate, and `Broadcast` is a
     /// key-driven validation-only declaration in v1. Validated at the top of
     /// [`build_plan`] ([`assert_valid_views`]) with an independent emitter backstop
-    /// in [`crate::cuda::Cuda::lower`].
+    /// in [`Backend::lower`](crate::backend::Backend::lower).
     pub views: &'a [crate::ir::View],
     /// Per-input **data-dependent read roles** ([`crate::ir::ReadIndex`], increment
     /// 4, GATHER) — index `i` ↔ `Input(i)`. **Empty for every index-free op**
@@ -240,7 +240,7 @@ pub struct KernelPlan<'a> {
     /// value-substitution in `cuda::emit_strided`); `Direct` reads at the
     /// iteration coordinate. Validated at the top of [`build_plan`]
     /// ([`assert_valid_gather`]) with an independent emitter backstop in
-    /// [`crate::cuda::Cuda::lower`].
+    /// [`Backend::lower`](crate::backend::Backend::lower).
     pub read_index: &'a [crate::ir::ReadIndex],
     /// The output's **data-dependent write role** ([`crate::ir::WriteIndex`],
     /// increment 5, SCATTER) — the write-side mirror of [`Self::read_index`].
@@ -249,7 +249,7 @@ pub struct KernelPlan<'a> {
     /// substitutes a runtime index value for one OUTPUT-axis coordinate and turns
     /// the store into a [`crate::ir::WriteCombine`] op. Validated at the top of
     /// [`build_plan`] ([`assert_valid_scatter`]) with an independent emitter
-    /// backstop in [`crate::cuda::Cuda::lower`].
+    /// backstop in [`Backend::lower`](crate::backend::Backend::lower).
     pub write_index: &'a crate::ir::WriteIndex,
     /// Per-input **runtime base element offsets** ([`crate::ir::BaseOffset`], the
     /// BASE_OFFSET SLICE increment) — index `i` ↔ `Input(i)`. **Empty for every
@@ -260,7 +260,7 @@ pub struct KernelPlan<'a> {
     /// entry). Presence forces [`Schedule::Strided`] (a runtime offset invalidates
     /// the keyed alignment fact the vectorized path relies on). Validated at the top
     /// of [`build_plan`] ([`assert_valid_offsets`]) with an independent emitter
-    /// backstop in [`crate::cuda::assert_offsets_lowerable`].
+    /// backstop in the backend.
     pub base_offsets: &'a [BaseOffset],
     /// The **single output's** runtime base element offset
     /// ([`crate::ir::BaseOffset`]) — the output-side mirror of [`Self::write_index`].
@@ -823,7 +823,7 @@ pub(crate) fn rr_role(o: OperandKey, last: u8) -> RrRole {
 /// future backend — can bypass the honest miss.
 /// Increment-1 **multi-output** admissibility gate — runs at the top of
 /// [`build_plan`] (the house pattern), with an independent emitter backstop in
-/// [`crate::cuda::Cuda::lower`]. A single-output op (`extra_out_bodies` empty,
+/// [`Backend::lower`](crate::backend::Backend::lower). A single-output op (`extra_out_bodies` empty,
 /// every pre-increment-1 op) returns immediately, so nothing about the
 /// established path changes and emission stays byte-identical. For a multi-output
 /// op (built by [`OpDef::elementwise_multi`] or [`OpDef::elementwise_multi_hetero`])
@@ -1048,7 +1048,7 @@ pub(crate) fn op_has_addressing_view(op: &OpDef) -> bool {
 
 /// Item-01 **layout-view** admissibility gate — runs at the TOP of
 /// [`build_plan`] (the house pattern), with an independent emitter backstop in
-/// [`crate::cuda::assert_views_lowerable`]. A view-free op (empty `views`, every
+/// the backend. A view-free op (empty `views`, every
 /// pre-item-01 constructor) returns immediately, and an all-[`View::Identity`] op
 /// returns after the length check — so the established path is unchanged and
 /// emission stays byte-identical. For an op carrying a real (non-`Identity`)
@@ -1204,7 +1204,7 @@ pub(crate) fn op_has_offset(op: &OpDef) -> bool {
 
 /// Increment-4 **GATHER** admissibility gate — runs at the TOP of [`build_plan`]
 /// (the house pattern), with an independent emitter backstop in
-/// [`crate::cuda::assert_gather_lowerable`]. An index-free op (empty
+/// the backend. An index-free op (empty
 /// `read_index`, every pre-increment-4 constructor) returns immediately, and an
 /// all-[`ReadIndex::Direct`] op returns after the length check — so the
 /// established path is unchanged and emission stays byte-identical. For an op
@@ -1370,7 +1370,7 @@ pub(crate) fn combine_legal_for_dtype(combine: WriteCombine, out_dtype: ElementK
 
 /// Increment-5 **SCATTER** admissibility gate — runs at the TOP of [`build_plan`]
 /// (the house pattern), with an independent emitter backstop in
-/// [`crate::cuda::assert_scatter_lowerable`]. A write-Direct op (every
+/// the backend. A write-Direct op (every
 /// pre-increment-5 constructor) returns immediately, so the established path is
 /// unchanged and emission stays byte-identical. For an op carrying a real scatter
 /// the v1 rules, all honest AOT panics (an author/generator error — the scatter
@@ -1492,7 +1492,7 @@ fn assert_valid_scatter(op: &OpDef, key: &StructureKey) {
 
 /// BASE_OFFSET SLICE admissibility gate — runs at the TOP of [`build_plan`] (the
 /// house pattern), with an independent emitter backstop in
-/// [`crate::cuda::assert_offsets_lowerable`]. An offset-free op (empty
+/// the backend. An offset-free op (empty
 /// `base_offsets` + a `Zero` output) returns immediately, and a non-empty all-`Zero`
 /// op returns after the length check — so the established path is unchanged and
 /// emission stays byte-identical. For an op carrying a real `Runtime` offset the v1

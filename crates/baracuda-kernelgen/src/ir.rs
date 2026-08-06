@@ -1860,7 +1860,7 @@ pub struct OpDef {
     /// constructors). Only a [`ReadIndex::Indexed`] entry changes emission (the
     /// axis-substitution in the strided offset); validated at the TOP of
     /// `plan::build_plan` (`assert_valid_gather`) with an independent emitter
-    /// backstop in [`crate::cuda::Cuda::lower`].
+    /// backstop in [`Backend::lower`](crate::backend::Backend::lower).
     pub read_index: Vec<ReadIndex>,
     /// The output's **data-dependent write role** (increment 5, SCATTER) — the
     /// write-side mirror of [`Self::read_index`]. [`WriteIndex::Direct`] (the
@@ -1871,7 +1871,7 @@ pub struct OpDef {
     /// (or the [`OpDef::scatter`]/[`OpDef::scatter_add`]/[`OpDef::index_add`]/
     /// [`OpDef::bincount`] convenience constructors). Validated at the TOP of
     /// `plan::build_plan` (`assert_valid_scatter`) with an independent emitter
-    /// backstop in [`crate::cuda::Cuda::lower`].
+    /// backstop in [`Backend::lower`](crate::backend::Backend::lower).
     pub write_index: WriteIndex,
     /// Per-input **runtime base element offset** (BASE_OFFSET SLICE) — index `i` ↔
     /// `Input(i)`, the parallel-Vec mirror of [`Self::views`]/[`Self::read_index`].
@@ -1884,7 +1884,7 @@ pub struct OpDef {
     /// [`OpDef::with_base_offsets`]. A non-empty all-`Zero` vec is semantically
     /// identical to empty — presence is `any(Runtime)` (`plan::op_has_offset`).
     /// Validated at the TOP of `plan::build_plan` (`assert_valid_offsets`) with an
-    /// independent emitter backstop in [`crate::cuda::assert_offsets_lowerable`].
+    /// independent emitter backstop in the backend.
     pub base_offsets: Vec<BaseOffset>,
     /// The **single output's** runtime base element offset — the output-side mirror
     /// of [`Self::write_index`] (default [`BaseOffset::Zero`], byte-identical). A

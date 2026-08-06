@@ -31,7 +31,7 @@
 //! - Dtypes: `F32`/`F32Strict`/`F64` + the integer compute dtypes
 //!   (`I32`/`I64`/`S8`/`U8`). `F16`/`Bf16` are DECLINED (no CPU half codec yet —
 //!   a documented limit; the oracle has one for a follow-up), as is the
-//!   `U32` index/address dtype (mirroring [`crate::cuda::Cuda::supports_dtype`]).
+//!   `U32` index/address dtype (mirroring [`Backend::supports_dtype`]).
 //! - Schedules: only [`Schedule::Scalar`] (the scalar contiguous Elementwise
 //!   path). Every other schedule (Vectorized/Strided/Reduction/…) panics clearly
 //!   — AOT authoring is trusted, so a panic is the honest v1 boundary (the same

@@ -651,6 +651,34 @@ pub(crate) fn assert_no_int_div_or_const(
     }
 }
 
+/// The SCALAR COMPUTE ctype for an op's runtime launch params — `scalar_ctype(
+/// plan.dtype)`, i.e. `"float"` for F32/F32Strict (byte-identical to the pre-F64
+/// hardcode) and `"double"` for F64. A launch param is ALWAYS a scalar arg, never
+/// vectorized, so this is the declaration ctype at EVERY emitter (including the
+/// vectorized ones, whose OPERANDS are `float4`/`double2` but whose param stays
+/// `double p0`) — the F64-param increment's load-bearing distinction: pass THIS,
+/// never `vty`/`octype`. The `Cuda::lower` param assert (see the `matches!` on
+/// `plan.dtype` above) guarantees a param-bearing plan has a spellable scalar
+/// ctype, so the `expect` is unreachable for any op that actually declares a param.
+pub(crate) fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
+    scalar_ctype(plan.dtype).expect("param dtype checked by the Cuda::lower param assert")
+}
+
+/// The trailing `, <ctype> p0, <ctype> p1, …` kernel-signature suffix for the
+/// op's runtime scalar params (empty when the op has none). `param_ctype` is the
+/// SCALAR COMPUTE ctype `scalar_ctype(plan.dtype)` — `"float"` for F32/F32Strict
+/// (byte-identical to the pre-F64 hardcode by construction), `"double"` for F64.
+/// A launch param is ALWAYS scalar: even on the vectorized emitter (operands are
+/// `float4`/`double2`) the declaration stays `double p0`, NOT `double2 p0` — so
+/// callers pass the SCALAR compute ctype, never `vty`/`octype` (the F64-param
+/// increment's load-bearing distinction).
+pub(crate) fn param_args(e: &ScalarExpr, param_ctype: &str) -> String {
+    params_used(e)
+        .iter()
+        .map(|i| format!(", {param_ctype} p{i}"))
+        .collect()
+}
+
 #[cfg(test)]
 mod int_div_or_const_root_gate_validate {
     //! Direct unit coverage for `assert_no_int_div_or_const`'s
@@ -702,32 +730,4 @@ mod int_div_or_const_root_gate_validate {
              would mirror the plan-gate leak this fix closes"
         );
     }
-}
-
-/// The SCALAR COMPUTE ctype for an op's runtime launch params — `scalar_ctype(
-/// plan.dtype)`, i.e. `"float"` for F32/F32Strict (byte-identical to the pre-F64
-/// hardcode) and `"double"` for F64. A launch param is ALWAYS a scalar arg, never
-/// vectorized, so this is the declaration ctype at EVERY emitter (including the
-/// vectorized ones, whose OPERANDS are `float4`/`double2` but whose param stays
-/// `double p0`) — the F64-param increment's load-bearing distinction: pass THIS,
-/// never `vty`/`octype`. The `Cuda::lower` param assert (see the `matches!` on
-/// `plan.dtype` above) guarantees a param-bearing plan has a spellable scalar
-/// ctype, so the `expect` is unreachable for any op that actually declares a param.
-pub(crate) fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
-    scalar_ctype(plan.dtype).expect("param dtype checked by the Cuda::lower param assert")
-}
-
-/// The trailing `, <ctype> p0, <ctype> p1, …` kernel-signature suffix for the
-/// op's runtime scalar params (empty when the op has none). `param_ctype` is the
-/// SCALAR COMPUTE ctype `scalar_ctype(plan.dtype)` — `"float"` for F32/F32Strict
-/// (byte-identical to the pre-F64 hardcode by construction), `"double"` for F64.
-/// A launch param is ALWAYS scalar: even on the vectorized emitter (operands are
-/// `float4`/`double2`) the declaration stays `double p0`, NOT `double2 p0` — so
-/// callers pass the SCALAR compute ctype, never `vty`/`octype` (the F64-param
-/// increment's load-bearing distinction).
-pub(crate) fn param_args(e: &ScalarExpr, param_ctype: &str) -> String {
-    params_used(e)
-        .iter()
-        .map(|i| format!(", {param_ctype} p{i}"))
-        .collect()
 }

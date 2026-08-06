@@ -1171,7 +1171,8 @@ fn eval_reduction(
     let mut out = alloc_output(plan, operands, n_in, 0);
     let out_dt = plan.out_dtype_of(0);
     let int_acc = is_int(plan.dtype);
-    // Mirror the emitter's reduction scope (cuda.rs:2192-2209) instead of silently
+    // Mirror the emitter's reduction scope (the integer-reduction scope contract:
+    // I32/I64 only, no integer Mean) instead of silently
     // mis-computing: integer reductions are I32/I64 only, and integer Mean is out
     // of scope (the emitter asserts `!(int_acc && Mean)`). Keep the oracle's
     // out-of-scope-PANIC convention (cf. eval_scan/eval_window/eval_row_reduce)

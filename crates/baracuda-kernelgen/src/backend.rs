@@ -3,7 +3,7 @@
 //! Everything else in the crate (the [`crate::ir`] op IR and the schedule
 //! decision in [`crate::plan`]) is language-agnostic. A [`Backend`] lowers a
 //! neutral [`crate::plan::KernelPlan`] to concrete kernel source. CUDA is the
-//! first impl ([`crate::cuda::Cuda`]); Slang / SPIR-V / Metal / CPU backends
+//! first impl (the CUDA backend); Slang / SPIR-V / Metal / CPU backends
 //! slot in as additional impls without touching the core — which is what lets
 //! this generator eventually target backends beyond CUDA (and move out of
 //! Baracuda) without a rewrite.
