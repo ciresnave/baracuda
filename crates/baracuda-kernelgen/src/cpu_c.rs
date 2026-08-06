@@ -14,14 +14,14 @@
 //! through the SAME language-neutral [`lower_dag`] the CUDA scalar path uses,
 //! against a CpuC [`Lowering`]. The per-op spellers CUDA injects are ~95%
 //! portable C99 (`powf`/`fmaxf`/`fmodf`/`atan2f`/the `Cmp*` operators/the ternary
-//! select), so this backend REUSES them verbatim — [`crate::cuda::binary_f32`] /
-//! [`crate::cuda::binary_f64`] / [`crate::cuda::binary_int`] /
-//! [`crate::cuda::select_f32`] / [`crate::cuda::select_f64`], plus
+//! select), so this backend REUSES them verbatim — [`crate::cfamily::binary_f32`] /
+//! [`crate::cfamily::binary_f64`] / [`crate::cfamily::binary_int`] /
+//! [`crate::cfamily::select_f32`] / [`crate::cfamily::select_f64`], plus
 //! [`crate::backend::const_lit`] (`NAN`/`INFINITY`/decimal — already valid C, and
 //! `<math.h>` supplies the two macros). The ONLY CUDA-specific unary atom is
 //! `rsqrt` (a CUDA intrinsic, `rsqrtf`/`rsqrt`); the CpuC unary twin
-//! ([`unary_f32_cpu`]/[`unary_f64_cpu`]) reuses [`crate::cuda::unary_f32`] /
-//! [`crate::cuda::unary_f64`] for EVERY other op and overrides only `Rsqrt` to
+//! ([`unary_f32_cpu`]/[`unary_f64_cpu`]) reuses [`crate::cfamily::unary_f32`] /
+//! [`crate::cfamily::unary_f64`] for EVERY other op and overrides only `Rsqrt` to
 //! `1.0f/sqrtf(x)` (f64: `1.0/sqrt(x)`). Because the reused CUDA fns are promoted
 //! `pub(crate)` with their bodies untouched, every CUDA golden stays
 //! byte-identical.
@@ -41,7 +41,7 @@
 //!   excludes every complex case.
 
 use crate::backend::{Backend, GeneratedKernel, Lowering, lower_dag};
-use crate::cuda::{
+use crate::cfamily::{
     assert_no_int_div_or_const, binary_f32, binary_f64, binary_int, dtype_tag, out_ctype_of,
     param_args, param_ctype, scalar_ctype, select_f32, select_f64, store_expr_of, unary_f32,
     unary_f64,
@@ -203,7 +203,7 @@ fn cpu_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
     }
 }
 
-/// The f32 unary twin: identical to [`crate::cuda::unary_f32`] for EVERY op
+/// The f32 unary twin: identical to [`crate::cfamily::unary_f32`] for EVERY op
 /// except `Rsqrt`, which the CUDA path spells as the intrinsic `rsqrtf(x)` — not
 /// portable C — so it is respelled `1.0f/sqrtf(x)` (the one genuinely new atom).
 /// Every other arm (`expf`/`sqrtf`/`fabsf`/`erff`/…) is a C99 `<math.h>` function
@@ -215,7 +215,7 @@ fn unary_f32_cpu(op: UnaryOp, x: String) -> String {
     }
 }
 
-/// The f64 unary twin: [`crate::cuda::unary_f64`] for every op except `Rsqrt`,
+/// The f64 unary twin: [`crate::cfamily::unary_f64`] for every op except `Rsqrt`,
 /// respelled `1.0/sqrt(x)` (the CUDA intrinsic `rsqrt(x)` is not portable C).
 fn unary_f64_cpu(op: UnaryOp, x: String) -> String {
     match op {

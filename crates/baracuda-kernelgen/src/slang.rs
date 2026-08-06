@@ -51,7 +51,7 @@
 //! is the fix (tracked as a seam follow-up).
 
 use crate::backend::{Backend, GeneratedKernel, Lowering, lower_dag};
-use crate::cuda::{assert_no_int_div_or_const, dtype_tag};
+use crate::cfamily::{assert_no_int_div_or_const, dtype_tag};
 use crate::ir::{BinaryOp, ExprDag, ScalarExpr, UnaryOp};
 use crate::plan::{KernelPlan, Schedule};
 use baracuda_kernel_vocab::ElementKind;
