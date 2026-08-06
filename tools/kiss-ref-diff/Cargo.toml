@@ -22,9 +22,9 @@ path = "main.rs"
 # converter's dev-dep so the CPU legs are byte-identical across both. Caret range
 # stays inside 0.1.x (0.2.0 is the deliberate breaking upgrade — see the
 # consolidation design doc).
-kiss-ref-core = "0.1.0"
-kiss-ops-vocab = "0.1.0"
-kiss-classify-vocab = "0.1.0"
+kiss-ref-core = "0.2.3"
+kiss-ops-vocab = "0.2.3"
+kiss-classify-vocab = "0.2.3"
 baracuda-kernelgen = { path = "../../crates/baracuda-kernelgen" }
 # `Cuda` (the emitter the differential lowers through) moved to the CUDA backend
 # crate in the Unpopped carve; the neutral generator stays for `generate`/IR.

@@ -58,9 +58,9 @@ tree-sitter-slang = { version = "0.3", optional = true }
 # no-CUDA CI stay clean. Pinned; the API is additive since 0.1.0 (Error is
 # #[non_exhaustive]). The in-tree `kiss_ref_diff` #[cfg(test)] module converts a
 # Baracuda emitted recipe to a kiss-ref FlatDag and diffs eval_recipe.
-kiss-ref-core = "0.1.0"
-kiss-ops-vocab = "0.1.0"
-kiss-classify-vocab = "0.1.0"
+kiss-ref-core = "0.2.3"
+kiss-ops-vocab = "0.2.3"
+kiss-classify-vocab = "0.2.3"
 # NOTE (carve step 3, done): the transitional `baracuda-cuda-emit` dev-dependency
 # cycle is GONE. Every Cuda-using test (the former contract.rs / jit.rs / fuzz.rs /
 # lift.rs / convert.rs / link.rs `#[cfg(test)]` arms) moved OUT to
