@@ -9,15 +9,15 @@
 #![allow(clippy::approx_constant, clippy::excessive_precision)]
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::*;
-use baracuda_kernelgen::backend::*;
-use baracuda_kernelgen::contract::{
+use unpopped::backend::*;
+use unpopped::contract::{
     bundle, bundle_kisc, cell_suffix, contract, contract_admissible, front_matter,
     fuel_primitive_op_kind, precision_of, root_op_name,
 };
-use baracuda_kernelgen::generate;
-use baracuda_kernelgen::ir::*;
-use baracuda_kernelgen::pattern::*;
+use unpopped::generate;
+use unpopped::ir::*;
+use unpopped::pattern::*;
+use unpopped_vocab::*;
 
 fn key_for(n_operands: usize, op_cat: OpCategory) -> StructureKey {
     let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
@@ -79,8 +79,8 @@ fn pred_key() -> StructureKey {
 
 #[test]
 fn contraction_advertises_a_recipe_carrying_contract() {
-    use baracuda_kernelgen::ir::{ContractionAxes, reduced};
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::{ContractionAxes, reduced};
+    use unpopped::pattern::PatternError;
     // A contraction is NOT expressible as an elementwise pattern (derive_pattern
     // rejects it), but it carries a neutral KISS-Ops recipe — so it advertises a
     // recipe-carrying `fused_op` contract (matmul node + `from_recipe` shape),
@@ -120,14 +120,14 @@ fn contraction_advertises_a_recipe_carrying_contract() {
     );
     // derive_pattern still rejects it — the recipe, not a pattern, is its identity.
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&mm),
+        unpopped::derive_pattern(&mm),
         Err(PatternError::NotElementwise)
     ));
 }
 
 #[test]
 fn contract_accumulation_type_matches_key_acc() {
-    use baracuda_kernelgen::ir::{ContractionAxes, ReduceOp, reduced};
+    use unpopped::ir::{ContractionAxes, ReduceOp, reduced};
     // The sk3 RFC §4.2 / KISS-Contract §6.8 pin: a contraction cell's
     // contract MUST declare `accumulation_type` denoting the SAME dtype as
     // the key's `<acc>` coordinate, in the SAME closed dtype-token
@@ -145,7 +145,7 @@ fn contract_accumulation_type_matches_key_acc() {
     let acc = key.contraction.expect("gem cell").acc;
     let want = format!(
         "  accumulation_type: {}\n",
-        baracuda_kernel_vocab::dtype_token(acc)
+        unpopped_vocab::dtype_token(acc)
     );
     let c = contract(&mm, &key, &generate(&mm, &key, &Cuda), &Cuda).expect("contract");
     assert!(
@@ -184,8 +184,8 @@ fn contract_accumulation_type_matches_key_acc() {
 
 #[test]
 fn rowreduce_advertises_a_recipe_carrying_contract() {
-    use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, UnaryOp, reduced};
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::{ReduceOp, ReduceStage, UnaryOp, reduced};
+    use unpopped::pattern::PatternError;
     // A RowReduce (softmax) is NOT an elementwise pattern (derive_pattern rejects
     // it), but it carries a neutral KISS-Ops recipe — staged `reduce[…]` folds
     // producing `Reduced(0..n)` + the row epilogue over them and the row-streamed
@@ -241,20 +241,20 @@ fn rowreduce_advertises_a_recipe_carrying_contract() {
     assert!(!withheld.contains("fused_op: softmax"), "{withheld}");
     let admitted = bundle_kisc("baracuda", "cuda", "rev0", std::slice::from_ref(&c), true);
     assert!(
-        admitted.contains(&baracuda_kernelgen::kisc::kisc_frame(&c)),
+        admitted.contains(&unpopped::kisc::kisc_frame(&c)),
         "recipe-carrying RowReduce admitted for a recipe-import peer: {admitted}"
     );
     // derive_pattern still rejects it — the recipe, not a pattern, is its identity.
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&sm),
+        unpopped::derive_pattern(&sm),
         Err(PatternError::NotElementwise)
     ));
 }
 
 #[test]
 fn scan_advertises_a_recipe_carrying_contract() {
-    use baracuda_kernelgen::ir::ReduceOp;
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::ReduceOp;
+    use unpopped::pattern::PatternError;
     // A scan is not an elementwise pattern (derive_pattern rejects it), but it
     // carries a `prefix_scan` recipe — so it advertises a recipe-carrying
     // `fused_op` contract, admitted only to a recipe-import peer. (Its output
@@ -287,15 +287,15 @@ fn scan_advertises_a_recipe_carrying_contract() {
         "admitted to a recipe-import peer"
     );
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&sc),
+        unpopped::derive_pattern(&sc),
         Err(PatternError::NotElementwise)
     ));
 }
 
 #[test]
 fn window_is_an_honest_miss_no_contract() {
-    use baracuda_kernelgen::ir::ReduceOp;
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::ReduceOp;
+    use unpopped::pattern::PatternError;
     // Increment 7 WINDOW (pooling) is an AOT-only honest miss: Fuel exposes no
     // Pool/Window OpKind (the pool family rides bespoke cuDNN, opaque), and
     // neither contract.rs nor pattern.rs has any Window vocabulary, so a window
@@ -323,15 +323,15 @@ fn window_is_an_honest_miss_no_contract() {
         "a window (pool) must emit NO contract (no Fuel Pool/Window OpKind; AOT-only honest miss)"
     );
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&p),
+        unpopped::derive_pattern(&p),
         Err(PatternError::NotElementwise)
     ));
 }
 
 #[test]
 fn sort_is_an_honest_miss_no_contract() {
-    use baracuda_kernelgen::ir::SortOrder;
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::SortOrder;
+    use unpopped::pattern::PatternError;
     // Increment 8 SORT_PERM is an AOT-only honest miss — a STRONGER miss than
     // scan/window: like pooling↔cuDNN, sort already rides bespoke kernels
     // (crates/baracuda-kernels/src/sort/*), so there is no Fuel Sort/ArgSort
@@ -348,15 +348,15 @@ fn sort_is_an_honest_miss_no_contract() {
         "a sort must emit NO contract (no Fuel Sort OpTag; AOT-only honest miss)"
     );
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&sc),
+        unpopped::derive_pattern(&sc),
         Err(PatternError::NotElementwise)
     ));
 }
 
 #[test]
 fn argsort_is_an_honest_miss_no_contract() {
-    use baracuda_kernelgen::ir::SortOrder;
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::SortOrder;
+    use unpopped::pattern::PatternError;
     // The argsort (I32 index output) is the same honest miss — generating +
     // running AOT, but no FKC contract.
     let sc = OpDef::row_argsort("argsort_rows", ElementKind::F32, SortOrder::Desc);
@@ -369,14 +369,14 @@ fn argsort_is_an_honest_miss_no_contract() {
         "an argsort must emit NO contract (no Fuel ArgSort OpTag; AOT-only honest miss)"
     );
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&sc),
+        unpopped::derive_pattern(&sc),
         Err(PatternError::NotElementwise)
     ));
 }
 
 #[test]
 fn im2col_is_an_honest_miss_no_contract() {
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::pattern::PatternError;
     // Increment 11 IM2COL is an AOT-only honest miss: Fuel treats convolution as a
     // first-class PRIMITIVE (the FKC whitelist has Conv2D/ConvTranspose2D, NO
     // Im2Col/Unfold/Pool) and im2col is only an internal lowering helper, never an
@@ -396,15 +396,15 @@ fn im2col_is_an_honest_miss_no_contract() {
              first-class primitive; AOT-only honest miss)"
     );
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&sc),
+        unpopped::derive_pattern(&sc),
         Err(PatternError::NotElementwise)
     ));
 }
 
 #[test]
 fn viewed_op_is_an_honest_miss_no_contract() {
-    use baracuda_kernelgen::ir::View;
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::View;
+    use unpopped::pattern::PatternError;
     // A fused transpose-elementwise (relu(x^T)) computes body(transpose(x)),
     // but the Op+Bind pattern grammar (no layout node, no attrs channel) can't
     // express the transpose — advertising `op_kind: Relu` would bind where
@@ -418,15 +418,15 @@ fn viewed_op_is_an_honest_miss_no_contract() {
         "a viewed op must emit NO contract (the transpose is inexpressible)"
     );
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&op),
+        unpopped::derive_pattern(&op),
         Err(PatternError::ViewUnsupported)
     ));
 }
 
 #[test]
 fn fused_body_gather_is_an_honest_miss_no_contract() {
-    use baracuda_kernelgen::ir::{OobPolicy, ReadIndex, UnaryOp};
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::{OobPolicy, ReadIndex, UnaryOp};
+    use unpopped::pattern::PatternError;
     // The recipe wiring covers the IDENTITY gather `data[index]` only. A FUSED
     // gather body (elementwise-over-gather, e.g. `relu(gather)`) is not yet
     // expressible as a single `gather[…]` recipe node, so `semantics_dag` returns
@@ -454,16 +454,16 @@ fn fused_body_gather_is_an_honest_miss_no_contract() {
         contract(&op, &key, &kernel, &Cuda).is_none(),
         "a fused-body gather must emit NO contract (v1 covers the identity gather only)"
     );
-    assert_eq!(baracuda_kernelgen::recipe::semantics_dag(&op), None);
+    assert_eq!(unpopped::recipe::semantics_dag(&op), None);
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&op),
+        unpopped::derive_pattern(&op),
         Err(PatternError::GatherUnsupported)
     ));
 }
 
 #[test]
 fn scattered_op_is_an_honest_miss_no_contract() {
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::pattern::PatternError;
     // Scatter stays a full honest miss even at u32 (see
     // `u32_scatter_family_stays_honest_miss`): scatter (no bare Scatter
     // op_kind), scatter_add/index_add (Fuel's `[T,U32,T,T]` 4-operand key vs
@@ -480,7 +480,7 @@ fn scattered_op_is_an_honest_miss_no_contract() {
             "a scattered op must emit NO contract"
         );
         assert!(matches!(
-            baracuda_kernelgen::derive_pattern(&op),
+            unpopped::derive_pattern(&op),
             Err(PatternError::ScatterUnsupported)
         ));
     }
@@ -488,8 +488,8 @@ fn scattered_op_is_an_honest_miss_no_contract() {
 
 #[test]
 fn offsetted_op_is_an_honest_miss_no_contract() {
-    use baracuda_kernelgen::ir::BaseOffset;
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::BaseOffset;
+    use unpopped::pattern::PatternError;
     // A runtime-offsetted op's kernel ABI requires the trailing `long long
     // off{i}` scalars the FKC accept block cannot convey (`start_offset`
     // stays truthful `rejected`; the frozen envelope has no off slot) —
@@ -515,15 +515,15 @@ fn offsetted_op_is_an_honest_miss_no_contract() {
         "an offsetted op must emit NO contract (the off-arg ABI is inexpressible)"
     );
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&op),
+        unpopped::derive_pattern(&op),
         Err(PatternError::OffsetUnsupported)
     ));
 }
 
 #[test]
 fn offsetted_u32_gather_is_an_honest_miss_no_contract() {
-    use baracuda_kernelgen::ir::{BaseOffset, OobPolicy};
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::{BaseOffset, OobPolicy};
+    use unpopped::pattern::PatternError;
     // THE bypass this guard exists for: a u32-index gather is advertisable
     // (Model A, structural op_kind — `derive_pattern` is never consulted),
     // so without `contract()`'s own `op_has_offset` guard an offsetted u32
@@ -559,14 +559,14 @@ fn offsetted_u32_gather_is_an_honest_miss_no_contract() {
     // offset in `derive_pattern`'s check order), which is exactly why the
     // pattern miss alone could never guard this path.
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&op),
+        unpopped::derive_pattern(&op),
         Err(PatternError::GatherUnsupported)
     ));
 }
 
 #[test]
 fn u32_gather_emits_a_keyed_contract_with_per_operand_dtype_and_oob() {
-    use baracuda_kernelgen::ir::OobPolicy;
+    use unpopped::ir::OobPolicy;
     // A u32-index torch-gather (full-shape index) is now HONESTLY advertisable
     // (Model A): op_kind Gather, the accept block carries the mixed-dtype tuple
     // [F32, U32, F32] (index slot U32, data slot F32) so Fuel assembles the
@@ -610,7 +610,7 @@ fn u32_gather_emits_a_keyed_contract_with_per_operand_dtype_and_oob() {
 
 #[test]
 fn u32_index_select_emits_index_select_op_kind() {
-    use baracuda_kernelgen::ir::OobPolicy;
+    use unpopped::ir::OobPolicy;
     // A 1-D u32 index ⇒ IndexSelect (structurally, from the index broadcast
     // mask), skip OOB.
     let op = OpDef::index_select(
@@ -650,7 +650,7 @@ fn u32_embedding_emits_index_select_with_zero_fill() {
 
 #[test]
 fn u32_gather_omits_shape_rule_output_is_the_index_shape() {
-    use baracuda_kernelgen::ir::OobPolicy;
+    use unpopped::ir::OobPolicy;
     // A u32-index gather rides the op_kind path (op_kind: Gather ⇒ NOT
     // recipe_carrying), so it takes the elementwise return branch. But a
     // gather's output shape is the INDEX shape, not the DATA shape, so
@@ -682,8 +682,8 @@ fn u32_gather_omits_shape_rule_output_is_the_index_shape() {
 
 #[test]
 fn i32_gather_advertises_a_recipe_carrying_contract() {
-    use baracuda_kernelgen::ir::OobPolicy;
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::OobPolicy;
+    use unpopped::pattern::PatternError;
     // A non-u32 (i32/i64) index gather is NOT a Fuel graph primitive — Fuel's
     // op_kind `Gather` keys the index as a FIXED U32 slot (`[T, U32, T]`), so an
     // i32/i64 index is unreachable from a Fuel graph node and carries NO
@@ -739,20 +739,20 @@ fn i32_gather_advertises_a_recipe_carrying_contract() {
     assert!(!withheld.contains("fused_op: gather"), "{withheld}");
     let admitted = bundle_kisc("baracuda", "cuda", "rev0", std::slice::from_ref(&c), true);
     assert!(
-        admitted.contains(&baracuda_kernelgen::kisc::kisc_frame(&c)),
+        admitted.contains(&unpopped::kisc::kisc_frame(&c)),
         "recipe-carrying i32 gather admitted for a recipe-import peer: {admitted}"
     );
     // derive_pattern still rejects it — the recipe, not a pattern, is its identity.
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&op),
+        unpopped::derive_pattern(&op),
         Err(PatternError::GatherUnsupported)
     ));
 }
 
 #[test]
 fn select_fusion_contract_is_withheld() {
-    use baracuda_kernelgen::ir::{BinaryOp, OobPolicy};
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::{BinaryOp, OobPolicy};
+    use unpopped::pattern::PatternError;
     // WHERE/SELECT (M10's target): ANY select-containing body has its
     // contract withheld wholesale — the Where advert needs the Model-A
     // per-operand tuple (cond U8) / fuel-side matcher validation, neither
@@ -776,7 +776,7 @@ fn select_fusion_contract_is_withheld() {
     // The pattern side misses typed too — but the miss does NOT
     // substitute for the contract guard (see (c)).
     assert_eq!(
-        baracuda_kernelgen::derive_pattern(&sel),
+        unpopped::derive_pattern(&sel),
         Err(PatternError::SelectUnsupported)
     );
     // (b) The fused-cmp form withholds as well (dual-gated with the cmp
@@ -805,9 +805,7 @@ fn select_fusion_contract_is_withheld() {
         OobPolicy::Skip,
         ElementKind::U32,
     );
-    gsel.body = input(0)
-        .select(input(0), baracuda_kernelgen::ir::konst(0.0))
-        .0;
+    gsel.body = input(0).select(input(0), unpopped::ir::konst(0.0)).0;
     let gkey = gather_key(ElementKind::U32, false);
     let gk = generate(&gsel, &gkey, &Cuda);
     assert!(
@@ -833,7 +831,7 @@ fn select_fusion_contract_is_withheld() {
 
 #[test]
 fn i32_and_i64_gather_advertise_recipe_carrying_not_op_kind() {
-    use baracuda_kernelgen::ir::OobPolicy;
+    use unpopped::ir::OobPolicy;
     // COMPLEMENT (not supersede) the u32 op_kind path: Fuel is U32-index for its
     // graph PRIMITIVE (`op_kind: Gather` keys `[T, U32, T]`), so an i32/i64 index
     // carries NO op_kind — but Fuel's pinned `gather` RECIPE schema admits
@@ -919,7 +917,7 @@ fn uniform_op_accept_block_is_unchanged_by_the_model_a_fix() {
 
 #[test]
 fn advertised_gather_op_kind_is_a_verified_fuel_string() {
-    use baracuda_kernelgen::ir::OobPolicy;
+    use unpopped::ir::OobPolicy;
     // Contract-import sanity: the emitted op_kind must be one of the exact
     // strings Fuel's `lower_op_kind` table accepts (else the whole bundle
     // fails import). Gather + IndexSelect are both in that table.
@@ -949,7 +947,7 @@ fn advertised_gather_op_kind_is_a_verified_fuel_string() {
 
 #[test]
 fn identity_view_still_advertises_a_contract() {
-    use baracuda_kernelgen::ir::View;
+    use unpopped::ir::View;
     // The view guard is PRECISE to address-affecting views: an all-Identity
     // view (an identity linear map) leaves the body-over-inputs pattern exactly
     // correct, so the op still advertises — same as view-free.
@@ -1045,7 +1043,7 @@ fn gather_index_operand_layout_is_contiguous_required_not_baked_broadcast() {
     // the u32 index_select INDEX. Its physical index buffer is emitted
     // truthfully as `contiguous: required` (conservative, Fuel `[T,U32,T]`),
     // NEVER the old over-accepting `broadcast_stride0: accepted`.
-    use baracuda_kernelgen::ir::OobPolicy;
+    use unpopped::ir::OobPolicy;
     let op = OpDef::index_select(
         "isel",
         &[ElementKind::F32],
@@ -1079,7 +1077,7 @@ fn gather_index_operand_layout_is_contiguous_required_not_baked_broadcast() {
 #[test]
 fn count_unit_matches_the_emitted_abi() {
     use baracuda_cuda_emit::Cuda;
-    use baracuda_kernelgen::generate;
+    use unpopped::generate;
     let c = |op: &OpDef, key: &StructureKey| {
         let k = generate(op, key, &Cuda);
         contract(op, key, &k, &Cuda).unwrap()
@@ -1107,9 +1105,9 @@ fn count_unit_matches_the_emitted_abi() {
 
 #[test]
 fn reduction_advertises_a_recipe_carrying_contract() {
-    use baracuda_kernel_vocab::AxisMask;
-    use baracuda_kernelgen::ir::ReduceOp;
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::ReduceOp;
+    use unpopped::pattern::PatternError;
+    use unpopped_vocab::AxisMask;
     // A general-path reduction is not an elementwise pattern, but it carries a
     // `reduce[…]` recipe — so it advertises a recipe-carrying contract admitted
     // only to a recipe-import peer. Its output shape+dtype ≠ its input (the axis
@@ -1152,7 +1150,7 @@ fn reduction_advertises_a_recipe_carrying_contract() {
 
 #[test]
 fn prod_and_hetero_out_reductions_advertise_recipe_carrying_contracts() {
-    use baracuda_kernelgen::ir::{BinaryOp, ReduceOp, konst, reduced};
+    use unpopped::ir::{BinaryOp, ReduceOp, konst, reduced};
     // The 0e reductions (Prod combiner; boolean/count hetero-out via a Cmp*
     // post) carry a `reduce[…]` recipe — so they advertise recipe-carrying
     // contracts (admitted only to a recipe-import peer). Fuel resolves the
@@ -1503,7 +1501,7 @@ fn unsupported_dtype_yields_no_contract() {
 
 #[test]
 fn int_ops_rate_zero_ulp_and_carry_recipe_contracts() {
-    use baracuda_kernelgen::ir::BinaryOp;
+    use unpopped::ir::BinaryOp;
     const INT_OPS: [BinaryOp; 8] = [
         BinaryOp::BitAnd,
         BinaryOp::BitOr,
@@ -1534,7 +1532,7 @@ fn int_ops_rate_zero_ulp_and_carry_recipe_contracts() {
     // `same_as(in0)` return block since out shape+dtype = the input's), withheld
     // from a non-recipe-import bundle and admitted to a recipe-import peer. The
     // kernel still generates (bitwise at i32, logical at u8).
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::pattern::PatternError;
     let band = OpDef::elementwise(
         "band",
         2,
@@ -1612,7 +1610,7 @@ fn uniform_int_add_contracts_carry_the_audited_dtype() {
 
 #[test]
 fn cmp_u8_contract_returns_fixed_u8_and_forbids_in_place() {
-    use baracuda_kernelgen::ir::BinaryOp;
+    use unpopped::ir::BinaryOp;
     let op = OpDef::elementwise_pred(
         "cmp_lt",
         2,
@@ -1656,7 +1654,7 @@ fn cmp_u8_contract_returns_fixed_u8_and_forbids_in_place() {
 
 #[test]
 fn float_mask_toplevel_cmp_has_no_contract() {
-    use baracuda_kernelgen::ir::BinaryOp;
+    use unpopped::ir::BinaryOp;
     // A top-level cmp with out_dtype = None stores 1.0f/0.0f in the KEY
     // dtype — not Fuel's "comparison → U8 mask" op. The kernel generates,
     // the pattern even derives (the vocabulary exists), but the contract is
@@ -1686,7 +1684,7 @@ fn float_mask_toplevel_cmp_has_no_contract() {
 
 #[test]
 fn nested_cmp_fusion_contract_is_withheld() {
-    use baracuda_kernelgen::ir::BinaryOp;
+    use unpopped::ir::BinaryOp;
     // relu-backward mask-multiply: dy * (x > z). The kernel is correct and
     // still generates — but the fused PATTERN would encode Gt as a direct
     // operand of Mul, an edge no constructible Fuel graph has (Fuel's
@@ -1719,8 +1717,8 @@ fn nested_cmp_fusion_contract_is_withheld() {
 
 #[test]
 fn coord_bodies_carry_recipe_contracts_via_recipe_import() {
-    use baracuda_kernelgen::ir::{BinaryOp, coord};
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::{BinaryOp, coord};
+    use unpopped::pattern::PatternError;
     // OpTag::Iota exists (0.10.2), but the emitted PATTERN grammar cannot carry
     // its axis attribute, so a Coord body still derives NO pattern (the SAME
     // `CoordUnsupported` Err). The RECIPE, however, expresses it honestly —
@@ -1735,11 +1733,7 @@ fn coord_bodies_carry_recipe_contracts_via_recipe_import() {
         "triu_mask",
         1,
         &[ElementKind::F32],
-        input(0)
-            * coord(1).binary(
-                BinaryOp::CmpGe,
-                coord(0) + baracuda_kernelgen::ir::konst(0.0),
-            ),
+        input(0) * coord(1).binary(BinaryOp::CmpGe, coord(0) + unpopped::ir::konst(0.0)),
     );
     let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
     let key = structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89);
@@ -1765,8 +1759,8 @@ fn coord_bodies_carry_recipe_contracts_via_recipe_import() {
 
 #[test]
 fn vocab_ops_carry_recipe_contracts_via_recipe_import() {
-    use baracuda_kernelgen::ir::{BinaryOp, UnaryOp};
-    use baracuda_kernelgen::pattern::PatternError;
+    use unpopped::ir::{BinaryOp, UnaryOp};
+    use unpopped::pattern::PatternError;
     // Fuel's §4.1/OpTag vocabulary doesn't name the increment-0a fns, so
     // `derive_pattern` still returns the SAME `NoFkcName` Err — but they carry a
     // valid KISS-Ops recipe (`erfc`/`atan2` are confirmed floor tokens Fuel
@@ -1794,7 +1788,7 @@ fn vocab_ops_carry_recipe_contracts_via_recipe_import() {
         "withheld pre-recipe, admitted to a recipe-import peer: {c}"
     );
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&erfc),
+        unpopped::derive_pattern(&erfc),
         Err(PatternError::NoFkcName { ref op }) if op == "Erfc"
     ));
     let at2 = OpDef::elementwise(
@@ -1810,14 +1804,14 @@ fn vocab_ops_carry_recipe_contracts_via_recipe_import() {
     assert!(cb.contains("semantics: atan2(in0, in1)"), "{cb}");
     assert!(cb.contains("shape_rule: same_as(in0)"), "{cb}");
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&at2),
+        unpopped::derive_pattern(&at2),
         Err(PatternError::NoFkcName { ref op }) if op == "Atan2"
     ));
 }
 
 #[test]
 fn every_mapped_primitive_root_emits_its_fuel_op_kind_through_the_emitter() {
-    use baracuda_kernelgen::ir::{BinaryOp, Expr, UnaryOp};
+    use unpopped::ir::{BinaryOp, Expr, UnaryOp};
     // UNARY single-op roots driven end-to-end through the real emitter.
     let unary: &[(UnaryOp, &str)] = &[
         (UnaryOp::Neg, "NegElementwise"),
@@ -1896,7 +1890,7 @@ fn standalone_scalar_param_op_is_an_honest_miss_not_a_poison_line() {
     );
     // Prove the root really IS the unmapped AddScalar (so the miss is the
     // mapping's doing, not some earlier guard).
-    let root = root_op_name(&baracuda_kernelgen::derive_pattern(&add_p).unwrap());
+    let root = root_op_name(&unpopped::derive_pattern(&add_p).unwrap());
     assert_eq!(root, "AddScalar");
     assert_eq!(fuel_primitive_op_kind(&root), None);
 
@@ -1904,7 +1898,7 @@ fn standalone_scalar_param_op_is_an_honest_miss_not_a_poison_line() {
     let km = generate(&mul_p, &key, &Cuda);
     assert!(contract(&mul_p, &key, &km, &Cuda).is_none());
     assert_eq!(
-        root_op_name(&baracuda_kernelgen::derive_pattern(&mul_p).unwrap()),
+        root_op_name(&unpopped::derive_pattern(&mul_p).unwrap()),
         "MulScalar"
     );
 }
@@ -1930,7 +1924,7 @@ fn identity_copy_root_never_reaches_the_op_kind_line() {
     );
     // And the pattern really is a bare Bind (n_ops == 0).
     assert!(matches!(
-        baracuda_kernelgen::derive_pattern(&copy).unwrap(),
+        unpopped::derive_pattern(&copy).unwrap(),
         PatternNode::Bind(0)
     ));
 }

@@ -19,11 +19,11 @@
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::{DeviceBuffer, Module};
-use baracuda_kernelgen::{Compiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input};
 use baracuda_kernels_bench::setup_device;
 use baracuda_kernels_types::{
     ArchSku, AxisMask, ElementKind, OpCategory, OperandDesc, structure_key,
 };
+use unpopped::{Compiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input};
 
 #[test]
 #[ignore = "requires a CUDA device + nvrtc"]

@@ -33,16 +33,14 @@
 //! compiler) are deferred follow-ups — neither the `convert` feature nor a C
 //! compiler is available in the default build here.
 
-use baracuda_kernelgen::ir::BinaryOp;
-use baracuda_kernelgen::{
+use unpopped::ir::BinaryOp;
+use unpopped::{
     CpuC, Fidelity, OpDef, ScalarExpr, Slang, TypedBuffer, UnaryOp, build_plan, compare, evaluate,
     generate, input, konst, lift_elementwise, param,
 };
 // `Cuda` moved to the sibling `baracuda-cuda-emit`; reached via the dev-dep cycle.
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::{
-    ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key,
-};
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key};
 
 // ---------------------------------------------------------------------------
 // Seeded LCG (Knuth/MMIX constants) — the same generator used by the reader
@@ -247,7 +245,7 @@ const TRI_BACKEND: Palette = Palette {
 // The random-expression generator.
 // ---------------------------------------------------------------------------
 
-fn gen_leaf(rng: &mut Rng, n_inputs: usize, pal: &Palette) -> baracuda_kernelgen::Expr {
+fn gen_leaf(rng: &mut Rng, n_inputs: usize, pal: &Palette) -> unpopped::Expr {
     // Leaf kinds: 0 input, 1 const, 2 coord, 3 param.
     let mut kinds: [u8; 4] = [0, 1, 0, 0];
     let mut n = 2;
@@ -262,17 +260,12 @@ fn gen_leaf(rng: &mut Rng, n_inputs: usize, pal: &Palette) -> baracuda_kernelgen
     match kinds[rng.below(n)] {
         0 => input(rng.below(n_inputs) as u8),
         1 => konst(*rng.pick(pal.consts)),
-        2 => baracuda_kernelgen::coord(0), // axis 0 — valid for the rank-1 cell
+        2 => unpopped::coord(0), // axis 0 — valid for the rank-1 cell
         _ => param(rng.below(4) as u8),
     }
 }
 
-fn gen_expr(
-    rng: &mut Rng,
-    depth: usize,
-    n_inputs: usize,
-    pal: &Palette,
-) -> baracuda_kernelgen::Expr {
+fn gen_expr(rng: &mut Rng, depth: usize, n_inputs: usize, pal: &Palette) -> unpopped::Expr {
     // Bias toward leaves as depth runs out, and 1-in-3 early stop for variety.
     if depth == 0 || rng.below(3) == 0 {
         return gen_leaf(rng, n_inputs, pal);
@@ -332,14 +325,11 @@ fn scalar_key(n_inputs: usize) -> StructureKey {
 /// The structural round-trip is therefore scoped to single-use (non-CSE) trees,
 /// which this filters. Detected the same way the interner decides: bottom-up,
 /// leaves excluded, first structural repeat wins.
-fn has_cse_hoist(
-    e: &baracuda_kernelgen::ScalarExpr,
-    seen: &mut std::collections::HashSet<String>,
-) -> bool {
-    use baracuda_kernelgen::ScalarExpr::{
+fn has_cse_hoist(e: &unpopped::ScalarExpr, seen: &mut std::collections::HashSet<String>) -> bool {
+    use unpopped::ScalarExpr::{
         Add, Binary, Const, Coord, Div, Input, Mul, Param, Reduced, Select, Sub, Unary,
     };
-    let kids: Vec<&baracuda_kernelgen::ScalarExpr> = match e {
+    let kids: Vec<&unpopped::ScalarExpr> = match e {
         Input(_) | Const(_) | Param(_) | Reduced(_) | Coord(_) => return false, // leaf
         Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Binary(_, a, b) => vec![a, b],
         Unary(_, a) => vec![a],
@@ -479,7 +469,7 @@ const SAFE_CONSTS: &[f64] = &[-2.0, -0.5, 0.0, 0.5, 1.5, 2.0];
 /// `Div`/`Max`/`Min`, so no NaN source and no NaN-semantics ambiguity between the
 /// two evaluators), keeping the differential about the PLUMBING (multi-input
 /// indexing, output store, f32 narrowing), not scalar-op edge cases.
-fn gen_safe(rng: &mut Rng, depth: usize, n_inputs: usize) -> baracuda_kernelgen::Expr {
+fn gen_safe(rng: &mut Rng, depth: usize, n_inputs: usize) -> unpopped::Expr {
     if depth == 0 || rng.below(3) == 0 {
         return if rng.below(4) == 0 {
             konst(*rng.pick(SAFE_CONSTS))

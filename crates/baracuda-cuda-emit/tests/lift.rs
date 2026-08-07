@@ -5,9 +5,9 @@
 //! re-emit to CUDA moved here. Public-API only (no widening needed).
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::lift::lift_elementwise;
-use baracuda_kernelgen::{CpuC, generate};
+use unpopped::lift::lift_elementwise;
+use unpopped::{CpuC, generate};
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
 const F32: &[ElementKind] = &[ElementKind::F32];
 

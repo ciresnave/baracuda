@@ -12,12 +12,12 @@
 //! `cargo run -p baracuda-cuda-emit --example emit_contract`
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::{
+use unpopped::{
     LinkEntry, OpDef, bundle, contract, emit_link_registry, generate, input, link_entry, param,
 };
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
-fn cell(n_operands: usize, op: OpCategory) -> baracuda_kernel_vocab::StructureKey {
+fn cell(n_operands: usize, op: OpCategory) -> unpopped_vocab::StructureKey {
     // [128, 256] row-major f32, 256-byte aligned (contiguous, float4-vectorizable).
     let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
     let operands: Vec<_> = std::iter::repeat_n(a, n_operands).collect();

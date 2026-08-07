@@ -15,9 +15,9 @@
 //! `cargo run -p baracuda-cuda-emit --example emit_bias_batched -- <out-dir>`
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::{ContractionAxes, OpDef, UnaryOp, generate, input, reduced};
 use std::fs;
+use unpopped::{ContractionAxes, OpDef, UnaryOp, generate, input, reduced};
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
 fn main() {
     let out = std::env::args()
@@ -26,7 +26,7 @@ fn main() {
     fs::create_dir_all(&out).expect("create out dir");
     let f32 = ElementKind::F32;
 
-    let write = |k: baracuda_kernelgen::GeneratedKernel| {
+    let write = |k: unpopped::GeneratedKernel| {
         let path = format!("{out}/{}.cu", k.name);
         fs::write(&path, &k.source).expect("write kernel");
         println!("generated {path}");

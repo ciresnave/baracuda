@@ -99,11 +99,11 @@ dependencies = [
 name = "baracuda-cuda-emit"
 version = "0.0.1-alpha.78"
 dependencies = [
- "baracuda-kernel-vocab",
- "baracuda-kernelgen",
  "baracuda-nvrtc",
  "fuel-kernel-seam",
  "fuel-kernel-seam-types",
+ "unpopped",
+ "unpopped-vocab",
 ]
 
 [[package]]
@@ -450,31 +450,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "baracuda-kernel-vocab"
-version = "0.0.1-alpha.78"
-dependencies = [
- "float8",
- "half",
-]
-
-[[package]]
-name = "baracuda-kernelgen"
-version = "0.0.1-alpha.78"
-dependencies = [
- "baracuda-kernel-vocab",
- "fuel-kernel-seam-types",
- "kiss-classify-vocab",
- "kiss-ops-vocab",
- "kiss-ref-core",
- "libm",
- "serde",
- "serde_json",
- "tree-sitter",
- "tree-sitter-cuda",
- "tree-sitter-slang",
-]
-
-[[package]]
 name = "baracuda-kernels"
 version = "0.0.1-alpha.78"
 dependencies = [
@@ -508,7 +483,6 @@ dependencies = [
  "baracuda-cutlass-sys",
  "baracuda-driver",
  "baracuda-forge",
- "baracuda-kernelgen",
  "baracuda-kernels",
  "baracuda-kernels-types",
  "baracuda-ozimmu",
@@ -517,6 +491,7 @@ dependencies = [
  "half",
  "serde",
  "serde_json",
+ "unpopped",
 ]
 
 [[package]]
@@ -533,10 +508,10 @@ name = "baracuda-kernels-types"
 version = "0.0.1-alpha.78"
 dependencies = [
  "baracuda-driver",
- "baracuda-kernel-vocab",
  "baracuda-types",
  "float8",
  "half",
+ "unpopped-vocab",
 ]
 
 [[package]]
@@ -843,12 +818,12 @@ dependencies = [
 name = "baracuda-types"
 version = "0.0.1-alpha.78"
 dependencies = [
- "baracuda-kernel-vocab",
  "baracuda-types-derive",
  "bytemuck",
  "float8",
  "half",
  "num-complex",
+ "unpopped-vocab",
 ]
 
 [[package]]
@@ -1247,30 +1222,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-name = "kiss-classify-vocab"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29df93d5496e200d4a61b3866cb8384ad22e17482b128b8f14afdfa7f089ab4e"
-
-[[package]]
-name = "kiss-ops-vocab"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af3891fa7ef282f0eb2b55042dbc392301fe938d9753e3ebe38ff0b7bfff9933"
-
-[[package]]
-name = "kiss-ref-core"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "033fab75ff86c324470c43792f9306768a3f79e61a99394f5f6bc268ba9148a6"
-dependencies = [
- "half",
- "kiss-classify-vocab",
- "kiss-ops-vocab",
- "libm",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1648,6 +1599,32 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "unpopped"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73382449cd1f987095ca2d7067e3c5091f015c1ba3228821c5427c527d9066d5"
+dependencies = [
+ "fuel-kernel-seam-types",
+ "libm",
+ "serde",
+ "serde_json",
+ "tree-sitter",
+ "tree-sitter-cuda",
+ "tree-sitter-slang",
+ "unpopped-vocab",
+]
+
+[[package]]
+name = "unpopped-vocab"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "888b91fce50927b092f9119c1a78938f3698c3433fedb90f19c3bcf8241c66ac"
+dependencies = [
+ "float8",
+ "half",
+]
 
 [[package]]
 name = "version_check"

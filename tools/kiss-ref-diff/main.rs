@@ -1,6 +1,6 @@
 //! Baracuda ↔ kiss-ref differential PoC — **step 2 (elementwise) + 2b (folds)**:
 //! the converter from Baracuda's REAL emitted recipe surface
-//! (`baracuda_kernelgen::recipe::semantics_dag` — the KISS-Contract §2.3
+//! (`unpopped::recipe::semantics_dag` — the KISS-Contract §2.3
 //! Semantics text every contract carries) into kiss-ref's `FlatDag`,
 //! differentially evaluated:
 //!
@@ -31,13 +31,13 @@
 
 use std::collections::HashMap;
 
-use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::ir::{
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use unpopped::ir::{
     BinaryOp, ContractionAxes, OpDef, ReadIndex, ReduceOp, WriteIndex, input, konst, param, reduced,
 };
-use baracuda_kernelgen::oracle::{self, TypedBuffer};
-use baracuda_kernelgen::plan::build_plan;
-use baracuda_kernelgen::recipe::semantics_dag;
+use unpopped::oracle::{self, TypedBuffer};
+use unpopped::plan::build_plan;
+use unpopped::recipe::semantics_dag;
 use kiss_classify_vocab::Dtype;
 use kiss_ops_vocab::Op;
 use kiss_ref_core::{
@@ -448,7 +448,7 @@ fn device_reduce_leg(dc: &DeviceCtx, op: &OpDef, rows: i64, cols: i64, input: &[
     let ind = OperandDesc::new(2, &[rows, cols], &[cols, 1], ElementKind::F32, 16);
     let outd = OperandDesc::new(1, &[rows], &[1], ElementKind::F32, 16);
     let key = structure_key(OpCategory::Reduction, &[ind, outd], ArchSku::Sm89);
-    let kernel = baracuda_kernelgen::generate(op, &key, &baracuda_cuda_emit::Cuda);
+    let kernel = unpopped::generate(op, &key, &baracuda_cuda_emit::Cuda);
     if std::env::var_os("POC_DUMP").is_some() {
         eprintln!("--- {} ({}) ---\n{}", op.name, kernel.name, kernel.source);
     }
@@ -650,7 +650,7 @@ fn device_leg(
     let od = OperandDesc::new(1, &[n], &[1], ElementKind::F32, 4);
     let operands: Vec<OperandDesc> = std::iter::repeat(od).take(inputs.len() + 1).collect();
     let key = structure_key(cat, &operands, ArchSku::Sm89);
-    let kernel = baracuda_kernelgen::generate(op, &key, &baracuda_cuda_emit::Cuda);
+    let kernel = unpopped::generate(op, &key, &baracuda_cuda_emit::Cuda);
     if std::env::var_os("POC_DUMP").is_some() {
         eprintln!("--- {} ({}) ---\n{}", op.name, kernel.name, kernel.source);
     }
@@ -1035,7 +1035,7 @@ fn main() {
         "gather",
         &[ElementKind::F32],
         0,
-        baracuda_kernelgen::ir::OobPolicy::Clamp,
+        unpopped::ir::OobPolicy::Clamp,
         ElementKind::I64,
     );
     assert_eq!(

@@ -7,8 +7,8 @@
 //! `cargo run -p baracuda-cuda-emit --example emit_relu_add_scalar`
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::{OpDef, generate, input};
+use unpopped::{OpDef, generate, input};
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
 fn main() {
     let op = OpDef::elementwise(
@@ -25,7 +25,7 @@ fn main() {
     let k = generate(&op, &key, &Cuda);
     println!("=== SCALAR NAME ===\n{}", k.name);
     println!("=== SCALAR SOURCE ===\n{}", k.source);
-    if let Some(c) = baracuda_kernelgen::contract(&op, &key, &k, &Cuda) {
+    if let Some(c) = unpopped::contract(&op, &key, &k, &Cuda) {
         println!("=== SCALAR CONTRACT ===\n{c}");
     }
 
@@ -35,7 +35,7 @@ fn main() {
     let kv = generate(&op, &keyv, &Cuda);
     println!("=== VEC NAME ===\n{}", kv.name);
     println!("=== VEC SOURCE ===\n{}", kv.source);
-    if let Some(c) = baracuda_kernelgen::contract(&op, &keyv, &kv, &Cuda) {
+    if let Some(c) = unpopped::contract(&op, &keyv, &kv, &Cuda) {
         println!("=== VEC CONTRACT ===\n{c}");
     }
 }

@@ -15,9 +15,9 @@
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::{DeviceBuffer, Module};
-use baracuda_kernelgen::{Compiler, OpDef, contract, generate, input};
 use baracuda_kernels_bench::setup_device;
 use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use unpopped::{Compiler, OpDef, contract, generate, input};
 
 /// Parse the `count_unit:` line of an FKC contract into the divisor `w` for the
 /// launch count (`elements` -> 1, `vectors_x{w}` -> w). This is exactly the read

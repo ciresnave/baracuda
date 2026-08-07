@@ -7,9 +7,9 @@
 #![cfg(feature = "convert")]
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::convert::{lift_elementwise_slang, lift_reduction_cuda};
-use baracuda_kernelgen::{CpuC, generate};
+use unpopped::convert::{lift_elementwise_slang, lift_reduction_cuda};
+use unpopped::{CpuC, generate};
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
 const F32: &[ElementKind] = &[ElementKind::F32];
 

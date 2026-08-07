@@ -1,11 +1,11 @@
 //! The NVRTC on-demand JIT compiler — the production source → PTX
-//! [`Compiler`](baracuda_kernelgen::Compiler). Carved out of
+//! [`Compiler`](unpopped::Compiler). Carved out of
 //! `baracuda-kernelgen`'s `jit.rs` (carve step 2). The whole module is behind
 //! `--features nvrtc` (wired in `lib.rs`), so the per-item `#[cfg]` the source
 //! carried is dropped here.
 
-use baracuda_kernel_vocab::ArchSku;
-use baracuda_kernelgen::{ArtifactKind, Compiler};
+use unpopped::{ArtifactKind, Compiler};
+use unpopped_vocab::ArchSku;
 
 /// The production on-demand compiler: nvrtc source → PTX. Feature-gated
 /// (`--features nvrtc`) because it needs the nvrtc runtime; constructed per target

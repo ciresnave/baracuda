@@ -4,10 +4,10 @@
 //! they live with the CUDA backend crate. Public-API only (no widening needed).
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::generate;
-use baracuda_kernelgen::ir::{OpDef, input};
-use baracuda_kernelgen::link::{LinkEntry, emit_link_registry, link_entry};
+use unpopped::generate;
+use unpopped::ir::{OpDef, input};
+use unpopped::link::{LinkEntry, emit_link_registry, link_entry};
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
 fn entry(name: &str) -> LinkEntry {
     let op = OpDef::elementwise(name, 2, &[ElementKind::F32], input(0) + input(1));

@@ -26,7 +26,7 @@ f8-crate = ["dep:float8"]
 # DeviceRepr is canonically owned by baracuda-kernel-vocab (the driver-free
 # vocabulary crate). baracuda-types re-exports it and adds impls for its own
 # numeric wrapper types. Non-optional: the re-export is part of the public API.
-baracuda-kernel-vocab = { workspace = true }
+unpopped-vocab = { workspace = true }
 baracuda-types-derive = { workspace = true, optional = true }
 half = { workspace = true, optional = true }
 num-complex = { workspace = true, optional = true }

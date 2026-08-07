@@ -43,33 +43,36 @@ jobs:
       # in their build scripts, so a full `--workspace` build genuinely cannot
       # succeed on a machine without the CUDA toolkit (the arch features that
       # drive the nvcc build are default-on and deeply chained). The purpose of
-      # this job is to guard the crates that ARE designed to build anywhere —
-      # the classifier vocabulary and the kernel generator (the neutral IR /
-      # seam surface consumed cross-project) — for missing_docs, clippy, and
-      # tests. The CUDA-dependent crates are validated on the CUDA runner.
+      # this job is to guard the Baracuda crate that IS designed to build
+      # anywhere — the CUDA emitter `baracuda-cuda-emit` (pure-Rust IR->.cu; the
+      # neutral generator + classifier vocab it consumes are now the external
+      # `unpopped` / `unpopped-vocab`, guarded in their own repo) — for
+      # missing_docs, clippy, and tests. The CUDA-dependent crates (and
+      # cuda-emit's real `nvrtc` feature) are validated on the CUDA runner.
       # (build.rs of baracuda-cutlass-kernels-sys now degrades gracefully when
       # nvcc is absent, so an accidental CUDA-crate build here warns instead of
       # panicking — but it is still not built by this job.)
       - name: cargo build (driver-free surface)
-        run: cargo build -p baracuda-kernel-vocab -p baracuda-kernelgen
+        run: cargo build -p baracuda-cuda-emit
       - name: cargo clippy (driver-free surface)
-        run: cargo clippy -p baracuda-kernel-vocab -p baracuda-kernelgen -- -D warnings
+        run: cargo clippy -p baracuda-cuda-emit -- -D warnings
       - name: cargo test (driver-free surface, no GPU)
-        run: cargo test -p baracuda-kernel-vocab -p baracuda-kernelgen
+        run: cargo test -p baracuda-cuda-emit
       - name: cargo doc (driver-free surface)
-        run: cargo doc -p baracuda-kernel-vocab -p baracuda-kernelgen --no-deps
+        run: cargo doc -p baracuda-cuda-emit --no-deps
       # ---- feature-gated surfaces the default --workspace build never compiles.
       # These features are deliberately CI-safe: `cuvs` is a lazy dynamic loader
       # (no RAPIDS needed to build/test; GPU-touching tests are #[ignore]d), and
-      # kernelgen's `seam`/`nvrtc` pull only crates.io Rust deps (all
-      # toolkit-dependent tests are #[ignore]d). Regression guard for the class
-      # of bug where `missing_docs = deny` (and clippy) never fired on a
+      # cuda-emit's `seam` pulls only crates.io Rust deps (its real `nvrtc`
+      # feature needs the toolkit, so it is validated on the CUDA runner, not
+      # here; toolkit-dependent tests are #[ignore]d). Regression guard for the
+      # class of bug where `missing_docs = deny` (and clippy) never fired on a
       # feature-gated module because CI never compiled it.
       - name: clippy cuvs surfaces (feature-gated)
         run: cargo clippy -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs -- -D warnings
       - name: test cuvs surfaces (feature-gated)
         run: cargo test -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs
-      - name: clippy kernelgen seam+nvrtc (feature-gated)
-        run: cargo clippy -p baracuda-kernelgen --features seam,nvrtc -- -D warnings
-      - name: test kernelgen seam (feature-gated)
-        run: cargo test -p baracuda-kernelgen --features seam
+      - name: clippy cuda-emit seam (feature-gated)
+        run: cargo clippy -p baracuda-cuda-emit --features seam -- -D warnings
+      - name: test cuda-emit seam (feature-gated)
+        run: cargo test -p baracuda-cuda-emit --features seam

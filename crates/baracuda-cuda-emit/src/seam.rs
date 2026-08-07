@@ -3,13 +3,13 @@
 //! calls (§5). Carved out of `baracuda-kernelgen`'s `jit.rs` (carve step 2): it
 //! wires the CUDA backend ([`crate::Cuda`]) + the NVRTC compiler into the neutral
 //! generator's backend-agnostic seam front-end
-//! (`baracuda_kernelgen::jit::seam::synthesize`). Behind `--features seam`.
+//! (`unpopped::jit::seam::synthesize`). Behind `--features seam`.
 
 #[cfg(feature = "nvrtc")]
 use crate::nvrtc::NvrtcCompiler;
-use baracuda_kernel_vocab::{OpCategory, OperandDesc};
-use baracuda_kernelgen::ArtifactKind;
 use fuel_kernel_seam_types::PatternNode as SeamNode;
+use unpopped::ArtifactKind;
+use unpopped_vocab::{OpCategory, OperandDesc};
 
 // ===== The live §5 call — the `fuel_kernel_seam::Synthesizer` Fuel invokes =====
 
@@ -67,7 +67,7 @@ impl Synthesizer for BaracudaSynthesizer {
         #[cfg(feature = "nvrtc")]
         let compiler = NvrtcCompiler::new(req.arch);
         #[cfg(not(feature = "nvrtc"))]
-        let compiler = baracuda_kernelgen::StubCompiler;
+        let compiler = unpopped::StubCompiler;
 
         let n_inputs = req.operands.len().saturating_sub(1);
         // The envelope carries no op category; elementwise schedule is layout-
@@ -85,7 +85,7 @@ impl Synthesizer for BaracudaSynthesizer {
         // synthesizer's own ceiling caps it.
         let budget = req.budget.max_compile_ms.min(self.max_compile_ms);
 
-        match baracuda_kernelgen::jit::seam::synthesize(
+        match unpopped::jit::seam::synthesize(
             &req.region,
             &req.operands,
             op_category,
@@ -181,12 +181,12 @@ fn region_op_id(region: &SeamNode, operands: &[OperandDesc]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use baracuda_kernel_vocab::{ArchSku, ElementKind};
-    use baracuda_kernelgen::jit::seam::synthesize;
-    use baracuda_kernelgen::{JitError, StubCompiler};
     use fuel_kernel_seam::JitBudget;
     use fuel_kernel_seam_types::OpAttrs;
     use fuel_kernel_seam_types::OpTag;
+    use unpopped::jit::seam::synthesize;
+    use unpopped::{JitError, StubCompiler};
+    use unpopped_vocab::{ArchSku, ElementKind};
 
     fn op(op: OpTag, operands: Vec<SeamNode>) -> SeamNode {
         SeamNode::Op {
@@ -473,7 +473,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             err,
-            JitError::Pattern(baracuda_kernelgen::pattern::PatternError::SelectUnsupported),
+            JitError::Pattern(unpopped::pattern::PatternError::SelectUnsupported),
             "the decline must name the withheld Where advert"
         );
         let synth = BaracudaSynthesizer::new(1000);

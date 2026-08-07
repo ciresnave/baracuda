@@ -7,16 +7,16 @@
 //! The backend-free decline/dtype-predicate tests stayed neutral in kernelgen.
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernelgen::jit::*;
-use baracuda_kernelgen::pattern::*;
+use unpopped::jit::*;
+use unpopped::pattern::*;
 // The nvrtc-gated `nvrtc_compiles_*` tests build `OpDef`/`BinaryOp` IR directly;
 // the non-nvrtc synthesis tests reach the IR only through the seam `PatternNode`
 // path, so the `ir` glob is dead weight (and an unused-import warning) without it.
 #[cfg(feature = "nvrtc")]
 use baracuda_cuda_emit::NvrtcCompiler;
-use baracuda_kernel_vocab::*;
 #[cfg(feature = "nvrtc")]
-use baracuda_kernelgen::ir::*;
+use unpopped::ir::*;
+use unpopped_vocab::*;
 
 fn op_node(op: &str, operands: Vec<PatternNode>) -> PatternNode {
     PatternNode::Op {
@@ -497,7 +497,7 @@ fn zero_budget_is_rejected() {
 
 /// End-to-end on-device synthesis: region → kernel → real nvrtc PTX. Ignored
 /// by default (needs the nvrtc runtime + a CUDA install); run with
-/// `cargo test -p baracuda-kernelgen --features nvrtc -- --ignored`.
+/// `cargo test -p baracuda-cuda-emit --features nvrtc -- --ignored`.
 #[cfg(feature = "nvrtc")]
 #[test]
 #[ignore = "requires nvrtc runtime + CUDA install"]
@@ -550,8 +550,8 @@ fn nvrtc_compiles_broadened_ops() {
 #[test]
 #[ignore = "requires nvrtc runtime + CUDA install"]
 fn nvrtc_compiles_increment_0a_vocab() {
-    use baracuda_kernelgen::generate;
-    use baracuda_kernelgen::ir::{BinaryOp, UnaryOp, input};
+    use unpopped::generate;
+    use unpopped::ir::{BinaryOp, UnaryOp, input};
     let cc = NvrtcCompiler::new(ArchSku::Sm89);
     let ukey = |dt: ElementKind| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
@@ -591,8 +591,8 @@ fn nvrtc_compiles_increment_0a_vocab() {
 #[test]
 #[ignore = "requires nvrtc runtime + CUDA install"]
 fn nvrtc_compiles_multi_output_kernel() {
-    use baracuda_kernelgen::generate;
-    use baracuda_kernelgen::ir::input;
+    use unpopped::generate;
+    use unpopped::ir::input;
     let cc = NvrtcCompiler::new(ArchSku::Sm89);
     let key = |n: usize| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
@@ -635,8 +635,8 @@ fn nvrtc_compiles_multi_output_kernel() {
 #[test]
 #[ignore = "requires nvrtc runtime + CUDA install"]
 fn nvrtc_compiles_cmp_u8_kernel() {
-    use baracuda_kernelgen::generate;
-    use baracuda_kernelgen::ir::{input, konst};
+    use unpopped::generate;
+    use unpopped::ir::{input, konst};
     let cc = NvrtcCompiler::new(ArchSku::Sm89);
     let pred_key = |dt: ElementKind| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
@@ -696,8 +696,8 @@ fn nvrtc_compiles_cmp_u8_kernel() {
 #[test]
 #[ignore = "requires nvrtc runtime + CUDA install"]
 fn nvrtc_compiles_int_bitwise_and_u8_add() {
-    use baracuda_kernelgen::generate;
-    use baracuda_kernelgen::ir::input;
+    use unpopped::generate;
+    use unpopped::ir::input;
     let cc = NvrtcCompiler::new(ArchSku::Sm89);
     let bkey = |dt: ElementKind| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
@@ -734,8 +734,8 @@ fn nvrtc_compiles_int_bitwise_and_u8_add() {
 #[test]
 #[ignore = "requires nvrtc runtime + CUDA install"]
 fn nvrtc_compiles_select_kernels() {
-    use baracuda_kernelgen::generate;
-    use baracuda_kernelgen::ir::{BinaryOp, coord, input, konst};
+    use unpopped::generate;
+    use unpopped::ir::{BinaryOp, coord, input, konst};
     let cc = NvrtcCompiler::new(ArchSku::Sm89);
     let skey = |dt: ElementKind, n: usize, align: u32| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
@@ -789,8 +789,8 @@ fn nvrtc_compiles_select_kernels() {
 #[test]
 #[ignore = "requires nvrtc runtime + CUDA install"]
 fn nvrtc_compiles_coord_kernels() {
-    use baracuda_kernelgen::generate;
-    use baracuda_kernelgen::ir::{coord, input, konst};
+    use unpopped::generate;
+    use unpopped::ir::{coord, input, konst};
     let cc = NvrtcCompiler::new(ArchSku::Sm89);
     let a32 = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
     let tkey = structure_key(OpCategory::BinaryElementwise, &[a32, a32], ArchSku::Sm89);
@@ -824,8 +824,8 @@ fn nvrtc_compiles_coord_kernels() {
 #[test]
 #[ignore = "requires nvrtc runtime + CUDA install"]
 fn nvrtc_compiles_reduction_kernels() {
-    use baracuda_kernelgen::ir::UnaryOp;
-    use baracuda_kernelgen::{ReduceOp, generate, input};
+    use unpopped::ir::UnaryOp;
+    use unpopped::{ReduceOp, generate, input};
     let cc = NvrtcCompiler::new(ArchSku::Sm89);
     let red_key = |dt: ElementKind| {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
@@ -867,7 +867,7 @@ fn nvrtc_compiles_reduction_kernels() {
         &[ElementKind::F32],
         input(0).unary(UnaryOp::Sqr),
         ReduceOp::Sum,
-        baracuda_kernelgen::ir::reduced(0).sqrt(),
+        unpopped::ir::reduced(0).sqrt(),
     );
     let kn = generate(&norm2, &red_key(ElementKind::F32), &Cuda);
     let ptxn = cc
@@ -884,8 +884,8 @@ fn nvrtc_compiles_reduction_kernels() {
 #[test]
 #[ignore = "requires nvrtc runtime + CUDA install"]
 fn nvrtc_compiles_rowreduce_kernels() {
-    use baracuda_kernelgen::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
-    use baracuda_kernelgen::{generate, input};
+    use unpopped::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
+    use unpopped::{generate, input};
     let cc = NvrtcCompiler::new(ArchSku::Sm89);
     let key = |dt: ElementKind, cat: OpCategory| {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);

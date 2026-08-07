@@ -10,8 +10,8 @@
 //! constructs it directly. The driver-free constructor `OperandDesc::new` stays
 //! on the type itself.
 
-use baracuda_kernel_vocab::{KernelDtype, MAX_RANK, OperandDesc};
 use baracuda_types::DeviceRepr;
+use unpopped_vocab::{KernelDtype, MAX_RANK, OperandDesc};
 
 use crate::TensorRef;
 

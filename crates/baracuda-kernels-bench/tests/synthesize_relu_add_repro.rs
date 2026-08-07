@@ -9,10 +9,10 @@
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::{DeviceBuffer, Module};
-use baracuda_kernelgen::pattern::PatternNode;
-use baracuda_kernelgen::{Compiler, JitBudget, JitRequest, synthesize};
 use baracuda_kernels_bench::setup_device;
 use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use unpopped::pattern::PatternNode;
+use unpopped::{Compiler, JitBudget, JitRequest, synthesize};
 
 fn op_node(op: &str, operands: Vec<PatternNode>) -> PatternNode {
     PatternNode::Op {
@@ -26,14 +26,23 @@ fn op_node(op: &str, operands: Vec<PatternNode>) -> PatternNode {
 fn relu_add_region() -> PatternNode {
     op_node(
         "Relu",
-        vec![op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)])],
+        vec![op_node(
+            "Add",
+            vec![PatternNode::Bind(0), PatternNode::Bind(1)],
+        )],
     )
 }
 
 /// Synthesize relu(add) for a given operand shape/align, then launch it the way
 /// Fuel's scalar-only launcher would: skip unless the symbol ends in `_scalar`,
 /// pass n = output element count. Returns (name, launched, all_zero, correct).
-fn run_case(ctx: &baracuda_driver::Context, stream: &baracuda_driver::Stream, rows: i64, cols: i64, align: u32) {
+fn run_case(
+    ctx: &baracuda_driver::Context,
+    stream: &baracuda_driver::Stream,
+    rows: i64,
+    cols: i64,
+    align: u32,
+) {
     let numel = rows * cols;
     let a = OperandDesc::new(2, &[rows, cols], &[cols, 1], ElementKind::F32, align);
     let operands = vec![a, a, a];
@@ -44,7 +53,9 @@ fn run_case(ctx: &baracuda_driver::Context, stream: &baracuda_driver::Stream, ro
         operands: operands.clone(),
         arch: ArchSku::Sm89,
         fused_op_id: "jit_relu_add".to_string(),
-        budget: JitBudget { max_compile_ms: 5000 },
+        budget: JitBudget {
+            max_compile_ms: 5000,
+        },
     };
     // Sanity: the structure key the synth builds for these operands.
     let _sk = structure_key(OpCategory::BinaryElementwise, &operands, ArchSku::Sm89);
@@ -60,7 +71,11 @@ fn run_case(ctx: &baracuda_driver::Context, stream: &baracuda_driver::Stream, ro
     let is_scalar = name.ends_with("_scalar");
     println!(
         "\n[rows={rows} cols={cols} align={align}] synth name = {name}  (Fuel {})",
-        if is_scalar { "LAUNCHES (scalar)" } else { "DECLINES (non-scalar suffix)" }
+        if is_scalar {
+            "LAUNCHES (scalar)"
+        } else {
+            "DECLINES (non-scalar suffix)"
+        }
     );
     // Emit the signature line for the record.
     if let Some(sig) = resp.kernel.source.lines().find(|l| l.contains("void ")) {
@@ -78,9 +93,18 @@ fn run_case(ctx: &baracuda_driver::Context, stream: &baracuda_driver::Stream, ro
     let module = Module::load_ptx(ctx, &ptx).expect("load");
     let f = module.get_function(&name).expect("func");
 
-    let in0: Vec<f32> = (0..numel).map(|i| (i as f32) - (numel as f32) / 2.0).collect();
+    let in0: Vec<f32> = (0..numel)
+        .map(|i| (i as f32) - (numel as f32) / 2.0)
+        .collect();
     let in1: Vec<f32> = vec![0.25f32; numel as usize];
-    let expected: Vec<f32> = in0.iter().zip(&in1).map(|(&a, &b)| { let s = a + b; if s < 0.0 { 0.0 } else { s } }).collect();
+    let expected: Vec<f32> = in0
+        .iter()
+        .zip(&in1)
+        .map(|(&a, &b)| {
+            let s = a + b;
+            if s < 0.0 { 0.0 } else { s }
+        })
+        .collect();
     let d_in0 = DeviceBuffer::from_slice(ctx, &in0).unwrap();
     let d_in1 = DeviceBuffer::from_slice(ctx, &in1).unwrap();
     let d_out = DeviceBuffer::from_slice(ctx, &vec![f32::NAN; numel as usize]).unwrap();
@@ -90,9 +114,16 @@ fn run_case(ctx: &baracuda_driver::Context, stream: &baracuda_driver::Stream, ro
     let grid = ((numel as u32) + block - 1) / block;
     // SAFETY: scalar ABI (in0, in1, out, long long n) — Fuel's exact marshalling.
     unsafe {
-        f.launch().grid(grid).block(block).stream(stream)
-            .arg(&d_in0).arg(&d_in1).arg(&d_out).arg(&n)
-            .launch().unwrap_or_else(|e| panic!("launch: {e}"));
+        f.launch()
+            .grid(grid)
+            .block(block)
+            .stream(stream)
+            .arg(&d_in0)
+            .arg(&d_in1)
+            .arg(&d_out)
+            .arg(&n)
+            .launch()
+            .unwrap_or_else(|e| panic!("launch: {e}"));
     }
     stream.synchronize().unwrap();
     let mut got = vec![0f32; numel as usize];
@@ -104,9 +135,13 @@ fn run_case(ctx: &baracuda_driver::Context, stream: &baracuda_driver::Stream, ro
     let mism = got.iter().zip(&expected).filter(|(g, e)| g != e).count();
     println!(
         "  LAUNCHED n={n}: {n_nan} never-wrote, {n_zero} zero, {n_pos} positive; {mism} mismatches vs relu(a+b)  => {}",
-        if n_pos == 0 && n_nan == 0 { "ALL-ZERO REGRESSION REPRODUCED" }
-        else if mism == 0 { "CORRECT" }
-        else { "WRONG (partial)" }
+        if n_pos == 0 && n_nan == 0 {
+            "ALL-ZERO REGRESSION REPRODUCED"
+        } else if mism == 0 {
+            "CORRECT"
+        } else {
+            "WRONG (partial)"
+        }
     );
 }
 

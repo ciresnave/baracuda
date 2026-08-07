@@ -1,4 +1,4 @@
-//! `kernelgen` — thin CLI over the [`baracuda_kernelgen`] library.
+//! `kernelgen` — thin CLI over the [`unpopped`] library.
 //!
 //! Usage: `kernelgen <out-dir> [telemetry.jsonl]`. v1 emits the elementwise pilot
 //! cell (f32 `add`, contiguous + V4) into `<out-dir>` via the CUDA backend. With
@@ -9,17 +9,17 @@
 //! cells) and a `--backend` selector replace the hardcoded pilot next.
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::{
-    ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc,
-    seed_winner, structure_key,
-};
-use baracuda_kernelgen::ir::BinaryOp;
-use baracuda_kernelgen::{
+use std::fs;
+use unpopped::ir::BinaryOp;
+use unpopped::{
     OpDef, ReduceOp, ReduceStage, UnaryOp, derive_pattern, emit_dispatch_table, generate,
     generate_variants, ingest_jsonl, input, konst, merge_reports, param, rank_matrix, reduced,
     to_fkc,
 };
-use std::fs;
+use unpopped_vocab::{
+    ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc,
+    seed_winner, structure_key,
+};
 
 fn main() {
     let out_dir = std::env::args()
@@ -537,7 +537,7 @@ fn main() {
     // all-Large regime stays vendor-routed via the seed below. Extents here pick
     // the cell CLASS (tll); m/n/k are launch args.
     {
-        use baracuda_kernelgen::ContractionAxes;
+        use unpopped::ContractionAxes;
         let mm = OpDef::contraction(
             "matmul",
             &[ElementKind::F32],
@@ -597,7 +597,7 @@ fn main() {
     // records today are the *seeds*: cells we deliberately route to a vendor
     // library and therefore do NOT generate — the honest miss made explicit (no
     // `.cu`, no link-registry entry). The bench gate later merges measured rows
-    // (`Provenance::Measured`) over these via `baracuda_kernel_vocab::merge`.
+    // (`Provenance::Measured`) over these via `unpopped_vocab::merge`.
     let mut dispatch: Vec<DispatchEntry> = Vec::new();
 
     // Large aligned half-precision GEMM → cuBLAS. kernelgen cannot yet emit a

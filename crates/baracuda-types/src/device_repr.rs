@@ -3,7 +3,7 @@
 //!
 //! The trait itself — together with the primitive, `[T; N]`, tuple, and foreign
 //! scalar (`half` / `float8`) impls — is canonically owned by the driver-free,
-//! neutral [`baracuda_kernel_vocab`] crate. `baracuda-types` re-exports it so
+//! neutral [`unpopped_vocab`] crate. `baracuda-types` re-exports it so
 //! existing consumers keep writing `baracuda_types::DeviceRepr`, and adds the
 //! impls for its own [`crate::numeric`] wrapper types here (a local type with a
 //! foreign trait — orphan-rule legal). User `#[repr(C)]` structs derive it via
@@ -11,7 +11,7 @@
 
 use crate::numeric::{BFloat16, Complex32, Complex64, Half};
 
-pub use baracuda_kernel_vocab::DeviceRepr;
+pub use unpopped_vocab::DeviceRepr;
 
 // SAFETY: the wrappers in `crate::numeric` are `#[repr(transparent)]` /
 // `#[repr(C)]` over primitives that are themselves `DeviceRepr`.

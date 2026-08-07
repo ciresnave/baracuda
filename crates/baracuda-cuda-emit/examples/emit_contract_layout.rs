@@ -5,7 +5,7 @@
 //! `emit_bias_batched` feeds `contract_bias_batched_validate.cu`.
 //!
 //! The layout CLASS comes from the operand STRIDE pattern alone
-//! (`baracuda_kernel_vocab::structure_key`'s `classify_mat_layout` derives
+//! (`unpopped_vocab::structure_key`'s `classify_mat_layout` derives
 //! `lhs_order`/`rhs_order` from strides, no `OpDef::with_views` needed —
 //! `m`/`n`/`k`/`B` stay launch args, so the harness runs these SAME kernels at
 //! small hand-checkable shapes, exactly as `emit_bias_batched` does):
@@ -21,9 +21,9 @@
 //! `cargo run -p baracuda-cuda-emit --example emit_contract_layout -- <out-dir>`
 
 use baracuda_cuda_emit::Cuda;
-use baracuda_kernel_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
-use baracuda_kernelgen::{ContractionAxes, OpDef, generate, reduced};
 use std::fs;
+use unpopped::{ContractionAxes, OpDef, generate, reduced};
+use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
 fn main() {
     let out = std::env::args()
@@ -32,7 +32,7 @@ fn main() {
     fs::create_dir_all(&out).expect("create out dir");
     let f32 = ElementKind::F32;
 
-    let write = |k: baracuda_kernelgen::GeneratedKernel| {
+    let write = |k: unpopped::GeneratedKernel| {
         let path = format!("{out}/{}.cu", k.name);
         fs::write(&path, &k.source).expect("write kernel");
         println!("generated {path}");

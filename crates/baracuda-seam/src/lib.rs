@@ -180,7 +180,7 @@ pub const SEAM_CAP_DLPACK_EXT_SYMBOLIC: u64 = 1 << 4;
 /// FDX gather / paged-blocks residency (`DlpackExtGather`).
 pub const SEAM_CAP_DLPACK_EXT_GATHER: u64 = 1 << 5;
 /// JIT-on-request endpoint implemented (§5) — Baracuda's `Synthesizer` impl
-/// (`baracuda_kernelgen::jit::seam::BaracudaSynthesizer`) builds a kernel for a
+/// (`unpopped::jit::seam::BaracudaSynthesizer`) builds a kernel for a
 /// Fuel-chosen region against the published `fuel-kernel-seam` envelope.
 pub const SEAM_CAP_JIT_ON_REQUEST: u64 = 1 << 32;
 

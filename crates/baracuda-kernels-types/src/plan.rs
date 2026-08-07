@@ -1,7 +1,7 @@
 //! Device-coupled plan handle: the borrowed [`Workspace`] scratch buffer.
 //!
 //! The pure-data plan *descriptors* ([`PlanPreference`], [`PrecisionGuarantee`])
-//! are driver-free and live in [`baracuda_kernel_vocab::plan`]; they are
+//! are driver-free and live in [`unpopped_vocab::plan`]; they are
 //! re-exported here so the `baracuda_kernels_types::plan::{PlanPreference,
 //! PrecisionGuarantee}` paths are unchanged. Only [`Workspace`] — which borrows
 //! a device [`DeviceSliceMut`](baracuda_driver::DeviceSliceMut) — needs the
@@ -9,7 +9,7 @@
 
 use baracuda_driver::DeviceSliceMut;
 
-pub use baracuda_kernel_vocab::{PlanPreference, PrecisionGuarantee};
+pub use unpopped_vocab::{PlanPreference, PrecisionGuarantee};
 
 /// Caller-supplied workspace for a launch.
 ///

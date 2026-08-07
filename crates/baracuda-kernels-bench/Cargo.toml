@@ -91,8 +91,8 @@ criterion = { workspace = true }
 # committed artifact. Dev-only: the neutral generator + its CUDA backend are the
 # publish=false build tools; the loop is an #[ignore]d on-device integration test,
 # never a shipped dependency. `Cuda`/`NvrtcCompiler` live in `baracuda-cuda-emit`
-# (the carve); `generate_variants`/`OpDef`/etc. in the neutral `baracuda-kernelgen`.
-baracuda-kernelgen = { path = "../baracuda-kernelgen" }
+# (the carve); `generate_variants`/`OpDef`/etc. in the neutral `unpopped`.
+unpopped = { workspace = true }
 baracuda-cuda-emit = { path = "../baracuda-cuda-emit", features = ["nvrtc"] }
 
 # Criterion's `#[bench]` story requires explicit `[[bench]]` entries
