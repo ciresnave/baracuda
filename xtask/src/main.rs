@@ -5,6 +5,8 @@
 //! - `xtask regen-all`             Regenerate every committed `bindings/cuda_*.rs`.
 //! - `xtask regen <lib>`           Regenerate a single `-sys` crate's bindings.
 //! - `xtask build-kernels`         Recompile shipped `.ptx` fixtures via `nvcc` (planned).
+//! - `xtask test-gpu [args]`       Run on-device (`#[ignore]`d) tests under the machine-wide
+//!                                 `gpu-run` lock (compile unlocked, device-run locked).
 //!
 //! All commands require a CUDA Toolkit install discoverable via `CUDA_PATH` /
 //! `CUDA_HOME` / OS defaults; see [`baracuda_build::detect_cuda`].
@@ -17,6 +19,7 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("regen-all") => regen_all(&args[1..]),
         Some("regen") => regen_one(&args[1..]),
+        Some("test-gpu") => test_gpu(&args[1..]),
         Some("build-kernels") => {
             eprintln!("xtask build-kernels: not implemented yet (planned)");
             ExitCode::from(2)
@@ -42,6 +45,125 @@ fn print_usage() {
         "  xtask regen <lib>            regenerate only the named -sys crate (e.g. cuda, nvrtc, cublas)"
     );
     println!("  xtask build-kernels          (planned) recompile shipped .ptx fixtures via nvcc");
+    println!(
+        "  xtask test-gpu [cargo args]  run on-device (#[ignore]d) tests under the gpu-run lock"
+    );
+    println!(
+        "                               (compile UNLOCKED, device-run LOCKED); prefer `-p <crate>`"
+    );
+}
+
+/// `xtask test-gpu [cargo test args] [-- <test-binary args>]`
+///
+/// Runs on-device (`#[ignore]`d) tests under the machine-wide `Global\gpu-run`
+/// mutex so lock acquisition is STRUCTURAL, not a convention someone must
+/// remember (the failure the postmortem indicts). Two phases:
+///   1. compile UNLOCKED — `cargo test <args> --no-run` (the lock wrapper
+///      explicitly forbids serializing compile-only work);
+///   2. device-run LOCKED — `scripts/gpu-run.ps1 -Project baracuda -- cargo test
+///      <args> -- --ignored <extra>`, which holds the mutex across the run.
+/// The child's exit code is propagated verbatim, including gpu-run's `75`
+/// (EX_TEMPFAIL: the lock holder looked wedged — try again later).
+fn test_gpu(args: &[String]) -> ExitCode {
+    // Split at the first `--`: cargo-level args before, test-binary args after.
+    let (cargo_args, test_bin_args): (&[String], &[String]) =
+        match args.iter().position(|a| a == "--") {
+            Some(i) => (&args[..i], &args[i + 1..]),
+            None => (args, &[]),
+        };
+
+    // Encourage scoping — an unfiltered run compiles+launches the entire device
+    // suite (~600 files) under one lock hold. Warn, don't block.
+    let scoped = cargo_args
+        .iter()
+        .any(|a| matches!(a.as_str(), "-p" | "--package" | "--test" | "--bin" | "--example"));
+    if !scoped {
+        eprintln!(
+            "xtask test-gpu: no -p/--test filter — this builds AND launches the whole device \
+             suite under one lock. Prefer `-p <crate>` / `--test <name>`."
+        );
+    }
+
+    // Phase 1 — compile UNLOCKED (never hold the GPU mutex during a build).
+    match std::process::Command::new("cargo")
+        .arg("test")
+        .args(cargo_args)
+        .arg("--no-run")
+        .status()
+    {
+        Ok(s) if s.success() => {}
+        Ok(s) => return ExitCode::from(s.code().unwrap_or(1) as u8),
+        Err(e) => {
+            eprintln!("xtask test-gpu: could not spawn `cargo test --no-run`: {e}");
+            return ExitCode::from(1);
+        }
+    }
+
+    // The device-run command shared by both the locked (Windows) and the
+    // unlocked-fallback paths: `cargo test <cargo_args> -- --ignored <extra>`.
+    let cargo_test_run = |cmd: &mut std::process::Command| {
+        cmd.arg("cargo")
+            .arg("test")
+            .args(cargo_args)
+            .arg("--")
+            .arg("--ignored")
+            .args(test_bin_args);
+    };
+
+    // Off-Windows (the 4070 box is Windows-only) there is no lock to take —
+    // run the device tests directly, with a warning, rather than fail.
+    if !cfg!(windows) {
+        eprintln!(
+            "xtask test-gpu: the gpu-run lock is Windows-only; running device tests WITHOUT it."
+        );
+        let mut cmd = std::process::Command::new("cargo");
+        // First token is the program, so drop the leading "cargo" the helper adds.
+        cmd.arg("test")
+            .args(cargo_args)
+            .arg("--")
+            .arg("--ignored")
+            .args(test_bin_args);
+        return match cmd.status() {
+            Ok(s) => ExitCode::from(s.code().unwrap_or(1) as u8),
+            Err(e) => {
+                eprintln!("xtask test-gpu: could not spawn `cargo test`: {e}");
+                ExitCode::from(1)
+            }
+        };
+    }
+
+    // Phase 2 — device-run LOCKED via scripts/gpu-run.ps1.
+    let Some(root) = find_workspace_root() else {
+        eprintln!("xtask test-gpu: could not locate workspace root");
+        return ExitCode::from(1);
+    };
+    let script = root.join("scripts").join("gpu-run.ps1");
+    if !script.exists() {
+        eprintln!("xtask test-gpu: lock wrapper not found at {}", script.display());
+        return ExitCode::from(1);
+    }
+
+    // Prefer PowerShell 7+ (`pwsh`); fall back to Windows `powershell`.
+    for (i, shell) in ["pwsh", "powershell"].iter().enumerate() {
+        let mut cmd = std::process::Command::new(shell);
+        cmd.arg("-File")
+            .arg(&script)
+            .arg("-Project")
+            .arg("baracuda")
+            .arg("--");
+        cargo_test_run(&mut cmd);
+        match cmd.status() {
+            Ok(s) => return ExitCode::from(s.code().unwrap_or(1) as u8),
+            // Shell not on PATH: try the next candidate; any other error is real.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && i == 0 => continue,
+            Err(e) => {
+                eprintln!("xtask test-gpu: could not spawn {shell}: {e}");
+                return ExitCode::from(1);
+            }
+        }
+    }
+    eprintln!("xtask test-gpu: neither `pwsh` nor `powershell` found on PATH");
+    ExitCode::from(1)
 }
 
 fn regen_all(_args: &[String]) -> ExitCode {

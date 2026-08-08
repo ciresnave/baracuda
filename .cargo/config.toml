@@ -1,0 +1,19 @@
+# Baracuda cargo configuration.
+#
+# NOTE: intentionally minimal — no `[build] rustflags` (e.g. target-cpu=native).
+# Global rustflags force a full workspace rebuild and change codegen for every
+# crate; keep them out of the committed config so a clean checkout builds fast
+# and reproducibly.
+
+[alias]
+# Run on-device (`#[ignore]`d) GPU tests through the machine-wide `gpu-run` lock.
+# This is the SANCTIONED way to run device tests: lock acquisition is structural
+# (the xtask subcommand *is* the wrapper call), so a device run cannot silently
+# skip the mutex — the "convention in a docs file is not a control" failure the
+# 2026-07-31 host-aperture postmortem indicts.
+#
+#   cargo gpu-test -p <crate> --test <name>            # scoped (preferred)
+#   cargo gpu-test -p <crate> --test <name> -- --nocapture
+#
+# Compiles UNLOCKED, then runs the device tests LOCKED. See `xtask test-gpu`.
+gpu-test = "run -q -p xtask -- test-gpu"

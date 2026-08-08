@@ -18,7 +18,7 @@ Thanks for your interest! baracuda is early-stage; the best contributions right 
    cargo test --workspace
    cargo doc --workspace --no-deps --all-features
    ```
-3. If your change requires a GPU, gate the test with `#[ignore]` and run it locally with `BARACUDA_GPU_TESTS=1 cargo test -- --ignored`. CI does not have GPUs on free runners.
+3. If your change requires a GPU, gate the test with `#[ignore]` and run it locally with **`cargo gpu-test -p <crate> --test <name>`** (scoped is preferred). This is the sanctioned path: it compiles unlocked, then runs the device tests while holding the machine-wide `gpu-run` mutex, so concurrent GPU runs across projects on the shared box can't collide (the 2026-07-31 host-aperture postmortem). Acquiring the lock is structural — a device run started this way cannot skip it. Raw `cargo test -- --ignored` bypasses the lock and must not be used for on-device runs. CI does not have GPUs on free runners.
 
 ## Crate conventions
 
