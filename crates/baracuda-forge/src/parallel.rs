@@ -107,13 +107,39 @@ impl ParallelConfig {
             }
         }
 
-        let available = self.detect_available_threads();
+        // Cargo passes `-j` to build scripts as NUM_JOBS. Honour it as an upper
+        // bound so a consumer running concurrent CUDA builds can cap this pool
+        // with the vocabulary they already have (see `resolve_thread_count`).
+        let num_jobs = std::env::var("NUM_JOBS")
+            .ok()
+            .and_then(|v| usize::from_str(&v).ok());
 
-        let calculated = if let Some(max) = self.max_threads {
+        self.resolve_thread_count(self.detect_available_threads(), num_jobs)
+    }
+
+    /// Resolve the pool size from the detected core count and cargo's `NUM_JOBS`
+    /// (`-j`) when set. Pure (reads no environment) so the NUM_JOBS policy is
+    /// unit-testable without env-var races.
+    ///
+    /// `NUM_JOBS` is an UPPER CAP, never a floor: cargo defaults it to the
+    /// logical-CPU count when `-j` is omitted, so treating it as the primary
+    /// value would silently raise the default from 50% to 100% of the box — the
+    /// opposite of what a `-j` cap is for, and the exact oversubscription that
+    /// makes ptxas fail with "Memory allocation failure". Capping means `-j 4`
+    /// actually limits nvcc (the good-citizen case under concurrent builds),
+    /// while an omitted `-j` leaves the memory-safe 50% default untouched.
+    /// `BARACUDA_FORGE_THREADS` (checked first, in `thread_count`) remains the
+    /// way to raise ABOVE the default.
+    fn resolve_thread_count(&self, available: usize, num_jobs: Option<usize>) -> usize {
+        let mut calculated = if let Some(max) = self.max_threads {
             max.min(available)
         } else {
             (available as f32 * self.thread_percentage).ceil() as usize
         };
+
+        if let Some(n) = num_jobs {
+            calculated = calculated.min(n.max(1));
+        }
 
         calculated.max(self.min_threads).min(available)
     }
@@ -148,6 +174,22 @@ mod tests {
         let config = ParallelConfig::default();
         assert_eq!(config.thread_percentage, 0.5);
         assert!(config.max_threads.is_none());
+    }
+
+    #[test]
+    fn num_jobs_caps_but_never_raises_the_default() {
+        let cfg = ParallelConfig::default(); // 50% of cores, min_threads 1
+        // `-j` omitted: cargo sets NUM_JOBS = core count, so the 50% default holds.
+        assert_eq!(cfg.resolve_thread_count(16, Some(16)), 8);
+        // `-j 4` (good citizen under concurrent builds) actually caps the pool.
+        assert_eq!(cfg.resolve_thread_count(16, Some(4)), 4);
+        // `-j` above the 50% default does NOT raise it — the memory-safe
+        // heuristic wins; BARACUDA_FORGE_THREADS is the knob to go higher.
+        assert_eq!(cfg.resolve_thread_count(16, Some(100)), 8);
+        // No NUM_JOBS at all: unchanged 50% default.
+        assert_eq!(cfg.resolve_thread_count(16, None), 8);
+        // The min_threads floor still applies under an aggressive cap.
+        assert_eq!(cfg.resolve_thread_count(16, Some(1)), 1);
     }
 
     #[test]
