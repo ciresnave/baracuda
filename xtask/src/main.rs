@@ -5,8 +5,7 @@
 //! - `xtask regen-all`             Regenerate every committed `bindings/cuda_*.rs`.
 //! - `xtask regen <lib>`           Regenerate a single `-sys` crate's bindings.
 //! - `xtask build-kernels`         Recompile shipped `.ptx` fixtures via `nvcc` (planned).
-//! - `xtask test-gpu [args]`       Run on-device (`#[ignore]`d) tests under the machine-wide
-//!                                 `gpu-run` lock (compile unlocked, device-run locked).
+//! - `xtask test-gpu [args]`       Run on-device (`#[ignore]`d) tests under the `gpu-run` lock.
 //!
 //! All commands require a CUDA Toolkit install discoverable via `CUDA_PATH` /
 //! `CUDA_HOME` / OS defaults; see [`baracuda_build::detect_cuda`].
@@ -58,10 +57,11 @@ fn print_usage() {
 /// Runs on-device (`#[ignore]`d) tests under the machine-wide `Global\gpu-run`
 /// mutex so lock acquisition is STRUCTURAL, not a convention someone must
 /// remember (the failure the postmortem indicts). Two phases:
-///   1. compile UNLOCKED — `cargo test <args> --no-run` (the lock wrapper
-///      explicitly forbids serializing compile-only work);
-///   2. device-run LOCKED — `scripts/gpu-run.ps1 -Project baracuda -- cargo test
-///      <args> -- --ignored <extra>`, which holds the mutex across the run.
+/// 1. compile UNLOCKED — `cargo test <args> --no-run` (the lock wrapper
+///    explicitly forbids serializing compile-only work);
+/// 2. device-run LOCKED — `scripts/gpu-run.ps1 -Project baracuda -- cargo test
+///    <args> -- --ignored <extra>`, which holds the mutex across the run.
+///
 /// The child's exit code is propagated verbatim, including gpu-run's `75`
 /// (EX_TEMPFAIL: the lock holder looked wedged — try again later).
 fn test_gpu(args: &[String]) -> ExitCode {
@@ -110,6 +110,17 @@ fn test_gpu(args: &[String]) -> ExitCode {
             .args(test_bin_args);
     };
 
+    // On-device declare-and-report wiring (baracuda-driver `test-support`): FAIL
+    // LOUD if a `require!`d resource is absent here — this is the box where the
+    // evidence must exist — and collect `require_optional!` declared skips into a
+    // log we tally after the run, so a would-be silent skip is reported instead.
+    let skip_log = std::env::temp_dir().join("baracuda-gpu-test-skips.log");
+    let _ = std::fs::remove_file(&skip_log);
+    let set_env = |cmd: &mut std::process::Command| {
+        cmd.env("BARACUDA_GPU_REQUIRED", "1")
+            .env("BARACUDA_SKIP_LOG", &skip_log);
+    };
+
     // Off-Windows (the 4070 box is Windows-only) there is no lock to take —
     // run the device tests directly, with a warning, rather than fail.
     if !cfg!(windows) {
@@ -123,13 +134,16 @@ fn test_gpu(args: &[String]) -> ExitCode {
             .arg("--")
             .arg("--ignored")
             .args(test_bin_args);
-        return match cmd.status() {
-            Ok(s) => ExitCode::from(s.code().unwrap_or(1) as u8),
+        set_env(&mut cmd);
+        let code = match cmd.status() {
+            Ok(s) => s.code().unwrap_or(1),
             Err(e) => {
                 eprintln!("xtask test-gpu: could not spawn `cargo test`: {e}");
-                ExitCode::from(1)
+                1
             }
         };
+        tally_skips(&skip_log);
+        return ExitCode::from(code as u8);
     }
 
     // Phase 2 — device-run LOCKED via scripts/gpu-run.ps1.
@@ -152,8 +166,12 @@ fn test_gpu(args: &[String]) -> ExitCode {
             .arg("baracuda")
             .arg("--");
         cargo_test_run(&mut cmd);
+        set_env(&mut cmd);
         match cmd.status() {
-            Ok(s) => return ExitCode::from(s.code().unwrap_or(1) as u8),
+            Ok(s) => {
+                tally_skips(&skip_log);
+                return ExitCode::from(s.code().unwrap_or(1) as u8);
+            }
             // Shell not on PATH: try the next candidate; any other error is real.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound && i == 0 => continue,
             Err(e) => {
@@ -164,6 +182,36 @@ fn test_gpu(args: &[String]) -> ExitCode {
     }
     eprintln!("xtask test-gpu: neither `pwsh` nor `powershell` found on PATH");
     ExitCode::from(1)
+}
+
+/// Read the declared-skip log written by `require_optional!` (via
+/// `BARACUDA_SKIP_LOG`) and report what was skipped — so an absent optional
+/// runtime on the box is STATED, never a silent `ok`. A `require!` (critical)
+/// absence would already have failed the run (BARACUDA_GPU_REQUIRED), so what
+/// lands here is the optional-runtime skips.
+fn tally_skips(skip_log: &Path) {
+    let Ok(contents) = std::fs::read_to_string(skip_log) else {
+        return;
+    };
+    let rows: Vec<&str> = contents
+        .lines()
+        .filter(|l| l.starts_with("SKIP-DECLARED"))
+        .collect();
+    if rows.is_empty() {
+        return;
+    }
+    eprintln!(
+        "xtask test-gpu: {} test(s) declared a resource skippable and skipped it on this box \
+         (require_optional! — an optional runtime/hardware was absent here):",
+        rows.len()
+    );
+    for row in rows {
+        // "SKIP-DECLARED\t<test>\t<reason>"
+        let mut cols = row.split('\t').skip(1);
+        let test = cols.next().unwrap_or("<?>");
+        let reason = cols.next().unwrap_or("<?>");
+        eprintln!("  - {test}: {reason}");
+    }
 }
 
 fn regen_all(_args: &[String]) -> ExitCode {

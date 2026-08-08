@@ -14,6 +14,10 @@ categories.workspace = true
 [features]
 default = []
 async = ["dep:futures-core"]
+# The `require!` / `require_optional!` primitives for on-device tests
+# (declare-and-report skippability — see src/test_support.rs). Enabled by
+# downstream test crates in their dev-dependencies; no production cost.
+test-support = []
 
 [dependencies]
 baracuda-types.workspace = true
