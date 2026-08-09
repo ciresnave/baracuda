@@ -27,11 +27,17 @@ baracuda-forge = { version = "0.0.1-alpha.78", path = "crates/baracuda-forge" }
 baracuda-cutlass-sys = { version = "0.0.1-alpha.78", path = "crates/baracuda-cutlass-sys" }
 baracuda-cutlass-kernels-sys = { version = "0.0.1-alpha.78", path = "crates/baracuda-cutlass-kernels-sys" }
 baracuda-cutlass = { version = "0.0.1-alpha.78", path = "crates/baracuda-cutlass" }
-baracuda-kernel-vocab = { version = "0.0.1-alpha.78", path = "crates/baracuda-kernel-vocab" }
 baracuda-kernels-types = { version = "0.0.1-alpha.78", path = "crates/baracuda-kernels-types" }
 baracuda-kernels-sys = { version = "0.0.1-alpha.78", path = "crates/baracuda-kernels-sys" }
 baracuda-kernels = { version = "0.0.1-alpha.78", path = "crates/baracuda-kernels" }
 baracuda-kernels-bench = { version = "0.0.1-alpha.78", path = "crates/baracuda-kernels-bench" }
+baracuda-cuda-emit = { version = "0.0.1-alpha.78", path = "crates/baracuda-cuda-emit" }
+# The neutral kernel generator + its classifier vocab were carved out and PUBLISHED
+# as the standalone vendor-neutral `unpopped` / `unpopped-vocab` (crates.io). Baracuda
+# is now a CONSUMER of the published crates, not their host — the local
+# `baracuda-kernelgen` / `baracuda-kernel-vocab` are retired.
+unpopped = "0.1.0"
+unpopped-vocab = "0.1.0"
 baracuda-seam = { version = "0.0.1-alpha.78", path = "crates/baracuda-seam" }
 baracuda-cuda-sys = { version = "0.0.1-alpha.78", path = "crates/baracuda-cuda-sys" }
 baracuda-driver = { version = "0.0.1-alpha.78", path = "crates/baracuda-driver" }

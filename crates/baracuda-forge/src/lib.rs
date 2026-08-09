@@ -26,6 +26,30 @@
 //! - **Parallel Compilation** — configurable thread percentage for parallel builds.
 //! - **Flexible Source Selection** — directory, glob, files, or exclude patterns.
 //!
+//! ## Controlling build parallelism
+//!
+//! nvcc/ptxas is memory-heavy, so forge compiles kernels on a pool sized, by
+//! default, to **~50% of the logical cores**. Under **concurrent CUDA builds**
+//! (several crates or worktrees building at once) that default can oversubscribe
+//! host memory and ptxas fails with `Memory allocation failure`. Three knobs, in
+//! priority order:
+//!
+//! - **`BARACUDA_FORGE_THREADS=K`** — set the pool to exactly `K`. The only knob
+//!   that can raise the pool ABOVE the 50% default.
+//! - **`RAYON_NUM_THREADS=K`** — honoured if the above is unset (it also perturbs
+//!   every other rayon consumer in the build; prefer `BARACUDA_FORGE_THREADS`).
+//! - **`cargo -j K`** (cargo sets `NUM_JOBS`) — honoured as an **upper cap**: it
+//!   only ever *lowers* the pool below the 50% default (cargo defaults `NUM_JOBS`
+//!   to the core count when `-j` is omitted, so it never raises it). Lets a
+//!   consumer running concurrent builds cap forge with the standard cargo flag.
+//!
+//! Forge prints a `cargo:warning` naming the thread count and these knobs, and
+//! re-surfaces a `ptxas fatal` / `Memory allocation failure` as the build-error
+//! headline (it usually means host oversubscription, not a code defect). Note
+//! that cargo **caches build-script output** and suppresses the warning on a
+//! fresh-but-cached build, so the warning's **absence is not evidence a cap is
+//! set** — it only prints on the first compile in a given target dir.
+//!
 //! ## Quick start
 //!
 //! ```no_run

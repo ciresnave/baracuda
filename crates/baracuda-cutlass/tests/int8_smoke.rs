@@ -750,6 +750,7 @@ fn int8_smoke_u8_rcr_bias_silu_i32() {
 // ---- Negative: RRR int8 must report Unsupported at plan selection ----
 
 #[test]
+#[ignore = "device-gated: select() queries the stream's device, so this rejection-path check silently skips on a CUDA-absent host (was a vacuous default-run green). Run via `cargo gpu-test`; interim pending the declare-and-report skippability primitive."]
 fn int8_rrr_select_returns_unsupported() {
     // Pure host-side check — doesn't touch the device. Doesn't need a
     // real CUDA context, but `IntGemmPlan::select` does query the

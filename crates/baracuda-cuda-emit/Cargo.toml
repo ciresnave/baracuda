@@ -1,0 +1,36 @@
+[package]
+name = "baracuda-cuda-emit"
+version = "0.0.1-alpha.78"
+description = "CUDA backend for the neutral `unpopped` kernel generator: the `Cuda` `Backend` (IR -> .cu emitter), the NVRTC on-demand JIT compiler (`NvrtcCompiler`), and `BaracudaSynthesizer` (the Fuel kernel-seam `Synthesizer` impl). Depends on the neutral generator `unpopped` and supplies the CUDA-specific final emit + compile stage from OUTSIDE the neutral core (the swappable backend model)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+# The real on-demand nvrtc compiler (`NvrtcCompiler`). Off by default so the crate
+# builds/tests without a CUDA toolchain; the Fuel synthesizer falls back to StubCompiler.
+nvrtc = ["dep:baracuda-nvrtc"]
+# The live Fuel kernel-seam Synthesizer endpoint (`BaracudaSynthesizer`) — wires the
+# fuel-kernel-seam `Synthesizer` trait + envelope. Pulls the neutral generator's own
+# `seam` feature for the PatternNode region grammar the request carries.
+seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam", "unpopped/seam"]
+# Enable the neutral generator's `convert` feature (tree-sitter CUDA/Slang lifters)
+# so the relocated lifter round-trip tests (`tests/convert.rs`) can reach
+# `unpopped::convert::*`. Test-only passthrough; no cuda-emit lib code
+# depends on it. Included in `--all-features`, which the carve validates against.
+convert = ["unpopped/convert"]
+
+[dependencies]
+unpopped = { workspace = true }
+unpopped-vocab = { workspace = true }
+baracuda-nvrtc = { workspace = true, optional = true }
+# The §5 shared wire grammar + live-call envelope Fuel calls — pinned to the
+# fuel-kernel-seam release train Fuel publishes; BaracudaSynthesizer implements the Synthesizer trait.
+fuel-kernel-seam-types = { version = "0.10.3", optional = true }
+fuel-kernel-seam = { version = "0.10.3", optional = true }
+
+[lints]
+workspace = true

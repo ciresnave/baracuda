@@ -33,6 +33,7 @@ fn setup() -> Option<(Context, Stream)> {
 }
 
 #[test]
+#[ignore = "device-gated: select() needs a Stream, so this rejection-path check silently skips on a CUDA-absent host (was a vacuous default-run green). Run via `cargo gpu-test`; interim pending the declare-and-report skippability primitive."]
 fn awq_plan_select_rejects_invalid_descriptor() {
     let Some((_ctx, stream)) = setup() else {
         // No GPU on this host — skip the validation tests too because

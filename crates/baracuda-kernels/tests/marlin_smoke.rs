@@ -34,6 +34,7 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
+#[ignore = "device-gated: needs a Stream to reach select(), so this rejection-path check silently skips on a CUDA-absent host (was a vacuous default-run green). Run via `cargo gpu-test`; interim pending the declare-and-report skippability primitive."]
 fn marlin_plan_select_rejects_invalid_descriptor() {
     let ctx_init = init();
     if ctx_init.is_err() {

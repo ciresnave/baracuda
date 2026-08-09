@@ -16,6 +16,45 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// Re-surface the nvcc/ptxas signatures that mean HOST resource exhaustion
+/// (ptxas ran out of memory / address space), not a code defect in this crate.
+///
+/// The raw failure is a single `ptxas fatal` line at the bottom of a wall of
+/// harmless CUTLASS `#177-D "declared but never referenced"` warnings, under a
+/// cargo headline that names only the crate ("failed to run custom build command
+/// for baracuda-kernels-sys") — which reads as "this crate is broken" when the
+/// real cause is concurrent CUDA builds oversubscribing the box (reported by
+/// Fuel, 2026-08-08). Returns a diagnostic banner to LEAD the error message with
+/// (empty when the failure is not oversubscription), and emits it as a
+/// `cargo:warning` so it also lands in cargo's warning summary rather than only
+/// buried in the build-error body.
+fn diagnose_host_oversubscription(stdout: &str, stderr: &str) -> String {
+    let hit = |needle: &str| stderr.contains(needle) || stdout.contains(needle);
+    if !(hit("ptxas fatal") || hit("Memory allocation failure") || hit("out of memory")) {
+        return String::new();
+    }
+    // Pull the actual fatal line(s) out from under the warning wall.
+    let fatal: Vec<&str> = stderr
+        .lines()
+        .chain(stdout.lines())
+        .map(str::trim)
+        .filter(|l| {
+            l.contains("ptxas fatal")
+                || l.contains("Memory allocation failure")
+                || l.contains("out of memory")
+        })
+        .collect();
+    let banner = format!(
+        "baracuda-forge: nvcc/ptxas FATAL — {}. This almost always means HOST \
+         oversubscription (concurrent CUDA builds exhausting memory/address space), \
+         NOT a code defect in this crate. Cap the nvcc pool with `cargo -j N` \
+         (honoured as an upper bound) or `BARACUDA_FORGE_THREADS=K`.",
+        fatal.join(" | ")
+    );
+    println!("cargo:warning={banner}");
+    banner
+}
+
 /// Main builder for CUDA kernel compilation.
 #[derive(Debug)]
 pub struct KernelBuilder {
@@ -366,7 +405,9 @@ impl KernelBuilder {
         let _ = self.parallel.init_thread_pool();
 
         println!(
-            "cargo:warning=Using {} threads for compilation",
+            "cargo:warning=baracuda-forge: compiling with {} nvcc threads (default ~50% of \
+             cores). Cap with `cargo -j N` or BARACUDA_FORGE_THREADS=K; concurrent CUDA builds \
+             can otherwise oversubscribe host memory (ptxas 'Memory allocation failure').",
             self.parallel.thread_count()
         );
 
@@ -520,14 +561,17 @@ impl KernelBuilder {
 
                 if !output.status.success() {
                     had_error.store(true, Ordering::Relaxed);
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let banner = diagnose_host_oversubscription(&stdout, &stderr);
+                    let lead = if banner.is_empty() {
+                        String::new()
+                    } else {
+                        format!("{banner}\n\n")
+                    };
                     return Err(Error::CompilationFailed {
                         path: kernel_file.clone(),
-                        message: format!(
-                            "nvcc exited with {}:\n{}\n{}",
-                            output.status,
-                            String::from_utf8_lossy(&output.stdout),
-                            String::from_utf8_lossy(&output.stderr)
-                        ),
+                        message: format!("{lead}nvcc exited with {}:\n{stdout}\n{stderr}", output.status),
                     });
                 }
 
@@ -744,14 +788,17 @@ impl KernelBuilder {
                     .map_err(|e| Error::NvccNotFound(format!("Failed to spawn nvcc: {}", e)))?;
 
                 if !output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let banner = diagnose_host_oversubscription(&stdout, &stderr);
+                    let lead = if banner.is_empty() {
+                        String::new()
+                    } else {
+                        format!("{banner}\n\n")
+                    };
                     return Err(Error::CompilationFailed {
                         path: kernel_file.to_path_buf(),
-                        message: format!(
-                            "nvcc exited with {}:\n{}\n{}",
-                            output.status,
-                            String::from_utf8_lossy(&output.stdout),
-                            String::from_utf8_lossy(&output.stderr)
-                        ),
+                        message: format!("{lead}nvcc exited with {}:\n{stdout}\n{stderr}", output.status),
                     });
                 }
 

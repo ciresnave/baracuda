@@ -9,17 +9,17 @@
 //! The **driver-free classifier vocabulary** — the dtype / layout / op-family
 //! tags, the [`Element`] trait hierarchy, [`StructureKey`] / [`OperandDesc`] +
 //! [`structure_key`], the dispatch-table types, and the plan descriptors — was
-//! carved into the leaf crate [`baracuda_kernel_vocab`] so that neutral
+//! carved into the leaf crate [`unpopped_vocab`] so that neutral
 //! consumers (the kernel generator, kernel selectors, Fuel's seam) can depend on
 //! the vocabulary WITHOUT this crate's `baracuda-driver` → `baracuda-cuda-sys`
 //! transitive pull. This crate **re-exports all of it** (`pub use
-//! baracuda_kernel_vocab::*` plus the vocabulary's module paths), so the public
+//! unpopped_vocab::*` plus the vocabulary's module paths), so the public
 //! API — flat items AND `baracuda_kernels_types::{element, layout, sku,
 //! dispatch, structure_key}::*` — is unchanged for every existing consumer.
 //!
 //! # 1.0-freeze stability
 //!
-//! See [`baracuda_kernel_vocab`] for the `#[non_exhaustive]` / exhaustive tag
+//! See [`unpopped_vocab`] for the `#[non_exhaustive]` / exhaustive tag
 //! policy — those enums live there now and are re-exported here.
 //!
 //! The trait `Element` was previously named `CutlassElement`;
@@ -37,7 +37,7 @@ pub mod tensor;
 // wholesale — flat items and module paths both — so this crate's public surface
 // is unchanged. The local `plan` module (device-coupled `Workspace`) shadows the
 // glob-imported vocabulary `plan` module and re-exports its descriptors.
-pub use baracuda_kernel_vocab::*;
+pub use unpopped_vocab::*;
 
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};
 pub use operand_desc_ext::OperandDescExt;

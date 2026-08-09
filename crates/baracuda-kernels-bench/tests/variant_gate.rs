@@ -14,17 +14,16 @@
 //! Ignored by default (needs a CUDA device + nvrtc); run with:
 //! `cargo test -p baracuda-kernels-bench --test variant_gate -- --ignored`
 
+use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
 use baracuda_driver::{Device, Module};
-use baracuda_kernelgen::emit_dispatch_table;
-use baracuda_kernelgen::{
-    Compiler, Cuda, NvrtcCompiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input,
-};
 use baracuda_kernels_bench::{current_hwstamp, gate_cell, setup_device};
 use baracuda_kernels_types::{
     ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, Implementor, OpCategory,
     OperandDesc, Provenance, merge, structure_key,
 };
+use unpopped::emit_dispatch_table;
+use unpopped::{Compiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input};
 
 const ROWS: i64 = 16_384;
 const COLS: i64 = 1_024;
@@ -217,7 +216,7 @@ fn variant_gate_loop_end_to_end() {
     assert_eq!(routed.provenance, Provenance::Measured, "seed upgraded");
     assert_eq!(routed.winner_entry.as_deref(), Some(partial_name.as_str()));
 
-    let artifact = emit_dispatch_table(&table);
+    let artifact = emit_dispatch_table("baracuda", &table);
     assert!(
         artifact.contains(&partial_name),
         "artifact names the winning variant's entry point"
@@ -232,7 +231,7 @@ fn variant_gate_loop_end_to_end() {
 #[test]
 #[ignore = "requires a CUDA device + nvrtc"]
 fn smemrow_variant_is_bit_identical_and_gated() {
-    use baracuda_kernelgen::{ReduceStage, reduced};
+    use unpopped::{ReduceStage, reduced};
 
     let (ctx, stream) = setup_device();
     let device = Device::get(0).expect("device");
