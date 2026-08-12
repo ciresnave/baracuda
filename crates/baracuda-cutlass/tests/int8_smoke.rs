@@ -15,7 +15,7 @@ use baracuda_cutlass::{
     ActivationKind, BiasElement, EpilogueKind, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
     LayoutSku, MatrixMut, MatrixRef, PlanPreference, S8, U8, VectorRef, Workspace,
 };
-use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, require};
 
 // ============================================================================
 // CPU reference — mirrors CUTLASS `LinearCombinationClamp` /
@@ -756,18 +756,10 @@ fn int8_rrr_select_returns_unsupported() {
     // real CUDA context, but `IntGemmPlan::select` does query the
     // stream's device. We probe a Stream to satisfy the API; this test
     // is marked NOT `#[ignore]` because it's host-side validation.
-    if init().is_err() {
-        // No CUDA driver — skip silently. This is a host-side test
-        // that's only meaningful if the workspace builds.
-        return;
-    }
-    let Ok(device) = Device::get(0) else { return };
-    let Ok(ctx) = Context::new(&device) else {
-        return;
-    };
-    let Ok(stream) = Stream::new(&ctx) else {
-        return;
-    };
+    require!(init(), "CUDA driver init");
+    let device = require!(Device::get(0), "a CUDA device");
+    let ctx = require!(Context::new(&device), "a CUDA context");
+    let stream = require!(Stream::new(&ctx), "a CUDA stream");
 
     let desc = IntGemmDescriptor {
         m: 64,

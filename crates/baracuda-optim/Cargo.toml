@@ -44,6 +44,10 @@ thiserror = { workspace = true }
 [build-dependencies]
 baracuda-forge = { workspace = true }
 
+[dev-dependencies]
+# `require_optional!` on-device-skip primitive (declare-and-report).
+baracuda-driver = { workspace = true, features = ["test-support"] }
+
 [package.metadata.docs.rs]
 no-default-features = true
 

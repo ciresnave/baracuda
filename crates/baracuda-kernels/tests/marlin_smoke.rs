@@ -18,7 +18,7 @@
 
 #![cfg(feature = "marlin")]
 
-use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, require};
 use baracuda_kernels::{
     Int4MarlinGemmArgs, Int4MarlinGemmDescriptor, Int4MarlinGemmPlan, PlanPreference, TensorMut,
     TensorRef, Workspace, contiguous_stride,
@@ -36,21 +36,12 @@ fn setup() -> (Context, Stream) {
 #[test]
 #[ignore = "device-gated: needs a Stream to reach select(), so this rejection-path check silently skips on a CUDA-absent host (was a vacuous default-run green). Run via `cargo gpu-test`; interim pending the declare-and-report skippability primitive."]
 fn marlin_plan_select_rejects_invalid_descriptor() {
-    let ctx_init = init();
-    if ctx_init.is_err() {
-        // No GPU on this host — host-side validation still works
-        // because select() does no GPU work. Continue.
-    }
-    let dummy_dev = Device::get(0).ok();
-    let ctx;
-    let stream;
-    if let Some(dev) = dummy_dev {
-        ctx = Context::new(&dev).expect("ctx");
-        stream = Stream::new(&ctx).expect("stream");
-    } else {
-        // Skip if no device — we can't even build a Stream.
-        return;
-    }
+    let _ = init();
+    // select() does no GPU work, but reaching it needs a real Stream, which
+    // needs a device — which MUST exist on the box.
+    let dev = require!(Device::get(0), "a CUDA device (Marlin select() needs a Stream)");
+    let ctx = Context::new(&dev).expect("ctx");
+    let stream = Stream::new(&ctx).expect("stream");
 
     // K not divisible by 128.
     let bad_k = Int4MarlinGemmDescriptor::new(1, 256, 64);

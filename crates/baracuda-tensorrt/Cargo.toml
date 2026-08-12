@@ -26,5 +26,9 @@ baracuda-driver.workspace = true
 baracuda-tensorrt-sys.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+# `require_optional!` on-device-skip primitive (declare-and-report).
+baracuda-driver = { workspace = true, features = ["test-support"] }
+
 [lints]
 workspace = true

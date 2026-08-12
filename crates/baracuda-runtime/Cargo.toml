@@ -24,5 +24,10 @@ baracuda-cuda-sys.workspace = true
 baracuda-driver = { workspace = true, optional = true }
 thiserror.workspace = true
 
+[dev-dependencies]
+# The `require_optional!` on-device-skip primitive (declare-and-report). The
+# `test-support` feature also activates `baracuda-driver` for the test build.
+baracuda-driver = { workspace = true, features = ["test-support"] }
+
 [lints]
 workspace = true

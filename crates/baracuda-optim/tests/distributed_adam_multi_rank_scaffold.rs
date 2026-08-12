@@ -35,7 +35,7 @@
     any(feature = "sm80", feature = "sm89", feature = "sm90a")
 ))]
 
-use baracuda_driver::{Context, Device, DeviceBuffer};
+use baracuda_driver::{Context, Device, DeviceBuffer, require_optional};
 use baracuda_nccl::Communicator;
 use baracuda_optim::{AdamConfig, AdamMode, DistributedAdamStepPlan, TensorList};
 
@@ -71,9 +71,10 @@ fn try_bringup_two_ranks() -> Option<Vec<Communicator>> {
 fn distributed_adam_two_ranks_all_reduce_then_step_then_all_gather() {
     baracuda_driver::init().unwrap();
 
-    let Some(comms) = try_bringup_two_ranks() else {
-        return;
-    };
+    let comms = require_optional!(
+        try_bringup_two_ranks(),
+        "2+ NVIDIA GPUs + NCCL (distributed Adam multi-rank)"
+    );
     assert_eq!(comms.len(), 2);
 
     let cfg = AdamConfig {

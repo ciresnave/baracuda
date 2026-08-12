@@ -5,24 +5,23 @@
 use std::os::fd::AsRawFd;
 
 #[cfg(target_os = "linux")]
+use baracuda_driver::require_optional;
+#[cfg(target_os = "linux")]
 use baracuda_runtime::{Device, DeviceBuffer};
 
 #[test]
 #[ignore = "requires cuFile + GDS-capable filesystem (Linux-only)"]
 #[cfg(target_os = "linux")]
 fn cufile_write_read_roundtrip() {
-    if baracuda_cufile::probe().is_err() {
-        eprintln!("cuFile not loadable on this host — skipping");
-        return;
-    }
+    require_optional!(
+        baracuda_cufile::probe(),
+        "cuFile runtime loadable (GPUDirect Storage)"
+    );
 
-    let _driver = match baracuda_cufile::Driver::open() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("Driver::open failed ({e:?}) — likely no GDS-capable filesystem; skipping");
-            return;
-        }
-    };
+    let _driver = require_optional!(
+        baracuda_cufile::Driver::open(),
+        "cuFile Driver::open (GDS-capable filesystem)"
+    );
 
     Device::from_ordinal(0).set_current().unwrap();
 
@@ -36,27 +35,20 @@ fn cufile_write_read_roundtrip() {
     // ext4 with nvme (not all /tmp supports GDS).
     let tmp_path = std::env::var("BARACUDA_CUFILE_TEST_PATH")
         .unwrap_or_else(|_| "/tmp/baracuda_cufile_test.bin".into());
-    let file = match std::fs::File::options()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&tmp_path)
-    {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("Can't open {tmp_path}: {e} — skipping");
-            return;
-        }
-    };
+    let file = require_optional!(
+        std::fs::File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&tmp_path),
+        "a writable temp file for the cuFile round-trip"
+    );
 
-    let fh = match unsafe { baracuda_cufile::FileHandle::register(file.as_raw_fd()) } {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("FileHandle::register: {e:?} — likely GDS-incompatible FS; skipping");
-            return;
-        }
-    };
+    let fh = require_optional!(
+        unsafe { baracuda_cufile::FileHandle::register(file.as_raw_fd()) },
+        "cuFile FileHandle::register (GDS-compatible filesystem)"
+    );
 
     let bytes = (n * core::mem::size_of::<u32>()) as usize;
 

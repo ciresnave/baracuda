@@ -16,7 +16,7 @@
 //!
 //! This scaffold takes the simpler single-process-multi-GPU path.
 
-use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, require_optional};
 use baracuda_megatron::{ColumnParallelLinearPlan, RowParallelLinearPlan, TensorParallelContext};
 use baracuda_nccl::Communicator;
 
@@ -26,23 +26,17 @@ fn column_parallel_world_size_2_smoke() {
     baracuda_driver::init().unwrap();
 
     let count = Device::count().unwrap_or(0);
-    if count < 2 {
-        eprintln!(
-            "multi_rank_scaffold: only {count} GPU(s) detected; this test \
-             requires 2+. Skipping cleanly."
-        );
-        return;
-    }
+    require_optional!(
+        (count >= 2).then_some(()),
+        "2+ NVIDIA GPUs for single-process multi-rank (ncclCommInitAll)"
+    );
 
     // Single-process multi-GPU: ncclCommInitAll for 2 devices, one
     // communicator per device.
-    let comms = match Communicator::init_all(&[0, 1]) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("NCCL init_all failed: {e:?}; skipping.");
-            return;
-        }
-    };
+    let comms = require_optional!(
+        Communicator::init_all(&[0, 1]),
+        "NCCL ncclCommInitAll across 2 devices"
+    );
     assert_eq!(comms.len(), 2);
     assert_eq!(comms[0].world_size(), 2);
     assert_eq!(comms[1].world_size(), 2);
@@ -81,18 +75,15 @@ fn row_parallel_world_size_2_smoke() {
     baracuda_driver::init().unwrap();
 
     let count = Device::count().unwrap_or(0);
-    if count < 2 {
-        eprintln!("multi_rank_scaffold: only {count} GPU(s); skipping.");
-        return;
-    }
+    require_optional!(
+        (count >= 2).then_some(()),
+        "2+ NVIDIA GPUs for single-process multi-rank (ncclCommInitAll)"
+    );
 
-    let comms = match Communicator::init_all(&[0, 1]) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("NCCL init_all failed: {e:?}; skipping.");
-            return;
-        }
-    };
+    let comms = require_optional!(
+        Communicator::init_all(&[0, 1]),
+        "NCCL ncclCommInitAll across 2 devices"
+    );
 
     let batch = 4i32;
     let in_f = 32i32; // in_per_rank = 16
