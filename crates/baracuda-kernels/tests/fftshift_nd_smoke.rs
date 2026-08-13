@@ -10,7 +10,7 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    Complex32, ElementKind, FFTSHIFT_ND_MAX_RANK, FFTSHIFT_ND_MAX_SHIFT_AXES, FftShiftNdArgs,
+    Complex64, ElementKind, FFTSHIFT_ND_MAX_RANK, FFTSHIFT_ND_MAX_SHIFT_AXES, FftShiftNdArgs,
     FftShiftNdDescriptor, FftShiftNdPlan, PlanPreference, TensorMut, TensorRef, Workspace,
     contiguous_stride,
 };
@@ -202,23 +202,23 @@ fn fftshift_nd_2d_odd_f32_both_axes_fft_vs_ifft() {
 #[test]
 #[ignore]
 fn fftshift_nd_2d_one_axis_only_complex32() {
-    // 4 x 6 — Complex32. Shift only axis 1 (last axis); axis 0 is
+    // 4 x 6 — Complex64. Shift only axis 1 (last axis); axis 0 is
     // pass-through. Equivalent to the 1-D plan with batch == shape[0],
     // but exercised through the N-D code path.
     let (ctx, stream) = setup();
     let shape = [4i32, 6];
     let numel: usize = (shape[0] * shape[1]) as usize;
-    let x_host: Vec<Complex32> = (0..numel)
-        .map(|i| Complex32::new(i as f32, (i as f32) * 0.25))
+    let x_host: Vec<Complex64> = (0..numel)
+        .map(|i| Complex64::new(i as f32, (i as f32) * 0.25))
         .collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
-    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
+    let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
 
-    let desc = build_desc::<2>(shape, [1, 0], 1, false, ElementKind::Complex32);
-    let plan = FftShiftNdPlan::<Complex32, 2>::select(&stream, &desc, PlanPreference::default())
+    let desc = build_desc::<2>(shape, [1, 0], 1, false, ElementKind::Complex64);
+    let plan = FftShiftNdPlan::<Complex64, 2>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let stride = contiguous_stride(shape);
-    let args = FftShiftNdArgs::<Complex32, 2> {
+    let args = FftShiftNdArgs::<Complex64, 2> {
         input: TensorRef {
             data: dev_x.as_slice(),
             shape,
@@ -233,7 +233,7 @@ fn fftshift_nd_2d_one_axis_only_complex32() {
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
 
-    let mut got = vec![Complex32::default(); numel];
+    let mut got = vec![Complex64::default(); numel];
     dev_y.copy_to_host(&mut got).expect("dl");
 
     let expected = cpu_fftshift_nd(&x_host, &shape, &[1], false);
@@ -354,22 +354,22 @@ fn fftshift_nd_3d_batched_inner_two_axes_f64() {
 #[test]
 #[ignore]
 fn fftshift_nd_3d_complex32_all_axes_odd() {
-    // 3 x 5 x 7 — odd-odd-odd Complex32. Stresses the per-axis (n+1)/2
+    // 3 x 5 x 7 — odd-odd-odd Complex64. Stresses the per-axis (n+1)/2
     // vs n/2 asymmetry on every shifted axis.
     let (ctx, stream) = setup();
     let shape = [3i32, 5, 7];
     let numel: usize = (shape[0] * shape[1] * shape[2]) as usize;
-    let x_host: Vec<Complex32> = (0..numel)
-        .map(|i| Complex32::new(i as f32, -(i as f32) * 0.125))
+    let x_host: Vec<Complex64> = (0..numel)
+        .map(|i| Complex64::new(i as f32, -(i as f32) * 0.125))
         .collect();
     let dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
-    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
+    let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
 
-    let desc = build_desc::<3>(shape, [0, 1, 2], 3, true, ElementKind::Complex32);
-    let plan = FftShiftNdPlan::<Complex32, 3>::select(&stream, &desc, PlanPreference::default())
+    let desc = build_desc::<3>(shape, [0, 1, 2], 3, true, ElementKind::Complex64);
+    let plan = FftShiftNdPlan::<Complex64, 3>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let stride = contiguous_stride(shape);
-    let args = FftShiftNdArgs::<Complex32, 3> {
+    let args = FftShiftNdArgs::<Complex64, 3> {
         input: TensorRef {
             data: dev_x.as_slice(),
             shape,
@@ -384,7 +384,7 @@ fn fftshift_nd_3d_complex32_all_axes_odd() {
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
 
-    let mut got = vec![Complex32::default(); numel];
+    let mut got = vec![Complex64::default(); numel];
     dev_y.copy_to_host(&mut got).expect("dl");
 
     let expected = cpu_fftshift_nd(&x_host, &shape, &[0, 1, 2], true);

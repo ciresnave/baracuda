@@ -189,7 +189,7 @@ impl<TIn: Element, TOut: IntElement> DynamicRangeQuantizePlan<TIn, TOut> {
                  activation (f16 / bf16 deferred)",
             ));
         }
-        if TOut::KIND != ElementKind::S8 {
+        if TOut::KIND != ElementKind::I8 {
             return Err(Error::Unsupported(
                 "DynamicRangeQuantizePlan: 8.3 trailblazer only wires s8 output \
                  (u8 deferred)",
@@ -294,7 +294,7 @@ impl<TIn: Element, TOut: IntElement> DynamicRangeQuantizePlan<TIn, TOut> {
         let stream_ptr = stream.as_raw();
 
         let status = match (TIn::KIND, TOut::KIND) {
-            (ElementKind::F32, ElementKind::S8) => unsafe {
+            (ElementKind::F32, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dynamic_range_quantize_per_token_sym_f32_s8_run(
                     self.desc.n,
                     self.desc.d,
@@ -304,7 +304,7 @@ impl<TIn: Element, TOut: IntElement> DynamicRangeQuantizePlan<TIn, TOut> {
                     core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            (ElementKind::F64, ElementKind::S8) => unsafe {
+            (ElementKind::F64, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_dynamic_range_quantize_per_token_sym_f64_s8_run(
                     self.desc.n,
                     self.desc.d,

@@ -159,7 +159,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorPlan<TIn, TOut> {
         let status = if <TIn::Scalar as ScalarType>::IS_F64 {
             let scale_f64 = args.scale.to_f64();
             match TOut::KIND {
-                ElementKind::S8 => unsafe {
+                ElementKind::I8 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_f64_s8_run(
                         numel,
                         scale_f64,
@@ -192,7 +192,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorPlan<TIn, TOut> {
         } else {
             let scale_f32 = args.scale.to_f32();
             match (TIn::KIND, TOut::KIND) {
-                (ElementKind::F32, ElementKind::S8) => unsafe {
+                (ElementKind::F32, ElementKind::I8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_f32_s8_run(
                         numel,
                         scale_f32,
@@ -216,7 +216,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorPlan<TIn, TOut> {
                         stream_ptr,
                     )
                 },
-                (ElementKind::F16, ElementKind::S8) => unsafe {
+                (ElementKind::F16, ElementKind::I8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_f16_s8_run(
                         numel,
                         scale_f32,
@@ -240,7 +240,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorPlan<TIn, TOut> {
                         stream_ptr,
                     )
                 },
-                (ElementKind::Bf16, ElementKind::S8) => unsafe {
+                (ElementKind::Bf16, ElementKind::I8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_dequantize_per_tensor_bf16_s8_run(
                         numel,
                         scale_f32,

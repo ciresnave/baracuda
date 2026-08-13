@@ -29,7 +29,7 @@ use baracuda_kernels_sys::{
     cufftSetStream,
 };
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FftKind, KernelSku,
+    ArchSku, BackendKind, Complex64, Complex128, Element, ElementKind, FftKind, KernelSku,
     MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
@@ -50,14 +50,14 @@ pub struct RfftDescriptor {
     /// Number of independent transforms in one launch.
     pub batch: i32,
     /// Real-side element type — `F32` or `F64`. The complex output
-    /// type is `Complex32` (for `F32`) or `Complex64` (for `F64`).
+    /// type is `Complex64` (for `F32`) or `Complex128` (for `F64`).
     pub element: ElementKind,
 }
 
 /// Args bundle for an RFFT.
 ///
 /// `T` is the *real* element type (`f32` / `f64`). The complex output
-/// uses [`Complex32`] / [`Complex64`] depending on `T`.
+/// uses [`Complex64`] / [`Complex128`] depending on `T`.
 #[derive(Debug)]
 pub struct RfftArgs<'a, T: Element, C: Element> {
     /// Real input tensor `[batch, n]`.
@@ -75,7 +75,7 @@ pub struct RfftArgs<'a, T: Element, C: Element> {
 /// inverse direction. Use [`super::FftPlan`] when the input is
 /// already complex.
 ///
-/// **Dtypes**: `f32` → `Complex32`; `f64` → `Complex64`.
+/// **Dtypes**: `f32` → `Complex64`; `f64` → `Complex128`.
 ///
 /// **Shape**: real `[batch, n]` → complex `[batch, n/2 + 1]`.
 ///
@@ -123,8 +123,8 @@ impl<T: Element> RfftPlan<T> {
             _ => MathPrecision::F32,
         };
         let aux = match T::KIND {
-            ElementKind::F32 => Some(ElementKind::Complex32),
-            ElementKind::F64 => Some(ElementKind::Complex64),
+            ElementKind::F32 => Some(ElementKind::Complex64),
+            ElementKind::F64 => Some(ElementKind::Complex128),
             _ => None,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -213,7 +213,7 @@ impl RfftPlan<f32> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: RfftArgs<'_, f32, Complex32>,
+        args: RfftArgs<'_, f32, Complex64>,
     ) -> Result<()> {
         let n = self.desc.n;
         let batch = self.desc.batch;
@@ -266,7 +266,7 @@ impl RfftPlan<f64> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: RfftArgs<'_, f64, Complex64>,
+        args: RfftArgs<'_, f64, Complex128>,
     ) -> Result<()> {
         let n = self.desc.n;
         let batch = self.desc.batch;
@@ -349,7 +349,7 @@ pub struct IrfftDescriptor {
 /// Args bundle for an IRFFT.
 ///
 /// `T` is the *real* output type; `C` is the matching complex input
-/// type ([`Complex32`] for `f32`, [`Complex64`] for `f64`).
+/// type ([`Complex64`] for `f32`, [`Complex128`] for `f64`).
 #[derive(Debug)]
 pub struct IrfftArgs<'a, T: Element, C: Element> {
     /// Complex input tensor `[batch, n/2 + 1]`.
@@ -368,7 +368,7 @@ pub struct IrfftArgs<'a, T: Element, C: Element> {
 /// caller supplies `n` explicitly because the Hermitian-half input
 /// length is ambiguous between `2 * (n/2)` and `2 * (n/2) + 1`.
 ///
-/// **Dtypes**: `Complex32` → `f32`; `Complex64` → `f64`.
+/// **Dtypes**: `Complex64` → `f32`; `Complex128` → `f64`.
 ///
 /// **Shape**: complex `[batch, n/2 + 1]` → real `[batch, n]`.
 ///
@@ -417,8 +417,8 @@ impl<T: Element> IrfftPlan<T> {
             _ => MathPrecision::F32,
         };
         let aux = match T::KIND {
-            ElementKind::F32 => Some(ElementKind::Complex32),
-            ElementKind::F64 => Some(ElementKind::Complex64),
+            ElementKind::F32 => Some(ElementKind::Complex64),
+            ElementKind::F64 => Some(ElementKind::Complex128),
             _ => None,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -507,7 +507,7 @@ impl IrfftPlan<f32> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: IrfftArgs<'_, f32, Complex32>,
+        args: IrfftArgs<'_, f32, Complex64>,
     ) -> Result<()> {
         let n = self.desc.n;
         let batch = self.desc.batch;
@@ -574,7 +574,7 @@ impl IrfftPlan<f64> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: IrfftArgs<'_, f64, Complex64>,
+        args: IrfftArgs<'_, f64, Complex128>,
     ) -> Result<()> {
         let n = self.desc.n;
         let batch = self.desc.batch;

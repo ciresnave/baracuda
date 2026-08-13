@@ -87,7 +87,7 @@ fn quantize_per_token_f32_s8_basic() {
         q_min: qmin,
         q_max: qmax,
         input_element: ElementKind::F32,
-        output_element: ElementKind::S8,
+        output_element: ElementKind::I8,
     };
     let plan = QuantizePerTokenPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");

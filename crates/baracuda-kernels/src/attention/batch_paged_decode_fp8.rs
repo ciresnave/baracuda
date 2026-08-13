@@ -128,7 +128,7 @@ impl<T: Element> BatchPagedDecodeFp8Plan<T> {
             op: AttentionKind::PagedAttention as u16,
             element: T::KIND,
             aux_element: Some(match desc.kv_dtype {
-                Fp8KvDtype::E4M3 => ElementKind::Fp8E4M3,
+                Fp8KvDtype::E4M3 => ElementKind::Fp8E4M3FN,
                 Fp8KvDtype::E5M2 => ElementKind::Fp8E5M2,
             }),
             layout: None,

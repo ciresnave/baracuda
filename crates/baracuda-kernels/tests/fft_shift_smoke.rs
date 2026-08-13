@@ -9,7 +9,7 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    Complex32, ElementKind, FftShiftArgs, FftShiftDescriptor, FftShiftPlan, PlanPreference,
+    Complex64, ElementKind, FftShiftArgs, FftShiftDescriptor, FftShiftPlan, PlanPreference,
     TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
@@ -222,17 +222,17 @@ fn fftshift_batched_complex32() {
     let n: i32 = 4;
     let batch: i32 = 2;
     let x_host = vec![
-        Complex32::new(0.0, 0.0),
-        Complex32::new(1.0, 0.0),
-        Complex32::new(2.0, 0.0),
-        Complex32::new(3.0, 0.0),
-        Complex32::new(10.0, 1.0),
-        Complex32::new(11.0, 1.0),
-        Complex32::new(12.0, 1.0),
-        Complex32::new(13.0, 1.0),
+        Complex64::new(0.0, 0.0),
+        Complex64::new(1.0, 0.0),
+        Complex64::new(2.0, 0.0),
+        Complex64::new(3.0, 0.0),
+        Complex64::new(10.0, 1.0),
+        Complex64::new(11.0, 1.0),
+        Complex64::new(12.0, 1.0),
+        Complex64::new(13.0, 1.0),
     ];
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
-    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, 8).expect("alloc y");
+    let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, 8).expect("alloc y");
 
     let shape = [batch, n];
     let stride = contiguous_stride(shape);
@@ -240,11 +240,11 @@ fn fftshift_batched_complex32() {
         n,
         batch,
         inverse: false,
-        element: ElementKind::Complex32,
+        element: ElementKind::Complex64,
     };
-    let plan = FftShiftPlan::<Complex32>::select(&stream, &desc, PlanPreference::default())
+    let plan = FftShiftPlan::<Complex64>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
-    let args = FftShiftArgs::<Complex32> {
+    let args = FftShiftArgs::<Complex64> {
         x: TensorRef {
             data: dev_x.as_slice(),
             shape,
@@ -259,17 +259,17 @@ fn fftshift_batched_complex32() {
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
 
-    let mut got = vec![Complex32::default(); 8];
+    let mut got = vec![Complex64::default(); 8];
     dev_y.copy_to_host(&mut got).expect("dl");
     let expected = vec![
-        Complex32::new(2.0, 0.0),
-        Complex32::new(3.0, 0.0),
-        Complex32::new(0.0, 0.0),
-        Complex32::new(1.0, 0.0),
-        Complex32::new(12.0, 1.0),
-        Complex32::new(13.0, 1.0),
-        Complex32::new(10.0, 1.0),
-        Complex32::new(11.0, 1.0),
+        Complex64::new(2.0, 0.0),
+        Complex64::new(3.0, 0.0),
+        Complex64::new(0.0, 0.0),
+        Complex64::new(1.0, 0.0),
+        Complex64::new(12.0, 1.0),
+        Complex64::new(13.0, 1.0),
+        Complex64::new(10.0, 1.0),
+        Complex64::new(11.0, 1.0),
     ];
     assert_eq!(got, expected);
 }

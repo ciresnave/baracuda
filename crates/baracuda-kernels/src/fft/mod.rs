@@ -7,7 +7,7 @@
 //! - [`FftPlan`] — `FFT` / `IFFT` (complex-to-complex). Carries an
 //!   `inverse: bool` on the descriptor so the same plan shape covers
 //!   both directions. Generic on `T: Element` parameterized over
-//!   [`Complex32`] / [`Complex64`].
+//!   [`Complex64`] / [`Complex128`].
 //! - [`RfftPlan`] — `RFFT` (real-to-complex). Input is real `[batch,
 //!   n]`, output is complex `[batch, n/2 + 1]` (Hermitian-half).
 //!   Generic on the real type `f32` / `f64`.
@@ -17,8 +17,8 @@
 //!   be inferred from the Hermitian-half input shape).
 //! - [`FftShiftPlan`] — `fftshift` / `ifftshift` (bespoke kernel,
 //!   pure index permutation). Element-width generic (4 / 8 / 16-byte
-//!   cells) so it covers any of `f32`, `f64`, [`Complex32`],
-//!   [`Complex64`].
+//!   cells) so it covers any of `f32`, `f64`, [`Complex64`],
+//!   [`Complex128`].
 //!
 //! ## Dtype coverage
 //!
@@ -27,7 +27,7 @@
 //! API does not expose `f16` / `bf16` for native transforms — callers
 //! needing reduced precision must cast on either side.
 //!
-//! Spectrum-domain tensors use [`Complex32`] / [`Complex64`] —
+//! Spectrum-domain tensors use [`Complex64`] / [`Complex128`] —
 //! `#[repr(C)]` newtype wrappers around a pair of FP fields,
 //! ABI-compatible with cuFFT's `cufftComplex` / `cufftDoubleComplex`.
 //!

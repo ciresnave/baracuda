@@ -161,7 +161,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
                 "int4 GEMM requires N to be even (packed-pair storage along N for D output)",
             ));
         }
-        if !matches!(T::KIND, ElementKind::S4 | ElementKind::U4) {
+        if !matches!(T::KIND, ElementKind::I4 | ElementKind::U4) {
             return Err(Error::Unsupported(
                 "baracuda-kernels: int4 GEMM: only S4 / U4 elements are accepted",
             ));
@@ -371,7 +371,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
         #[cfg(feature = "sm89")]
         let status = match (T::KIND, self.sku.layout, self.sku.epilogue) {
             // ---- Identity ----
-            (ElementKind::S4, LayoutSku::Rcr, EpilogueKind::Identity) => unsafe {
+            (ElementKind::I4, LayoutSku::Rcr, EpilogueKind::Identity) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_s4_rcr_sm89_run(
                     m,
                     n,
@@ -411,7 +411,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
                     stream_ptr,
                 )
             },
-            (ElementKind::S4, LayoutSku::Rrr, EpilogueKind::Identity) => unsafe {
+            (ElementKind::I4, LayoutSku::Rrr, EpilogueKind::Identity) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_s4_rrr_sm89_run(
                     m,
                     n,
@@ -453,7 +453,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
             },
 
             // ---- S4 × RCR × Bias family ----
-            (ElementKind::S4, LayoutSku::Rcr, EpilogueKind::Bias) => match BT::KIND {
+            (ElementKind::I4, LayoutSku::Rcr, EpilogueKind::Bias) => match BT::KIND {
                 BiasElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_gemm_s4_rcr_sm89_bias_f32_run(
                         m,
@@ -497,7 +497,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
                     )
                 },
             },
-            (ElementKind::S4, LayoutSku::Rcr, EpilogueKind::BiasRelu) => match BT::KIND {
+            (ElementKind::I4, LayoutSku::Rcr, EpilogueKind::BiasRelu) => match BT::KIND {
                 BiasElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_gemm_s4_rcr_sm89_bias_relu_f32_run(
                         m,
@@ -541,7 +541,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
                     )
                 },
             },
-            (ElementKind::S4, LayoutSku::Rcr, EpilogueKind::BiasGelu) => match BT::KIND {
+            (ElementKind::I4, LayoutSku::Rcr, EpilogueKind::BiasGelu) => match BT::KIND {
                 BiasElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_gemm_s4_rcr_sm89_bias_gelu_f32_run(
                         m,
@@ -585,7 +585,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
                     )
                 },
             },
-            (ElementKind::S4, LayoutSku::Rcr, EpilogueKind::BiasSilu) => match BT::KIND {
+            (ElementKind::I4, LayoutSku::Rcr, EpilogueKind::BiasSilu) => match BT::KIND {
                 BiasElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_gemm_s4_rcr_sm89_bias_silu_f32_run(
                         m,
@@ -809,7 +809,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
             },
 
             // ---- S4 × RRR × Bias family ----
-            (ElementKind::S4, LayoutSku::Rrr, EpilogueKind::Bias) => match BT::KIND {
+            (ElementKind::I4, LayoutSku::Rrr, EpilogueKind::Bias) => match BT::KIND {
                 BiasElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_gemm_s4_rrr_sm89_bias_f32_run(
                         m,
@@ -853,7 +853,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
                     )
                 },
             },
-            (ElementKind::S4, LayoutSku::Rrr, EpilogueKind::BiasRelu) => match BT::KIND {
+            (ElementKind::I4, LayoutSku::Rrr, EpilogueKind::BiasRelu) => match BT::KIND {
                 BiasElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_gemm_s4_rrr_sm89_bias_relu_f32_run(
                         m,
@@ -897,7 +897,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
                     )
                 },
             },
-            (ElementKind::S4, LayoutSku::Rrr, EpilogueKind::BiasGelu) => match BT::KIND {
+            (ElementKind::I4, LayoutSku::Rrr, EpilogueKind::BiasGelu) => match BT::KIND {
                 BiasElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_gemm_s4_rrr_sm89_bias_gelu_f32_run(
                         m,
@@ -941,7 +941,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
                     )
                 },
             },
-            (ElementKind::S4, LayoutSku::Rrr, EpilogueKind::BiasSilu) => match BT::KIND {
+            (ElementKind::I4, LayoutSku::Rrr, EpilogueKind::BiasSilu) => match BT::KIND {
                 BiasElementKind::F32 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_gemm_s4_rrr_sm89_bias_silu_f32_run(
                         m,

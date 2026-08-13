@@ -102,7 +102,7 @@ pub struct WriteSliceArgs<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
 ///
 /// **Dtypes**: every byte-aligned element kind in baracuda's element
 /// bank — `f16, bf16, f32, F32Strict, f64, i32, i64, Bool, S8, U8,
-/// Fp8E4M3, Fp8E5M2, Complex32, Complex64`. Plus nibble-packed
+/// Fp8E4M3FN, Fp8E5M2, Complex64, Complex128`. Plus nibble-packed
 /// `S4 / U4` with the even-alignment constraint on the innermost axis.
 /// `Bin` (1-bit packed) is out of scope.
 ///
@@ -186,7 +186,7 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
                 return Err(Error::Unsupported(
                     "baracuda-kernels::WriteSlicePlan: dtype out of scope. Supported set: \
                      {f16, bf16, f32, F32Strict, f64, i32, i64, Bool, S8, U8, S4, U4, \
-                      Fp8E4M3, Fp8E5M2, Complex32, Complex64}",
+                      Fp8E4M3FN, Fp8E5M2, Complex64, Complex128}",
                 ));
             }
         };
@@ -486,24 +486,31 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
 fn dispatch_kind(k: ElementKind) -> Option<(i32, bool)> {
     Some(match k {
         ElementKind::Bool => (1, false),
-        ElementKind::S8 => (1, false),
+        ElementKind::I8 => (1, false),
         ElementKind::U8 => (1, false),
-        ElementKind::Fp8E4M3 => (1, false),
+        ElementKind::Fp8E4M3FN => (1, false),
+        ElementKind::Fp8E4M3FNUZ => (1, false),
         ElementKind::Fp8E5M2 => (1, false),
+        ElementKind::Fp8E5M2FNUZ => (1, false),
+        ElementKind::F8E8M0 => (1, false),
+        ElementKind::F8E6M2 => (1, false),
         ElementKind::F16 => (2, false),
         ElementKind::Bf16 => (2, false),
+        ElementKind::I16 => (2, false),
+        ElementKind::U16 => (2, false),
         ElementKind::F32 => (4, false),
         ElementKind::F32Strict => (4, false),
         ElementKind::I32 => (4, false),
         ElementKind::U32 => (4, false), // index dtype; 4-byte, not sub-byte
         ElementKind::F64 => (8, false),
         ElementKind::I64 => (8, false),
-        ElementKind::Complex32 => (8, false),
-        ElementKind::Complex64 => (16, false),
-        ElementKind::S4 => (1, true),
+        ElementKind::U64 => (8, false),
+        ElementKind::Complex64 => (8, false),
+        ElementKind::Complex128 => (16, false),
+        ElementKind::I4 => (1, true),
         ElementKind::U4 => (1, true),
         // Bin (1-bit packed) is out of scope — distinct packing model.
-        ElementKind::Bin => return None,
+        ElementKind::B1 => return None,
     })
 }
 

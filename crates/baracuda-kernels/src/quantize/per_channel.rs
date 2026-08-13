@@ -210,7 +210,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerChannelPlan<TIn, TOut> {
         let qmax = self.desc.q_max;
 
         let status = match (TIn::KIND, TOut::KIND) {
-            (ElementKind::F32, ElementKind::S8) => unsafe {
+            (ElementKind::F32, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_channel_f32_s8_run(
                     numel,
                     shape4,
@@ -242,7 +242,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerChannelPlan<TIn, TOut> {
                     stream_ptr,
                 )
             },
-            (ElementKind::F16, ElementKind::S8) => unsafe {
+            (ElementKind::F16, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_channel_f16_s8_run(
                     numel,
                     shape4,
@@ -274,7 +274,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerChannelPlan<TIn, TOut> {
                     stream_ptr,
                 )
             },
-            (ElementKind::Bf16, ElementKind::S8) => unsafe {
+            (ElementKind::Bf16, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_channel_bf16_s8_run(
                     numel,
                     shape4,
@@ -306,7 +306,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerChannelPlan<TIn, TOut> {
                     stream_ptr,
                 )
             },
-            (ElementKind::F64, ElementKind::S8) => unsafe {
+            (ElementKind::F64, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_channel_f64_s8_run(
                     numel,
                     shape4,

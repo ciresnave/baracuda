@@ -15,7 +15,7 @@ use core::ffi::c_void;
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     BatchedOrmqrArgs, BatchedOrmqrDescriptor, BatchedOrmqrOp, BatchedOrmqrPlan, BatchedOrmqrSide,
-    BatchedQrArgs, BatchedQrDescriptor, BatchedQrPlan, Complex32, Complex64, ElementKind,
+    BatchedQrArgs, BatchedQrDescriptor, BatchedQrPlan, Complex64, Complex128, ElementKind,
     PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_sys::{
@@ -634,7 +634,7 @@ fn ormqr_batched_f64_left_t() {
 }
 
 // =============================================================================
-// Milestone 6.18 — Right-side (real) and complex (Complex32 / Complex64)
+// Milestone 6.18 — Right-side (real) and complex (Complex64 / Complex128)
 // extensions. The Right-side path needs a square `[B, N, N]` packed input
 // (Q is N × N); we obtain it by feeding BatchedQrPlan an `[B, N, N]`
 // input matrix. The complex path can't use BatchedQrPlan (which is
@@ -644,102 +644,28 @@ fn ormqr_batched_f64_left_t() {
 
 // ----- Complex deterministic input builders ----------------------------------
 
-fn build_matrix_complex32(b: usize, m: usize, n: usize, seed: u32) -> Vec<Complex32> {
+fn build_matrix_complex32(b: usize, m: usize, n: usize, seed: u32) -> Vec<Complex64> {
     let mut out = Vec::with_capacity(b * m * n);
     // Seed real and imaginary halves with two LCG streams so the data is
     // genuinely complex (non-zero imaginary part).
     let real = build_matrix_f32(b, m, n, seed);
     let imag = build_matrix_f32(b, m, n, seed.wrapping_add(0x5151_5151));
     for (r, i) in real.into_iter().zip(imag.into_iter()) {
-        out.push(Complex32::new(r, i));
+        out.push(Complex64::new(r, i));
     }
     out
 }
 
-fn build_matrix_complex64(b: usize, m: usize, n: usize, seed: u32) -> Vec<Complex64> {
+fn build_matrix_complex64(b: usize, m: usize, n: usize, seed: u32) -> Vec<Complex128> {
     build_matrix_complex32(b, m, n, seed)
         .into_iter()
-        .map(|z| Complex64::new(z.re as f64, z.im as f64))
+        .map(|z| Complex128::new(z.re as f64, z.im as f64))
         .collect()
 }
 
 // ----- Per-slot complex QR via cusolverDn{C,Z}geqrf --------------------------
 
 fn run_cusolver_geqrf_per_slot_complex32(
-    ctx: &Context,
-    stream: &Stream,
-    a_host: &[Complex32],
-    b: i32,
-    m: i32,
-    n: i32,
-) -> (Vec<Complex32>, Vec<Complex32>) {
-    let stream_ptr = stream.as_raw() as *mut c_void;
-    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-    assert_eq!(s, 0);
-    let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
-    assert_eq!(s, 0);
-
-    let k = m.min(n);
-    let mu = m as usize;
-    let nu = n as usize;
-    let ku = k as usize;
-    let mut a_packed = vec![Complex32::new(0.0, 0.0); (b * m * n) as usize];
-    let mut tau = vec![Complex32::new(0.0, 0.0); (b * k) as usize];
-
-    for bi in 0..b as usize {
-        let mut dev_a_slot =
-            DeviceBuffer::from_slice(ctx, &a_host[bi * mu * nu..(bi + 1) * mu * nu])
-                .expect("upload slot a (cgeqrf)");
-        let mut dev_tau_slot: DeviceBuffer<Complex32> =
-            DeviceBuffer::zeros(ctx, ku).expect("alloc slot tau (cgeqrf)");
-        let mut lwork: i32 = 0;
-        let s = unsafe {
-            cusolverDnCgeqrf_bufferSize(
-                handle,
-                m,
-                n,
-                dev_a_slot.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
-                m,
-                &mut lwork as *mut _,
-            )
-        };
-        assert_eq!(s, 0);
-        let mut dev_work: DeviceBuffer<Complex32> =
-            DeviceBuffer::zeros(ctx, lwork.max(1) as usize).expect("alloc work cgeqrf");
-        let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(ctx, 1).expect("alloc info");
-        let s = unsafe {
-            cusolverDnCgeqrf(
-                handle,
-                m,
-                n,
-                dev_a_slot.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
-                m,
-                dev_tau_slot.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
-                dev_work.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
-                lwork,
-                dev_info.as_slice_mut().as_raw().0 as *mut i32,
-            )
-        };
-        assert_eq!(s, 0);
-        stream.synchronize().expect("sync cgeqrf");
-        let mut info_host = vec![0i32; 1];
-        dev_info.copy_to_host(&mut info_host).expect("dl info");
-        assert_eq!(info_host[0], 0);
-        let mut a_out = vec![Complex32::new(0.0, 0.0); mu * nu];
-        dev_a_slot.copy_to_host(&mut a_out).expect("dl a");
-        a_packed[bi * mu * nu..(bi + 1) * mu * nu].copy_from_slice(&a_out);
-        let mut tau_out = vec![Complex32::new(0.0, 0.0); ku];
-        dev_tau_slot.copy_to_host(&mut tau_out).expect("dl tau");
-        tau[bi * ku..(bi + 1) * ku].copy_from_slice(&tau_out);
-    }
-    unsafe {
-        let _ = cusolverDnDestroy(handle);
-    }
-    (a_packed, tau)
-}
-
-fn run_cusolver_geqrf_per_slot_complex64(
     ctx: &Context,
     stream: &Stream,
     a_host: &[Complex64],
@@ -764,8 +690,82 @@ fn run_cusolver_geqrf_per_slot_complex64(
     for bi in 0..b as usize {
         let mut dev_a_slot =
             DeviceBuffer::from_slice(ctx, &a_host[bi * mu * nu..(bi + 1) * mu * nu])
-                .expect("upload slot a (zgeqrf)");
+                .expect("upload slot a (cgeqrf)");
         let mut dev_tau_slot: DeviceBuffer<Complex64> =
+            DeviceBuffer::zeros(ctx, ku).expect("alloc slot tau (cgeqrf)");
+        let mut lwork: i32 = 0;
+        let s = unsafe {
+            cusolverDnCgeqrf_bufferSize(
+                handle,
+                m,
+                n,
+                dev_a_slot.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
+                m,
+                &mut lwork as *mut _,
+            )
+        };
+        assert_eq!(s, 0);
+        let mut dev_work: DeviceBuffer<Complex64> =
+            DeviceBuffer::zeros(ctx, lwork.max(1) as usize).expect("alloc work cgeqrf");
+        let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(ctx, 1).expect("alloc info");
+        let s = unsafe {
+            cusolverDnCgeqrf(
+                handle,
+                m,
+                n,
+                dev_a_slot.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
+                m,
+                dev_tau_slot.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
+                dev_work.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
+                lwork,
+                dev_info.as_slice_mut().as_raw().0 as *mut i32,
+            )
+        };
+        assert_eq!(s, 0);
+        stream.synchronize().expect("sync cgeqrf");
+        let mut info_host = vec![0i32; 1];
+        dev_info.copy_to_host(&mut info_host).expect("dl info");
+        assert_eq!(info_host[0], 0);
+        let mut a_out = vec![Complex64::new(0.0, 0.0); mu * nu];
+        dev_a_slot.copy_to_host(&mut a_out).expect("dl a");
+        a_packed[bi * mu * nu..(bi + 1) * mu * nu].copy_from_slice(&a_out);
+        let mut tau_out = vec![Complex64::new(0.0, 0.0); ku];
+        dev_tau_slot.copy_to_host(&mut tau_out).expect("dl tau");
+        tau[bi * ku..(bi + 1) * ku].copy_from_slice(&tau_out);
+    }
+    unsafe {
+        let _ = cusolverDnDestroy(handle);
+    }
+    (a_packed, tau)
+}
+
+fn run_cusolver_geqrf_per_slot_complex64(
+    ctx: &Context,
+    stream: &Stream,
+    a_host: &[Complex128],
+    b: i32,
+    m: i32,
+    n: i32,
+) -> (Vec<Complex128>, Vec<Complex128>) {
+    let stream_ptr = stream.as_raw() as *mut c_void;
+    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
+    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
+    assert_eq!(s, 0);
+    let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
+    assert_eq!(s, 0);
+
+    let k = m.min(n);
+    let mu = m as usize;
+    let nu = n as usize;
+    let ku = k as usize;
+    let mut a_packed = vec![Complex128::new(0.0, 0.0); (b * m * n) as usize];
+    let mut tau = vec![Complex128::new(0.0, 0.0); (b * k) as usize];
+
+    for bi in 0..b as usize {
+        let mut dev_a_slot =
+            DeviceBuffer::from_slice(ctx, &a_host[bi * mu * nu..(bi + 1) * mu * nu])
+                .expect("upload slot a (zgeqrf)");
+        let mut dev_tau_slot: DeviceBuffer<Complex128> =
             DeviceBuffer::zeros(ctx, ku).expect("alloc slot tau (zgeqrf)");
         let mut lwork: i32 = 0;
         let s = unsafe {
@@ -779,7 +779,7 @@ fn run_cusolver_geqrf_per_slot_complex64(
             )
         };
         assert_eq!(s, 0);
-        let mut dev_work: DeviceBuffer<Complex64> =
+        let mut dev_work: DeviceBuffer<Complex128> =
             DeviceBuffer::zeros(ctx, lwork.max(1) as usize).expect("alloc work zgeqrf");
         let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(ctx, 1).expect("alloc info");
         let s = unsafe {
@@ -800,10 +800,10 @@ fn run_cusolver_geqrf_per_slot_complex64(
         let mut info_host = vec![0i32; 1];
         dev_info.copy_to_host(&mut info_host).expect("dl info");
         assert_eq!(info_host[0], 0);
-        let mut a_out = vec![Complex64::new(0.0, 0.0); mu * nu];
+        let mut a_out = vec![Complex128::new(0.0, 0.0); mu * nu];
         dev_a_slot.copy_to_host(&mut a_out).expect("dl a");
         a_packed[bi * mu * nu..(bi + 1) * mu * nu].copy_from_slice(&a_out);
-        let mut tau_out = vec![Complex64::new(0.0, 0.0); ku];
+        let mut tau_out = vec![Complex128::new(0.0, 0.0); ku];
         dev_tau_slot.copy_to_host(&mut tau_out).expect("dl tau");
         tau[bi * ku..(bi + 1) * ku].copy_from_slice(&tau_out);
     }
@@ -816,99 +816,6 @@ fn run_cusolver_geqrf_per_slot_complex64(
 // ----- Per-slot cuSOLVER unmqr reference (complex) ---------------------------
 
 fn cusolver_unmqr_per_slot_complex32(
-    ctx: &Context,
-    stream: &Stream,
-    a_packed: &[Complex32],
-    tau: &[Complex32],
-    c_init: &[Complex32],
-    b: i32,
-    m: i32,
-    n: i32,
-    k: i32,
-    side: BatchedOrmqrSide,
-    op: BatchedOrmqrOp,
-) -> Vec<Complex32> {
-    let stream_ptr = stream.as_raw() as *mut c_void;
-    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
-    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
-    assert_eq!(s, 0);
-    let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
-    assert_eq!(s, 0);
-
-    let mu = m as usize;
-    let nu = n as usize;
-    let ku = k as usize;
-    let (side_flag, a_slot_elems, lda) = match side {
-        BatchedOrmqrSide::Left => (CUBLAS_SIDE_LEFT, mu * ku, m),
-        BatchedOrmqrSide::Right => (CUBLAS_SIDE_RIGHT, nu * nu, n),
-    };
-    let trans = op_to_cublas(op);
-    let mut c_post = vec![Complex32::new(0.0, 0.0); (b * m * n) as usize];
-
-    for bi in 0..b as usize {
-        let dev_a_slot =
-            DeviceBuffer::from_slice(ctx, &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems])
-                .expect("upload slot a (cunmqr)");
-        let dev_tau_slot =
-            DeviceBuffer::from_slice(ctx, &tau[bi * ku..(bi + 1) * ku]).expect("upload slot tau");
-        let mut dev_c_slot =
-            DeviceBuffer::from_slice(ctx, &c_init[bi * mu * nu..(bi + 1) * mu * nu])
-                .expect("upload slot c");
-        let mut lwork: i32 = 0;
-        let s = unsafe {
-            cusolverDnCunmqr_bufferSize(
-                handle,
-                side_flag,
-                trans,
-                m,
-                n,
-                k,
-                dev_a_slot.as_slice().as_raw().0 as *const cuFloatComplex,
-                lda,
-                dev_tau_slot.as_slice().as_raw().0 as *const cuFloatComplex,
-                dev_c_slot.as_slice().as_raw().0 as *const cuFloatComplex,
-                m,
-                &mut lwork as *mut _,
-            )
-        };
-        assert_eq!(s, 0);
-        let mut dev_work: DeviceBuffer<Complex32> =
-            DeviceBuffer::zeros(ctx, lwork.max(1) as usize).expect("alloc work cunmqr");
-        let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(ctx, 1).expect("alloc info");
-        let s = unsafe {
-            cusolverDnCunmqr(
-                handle,
-                side_flag,
-                trans,
-                m,
-                n,
-                k,
-                dev_a_slot.as_slice().as_raw().0 as *const cuFloatComplex,
-                lda,
-                dev_tau_slot.as_slice().as_raw().0 as *const cuFloatComplex,
-                dev_c_slot.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
-                m,
-                dev_work.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
-                lwork,
-                dev_info.as_slice_mut().as_raw().0 as *mut i32,
-            )
-        };
-        assert_eq!(s, 0);
-        stream.synchronize().expect("sync cunmqr");
-        let mut info_host = vec![0i32; 1];
-        dev_info.copy_to_host(&mut info_host).expect("dl info");
-        assert_eq!(info_host[0], 0);
-        let mut slot_out = vec![Complex32::new(0.0, 0.0); mu * nu];
-        dev_c_slot.copy_to_host(&mut slot_out).expect("dl slot c");
-        c_post[bi * mu * nu..(bi + 1) * mu * nu].copy_from_slice(&slot_out);
-    }
-    unsafe {
-        let _ = cusolverDnDestroy(handle);
-    }
-    c_post
-}
-
-fn cusolver_unmqr_per_slot_complex64(
     ctx: &Context,
     stream: &Stream,
     a_packed: &[Complex64],
@@ -941,6 +848,99 @@ fn cusolver_unmqr_per_slot_complex64(
     for bi in 0..b as usize {
         let dev_a_slot =
             DeviceBuffer::from_slice(ctx, &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems])
+                .expect("upload slot a (cunmqr)");
+        let dev_tau_slot =
+            DeviceBuffer::from_slice(ctx, &tau[bi * ku..(bi + 1) * ku]).expect("upload slot tau");
+        let mut dev_c_slot =
+            DeviceBuffer::from_slice(ctx, &c_init[bi * mu * nu..(bi + 1) * mu * nu])
+                .expect("upload slot c");
+        let mut lwork: i32 = 0;
+        let s = unsafe {
+            cusolverDnCunmqr_bufferSize(
+                handle,
+                side_flag,
+                trans,
+                m,
+                n,
+                k,
+                dev_a_slot.as_slice().as_raw().0 as *const cuFloatComplex,
+                lda,
+                dev_tau_slot.as_slice().as_raw().0 as *const cuFloatComplex,
+                dev_c_slot.as_slice().as_raw().0 as *const cuFloatComplex,
+                m,
+                &mut lwork as *mut _,
+            )
+        };
+        assert_eq!(s, 0);
+        let mut dev_work: DeviceBuffer<Complex64> =
+            DeviceBuffer::zeros(ctx, lwork.max(1) as usize).expect("alloc work cunmqr");
+        let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(ctx, 1).expect("alloc info");
+        let s = unsafe {
+            cusolverDnCunmqr(
+                handle,
+                side_flag,
+                trans,
+                m,
+                n,
+                k,
+                dev_a_slot.as_slice().as_raw().0 as *const cuFloatComplex,
+                lda,
+                dev_tau_slot.as_slice().as_raw().0 as *const cuFloatComplex,
+                dev_c_slot.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
+                m,
+                dev_work.as_slice_mut().as_raw().0 as *mut cuFloatComplex,
+                lwork,
+                dev_info.as_slice_mut().as_raw().0 as *mut i32,
+            )
+        };
+        assert_eq!(s, 0);
+        stream.synchronize().expect("sync cunmqr");
+        let mut info_host = vec![0i32; 1];
+        dev_info.copy_to_host(&mut info_host).expect("dl info");
+        assert_eq!(info_host[0], 0);
+        let mut slot_out = vec![Complex64::new(0.0, 0.0); mu * nu];
+        dev_c_slot.copy_to_host(&mut slot_out).expect("dl slot c");
+        c_post[bi * mu * nu..(bi + 1) * mu * nu].copy_from_slice(&slot_out);
+    }
+    unsafe {
+        let _ = cusolverDnDestroy(handle);
+    }
+    c_post
+}
+
+fn cusolver_unmqr_per_slot_complex64(
+    ctx: &Context,
+    stream: &Stream,
+    a_packed: &[Complex128],
+    tau: &[Complex128],
+    c_init: &[Complex128],
+    b: i32,
+    m: i32,
+    n: i32,
+    k: i32,
+    side: BatchedOrmqrSide,
+    op: BatchedOrmqrOp,
+) -> Vec<Complex128> {
+    let stream_ptr = stream.as_raw() as *mut c_void;
+    let mut handle: cusolverDnHandle_t = core::ptr::null_mut();
+    let s = unsafe { cusolverDnCreate(&mut handle as *mut _) };
+    assert_eq!(s, 0);
+    let s = unsafe { cusolverDnSetStream(handle, stream_ptr) };
+    assert_eq!(s, 0);
+
+    let mu = m as usize;
+    let nu = n as usize;
+    let ku = k as usize;
+    let (side_flag, a_slot_elems, lda) = match side {
+        BatchedOrmqrSide::Left => (CUBLAS_SIDE_LEFT, mu * ku, m),
+        BatchedOrmqrSide::Right => (CUBLAS_SIDE_RIGHT, nu * nu, n),
+    };
+    let trans = op_to_cublas(op);
+    let mut c_post = vec![Complex128::new(0.0, 0.0); (b * m * n) as usize];
+
+    for bi in 0..b as usize {
+        let dev_a_slot =
+            DeviceBuffer::from_slice(ctx, &a_packed[bi * a_slot_elems..(bi + 1) * a_slot_elems])
                 .expect("upload slot a (zunmqr)");
         let dev_tau_slot =
             DeviceBuffer::from_slice(ctx, &tau[bi * ku..(bi + 1) * ku]).expect("upload slot tau");
@@ -965,7 +965,7 @@ fn cusolver_unmqr_per_slot_complex64(
             )
         };
         assert_eq!(s, 0);
-        let mut dev_work: DeviceBuffer<Complex64> =
+        let mut dev_work: DeviceBuffer<Complex128> =
             DeviceBuffer::zeros(ctx, lwork.max(1) as usize).expect("alloc work zunmqr");
         let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(ctx, 1).expect("alloc info");
         let s = unsafe {
@@ -991,7 +991,7 @@ fn cusolver_unmqr_per_slot_complex64(
         let mut info_host = vec![0i32; 1];
         dev_info.copy_to_host(&mut info_host).expect("dl info");
         assert_eq!(info_host[0], 0);
-        let mut slot_out = vec![Complex64::new(0.0, 0.0); mu * nu];
+        let mut slot_out = vec![Complex128::new(0.0, 0.0); mu * nu];
         dev_c_slot.copy_to_host(&mut slot_out).expect("dl slot c");
         c_post[bi * mu * nu..(bi + 1) * mu * nu].copy_from_slice(&slot_out);
     }
@@ -1004,63 +1004,6 @@ fn cusolver_unmqr_per_slot_complex64(
 // ----- Bespoke kernel wrappers (complex) -------------------------------------
 
 fn bespoke_ormqr_complex32(
-    ctx: &Context,
-    stream: &Stream,
-    a_packed: &[Complex32],
-    tau: &[Complex32],
-    c_init: &[Complex32],
-    b: i32,
-    m: i32,
-    n: i32,
-    k: i32,
-    side: BatchedOrmqrSide,
-    op: BatchedOrmqrOp,
-) -> Vec<Complex32> {
-    let dev_a = DeviceBuffer::from_slice(ctx, a_packed).expect("upload a");
-    let dev_tau = DeviceBuffer::from_slice(ctx, tau).expect("upload tau");
-    let mut dev_c = DeviceBuffer::from_slice(ctx, c_init).expect("upload c");
-
-    let desc = BatchedOrmqrDescriptor {
-        m,
-        n,
-        k,
-        batch_size: b,
-        side,
-        op,
-        element: ElementKind::Complex32,
-    };
-    let plan = BatchedOrmqrPlan::<Complex32>::select(stream, &desc, PlanPreference::default())
-        .expect("select BatchedOrmqrPlan<Complex32>");
-    let a_shape = match side {
-        BatchedOrmqrSide::Left => [b, m, k],
-        BatchedOrmqrSide::Right => [b, n, n],
-    };
-    let args = BatchedOrmqrArgs::<Complex32> {
-        a_packed: TensorRef {
-            data: dev_a.as_slice(),
-            shape: a_shape,
-            stride: contiguous_stride(a_shape),
-        },
-        tau: TensorRef {
-            data: dev_tau.as_slice(),
-            shape: [b, k],
-            stride: contiguous_stride([b, k]),
-        },
-        c: TensorMut {
-            data: dev_c.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
-    };
-    plan.run(stream, Workspace::None, args)
-        .expect("run bespoke batched unmqr complex32");
-    stream.synchronize().expect("sync");
-    let mut c_post = vec![Complex32::new(0.0, 0.0); (b * m * n) as usize];
-    dev_c.copy_to_host(&mut c_post).expect("dl c-post");
-    c_post
-}
-
-fn bespoke_ormqr_complex64(
     ctx: &Context,
     stream: &Stream,
     a_packed: &[Complex64],
@@ -1110,14 +1053,71 @@ fn bespoke_ormqr_complex64(
         },
     };
     plan.run(stream, Workspace::None, args)
-        .expect("run bespoke batched unmqr complex64");
+        .expect("run bespoke batched unmqr complex32");
     stream.synchronize().expect("sync");
     let mut c_post = vec![Complex64::new(0.0, 0.0); (b * m * n) as usize];
     dev_c.copy_to_host(&mut c_post).expect("dl c-post");
     c_post
 }
 
-fn check_complex32(got: &[Complex32], expected: &[Complex32], tol: f32, label: &str) {
+fn bespoke_ormqr_complex64(
+    ctx: &Context,
+    stream: &Stream,
+    a_packed: &[Complex128],
+    tau: &[Complex128],
+    c_init: &[Complex128],
+    b: i32,
+    m: i32,
+    n: i32,
+    k: i32,
+    side: BatchedOrmqrSide,
+    op: BatchedOrmqrOp,
+) -> Vec<Complex128> {
+    let dev_a = DeviceBuffer::from_slice(ctx, a_packed).expect("upload a");
+    let dev_tau = DeviceBuffer::from_slice(ctx, tau).expect("upload tau");
+    let mut dev_c = DeviceBuffer::from_slice(ctx, c_init).expect("upload c");
+
+    let desc = BatchedOrmqrDescriptor {
+        m,
+        n,
+        k,
+        batch_size: b,
+        side,
+        op,
+        element: ElementKind::Complex128,
+    };
+    let plan = BatchedOrmqrPlan::<Complex128>::select(stream, &desc, PlanPreference::default())
+        .expect("select BatchedOrmqrPlan<Complex128>");
+    let a_shape = match side {
+        BatchedOrmqrSide::Left => [b, m, k],
+        BatchedOrmqrSide::Right => [b, n, n],
+    };
+    let args = BatchedOrmqrArgs::<Complex128> {
+        a_packed: TensorRef {
+            data: dev_a.as_slice(),
+            shape: a_shape,
+            stride: contiguous_stride(a_shape),
+        },
+        tau: TensorRef {
+            data: dev_tau.as_slice(),
+            shape: [b, k],
+            stride: contiguous_stride([b, k]),
+        },
+        c: TensorMut {
+            data: dev_c.as_slice_mut(),
+            shape: [b, m, n],
+            stride: contiguous_stride([b, m, n]),
+        },
+    };
+    plan.run(stream, Workspace::None, args)
+        .expect("run bespoke batched unmqr complex64");
+    stream.synchronize().expect("sync");
+    let mut c_post = vec![Complex128::new(0.0, 0.0); (b * m * n) as usize];
+    dev_c.copy_to_host(&mut c_post).expect("dl c-post");
+    c_post
+}
+
+fn check_complex32(got: &[Complex64], expected: &[Complex64], tol: f32, label: &str) {
     assert_eq!(got.len(), expected.len(), "{label}: length mismatch");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff_re = (g.re - e.re).abs();
@@ -1133,7 +1133,7 @@ fn check_complex32(got: &[Complex32], expected: &[Complex32], tol: f32, label: &
     }
 }
 
-fn check_complex64(got: &[Complex64], expected: &[Complex64], tol: f64, label: &str) {
+fn check_complex64(got: &[Complex128], expected: &[Complex128], tol: f64, label: &str) {
     assert_eq!(got.len(), expected.len(), "{label}: length mismatch");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let diff_re = (g.re - e.re).abs();
@@ -1304,7 +1304,7 @@ fn ormqr_batched_complex32_left_n() {
         &bespoke,
         &reference,
         tol,
-        &format!("Complex32 unmqr_batched side=Left op={}", fmt_op(op)),
+        &format!("Complex64 unmqr_batched side=Left op={}", fmt_op(op)),
     );
 }
 
@@ -1333,7 +1333,7 @@ fn ormqr_batched_complex32_left_c() {
         &bespoke,
         &reference,
         tol,
-        &format!("Complex32 unmqr_batched side=Left op={}", fmt_op(op)),
+        &format!("Complex64 unmqr_batched side=Left op={}", fmt_op(op)),
     );
 }
 
@@ -1362,7 +1362,7 @@ fn ormqr_batched_complex64_left_n() {
         &bespoke,
         &reference,
         tol,
-        &format!("Complex64 unmqr_batched side=Left op={}", fmt_op(op)),
+        &format!("Complex128 unmqr_batched side=Left op={}", fmt_op(op)),
     );
 }
 
@@ -1391,7 +1391,7 @@ fn ormqr_batched_complex64_left_c() {
         &bespoke,
         &reference,
         tol,
-        &format!("Complex64 unmqr_batched side=Left op={}", fmt_op(op)),
+        &format!("Complex128 unmqr_batched side=Left op={}", fmt_op(op)),
     );
 }
 
@@ -1424,7 +1424,7 @@ fn ormqr_batched_complex32_right_n() {
         &bespoke,
         &reference,
         tol,
-        &format!("Complex32 unmqr_batched side=Right op={}", fmt_op(op)),
+        &format!("Complex64 unmqr_batched side=Right op={}", fmt_op(op)),
     );
 }
 
@@ -1453,7 +1453,7 @@ fn ormqr_batched_complex32_right_c() {
         &bespoke,
         &reference,
         tol,
-        &format!("Complex32 unmqr_batched side=Right op={}", fmt_op(op)),
+        &format!("Complex64 unmqr_batched side=Right op={}", fmt_op(op)),
     );
 }
 
@@ -1482,7 +1482,7 @@ fn ormqr_batched_complex64_right_n() {
         &bespoke,
         &reference,
         tol,
-        &format!("Complex64 unmqr_batched side=Right op={}", fmt_op(op)),
+        &format!("Complex128 unmqr_batched side=Right op={}", fmt_op(op)),
     );
 }
 
@@ -1511,6 +1511,6 @@ fn ormqr_batched_complex64_right_c() {
         &bespoke,
         &reference,
         tol,
-        &format!("Complex64 unmqr_batched side=Right op={}", fmt_op(op)),
+        &format!("Complex128 unmqr_batched side=Right op={}", fmt_op(op)),
     );
 }

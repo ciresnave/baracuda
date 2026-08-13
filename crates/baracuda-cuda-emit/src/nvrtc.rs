@@ -81,6 +81,7 @@ fn arch_flag(arch: ArchSku) -> &'static str {
     match arch {
         ArchSku::Sm80 => "sm_80",
         ArchSku::Sm89 => "sm_89",
+        ArchSku::Sm90 => "sm_90",
         ArchSku::Sm90a => "sm_90a",
     }
 }

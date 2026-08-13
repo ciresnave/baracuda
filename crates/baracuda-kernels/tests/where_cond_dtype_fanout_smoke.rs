@@ -8,7 +8,7 @@
 //!   - (b) U8 / U32 / I64 cond × {u8, i8, u32, i16, i32, i64} — at
 //!         least one contig per cond dtype (mixed value coverage), plus
 //!         one strided case per cond dtype.
-//!   - (c) U8-cond × Fp8E4M3 — single contig (treated as raw u8 bytes).
+//!   - (c) U8-cond × Fp8E4M3FN — single contig (treated as raw u8 bytes).
 //!
 //! Validation is bit-exact against a Rust CPU reference because the op
 //! is pure element selection — no arithmetic. The reference is
@@ -702,7 +702,7 @@ fn ffi_where_i64cond_f32_strided_per_row_mask() {
 }
 
 // ----------------------------------------------------------------------------
-// (c) Fp8E4M3 — 1-byte storage, treated as raw u8
+// (c) Fp8E4M3FN — 1-byte storage, treated as raw u8
 // ----------------------------------------------------------------------------
 
 #[test]
@@ -710,7 +710,7 @@ fn ffi_where_i64cond_f32_strided_per_row_mask() {
 fn ffi_where_u8cond_fp8e4m3_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 1024;
-    // Use raw u8 host buffers — Fp8E4M3 is just a byte at the FFI level.
+    // Use raw u8 host buffers — Fp8E4M3FN is just a byte at the FFI level.
     let host_cond: Vec<u8> = (0..n).map(|i| (i % 2) as u8).collect();
     let host_a: Vec<u8> = (0..n).map(|i| (i as u8).wrapping_mul(11)).collect();
     let host_b: Vec<u8> = (0..n).map(|i| (i as u8).wrapping_add(99)).collect();

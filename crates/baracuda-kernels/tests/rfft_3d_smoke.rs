@@ -7,8 +7,8 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    Complex32, Complex64, ElementKind, IrfftNdArgs, IrfftNdDescriptor, IrfftNdPlan, PlanPreference,
-    RfftNdArgs, RfftNdDescriptor, RfftNdPlan, Workspace,
+    Complex64, Complex128, ElementKind, IrfftNdArgs, IrfftNdDescriptor, IrfftNdPlan,
+    PlanPreference, RfftNdArgs, RfftNdDescriptor, RfftNdPlan, Workspace,
 };
 
 const D: i32 = 4;
@@ -47,7 +47,7 @@ fn rfft3_irfft3_roundtrip_f32() {
     }
 
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex32> =
+    let mut dev_y: DeviceBuffer<Complex64> =
         DeviceBuffer::zeros(&ctx, total_complex).expect("alloc y");
     let mut dev_xr: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
@@ -60,7 +60,7 @@ fn rfft3_irfft3_roundtrip_f32() {
     let fwd_plan = RfftNdPlan::<f32>::select(&stream, &fwd_desc, PlanPreference::default())
         .expect("select rfft3");
     {
-        let args = RfftNdArgs::<f32, Complex32> {
+        let args = RfftNdArgs::<f32, Complex64> {
             x: dev_x.as_slice(),
             y: dev_y.as_slice_mut(),
         };
@@ -78,7 +78,7 @@ fn rfft3_irfft3_roundtrip_f32() {
     let inv_plan = IrfftNdPlan::<f32>::select(&stream, &inv_desc, PlanPreference::default())
         .expect("select irfft3");
     {
-        let args = IrfftNdArgs::<f32, Complex32> {
+        let args = IrfftNdArgs::<f32, Complex64> {
             x: dev_y.as_slice(),
             y: dev_xr.as_slice_mut(),
         };
@@ -121,7 +121,7 @@ fn rfft3_irfft3_roundtrip_f64() {
     }
 
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex64> =
+    let mut dev_y: DeviceBuffer<Complex128> =
         DeviceBuffer::zeros(&ctx, total_complex).expect("alloc y");
     let mut dev_xr: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
@@ -134,7 +134,7 @@ fn rfft3_irfft3_roundtrip_f64() {
     let fwd_plan = RfftNdPlan::<f64>::select(&stream, &fwd_desc, PlanPreference::default())
         .expect("select rfft3 f64");
     {
-        let args = RfftNdArgs::<f64, Complex64> {
+        let args = RfftNdArgs::<f64, Complex128> {
             x: dev_x.as_slice(),
             y: dev_y.as_slice_mut(),
         };
@@ -152,7 +152,7 @@ fn rfft3_irfft3_roundtrip_f64() {
     let inv_plan = IrfftNdPlan::<f64>::select(&stream, &inv_desc, PlanPreference::default())
         .expect("select irfft3 f64");
     {
-        let args = IrfftNdArgs::<f64, Complex64> {
+        let args = IrfftNdArgs::<f64, Complex128> {
             x: dev_y.as_slice(),
             y: dev_xr.as_slice_mut(),
         };

@@ -3,7 +3,7 @@
 //! cuFFT has no native shift, so these are hand-rolled kernels in
 //! `baracuda-kernels-sys`. The kernel is element-width-generic (4 / 8
 //! / 16-byte cells) so the same code covers `f32`, `f64`,
-//! [`Complex32`], and [`Complex64`] without per-type templating —
+//! [`Complex64`], and [`Complex128`] without per-type templating —
 //! shift is a pure index permutation (no arithmetic on the element
 //! values), so the element type is irrelevant beyond its byte width.
 //!
@@ -79,7 +79,7 @@ pub struct FftShiftArgs<'a, T: Element> {
 ///
 /// **Dtypes**: any [`Element`] — kernel dispatches on
 /// `size_of::<T>()` (4 / 8 / 16-byte cells), so `f32`, `f64`,
-/// `Complex32`, `Complex64` all work without per-type templating.
+/// `Complex64`, `Complex128` all work without per-type templating.
 ///
 /// **Shape**: `[batch, n]`. Out-of-place only (in-place shift would
 /// need a 2-phase swap).
@@ -111,7 +111,7 @@ impl<T: Element> FftShiftPlan<T> {
         }
         // Kernel handles cells of 4, 8, or 16 bytes — any baracuda
         // [`Element`] with one of those widths is supported. Today
-        // that's f32 / f64 / Complex32 / Complex64; rejecting the
+        // that's f32 / f64 / Complex64 / Complex128; rejecting the
         // others up front keeps the supported set narrow and obvious.
         let size = core::mem::size_of::<T>();
         if !matches!(size, 4 | 8 | 16) {
@@ -131,7 +131,7 @@ impl<T: Element> FftShiftPlan<T> {
         }
 
         let math_precision = match T::KIND {
-            ElementKind::F64 | ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::F64 | ElementKind::Complex128 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {

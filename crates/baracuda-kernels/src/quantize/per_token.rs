@@ -179,7 +179,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTokenPlan<TIn, TOut> {
         let stream_ptr = stream.as_raw();
 
         let status = match (TIn::KIND, TOut::KIND) {
-            (ElementKind::F32, ElementKind::S8) => unsafe {
+            (ElementKind::F32, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_token_f32_s8_run(
                     self.desc.n,
                     self.desc.d,
@@ -209,7 +209,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTokenPlan<TIn, TOut> {
                     stream_ptr,
                 )
             },
-            (ElementKind::F64, ElementKind::S8) => unsafe {
+            (ElementKind::F64, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_token_f64_s8_run(
                     self.desc.n,
                     self.desc.d,
@@ -239,7 +239,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTokenPlan<TIn, TOut> {
                     stream_ptr,
                 )
             },
-            (ElementKind::F16, ElementKind::S8) => unsafe {
+            (ElementKind::F16, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_token_f16_s8_run(
                     self.desc.n,
                     self.desc.d,
@@ -269,7 +269,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTokenPlan<TIn, TOut> {
                     stream_ptr,
                 )
             },
-            (ElementKind::Bf16, ElementKind::S8) => unsafe {
+            (ElementKind::Bf16, ElementKind::I8) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_quantize_per_token_bf16_s8_run(
                     self.desc.n,
                     self.desc.d,

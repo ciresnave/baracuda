@@ -305,7 +305,7 @@ impl GemmSku {
             ElementKind::F32 => MathPrecision::Tf32,
             ElementKind::F32Strict => MathPrecision::F32,
             ElementKind::F64 => MathPrecision::F64,
-            ElementKind::S8 | ElementKind::U8 => MathPrecision::Int8,
+            ElementKind::I8 | ElementKind::U8 => MathPrecision::Int8,
             // `I32` is an accumulator-only kind, never a kernel input
             // element. A `GemmSku` constructed with `element = I32` is
             // a programming error; report Int8 math precision (the
@@ -323,20 +323,32 @@ impl GemmSku {
             // `element = U32` is a programming error; defensive Int8 placeholder
             // (same class as the I32/I64 defensive arms above).
             ElementKind::U32 => MathPrecision::Int8,
+            // Storage-only integers (`I16` / `U16` / `U64`) and the reserved MX
+            // scale / FP8-fnuz kinds (`F8E8M0` / `F8E6M2` / `Fp8E4M3FNUZ` /
+            // `Fp8E5M2FNUZ`) are never CUTLASS GEMM elements — no SKU consumes
+            // them. Defensive Int8 placeholder, same class as the I32/I64/U32
+            // arms above (a `GemmSku` built with these is a programming error).
+            ElementKind::I16
+            | ElementKind::U16
+            | ElementKind::U64
+            | ElementKind::F8E8M0
+            | ElementKind::F8E6M2
+            | ElementKind::Fp8E4M3FNUZ
+            | ElementKind::Fp8E5M2FNUZ => MathPrecision::Int8,
             // FP8 kernels live in baracuda-kernels-sys, not baracuda-cutlass.
             // No CUTLASS SKU produces these element kinds; defensive arm.
-            ElementKind::Fp8E4M3 => MathPrecision::Fp8E4M3,
+            ElementKind::Fp8E4M3FN => MathPrecision::Fp8E4M3FN,
             ElementKind::Fp8E5M2 => MathPrecision::Fp8E5M2,
             // Int4 kernels (S4 / U4) live in baracuda-kernels-sys, not
             // baracuda-cutlass. Defensive arm.
-            ElementKind::S4 | ElementKind::U4 => MathPrecision::Int4,
+            ElementKind::I4 | ElementKind::U4 => MathPrecision::Int4,
             // Binary (Bin) GEMM lives in baracuda-kernels-sys. Defensive arm.
-            ElementKind::Bin => MathPrecision::Binary,
-            // Complex32 / Complex64 are FFT-family element types — no
+            ElementKind::B1 => MathPrecision::Binary,
+            // Complex64 / Complex128 are FFT-family element types — no
             // CUTLASS GEMM SKU consumes them. Report the matching float
             // math precision as a defensive fallback.
-            ElementKind::Complex32 => MathPrecision::F32,
-            ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::Complex64 => MathPrecision::F32,
+            ElementKind::Complex128 => MathPrecision::F64,
         };
         // F32Strict (SIMT CUDA cores) and int8 (integer tensor cores)
         // are bit-stable on the same hardware. Float tensor-core
@@ -345,19 +357,19 @@ impl GemmSku {
         let bit_stable_on_same_hardware = matches!(
             self.element,
             ElementKind::F32Strict
-                | ElementKind::S8
+                | ElementKind::I8
                 | ElementKind::U8
-                | ElementKind::S4
+                | ElementKind::I4
                 | ElementKind::U4
-                | ElementKind::Bin,
+                | ElementKind::B1,
         );
         let accumulator = match self.element {
             ElementKind::F64 => ElementKind::F64,
-            ElementKind::S8
+            ElementKind::I8
             | ElementKind::U8
-            | ElementKind::S4
+            | ElementKind::I4
             | ElementKind::U4
-            | ElementKind::Bin => ElementKind::I32,
+            | ElementKind::B1 => ElementKind::I32,
             _ => ElementKind::F32,
         };
         PrecisionGuarantee {

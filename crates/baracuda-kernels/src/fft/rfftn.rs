@@ -33,7 +33,7 @@ use baracuda_kernels_sys::{
     cufftSetStream,
 };
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FftKind, KernelSku,
+    ArchSku, BackendKind, Complex64, Complex128, Element, ElementKind, FftKind, KernelSku,
     MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, Workspace,
 };
 
@@ -111,7 +111,7 @@ pub struct RfftNdArgs<'a, T: Element, C: Element> {
 /// **When to use**: ND forward FFT of real-valued data. Permute to
 /// move transform axes into the trailing suffix if needed.
 ///
-/// **Dtypes**: `f32` → `Complex32`; `f64` → `Complex64`.
+/// **Dtypes**: `f32` → `Complex64`; `f64` → `Complex128`.
 ///
 /// **Shape**: real-side `batch * product(dims[..rank])`; complex-side
 /// `batch * product(dims[..rank-1]) * (dims[rank-1]/2 + 1)`. Rank in
@@ -172,8 +172,8 @@ impl<T: Element> RfftNdPlan<T> {
             _ => MathPrecision::F32,
         };
         let aux = match T::KIND {
-            ElementKind::F32 => Some(ElementKind::Complex32),
-            ElementKind::F64 => Some(ElementKind::Complex64),
+            ElementKind::F32 => Some(ElementKind::Complex64),
+            ElementKind::F64 => Some(ElementKind::Complex128),
             _ => None,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -274,7 +274,7 @@ impl RfftNdPlan<f32> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: RfftNdArgs<'_, f32, Complex32>,
+        args: RfftNdArgs<'_, f32, Complex64>,
     ) -> Result<()> {
         let real_total = self
             .desc
@@ -319,7 +319,7 @@ impl RfftNdPlan<f64> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: RfftNdArgs<'_, f64, Complex64>,
+        args: RfftNdArgs<'_, f64, Complex128>,
     ) -> Result<()> {
         let real_total = self
             .desc
@@ -437,7 +437,7 @@ pub struct IrfftNdArgs<'a, T: Element, C: Element> {
 ///
 /// **When to use**: ND inverse FFT producing real-valued data.
 ///
-/// **Dtypes**: `Complex32` → `f32`; `Complex64` → `f64`.
+/// **Dtypes**: `Complex64` → `f32`; `Complex128` → `f64`.
 ///
 /// **Shape**: complex-side `batch * product(dims[..rank-1]) *
 /// (dims[rank-1]/2 + 1)`; real-side `batch * product(dims[..rank])`.
@@ -498,8 +498,8 @@ impl<T: Element> IrfftNdPlan<T> {
             _ => MathPrecision::F32,
         };
         let aux = match T::KIND {
-            ElementKind::F32 => Some(ElementKind::Complex32),
-            ElementKind::F64 => Some(ElementKind::Complex64),
+            ElementKind::F32 => Some(ElementKind::Complex64),
+            ElementKind::F64 => Some(ElementKind::Complex128),
             _ => None,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -601,7 +601,7 @@ impl IrfftNdPlan<f32> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: IrfftNdArgs<'_, f32, Complex32>,
+        args: IrfftNdArgs<'_, f32, Complex64>,
     ) -> Result<()> {
         let real_total = self
             .desc
@@ -660,7 +660,7 @@ impl IrfftNdPlan<f64> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: IrfftNdArgs<'_, f64, Complex64>,
+        args: IrfftNdArgs<'_, f64, Complex128>,
     ) -> Result<()> {
         let real_total = self
             .desc

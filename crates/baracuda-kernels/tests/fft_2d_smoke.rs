@@ -14,7 +14,7 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    Complex32, Complex64, ElementKind, FftNdArgs, FftNdDescriptor, FftNdPlan, PlanPreference,
+    Complex64, Complex128, ElementKind, FftNdArgs, FftNdDescriptor, FftNdPlan, PlanPreference,
     Workspace,
 };
 
@@ -37,12 +37,12 @@ fn fft2_ifft2_roundtrip_complex32() {
 
     let per = (H * W) as usize;
     let total = (BATCH as usize) * per;
-    let mut x_host = vec![Complex32::default(); total];
+    let mut x_host = vec![Complex64::default(); total];
     for b in 0..BATCH as usize {
         for i in 0..H as usize {
             for j in 0..W as usize {
                 let idx = b * per + i * W as usize + j;
-                x_host[idx] = Complex32::new(
+                x_host[idx] = Complex64::new(
                     (i as f32) + 0.25 * (j as f32) + 0.5 * (b as f32),
                     -(j as f32),
                 );
@@ -50,10 +50,10 @@ fn fft2_ifft2_roundtrip_complex32() {
         }
     }
 
-    let mut dev_x: DeviceBuffer<Complex32> =
+    let mut dev_x: DeviceBuffer<Complex64> =
         DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
+    let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_xr: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
 
     // Forward FFT2 — x → y.
     let fwd_desc = FftNdDescriptor {
@@ -61,12 +61,12 @@ fn fft2_ifft2_roundtrip_complex32() {
         rank: 2,
         batch: BATCH,
         inverse: false,
-        element: ElementKind::Complex32,
+        element: ElementKind::Complex64,
     };
-    let fwd_plan = FftNdPlan::<Complex32>::select(&stream, &fwd_desc, PlanPreference::default())
+    let fwd_plan = FftNdPlan::<Complex64>::select(&stream, &fwd_desc, PlanPreference::default())
         .expect("select fwd plan");
     {
-        let args = FftNdArgs::<Complex32> {
+        let args = FftNdArgs::<Complex64> {
             x: dev_x.as_slice(),
             y: dev_y.as_slice_mut(),
         };
@@ -81,12 +81,12 @@ fn fft2_ifft2_roundtrip_complex32() {
         rank: 2,
         batch: BATCH,
         inverse: true,
-        element: ElementKind::Complex32,
+        element: ElementKind::Complex64,
     };
-    let inv_plan = FftNdPlan::<Complex32>::select(&stream, &inv_desc, PlanPreference::default())
+    let inv_plan = FftNdPlan::<Complex64>::select(&stream, &inv_desc, PlanPreference::default())
         .expect("select inv plan");
     {
-        let args = FftNdArgs::<Complex32> {
+        let args = FftNdArgs::<Complex64> {
             x: dev_y.as_slice(),
             y: dev_xr.as_slice_mut(),
         };
@@ -96,7 +96,7 @@ fn fft2_ifft2_roundtrip_complex32() {
     }
     stream.synchronize().expect("sync");
 
-    let mut got = vec![Complex32::default(); total];
+    let mut got = vec![Complex64::default(); total];
     dev_xr.copy_to_host(&mut got).expect("download");
 
     for (idx, (got, want)) in got.iter().zip(x_host.iter()).enumerate() {
@@ -120,12 +120,12 @@ fn fft2_ifft2_roundtrip_complex64() {
 
     let per = (H * W) as usize;
     let total = (BATCH as usize) * per;
-    let mut x_host = vec![Complex64::default(); total];
+    let mut x_host = vec![Complex128::default(); total];
     for b in 0..BATCH as usize {
         for i in 0..H as usize {
             for j in 0..W as usize {
                 let idx = b * per + i * W as usize + j;
-                x_host[idx] = Complex64::new(
+                x_host[idx] = Complex128::new(
                     (i as f64) + 0.25 * (j as f64) + 0.5 * (b as f64),
                     -(j as f64),
                 );
@@ -133,22 +133,22 @@ fn fft2_ifft2_roundtrip_complex64() {
         }
     }
 
-    let mut dev_x: DeviceBuffer<Complex64> =
+    let mut dev_x: DeviceBuffer<Complex128> =
         DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
-    let mut dev_xr: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
+    let mut dev_y: DeviceBuffer<Complex128> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_xr: DeviceBuffer<Complex128> = DeviceBuffer::zeros(&ctx, total).expect("alloc xr");
 
     let fwd_desc = FftNdDescriptor {
         dims: [H, W, 0, 0],
         rank: 2,
         batch: BATCH,
         inverse: false,
-        element: ElementKind::Complex64,
+        element: ElementKind::Complex128,
     };
-    let fwd_plan = FftNdPlan::<Complex64>::select(&stream, &fwd_desc, PlanPreference::default())
+    let fwd_plan = FftNdPlan::<Complex128>::select(&stream, &fwd_desc, PlanPreference::default())
         .expect("select fwd plan");
     {
-        let args = FftNdArgs::<Complex64> {
+        let args = FftNdArgs::<Complex128> {
             x: dev_x.as_slice(),
             y: dev_y.as_slice_mut(),
         };
@@ -162,12 +162,12 @@ fn fft2_ifft2_roundtrip_complex64() {
         rank: 2,
         batch: BATCH,
         inverse: true,
-        element: ElementKind::Complex64,
+        element: ElementKind::Complex128,
     };
-    let inv_plan = FftNdPlan::<Complex64>::select(&stream, &inv_desc, PlanPreference::default())
+    let inv_plan = FftNdPlan::<Complex128>::select(&stream, &inv_desc, PlanPreference::default())
         .expect("select inv plan");
     {
-        let args = FftNdArgs::<Complex64> {
+        let args = FftNdArgs::<Complex128> {
             x: dev_y.as_slice(),
             y: dev_xr.as_slice_mut(),
         };
@@ -177,7 +177,7 @@ fn fft2_ifft2_roundtrip_complex64() {
     }
     stream.synchronize().expect("sync");
 
-    let mut got = vec![Complex64::default(); total];
+    let mut got = vec![Complex128::default(); total];
     dev_xr.copy_to_host(&mut got).expect("download");
 
     for (idx, (got, want)) in got.iter().zip(x_host.iter()).enumerate() {
@@ -203,33 +203,33 @@ fn fft2_forward_constant_signal() {
     let (ctx, stream) = setup();
     let per = (H * W) as usize;
     let total = (BATCH as usize) * per;
-    let mut x_host = vec![Complex32::default(); total];
+    let mut x_host = vec![Complex64::default(); total];
     for b in 0..BATCH as usize {
         let c = (b as f32) + 1.0;
         for k in 0..per {
-            x_host[b * per + k] = Complex32::new(c, 0.0);
+            x_host[b * per + k] = Complex64::new(c, 0.0);
         }
     }
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
-    let mut dev_y: DeviceBuffer<Complex32> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
+    let mut dev_y: DeviceBuffer<Complex64> = DeviceBuffer::zeros(&ctx, total).expect("alloc y");
 
     let desc = FftNdDescriptor {
         dims: [H, W, 0, 0],
         rank: 2,
         batch: BATCH,
         inverse: false,
-        element: ElementKind::Complex32,
+        element: ElementKind::Complex64,
     };
     let plan =
-        FftNdPlan::<Complex32>::select(&stream, &desc, PlanPreference::default()).expect("select");
-    let args = FftNdArgs::<Complex32> {
+        FftNdPlan::<Complex64>::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let args = FftNdArgs::<Complex64> {
         x: dev_x.as_slice(),
         y: dev_y.as_slice_mut(),
     };
     plan.run(&stream, Workspace::None, args).expect("run");
     stream.synchronize().expect("sync");
 
-    let mut got = vec![Complex32::default(); total];
+    let mut got = vec![Complex64::default(); total];
     dev_y.copy_to_host(&mut got).expect("dl");
 
     for b in 0..BATCH as usize {

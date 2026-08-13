@@ -52,7 +52,7 @@ fn fp8_decode_plan_select_validates() {
         BatchPagedDecodeFp8Plan::<f32>::select(&stream, &desc, PlanPreference::default()).is_err(),
         "f32 Q/O must be rejected",
     );
-    assert_eq!(plan.sku().aux_element, Some(ElementKind::Fp8E4M3));
+    assert_eq!(plan.sku().aux_element, Some(ElementKind::Fp8E4M3FN));
 }
 
 #[test]

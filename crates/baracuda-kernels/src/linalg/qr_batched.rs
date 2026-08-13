@@ -50,7 +50,7 @@ pub struct BatchedQrDescriptor {
     pub n: i32,
     /// Number of independent matrices in the batch.
     pub batch_size: i32,
-    /// Element type. Must be `F32`, `F64`, `Complex32`, or `Complex64`.
+    /// Element type. Must be `F32`, `F64`, `Complex64`, or `Complex128`.
     pub element: ElementKind,
 }
 
@@ -87,7 +87,7 @@ pub struct BatchedQrArgs<'a, T: Element> {
 /// [`super::BatchedQrMaterializePlan`] for explicit dense `Q` / `R`).
 /// For one-shot QR use [`super::QrPlan`].
 ///
-/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64` — cuBLAS exposes
+/// **Dtypes**: `f32`, `f64`, `Complex64`, `Complex128` — cuBLAS exposes
 /// all four for `geqrfBatched`.
 ///
 /// **Shape**: `[batch, M, N]` per slot.
@@ -123,11 +123,11 @@ impl<T: Element> BatchedQrPlan<T> {
         }
         if !matches!(
             T::KIND,
-            ElementKind::F32 | ElementKind::F64 | ElementKind::Complex32 | ElementKind::Complex64
+            ElementKind::F32 | ElementKind::F64 | ElementKind::Complex64 | ElementKind::Complex128
         ) {
             return Err(Error::Unsupported(
                 "baracuda-kernels::BatchedQrPlan: cuBLAS batched QR supports f32 / f64 / \
-                 Complex32 / Complex64",
+                 Complex64 / Complex128",
             ));
         }
         if desc.m <= 0 || desc.n <= 0 {
@@ -147,7 +147,7 @@ impl<T: Element> BatchedQrPlan<T> {
         }
 
         let math_precision = match T::KIND {
-            ElementKind::F64 | ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::F64 | ElementKind::Complex128 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -334,12 +334,12 @@ macro_rules! impl_batched_qr_run {
 impl_batched_qr_run!(f32, cublasSgeqrfBatched, f32);
 impl_batched_qr_run!(f64, cublasDgeqrfBatched, f64);
 impl_batched_qr_run!(
-    baracuda_kernels_types::Complex32,
+    baracuda_kernels_types::Complex64,
     cublasCgeqrfBatched,
     baracuda_kernels_sys::cuComplex
 );
 impl_batched_qr_run!(
-    baracuda_kernels_types::Complex64,
+    baracuda_kernels_types::Complex128,
     cublasZgeqrfBatched,
     baracuda_kernels_sys::cuDoubleComplex
 );

@@ -9,7 +9,7 @@
 //!   produces strictly 0 or 1; Bool → T produces 0.0 or 1.0 (the
 //!   conversion normalizes whatever non-zero byte the caller stored).
 //!
-//! - **`Fp8E4M3` / `Fp8E5M2` ↔ {`f32`, `f16`, `bf16`}** — Fp8 lives on
+//! - **`Fp8E4M3FN` / `Fp8E5M2` ↔ {`f32`, `f16`, `bf16`}** — Fp8 lives on
 //!   the [`FpElement`] sibling trait, not [`Element`]. Conversions
 //!   route through `f32` via NVIDIA's `__nv_cvt_*_fp8` intrinsics with
 //!   `SATFINITE` semantics (the wide → narrow direction clamps `|x|` to
@@ -28,7 +28,7 @@
 //! ## Why a sibling plan instead of widening `CastPlan`'s trait bound?
 //!
 //! `CastPlan<TIn: Element, TOut: Element>` is parameterized on the
-//! `Element` trait. The sub-byte dtypes (`S4`, `U4`, `Fp8E4M3`,
+//! `Element` trait. The sub-byte dtypes (`S4`, `U4`, `Fp8E4M3FN`,
 //! `Fp8E5M2`) live on `IntElement` / `FpElement` siblings. Widening
 //! `CastPlan`'s bound to a common ancestor (e.g. `DeviceRepr + Copy +
 //! 'static` as `ContiguizePlan` does) would force every existing caller
@@ -98,7 +98,7 @@ pub struct CastSubByteArgs<'a, TIn: DeviceRepr + Copy + 'static, TOut: DeviceRep
 /// `TIn` is the input element type, `TOut` is the output element type.
 /// Both are bounded by [`baracuda_types::DeviceRepr`] only (not
 /// [`baracuda_kernels_types::Element`]) so the dtype set can include
-/// `S4`, `U4`, `Fp8E4M3`, `Fp8E5M2`, and `Bool` alongside the classic
+/// `S4`, `U4`, `Fp8E4M3FN`, `Fp8E5M2`, and `Bool` alongside the classic
 /// fp / int element types.
 ///
 /// **Coverage**: see the [crate-level module docs](self) for the full
@@ -141,8 +141,8 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
             ));
         }
         // S4 / U4 endpoints require even numel (nibble packing).
-        let inv = matches!(desc.input_element, ElementKind::S4 | ElementKind::U4);
-        let outv = matches!(desc.output_element, ElementKind::S4 | ElementKind::U4);
+        let inv = matches!(desc.input_element, ElementKind::I4 | ElementKind::U4);
+        let outv = matches!(desc.output_element, ElementKind::I4 | ElementKind::U4);
         if (inv || outv) && (desc.numel % 2 != 0) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::CastSubBytePlan: S4 / U4 endpoints require even numel \
@@ -195,8 +195,8 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
         // We accept either the logical-element count OR the packed-slot
         // count here — the contract is "the buffer has enough storage
         // for `numel` logical elements".
-        let in_packed = matches!(self.desc.input_element, ElementKind::S4 | ElementKind::U4);
-        let out_packed = matches!(self.desc.output_element, ElementKind::S4 | ElementKind::U4);
+        let in_packed = matches!(self.desc.input_element, ElementKind::I4 | ElementKind::U4);
+        let out_packed = matches!(self.desc.output_element, ElementKind::I4 | ElementKind::U4);
 
         let needed_in = if in_packed {
             (expected + 1) / 2
@@ -361,8 +361,8 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            // ---- Fp8E4M3 <-> {f32, f16, bf16} ----
-            (ElementKind::Fp8E4M3, ElementKind::F32) => unsafe {
+            // ---- Fp8E4M3FN <-> {f32, f16, bf16} ----
+            (ElementKind::Fp8E4M3FN, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_fp8e4m3_f32_run(
                     numel,
                     x_ptr,
@@ -372,7 +372,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::Fp8E4M3, ElementKind::F16) => unsafe {
+            (ElementKind::Fp8E4M3FN, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_fp8e4m3_f16_run(
                     numel,
                     x_ptr,
@@ -382,7 +382,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::Fp8E4M3, ElementKind::Bf16) => unsafe {
+            (ElementKind::Fp8E4M3FN, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_fp8e4m3_bf16_run(
                     numel,
                     x_ptr,
@@ -392,7 +392,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::F32, ElementKind::Fp8E4M3) => unsafe {
+            (ElementKind::F32, ElementKind::Fp8E4M3FN) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f32_fp8e4m3_run(
                     numel,
                     x_ptr,
@@ -402,7 +402,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::F16, ElementKind::Fp8E4M3) => unsafe {
+            (ElementKind::F16, ElementKind::Fp8E4M3FN) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f16_fp8e4m3_run(
                     numel,
                     x_ptr,
@@ -412,7 +412,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::Bf16, ElementKind::Fp8E4M3) => unsafe {
+            (ElementKind::Bf16, ElementKind::Fp8E4M3FN) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_bf16_fp8e4m3_run(
                     numel,
                     x_ptr,
@@ -484,7 +484,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                 )
             },
             // ---- S4 <-> {i32, i64, f32} ----
-            (ElementKind::S4, ElementKind::I32) => unsafe {
+            (ElementKind::I4, ElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_s4_i32_run(
                     numel,
                     x_ptr,
@@ -494,7 +494,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::S4, ElementKind::I64) => unsafe {
+            (ElementKind::I4, ElementKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_s4_i64_run(
                     numel,
                     x_ptr,
@@ -504,7 +504,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::S4, ElementKind::F32) => unsafe {
+            (ElementKind::I4, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_s4_f32_run(
                     numel,
                     x_ptr,
@@ -514,7 +514,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::I32, ElementKind::S4) => unsafe {
+            (ElementKind::I32, ElementKind::I4) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_i32_s4_run(
                     numel,
                     x_ptr,
@@ -524,7 +524,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::I64, ElementKind::S4) => unsafe {
+            (ElementKind::I64, ElementKind::I4) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_i64_s4_run(
                     numel,
                     x_ptr,
@@ -534,7 +534,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
                     stream_ptr,
                 )
             },
-            (ElementKind::F32, ElementKind::S4) => unsafe {
+            (ElementKind::F32, ElementKind::I4) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_cast_f32_s4_run(
                     numel,
                     x_ptr,
@@ -624,15 +624,15 @@ fn pair_in_scope(input: ElementKind, output: ElementKind) -> bool {
         // Bool ↔ {i32, i64, f32, f16, bf16}.
         (Bool, I32) | (Bool, I64) | (Bool, F32) | (Bool, F16) | (Bool, Bf16) => true,
         (I32, Bool) | (I64, Bool) | (F32, Bool) | (F16, Bool) | (Bf16, Bool) => true,
-        // Fp8E4M3 ↔ {f32, f16, bf16}.
-        (Fp8E4M3, F32) | (Fp8E4M3, F16) | (Fp8E4M3, Bf16) => true,
-        (F32, Fp8E4M3) | (F16, Fp8E4M3) | (Bf16, Fp8E4M3) => true,
+        // Fp8E4M3FN ↔ {f32, f16, bf16}.
+        (Fp8E4M3FN, F32) | (Fp8E4M3FN, F16) | (Fp8E4M3FN, Bf16) => true,
+        (F32, Fp8E4M3FN) | (F16, Fp8E4M3FN) | (Bf16, Fp8E4M3FN) => true,
         // Fp8E5M2 ↔ {f32, f16, bf16}.
         (Fp8E5M2, F32) | (Fp8E5M2, F16) | (Fp8E5M2, Bf16) => true,
         (F32, Fp8E5M2) | (F16, Fp8E5M2) | (Bf16, Fp8E5M2) => true,
-        // S4 ↔ {i32, i64, f32}.
-        (S4, I32) | (S4, I64) | (S4, F32) => true,
-        (I32, S4) | (I64, S4) | (F32, S4) => true,
+        // I4 ↔ {i32, i64, f32}.
+        (I4, I32) | (I4, I64) | (I4, F32) => true,
+        (I32, I4) | (I64, I4) | (F32, I4) => true,
         // U4 ↔ {i32, i64, f32}.
         (U4, I32) | (U4, I64) | (U4, F32) => true,
         (I32, U4) | (I64, U4) | (F32, U4) => true,
@@ -645,17 +645,21 @@ fn pair_in_scope(input: ElementKind, output: ElementKind) -> bool {
 fn type_size_matches_kind<T>(kind: ElementKind) -> bool {
     let want = match kind {
         ElementKind::Bool
-        | ElementKind::S8
+        | ElementKind::I8
         | ElementKind::U8
-        | ElementKind::Fp8E4M3
+        | ElementKind::Fp8E4M3FN
+        | ElementKind::Fp8E4M3FNUZ
         | ElementKind::Fp8E5M2
-        | ElementKind::S4
+        | ElementKind::Fp8E5M2FNUZ
+        | ElementKind::F8E8M0
+        | ElementKind::F8E6M2
+        | ElementKind::I4
         | ElementKind::U4 => 1,
-        ElementKind::F16 | ElementKind::Bf16 => 2,
+        ElementKind::F16 | ElementKind::Bf16 | ElementKind::I16 | ElementKind::U16 => 2,
         ElementKind::F32 | ElementKind::F32Strict | ElementKind::I32 | ElementKind::U32 => 4,
-        ElementKind::F64 | ElementKind::I64 | ElementKind::Complex32 => 8,
-        ElementKind::Complex64 => 16,
-        ElementKind::Bin => return false,
+        ElementKind::F64 | ElementKind::I64 | ElementKind::U64 | ElementKind::Complex64 => 8,
+        ElementKind::Complex128 => 16,
+        ElementKind::B1 => return false,
     };
     core::mem::size_of::<T>() == want
 }

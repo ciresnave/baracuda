@@ -4,8 +4,8 @@
 //!
 //! Wraps cuSOLVER's divide-and-conquer eigh routines:
 //! - `cusolverDnSsyevd` / `Dsyevd` — real symmetric (`f32` / `f64`).
-//! - `cusolverDnCheevd` / `Zheevd` — complex Hermitian (`Complex32` /
-//!   `Complex64`); eigenvalues are real even for Hermitian input.
+//! - `cusolverDnCheevd` / `Zheevd` — complex Hermitian (`Complex64` /
+//!   `Complex128`); eigenvalues are real even for Hermitian input.
 //!
 //! **2-D only** — single matrix per launch. cuSOLVER's dense API has no
 //! batched `syevd` / `heevd`.
@@ -34,7 +34,7 @@ use baracuda_kernels_sys::{
     cusolverDnZheevd_bufferSize,
 };
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FillMode, KernelSku,
+    ArchSku, BackendKind, Complex64, Complex128, Element, ElementKind, FillMode, KernelSku,
     LinalgKind, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut,
     Workspace,
 };
@@ -49,7 +49,7 @@ pub struct EighDescriptor {
     /// Triangle of `A` read by cuSOLVER. The opposite triangle's
     /// contents are ignored.
     pub uplo: FillMode,
-    /// Element type. Must be `F32`, `F64`, `Complex32`, or `Complex64`.
+    /// Element type. Must be `F32`, `F64`, `Complex64`, or `Complex128`.
     pub element: ElementKind,
 }
 
@@ -60,7 +60,7 @@ pub struct EighDescriptor {
 /// `n` real eigenvalues sorted ascending.
 ///
 /// `TW` is the real eigenvalue element type — `f32` when `T = f32` or
-/// `Complex32`, `f64` when `T = f64` or `Complex64`. The plan validates
+/// `Complex64`, `f64` when `T = f64` or `Complex128`. The plan validates
 /// `TW == T::Scalar` at runtime. Surfacing `TW` as a second generic
 /// (rather than just `T::Scalar`) sidesteps the
 /// `T::Scalar: DeviceRepr` propagation gap in the [`Element`] trait —
@@ -73,7 +73,7 @@ pub struct EighArgs<'a, T: Element, TW: Element> {
     pub a: TensorMut<'a, T, 2>,
     /// Eigenvalues `[N]` (always real, sorted ascending). `TW` must be
     /// the real-scalar sibling of `T` — i.e. `f32` for `T = f32` /
-    /// `Complex32`, `f64` for `T = f64` / `Complex64`.
+    /// `Complex64`, `f64` for `T = f64` / `Complex128`.
     pub w: TensorMut<'a, TW, 1>,
     /// Single-cell info: `0` on success, `k > 0` if the algorithm
     /// failed to converge at step `k`, `k < 0` if the `-k`-th argument
@@ -92,9 +92,9 @@ pub struct EighArgs<'a, T: Element, TW: Element> {
 /// Hermitian (complex) matrix — typically faster and more accurate
 /// than [`super::EigPlan`] for these inputs.
 ///
-/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64`. Eigenvalues are
+/// **Dtypes**: `f32`, `f64`, `Complex64`, `Complex128`. Eigenvalues are
 /// always real — `W` takes `TW = T::Scalar` (`f32` for `f32` /
-/// `Complex32`, `f64` for `f64` / `Complex64`).
+/// `Complex64`, `f64` for `f64` / `Complex128`).
 ///
 /// **Shape**: `[N, N]`. 2-D only — cuSOLVER has no batched
 /// `syevd` / `heevd`.
@@ -127,10 +127,10 @@ impl<T: Element> EighPlan<T> {
         }
         if !matches!(
             T::KIND,
-            ElementKind::F32 | ElementKind::F64 | ElementKind::Complex32 | ElementKind::Complex64
+            ElementKind::F32 | ElementKind::F64 | ElementKind::Complex64 | ElementKind::Complex128
         ) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::EighPlan: supports f32 / f64 / Complex32 / Complex64 only",
+                "baracuda-kernels::EighPlan: supports f32 / f64 / Complex64 / Complex128 only",
             ));
         }
         if desc.n <= 0 {
@@ -140,7 +140,7 @@ impl<T: Element> EighPlan<T> {
         }
 
         let math_precision = match T::KIND {
-            ElementKind::F64 | ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::F64 | ElementKind::Complex128 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -224,7 +224,7 @@ impl<T: Element> EighPlan<T> {
                     &mut lwork as *mut _,
                 )
             },
-            ElementKind::Complex32 => unsafe {
+            ElementKind::Complex64 => unsafe {
                 cusolverDnCheevd_bufferSize(
                     h,
                     CUSOLVER_EIG_MODE_VECTOR,
@@ -236,7 +236,7 @@ impl<T: Element> EighPlan<T> {
                     &mut lwork as *mut _,
                 )
             },
-            ElementKind::Complex64 => unsafe {
+            ElementKind::Complex128 => unsafe {
                 cusolverDnZheevd_bufferSize(
                     h,
                     CUSOLVER_EIG_MODE_VECTOR,
@@ -248,7 +248,7 @@ impl<T: Element> EighPlan<T> {
                     &mut lwork as *mut _,
                 )
             },
-            _ => unreachable!("select() gates on F32 / F64 / Complex32 / Complex64"),
+            _ => unreachable!("select() gates on F32 / F64 / Complex64 / Complex128"),
         };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
@@ -312,7 +312,7 @@ impl<T: Element> EighPlan<T> {
         if TW::KIND != expected {
             return Err(Error::Unsupported(
                 "baracuda-kernels::EighPlan: TW != real-scalar sibling of T \
-                 (f32/Complex32 → f32, f64/Complex64 → f64)",
+                 (f32/Complex64 → f32, f64/Complex128 → f64)",
             ));
         }
         Ok(())
@@ -324,9 +324,9 @@ impl<T: Element> EighPlan<T> {
 #[inline]
 fn real_scalar_kind<T: Element>() -> ElementKind {
     match T::KIND {
-        ElementKind::F32 | ElementKind::Complex32 => ElementKind::F32,
-        ElementKind::F64 | ElementKind::Complex64 => ElementKind::F64,
-        _ => unreachable!("select() gates on F32 / F64 / Complex32 / Complex64"),
+        ElementKind::F32 | ElementKind::Complex64 => ElementKind::F32,
+        ElementKind::F64 | ElementKind::Complex128 => ElementKind::F64,
+        _ => unreachable!("select() gates on F32 / F64 / Complex64 / Complex128"),
     }
 }
 
@@ -428,17 +428,17 @@ impl EighPlan<f64> {
     }
 }
 
-// ----- Complex32 (Hermitian) -----------------------------------------------
+// ----- Complex64 (Hermitian) -----------------------------------------------
 
-impl EighPlan<Complex32> {
-    /// Run the Hermitian eigendecomposition (Complex32). Eigenvalues
+impl EighPlan<Complex64> {
+    /// Run the Hermitian eigendecomposition (Complex64). Eigenvalues
     /// land in `args.w` as real `f32` (the Hermitian eigenvalue
     /// spectrum is always real).
     pub fn run(
         &self,
         stream: &Stream,
         workspace: Workspace<'_>,
-        args: EighArgs<'_, Complex32, f32>,
+        args: EighArgs<'_, Complex64, f32>,
     ) -> Result<()> {
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
@@ -451,7 +451,7 @@ impl EighPlan<Complex32> {
             self.workspace_bytes.get()
         };
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, needed)?;
-        let lwork = (ws_bytes / core::mem::size_of::<Complex32>()) as i32;
+        let lwork = (ws_bytes / core::mem::size_of::<Complex64>()) as i32;
 
         let a_ptr = args.a.data.as_raw().0 as *mut cuComplex;
         // W is real-valued even for Hermitian input.
@@ -479,16 +479,16 @@ impl EighPlan<Complex32> {
     }
 }
 
-// ----- Complex64 (Hermitian) -----------------------------------------------
+// ----- Complex128 (Hermitian) -----------------------------------------------
 
-impl EighPlan<Complex64> {
-    /// Run the Hermitian eigendecomposition (Complex64). Eigenvalues
+impl EighPlan<Complex128> {
+    /// Run the Hermitian eigendecomposition (Complex128). Eigenvalues
     /// land in `args.w` as real `f64`.
     pub fn run(
         &self,
         stream: &Stream,
         workspace: Workspace<'_>,
-        args: EighArgs<'_, Complex64, f64>,
+        args: EighArgs<'_, Complex128, f64>,
     ) -> Result<()> {
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
@@ -501,7 +501,7 @@ impl EighPlan<Complex64> {
             self.workspace_bytes.get()
         };
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, needed)?;
-        let lwork = (ws_bytes / core::mem::size_of::<Complex64>()) as i32;
+        let lwork = (ws_bytes / core::mem::size_of::<Complex128>()) as i32;
 
         let a_ptr = args.a.data.as_raw().0 as *mut cuDoubleComplex;
         let w_ptr = args.w.data.as_raw().0 as *mut f64;

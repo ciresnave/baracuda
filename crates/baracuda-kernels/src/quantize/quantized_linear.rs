@@ -169,7 +169,7 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
                  activation (f16 / bf16 deferred)",
             ));
         }
-        if TWQ::KIND != ElementKind::S8 {
+        if TWQ::KIND != ElementKind::I8 {
             return Err(Error::Unsupported(
                 "QuantizedLinearPlan: 8.3 trailblazer only wires S8 weight \
                  (U8 deferred)",

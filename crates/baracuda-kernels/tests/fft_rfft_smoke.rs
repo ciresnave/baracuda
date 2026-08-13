@@ -9,7 +9,7 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    Complex32, Complex64, ElementKind, IrfftArgs, IrfftDescriptor, IrfftPlan, PlanPreference,
+    Complex64, Complex128, ElementKind, IrfftArgs, IrfftDescriptor, IrfftPlan, PlanPreference,
     RfftArgs, RfftDescriptor, RfftPlan, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
@@ -39,7 +39,7 @@ fn rfft_irfft_roundtrip_f32() {
     }
 
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex32> =
+    let mut dev_y: DeviceBuffer<Complex64> =
         DeviceBuffer::zeros(&ctx, total_freq).expect("alloc y");
     let mut dev_xr: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
@@ -57,7 +57,7 @@ fn rfft_irfft_roundtrip_f32() {
     let fwd_plan = RfftPlan::<f32>::select(&stream, &fwd_desc, PlanPreference::default())
         .expect("select rfft");
     {
-        let args = RfftArgs::<f32, Complex32> {
+        let args = RfftArgs::<f32, Complex64> {
             x: TensorRef {
                 data: dev_x.as_slice(),
                 shape: real_shape,
@@ -83,7 +83,7 @@ fn rfft_irfft_roundtrip_f32() {
     let inv_plan = IrfftPlan::<f32>::select(&stream, &inv_desc, PlanPreference::default())
         .expect("select irfft");
     {
-        let args = IrfftArgs::<f32, Complex32> {
+        let args = IrfftArgs::<f32, Complex64> {
             x: TensorRef {
                 data: dev_y.as_slice(),
                 shape: freq_shape,
@@ -129,7 +129,7 @@ fn rfft_irfft_roundtrip_f64() {
     }
 
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload x");
-    let mut dev_y: DeviceBuffer<Complex64> =
+    let mut dev_y: DeviceBuffer<Complex128> =
         DeviceBuffer::zeros(&ctx, total_freq).expect("alloc y");
     let mut dev_xr: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, total_real).expect("alloc xr");
 
@@ -146,7 +146,7 @@ fn rfft_irfft_roundtrip_f64() {
     let fwd_plan = RfftPlan::<f64>::select(&stream, &fwd_desc, PlanPreference::default())
         .expect("select rfft");
     {
-        let args = RfftArgs::<f64, Complex64> {
+        let args = RfftArgs::<f64, Complex128> {
             x: TensorRef {
                 data: dev_x.as_slice(),
                 shape: real_shape,
@@ -171,7 +171,7 @@ fn rfft_irfft_roundtrip_f64() {
     let inv_plan = IrfftPlan::<f64>::select(&stream, &inv_desc, PlanPreference::default())
         .expect("select irfft");
     {
-        let args = IrfftArgs::<f64, Complex64> {
+        let args = IrfftArgs::<f64, Complex128> {
             x: TensorRef {
                 data: dev_y.as_slice(),
                 shape: freq_shape,
@@ -218,7 +218,7 @@ fn rfft_dc_bin_equals_sum() {
         }
     }
     let mut dev_x = DeviceBuffer::from_slice(&ctx, &x_host).expect("upload");
-    let mut dev_y: DeviceBuffer<Complex32> =
+    let mut dev_y: DeviceBuffer<Complex64> =
         DeviceBuffer::zeros(&ctx, total_freq).expect("alloc y");
 
     let real_shape = [BATCH, N];
@@ -233,7 +233,7 @@ fn rfft_dc_bin_equals_sum() {
     };
     let plan =
         RfftPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select rfft");
-    let args = RfftArgs::<f32, Complex32> {
+    let args = RfftArgs::<f32, Complex64> {
         x: TensorRef {
             data: dev_x.as_slice(),
             shape: real_shape,
@@ -248,7 +248,7 @@ fn rfft_dc_bin_equals_sum() {
     plan.run(&stream, Workspace::None, args).expect("run rfft");
     stream.synchronize().expect("sync");
 
-    let mut got = vec![Complex32::default(); total_freq];
+    let mut got = vec![Complex64::default(); total_freq];
     dev_y.copy_to_host(&mut got).expect("download");
 
     for b in 0..BATCH as usize {

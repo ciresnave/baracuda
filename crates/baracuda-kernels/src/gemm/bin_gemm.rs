@@ -119,7 +119,7 @@ impl BinGemmPlan {
             arch: ArchSku::Sm89,
             layout: desc.layout,
             epilogue: EpilogueKind::Identity,
-            element: ElementKind::Bin,
+            element: ElementKind::B1,
             // No bias chain.
             bias_element: None,
         };
