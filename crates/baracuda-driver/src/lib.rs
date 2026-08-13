@@ -64,10 +64,10 @@ pub mod pointer;
 pub mod profiler;
 pub mod stream;
 pub mod tensor_map;
-pub mod user_object;
-pub mod vmm;
 #[cfg(feature = "test-support")]
 pub mod test_support;
+pub mod user_object;
+pub mod vmm;
 
 pub use array::{
     Array, ArrayFormat, SurfaceObject, TextureAddressMode, TextureDesc, TextureFilterMode,
