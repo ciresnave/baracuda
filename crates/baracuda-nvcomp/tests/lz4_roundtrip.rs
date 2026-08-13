@@ -13,10 +13,7 @@ use baracuda_runtime::{Device, DeviceBuffer, Stream};
 #[test]
 #[ignore = "requires nvCOMP installed + NVIDIA GPU"]
 fn lz4_compress_decompress_roundtrip() {
-    require_optional!(
-        baracuda_nvcomp::probe(),
-        "nvCOMP runtime library installed"
-    );
+    require_optional!(baracuda_nvcomp::probe(), "nvCOMP runtime library installed");
 
     Device::from_ordinal(0).set_current().unwrap();
     let stream = Stream::new().unwrap();

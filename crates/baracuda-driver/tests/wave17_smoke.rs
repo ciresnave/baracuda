@@ -1,6 +1,7 @@
 //! GPU-gated integration test for Wave-17 Driver-API additions:
 //! green contexts (CUDA 12.4+).
 
+use baracuda_cuda_sys::types::CUstream_flags;
 use baracuda_driver::green::{GreenContext, device_sm_resource, sm_resource_split_by_count};
 use baracuda_driver::{Context, Device, require};
 
@@ -41,9 +42,11 @@ fn split_sms_and_create_green_context() {
     eprintln!("green context owns {} SMs", sm.sm_count);
     assert!(sm.sm_count >= 2);
 
-    // cuGreenCtxStreamCreate requires CU_STREAM_NON_BLOCKING (0x01); flags=0
+    // cuGreenCtxStreamCreate requires CU_STREAM_NON_BLOCKING; flags=0
     // (CU_STREAM_DEFAULT) is rejected with CUDA_ERROR_INVALID_VALUE. (Pre-existing
     // test bug surfaced on-device once the silent-skip migration let this test
     // run to completion — orthogonal to the require! change above.)
-    let _stream = green.create_stream_raw(0x01, 0).unwrap();
+    let _stream = green
+        .create_stream_raw(CUstream_flags::NON_BLOCKING, 0)
+        .unwrap();
 }

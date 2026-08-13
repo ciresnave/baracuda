@@ -16,7 +16,7 @@
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
-use baracuda_driver::{Device, Module, require};
+use baracuda_driver::{Device, Module, require_optional};
 use baracuda_kernels_bench::{current_hwstamp, gate_cell, setup_device};
 use baracuda_kernels_types::{
     ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, Implementor, OpCategory,
@@ -36,7 +36,7 @@ fn variant_gate_loop_end_to_end() {
     let (ctx, stream) = setup_device();
     let device = Device::get(0).expect("device");
     let stamp = current_hwstamp(&device).expect("hwstamp");
-    require!(
+    require_optional!(
         (stamp.arch == ArchSku::Sm89).then_some(()),
         "an sm89 device (this variant cell is keyed sm89)"
     );
@@ -236,7 +236,7 @@ fn smemrow_variant_is_bit_identical_and_gated() {
     let (ctx, stream) = setup_device();
     let device = Device::get(0).expect("device");
     let stamp = current_hwstamp(&device).expect("hwstamp");
-    require!(
+    require_optional!(
         (stamp.arch == ArchSku::Sm89).then_some(()),
         "an sm89 device (this variant cell is keyed sm89)"
     );

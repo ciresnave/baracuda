@@ -80,10 +80,7 @@ fn column_parallel_f32_forward_single_rank_matches_linear() {
     let ctx = Context::new(&device).unwrap();
     let stream = Stream::new(&ctx).unwrap();
 
-    let comm = require_optional!(
-        try_bringup(0),
-        "NCCL single-rank communicator bring-up"
-    );
+    let comm = require_optional!(try_bringup(0), "NCCL single-rank communicator bring-up");
     assert_eq!(comm.world_size(), 1, "expected single-rank comm");
 
     let batch = 4usize;
@@ -131,10 +128,7 @@ fn column_parallel_f32_backward_single_rank_matches_linear() {
     let ctx = Context::new(&device).unwrap();
     let stream = Stream::new(&ctx).unwrap();
 
-    let comm = require_optional!(
-        try_bringup(0),
-        "NCCL single-rank communicator bring-up"
-    );
+    let comm = require_optional!(try_bringup(0), "NCCL single-rank communicator bring-up");
 
     let batch = 6usize;
     let in_f = 24usize;

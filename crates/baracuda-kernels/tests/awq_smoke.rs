@@ -67,10 +67,7 @@ fn awq_plan_select_rejects_invalid_descriptor() {
 #[test]
 #[ignore]
 fn awq_gemm_zero_weights_smoke() {
-    let (ctx, stream) = require!(
-        setup(),
-        "a CUDA device + stream (AWQ GEMM smoke)"
-    );
+    let (ctx, stream) = require!(setup(), "a CUDA device + stream (AWQ GEMM smoke)");
     let m: i32 = 1;
     let ic: i32 = 256;
     let oc: i32 = 64;

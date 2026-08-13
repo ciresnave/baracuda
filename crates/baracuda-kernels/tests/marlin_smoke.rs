@@ -39,7 +39,10 @@ fn marlin_plan_select_rejects_invalid_descriptor() {
     let _ = init();
     // select() does no GPU work, but reaching it needs a real Stream, which
     // needs a device — which MUST exist on the box.
-    let dev = require!(Device::get(0), "a CUDA device (Marlin select() needs a Stream)");
+    let dev = require!(
+        Device::get(0),
+        "a CUDA device (Marlin select() needs a Stream)"
+    );
     let ctx = Context::new(&dev).expect("ctx");
     let stream = Stream::new(&ctx).expect("stream");
 

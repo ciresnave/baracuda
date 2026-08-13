@@ -42,10 +42,8 @@ fn try_bringup() -> Option<(Context, Stream, Communicator)> {
 #[test]
 #[ignore = "requires NCCL installed (typically Linux multi-GPU hosts)"]
 fn new_single_gpu_reports_rank0_worldsize1() {
-    let (_ctx, _stream, comm) = require_optional!(
-        try_bringup(),
-        "NCCL single-GPU communicator bring-up"
-    );
+    let (_ctx, _stream, comm) =
+        require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
     assert_eq!(comm.rank(), 0, "single-GPU communicator must be rank 0");
     assert_eq!(
         comm.world_size(),
@@ -57,10 +55,8 @@ fn new_single_gpu_reports_rank0_worldsize1() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn all_reduce_single_gpu_passes_through() {
-    let (ctx, stream, comm) = require_optional!(
-        try_bringup(),
-        "NCCL single-GPU communicator bring-up"
-    );
+    let (ctx, stream, comm) =
+        require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
 
     let host_in: Vec<f32> = (0..32).map(|i| i as f32).collect();
     let send = DeviceBuffer::from_slice(&ctx, &host_in).unwrap();
@@ -78,10 +74,8 @@ fn all_reduce_single_gpu_passes_through() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn reduce_single_gpu_passes_through() {
-    let (ctx, stream, comm) = require_optional!(
-        try_bringup(),
-        "NCCL single-GPU communicator bring-up"
-    );
+    let (ctx, stream, comm) =
+        require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
 
     let host_in: Vec<f32> = (0..16).map(|i| i as f32 + 1.0).collect();
     let send = DeviceBuffer::from_slice(&ctx, &host_in).unwrap();
@@ -106,10 +100,8 @@ fn reduce_single_gpu_passes_through() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn broadcast_single_gpu_passes_through() {
-    let (ctx, stream, comm) = require_optional!(
-        try_bringup(),
-        "NCCL single-GPU communicator bring-up"
-    );
+    let (ctx, stream, comm) =
+        require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
 
     let host_in: Vec<i32> = (0..24).collect();
     let mut buf = DeviceBuffer::from_slice(&ctx, &host_in).unwrap();
@@ -129,10 +121,8 @@ fn broadcast_single_gpu_passes_through() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn all_gather_single_gpu_passes_through() {
-    let (ctx, stream, comm) = require_optional!(
-        try_bringup(),
-        "NCCL single-GPU communicator bring-up"
-    );
+    let (ctx, stream, comm) =
+        require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
 
     // sendcount = N, world_size = 1 → recv buffer matches send buffer.
     let host_in: Vec<f32> = (0..20).map(|i| i as f32 * 0.5).collect();
@@ -151,10 +141,8 @@ fn all_gather_single_gpu_passes_through() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn reduce_scatter_single_gpu_passes_through() {
-    let (ctx, stream, comm) = require_optional!(
-        try_bringup(),
-        "NCCL single-GPU communicator bring-up"
-    );
+    let (ctx, stream, comm) =
+        require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
 
     // recvcount × world_size = sendlen → with world_size=1 they match.
     let host_in: Vec<f32> = (0..28).map(|i| i as f32).collect();
@@ -178,10 +166,8 @@ fn reduce_scatter_single_gpu_passes_through() {
 fn send_recv_self_loop_in_group() {
     // P2P self-loop: rank 0 sends to rank 0. NCCL requires `send` and
     // `recv` paired inside a group bracket on the same communicator.
-    let (ctx, stream, comm) = require_optional!(
-        try_bringup(),
-        "NCCL single-GPU communicator bring-up"
-    );
+    let (ctx, stream, comm) =
+        require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
 
     let host_in: Vec<f32> = (0..12).map(|i| i as f32 + 100.0).collect();
     let send = DeviceBuffer::from_slice(&ctx, &host_in).unwrap();

@@ -35,13 +35,16 @@ fn dims_new_and_slice_roundtrip() {
 #[test]
 #[ignore = "requires a working TensorRT install + the C-ABI shim (see AUDIT.md)"]
 fn version_reports_trt10_or_newer() {
-    // `version()` fail-loud-panicked on the box when TensorRT is absent (a false
-    // fail for a legitimately-absent optional runtime under `cargo gpu-test`);
-    // declare-and-skip instead, like `deserialize_garbage_blob` below.
-    let v = require_optional!(
-        baracuda_tensorrt::version(),
-        "TensorRT runtime (getInferLibVersion)"
-    );
+    // TensorRT absent (libnvinfer not loadable) is a legitimate skip under
+    // `cargo gpu-test`, but a non-Loader error means TRT is present and
+    // misbehaving -- a real regression -- so only a Loader error declares-skip;
+    // anything else panics (don't let require_optional! swallow it).
+    let probe = match baracuda_tensorrt::version() {
+        Ok(v) => Some(v),
+        Err(baracuda_tensorrt::Error::Loader(_)) => None,
+        Err(e) => panic!("getInferLibVersion returned a non-absence error: {e}"),
+    };
+    let v = require_optional!(probe, "TensorRT runtime (getInferLibVersion)");
     // TRT version is MAJOR*1000 + MINOR*100 + PATCH; we wrap TRT 10+.
     assert!(v >= 10_000, "expected TensorRT >= 10, got encoded {v}");
 }
