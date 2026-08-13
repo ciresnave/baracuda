@@ -203,3 +203,13 @@ lto = "thin"
 # consulted when the registry dep is in the graph (seam on); a no-op otherwise.
 [patch.crates-io]
 baracuda-kernels-types = { path = "crates/baracuda-kernels-types" }
+# sk4 corpus regen: pin the sk4 vocabulary to the EXACT pushed rev (still 0.1.0;
+# crates.io publish rides the 4-way byte-match). Pin the SHA, never the branch —
+# a moving `main` would silently re-point the corpus mid-regen (KISS §6.5-0014
+# reproducibility). Rev = Unpopped origin/main @ 2026-08-12. Both the generator
+# (`unpopped`) and the vocabulary (`unpopped-vocab`) move in lockstep: the sk4
+# §6.1 dtype respell renamed ElementKind variants (S8->i8, e4m3fn->f8e4m3fn,
+# complex-by-total-width), so the published `unpopped` 0.1.0 no longer compiles
+# against the sk4 vocab — pin both to the same rev.
+unpopped = { git = "https://github.com/EvansLaboratories/Unpopped", rev = "4b33726ee0d36696db76bf16660d1dd1b329ca08" }
+unpopped-vocab = { git = "https://github.com/EvansLaboratories/Unpopped", rev = "4b33726ee0d36696db76bf16660d1dd1b329ca08" }

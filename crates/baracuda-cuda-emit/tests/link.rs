@@ -21,7 +21,7 @@ fn entry(name: &str) -> LinkEntry {
 fn entry_mirrors_contract_fields() {
     let e = entry("add");
     assert!(e.entry_point.contains("add"));
-    assert!(e.structure_key.starts_with("sk3|bin|f32|cuda:sm89|"));
+    assert!(e.structure_key.starts_with("sk4|bin|f32|cuda:sm89|"));
     assert_ne!(e.revision_hash, 0);
 }
 
