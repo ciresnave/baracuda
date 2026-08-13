@@ -1603,7 +1603,7 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 [[package]]
 name = "unpopped"
 version = "0.1.0"
-source = "git+https://github.com/EvansLaboratories/Unpopped?rev=4b33726ee0d36696db76bf16660d1dd1b329ca08#4b33726ee0d36696db76bf16660d1dd1b329ca08"
+source = "git+https://github.com/EvansLaboratories/Unpopped?rev=4cefb6a24b5823d1bf9c8b036a08a55d7fae024c#4cefb6a24b5823d1bf9c8b036a08a55d7fae024c"
 dependencies = [
  "fuel-kernel-seam-types",
  "libm",
@@ -1617,8 +1617,8 @@ dependencies = [
 
 [[package]]
 name = "unpopped-vocab"
-version = "0.1.0"
-source = "git+https://github.com/EvansLaboratories/Unpopped?rev=4b33726ee0d36696db76bf16660d1dd1b329ca08#4b33726ee0d36696db76bf16660d1dd1b329ca08"
+version = "0.2.0"
+source = "git+https://github.com/EvansLaboratories/Unpopped?rev=4cefb6a24b5823d1bf9c8b036a08a55d7fae024c#4cefb6a24b5823d1bf9c8b036a08a55d7fae024c"
 dependencies = [
  "float8",
  "half",

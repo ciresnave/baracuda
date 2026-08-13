@@ -44,14 +44,9 @@ impl OperandDescExt for OperandDesc {
             shape[d] = i64::from(view.shape[d]);
             strides[d] = view.stride[d];
         }
-        OperandDesc {
-            rank: N as u8,
-            shape,
-            strides,
-            dtype: T::KIND,
-            align_bytes,
-            quant: None,
-            symbolic: None,
-        }
+        // `OperandDesc` is `#[non_exhaustive]` in unpopped-vocab 0.2.0 — construct
+        // via `new` (the plain non-quant/non-symbolic constructor), which zero-pads
+        // shape/strides to MAX_RANK identically to the former struct literal.
+        OperandDesc::new(N, &shape[..N], &strides[..N], T::KIND, align_bytes)
     }
 }

@@ -37,7 +37,7 @@ baracuda-cuda-emit = { version = "0.0.1-alpha.78", path = "crates/baracuda-cuda-
 # is now a CONSUMER of the published crates, not their host — the local
 # `baracuda-kernelgen` / `baracuda-kernel-vocab` are retired.
 unpopped = "0.1.0"
-unpopped-vocab = "0.1.0"
+unpopped-vocab = "0.2.0"
 baracuda-seam = { version = "0.0.1-alpha.78", path = "crates/baracuda-seam" }
 baracuda-cuda-sys = { version = "0.0.1-alpha.78", path = "crates/baracuda-cuda-sys" }
 baracuda-driver = { version = "0.0.1-alpha.78", path = "crates/baracuda-driver" }
@@ -205,11 +205,15 @@ lto = "thin"
 baracuda-kernels-types = { path = "crates/baracuda-kernels-types" }
 # sk4 corpus regen: pin the sk4 vocabulary to the EXACT pushed rev (still 0.1.0;
 # crates.io publish rides the 4-way byte-match). Pin the SHA, never the branch —
-# a moving `main` would silently re-point the corpus mid-regen (KISS §6.5-0014
-# reproducibility). Rev = Unpopped origin/main @ 2026-08-12. Both the generator
-# (`unpopped`) and the vocabulary (`unpopped-vocab`) move in lockstep: the sk4
-# §6.1 dtype respell renamed ElementKind variants (S8->i8, e4m3fn->f8e4m3fn,
-# complex-by-total-width), so the published `unpopped` 0.1.0 no longer compiles
-# against the sk4 vocab — pin both to the same rev.
-unpopped = { git = "https://github.com/EvansLaboratories/Unpopped", rev = "4b33726ee0d36696db76bf16660d1dd1b329ca08" }
-unpopped-vocab = { git = "https://github.com/EvansLaboratories/Unpopped", rev = "4b33726ee0d36696db76bf16660d1dd1b329ca08" }
+# `unpopped-vocab` 0.2.0 is PUBLISHED to crates.io, but a plain registry dep is
+# NOT usable here yet: the sk4 `unpopped` GENERATOR is still unpublished (crates.io
+# `unpopped` 0.1.0 predates the sk4 ElementKind respell and won't compile against
+# the 0.2.0 vocab), so it stays git-pinned — and it deps `unpopped-vocab =
+# { workspace = true }`, dragging its git-sibling vocab from the SAME checkout.
+# A registry 0.2.0 vocab and that git-sibling vocab are two distinct crates that
+# collide (StructureKey type mismatch), so BOTH pin to the exact 0.2.0-published
+# rev 4cefb6a2 (byte-identical to crates.io unpopped-vocab 0.2.0 / tag
+# unpopped-vocab-v0.2.0; token corpus measured 6144-identical vs the earlier
+# 4b33726). Move both to plain registry deps once the generator's 0.2.0 publishes.
+unpopped = { git = "https://github.com/EvansLaboratories/Unpopped", rev = "4cefb6a24b5823d1bf9c8b036a08a55d7fae024c" }
+unpopped-vocab = { git = "https://github.com/EvansLaboratories/Unpopped", rev = "4cefb6a24b5823d1bf9c8b036a08a55d7fae024c" }
