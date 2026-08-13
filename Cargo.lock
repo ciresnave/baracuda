@@ -190,6 +190,7 @@ version = "0.0.1-alpha.78"
 dependencies = [
  "baracuda-core",
  "baracuda-cufile-sys",
+ "baracuda-driver",
  "baracuda-runtime",
  "baracuda-types",
  "thiserror",
@@ -298,6 +299,7 @@ version = "0.0.1-alpha.78"
 dependencies = [
  "baracuda-core",
  "baracuda-cutensor-sys",
+ "baracuda-driver",
  "baracuda-runtime",
  "baracuda-types",
  "thiserror",
@@ -372,6 +374,7 @@ version = "0.0.1-alpha.78"
 dependencies = [
  "baracuda-core",
  "baracuda-cvcuda-sys",
+ "baracuda-driver",
  "baracuda-runtime",
  "baracuda-types",
  "thiserror",
@@ -392,6 +395,7 @@ version = "0.0.1-alpha.78"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
+ "baracuda-driver",
  "baracuda-nvrtc",
  "baracuda-types",
  "futures-core",
@@ -577,6 +581,7 @@ name = "baracuda-nvcomp"
 version = "0.0.1-alpha.78"
 dependencies = [
  "baracuda-core",
+ "baracuda-driver",
  "baracuda-nvcomp-sys",
  "baracuda-runtime",
  "baracuda-types",

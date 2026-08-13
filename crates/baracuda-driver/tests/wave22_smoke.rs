@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use baracuda_driver::user_object::UserObject;
-use baracuda_driver::{Context, Device, Graph};
+use baracuda_driver::{Context, Device, Graph, require};
 
 static DESTRUCTOR_CALLS: AtomicU32 = AtomicU32::new(0);
 
@@ -21,19 +21,16 @@ fn user_object_destructor_fires_when_graph_drops() {
     // Capture a closure; the closure dropping implies destructor ran.
     let counter = Arc::new(());
     let _counter_clone = counter.clone();
-    let uo = match UserObject::new(
-        move || {
-            DESTRUCTOR_CALLS.fetch_add(1, Ordering::SeqCst);
-            drop(_counter_clone);
-        },
-        1,
-    ) {
-        Ok(u) => u,
-        Err(e) => {
-            eprintln!("cuUserObjectCreate rejected: {e:?}");
-            return;
-        }
-    };
+    let uo = require!(
+        UserObject::new(
+            move || {
+                DESTRUCTOR_CALLS.fetch_add(1, Ordering::SeqCst);
+                drop(_counter_clone);
+            },
+            1,
+        ),
+        "cuUserObjectCreate (CUDA 12+)"
+    );
 
     let graph = Graph::new(&ctx).unwrap();
     // Transfer our single reference to the graph — safer than retain+release.

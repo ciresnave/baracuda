@@ -35,11 +35,11 @@
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::{Context, DeviceBuffer, Module, Stream};
 use baracuda_kernels_bench::setup_device;
-use baracuda_types::DeviceRepr;
 use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use baracuda_types::DeviceRepr;
+use unpopped::Compiler;
 use unpopped::generate;
 use unpopped::ir::{BinaryOp, OpDef, input};
-use unpopped::Compiler;
 
 /// Emit `op` for `dt`, compile it through the real production chain, launch it
 /// on-device over the `(in0, in1)` lanes, and assert the result is bit-exact
@@ -133,12 +133,26 @@ fn emitter_integer_kernels_are_correct_on_device() {
     // ---- 1. signed i32 `>>` : ARITHMETIC (sign-replicating) shift ------------
     // Negative lanes discriminate: arithmetic `>>` stays negative; a logical
     // `>>` (treating the value as u32) would go large-positive.
-    let shr_i32 = OpDef::elementwise("shr", 2, &[ElementKind::I32], input(0).binary(BinaryOp::Shr, input(1)));
+    let shr_i32 = OpDef::elementwise(
+        "shr",
+        2,
+        &[ElementKind::I32],
+        input(0).binary(BinaryOp::Shr, input(1)),
+    );
     let a_i32: Vec<i32> = vec![-8, -256, -1, 1024, i32::MIN, 255, -12345, 7];
     let b_i32: Vec<i32> = vec![1, 4, 3, 2, 8, 1, 4, 1];
     let e_i32: Vec<i32> = a_i32.iter().zip(&b_i32).map(|(&x, &s)| x >> s).collect();
     let got_i32 = run_binary_int(
-        &ctx, &stream, &shr_i32, ElementKind::I32, 4, &a_i32, &b_i32, &e_i32, i32::MAX, "i32 arithmetic >>",
+        &ctx,
+        &stream,
+        &shr_i32,
+        ElementKind::I32,
+        4,
+        &a_i32,
+        &b_i32,
+        &e_i32,
+        i32::MAX,
+        "i32 arithmetic >>",
     );
     // Discriminating control: every negative-input lane stays NEGATIVE — a
     // logical shift on those lanes would be a large positive value.
@@ -148,7 +162,9 @@ fn emitter_integer_kernels_are_correct_on_device() {
                 got_i32[i] < 0,
                 "i32 >> lane {i}: {} >> {} = {} — arithmetic shift must keep the sign; a positive \
                  result means the emitter/toolchain used a LOGICAL shift",
-                a_i32[i], b_i32[i], got_i32[i]
+                a_i32[i],
+                b_i32[i],
+                got_i32[i]
             );
         }
     }
@@ -156,12 +172,26 @@ fn emitter_integer_kernels_are_correct_on_device() {
     // ---- 2. unsigned u8 `>>` : LOGICAL (zero-fill) shift ---------------------
     // High-bit lanes discriminate: logical `>>` zero-fills; an arithmetic `>>`
     // (as if signed) would replicate bit 7 — a different byte.
-    let shr_u8 = OpDef::elementwise("shr", 2, &[ElementKind::U8], input(0).binary(BinaryOp::Shr, input(1)));
+    let shr_u8 = OpDef::elementwise(
+        "shr",
+        2,
+        &[ElementKind::U8],
+        input(0).binary(BinaryOp::Shr, input(1)),
+    );
     let a_u8: Vec<u8> = vec![0x80, 0xFF, 0xC0, 0x81, 0x40, 0xAA, 0x01, 0xFE];
     let b_u8: Vec<u8> = vec![1, 4, 2, 7, 1, 3, 1, 1];
     let e_u8: Vec<u8> = a_u8.iter().zip(&b_u8).map(|(&x, &s)| x >> s).collect();
     let got_u8 = run_binary_int(
-        &ctx, &stream, &shr_u8, ElementKind::U8, 1, &a_u8, &b_u8, &e_u8, 0x37, "u8 logical >>",
+        &ctx,
+        &stream,
+        &shr_u8,
+        ElementKind::U8,
+        1,
+        &a_u8,
+        &b_u8,
+        &e_u8,
+        0x37,
+        "u8 logical >>",
     );
     // Discriminating control: on each high-bit lane the LOGICAL result must
     // differ from the ARITHMETIC result (sign-replicating on the signed byte).
@@ -185,9 +215,22 @@ fn emitter_integer_kernels_are_correct_on_device() {
     let add_u8 = OpDef::elementwise("add", 2, &[ElementKind::U8], input(0) + input(1));
     let a_add: Vec<u8> = vec![200, 255, 128, 1, 100, 250, 0, 127];
     let b_add: Vec<u8> = vec![100, 1, 200, 254, 200, 10, 0, 129];
-    let e_add: Vec<u8> = a_add.iter().zip(&b_add).map(|(&x, &y)| x.wrapping_add(y)).collect();
+    let e_add: Vec<u8> = a_add
+        .iter()
+        .zip(&b_add)
+        .map(|(&x, &y)| x.wrapping_add(y))
+        .collect();
     let got_add = run_binary_int(
-        &ctx, &stream, &add_u8, ElementKind::U8, 1, &a_add, &b_add, &e_add, 0x37, "u8 wrapping +",
+        &ctx,
+        &stream,
+        &add_u8,
+        ElementKind::U8,
+        1,
+        &a_add,
+        &b_add,
+        &e_add,
+        0x37,
+        "u8 wrapping +",
     );
     // Discriminating control: an overflowing lane must NOT saturate to 0xFF.
     for i in 0..a_add.len() {

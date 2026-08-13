@@ -19,6 +19,8 @@ thiserror.workspace = true
 
 [dev-dependencies]
 baracuda-runtime = { path = "../baracuda-runtime" }  # path-only: avoid publish cycle on cargo 1.90+ (dev-dep, dropped from published manifest)
+# `require_optional!` on-device-skip primitive (declare-and-report).
+baracuda-driver = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

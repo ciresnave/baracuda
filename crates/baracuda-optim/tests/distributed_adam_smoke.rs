@@ -24,7 +24,7 @@
     any(feature = "sm80", feature = "sm89", feature = "sm90a")
 ))]
 
-use baracuda_driver::{Context, Device, DeviceBuffer};
+use baracuda_driver::{Context, Device, DeviceBuffer, require_optional};
 use baracuda_nccl::Communicator;
 use baracuda_optim::{
     AdamConfig, AdamMode, AdamStepPlan, DistributedAdamStepPlan, TensorList, shard_range,
@@ -52,9 +52,10 @@ fn distributed_adam_single_rank_matches_plain_adam() {
     let ctx = Context::new(&device).unwrap();
     let stream = baracuda_driver::Stream::new(&ctx).unwrap();
 
-    let Some(comm) = try_bringup_single_rank() else {
-        return;
-    };
+    let comm = require_optional!(
+        try_bringup_single_rank(),
+        "NCCL single-rank communicator bring-up (distributed Adam)"
+    );
 
     // World size must be 1 for the degenerate-case property.
     assert_eq!(
@@ -151,9 +152,10 @@ fn distributed_adam_single_rank_three_tensors_no_collective_overhead() {
     let ctx = Context::new(&device).unwrap();
     let stream = baracuda_driver::Stream::new(&ctx).unwrap();
 
-    let Some(comm) = try_bringup_single_rank() else {
-        return;
-    };
+    let comm = require_optional!(
+        try_bringup_single_rank(),
+        "NCCL single-rank communicator bring-up (distributed Adam)"
+    );
 
     let cfg = AdamConfig::default();
 

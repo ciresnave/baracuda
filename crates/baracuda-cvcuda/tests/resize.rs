@@ -4,6 +4,7 @@
 //! test skips gracefully.
 
 use baracuda_cvcuda::{Interpolation, Resize, Tensor};
+use baracuda_driver::require_optional;
 use baracuda_runtime::{Device, Stream};
 
 const LAYOUT_NHWC: i32 = 0; // NVCVTensorLayout::NHWC
@@ -12,10 +13,10 @@ const DTYPE_U8: i32 = 2; // NVCVDataType::U8 (first unsigned 8-bit slot)
 #[test]
 #[ignore = "requires CV-CUDA installed + NVIDIA GPU (Linux-only)"]
 fn resize_tensor_smoke() {
-    if baracuda_cvcuda::probe().is_err() {
-        eprintln!("CV-CUDA not installed on this host — skipping");
-        return;
-    }
+    require_optional!(
+        baracuda_cvcuda::probe(),
+        "CV-CUDA runtime library installed"
+    );
     Device::from_ordinal(0).set_current().unwrap();
     let stream = Stream::new().unwrap();
 

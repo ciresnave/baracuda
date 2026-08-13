@@ -3,6 +3,7 @@
 
 use baracuda_cuda_sys::runtime::types::{cudaChannelFormatKind, cudaExtent, cudaTextureDesc};
 
+use baracuda_driver::require_optional;
 use baracuda_runtime::array::{Array, MipmappedArray, SurfaceObject, TextureObject, channel_desc};
 use baracuda_runtime::launch_attr::LaunchExBuilder;
 use baracuda_runtime::memcpy3d::Pitched3dBuffer;
@@ -112,14 +113,18 @@ fn launch_ex_basic_vector_add() {
         LaunchExBuilder::new(&stream, (n.div_ceil(256), 1, 1), (256, 1, 1))
             .launch(&kernel, &mut args)
     };
-    match rc {
-        Ok(()) => {}
-        Err(baracuda_runtime::Error::Loader(_)) => {
-            eprintln!("cudaLaunchKernelEx not exported on this build — skipping");
-            return;
-        }
+    // cudaLaunchKernelEx is not always exported from the Windows cudart DLL, so
+    // a missing symbol is a legitimate skip even on the box → require_optional!
+    // (declared, not silent). Any OTHER error is a real failure and still panics.
+    let op = match rc {
+        Ok(()) => Some(()),
+        Err(baracuda_runtime::Error::Loader(_)) => None,
         Err(e) => panic!("launch_ex: {e:?}"),
-    }
+    };
+    require_optional!(
+        op,
+        "cudaLaunchKernelEx export (not always present in the Windows cudart DLL)"
+    );
     stream.synchronize().unwrap();
 
     let mut out = vec![0f32; n as usize];
@@ -147,30 +152,24 @@ fn vmm_end_to_end() {
     device.set_current().unwrap();
     let prop = vmm::device_alloc_prop(&device);
 
-    // VMM requires a handle-type on some drivers. If create fails, skip.
-    let granularity = match vmm::allocation_granularity(&prop, 0) {
-        Ok(g) => g,
-        Err(e) => {
-            eprintln!("granularity query failed: {e:?} — skipping");
-            return;
-        }
-    };
+    // VMM requires a supported handle-type on some drivers; where it isn't
+    // available these queries fail legitimately even on the box, so they are
+    // require_optional! (declared skip, not silent). If they DO succeed, the
+    // unsafe map/set_access/unmap/free block below is the assertion (Tier-B).
+    let granularity = require_optional!(
+        vmm::allocation_granularity(&prop, 0),
+        "VMM allocation-granularity query (driver/handle-type dependent)"
+    );
     let size = granularity.max(1 << 20);
 
-    let handle = match vmm::MemHandle::new(size, &prop, 0) {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("MemCreate failed: {e:?} — skipping");
-            return;
-        }
-    };
-    let va = match vmm::address_reserve(size, granularity, 0) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("address_reserve failed: {e:?} — skipping");
-            return;
-        }
-    };
+    let handle = require_optional!(
+        vmm::MemHandle::new(size, &prop, 0),
+        "VMM cuMemCreate (requires a supported handle type on this driver)"
+    );
+    let va = require_optional!(
+        vmm::address_reserve(size, granularity, 0),
+        "VMM cuMemAddressReserve"
+    );
     unsafe {
         vmm::map(va, size, 0, &handle, 0).unwrap();
         vmm::set_access(

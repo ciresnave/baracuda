@@ -2,7 +2,7 @@
 //! conditional graph nodes (CUDA 12.3+).
 
 use baracuda_cuda_sys::types::{CUgraphConditionalNodeType, CUgraphNodeType};
-use baracuda_driver::{Context, Device, DeviceBuffer, Graph, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Graph, Stream, require_optional};
 
 #[test]
 #[ignore = "requires an NVIDIA GPU + CUDA 12.3+"]
@@ -14,22 +14,15 @@ fn add_conditional_if_node_with_memset_body() {
 
     let parent = Graph::new(&ctx).unwrap();
     // default_launch_value = 1 -> the IF body runs once.
-    let handle = match parent.conditional_handle(1, 0) {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("cuGraphConditionalHandleCreate not supported: {e:?}");
-            return;
-        }
-    };
+    let handle = require_optional!(
+        parent.conditional_handle(1, 0),
+        "cuGraphConditionalHandleCreate — conditional graph node (CUDA 12.3+)"
+    );
 
-    let (cond_node, body) =
-        match parent.add_conditional_node(&[], handle, CUgraphConditionalNodeType::IF, 1) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("add_conditional_node rejected: {e:?}");
-                return;
-            }
-        };
+    let (cond_node, body) = require_optional!(
+        parent.add_conditional_node(&[], handle, CUgraphConditionalNodeType::IF, 1),
+        "cuGraphAddNode — conditional IF node (CUDA 12.3+)"
+    );
 
     assert_eq!(cond_node.node_type().unwrap(), CUgraphNodeType::CONDITIONAL);
 
@@ -37,22 +30,16 @@ fn add_conditional_if_node_with_memset_body() {
     // tight restrictions on what kinds of nodes they can contain (no
     // memset in some CUDA versions). Add an empty node instead — it's
     // always legal and proves the body CUgraph handle is usable.
-    let _empty = match body.add_empty_node(&[]) {
-        Ok(n) => n,
-        Err(e) => {
-            eprintln!("body.add_empty_node failed: {e:?}");
-            return;
-        }
-    };
+    let _empty = require_optional!(
+        body.add_empty_node(&[]),
+        "cuGraphAddEmptyNode in a conditional body graph"
+    );
 
     // Instantiate + launch. Default value was 1 so the body should run.
-    let exec = match parent.instantiate() {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("conditional graph instantiate failed: {e:?}");
-            return;
-        }
-    };
+    let exec = require_optional!(
+        parent.instantiate(),
+        "cuGraphInstantiate — instantiate conditional graph"
+    );
     exec.launch(&stream).unwrap();
     stream.synchronize().unwrap();
 

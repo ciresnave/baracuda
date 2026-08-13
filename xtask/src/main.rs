@@ -74,9 +74,12 @@ fn test_gpu(args: &[String]) -> ExitCode {
 
     // Encourage scoping — an unfiltered run compiles+launches the entire device
     // suite (~600 files) under one lock hold. Warn, don't block.
-    let scoped = cargo_args
-        .iter()
-        .any(|a| matches!(a.as_str(), "-p" | "--package" | "--test" | "--bin" | "--example"));
+    let scoped = cargo_args.iter().any(|a| {
+        matches!(
+            a.as_str(),
+            "-p" | "--package" | "--test" | "--bin" | "--example"
+        )
+    });
     if !scoped {
         eprintln!(
             "xtask test-gpu: no -p/--test filter — this builds AND launches the whole device \
@@ -153,7 +156,10 @@ fn test_gpu(args: &[String]) -> ExitCode {
     };
     let script = root.join("scripts").join("gpu-run.ps1");
     if !script.exists() {
-        eprintln!("xtask test-gpu: lock wrapper not found at {}", script.display());
+        eprintln!(
+            "xtask test-gpu: lock wrapper not found at {}",
+            script.display()
+        );
         return ExitCode::from(1);
     }
 

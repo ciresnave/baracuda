@@ -6,15 +6,16 @@
 use core::ffi::c_void;
 
 use baracuda_cutensor::*;
+use baracuda_driver::require_optional;
 use baracuda_runtime::{Device, DeviceBuffer, Stream};
 
 #[test]
 #[ignore = "requires cuTENSOR installed + NVIDIA GPU"]
 fn contract_matmul_small() {
-    if baracuda_cutensor::probe().is_err() {
-        eprintln!("cuTENSOR not installed — skipping");
-        return;
-    }
+    require_optional!(
+        baracuda_cutensor::probe(),
+        "cuTENSOR runtime library (separately-installed optional library)"
+    );
 
     Device::from_ordinal(0).set_current().unwrap();
     baracuda_cutensor::set_log_level(2).ok();
@@ -129,9 +130,10 @@ fn contract_matmul_small() {
 #[test]
 #[ignore = "requires cuTENSOR installed + NVIDIA GPU"]
 fn reduce_sum_axis() {
-    if baracuda_cutensor::probe().is_err() {
-        return;
-    }
+    require_optional!(
+        baracuda_cutensor::probe(),
+        "cuTENSOR runtime library (separately-installed optional library)"
+    );
     Device::from_ordinal(0).set_current().unwrap();
     let stream = Stream::new().unwrap();
     let handle = Handle::new().unwrap();

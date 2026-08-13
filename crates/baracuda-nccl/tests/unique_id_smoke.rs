@@ -9,18 +9,13 @@
 //! Multi-rank validation of the id is out of scope for Phase 52 (needs
 //! 2+ GPUs or a process-spawning harness).
 
+use baracuda_driver::require_optional;
 use baracuda_nccl::NcclUniqueId;
 
 #[test]
 #[ignore = "requires NCCL installed (typically Linux multi-GPU hosts)"]
 fn nccl_unique_id_generate_roundtrip() {
-    let id = match NcclUniqueId::generate() {
-        Ok(id) => id,
-        Err(e) => {
-            eprintln!("NCCL not available: {e}. Skipping.");
-            return;
-        }
-    };
+    let id = require_optional!(NcclUniqueId::generate(), "NCCL runtime (ncclGetUniqueId)");
 
     // Round-trip through the 128-byte wire form.
     let bytes = id.as_bytes();
@@ -37,13 +32,7 @@ fn nccl_unique_id_generate_roundtrip() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn nccl_unique_id_generate_is_nonzero() {
-    let id = match NcclUniqueId::generate() {
-        Ok(id) => id,
-        Err(e) => {
-            eprintln!("NCCL not available: {e}. Skipping.");
-            return;
-        }
-    };
+    let id = require_optional!(NcclUniqueId::generate(), "NCCL runtime (ncclGetUniqueId)");
     let bytes = id.as_bytes();
     // NCCL embeds a TCP listen address + nonce in the id — astronomically
     // unlikely to be all-zero (an all-zero id would indicate a stub).
@@ -56,13 +45,7 @@ fn nccl_unique_id_generate_is_nonzero() {
 #[test]
 #[ignore = "requires NCCL installed"]
 fn nccl_unique_id_generate_is_unique_per_call() {
-    let a = match NcclUniqueId::generate() {
-        Ok(id) => id,
-        Err(e) => {
-            eprintln!("NCCL not available: {e}. Skipping.");
-            return;
-        }
-    };
+    let a = require_optional!(NcclUniqueId::generate(), "NCCL runtime (ncclGetUniqueId)");
     let b = NcclUniqueId::generate().expect("second generate should succeed");
     assert_ne!(
         a.as_bytes(),
