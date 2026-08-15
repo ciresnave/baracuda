@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cuda-emit"
-version = "0.0.1-alpha.78"
+version = "0.0.1-alpha.79"
 description = "CUDA backend for the neutral `unpopped` kernel generator: the `Cuda` `Backend` (IR -> .cu emitter), the NVRTC on-demand JIT compiler (`NvrtcCompiler`), and `BaracudaSynthesizer` (the Fuel kernel-seam `Synthesizer` impl). Depends on the neutral generator `unpopped` and supplies the CUDA-specific final emit + compile stage from OUTSIDE the neutral core (the swappable backend model)."
 edition.workspace = true
 rust-version.workspace = true
