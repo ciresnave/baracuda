@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Eric Evans and the baracuda contributors
+// SPDX-FileCopyrightText: 2026 Eric Evans
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // Phase 13.3 — Fp8E4M3 / Fp8E5M2 ↔ {f32, f16, bf16} cast kernel
