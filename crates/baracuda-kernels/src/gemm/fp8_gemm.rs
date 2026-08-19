@@ -1,7 +1,7 @@
 //! FP8 GEMM plan.
 //!
 //! Full Phase 2 surface: 20 SKUs spanning
-//! `{Fp8E4M3, Fp8E5M2} × {LayoutSku::Rcr, LayoutSku::Rrr} ×
+//! `{Fp8E4M3FN, Fp8E5M2} × {LayoutSku::Rcr, LayoutSku::Rrr} ×
 //!  {Identity, Bias, BiasRelu, BiasGelu, BiasSilu}` on `sm_89`.
 //!
 //! All FP8 SKUs are bespoke kernels in
@@ -21,7 +21,7 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, ElementKind, EpilogueKind, Fp8E4M3, Fp8E5M2, FpElement, LayoutSku, MatrixMut,
+    ArchSku, ElementKind, EpilogueKind, Fp8E4M3FN, Fp8E5M2, FpElement, LayoutSku, MatrixMut,
     MatrixRef, PlanPreference, PrecisionGuarantee, VectorRef, Workspace,
 };
 
@@ -85,7 +85,7 @@ pub struct Fp8GemmArgs<'a, T: FpElement> {
 
 /// FP8 GEMM plan.
 ///
-/// Parameterized on `T: FpElement` ([`Fp8E4M3`] or [`Fp8E5M2`]). No
+/// Parameterized on `T: FpElement` ([`Fp8E4M3FN`] or [`Fp8E5M2`]). No
 /// bias-element generic — FP8 bias is always `f32`.
 #[derive(Debug)]
 pub struct Fp8GemmPlan<T: FpElement> {
@@ -116,9 +116,9 @@ impl<T: FpElement> Fp8GemmPlan<T> {
                 "baracuda-kernels: FP8 GEMM: only RCR / RRR layouts are shipped",
             ));
         }
-        if !matches!(T::KIND, ElementKind::Fp8E4M3 | ElementKind::Fp8E5M2) {
+        if !matches!(T::KIND, ElementKind::Fp8E4M3FN | ElementKind::Fp8E5M2) {
             return Err(Error::Unsupported(
-                "baracuda-kernels: FP8 GEMM: only Fp8E4M3 / Fp8E5M2 elements are shipped",
+                "baracuda-kernels: FP8 GEMM: only Fp8E4M3FN / Fp8E5M2 elements are shipped",
             ));
         }
         // EpilogueKind has 5 variants and we cover all of them — no
@@ -295,7 +295,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
         #[cfg(feature = "sm89")]
         let status = match (T::KIND, self.sku.layout, self.sku.epilogue) {
             // ---------- Identity ----------
-            (ElementKind::Fp8E4M3, LayoutSku::Rcr, EpilogueKind::Identity) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rcr, EpilogueKind::Identity) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_run(
                     m,
                     n,
@@ -315,7 +315,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
                     stream_ptr,
                 )
             },
-            (ElementKind::Fp8E4M3, LayoutSku::Rrr, EpilogueKind::Identity) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rrr, EpilogueKind::Identity) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rrr_sm89_run(
                     m,
                     n,
@@ -377,7 +377,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
             },
 
             // ---------- E4M3 × RCR × Bias family ----------
-            (ElementKind::Fp8E4M3, LayoutSku::Rcr, EpilogueKind::Bias) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rcr, EpilogueKind::Bias) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_bias_run(
                     m,
                     n,
@@ -398,7 +398,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
                     stream_ptr,
                 )
             },
-            (ElementKind::Fp8E4M3, LayoutSku::Rcr, EpilogueKind::BiasRelu) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rcr, EpilogueKind::BiasRelu) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_bias_relu_run(
                     m,
                     n,
@@ -419,7 +419,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
                     stream_ptr,
                 )
             },
-            (ElementKind::Fp8E4M3, LayoutSku::Rcr, EpilogueKind::BiasGelu) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rcr, EpilogueKind::BiasGelu) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_bias_gelu_run(
                     m,
                     n,
@@ -440,7 +440,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
                     stream_ptr,
                 )
             },
-            (ElementKind::Fp8E4M3, LayoutSku::Rcr, EpilogueKind::BiasSilu) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rcr, EpilogueKind::BiasSilu) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_bias_silu_run(
                     m,
                     n,
@@ -463,7 +463,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
             },
 
             // ---------- E4M3 × RRR × Bias family ----------
-            (ElementKind::Fp8E4M3, LayoutSku::Rrr, EpilogueKind::Bias) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rrr, EpilogueKind::Bias) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rrr_sm89_bias_run(
                     m,
                     n,
@@ -484,7 +484,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
                     stream_ptr,
                 )
             },
-            (ElementKind::Fp8E4M3, LayoutSku::Rrr, EpilogueKind::BiasRelu) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rrr, EpilogueKind::BiasRelu) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rrr_sm89_bias_relu_run(
                     m,
                     n,
@@ -505,7 +505,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
                     stream_ptr,
                 )
             },
-            (ElementKind::Fp8E4M3, LayoutSku::Rrr, EpilogueKind::BiasGelu) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rrr, EpilogueKind::BiasGelu) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rrr_sm89_bias_gelu_run(
                     m,
                     n,
@@ -526,7 +526,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
                     stream_ptr,
                 )
             },
-            (ElementKind::Fp8E4M3, LayoutSku::Rrr, EpilogueKind::BiasSilu) => unsafe {
+            (ElementKind::Fp8E4M3FN, LayoutSku::Rrr, EpilogueKind::BiasSilu) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gemm_fp8_e4m3_rrr_sm89_bias_silu_run(
                     m,
                     n,
@@ -746,7 +746,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
 // path.
 #[allow(dead_code)]
 fn _hold_fp8_elements_in_scope() {
-    let _ = Fp8E4M3(0);
+    let _ = Fp8E4M3FN(0);
     let _ = Fp8E5M2(0);
 }
 

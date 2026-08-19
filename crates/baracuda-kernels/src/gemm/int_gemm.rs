@@ -93,7 +93,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                 // baracuda-kernels' RRR coverage today: {S8, U8} ×
                 // {Identity, Bias, BiasRelu, BiasGelu, BiasSilu} ×
                 // {f32 bias, i32 bias}. int4 / bin land in Phase 2.
-                if !matches!(T::KIND, ElementKind::S8 | ElementKind::U8) {
+                if !matches!(T::KIND, ElementKind::I8 | ElementKind::U8) {
                     return Err(Error::Unsupported(
                         "baracuda-kernels: int RRR bespoke kernels: \
                          only S8 / U8 are implemented today \
@@ -242,7 +242,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                 // in baracuda-kernels-sys.
                 let status = match (T::KIND, self.sku.epilogue, BT::KIND) {
                     // ---- Identity (bias_element tag is meaningless) ----
-                    (ElementKind::S8, EpilogueKind::Identity, _) => unsafe {
+                    (ElementKind::I8, EpilogueKind::Identity, _) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_run(
                             m,
                             n,
@@ -284,7 +284,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     },
 
                     // ---- S8 × Bias family ----
-                    (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+                    (ElementKind::I8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_f32_run(
                             m,
                             n,
@@ -305,7 +305,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                             stream_ptr,
                         )
                     },
-                    (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+                    (ElementKind::I8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_relu_f32_run(
                             m,
                             n,
@@ -326,7 +326,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                             stream_ptr,
                         )
                     },
-                    (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+                    (ElementKind::I8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_gelu_f32_run(
                             m,
                             n,
@@ -347,7 +347,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                             stream_ptr,
                         )
                     },
-                    (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+                    (ElementKind::I8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_silu_f32_run(
                             m,
                             n,
@@ -368,7 +368,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                             stream_ptr,
                         )
                     },
-                    (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+                    (ElementKind::I8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_i32_run(
                             m,
                             n,
@@ -389,7 +389,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                             stream_ptr,
                         )
                     },
-                    (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+                    (ElementKind::I8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_relu_i32_run(
                             m,
                             n,
@@ -410,7 +410,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                             stream_ptr,
                         )
                     },
-                    (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+                    (ElementKind::I8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_gelu_i32_run(
                             m,
                             n,
@@ -431,7 +431,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                             stream_ptr,
                         )
                     },
-                    (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+                    (ElementKind::I8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_silu_i32_run(
                             m,
                             n,

@@ -20,7 +20,7 @@
 //! - `side = Left` only.
 //! - `op ∈ {N, T, C}` — `T` is real-only, `C` is complex-only (the
 //!   conjugate-transpose adjoint of unitary `Q`).
-//! - `dtype ∈ {f32, f64, Complex32, Complex64}`. Complex variants
+//! - `dtype ∈ {f32, f64, Complex64, Complex128}`. Complex variants
 //!   landed in Phase 26 and reuse the same WY-blocked kernel template
 //!   via the [`mul_T`] / [`conj_T`] element-arithmetic helpers in
 //!   `baracuda_batched_ormqr.cuh`. Complex GEMMs go through cuBLAS
@@ -81,7 +81,7 @@ use baracuda_kernels_sys::{
     cublasHandle_t, cublasSetStream_v2, cublasSgemmStridedBatched, cublasZgemmStridedBatched,
 };
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, KernelSku, LinalgKind,
+    ArchSku, BackendKind, Complex64, Complex128, Element, ElementKind, KernelSku, LinalgKind,
     MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, Workspace,
 };
 
@@ -112,8 +112,8 @@ pub struct BatchedOrmqrWyDescriptor {
     /// [`BatchedOrmqrOp::T`] (apply `Q^T`, real only), or
     /// [`BatchedOrmqrOp::C`] (apply `Q^H`, complex only).
     pub op: BatchedOrmqrOp,
-    /// Element type. Must be `F32`, `F64`, `Complex32`, or
-    /// `Complex64`.
+    /// Element type. Must be `F32`, `F64`, `Complex64`, or
+    /// `Complex128`.
     pub element: ElementKind,
 }
 
@@ -153,7 +153,7 @@ pub struct BatchedOrmqrWyArgs<'a, T: Element> {
 /// matrices. Pair with [`super::BatchedQrPlan`] which produces the
 /// packed inputs.
 ///
-/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64`. Complex variants
+/// **Dtypes**: `f32`, `f64`, `Complex64`, `Complex128`. Complex variants
 /// landed in Phase 26 — they share the WY-blocked kernel template
 /// (with the inner dot-product `conj()` and the GEMM trans flag
 /// `OP_C`) and use cuBLAS's `C/ZgemmStridedBatched` for the per-block
@@ -195,11 +195,11 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
             ));
         }
         let is_real = matches!(T::KIND, ElementKind::F32 | ElementKind::F64);
-        let is_complex = matches!(T::KIND, ElementKind::Complex32 | ElementKind::Complex64);
+        let is_complex = matches!(T::KIND, ElementKind::Complex64 | ElementKind::Complex128);
         if !(is_real || is_complex) {
             return Err(Error::Unsupported(
                 "baracuda-kernels::BatchedOrmqrWyPlan: dtype must be one of \
-                 {f32, f64, Complex32, Complex64}",
+                 {f32, f64, Complex64, Complex128}",
             ));
         }
         if !matches!(desc.side, BatchedOrmqrSide::Left) {
@@ -262,7 +262,7 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
         let ws_bytes = (t_elems + v_elems + w_elems + w2_elems) * elem;
 
         let math_precision = match T::KIND {
-            ElementKind::F64 | ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::F64 | ElementKind::Complex128 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -686,7 +686,7 @@ impl_batched_ormqr_wy_run!(
     CUBLAS_OP_T
 );
 impl_batched_ormqr_wy_run!(
-    Complex32,
+    Complex64,
     cuComplex,
     baracuda_kernels_batched_ormqr_wy_build_t_complex32_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_complex32_run,
@@ -698,7 +698,7 @@ impl_batched_ormqr_wy_run!(
     CUBLAS_OP_C
 );
 impl_batched_ormqr_wy_run!(
-    Complex64,
+    Complex128,
     cuDoubleComplex,
     baracuda_kernels_batched_ormqr_wy_build_t_complex64_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_complex64_run,

@@ -1358,7 +1358,7 @@ fn primitive_add_uses_op_kind_and_carries_required_blocks() {
     // required §4.3 blocks.
     for block in [
         "accept:",
-        "structure_key: \"sk3|",
+        "structure_key: \"sk4|",
         "return:",
         "caps:",
         "cost:",
@@ -1482,8 +1482,17 @@ fn f64_scalar_param_op_params_carry_the_f64_token() {
 
 #[test]
 fn bool_dtype_maps_to_u8_not_bool() {
+    use unpopped::ir::BinaryOp;
     // §5 (B5/E5): Fuel has no Bool dtype — a provider's Bool rides as U8.
-    let op = OpDef::elementwise("eq", 2, &[ElementKind::Bool], input(0) + input(1));
+    // Use a LOGICAL op: unpopped 0.2.0 (723fdb0, "bool is its own kind") declines
+    // ARITHMETIC at Bool (`true + true` = 2 isn't a value of the dtype) and admits
+    // logical ops — the path that actually reaches the FKC contract for a Bool cell.
+    let op = OpDef::elementwise(
+        "and",
+        2,
+        &[ElementKind::Bool],
+        input(0).binary(BinaryOp::LogicalAnd, input(1)),
+    );
     let key = key_dtype(ElementKind::Bool, 3);
     let c = contract(&op, &key, &stub_kernel(), &Cuda).unwrap();
     assert!(c.contains("dtypes: [U8]"));
@@ -1494,8 +1503,8 @@ fn bool_dtype_maps_to_u8_not_bool() {
 fn unsupported_dtype_yields_no_contract() {
     // Complex has no FKC §5 base-dtype slot — skip the cell (honest miss),
     // never emit an unbindable `dtypes: [C64]` contract.
-    let op = OpDef::elementwise("add", 2, &[ElementKind::Complex64], input(0) + input(1));
-    let key = key_dtype(ElementKind::Complex64, 3);
+    let op = OpDef::elementwise("add", 2, &[ElementKind::Complex128], input(0) + input(1));
+    let key = key_dtype(ElementKind::Complex128, 3);
     assert!(contract(&op, &key, &stub_kernel(), &Cuda).is_none());
 }
 
@@ -1600,8 +1609,8 @@ fn uniform_int_add_contracts_carry_the_audited_dtype() {
     assert!(c.contains("count_unit: elements"));
     // 2 u8 reads + 1 u8 write ⇒ bytes_moved expression "3 * n".
     assert!(c.contains("  bytes_moved: \"3 * n\"\n"), "{c}");
-    let adds = OpDef::elementwise("add", 2, &[ElementKind::S8], input(0) + input(1));
-    let ks = key_dtype(ElementKind::S8, 3);
+    let adds = OpDef::elementwise("add", 2, &[ElementKind::I8], input(0) + input(1));
+    let ks = key_dtype(ElementKind::I8, 3);
     let k8 = generate(&adds, &ks, &Cuda);
     let c8 = contract(&adds, &ks, &k8, &Cuda).unwrap();
     assert!(c8.contains("dtypes: [I8]"), "S8 spells I8 on the FKC wire");

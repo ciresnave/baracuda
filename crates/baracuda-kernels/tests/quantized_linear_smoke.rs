@@ -126,7 +126,7 @@ fn quantized_linear_w8a8_f32_basic() {
         q_min: -127,
         q_max: 127,
         activation_element: ElementKind::F32,
-        weight_element: ElementKind::S8,
+        weight_element: ElementKind::I8,
     };
     let plan = QuantizedLinearPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");

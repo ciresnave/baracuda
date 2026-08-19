@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Eric Evans and the baracuda contributors
+// SPDX-FileCopyrightText: 2026 Eric Evans
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // baracuda_te_shim.cu — flat C-ABI bridge for the

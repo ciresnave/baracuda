@@ -348,7 +348,7 @@ fn contiguize_s4_contiguous_rank1() {
         shape,
         source_strides: [1i64],
         source_offset: 0,
-        element: ElementKind::S4,
+        element: ElementKind::I4,
     };
     let plan = ContiguizePlan::<S4, 1>::select(&stream, &desc, PlanPreference::default())
         .expect("select s4");

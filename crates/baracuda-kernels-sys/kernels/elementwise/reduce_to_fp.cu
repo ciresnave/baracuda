@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Eric Evans and the baracuda contributors
+// SPDX-FileCopyrightText: 2026 Eric Evans
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // Phase 31 — instantiations for `reduce_sum_to` and `reduce_max_to`

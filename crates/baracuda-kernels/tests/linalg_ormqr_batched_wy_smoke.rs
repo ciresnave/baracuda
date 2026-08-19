@@ -16,7 +16,7 @@ use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     BatchedOrmqrArgs, BatchedOrmqrDescriptor, BatchedOrmqrOp, BatchedOrmqrPlan, BatchedOrmqrSide,
     BatchedOrmqrWyArgs, BatchedOrmqrWyDescriptor, BatchedOrmqrWyPlan, BatchedQrArgs,
-    BatchedQrDescriptor, BatchedQrPlan, Complex32, Complex64, ElementKind, PlanPreference,
+    BatchedQrDescriptor, BatchedQrPlan, Complex64, Complex128, ElementKind, PlanPreference,
     TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
@@ -490,69 +490,25 @@ fn ormqr_batched_wy_f64_left_t() {
 // supports complex via Milestone 6.18) at GEMM tolerances.
 // =============================================================================
 
-fn build_matrix_complex32(b: usize, m: usize, n: usize, seed: u32) -> Vec<Complex32> {
+fn build_matrix_complex32(b: usize, m: usize, n: usize, seed: u32) -> Vec<Complex64> {
     let re = build_matrix_f32(b, m, n, seed);
     let im = build_matrix_f32(b, m, n, seed.wrapping_mul(0x6F4A_8B19));
-    re.into_iter()
-        .zip(im)
-        .map(|(r, i)| Complex32::new(r, i))
-        .collect()
-}
-
-fn build_matrix_complex64(b: usize, m: usize, n: usize, seed: u32) -> Vec<Complex64> {
-    let re = build_matrix_f64(b, m, n, seed);
-    let im = build_matrix_f64(b, m, n, seed.wrapping_mul(0x6F4A_8B19));
     re.into_iter()
         .zip(im)
         .map(|(r, i)| Complex64::new(r, i))
         .collect()
 }
 
-fn run_batched_qr_complex32(
-    ctx: &Context,
-    stream: &Stream,
-    a_host: &[Complex32],
-    b: i32,
-    m: i32,
-    n: i32,
-) -> (Vec<Complex32>, Vec<Complex32>) {
-    let k = m.min(n);
-    let mut dev_a = DeviceBuffer::from_slice(ctx, a_host).expect("upload a");
-    let mut dev_tau: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(ctx, (b * k) as usize).expect("alloc tau");
-    let desc = BatchedQrDescriptor {
-        m,
-        n,
-        batch_size: b,
-        element: ElementKind::Complex32,
-    };
-    let plan = BatchedQrPlan::<Complex32>::select(stream, &desc, PlanPreference::default())
-        .expect("select BatchedQrPlan<Complex32>");
-    let ws_bytes = plan.query_workspace_size(stream).expect("ws query");
-    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes).expect("alloc ws");
-    let args = BatchedQrArgs::<Complex32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [b, m, n],
-            stride: contiguous_stride([b, m, n]),
-        },
-        tau: TensorMut {
-            data: dev_tau.as_slice_mut(),
-            shape: [b, k],
-            stride: contiguous_stride([b, k]),
-        },
-    };
-    plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
-        .expect("run batched QR complex32");
-    stream.synchronize().expect("sync");
-    let mut a_post = vec![Complex32::new(0.0, 0.0); (b * m * n) as usize];
-    dev_a.copy_to_host(&mut a_post).expect("dl a-post");
-    let mut tau_post = vec![Complex32::new(0.0, 0.0); (b * k) as usize];
-    dev_tau.copy_to_host(&mut tau_post).expect("dl tau-post");
-    (a_post, tau_post)
+fn build_matrix_complex64(b: usize, m: usize, n: usize, seed: u32) -> Vec<Complex128> {
+    let re = build_matrix_f64(b, m, n, seed);
+    let im = build_matrix_f64(b, m, n, seed.wrapping_mul(0x6F4A_8B19));
+    re.into_iter()
+        .zip(im)
+        .map(|(r, i)| Complex128::new(r, i))
+        .collect()
 }
 
-fn run_batched_qr_complex64(
+fn run_batched_qr_complex32(
     ctx: &Context,
     stream: &Stream,
     a_host: &[Complex64],
@@ -587,7 +543,7 @@ fn run_batched_qr_complex64(
         },
     };
     plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
-        .expect("run batched QR complex64");
+        .expect("run batched QR complex32");
     stream.synchronize().expect("sync");
     let mut a_post = vec![Complex64::new(0.0, 0.0); (b * m * n) as usize];
     dev_a.copy_to_host(&mut a_post).expect("dl a-post");
@@ -596,58 +552,51 @@ fn run_batched_qr_complex64(
     (a_post, tau_post)
 }
 
-fn ref_ormqr_complex32(
+fn run_batched_qr_complex64(
     ctx: &Context,
     stream: &Stream,
-    a_packed: &[Complex32],
-    tau: &[Complex32],
-    c_init: &[Complex32],
+    a_host: &[Complex128],
     b: i32,
     m: i32,
     n: i32,
-    k: i32,
-    op: BatchedOrmqrOp,
-) -> Vec<Complex32> {
-    let dev_a = DeviceBuffer::from_slice(ctx, a_packed).expect("upload a");
-    let dev_tau = DeviceBuffer::from_slice(ctx, tau).expect("upload tau");
-    let mut dev_c = DeviceBuffer::from_slice(ctx, c_init).expect("upload c");
-    let desc = BatchedOrmqrDescriptor {
+) -> (Vec<Complex128>, Vec<Complex128>) {
+    let k = m.min(n);
+    let mut dev_a = DeviceBuffer::from_slice(ctx, a_host).expect("upload a");
+    let mut dev_tau: DeviceBuffer<Complex128> =
+        DeviceBuffer::zeros(ctx, (b * k) as usize).expect("alloc tau");
+    let desc = BatchedQrDescriptor {
         m,
         n,
-        k,
         batch_size: b,
-        side: BatchedOrmqrSide::Left,
-        op,
-        element: ElementKind::Complex32,
+        element: ElementKind::Complex128,
     };
-    let plan = BatchedOrmqrPlan::<Complex32>::select(stream, &desc, PlanPreference::default())
-        .expect("select BatchedOrmqrPlan<Complex32>");
-    let args = BatchedOrmqrArgs::<Complex32> {
-        a_packed: TensorRef {
-            data: dev_a.as_slice(),
-            shape: [b, m, k],
-            stride: contiguous_stride([b, m, k]),
-        },
-        tau: TensorRef {
-            data: dev_tau.as_slice(),
-            shape: [b, k],
-            stride: contiguous_stride([b, k]),
-        },
-        c: TensorMut {
-            data: dev_c.as_slice_mut(),
+    let plan = BatchedQrPlan::<Complex128>::select(stream, &desc, PlanPreference::default())
+        .expect("select BatchedQrPlan<Complex128>");
+    let ws_bytes = plan.query_workspace_size(stream).expect("ws query");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes).expect("alloc ws");
+    let args = BatchedQrArgs::<Complex128> {
+        a: TensorMut {
+            data: dev_a.as_slice_mut(),
             shape: [b, m, n],
             stride: contiguous_stride([b, m, n]),
         },
+        tau: TensorMut {
+            data: dev_tau.as_slice_mut(),
+            shape: [b, k],
+            stride: contiguous_stride([b, k]),
+        },
     };
-    plan.run(stream, Workspace::None, args)
-        .expect("run reflector ormqr complex32");
+    plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
+        .expect("run batched QR complex64");
     stream.synchronize().expect("sync");
-    let mut c_post = vec![Complex32::new(0.0, 0.0); (b * m * n) as usize];
-    dev_c.copy_to_host(&mut c_post).expect("dl c-post");
-    c_post
+    let mut a_post = vec![Complex128::new(0.0, 0.0); (b * m * n) as usize];
+    dev_a.copy_to_host(&mut a_post).expect("dl a-post");
+    let mut tau_post = vec![Complex128::new(0.0, 0.0); (b * k) as usize];
+    dev_tau.copy_to_host(&mut tau_post).expect("dl tau-post");
+    (a_post, tau_post)
 }
 
-fn ref_ormqr_complex64(
+fn ref_ormqr_complex32(
     ctx: &Context,
     stream: &Stream,
     a_packed: &[Complex64],
@@ -691,49 +640,47 @@ fn ref_ormqr_complex64(
         },
     };
     plan.run(stream, Workspace::None, args)
-        .expect("run reflector ormqr complex64");
+        .expect("run reflector ormqr complex32");
     stream.synchronize().expect("sync");
     let mut c_post = vec![Complex64::new(0.0, 0.0); (b * m * n) as usize];
     dev_c.copy_to_host(&mut c_post).expect("dl c-post");
     c_post
 }
 
-fn wy_ormqr_complex32(
+fn ref_ormqr_complex64(
     ctx: &Context,
     stream: &Stream,
-    a_packed: &[Complex32],
-    tau: &[Complex32],
-    c_init: &[Complex32],
+    a_packed: &[Complex128],
+    tau: &[Complex128],
+    c_init: &[Complex128],
     b: i32,
     m: i32,
     n: i32,
     k: i32,
     op: BatchedOrmqrOp,
-) -> Vec<Complex32> {
-    let mut dev_a = DeviceBuffer::from_slice(ctx, a_packed).expect("upload a");
-    let mut dev_tau = DeviceBuffer::from_slice(ctx, tau).expect("upload tau");
+) -> Vec<Complex128> {
+    let dev_a = DeviceBuffer::from_slice(ctx, a_packed).expect("upload a");
+    let dev_tau = DeviceBuffer::from_slice(ctx, tau).expect("upload tau");
     let mut dev_c = DeviceBuffer::from_slice(ctx, c_init).expect("upload c");
-    let desc = BatchedOrmqrWyDescriptor {
+    let desc = BatchedOrmqrDescriptor {
         m,
         n,
         k,
         batch_size: b,
         side: BatchedOrmqrSide::Left,
         op,
-        element: ElementKind::Complex32,
+        element: ElementKind::Complex128,
     };
-    let plan = BatchedOrmqrWyPlan::<Complex32>::select(stream, &desc, PlanPreference::default())
-        .expect("select BatchedOrmqrWyPlan<Complex32>");
-    let ws_bytes = plan.query_workspace_size(stream).expect("ws query");
-    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes).expect("alloc ws");
-    let args = BatchedOrmqrWyArgs::<Complex32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
+    let plan = BatchedOrmqrPlan::<Complex128>::select(stream, &desc, PlanPreference::default())
+        .expect("select BatchedOrmqrPlan<Complex128>");
+    let args = BatchedOrmqrArgs::<Complex128> {
+        a_packed: TensorRef {
+            data: dev_a.as_slice(),
             shape: [b, m, k],
             stride: contiguous_stride([b, m, k]),
         },
-        tau: TensorMut {
-            data: dev_tau.as_slice_mut(),
+        tau: TensorRef {
+            data: dev_tau.as_slice(),
             shape: [b, k],
             stride: contiguous_stride([b, k]),
         },
@@ -743,15 +690,15 @@ fn wy_ormqr_complex32(
             stride: contiguous_stride([b, m, n]),
         },
     };
-    plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
-        .expect("run WY ormqr complex32");
+    plan.run(stream, Workspace::None, args)
+        .expect("run reflector ormqr complex64");
     stream.synchronize().expect("sync");
-    let mut c_post = vec![Complex32::new(0.0, 0.0); (b * m * n) as usize];
+    let mut c_post = vec![Complex128::new(0.0, 0.0); (b * m * n) as usize];
     dev_c.copy_to_host(&mut c_post).expect("dl c-post");
     c_post
 }
 
-fn wy_ormqr_complex64(
+fn wy_ormqr_complex32(
     ctx: &Context,
     stream: &Stream,
     a_packed: &[Complex64],
@@ -797,14 +744,67 @@ fn wy_ormqr_complex64(
         },
     };
     plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
-        .expect("run WY ormqr complex64");
+        .expect("run WY ormqr complex32");
     stream.synchronize().expect("sync");
     let mut c_post = vec![Complex64::new(0.0, 0.0); (b * m * n) as usize];
     dev_c.copy_to_host(&mut c_post).expect("dl c-post");
     c_post
 }
 
-fn check_complex32(got: &[Complex32], expected: &[Complex32], tol: f32, label: &str) {
+fn wy_ormqr_complex64(
+    ctx: &Context,
+    stream: &Stream,
+    a_packed: &[Complex128],
+    tau: &[Complex128],
+    c_init: &[Complex128],
+    b: i32,
+    m: i32,
+    n: i32,
+    k: i32,
+    op: BatchedOrmqrOp,
+) -> Vec<Complex128> {
+    let mut dev_a = DeviceBuffer::from_slice(ctx, a_packed).expect("upload a");
+    let mut dev_tau = DeviceBuffer::from_slice(ctx, tau).expect("upload tau");
+    let mut dev_c = DeviceBuffer::from_slice(ctx, c_init).expect("upload c");
+    let desc = BatchedOrmqrWyDescriptor {
+        m,
+        n,
+        k,
+        batch_size: b,
+        side: BatchedOrmqrSide::Left,
+        op,
+        element: ElementKind::Complex128,
+    };
+    let plan = BatchedOrmqrWyPlan::<Complex128>::select(stream, &desc, PlanPreference::default())
+        .expect("select BatchedOrmqrWyPlan<Complex128>");
+    let ws_bytes = plan.query_workspace_size(stream).expect("ws query");
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(ctx, ws_bytes).expect("alloc ws");
+    let args = BatchedOrmqrWyArgs::<Complex128> {
+        a: TensorMut {
+            data: dev_a.as_slice_mut(),
+            shape: [b, m, k],
+            stride: contiguous_stride([b, m, k]),
+        },
+        tau: TensorMut {
+            data: dev_tau.as_slice_mut(),
+            shape: [b, k],
+            stride: contiguous_stride([b, k]),
+        },
+        c: TensorMut {
+            data: dev_c.as_slice_mut(),
+            shape: [b, m, n],
+            stride: contiguous_stride([b, m, n]),
+        },
+    };
+    plan.run(stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
+        .expect("run WY ormqr complex64");
+    stream.synchronize().expect("sync");
+    let mut c_post = vec![Complex128::new(0.0, 0.0); (b * m * n) as usize];
+    dev_c.copy_to_host(&mut c_post).expect("dl c-post");
+    c_post
+}
+
+fn check_complex32(got: &[Complex64], expected: &[Complex64], tol: f32, label: &str) {
     assert_eq!(got.len(), expected.len(), "{label}: length mismatch");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let d_re = (g.re - e.re).abs();
@@ -823,7 +823,7 @@ fn check_complex32(got: &[Complex32], expected: &[Complex32], tol: f32, label: &
     }
 }
 
-fn check_complex64(got: &[Complex64], expected: &[Complex64], tol: f64, label: &str) {
+fn check_complex64(got: &[Complex128], expected: &[Complex128], tol: f64, label: &str) {
     assert_eq!(got.len(), expected.len(), "{label}: length mismatch");
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         let d_re = (g.re - e.re).abs();

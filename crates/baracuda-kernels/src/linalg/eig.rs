@@ -3,7 +3,7 @@
 //!
 //! Wraps cuSOLVER's 64-bit-index `cusolverDnXgeev` (cuSOLVER 11.7+ /
 //! CUDA 12.6+). The single Xgeev entry point handles all four input
-//! dtypes (`f32` / `f64` / `Complex32` / `Complex64`) via the
+//! dtypes (`f32` / `f64` / `Complex64` / `Complex128`) via the
 //! `cudaDataType` argument.
 //!
 //! ## LAPACK-style output convention (NOT always-complex)
@@ -27,7 +27,7 @@
 //!   imaginary parts (`wi`). Complex eigenvalues appear as
 //!   conjugate pairs at adjacent indices: `wr[k] + i·wi[k]` and
 //!   `wr[k+1] + i·wi[k+1]` with `wi[k+1] = -wi[k]`.
-//! - **Complex input (`Complex32` / `Complex64`)**: `W` is sized `[N]`
+//! - **Complex input (`Complex64` / `Complex128`)**: `W` is sized `[N]`
 //!   and contains complex eigenvalues directly.
 //!
 //! ### VL/VR layout
@@ -91,7 +91,7 @@ pub struct EigDescriptor {
     /// `true` to compute right eigenvectors `VR`. `false` to skip —
     /// `VR` may be `None`.
     pub compute_right: bool,
-    /// Input element type. `F32` / `F64` / `Complex32` / `Complex64`.
+    /// Input element type. `F32` / `F64` / `Complex64` / `Complex128`.
     /// The output dtype matches the input dtype — see module-level docs
     /// for the LAPACK packed-real convention used when input is real.
     pub element: ElementKind,
@@ -135,7 +135,7 @@ pub struct EigArgs<'a, T: Element> {
 /// matrix. Use [`super::EighPlan`] when the input is symmetric /
 /// Hermitian (faster, real eigvals).
 ///
-/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64`. The single
+/// **Dtypes**: `f32`, `f64`, `Complex64`, `Complex128`. The single
 /// `Xgeev` entry point dispatches via `cudaDataType`.
 ///
 /// **Shape**: `[N, N]`. 2-D only — no batched `Xgeev` in cuSOLVER.
@@ -175,10 +175,10 @@ impl<T: Element> EigPlan<T> {
         }
         if !matches!(
             T::KIND,
-            ElementKind::F32 | ElementKind::F64 | ElementKind::Complex32 | ElementKind::Complex64
+            ElementKind::F32 | ElementKind::F64 | ElementKind::Complex64 | ElementKind::Complex128
         ) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::EigPlan: supports f32 / f64 / Complex32 / Complex64 only",
+                "baracuda-kernels::EigPlan: supports f32 / f64 / Complex64 / Complex128 only",
             ));
         }
         if desc.n <= 0 {
@@ -188,7 +188,7 @@ impl<T: Element> EigPlan<T> {
         }
 
         let math_precision = match T::KIND {
-            ElementKind::F64 | ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::F64 | ElementKind::Complex128 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -501,9 +501,9 @@ fn dtype_tag<T: Element>() -> cudaDataType {
     match T::KIND {
         ElementKind::F32 => CUDA_R_32F,
         ElementKind::F64 => CUDA_R_64F,
-        ElementKind::Complex32 => CUDA_C_32F,
-        ElementKind::Complex64 => CUDA_C_64F,
-        _ => unreachable!("select() gates on F32 / F64 / Complex32 / Complex64"),
+        ElementKind::Complex64 => CUDA_C_32F,
+        ElementKind::Complex128 => CUDA_C_64F,
+        _ => unreachable!("select() gates on F32 / F64 / Complex64 / Complex128"),
     }
 }
 
@@ -514,7 +514,7 @@ fn dtype_tag<T: Element>() -> cudaDataType {
 fn w_packed_len<T: Element>(n: i32) -> i32 {
     match T::KIND {
         ElementKind::F32 | ElementKind::F64 => 2 * n,
-        ElementKind::Complex32 | ElementKind::Complex64 => n,
-        _ => unreachable!("select() gates on F32 / F64 / Complex32 / Complex64"),
+        ElementKind::Complex64 | ElementKind::Complex128 => n,
+        _ => unreachable!("select() gates on F32 / F64 / Complex64 / Complex128"),
     }
 }

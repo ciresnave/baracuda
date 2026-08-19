@@ -9,7 +9,7 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    EpilogueKind, Fp8E4M3, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan, LayoutSku, MatrixMut,
+    EpilogueKind, Fp8E4M3FN, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan, LayoutSku, MatrixMut,
     MatrixRef, PlanPreference, Workspace,
 };
 use float8::F8E4M3;
@@ -105,9 +105,9 @@ fn run_fp8_e4m3_rrr_identity(m: i32, n: i32, k: i32) {
 
     let dev_a_bytes = DeviceBuffer::from_slice(&ctx, &host_a_bits).expect("upload A");
     let dev_b_bytes = DeviceBuffer::from_slice(&ctx, &host_b_bits).expect("upload B");
-    let dev_a = dev_a_bytes.view_as::<Fp8E4M3>();
-    let dev_b = dev_b_bytes.view_as::<Fp8E4M3>();
-    let mut dev_d: DeviceBuffer<Fp8E4M3> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
+    let dev_a = dev_a_bytes.view_as::<Fp8E4M3FN>();
+    let dev_b = dev_b_bytes.view_as::<Fp8E4M3FN>();
+    let mut dev_d: DeviceBuffer<Fp8E4M3FN> = DeviceBuffer::zeros(&ctx, mu * nu).expect("alloc D");
 
     let desc = Fp8GemmDescriptor {
         m,
@@ -116,10 +116,10 @@ fn run_fp8_e4m3_rrr_identity(m: i32, n: i32, k: i32) {
         layout: LayoutSku::Rrr,
         epilogue: EpilogueKind::Identity,
     };
-    let plan = Fp8GemmPlan::<Fp8E4M3>::select(&stream, &desc, PlanPreference::default())
+    let plan = Fp8GemmPlan::<Fp8E4M3FN>::select(&stream, &desc, PlanPreference::default())
         .expect("select FP8 E4M3 RRR plan");
 
-    let args = Fp8GemmArgs::<Fp8E4M3> {
+    let args = Fp8GemmArgs::<Fp8E4M3FN> {
         a: MatrixRef {
             data: dev_a,
             rows: m,
@@ -148,7 +148,7 @@ fn run_fp8_e4m3_rrr_identity(m: i32, n: i32, k: i32) {
         .expect("FP8 E4M3 RRR GEMM run");
     stream.synchronize().expect("stream sync");
 
-    let mut host_d_bits = vec![Fp8E4M3(0); mu * nu];
+    let mut host_d_bits = vec![Fp8E4M3FN(0); mu * nu];
     dev_d.copy_to_host(&mut host_d_bits).expect("download D");
 
     let mut mismatches = 0usize;

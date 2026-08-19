@@ -196,7 +196,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
             // f64 input — use the f64-scale FFI flavor.
             let scale_f64 = args.scale.to_f64();
             match TOut::KIND {
-                ElementKind::S8 => unsafe {
+                ElementKind::I8 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_f64_s8_run(
                         numel,
                         scale_f64,
@@ -234,7 +234,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
             // f32 / f16 / bf16 input — f32 scale flavor.
             let scale_f32 = args.scale.to_f32();
             match (TIn::KIND, TOut::KIND) {
-                (ElementKind::F32, ElementKind::S8) => unsafe {
+                (ElementKind::F32, ElementKind::I8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_f32_s8_run(
                         numel,
                         scale_f32,
@@ -262,7 +262,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
                         stream_ptr,
                     )
                 },
-                (ElementKind::F16, ElementKind::S8) => unsafe {
+                (ElementKind::F16, ElementKind::I8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_f16_s8_run(
                         numel,
                         scale_f32,
@@ -290,7 +290,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
                         stream_ptr,
                     )
                 },
-                (ElementKind::Bf16, ElementKind::S8) => unsafe {
+                (ElementKind::Bf16, ElementKind::I8) => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_quantize_per_tensor_bf16_s8_run(
                         numel,
                         scale_f32,

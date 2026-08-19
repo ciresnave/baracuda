@@ -1235,19 +1235,26 @@ mod dispatch {
             // dispatcher should never see them when the plan layer is
             // wired correctly. `I32` is an accumulator-only kind and
             // is never a kernel input element.
-            (_, ElementKind::S8)
+            (_, ElementKind::I8)
             | (_, ElementKind::U8)
             | (_, ElementKind::I32)
             | (_, ElementKind::I64)
             | (_, ElementKind::Bool)
-            | (_, ElementKind::Fp8E4M3)
+            | (_, ElementKind::Fp8E4M3FN)
             | (_, ElementKind::Fp8E5M2)
-            | (_, ElementKind::S4)
+            | (_, ElementKind::I4)
             | (_, ElementKind::U4)
-            | (_, ElementKind::Bin)
+            | (_, ElementKind::B1)
             | (_, ElementKind::U32)
-            | (_, ElementKind::Complex32)
-            | (_, ElementKind::Complex64) => 3,
+            | (_, ElementKind::I16)
+            | (_, ElementKind::U16)
+            | (_, ElementKind::U64)
+            | (_, ElementKind::Fp8E4M3FNUZ)
+            | (_, ElementKind::Fp8E5M2FNUZ)
+            | (_, ElementKind::F8E8M0)
+            | (_, ElementKind::F8E6M2)
+            | (_, ElementKind::Complex64)
+            | (_, ElementKind::Complex128) => 3,
         }
     }
 
@@ -1290,19 +1297,26 @@ mod dispatch {
             // Integer kinds route through `int_gemm_sm80_workspace_size`.
             // FP8 kinds route through baracuda-kernels-sys. Defensive arms;
             // never expected to fire here.
-            (_, ElementKind::S8)
+            (_, ElementKind::I8)
             | (_, ElementKind::U8)
             | (_, ElementKind::I32)
             | (_, ElementKind::I64)
             | (_, ElementKind::Bool)
-            | (_, ElementKind::Fp8E4M3)
+            | (_, ElementKind::Fp8E4M3FN)
             | (_, ElementKind::Fp8E5M2)
-            | (_, ElementKind::S4)
+            | (_, ElementKind::I4)
             | (_, ElementKind::U4)
-            | (_, ElementKind::Bin)
+            | (_, ElementKind::B1)
             | (_, ElementKind::U32)
-            | (_, ElementKind::Complex32)
-            | (_, ElementKind::Complex64) => 0,
+            | (_, ElementKind::I16)
+            | (_, ElementKind::U16)
+            | (_, ElementKind::U64)
+            | (_, ElementKind::Fp8E4M3FNUZ)
+            | (_, ElementKind::Fp8E5M2FNUZ)
+            | (_, ElementKind::F8E8M0)
+            | (_, ElementKind::F8E6M2)
+            | (_, ElementKind::Complex64)
+            | (_, ElementKind::Complex128) => 0,
         }
     }
 
@@ -1368,19 +1382,26 @@ mod dispatch {
             // F64 routes through its own dispatcher.
             (LayoutSku::Rcr, ElementKind::F64) | (LayoutSku::Rrr, ElementKind::F64) => 3,
             // Integer kinds route through `int_gemm_sm80_can_implement`.
-            (_, ElementKind::S8)
+            (_, ElementKind::I8)
             | (_, ElementKind::U8)
             | (_, ElementKind::I32)
             | (_, ElementKind::I64)
             | (_, ElementKind::Bool)
-            | (_, ElementKind::Fp8E4M3)
+            | (_, ElementKind::Fp8E4M3FN)
             | (_, ElementKind::Fp8E5M2)
-            | (_, ElementKind::S4)
+            | (_, ElementKind::I4)
             | (_, ElementKind::U4)
-            | (_, ElementKind::Bin)
+            | (_, ElementKind::B1)
             | (_, ElementKind::U32)
-            | (_, ElementKind::Complex32)
-            | (_, ElementKind::Complex64) => 3,
+            | (_, ElementKind::I16)
+            | (_, ElementKind::U16)
+            | (_, ElementKind::U64)
+            | (_, ElementKind::Fp8E4M3FNUZ)
+            | (_, ElementKind::Fp8E5M2FNUZ)
+            | (_, ElementKind::F8E8M0)
+            | (_, ElementKind::F8E6M2)
+            | (_, ElementKind::Complex64)
+            | (_, ElementKind::Complex128) => 3,
         }
     }
 
@@ -2022,19 +2043,26 @@ mod dispatch {
             ElementKind::F32
             | ElementKind::F32Strict
             | ElementKind::F64
-            | ElementKind::S8
+            | ElementKind::I8
             | ElementKind::U8
             | ElementKind::I32
             | ElementKind::I64
             | ElementKind::Bool
-            | ElementKind::Fp8E4M3
+            | ElementKind::Fp8E4M3FN
             | ElementKind::Fp8E5M2
-            | ElementKind::S4
+            | ElementKind::I4
             | ElementKind::U4
-            | ElementKind::Bin
+            | ElementKind::B1
             | ElementKind::U32
-            | ElementKind::Complex32
-            | ElementKind::Complex64 => 0,
+            | ElementKind::I16
+            | ElementKind::U16
+            | ElementKind::U64
+            | ElementKind::Fp8E4M3FNUZ
+            | ElementKind::Fp8E5M2FNUZ
+            | ElementKind::F8E8M0
+            | ElementKind::F8E6M2
+            | ElementKind::Complex64
+            | ElementKind::Complex128 => 0,
         }
     }
 
@@ -2070,19 +2098,26 @@ mod dispatch {
             ElementKind::F32
             | ElementKind::F32Strict
             | ElementKind::F64
-            | ElementKind::S8
+            | ElementKind::I8
             | ElementKind::U8
             | ElementKind::I32
             | ElementKind::I64
             | ElementKind::Bool
-            | ElementKind::Fp8E4M3
+            | ElementKind::Fp8E4M3FN
             | ElementKind::Fp8E5M2
-            | ElementKind::S4
+            | ElementKind::I4
             | ElementKind::U4
-            | ElementKind::Bin
+            | ElementKind::B1
             | ElementKind::U32
-            | ElementKind::Complex32
-            | ElementKind::Complex64 => 0,
+            | ElementKind::I16
+            | ElementKind::U16
+            | ElementKind::U64
+            | ElementKind::Fp8E4M3FNUZ
+            | ElementKind::Fp8E5M2FNUZ
+            | ElementKind::F8E8M0
+            | ElementKind::F8E6M2
+            | ElementKind::Complex64
+            | ElementKind::Complex128 => 0,
         }
     }
 
@@ -2115,19 +2150,26 @@ mod dispatch {
             ElementKind::F32
             | ElementKind::F32Strict
             | ElementKind::F64
-            | ElementKind::S8
+            | ElementKind::I8
             | ElementKind::U8
             | ElementKind::I32
             | ElementKind::I64
             | ElementKind::Bool
-            | ElementKind::Fp8E4M3
+            | ElementKind::Fp8E4M3FN
             | ElementKind::Fp8E5M2
-            | ElementKind::S4
+            | ElementKind::I4
             | ElementKind::U4
-            | ElementKind::Bin
+            | ElementKind::B1
             | ElementKind::U32
-            | ElementKind::Complex32
-            | ElementKind::Complex64 => 3,
+            | ElementKind::I16
+            | ElementKind::U16
+            | ElementKind::U64
+            | ElementKind::Fp8E4M3FNUZ
+            | ElementKind::Fp8E5M2FNUZ
+            | ElementKind::F8E8M0
+            | ElementKind::F8E6M2
+            | ElementKind::Complex64
+            | ElementKind::Complex128 => 3,
         }
     }
 
@@ -2200,19 +2242,26 @@ mod dispatch {
             ElementKind::F32
             | ElementKind::F32Strict
             | ElementKind::F64
-            | ElementKind::S8
+            | ElementKind::I8
             | ElementKind::U8
             | ElementKind::I32
             | ElementKind::I64
             | ElementKind::Bool
-            | ElementKind::Fp8E4M3
+            | ElementKind::Fp8E4M3FN
             | ElementKind::Fp8E5M2
-            | ElementKind::S4
+            | ElementKind::I4
             | ElementKind::U4
-            | ElementKind::Bin
+            | ElementKind::B1
             | ElementKind::U32
-            | ElementKind::Complex32
-            | ElementKind::Complex64 => 3,
+            | ElementKind::I16
+            | ElementKind::U16
+            | ElementKind::U64
+            | ElementKind::Fp8E4M3FNUZ
+            | ElementKind::Fp8E5M2FNUZ
+            | ElementKind::F8E8M0
+            | ElementKind::F8E6M2
+            | ElementKind::Complex64
+            | ElementKind::Complex128 => 3,
         }
     }
 
@@ -2249,7 +2298,7 @@ mod dispatch {
     ) -> i32 {
         use baracuda_cutlass_kernels_sys as k_sys;
         match (layout, kind) {
-            (LayoutSku::Rcr, ElementKind::S8) => unsafe {
+            (LayoutSku::Rcr, ElementKind::I8) => unsafe {
                 k_sys::baracuda_cutlass_gemm_s8_rcr_sm80_run(
                     m,
                     n,
@@ -2292,7 +2341,7 @@ mod dispatch {
             // RRR int8 is deferred — CUTLASS 4.2.0 lacks the 8-bit
             // `TensorOpMultiplicandCongruous` warp iterator needed for
             // `RowMajor × RowMajor × OpClassTensorOp` instantiation.
-            (LayoutSku::Rrr, ElementKind::S8) | (LayoutSku::Rrr, ElementKind::U8) => 3,
+            (LayoutSku::Rrr, ElementKind::I8) | (LayoutSku::Rrr, ElementKind::U8) => 3,
             // Defensive: float and I32 kinds should never reach this dispatcher.
             _ => 3,
         }
@@ -2308,7 +2357,7 @@ mod dispatch {
     ) -> usize {
         use baracuda_cutlass_kernels_sys as k_sys;
         match (layout, kind) {
-            (LayoutSku::Rcr, ElementKind::S8) => unsafe {
+            (LayoutSku::Rcr, ElementKind::I8) => unsafe {
                 k_sys::baracuda_cutlass_gemm_s8_rcr_sm80_workspace_size(m, n, k)
             },
             (LayoutSku::Rcr, ElementKind::U8) => unsafe {
@@ -2337,7 +2386,7 @@ mod dispatch {
     ) -> i32 {
         use baracuda_cutlass_kernels_sys as k_sys;
         match (layout, kind) {
-            (LayoutSku::Rcr, ElementKind::S8) => unsafe {
+            (LayoutSku::Rcr, ElementKind::I8) => unsafe {
                 k_sys::baracuda_cutlass_gemm_s8_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
                 )
@@ -2347,7 +2396,7 @@ mod dispatch {
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
                 )
             },
-            (LayoutSku::Rrr, ElementKind::S8) | (LayoutSku::Rrr, ElementKind::U8) => 3,
+            (LayoutSku::Rrr, ElementKind::I8) | (LayoutSku::Rrr, ElementKind::U8) => 3,
             _ => 3,
         }
     }
@@ -2396,7 +2445,7 @@ mod dispatch {
         }
         match (kind, epilogue, bias_kind) {
             // ---- s8 × f32 bias ----
-            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rcr_sm80_run(
                     m,
                     n,
@@ -2417,7 +2466,7 @@ mod dispatch {
                     stream,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rcr_sm80_run(
                     m,
                     n,
@@ -2438,7 +2487,7 @@ mod dispatch {
                     stream,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rcr_sm80_run(
                     m,
                     n,
@@ -2459,7 +2508,7 @@ mod dispatch {
                     stream,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rcr_sm80_run(
                     m,
                     n,
@@ -2481,7 +2530,7 @@ mod dispatch {
                 )
             },
             // ---- s8 × i32 bias ----
-            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rcr_sm80_run(
                     m,
                     n,
@@ -2502,7 +2551,7 @@ mod dispatch {
                     stream,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rcr_sm80_run(
                     m,
                     n,
@@ -2523,7 +2572,7 @@ mod dispatch {
                     stream,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rcr_sm80_run(
                     m,
                     n,
@@ -2544,7 +2593,7 @@ mod dispatch {
                     stream,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rcr_sm80_run(
                     m,
                     n,
@@ -2759,28 +2808,28 @@ mod dispatch {
             return 0;
         }
         match (kind, epilogue, bias_kind) {
-            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
-            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
-            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
-            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
-            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
-            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
-            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
-            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
             (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
@@ -2836,42 +2885,42 @@ mod dispatch {
             return 3;
         }
         match (kind, epilogue, bias_kind) {
-            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
-            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
-            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+            (ElementKind::I8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
@@ -3706,7 +3755,7 @@ impl<T: CutlassElement> GemmPlan<T> {
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            (ArchSku::Sm90a, _) => {
+            (ArchSku::Sm90a | ArchSku::Sm90, _) => {
                 return Err(Error::Unsupported(
                     "sm90a kernels not yet shipped (deferred until Hopper hardware available for validation)",
                 ));
@@ -3776,7 +3825,7 @@ impl<T: CutlassElement> GemmPlan<T> {
             ),
             #[cfg(not(feature = "sm80"))]
             (ArchSku::Sm80, _) => 0,
-            (ArchSku::Sm90a, _) => 0,
+            (ArchSku::Sm90a | ArchSku::Sm90, _) => 0,
             (ArchSku::Sm89, _) => 0,
         }
     }
@@ -4017,7 +4066,7 @@ impl<T: CutlassElement> GemmPlan<T> {
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            (ArchSku::Sm90a, _) => {
+            (ArchSku::Sm90a | ArchSku::Sm90, _) => {
                 return Err(Error::Unsupported(
                     "sm90a kernels not yet implemented (Phase 4c)",
                 ));
@@ -4734,7 +4783,7 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            ArchSku::Sm90a => {
+            ArchSku::Sm90a | ArchSku::Sm90 => {
                 return Err(Error::Unsupported("sm90a batched kernels not yet shipped"));
             }
             ArchSku::Sm89 => {
@@ -4761,7 +4810,7 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
             ),
             #[cfg(not(feature = "sm80"))]
             ArchSku::Sm80 => 0,
-            ArchSku::Sm90a => 0,
+            ArchSku::Sm90a | ArchSku::Sm90 => 0,
             ArchSku::Sm89 => 0,
         }
     }
@@ -4856,7 +4905,7 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            ArchSku::Sm90a => {
+            ArchSku::Sm90a | ArchSku::Sm90 => {
                 return Err(Error::Unsupported("sm90a batched kernels not yet shipped"));
             }
             ArchSku::Sm89 => {
@@ -5179,7 +5228,7 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            ArchSku::Sm90a => {
+            ArchSku::Sm90a | ArchSku::Sm90 => {
                 return Err(Error::Unsupported(
                     "sm90a grouped kernels not yet shipped (deferred until Hopper hardware available)",
                 ));
@@ -5206,7 +5255,7 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
             },
             #[cfg(not(feature = "sm80"))]
             ArchSku::Sm80 => 0,
-            ArchSku::Sm90a => 0,
+            ArchSku::Sm90a | ArchSku::Sm90 => 0,
             ArchSku::Sm89 => 0,
         };
         if threadblock_count <= 0 {
@@ -5227,7 +5276,7 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
             },
             #[cfg(not(feature = "sm80"))]
             ArchSku::Sm80 => 0,
-            ArchSku::Sm90a => 0,
+            ArchSku::Sm90a | ArchSku::Sm90 => 0,
             ArchSku::Sm89 => 0,
         };
 
@@ -5478,7 +5527,7 @@ impl<'a, T: CutlassElement> PreparedGroupedGemm<'a, T> {
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            ArchSku::Sm90a => {
+            ArchSku::Sm90a | ArchSku::Sm90 => {
                 return Err(Error::Unsupported("sm90a grouped kernels not yet shipped"));
             }
             ArchSku::Sm89 => {
@@ -5640,7 +5689,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            (ArchSku::Sm90a, _) => {
+            (ArchSku::Sm90a | ArchSku::Sm90, _) => {
                 return Err(Error::Unsupported("sm90a int8 kernels not yet shipped"));
             }
             (ArchSku::Sm89, _) => {
@@ -5677,7 +5726,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
             ),
             #[cfg(not(feature = "sm80"))]
             (ArchSku::Sm80, _) => 0,
-            (ArchSku::Sm90a, _) => 0,
+            (ArchSku::Sm90a | ArchSku::Sm90, _) => 0,
             (ArchSku::Sm89, _) => 0,
         }
     }
@@ -5795,7 +5844,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            (ArchSku::Sm90a, _) => {
+            (ArchSku::Sm90a | ArchSku::Sm90, _) => {
                 return Err(Error::Unsupported("sm90a int8 kernels not yet shipped"));
             }
             (ArchSku::Sm89, _) => {

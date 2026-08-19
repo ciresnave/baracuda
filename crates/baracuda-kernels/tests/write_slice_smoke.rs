@@ -474,7 +474,7 @@ fn write_slice_nibble_s4_rank2() {
         dest_shape,
         source_shape,
         ranges,
-        element: ElementKind::S4,
+        element: ElementKind::I4,
     };
     let plan =
         WriteSlicePlan::<S4, 2>::select(&stream, &desc, PlanPreference::default()).expect("select");
@@ -551,7 +551,7 @@ fn write_slice_nibble_odd_start_rejected() {
         dest_shape,
         source_shape,
         ranges,
-        element: ElementKind::S4,
+        element: ElementKind::I4,
     };
     let res = WriteSlicePlan::<S4, 2>::select(&stream, &desc, PlanPreference::default());
     assert!(

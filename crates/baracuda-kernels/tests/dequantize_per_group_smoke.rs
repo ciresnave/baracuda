@@ -67,7 +67,7 @@ fn dequantize_per_group_f32_s8_basic() {
         axis_size,
         group_size,
         input_element: ElementKind::F32,
-        output_element: ElementKind::S8,
+        output_element: ElementKind::I8,
     };
     let plan = DequantizePerGroupPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");

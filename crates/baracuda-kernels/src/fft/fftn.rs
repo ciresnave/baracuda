@@ -1,5 +1,5 @@
 //! Multi-dimensional FFT / IFFT (complex-to-complex) — `FftNdPlan<T>`
-//! for `T = Complex32` / `Complex64`. Milestone 6.8.
+//! for `T = Complex64` / `Complex128`. Milestone 6.8.
 //!
 //! Wraps cuFFT's `cufftPlanMany` for `rank`-D transforms (2-D and 3-D
 //! are the primary targets; rank-1 also works as a degenerate path
@@ -42,7 +42,7 @@ use baracuda_kernels_sys::{
     cufftExecC2C, cufftExecZ2Z, cufftHandle, cufftPlanMany, cufftSetStream,
 };
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FftKind, KernelSku,
+    ArchSku, BackendKind, Complex64, Complex128, Element, ElementKind, FftKind, KernelSku,
     MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, Workspace,
 };
 
@@ -70,7 +70,7 @@ pub struct FftNdDescriptor {
     /// `false` = forward (unnormalized), `true` = inverse (normalized
     /// by `1/N` to match PyTorch's `norm="backward"`).
     pub inverse: bool,
-    /// Element type — `Complex32` / `Complex64`.
+    /// Element type — `Complex64` / `Complex128`.
     pub element: ElementKind,
 }
 
@@ -113,7 +113,7 @@ pub struct FftNdArgs<'a, T: Element> {
 /// Permute first if your transformed axes aren't a contiguous suffix.
 /// Use [`super::FftPlan`] for the 1-D fast path.
 ///
-/// **Dtypes**: `Complex32`, `Complex64`.
+/// **Dtypes**: `Complex64`, `Complex128`.
 ///
 /// **Shape**: `rank ∈ {1, 2, 3}` trailblazer (rank 4 wired but
 /// rejected by `select` pending hardware soak). `dims[0..rank]` are the
@@ -144,9 +144,9 @@ impl<T: Element> FftNdPlan<T> {
                 "baracuda-kernels::FftNdPlan: descriptor.element != T::KIND",
             ));
         }
-        if !matches!(T::KIND, ElementKind::Complex32 | ElementKind::Complex64) {
+        if !matches!(T::KIND, ElementKind::Complex64 | ElementKind::Complex128) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::FftNdPlan: C2C ND FFT supports Complex32 + Complex64 only",
+                "baracuda-kernels::FftNdPlan: C2C ND FFT supports Complex64 + Complex128 only",
             ));
         }
         if !(1..=3).contains(&desc.rank) {
@@ -168,7 +168,7 @@ impl<T: Element> FftNdPlan<T> {
         }
 
         let math_precision = match T::KIND {
-            ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::Complex128 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -225,9 +225,9 @@ impl<T: Element> FftNdPlan<T> {
             return Ok(h);
         }
         let fft_type = match T::KIND {
-            ElementKind::Complex32 => CUFFT_C2C,
-            ElementKind::Complex64 => CUFFT_Z2Z,
-            _ => unreachable!("select() gates on Complex32 / Complex64"),
+            ElementKind::Complex64 => CUFFT_C2C,
+            ElementKind::Complex128 => CUFFT_Z2Z,
+            _ => unreachable!("select() gates on Complex64 / Complex128"),
         };
         let rank = self.desc.rank as i32;
         // cufftPlanMany takes `*mut i32` for n / inembed / onembed; the
@@ -286,15 +286,15 @@ impl<T: Element> FftNdPlan<T> {
     }
 }
 
-// ----- Complex32 -------------------------------------------------------------
+// ----- Complex64 -------------------------------------------------------------
 
-impl FftNdPlan<Complex32> {
+impl FftNdPlan<Complex64> {
     /// Run the ND C2C FFT (single precision).
     pub fn run(
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: FftNdArgs<'_, Complex32>,
+        args: FftNdArgs<'_, Complex64>,
     ) -> Result<()> {
         let total = self.check_args(&args.x, &args.y)?;
         if total == 0 {
@@ -334,15 +334,15 @@ impl FftNdPlan<Complex32> {
     }
 }
 
-// ----- Complex64 -------------------------------------------------------------
+// ----- Complex128 -------------------------------------------------------------
 
-impl FftNdPlan<Complex64> {
+impl FftNdPlan<Complex128> {
     /// Run the ND C2C FFT (double precision).
     pub fn run(
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: FftNdArgs<'_, Complex64>,
+        args: FftNdArgs<'_, Complex128>,
     ) -> Result<()> {
         let total = self.check_args(&args.x, &args.y)?;
         if total == 0 {

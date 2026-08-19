@@ -3,3 +3,10 @@
 # writes '\n'; force these goldens to LF on checkout so byte-identity holds on
 # Windows too (autocrlf would otherwise convert them to CRLF and fail the test).
 crates/baracuda-cuda-emit/src/goldens/*.cu text eol=lf
+
+# LICENSE-MIT / LICENSE-APACHE are byte-identical to their canonical upstream
+# (Apache-2.0 = apache.org/licenses/LICENSE-2.0.txt, sha256 cfc7749b…). The
+# published tarball must stay byte-identical, so pin them to LF on every
+# checkout — autocrlf would otherwise rewrite them to CRLF on Windows and break
+# the hash. Slash-less pattern → matches at root and in every crate dir.
+LICENSE-* text eol=lf

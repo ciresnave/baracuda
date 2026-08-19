@@ -82,7 +82,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTokenBackwardPlan<TIn, TOut> {
             TIn::KIND,
             "DequantizePerTokenBackwardPlan: unsupported TIn dtype",
         )?;
-        if !matches!(TOut::KIND, ElementKind::S8 | ElementKind::U8) {
+        if !matches!(TOut::KIND, ElementKind::I8 | ElementKind::U8) {
             return Err(Error::Unsupported(
                 "DequantizePerTokenBackwardPlan: TOut must be S8 or U8",
             ));

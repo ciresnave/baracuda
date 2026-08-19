@@ -10,7 +10,7 @@
 //!   cuBLAS batched LU is a deferred follow-up).
 //! - [`QrPlan`] — `A = Q · R`; 2-D only (cuSOLVER has no batched `geqrf`).
 //! - [`BatchedQrPlan`] — batched-QR via **cuBLAS** `geqrfBatched`,
-//!   packed output, `f32` / `f64` / `Complex32` / `Complex64`.
+//!   packed output, `f32` / `f64` / `Complex64` / `Complex128`.
 //! - [`BatchedQrMaterializePlan`] — bespoke kernel that unpacks
 //!   [`BatchedQrPlan`]'s output into dense `Q [B, M, M]` + `R [B, K, N]`.
 //! - [`SvdPlan`] — `A = U · diag(S) · V^T`. 2-D only (`gesvd`,
@@ -44,7 +44,7 @@
 //!
 //! Most plans support `f32` + `f64` only — cuSOLVER's dense API does
 //! **not** expose `f16` / `bf16` for these factorizations. Complex
-//! (`Complex32` / `Complex64`) is wired for [`EighPlan`], [`EigPlan`],
+//! (`Complex64` / `Complex128`) is wired for [`EighPlan`], [`EigPlan`],
 //! [`BatchedQrPlan`], [`BatchedOrmqrPlan`], [`BatchedOrmqrWyPlan`].
 //! See per-plan docs for the authoritative dtype list.
 //!

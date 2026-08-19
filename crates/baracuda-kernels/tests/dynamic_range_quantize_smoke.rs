@@ -86,7 +86,7 @@ fn dynamic_range_quantize_f32_s8_per_token_symmetric_basic() {
         mode: DynamicRangeMode::Symmetric,
         scope: DynamicRangeScope::Token,
         input_element: ElementKind::F32,
-        output_element: ElementKind::S8,
+        output_element: ElementKind::I8,
     };
     let plan =
         DynamicRangeQuantizePlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())

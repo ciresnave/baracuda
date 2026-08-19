@@ -90,13 +90,21 @@ pub fn setup_device() -> (Context, Stream) {
 /// Map a device's `(major, minor)` compute capability to the specialization
 /// `ArchSku`. Ada (sm_89) is its own SKU; other Ampere (sm_80/86/87) keys to the
 /// `Sm80` cell (an sm_80 kernel is forward-compatible within Ampere); Hopper
-/// (sm_90) to `Sm90a`. `None` for a capability with no built cell.
+/// (compute 9.x) elects `Sm90a`, NOT the portable `Sm90` — deliberately: Baracuda
+/// specializes Hopper against the arch-exclusive instruction set (its Hopper token
+/// is `sm90a`, cuda.md §2), so a detected H100 gets the accelerated cell. `Sm90`
+/// (added to the vocabulary in unpopped-vocab 0.2.0) exists for token decode but is
+/// not a Baracuda election target — `sm_90` and `sm_90a` are distinct compilation
+/// targets that cannot share a cache key. Mirrors `unpopped-vocab
+/// telemetry::arch_sku_of`, kept in lockstep so drift is caught. `None` for a
+/// capability with no built cell.
 #[must_use]
 pub fn arch_sku_of(major: u32, minor: u32) -> Option<ArchSku> {
     match (major, minor) {
-        (8, 9) => Some(ArchSku::Sm89),  // Ada — RTX 4070 / RTX 6000 Ada / L40S
-        (8, _) => Some(ArchSku::Sm80),  // Ampere — A100 (sm_80), consumer sm_86/87
-        (9, _) => Some(ArchSku::Sm90a), // Hopper
+        (8, 9) => Some(ArchSku::Sm89), // Ada — RTX 4070 / RTX 6000 Ada / L40S
+        (8, _) => Some(ArchSku::Sm80), // Ampere — A100 (sm_80), consumer sm_86/87
+        // Hopper — elects sm90a (arch-exclusive), not the portable sm90 (see doc).
+        (9, _) => Some(ArchSku::Sm90a),
         _ => None,
     }
 }
@@ -117,9 +125,12 @@ pub fn current_hwstamp(device: &Device) -> Option<HwStamp> {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     Some(HwStamp {
-        arch,
+        // 0.2.0 generalized HwStamp off cuda-specific naming: `arch: ArchSku` →
+        // `target: TargetId` (via `From<ArchSku>`), `cuda_version` → `runtime_version`
+        // (opaque here — the namespace owner spells it, §6.8-0004).
+        target: arch.into(),
         device_name,
-        cuda_version,
+        runtime_version: cuda_version,
         captured_unix_s,
     })
 }
@@ -790,7 +801,11 @@ mod gate_tests {
         let (ctx, stream) = setup_device();
         let device = Device::get(0).expect("device");
         let stamp = current_hwstamp(&device).expect("hwstamp");
-        assert_eq!(stamp.arch, ArchSku::Sm89, "RTX 4070 is Ada/sm89");
+        assert_eq!(
+            stamp.target,
+            baracuda_kernels_types::TargetId::from(ArchSku::Sm89),
+            "RTX 4070 is Ada/sm89"
+        );
         assert!(!stamp.device_name.is_empty());
 
         let a = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);

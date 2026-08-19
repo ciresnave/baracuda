@@ -66,9 +66,9 @@
 // Re-export the shared type vocabulary.
 pub use baracuda_kernels_types::{
     ActivationKind, ArchSku, ArgReduceKind, AttentionKind, BackendKind, BiasElement,
-    BiasElementKind, Bin, BinElement, BinaryCmpKind, BinaryKind, Bool, Complex32, Complex64,
+    BiasElementKind, Bin, BinElement, BinaryCmpKind, BinaryKind, Bool, Complex64, Complex128,
     CrossEntropyTargetKind, Element, ElementKind, EmbeddingKind, EpilogueKind, F32Strict, FftKind,
-    FillMode, Fp8E4M3, Fp8E5M2, FpElement, GatedActivationKind, GgufBlockFormat, ImageKind,
+    FillMode, Fp8E4M3FN, Fp8E5M2, FpElement, GatedActivationKind, GgufBlockFormat, ImageKind,
     IndexElement, IndexElementKind, IndexOutputElement, IndexOutputKind, IndexingKind, IntElement,
     KernelDtype, KernelSku, LayoutSku, LinalgKind, LossKind, LossReduction, MathPrecision,
     MatrixMut, MatrixRef, MoeKind, NormalizationKind, OpCategory, PadMode, PlanPreference,

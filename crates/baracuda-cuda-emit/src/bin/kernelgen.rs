@@ -281,7 +281,7 @@ fn main() {
     // here so `ondevice/reduction_int8_validate.cu` can `#include` the emitted
     // kernels the same way `reduce_validate.cu`/`reduction_upgrades_validate.cu`
     // consume the i32/f32 cells above.
-    for dt in [ElementKind::S8, ElementKind::U8] {
+    for dt in [ElementKind::I8, ElementKind::U8] {
         let isum8 = OpDef::reduction("sum", 1, &[dt], input(0), ReduceOp::Sum);
         let imax8 = OpDef::reduction("amax", 1, &[dt], input(0), ReduceOp::Max);
         let imin8 = OpDef::reduction("amin", 1, &[dt], input(0), ReduceOp::Min);

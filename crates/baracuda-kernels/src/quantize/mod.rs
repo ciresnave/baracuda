@@ -207,7 +207,7 @@ pub(crate) fn validate_output_element(
     plan_name: &'static str,
 ) -> Result<()> {
     use baracuda_kernels_types::ElementKind;
-    if !matches!(tout_kind, ElementKind::S8 | ElementKind::U8) {
+    if !matches!(tout_kind, ElementKind::I8 | ElementKind::U8) {
         return Err(Error::Unsupported(plan_name));
     }
     Ok(())
@@ -223,7 +223,7 @@ pub(crate) fn validate_output_element(
 pub fn default_q_range(out_kind: baracuda_kernels_types::ElementKind) -> Option<(i32, i32)> {
     use baracuda_kernels_types::ElementKind;
     match out_kind {
-        ElementKind::S8 => Some((-128, 127)),
+        ElementKind::I8 => Some((-128, 127)),
         ElementKind::U8 => Some((0, 255)),
         _ => None,
     }

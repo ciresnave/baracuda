@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 baracuda project contributors  (MIT OR Apache-2.0)
+// SPDX-FileCopyrightText: 2026 Eric Evans  (MIT OR Apache-2.0)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // gather_rows.cu — capture-safe decode-shaped row gather (embedding lookup).

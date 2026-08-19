@@ -3,7 +3,7 @@
 //! Coverage:
 //!   - `S4 -> i32` (unpack, sign-extension)
 //!   - `U4 -> i32` (unpack, zero-extension)
-//!   - `Fp8E4M3 -> f32` and `f32 -> Fp8E4M3` round-trip
+//!   - `Fp8E4M3FN -> f32` and `f32 -> Fp8E4M3FN` round-trip
 //!   - `U8 -> f32`... NOT covered here because U8 routes through the
 //!     classic `CastPlan` via the `u8 -> f32` FFI symbol; the dedicated
 //!     test for that lives elsewhere.
@@ -20,7 +20,7 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    Bool, CastSubByteArgs, CastSubByteDescriptor, CastSubBytePlan, ElementKind, Fp8E4M3,
+    Bool, CastSubByteArgs, CastSubByteDescriptor, CastSubBytePlan, ElementKind, Fp8E4M3FN,
     PlanPreference, S4, TensorMut, TensorRef, U4, Workspace, contiguous_stride,
 };
 
@@ -62,7 +62,7 @@ fn cast_s4_to_i32_unpacks_with_sign_extension() {
 
     let desc = CastSubByteDescriptor {
         numel,
-        input_element: ElementKind::S4,
+        input_element: ElementKind::I4,
         output_element: ElementKind::I32,
     };
     let plan = CastSubBytePlan::<S4, i32>::select(&stream, &desc, PlanPreference::default())
@@ -145,7 +145,7 @@ fn cast_u4_to_i32_unpacks_with_zero_extension() {
 }
 
 // =============================================================================
-// Fp8E4M3 -> f32 -> Fp8E4M3 round-trip.
+// Fp8E4M3FN -> f32 -> Fp8E4M3FN round-trip.
 //
 // Pick values that are exactly representable on the E4M3 lattice so the
 // round-trip is bit-exact. The grid {0, 0.5, 1, 2, 4, 8, 16, 32, 64} all
@@ -157,23 +157,23 @@ fn cast_u4_to_i32_unpacks_with_zero_extension() {
 fn cast_fp8e4m3_to_f32_lattice_grid() {
     let (ctx, stream) = setup();
     let grid: Vec<f32> = vec![0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0];
-    let host_x: Vec<Fp8E4M3> = grid.iter().map(|&f| Fp8E4M3::from_f32(f)).collect();
+    let host_x: Vec<Fp8E4M3FN> = grid.iter().map(|&f| Fp8E4M3FN::from_f32(f)).collect();
     let numel = host_x.len() as i32;
 
-    // Reinterpret as bytes for upload (Fp8E4M3 is repr(transparent) over u8).
+    // Reinterpret as bytes for upload (Fp8E4M3FN is repr(transparent) over u8).
     let host_x_bytes: Vec<u8> = host_x.iter().map(|fp| fp.0).collect();
     let dev_x_u8 = DeviceBuffer::from_slice(&ctx, &host_x_bytes).expect("upload");
-    let dev_x: DeviceBuffer<Fp8E4M3> = unsafe { core::mem::transmute(dev_x_u8) };
+    let dev_x: DeviceBuffer<Fp8E4M3FN> = unsafe { core::mem::transmute(dev_x_u8) };
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc");
 
     let desc = CastSubByteDescriptor {
         numel,
-        input_element: ElementKind::Fp8E4M3,
+        input_element: ElementKind::Fp8E4M3FN,
         output_element: ElementKind::F32,
     };
-    let plan = CastSubBytePlan::<Fp8E4M3, f32>::select(&stream, &desc, PlanPreference::default())
+    let plan = CastSubBytePlan::<Fp8E4M3FN, f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
-    let args = CastSubByteArgs::<Fp8E4M3, f32> {
+    let args = CastSubByteArgs::<Fp8E4M3FN, f32> {
         input: TensorRef {
             data: dev_x.as_slice(),
             shape: [numel],
@@ -190,7 +190,7 @@ fn cast_fp8e4m3_to_f32_lattice_grid() {
 
     let mut got = vec![0f32; numel as usize];
     dev_y.copy_to_host(&mut got).expect("download");
-    // Reference: host-side Fp8E4M3 -> f32 lookup.
+    // Reference: host-side Fp8E4M3FN -> f32 lookup.
     let expected: Vec<f32> = host_x.iter().map(|fp| fp.to_f32()).collect();
     for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
         assert_eq!(g.to_bits(), e.to_bits(), "fp8e4m3 -> f32 mismatch @ {i}");
@@ -207,16 +207,16 @@ fn cast_f32_to_fp8e4m3_lattice_grid() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("upload");
     let dev_y_bytes: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, numel as usize).expect("alloc");
-    let mut dev_y: DeviceBuffer<Fp8E4M3> = unsafe { core::mem::transmute(dev_y_bytes) };
+    let mut dev_y: DeviceBuffer<Fp8E4M3FN> = unsafe { core::mem::transmute(dev_y_bytes) };
 
     let desc = CastSubByteDescriptor {
         numel,
         input_element: ElementKind::F32,
-        output_element: ElementKind::Fp8E4M3,
+        output_element: ElementKind::Fp8E4M3FN,
     };
-    let plan = CastSubBytePlan::<f32, Fp8E4M3>::select(&stream, &desc, PlanPreference::default())
+    let plan = CastSubBytePlan::<f32, Fp8E4M3FN>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
-    let args = CastSubByteArgs::<f32, Fp8E4M3> {
+    let args = CastSubByteArgs::<f32, Fp8E4M3FN> {
         input: TensorRef {
             data: dev_x.as_slice(),
             shape: [numel],
@@ -238,7 +238,7 @@ fn cast_f32_to_fp8e4m3_lattice_grid() {
         .copy_to_host(&mut got_bytes)
         .expect("download");
 
-    let expected: Vec<u8> = host_x.iter().map(|&f| Fp8E4M3::from_f32(f).0).collect();
+    let expected: Vec<u8> = host_x.iter().map(|&f| Fp8E4M3FN::from_f32(f).0).collect();
     assert_eq!(got_bytes, expected, "f32 -> fp8e4m3");
 }
 
@@ -303,7 +303,7 @@ fn select_rejects_odd_numel_for_s4() {
 
     let desc = CastSubByteDescriptor {
         numel: 7, // odd — must be rejected.
-        input_element: ElementKind::S4,
+        input_element: ElementKind::I4,
         output_element: ElementKind::I32,
     };
     let res = CastSubBytePlan::<S4, i32>::select(&stream, &desc, PlanPreference::default());

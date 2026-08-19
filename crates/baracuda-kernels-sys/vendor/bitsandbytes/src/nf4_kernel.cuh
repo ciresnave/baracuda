@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2022-2024 Tim Dettmers and the bitsandbytes contributors  (MIT)
-// SPDX-FileCopyrightText: 2026 baracuda project contributors                          (MIT OR Apache-2.0)
+// SPDX-FileCopyrightText: 2026 Eric Evans                          (MIT OR Apache-2.0)
 // SPDX-License-Identifier: MIT
 //
 // nf4_kernel.cuh — Phase 53.

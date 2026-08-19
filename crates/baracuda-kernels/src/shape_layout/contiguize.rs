@@ -5,7 +5,7 @@
 //! backend for non-contiguous CUDA inputs. The kernel is byte-level
 //! dtype-agnostic: a single sizeof(T)-templated CUDA body covers every
 //! byte-aligned dtype (f16, bf16, f32, f64, F32Strict, i32, i64, Bool,
-//! S8, U8, Fp8E4M3, Fp8E5M2, Complex32, Complex64). A separate nibble
+//! S8, U8, Fp8E4M3FN, Fp8E5M2, Complex64, Complex128). A separate nibble
 //! kernel handles S4 / U4 with a documented innermost-stride
 //! constraint.
 //!
@@ -88,7 +88,7 @@ pub struct ContiguizeArgs<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
 ///
 /// **Dtypes**: every byte-aligned dtype baracuda's element bank
 /// exposes — `{f16, bf16, f32, f64, F32Strict, i32, i64, Bool, S8, U8,
-/// Fp8E4M3, Fp8E5M2, Complex32, Complex64}` — plus nibble-packed
+/// Fp8E4M3FN, Fp8E5M2, Complex64, Complex128}` — plus nibble-packed
 /// `{S4, U4}` with an innermost-stride constraint. `Bin` (1-bit) is
 /// **out of scope** for Phase 13.2.
 ///
@@ -117,9 +117,9 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
     /// Unlike most `*Plan` types in this crate, the type parameter `T`
     /// is bounded by [`baracuda_types::DeviceRepr`] only (no `Element` /
     /// `IntElement` family) so the byte-level-agnostic kernel can serve
-    /// `T = S4 / U4 / S8 / U8 / Fp8E4M3 / Fp8E5M2` alongside the
+    /// `T = S4 / U4 / S8 / U8 / Fp8E4M3FN / Fp8E5M2` alongside the
     /// classic `Element`s (`f16` / `bf16` / `f32` / `f64` / `i32` /
-    /// `i64` / `Bool` / `Complex32` / `Complex64` / `F32Strict`).
+    /// `i64` / `Bool` / `Complex64` / `Complex128` / `F32Strict`).
     /// `desc.element` is the source of truth for dispatch.
     pub fn select(
         _stream: &Stream,
@@ -161,13 +161,13 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
                 | ElementKind::I32
                 | ElementKind::I64
                 | ElementKind::Bool
-                | ElementKind::S8
+                | ElementKind::I8
                 | ElementKind::U8
-                | ElementKind::Fp8E4M3
+                | ElementKind::Fp8E4M3FN
                 | ElementKind::Fp8E5M2
-                | ElementKind::Complex32
                 | ElementKind::Complex64
-                | ElementKind::S4
+                | ElementKind::Complex128
+                | ElementKind::I4
                 | ElementKind::U4
         );
         if !supported {
@@ -179,7 +179,7 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
         // S4 / U4 innermost-stride alignment check — duplicated on the
         // device side defensively, but we surface it earlier here so
         // mis-configured plans fail at select() rather than run().
-        if matches!(desc.element, ElementKind::S4 | ElementKind::U4) && N >= 1 {
+        if matches!(desc.element, ElementKind::I4 | ElementKind::U4) && N >= 1 {
             let inner = desc.source_strides[N - 1];
             if !(inner == 1 || inner == -1 || inner == 2) {
                 return Err(Error::Unsupported(
@@ -237,7 +237,7 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
         // byte/storage-slot, so the storage requirement is
         // ceil(numel/2), not numel.
         let needed_storage = match self.desc.element {
-            ElementKind::S4 | ElementKind::U4 => (numel + 1) / 2,
+            ElementKind::I4 | ElementKind::U4 => (numel + 1) / 2,
             _ => numel,
         };
         if dest_len < needed_storage {
@@ -297,9 +297,9 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
         let status = match self.desc.element {
             // 1-byte payloads.
             ElementKind::Bool
-            | ElementKind::S8
+            | ElementKind::I8
             | ElementKind::U8
-            | ElementKind::Fp8E4M3
+            | ElementKind::Fp8E4M3FN
             | ElementKind::Fp8E5M2 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_contiguize_b1_run(
                     dest_ptr,
@@ -335,8 +335,8 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
                     stream_ptr,
                 )
             },
-            // 8-byte payloads — f64 (8 B), i64 (8 B), Complex32 (4+4 B).
-            ElementKind::F64 | ElementKind::I64 | ElementKind::Complex32 => unsafe {
+            // 8-byte payloads — f64 (8 B), i64 (8 B), Complex64 (4+4 B).
+            ElementKind::F64 | ElementKind::I64 | ElementKind::Complex64 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_contiguize_b8_run(
                     dest_ptr,
                     source_ptr,
@@ -347,8 +347,8 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
                     stream_ptr,
                 )
             },
-            // 16-byte payloads — Complex64 (8+8 B).
-            ElementKind::Complex64 => unsafe {
+            // 16-byte payloads — Complex128 (8+8 B).
+            ElementKind::Complex128 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_contiguize_b16_run(
                     dest_ptr,
                     source_ptr,
@@ -361,7 +361,7 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
             },
             // Nibble-packed (S4 / U4) — single symbol with documented
             // innermost-stride constraint enforced device-side.
-            ElementKind::S4 | ElementKind::U4 => unsafe {
+            ElementKind::I4 | ElementKind::U4 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_contiguize_nibble_run(
                     dest_ptr,
                     source_ptr,
@@ -392,17 +392,21 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
 fn type_size_matches_kind<T>(kind: ElementKind) -> bool {
     let want = match kind {
         ElementKind::Bool
-        | ElementKind::S8
+        | ElementKind::I8
         | ElementKind::U8
-        | ElementKind::Fp8E4M3
+        | ElementKind::Fp8E4M3FN
+        | ElementKind::Fp8E4M3FNUZ
         | ElementKind::Fp8E5M2
-        | ElementKind::S4
+        | ElementKind::Fp8E5M2FNUZ
+        | ElementKind::F8E8M0
+        | ElementKind::F8E6M2
+        | ElementKind::I4
         | ElementKind::U4 => 1,
-        ElementKind::F16 | ElementKind::Bf16 => 2,
+        ElementKind::F16 | ElementKind::Bf16 | ElementKind::I16 | ElementKind::U16 => 2,
         ElementKind::F32 | ElementKind::F32Strict | ElementKind::I32 | ElementKind::U32 => 4,
-        ElementKind::F64 | ElementKind::I64 | ElementKind::Complex32 => 8,
-        ElementKind::Complex64 => 16,
-        ElementKind::Bin => return false, // out of scope
+        ElementKind::F64 | ElementKind::I64 | ElementKind::U64 | ElementKind::Complex64 => 8,
+        ElementKind::Complex128 => 16,
+        ElementKind::B1 => return false, // out of scope
     };
     core::mem::size_of::<T>() == want
 }

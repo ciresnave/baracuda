@@ -17,7 +17,7 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    EpilogueKind, Fp8E4M3, Fp8E5M2, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan, FpElement,
+    EpilogueKind, Fp8E4M3FN, Fp8E5M2, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan, FpElement,
     LayoutSku, MatrixMut, MatrixRef, PlanPreference, VectorRef, Workspace,
 };
 use float8::{F8E4M3, F8E5M2};
@@ -78,7 +78,7 @@ trait Fp8Shim: FpElement + Default {
     fn to_bits(self) -> u8;
 }
 
-impl Fp8Shim for Fp8E4M3 {
+impl Fp8Shim for Fp8E4M3FN {
     fn quantize(x: f32) -> u8 {
         F8E4M3::from_f32(x).to_bits()
     }
@@ -324,22 +324,22 @@ const K: i32 = 128;
 #[test]
 #[ignore]
 fn fp8_e4m3_rcr_bias() {
-    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias);
+    run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias);
 }
 #[test]
 #[ignore]
 fn fp8_e4m3_rcr_bias_relu() {
-    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu);
+    run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu);
 }
 #[test]
 #[ignore]
 fn fp8_e4m3_rcr_bias_gelu() {
-    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu);
+    run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu);
 }
 #[test]
 #[ignore]
 fn fp8_e4m3_rcr_bias_silu() {
-    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu);
+    run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu);
 }
 
 // ---- E4M3 × RRR ----
@@ -347,22 +347,22 @@ fn fp8_e4m3_rcr_bias_silu() {
 #[test]
 #[ignore]
 fn fp8_e4m3_rrr_bias() {
-    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias);
+    run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias);
 }
 #[test]
 #[ignore]
 fn fp8_e4m3_rrr_bias_relu() {
-    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu);
+    run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu);
 }
 #[test]
 #[ignore]
 fn fp8_e4m3_rrr_bias_gelu() {
-    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu);
+    run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu);
 }
 #[test]
 #[ignore]
 fn fp8_e4m3_rrr_bias_silu() {
-    run_fp8_bias::<Fp8E4M3>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu);
+    run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu);
 }
 
 // ---- E5M2 × RCR ----

@@ -37,7 +37,7 @@ fn variant_gate_loop_end_to_end() {
     let device = Device::get(0).expect("device");
     let stamp = current_hwstamp(&device).expect("hwstamp");
     require_optional!(
-        (stamp.arch == ArchSku::Sm89).then_some(()),
+        (stamp.target == ArchSku::Sm89.into()).then_some(()),
         "an sm89 device (this variant cell is keyed sm89)"
     );
 
@@ -237,7 +237,7 @@ fn smemrow_variant_is_bit_identical_and_gated() {
     let device = Device::get(0).expect("device");
     let stamp = current_hwstamp(&device).expect("hwstamp");
     require_optional!(
-        (stamp.arch == ArchSku::Sm89).then_some(()),
+        (stamp.target == ArchSku::Sm89.into()).then_some(()),
         "an sm89 device (this variant cell is keyed sm89)"
     );
 

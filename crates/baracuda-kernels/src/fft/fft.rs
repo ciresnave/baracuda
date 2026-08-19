@@ -1,5 +1,5 @@
-//! FFT / IFFT (complex-to-complex) — `FftPlan<T>` for `T = Complex32`
-//! or `T = Complex64`.
+//! FFT / IFFT (complex-to-complex) — `FftPlan<T>` for `T = Complex64`
+//! or `T = Complex128`.
 //!
 //! Wraps cuFFT's `cufftExecC2C` / `cufftExecZ2Z`. The descriptor's
 //! `inverse: bool` selects the direction; both branches share the same
@@ -25,7 +25,7 @@ use baracuda_kernels_sys::{
     cufftExecC2C, cufftExecZ2Z, cufftHandle, cufftPlan1d, cufftSetStream,
 };
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, FftKind, KernelSku,
+    ArchSku, BackendKind, Complex64, Complex128, Element, ElementKind, FftKind, KernelSku,
     MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
@@ -46,7 +46,7 @@ pub struct FftDescriptor {
     /// `false` for forward (`cufftExec*` with `CUFFT_FORWARD`), `true`
     /// for inverse. Inverse is normalized by `1/n`.
     pub inverse: bool,
-    /// Output / input element type. Must be `Complex32` or `Complex64`.
+    /// Output / input element type. Must be `Complex64` or `Complex128`.
     pub element: ElementKind,
 }
 
@@ -77,7 +77,7 @@ pub struct FftArgs<'a, T: Element> {
 /// [`super::RfftPlan`] / [`super::IrfftPlan`] for real input / output;
 /// [`super::FftNdPlan`] for multi-axis transforms.
 ///
-/// **Dtypes**: `Complex32`, `Complex64`. cuFFT does not expose
+/// **Dtypes**: `Complex64`, `Complex128`. cuFFT does not expose
 /// `f16` / `bf16` transforms.
 ///
 /// **Shape**: `[batch, n]` — both buffers complex. Out-of-place only
@@ -111,9 +111,9 @@ impl<T: Element> FftPlan<T> {
                 "baracuda-kernels::FftPlan: descriptor.element != T::KIND",
             ));
         }
-        if !matches!(T::KIND, ElementKind::Complex32 | ElementKind::Complex64) {
+        if !matches!(T::KIND, ElementKind::Complex64 | ElementKind::Complex128) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::FftPlan: C2C FFT supports Complex32 + Complex64 only",
+                "baracuda-kernels::FftPlan: C2C FFT supports Complex64 + Complex128 only",
             ));
         }
         if desc.n <= 0 {
@@ -128,7 +128,7 @@ impl<T: Element> FftPlan<T> {
         }
 
         let math_precision = match T::KIND {
-            ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::Complex128 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -196,9 +196,9 @@ impl<T: Element> FftPlan<T> {
             return Ok(h);
         }
         let fft_type = match T::KIND {
-            ElementKind::Complex32 => CUFFT_C2C,
-            ElementKind::Complex64 => CUFFT_Z2Z,
-            _ => unreachable!("select() gates on Complex32 / Complex64"),
+            ElementKind::Complex64 => CUFFT_C2C,
+            ElementKind::Complex128 => CUFFT_Z2Z,
+            _ => unreachable!("select() gates on Complex64 / Complex128"),
         };
         let mut handle: cufftHandle = HANDLE_UNINIT;
         let status = unsafe {
@@ -255,9 +255,9 @@ impl<T: Element> FftPlan<T> {
     }
 }
 
-// ----- Complex32 -------------------------------------------------------------
+// ----- Complex64 -------------------------------------------------------------
 
-impl FftPlan<Complex32> {
+impl FftPlan<Complex64> {
     /// Run the C2C FFT (single precision).
     ///
     /// Performs `cufftExecC2C` with the descriptor's direction, then
@@ -267,7 +267,7 @@ impl FftPlan<Complex32> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: FftArgs<'_, Complex32>,
+        args: FftArgs<'_, Complex64>,
     ) -> Result<()> {
         let numel = self.check_args(&args.x, &args.y)?;
         if numel == 0 {
@@ -307,15 +307,15 @@ impl FftPlan<Complex32> {
     }
 }
 
-// ----- Complex64 -------------------------------------------------------------
+// ----- Complex128 -------------------------------------------------------------
 
-impl FftPlan<Complex64> {
+impl FftPlan<Complex128> {
     /// Run the C2C FFT (double precision).
     pub fn run(
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: FftArgs<'_, Complex64>,
+        args: FftArgs<'_, Complex128>,
     ) -> Result<()> {
         let numel = self.check_args(&args.x, &args.y)?;
         if numel == 0 {

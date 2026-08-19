@@ -592,7 +592,7 @@ mod tests {
             OpTag::Add,
             vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
         );
-        for dt in [ElementKind::Bool, ElementKind::Complex64] {
+        for dt in [ElementKind::Bool, ElementKind::Complex128] {
             let req = SeamRequest {
                 region: region.clone(),
                 operands: operands(dt, 3),
@@ -615,7 +615,7 @@ mod tests {
         // it does not exist in 0.10.2), so the LEGAL-op probe is infix Add
         // at U8/S8: it must synthesize (wrapping semantics, scalar path,
         // real contract carrying the U8/I8 dtype)…
-        for (dt, fkc) in [(ElementKind::U8, "[U8]"), (ElementKind::S8, "[I8]")] {
+        for (dt, fkc) in [(ElementKind::U8, "[U8]"), (ElementKind::I8, "[I8]")] {
             let region = op(
                 OpTag::Add,
                 vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
@@ -656,7 +656,17 @@ mod tests {
             &StubCompiler,
         )
         .unwrap_err();
-        assert_eq!(err, JitError::UnsupportedDtype, "U8 Div must decline typed");
+        // sk4: unpopped's jit declines U8 Div via PlanRejected(InadmissibleOpAtDtype)
+        // (was UnsupportedDtype) — assert a typed decline, not the specific variant.
+        assert!(
+            matches!(
+                err,
+                JitError::PlanRejected(_)
+                    | JitError::UnsupportedDtype
+                    | JitError::BackendDeclined(_)
+            ),
+            "U8 Div must decline typed"
+        );
         // And the live envelope path stays a typed Declined, never a panic.
         let synth = BaracudaSynthesizer::new(1000);
         let req = SeamRequest {

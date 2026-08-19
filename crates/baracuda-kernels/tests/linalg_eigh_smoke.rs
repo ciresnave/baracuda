@@ -229,7 +229,7 @@ fn eigh_f64_symmetric_3x3() {
     }
 }
 
-// Complex variants (Complex32 / Complex64 Hermitian) are out of scope
+// Complex variants (Complex64 / Complex128 Hermitian) are out of scope
 // for the trailblazer smoke; the plan implementation is wired but
 // exercising it requires upload-side complex helpers that aren't on
 // the smoke-test path yet. See module docs in

@@ -192,7 +192,7 @@ impl<T: Element, const N: usize> FftShiftNdPlan<T, N> {
         }
 
         let math_precision = match T::KIND {
-            ElementKind::F64 | ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::F64 | ElementKind::Complex128 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {

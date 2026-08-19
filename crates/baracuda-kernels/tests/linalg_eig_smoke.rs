@@ -17,7 +17,7 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    Complex32, Complex64, EigArgs, EigDescriptor, EigPlan, ElementKind, PlanPreference, TensorMut,
+    Complex64, Complex128, EigArgs, EigDescriptor, EigPlan, ElementKind, PlanPreference, TensorMut,
     Workspace, contiguous_stride,
 };
 
@@ -43,17 +43,17 @@ fn rotation_2x2_f64() -> Vec<f64> {
     vec![0.0, 1.0, -1.0, 0.0]
 }
 
-fn rotation_2x2_c32() -> Vec<Complex32> {
-    [(0.0, 0.0), (1.0, 0.0), (-1.0, 0.0), (0.0, 0.0)]
-        .iter()
-        .map(|&(r, i)| Complex32::new(r, i))
-        .collect()
-}
-
-fn rotation_2x2_c64() -> Vec<Complex64> {
+fn rotation_2x2_c32() -> Vec<Complex64> {
     [(0.0, 0.0), (1.0, 0.0), (-1.0, 0.0), (0.0, 0.0)]
         .iter()
         .map(|&(r, i)| Complex64::new(r, i))
+        .collect()
+}
+
+fn rotation_2x2_c64() -> Vec<Complex128> {
+    [(0.0, 0.0), (1.0, 0.0), (-1.0, 0.0), (0.0, 0.0)]
+        .iter()
+        .map(|&(r, i)| Complex128::new(r, i))
         .collect()
 }
 
@@ -210,77 +210,6 @@ fn eig_complex32_pm_i() {
     let a_host = rotation_2x2_c32();
 
     let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
-    let mut dev_w: DeviceBuffer<Complex32> =
-        DeviceBuffer::zeros(&ctx, n as usize).expect("alloc w");
-    let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc info");
-
-    let desc = EigDescriptor {
-        n,
-        compute_left: false,
-        compute_right: false,
-        element: ElementKind::Complex32,
-    };
-    let plan = EigPlan::<Complex32>::select(&stream, &desc, PlanPreference::default())
-        .expect("select EigPlan<Complex32>");
-    let ws_bytes = plan.query_workspace_size(&stream).expect("ws query");
-    let ws_alloc = ws_bytes.max(1);
-    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_alloc).expect("alloc ws");
-
-    let args = EigArgs::<Complex32> {
-        a: TensorMut {
-            data: dev_a.as_slice_mut(),
-            shape: [n, n],
-            stride: contiguous_stride([n, n]),
-        },
-        w: TensorMut {
-            data: dev_w.as_slice_mut(),
-            shape: [n],
-            stride: [1],
-        },
-        vl: None,
-        vr: None,
-        info: TensorMut {
-            data: dev_info.as_slice_mut(),
-            shape: [1i32],
-            stride: [1],
-        },
-    };
-    plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
-        .expect("run eig Complex32");
-    stream.synchronize().expect("sync");
-
-    let mut info_host = vec![0i32; 1];
-    dev_info.copy_to_host(&mut info_host).expect("dl info");
-    assert_eq!(info_host[0], 0, "eig Complex32 info != 0");
-
-    let mut w_host = vec![Complex32::new(0.0, 0.0); n as usize];
-    dev_w.copy_to_host(&mut w_host).expect("dl w");
-
-    let tol = 1e-5f32;
-    for c in w_host.iter() {
-        assert!(c.re.abs() <= tol, "eig Complex32: re={} not near 0", c.re);
-        assert!(
-            (c.im.abs() - 1.0).abs() <= tol,
-            "eig Complex32: |im|={} not near 1",
-            c.im.abs()
-        );
-    }
-    let signs_opposite = (w_host[0].im * w_host[1].im) < 0.0;
-    assert!(
-        signs_opposite,
-        "eig Complex32: eigenvalues should be conjugate pair, got {:?}",
-        w_host
-    );
-}
-
-#[test]
-#[ignore]
-fn eig_complex64_pm_i() {
-    let (ctx, stream) = setup();
-    let n: i32 = 2;
-    let a_host = rotation_2x2_c64();
-
-    let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
     let mut dev_w: DeviceBuffer<Complex64> =
         DeviceBuffer::zeros(&ctx, n as usize).expect("alloc w");
     let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc info");
@@ -327,7 +256,7 @@ fn eig_complex64_pm_i() {
     let mut w_host = vec![Complex64::new(0.0, 0.0); n as usize];
     dev_w.copy_to_host(&mut w_host).expect("dl w");
 
-    let tol = 1e-12f64;
+    let tol = 1e-5f32;
     for c in w_host.iter() {
         assert!(c.re.abs() <= tol, "eig Complex64: re={} not near 0", c.re);
         assert!(
@@ -340,6 +269,77 @@ fn eig_complex64_pm_i() {
     assert!(
         signs_opposite,
         "eig Complex64: eigenvalues should be conjugate pair, got {:?}",
+        w_host
+    );
+}
+
+#[test]
+#[ignore]
+fn eig_complex64_pm_i() {
+    let (ctx, stream) = setup();
+    let n: i32 = 2;
+    let a_host = rotation_2x2_c64();
+
+    let mut dev_a = DeviceBuffer::from_slice(&ctx, &a_host).expect("upload a");
+    let mut dev_w: DeviceBuffer<Complex128> =
+        DeviceBuffer::zeros(&ctx, n as usize).expect("alloc w");
+    let mut dev_info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc info");
+
+    let desc = EigDescriptor {
+        n,
+        compute_left: false,
+        compute_right: false,
+        element: ElementKind::Complex128,
+    };
+    let plan = EigPlan::<Complex128>::select(&stream, &desc, PlanPreference::default())
+        .expect("select EigPlan<Complex128>");
+    let ws_bytes = plan.query_workspace_size(&stream).expect("ws query");
+    let ws_alloc = ws_bytes.max(1);
+    let mut dev_ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_alloc).expect("alloc ws");
+
+    let args = EigArgs::<Complex128> {
+        a: TensorMut {
+            data: dev_a.as_slice_mut(),
+            shape: [n, n],
+            stride: contiguous_stride([n, n]),
+        },
+        w: TensorMut {
+            data: dev_w.as_slice_mut(),
+            shape: [n],
+            stride: [1],
+        },
+        vl: None,
+        vr: None,
+        info: TensorMut {
+            data: dev_info.as_slice_mut(),
+            shape: [1i32],
+            stride: [1],
+        },
+    };
+    plan.run(&stream, Workspace::Borrowed(dev_ws.as_slice_mut()), args)
+        .expect("run eig Complex128");
+    stream.synchronize().expect("sync");
+
+    let mut info_host = vec![0i32; 1];
+    dev_info.copy_to_host(&mut info_host).expect("dl info");
+    assert_eq!(info_host[0], 0, "eig Complex128 info != 0");
+
+    let mut w_host = vec![Complex128::new(0.0, 0.0); n as usize];
+    dev_w.copy_to_host(&mut w_host).expect("dl w");
+
+    let tol = 1e-12f64;
+    for c in w_host.iter() {
+        assert!(c.re.abs() <= tol, "eig Complex128: re={} not near 0", c.re);
+        assert!(
+            (c.im.abs() - 1.0).abs() <= tol,
+            "eig Complex128: |im|={} not near 1",
+            c.im.abs()
+        );
+    }
+    let signs_opposite = (w_host[0].im * w_host[1].im) < 0.0;
+    assert!(
+        signs_opposite,
+        "eig Complex128: eigenvalues should be conjugate pair, got {:?}",
         w_host
     );
 }

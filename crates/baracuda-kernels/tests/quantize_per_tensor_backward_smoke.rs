@@ -52,7 +52,7 @@ fn quantize_per_tensor_backward_f32_s8_ste() {
         q_min: -128,
         q_max: 127,
         input_element: ElementKind::F32,
-        output_element: ElementKind::S8,
+        output_element: ElementKind::I8,
     };
     let plan =
         QuantizePerTensorBackwardPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())

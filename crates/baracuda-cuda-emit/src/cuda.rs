@@ -7,8 +7,8 @@
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
 use unpopped::backend::{
-    Backend, GeneratedKernel, Lowering, Variant, VariantFidelity, lower_dag, lower_dag_all,
-    lower_dag_multi, lower_expr,
+    Backend, GeneratedKernel, LowerError, Lowering, Variant, VariantFidelity, lower_dag,
+    lower_dag_all, lower_dag_multi, lower_expr,
 };
 use unpopped::cfamily::{
     assert_no_int_div_or_const, binary_f32, binary_f64, binary_int, cast_scalar, demote_store_f32,
@@ -55,7 +55,14 @@ impl Backend for Cuda {
         }
     }
 
-    fn supports_dtype(&self, dtype: ElementKind) -> bool {
+    fn supports_dtype(&self, dtype: ElementKind, _target: unpopped_vocab::TargetId) -> bool {
+        // `target` is the 0.2.0 third-state hook (Backend::supports_dtype gained a
+        // TargetId so a backend WITH capability data can arch-condition). Cuda's
+        // answer here is deliberately target-INDEPENDENT: this gate is "can we spell
+        // a scalar C type" (storage/emitability), NOT "can this arch COMPUTE it" —
+        // the arch-compute gating lives in dtype_compatible / the plan gate (see the
+        // dtype comment below). We ignore `target` until a cuda capability manifest
+        // (baracuda-cuda-vocab / KISS #171) exists to condition on honestly.
         // Increment 0c replaced the 0b uniform-u8 hold with the audited int
         // story: U8 and S8 are now COMPUTE dtypes (wrapping add/sub/mul via
         // integer promotion + store truncation; the bitwise/shift/logical
@@ -78,7 +85,7 @@ impl Backend for Cuda {
         !matches!(dtype, ElementKind::U32) && scalar_ctype(dtype).is_some()
     }
 
-    fn lower_variants(&self, plan: &KernelPlan<'_>) -> Vec<Variant> {
+    fn lower_variants(&self, plan: &KernelPlan<'_>) -> Result<Vec<Variant>, LowerError> {
         // Schedule variants per the backlog
         // (docs/planning/foundational/11-variant-generators-backlog.md):
         // split-K for the outer-axis reduction cell; the materialized row cache
@@ -110,326 +117,348 @@ impl Backend for Cuda {
         // regime rides the launch_note (the extent-free key cannot gate it), the
         // bench/dispatch layer selects the measured default (ship-top-K).
         vs.extend(partial_select_topk_variant(plan));
-        vs
+        Ok(vs)
     }
 
-    fn lower(&self, plan: &KernelPlan<'_>) -> GeneratedKernel {
-        // U32 has a `scalar_ctype` ("unsigned int") ONLY as an index/address
-        // dtype — it must never reach an ARITHMETIC compute path (a U32
-        // elementwise add would silently lower to an `unsigned int` kernel and
-        // bypass the int-div backstop). It IS a legitimate `plan.dtype` for an
-        // INDEXED op though: a gather keys the DATA dtype (U32 rides
-        // `read_index`), but `bincount` self-indexes — its input IS the u32 x,
-        // so `plan.dtype == U32` while the u32 is used as a scatter ADDRESS, not
-        // a value in arithmetic. So reject a U32 plan ONLY for a NON-indexed
-        // (plain elementwise/reduction) op; the gather/scatter emitters handle
-        // the index dtype themselves. `supports_dtype` declines U32 at the JIT
-        // boundary; this is the independent AOT emitter backstop.
-        let is_indexed = plan
-            .read_index
-            .iter()
-            .any(|r| !matches!(r, unpopped::ir::ReadIndex::Direct))
-            || !matches!(plan.write_index, unpopped::ir::WriteIndex::Direct);
-        assert!(
-            !matches!(plan.dtype, ElementKind::U32) || is_indexed,
-            "cuda backend: U32 is an index/address dtype only — a U32 value/key \
-             plan is illegal for a non-indexed op (no u32 arithmetic)"
-        );
-        let Some(ctype) = scalar_ctype(plan.dtype) else {
-            panic!("cuda backend: unsupported dtype {:?}", plan.dtype);
-        };
-        assert!(
-            plan.output_bodies()
+    fn lower(&self, plan: &KernelPlan<'_>) -> Result<GeneratedKernel, LowerError> {
+        Ok((|| -> GeneratedKernel {
+            // U32 has a `scalar_ctype` ("unsigned int") ONLY as an index/address
+            // dtype — it must never reach an ARITHMETIC compute path (a U32
+            // elementwise add would silently lower to an `unsigned int` kernel and
+            // bypass the int-div backstop). It IS a legitimate `plan.dtype` for an
+            // INDEXED op though: a gather keys the DATA dtype (U32 rides
+            // `read_index`), but `bincount` self-indexes — its input IS the u32 x,
+            // so `plan.dtype == U32` while the u32 is used as a scatter ADDRESS, not
+            // a value in arithmetic. So reject a U32 plan ONLY for a NON-indexed
+            // (plain elementwise/reduction) op; the gather/scatter emitters handle
+            // the index dtype themselves. `supports_dtype` declines U32 at the JIT
+            // boundary; this is the independent AOT emitter backstop.
+            let is_indexed = plan
+                .read_index
                 .iter()
-                .all(|b| params_used(b).is_empty())
-                || matches!(
-                    plan.dtype,
-                    ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
-                ),
-            "cuda backend v1: scalar params are f32/f64-only for now (dtype {:?})",
-            plan.dtype
-        );
-        // Increment 0c: infix `Div` and `Const` are spelled by shared,
-        // dtype-blind backend code (`lower_expr` emits C `/` and an f64
-        // literal with no dtype context) — the only two REJECT rows of the
-        // ir.rs admissibility table with no op-level emitter backstop, and
-        // exactly the device-dangerous ones (int `/0` is device-UB; an
-        // f64-spelled Const silently runs double math in an integer kernel).
-        // Mirror of the Param assert above, walking every expression the plan
-        // can lower (body + RowReduce stages/epilogue + Contraction epilogue,
-        // the same coverage as plan.rs's assert_no_half_nextafter walk) so the
-        // backstop holds independently of the plan gate — the 0a lesson: gate
-        // every layer.
-        // Increment 5 — bincount exemption (mirrors `plan::assert_int_op_admissibility`):
-        // a scatter with a bare `Const` body is the integer-count histogram; its
-        // `Const(1)` is a store literal the scatter combine narrows exactly, not
-        // int compute — the double-math hazard this walk polices does not apply.
-        let bincount_shape =
-            plan.write_index.scatter().is_some() && matches!(plan.body, ScalarExpr::Const(_));
-        if unpopped::plan::is_int_dtype(plan.dtype) && !bincount_shape {
-            // Rule 4 mirror (`plan::assert_int_op_admissibility`'s any/all/count
-            // lift, ba325509): `true` only for `Access::Reduction` — NOT
-            // RowReduce/Contraction/Scan/Window, which stay out of scope for the
-            // fused-Cmp*-predicate exception, exactly like the plan gate. Passed
-            // uniformly to every expr below (for `Access::Reduction` every entry
-            // in `exprs` is `body` or `post`, both correctly in-scope; for every
-            // other access kind this stays `false`, so their walk is unchanged).
-            let in_reduction = matches!(plan.access, Access::Reduction { .. });
-            // Every output body (multi-output: body + extra_out_bodies), plus the
-            // reduction-class stages/epilogue — the same coverage as plan.rs.
-            let mut exprs: Vec<&ScalarExpr> = plan.output_bodies();
-            match plan.access {
-                Access::RowReduce { stages, epilogue } => {
-                    exprs.extend(stages.iter().map(|s| &s.pre));
-                    exprs.push(epilogue);
-                }
-                Access::Contraction { epilogue, .. } => exprs.push(epilogue),
-                // The 0e reduction post-expr lowers at the accumulator dtype too.
-                Access::Reduction { post, .. } => exprs.push(post),
-                // Increment 6 SCAN: `pre`/`post` lower at the accumulator dtype (an
-                // int cumsum rides the serial base), so gate both for int Div/Const.
-                Access::Scan { pre, post, .. } => {
-                    exprs.push(pre);
-                    exprs.push(post);
-                }
-                // Increment 7 WINDOW: `pre`/`post` lower at the accumulator dtype
-                // (an int sum/max pool rides the same fold), so gate both for int
-                // Div/Const.
-                Access::Window { pre, post, .. } => {
-                    exprs.push(pre);
-                    exprs.push(post);
-                }
-                // Increment 8 SORT_PERM: `body` is pinned `Input(0)` (already in
-                // `exprs`); an int sort permutes storage bits (no int Div/Const
-                // arithmetic), so nothing extra to gate — the arm keeps the walk total.
-                Access::RowSort { .. } => {}
-                // Increment 11 IM2COL: `body` is pinned `Input(0)` (already in
-                // `exprs`); a raw-bit gather permutes storage bits (no int Div/Const
-                // arithmetic), so nothing extra to gate — the arm keeps the walk total.
-                Access::Im2Col { .. } => {}
-                Access::Elementwise => {}
-                // `Access` is `#[non_exhaustive]`: a future neutral pattern must teach
-                // this gate its accumulator-dtype sub-exprs. Until then, fail loud
-                // rather than silently under-gate an int Div/Const in a new variant.
-                _ => unreachable!(
-                    "cuda backend: unhandled Access variant in the int-div-admissibility gate — \
+                .any(|r| !matches!(r, unpopped::ir::ReadIndex::Direct))
+                || !matches!(plan.write_index, unpopped::ir::WriteIndex::Direct);
+            assert!(
+                !matches!(plan.dtype, ElementKind::U32) || is_indexed,
+                "cuda backend: U32 is an index/address dtype only — a U32 value/key \
+             plan is illegal for a non-indexed op (no u32 arithmetic)"
+            );
+            let Some(ctype) = scalar_ctype(plan.dtype) else {
+                panic!("cuda backend: unsupported dtype {:?}", plan.dtype);
+            };
+            assert!(
+                plan.output_bodies()
+                    .iter()
+                    .all(|b| params_used(b).is_empty())
+                    || matches!(
+                        plan.dtype,
+                        ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
+                    ),
+                "cuda backend v1: scalar params are f32/f64-only for now (dtype {:?})",
+                plan.dtype
+            );
+            // Increment 0c: infix `Div` and `Const` are spelled by shared,
+            // dtype-blind backend code (`lower_expr` emits C `/` and an f64
+            // literal with no dtype context) — the only two REJECT rows of the
+            // ir.rs admissibility table with no op-level emitter backstop, and
+            // exactly the device-dangerous ones (int `/0` is device-UB; an
+            // f64-spelled Const silently runs double math in an integer kernel).
+            // Mirror of the Param assert above, walking every expression the plan
+            // can lower (body + RowReduce stages/epilogue + Contraction epilogue,
+            // the same coverage as plan.rs's assert_no_half_nextafter walk) so the
+            // backstop holds independently of the plan gate — the 0a lesson: gate
+            // every layer.
+            // Increment 5 — bincount exemption (mirrors `plan::assert_int_op_admissibility`):
+            // a scatter with a bare `Const` body is the integer-count histogram; its
+            // `Const(1)` is a store literal the scatter combine narrows exactly, not
+            // int compute — the double-math hazard this walk polices does not apply.
+            let bincount_shape =
+                plan.write_index.scatter().is_some() && matches!(plan.body, ScalarExpr::Const(_));
+            if unpopped::plan::is_int_dtype(plan.dtype) && !bincount_shape {
+                // Rule 4 mirror (`plan::assert_int_op_admissibility`'s any/all/count
+                // lift, ba325509): `true` only for `Access::Reduction` — NOT
+                // RowReduce/Contraction/Scan/Window, which stay out of scope for the
+                // fused-Cmp*-predicate exception, exactly like the plan gate. Passed
+                // uniformly to every expr below (for `Access::Reduction` every entry
+                // in `exprs` is `body` or `post`, both correctly in-scope; for every
+                // other access kind this stays `false`, so their walk is unchanged).
+                let in_reduction = matches!(plan.access, Access::Reduction { .. });
+                // Every output body (multi-output: body + extra_out_bodies), plus the
+                // reduction-class stages/epilogue — the same coverage as plan.rs.
+                let mut exprs: Vec<&ScalarExpr> = plan.output_bodies();
+                match plan.access {
+                    Access::RowReduce { stages, epilogue } => {
+                        exprs.extend(stages.iter().map(|s| &s.pre));
+                        exprs.push(epilogue);
+                    }
+                    Access::Contraction { epilogue, .. } => exprs.push(epilogue),
+                    // The 0e reduction post-expr lowers at the accumulator dtype too.
+                    Access::Reduction { post, .. } => exprs.push(post),
+                    // Increment 6 SCAN: `pre`/`post` lower at the accumulator dtype (an
+                    // int cumsum rides the serial base), so gate both for int Div/Const.
+                    Access::Scan { pre, post, .. } => {
+                        exprs.push(pre);
+                        exprs.push(post);
+                    }
+                    // Increment 7 WINDOW: `pre`/`post` lower at the accumulator dtype
+                    // (an int sum/max pool rides the same fold), so gate both for int
+                    // Div/Const.
+                    Access::Window { pre, post, .. } => {
+                        exprs.push(pre);
+                        exprs.push(post);
+                    }
+                    // Increment 8 SORT_PERM: `body` is pinned `Input(0)` (already in
+                    // `exprs`); an int sort permutes storage bits (no int Div/Const
+                    // arithmetic), so nothing extra to gate — the arm keeps the walk total.
+                    Access::RowSort { .. } => {}
+                    // Increment 11 IM2COL: `body` is pinned `Input(0)` (already in
+                    // `exprs`); a raw-bit gather permutes storage bits (no int Div/Const
+                    // arithmetic), so nothing extra to gate — the arm keeps the walk total.
+                    Access::Im2Col { .. } => {}
+                    Access::Elementwise => {}
+                    // `Access` is `#[non_exhaustive]`: a future neutral pattern must teach
+                    // this gate its accumulator-dtype sub-exprs. Until then, fail loud
+                    // rather than silently under-gate an int Div/Const in a new variant.
+                    _ => unreachable!(
+                        "cuda backend: unhandled Access variant in the int-div-admissibility gate — \
                      teach baracuda-cuda-emit the new pattern's accumulator-dtype sub-exprs"
-                ),
+                    ),
+                }
+                for e in exprs {
+                    // `at_reduction_root: in_reduction` — this loop is the initial
+                    // call on each expr in `exprs`, which is `[body, post]`
+                    // precisely when `in_reduction` is true (see the match above:
+                    // only `Access::Reduction` pushes `post`), mirroring
+                    // `plan::assert_int_op_admissibility`'s same `in_reduction`-as-
+                    // `at_reduction_root` initial call.
+                    assert_no_int_div_or_const(e, plan.dtype, in_reduction, in_reduction);
+                }
             }
-            for e in exprs {
-                // `at_reduction_root: in_reduction` — this loop is the initial
-                // call on each expr in `exprs`, which is `[body, post]`
-                // precisely when `in_reduction` is true (see the match above:
-                // only `Access::Reduction` pushes `post`), mirroring
-                // `plan::assert_int_op_admissibility`'s same `in_reduction`-as-
-                // `at_reduction_root` initial call.
-                assert_no_int_div_or_const(e, plan.dtype, in_reduction, in_reduction);
-            }
-        }
-        // Increment 0d: independent Coord emitter backstop, beside the int
-        // Div/Const walk above and with the SAME expression coverage (body +
-        // RowReduce stages/epilogue + Contraction epilogue). The plan gate
-        // (`plan::assert_coord_admissibility`) validate-rejects the same
-        // three rows; this backstop holds independently of it (the 0a
-        // lesson: gate every layer), with cuda-prefixed messages distinct
-        // from the plan gate's. The fourth layer is per-emitter: every
-        // non-strided emitter's `coord` closure panics if a Coord leaf
-        // actually reaches it.
-        {
-            let mut exprs: Vec<&ScalarExpr> = plan.output_bodies();
-            match plan.access {
-                Access::RowReduce { stages, epilogue } => {
-                    exprs.extend(stages.iter().map(|s| &s.pre));
-                    exprs.push(epilogue);
-                }
-                Access::Contraction { epilogue, .. } => exprs.push(epilogue),
-                Access::Reduction { post, .. } => exprs.push(post),
-                // Increment 6 SCAN: a Coord in `pre`/`post` is rejected here (the
-                // scan iterates the (row, j) space, not the elementwise output space).
-                Access::Scan { pre, post, .. } => {
-                    exprs.push(pre);
-                    exprs.push(post);
-                }
-                // Increment 7 WINDOW: a Coord in `pre`/`post` is rejected here (the
-                // window iterates the (row, o) space, not the elementwise output space).
-                Access::Window { pre, post, .. } => {
-                    exprs.push(pre);
-                    exprs.push(post);
-                }
-                // Increment 8 SORT_PERM: `body` is pinned `Input(0)` (no Coord);
-                // RowSort is non-elementwise, so a Coord would be rejected upstream —
-                // nothing extra to walk here.
-                Access::RowSort { .. } => {}
-                // Increment 11 IM2COL: `body` is pinned `Input(0)` (no Coord); im2col
-                // is non-elementwise, so a Coord would be rejected upstream — nothing
-                // extra to walk here.
-                Access::Im2Col { .. } => {}
-                Access::Elementwise => {}
-                // `Access` is `#[non_exhaustive]`: a future neutral pattern must teach
-                // this Coord backstop its accumulator-dtype sub-exprs. Fail loud.
-                _ => unreachable!(
-                    "cuda backend: unhandled Access variant in the Coord backstop gate — \
+            // Increment 0d: independent Coord emitter backstop, beside the int
+            // Div/Const walk above and with the SAME expression coverage (body +
+            // RowReduce stages/epilogue + Contraction epilogue). The plan gate
+            // (`plan::assert_coord_admissibility`) validate-rejects the same
+            // three rows; this backstop holds independently of it (the 0a
+            // lesson: gate every layer), with cuda-prefixed messages distinct
+            // from the plan gate's. The fourth layer is per-emitter: every
+            // non-strided emitter's `coord` closure panics if a Coord leaf
+            // actually reaches it.
+            {
+                let mut exprs: Vec<&ScalarExpr> = plan.output_bodies();
+                match plan.access {
+                    Access::RowReduce { stages, epilogue } => {
+                        exprs.extend(stages.iter().map(|s| &s.pre));
+                        exprs.push(epilogue);
+                    }
+                    Access::Contraction { epilogue, .. } => exprs.push(epilogue),
+                    Access::Reduction { post, .. } => exprs.push(post),
+                    // Increment 6 SCAN: a Coord in `pre`/`post` is rejected here (the
+                    // scan iterates the (row, j) space, not the elementwise output space).
+                    Access::Scan { pre, post, .. } => {
+                        exprs.push(pre);
+                        exprs.push(post);
+                    }
+                    // Increment 7 WINDOW: a Coord in `pre`/`post` is rejected here (the
+                    // window iterates the (row, o) space, not the elementwise output space).
+                    Access::Window { pre, post, .. } => {
+                        exprs.push(pre);
+                        exprs.push(post);
+                    }
+                    // Increment 8 SORT_PERM: `body` is pinned `Input(0)` (no Coord);
+                    // RowSort is non-elementwise, so a Coord would be rejected upstream —
+                    // nothing extra to walk here.
+                    Access::RowSort { .. } => {}
+                    // Increment 11 IM2COL: `body` is pinned `Input(0)` (no Coord); im2col
+                    // is non-elementwise, so a Coord would be rejected upstream — nothing
+                    // extra to walk here.
+                    Access::Im2Col { .. } => {}
+                    Access::Elementwise => {}
+                    // `Access` is `#[non_exhaustive]`: a future neutral pattern must teach
+                    // this Coord backstop its accumulator-dtype sub-exprs. Fail loud.
+                    _ => unreachable!(
+                        "cuda backend: unhandled Access variant in the Coord backstop gate — \
                      teach baracuda-cuda-emit the new pattern's accumulator-dtype sub-exprs"
-                ),
+                    ),
+                }
+                for e in exprs {
+                    assert_coord_lowerable(e, plan);
+                }
             }
-            for e in exprs {
-                assert_coord_lowerable(e, plan);
-            }
-        }
-        // Increment 0b/0e: a hetero-output plan reaches only emitters with an
-        // out_dtype-aware store: the scalar/strided elementwise emitters (0b
-        // u8-predicate — no packed u8 store exists, so `build_plan` forces the
-        // schedule) and the reduction emitter (0e any/all → U8, count → I64 —
-        // `emit_reduction` threads `out_ctype`/`store` through the fold). This
-        // emitter-level backstop keeps a future schedule change from silently
-        // routing a hetero output through a vector-typed store (the 0a lesson:
-        // gate every layer, not just the first).
-        // Increment 8 SORT_PERM: the ARGSORT index output is a hetero out (I32 !=
-        // key dtype) that the RowSort emitter stores through an out_dtype-aware
-        // `int* out` store — widen the matches! so it is not rejected here. Additive
-        // (existing behavior untouched); pinned by the argsort golden test.
-        assert!(
-            plan.out_dtype == plan.dtype
-                || matches!(
-                    plan.schedule,
-                    Schedule::Scalar
-                        | Schedule::Strided
-                        | Schedule::Reduction { .. }
-                        | Schedule::RowSort { .. }
-                ),
-            "cuda backend: hetero output (out {:?}, key {:?}) lowers scalar/strided/reduction/rowsort only; got {:?}",
-            plan.out_dtype,
-            plan.dtype,
-            plan.schedule
-        );
-        // Item 01: independent layout-VIEW backstop, beside the plan gate
-        // `plan::assert_valid_views` (the 0a lesson: gate every layer). A viewed
-        // input reads the producer through a layout change that ONLY the strided
-        // emitter's per-operand `offset_expr` remap folds — the vector/scalar/
-        // packed emitters iterate a bare linear index and would silently read the
-        // un-viewed operand. This pins: a real view ⇒ Elementwise + single-output
-        // + the Strided schedule, and re-validates each view's structure. A
-        // view-free / all-identity plan returns immediately (byte-identical).
-        assert_views_lowerable(plan);
-        // Increment 4: independent GATHER backstop, beside the plan gate
-        // `plan::assert_valid_gather` (the 0a lesson: gate every layer). A gathered
-        // input reads a data-dependent address that ONLY the strided emitter folds;
-        // the vector/packed/scalar emitters iterate a bare linear index and would
-        // ignore the index operand. Pins: a real gather ⇒ Elementwise +
-        // single-output + one gathered input + Strided schedule. An index-free plan
-        // returns immediately (byte-identical).
-        assert_gather_lowerable(plan);
-        // Increment 5: independent SCATTER backstop, beside the plan gate
-        // `plan::assert_valid_scatter` (the 0a lesson: gate every layer). A
-        // scattered output writes a data-dependent address that ONLY the strided
-        // emitter folds; the vector/packed/scalar emitters iterate a bare linear
-        // index and would ignore the index operand. Pins: a real scatter ⇒
-        // Elementwise + single-output + Strided + a legal combine/dtype pair. A
-        // write-Direct plan returns immediately (byte-identical).
-        assert_scatter_lowerable(plan);
-        // BASE_OFFSET SLICE: independent OFFSET backstop, beside the plan gate
-        // `plan::assert_valid_offsets` (the 0a lesson: gate every layer). A runtime
-        // base offset bumps the operand base pointer at kernel entry, which ONLY the
-        // strided emitter does; the vectorized/scalar/packed + multi-out + every
-        // non-elementwise emitter iterate a bare linear index that would silently
-        // ignore the bump. Pins: a real offset ⇒ Elementwise + single-output +
-        // Strided + not-an-FP-atomic-scatter. An offset-free plan returns immediately
-        // (byte-identical). Runs BEFORE the multi-output dispatch so an offsetted
-        // multi-output plan trips here, not in `emit_strided_multi`.
-        assert_offsets_lowerable(plan);
-        // Increment 1: a MULTI-OUTPUT plan routes to the dedicated N-store
-        // emitters BEFORE the single-output dispatch below — so the single-output
-        // emitters stay byte-for-byte untouched (extra_out_bodies is empty ⇒
-        // n_outputs == 1 ⇒ this branch is never taken for any pre-increment-1 op).
-        // Independent emitter backstop (the plan gate validates the same rules;
-        // the 0a lesson: gate every layer): Elementwise + uniform dtype + no
-        // Reduced/Coord in any body (the multi lowering has no coord/reduced
-        // closure to reach).
-        if plan.n_outputs > 1 {
-            assert_multi_output_lowerable(plan);
-            return match plan.schedule {
-                Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
-                    Some((vty, lanes)) => emit_vectorized_multi(plan, vty, lanes),
-                    None => match packed_kind(plan.dtype, width) {
-                        Some(pk) if bodies_pack(plan) => emit_vectorized_packed_multi(plan, &pk),
-                        _ => emit_scalar_multi(plan, ctype),
+            // Increment 0b/0e: a hetero-output plan reaches only emitters with an
+            // out_dtype-aware store: the scalar/strided elementwise emitters (0b
+            // u8-predicate — no packed u8 store exists, so `build_plan` forces the
+            // schedule) and the reduction emitter (0e any/all → U8, count → I64 —
+            // `emit_reduction` threads `out_ctype`/`store` through the fold). This
+            // emitter-level backstop keeps a future schedule change from silently
+            // routing a hetero output through a vector-typed store (the 0a lesson:
+            // gate every layer, not just the first).
+            // Increment 8 SORT_PERM: the ARGSORT index output is a hetero out (I32 !=
+            // key dtype) that the RowSort emitter stores through an out_dtype-aware
+            // `int* out` store — widen the matches! so it is not rejected here. Additive
+            // (existing behavior untouched); pinned by the argsort golden test.
+            assert!(
+                plan.out_dtype == plan.dtype
+                    || matches!(
+                        plan.schedule,
+                        Schedule::Scalar
+                            | Schedule::Strided
+                            | Schedule::Reduction { .. }
+                            | Schedule::RowSort { .. }
+                    ),
+                "cuda backend: hetero output (out {:?}, key {:?}) lowers scalar/strided/reduction/rowsort only; got {:?}",
+                plan.out_dtype,
+                plan.dtype,
+                plan.schedule
+            );
+            // Item 01: independent layout-VIEW backstop, beside the plan gate
+            // `plan::assert_valid_views` (the 0a lesson: gate every layer). A viewed
+            // input reads the producer through a layout change that ONLY the strided
+            // emitter's per-operand `offset_expr` remap folds — the vector/scalar/
+            // packed emitters iterate a bare linear index and would silently read the
+            // un-viewed operand. This pins: a real view ⇒ Elementwise + single-output
+            // + the Strided schedule, and re-validates each view's structure. A
+            // view-free / all-identity plan returns immediately (byte-identical).
+            assert_views_lowerable(plan);
+            // Increment 4: independent GATHER backstop, beside the plan gate
+            // `plan::assert_valid_gather` (the 0a lesson: gate every layer). A gathered
+            // input reads a data-dependent address that ONLY the strided emitter folds;
+            // the vector/packed/scalar emitters iterate a bare linear index and would
+            // ignore the index operand. Pins: a real gather ⇒ Elementwise +
+            // single-output + one gathered input + Strided schedule. An index-free plan
+            // returns immediately (byte-identical).
+            assert_gather_lowerable(plan);
+            // Increment 5: independent SCATTER backstop, beside the plan gate
+            // `plan::assert_valid_scatter` (the 0a lesson: gate every layer). A
+            // scattered output writes a data-dependent address that ONLY the strided
+            // emitter folds; the vector/packed/scalar emitters iterate a bare linear
+            // index and would ignore the index operand. Pins: a real scatter ⇒
+            // Elementwise + single-output + Strided + a legal combine/dtype pair. A
+            // write-Direct plan returns immediately (byte-identical).
+            assert_scatter_lowerable(plan);
+            // BASE_OFFSET SLICE: independent OFFSET backstop, beside the plan gate
+            // `plan::assert_valid_offsets` (the 0a lesson: gate every layer). A runtime
+            // base offset bumps the operand base pointer at kernel entry, which ONLY the
+            // strided emitter does; the vectorized/scalar/packed + multi-out + every
+            // non-elementwise emitter iterate a bare linear index that would silently
+            // ignore the bump. Pins: a real offset ⇒ Elementwise + single-output +
+            // Strided + not-an-FP-atomic-scatter. An offset-free plan returns immediately
+            // (byte-identical). Runs BEFORE the multi-output dispatch so an offsetted
+            // multi-output plan trips here, not in `emit_strided_multi`.
+            assert_offsets_lowerable(plan);
+            // Increment 1: a MULTI-OUTPUT plan routes to the dedicated N-store
+            // emitters BEFORE the single-output dispatch below — so the single-output
+            // emitters stay byte-for-byte untouched (extra_out_bodies is empty ⇒
+            // n_outputs == 1 ⇒ this branch is never taken for any pre-increment-1 op).
+            // Independent emitter backstop (the plan gate validates the same rules;
+            // the 0a lesson: gate every layer): Elementwise + uniform dtype + no
+            // Reduced/Coord in any body (the multi lowering has no coord/reduced
+            // closure to reach).
+            if plan.n_outputs > 1 {
+                assert_multi_output_lowerable(plan);
+                return match plan.schedule {
+                    Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
+                        Some((vty, lanes)) => emit_vectorized_multi(plan, vty, lanes),
+                        None => match packed_kind(plan.dtype, width) {
+                            Some(pk) if bodies_pack(plan) => {
+                                emit_vectorized_packed_multi(plan, &pk)
+                            }
+                            _ => emit_scalar_multi(plan, ctype),
+                        },
                     },
-                },
-                Schedule::Scalar => emit_scalar_multi(plan, ctype),
-                Schedule::Strided => emit_strided_multi(plan, ctype),
-                // Multi-output is Elementwise-only (plan gate + the backstop
-                // above), so only the elementwise schedules can appear.
-                other => panic!(
-                    "cuda backend: multi-output op '{}' reached a non-elementwise \
+                    Schedule::Scalar => emit_scalar_multi(plan, ctype),
+                    Schedule::Strided => emit_strided_multi(plan, ctype),
+                    // Multi-output is Elementwise-only (plan gate + the backstop
+                    // above), so only the elementwise schedules can appear.
+                    other => panic!(
+                        "cuda backend: multi-output op '{}' reached a non-elementwise \
                      schedule {other:?} — the plan gate pins multi-output to \
                      Access::Elementwise (scalar/vectorized/strided)",
-                    plan.op_name
-                ),
-            };
-        }
-        match plan.schedule {
-            Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
-                Some((vty, lanes)) => emit_vectorized(plan, vty, lanes),
-                None => match packed_kind(plan.dtype, width) {
-                    // f16/bf16: packed half2/bf162 pairs — bit-identical to the
-                    // scalar kernel per lane (see the tier notes on the spellers),
-                    // gated to Input-leaf bodies (a Const/Param participates in
-                    // double-promoted math on the scalar path, which a pair splat
-                    // would change).
-                    Some(pk) if body_packs(plan.body) => emit_vectorized_packed(plan, &pk),
-                    // No packed path (or a const/param body): scalar fallback —
-                    // still correct, still the narrower-dtype bandwidth win.
-                    _ => emit_scalar(plan, ctype),
-                },
-            },
-            Schedule::Scalar => emit_scalar(plan, ctype),
-            Schedule::Strided => {
-                // Increment 5 — DETERMINISM ROUTING. An FP `atomicAdd` scatter is
-                // run-to-run non-deterministic, so per the house variant rule it is
-                // NEVER the silent default: the base `lower()` emits the
-                // deterministic **gather-sum** reformulation (one thread per output
-                // cell scans the update domain and sums matching values in a fixed
-                // order — the bespoke `segment_sorted_kernel` precedent), and the
-                // atomic scatter is offered separately as the `Nondeterministic`
-                // variant (`lower_variants`). Every deterministic combine (Assign,
-                // integer atomicAdd, atomicMax/Min) takes the direct scatter store
-                // in `emit_strided` as its unconditional base.
-                match plan.write_index.scatter() {
-                    Some((_, _, combine, _, _)) if combine.is_fp_atomic_add(plan.out_dtype) => {
-                        emit_scatter_gathersum(plan, ctype)
-                    }
-                    _ => emit_strided(plan, ctype),
-                }
+                        plan.op_name
+                    ),
+                };
             }
-            Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op, false),
-            Schedule::RowReduce { .. } => emit_row_reduce(plan, ctype),
-            Schedule::Contraction => emit_contraction(plan, ctype),
-            // Increment 6 SCAN: `build_plan` always derives `block: false` (the
-            // serial-fold base); the cooperative block-scan is produced separately
-            // by `scan_blockscan_variant`, never routed through `lower()`.
-            Schedule::Scan { .. } => emit_scan(plan, ctype),
-            // Increment 7 WINDOW: one thread per output element (grid-stride) folds
-            // the local pooling window — no variant (each output is an independent
-            // fixed-order fold, BitIdentical).
-            Schedule::Window { .. } => emit_window(plan, ctype),
-            // Increment 8 SORT_PERM: the per-output RANK-sort base (any k, no smem,
-            // no barriers). The cooperative smem bitonic pair-sort is produced
-            // separately by `row_sort_bitonic_variant`, never routed through `lower()`.
-            Schedule::RowSort { .. } => emit_row_sort(plan, ctype),
-            // Increment 11 IM2COL: one thread per output cell (grid-stride) computes
-            // the closed-form source coord and RAW-BIT copies it (or stores the typed
-            // zero for an OOB tap) — no fold, no variant (each output is an
-            // independent read-or-zero + store, BitIdentical).
-            Schedule::Im2Col { .. } => emit_im2col(plan, ctype),
-            // `Schedule` is `#[non_exhaustive]`: a new neutral schedule must be taught
-            // an emitter here. Fail loud rather than silently emit the wrong kernel.
-            _ => panic!(
-                "cuda backend: unhandled Schedule variant {:?} — a new neutral schedule \
+            match plan.schedule {
+                Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
+                    Some((vty, lanes)) => emit_vectorized(plan, vty, lanes),
+                    None => match packed_kind(plan.dtype, width) {
+                        // f16/bf16: packed half2/bf162 pairs — bit-identical to the
+                        // scalar kernel per lane (see the tier notes on the spellers),
+                        // gated to Input-leaf bodies (a Const/Param participates in
+                        // double-promoted math on the scalar path, which a pair splat
+                        // would change).
+                        Some(pk) if body_packs(plan.body) => emit_vectorized_packed(plan, &pk),
+                        // No packed path (or a const/param body): scalar fallback —
+                        // still correct, still the narrower-dtype bandwidth win.
+                        _ => emit_scalar(plan, ctype),
+                    },
+                },
+                Schedule::Scalar => emit_scalar(plan, ctype),
+                Schedule::Strided => {
+                    // Increment 5 — DETERMINISM ROUTING. An FP `atomicAdd` scatter is
+                    // run-to-run non-deterministic, so per the house variant rule it is
+                    // NEVER the silent default: the base `lower()` emits the
+                    // deterministic **gather-sum** reformulation (one thread per output
+                    // cell scans the update domain and sums matching values in a fixed
+                    // order — the bespoke `segment_sorted_kernel` precedent), and the
+                    // atomic scatter is offered separately as the `Nondeterministic`
+                    // variant (`lower_variants`). Every deterministic combine (Assign,
+                    // integer atomicAdd, atomicMax/Min) takes the direct scatter store
+                    // in `emit_strided` as its unconditional base.
+                    match plan.write_index.scatter() {
+                        Some((_, _, combine, _, _)) if combine.is_fp_atomic_add(plan.out_dtype) => {
+                            emit_scatter_gathersum(plan, ctype)
+                        }
+                        _ => emit_strided(plan, ctype),
+                    }
+                }
+                Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op, false),
+                Schedule::RowReduce { .. } => emit_row_reduce(plan, ctype),
+                Schedule::Contraction => emit_contraction(plan, ctype),
+                // Increment 6 SCAN: `build_plan` always derives `block: false` (the
+                // serial-fold base); the cooperative block-scan is produced separately
+                // by `scan_blockscan_variant`, never routed through `lower()`.
+                Schedule::Scan { .. } => emit_scan(plan, ctype),
+                // Increment 7 WINDOW: one thread per output element (grid-stride) folds
+                // the local pooling window — no variant (each output is an independent
+                // fixed-order fold, BitIdentical).
+                Schedule::Window { .. } => emit_window(plan, ctype),
+                // Increment 8 SORT_PERM: the per-output RANK-sort base (any k, no smem,
+                // no barriers). The cooperative smem bitonic pair-sort is produced
+                // separately by `row_sort_bitonic_variant`, never routed through `lower()`.
+                Schedule::RowSort { .. } => emit_row_sort(plan, ctype),
+                // Increment 11 IM2COL: one thread per output cell (grid-stride) computes
+                // the closed-form source coord and RAW-BIT copies it (or stores the typed
+                // zero for an OOB tap) — no fold, no variant (each output is an
+                // independent read-or-zero + store, BitIdentical).
+                Schedule::Im2Col { .. } => emit_im2col(plan, ctype),
+                // `Schedule` is `#[non_exhaustive]`: a new neutral schedule must be taught
+                // an emitter here. Fail loud rather than silently emit the wrong kernel.
+                _ => panic!(
+                    "cuda backend: unhandled Schedule variant {:?} — a new neutral schedule \
                  must be taught an emitter in baracuda-cuda-emit",
-                plan.schedule
-            ),
-        }
+                    plan.schedule
+                ),
+            }
+        })())
     }
+}
+
+/// `unpopped`'s `Lowering` is `#[non_exhaustive]`; build it via its builder.
+/// The CUDA emitters spell all six of these seams explicitly and never override
+/// `constant` (it keeps its `const_lit` default), so no emitted byte changes.
+fn cuda_lowering<'a>(
+    leaf: &'a dyn Fn(u8) -> String,
+    reduced: &'a dyn Fn(u8) -> String,
+    coord: &'a dyn Fn(u8) -> String,
+    unary: &'a dyn Fn(UnaryOp, String) -> String,
+    binary: &'a dyn Fn(BinaryOp, String, String) -> String,
+    select: &'a dyn Fn(String, String, String) -> String,
+) -> Lowering<'a> {
+    Lowering::builder(leaf, unary, binary)
+        .reduced(reduced)
+        .coord(coord)
+        .select(select)
+        .build()
 }
 
 /// Extra header a dtype needs (fp16 / bf16 device operators), if any.
@@ -625,20 +654,20 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
         let (prelude, root) = lower_dag(
             &ExprDag::from_expr(plan.body),
             sctype,
-            &Lowering {
-                leaf: &acc,
-                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
-                coord: &|d| {
+            &cuda_lowering(
+                &acc,
+                &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+                &|d| {
                     panic!(
                         "cuda backend: Coord({d}) reached the vectorized emitter — Coord \
                          bodies lower via Strided only (the linear-index kernels have no \
                          per-axis coordinates)"
                     )
                 },
-                unary: &|op, x| cuda_unary(op, x, plan.dtype),
-                binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
-                select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
-            },
+                &|op, x| cuda_unary(op, x, plan.dtype),
+                &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+                &|c, a, b| cuda_select(c, a, b, plan.dtype),
+            ),
         );
         if prelude.is_empty() {
             s.push_str(&format!("        vo.{lane} = {root};\n"));
@@ -713,29 +742,29 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
         let (prelude, root) = lower_dag_all(
             &ExprDag::from_expr(plan.body),
             pk.pair_ty,
-            &Lowering {
-                leaf: &acc,
-                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            &cuda_lowering(
+                &acc,
+                &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
                 // Doubly unreachable: `body_packs` is Input-leaf-only AND the
                 // packed dtypes are outside Coord's f32/f64 gate.
-                coord: &|d| {
+                &|d| {
                     panic!(
                         "cuda backend: Coord({d}) reached the packed emitter — Coord \
                          bodies lower via Strided only (and halves are outside the \
                          Coord dtype gate)"
                     )
                 },
-                unary: &|op, x| packed_unary(op, x, plan.dtype),
-                binary: &|op, a, b| packed_binary(op, a, b, plan.dtype),
+                &|op, x| packed_unary(op, x, plan.dtype),
+                &|op, a, b| packed_binary(op, a, b, plan.dtype),
                 // Unreachable: `body_packs` excludes Select (G7), so a select
                 // body never reaches the packed pair path — panic backstop.
-                select: &|_, _, _| {
+                &|_, _, _| {
                     panic!(
                         "cuda backend: Select reached the packed emitter — body_packs \
                          excludes select bodies (they decline to the scalar path)"
                     )
                 },
-            },
+            ),
         );
         if prelude.is_empty() {
             // Body is a bare Input leaf (a copy) — no tmp needed.
@@ -775,20 +804,20 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let (prelude, root) = lower_dag(
         &ExprDag::from_expr(plan.body),
         ctype,
-        &Lowering {
-            leaf: &acc,
-            reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
-            coord: &|d| {
+        &cuda_lowering(
+            &acc,
+            &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            &|d| {
                 panic!(
                     "cuda backend: Coord({d}) reached the scalar emitter — Coord bodies \
                      lower via Strided only (the linear-index kernels have no per-axis \
                      coordinates)"
                 )
             },
-            unary: &|op, x| cuda_unary(op, x, plan.dtype),
-            binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
-            select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
-        },
+            &|op, x| cuda_unary(op, x, plan.dtype),
+            &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            &|c, a, b| cuda_select(c, a, b, plan.dtype),
+        ),
     );
     let store = store_expr_of(plan, 0, root);
     if prelude.is_empty() {
@@ -1086,14 +1115,14 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let (prelude, root) = lower_dag(
         &ExprDag::from_expr(plan.body),
         ctype,
-        &Lowering {
-            leaf: &acc,
-            reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
-            coord: &coord,
-            unary: &|op, x| cuda_unary(op, x, plan.dtype),
-            binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
-            select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
-        },
+        &cuda_lowering(
+            &acc,
+            &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            &coord,
+            &|op, x| cuda_unary(op, x, plan.dtype),
+            &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            &|c, a, b| cuda_select(c, a, b, plan.dtype),
+        ),
     );
     for decl in &prelude {
         s.push_str(&format!("        {decl}\n"));
@@ -1804,14 +1833,14 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let (prelude, roots) = lower_dag_multi(
         &dag,
         ctype,
-        &Lowering {
-            leaf: &acc,
-            reduced: &multi_reduced_panic(plan.op_name),
-            coord: &multi_coord_panic(plan.op_name),
-            unary: &|op, x| cuda_unary(op, x, plan.dtype),
-            binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
-            select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
-        },
+        &cuda_lowering(
+            &acc,
+            &multi_reduced_panic(plan.op_name),
+            &multi_coord_panic(plan.op_name),
+            &|op, x| cuda_unary(op, x, plan.dtype),
+            &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            &|c, a, b| cuda_select(c, a, b, plan.dtype),
+        ),
         false,
     );
     s.push_str("    for (; i < n; i += step) {\n");
@@ -1925,14 +1954,14 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let (prelude, roots) = lower_dag_multi(
         &dag,
         ctype,
-        &Lowering {
-            leaf: &acc,
-            reduced: &multi_reduced_panic(plan.op_name),
-            coord: &multi_coord_panic(plan.op_name),
-            unary: &|op, x| cuda_unary(op, x, plan.dtype),
-            binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
-            select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
-        },
+        &cuda_lowering(
+            &acc,
+            &multi_reduced_panic(plan.op_name),
+            &multi_coord_panic(plan.op_name),
+            &|op, x| cuda_unary(op, x, plan.dtype),
+            &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            &|c, a, b| cuda_select(c, a, b, plan.dtype),
+        ),
         false,
     );
     for decl in &prelude {
@@ -2014,14 +2043,14 @@ fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Ge
         let (prelude, roots) = lower_dag_multi(
             &dag,
             sctype,
-            &Lowering {
-                leaf: &acc,
-                reduced: &multi_reduced_panic(plan.op_name),
-                coord: &multi_coord_panic(plan.op_name),
-                unary: &|op, x| cuda_unary(op, x, plan.dtype),
-                binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
-                select: &|c, a, b| cuda_select(c, a, b, plan.dtype),
-            },
+            &cuda_lowering(
+                &acc,
+                &multi_reduced_panic(plan.op_name),
+                &multi_coord_panic(plan.op_name),
+                &|op, x| cuda_unary(op, x, plan.dtype),
+                &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+                &|c, a, b| cuda_select(c, a, b, plan.dtype),
+            ),
             false,
         );
         if prelude.is_empty() {
@@ -2102,22 +2131,22 @@ fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> Gener
         let (prelude, roots) = lower_dag_multi(
             &dag,
             pk.pair_ty,
-            &Lowering {
-                leaf: &acc,
-                reduced: &multi_reduced_panic(plan.op_name),
-                coord: &multi_coord_panic(plan.op_name),
-                unary: &|op, x| packed_unary(op, x, plan.dtype),
-                binary: &|op, a, b| packed_binary(op, a, b, plan.dtype),
+            &cuda_lowering(
+                &acc,
+                &multi_reduced_panic(plan.op_name),
+                &multi_coord_panic(plan.op_name),
+                &|op, x| packed_unary(op, x, plan.dtype),
+                &|op, a, b| packed_binary(op, a, b, plan.dtype),
                 // Unreachable: `bodies_pack` (all-`body_packs`) excludes any
                 // select body from the packed multi path — panic backstop.
-                select: &|_, _, _| {
+                &|_, _, _| {
                     panic!(
                         "cuda backend: Select reached the packed multi-output emitter — \
                          body_packs excludes select bodies (they decline to the scalar \
                          path)"
                     )
                 },
-            },
+            ),
             true,
         );
         if prelude.is_empty() {
@@ -2185,7 +2214,7 @@ fn emit_reduction(
     let prec = if precision { "_prec" } else { "" };
     let int_acc = matches!(
         plan.dtype,
-        ElementKind::I32 | ElementKind::I64 | ElementKind::S8 | ElementKind::U8
+        ElementKind::I32 | ElementKind::I64 | ElementKind::I8 | ElementKind::U8
     );
     assert!(
         matches!(
@@ -2361,37 +2390,37 @@ fn emit_reduction(
     .unwrap_or_else(|| {
         lower_expr(
             plan.body,
-            &Lowering {
-                leaf: &load,
-                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
-                coord: &|d| {
+            &cuda_lowering(
+                &load,
+                &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+                &|d| {
                     panic!(
                         "cuda backend: Coord({d}) reached the reduction emitter — Coord is \
                          Elementwise-only (a coordinate along a folded axis is ambiguous)"
                     )
                 },
-                unary: &|op, x| {
+                &|op, x| {
                     if dbl {
                         unary_f64(op, x)
                     } else {
                         unary_f32(op, x)
                     }
                 },
-                binary: &|op, a, b| {
+                &|op, a, b| {
                     if dbl {
                         binary_f64(op, a, b)
                     } else {
                         binary_f32(op, a, b)
                     }
                 },
-                select: &|c, a, b| {
+                &|c, a, b| {
                     if dbl {
                         select_f64(c, a, b)
                     } else {
                         select_f32(c, a, b)
                     }
                 },
-            },
+            ),
         )
     });
     // Convert an accumulator-width value to the output store. Uniform-dtype is
@@ -2445,36 +2474,36 @@ fn emit_reduction(
             int_reduction_predicate(post, &post_leaf, &post_reduced).unwrap_or_else(|| {
                 lower_expr(
                     post,
-                    &Lowering {
-                        leaf: &post_leaf,
-                        reduced: &post_reduced,
-                        coord: &|d| {
+                    &cuda_lowering(
+                        &post_leaf,
+                        &post_reduced,
+                        &|d| {
                             panic!(
                                 "cuda backend: reduction post-expr Coord({d}) is Elementwise-only"
                             )
                         },
-                        unary: &|op, x| {
+                        &|op, x| {
                             if dbl {
                                 unary_f64(op, x)
                             } else {
                                 unary_f32(op, x)
                             }
                         },
-                        binary: &|op, a, b| {
+                        &|op, a, b| {
                             if dbl {
                                 binary_f64(op, a, b)
                             } else {
                                 binary_f32(op, a, b)
                             }
                         },
-                        select: &|c, a, b| {
+                        &|c, a, b| {
                             if dbl {
                                 select_f64(c, a, b)
                             } else {
                                 select_f32(c, a, b)
                             }
                         },
-                    },
+                    ),
                 )
             });
         (Some(format!("{acc} red0 = {finalized};")), store(posted))
@@ -3075,37 +3104,37 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     };
     let elem = lower_expr(
         plan.body,
-        &Lowering {
-            leaf: &load,
-            reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
-            coord: &|d| {
+        &cuda_lowering(
+            &load,
+            &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            &|d| {
                 panic!(
                     "cuda backend: Coord({d}) reached the split-K reduction variant — \
                      Coord is Elementwise-only"
                 )
             },
-            unary: &|op, x| {
+            &|op, x| {
                 if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
                 }
             },
-            binary: &|op, a, b| {
+            &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
                 }
             },
-            select: &|c, a, b| {
+            &|c, a, b| {
                 if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
                 }
             },
-        },
+        ),
     );
     let store = |finalized: String| -> String {
         match plan.dtype {
@@ -3323,11 +3352,11 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     };
     let epi = lower_expr(
         epilogue,
-        &Lowering {
+        &cuda_lowering(
             // The only admissible epilogue Input is the fused bias `in{i}` (i>=2),
             // a per-column `[N]` bias read at `col` and up-converted to the
             // accumulator width, exactly as the operand loads are.
-            leaf: &|i| {
+            &|i| {
                 assert!(
                     i >= 2,
                     "contraction epilogue Input leaf must be the fused bias (>=2): in{i}"
@@ -3339,36 +3368,36 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
                     _ => e,
                 }
             },
-            reduced: &red,
-            coord: &|d| {
+            &red,
+            &|d| {
                 panic!(
                     "cuda backend: Coord({d}) reached the contraction emitter — the \
                      (m, n) epilogue space is not the elementwise coordinate space; \
                      Coord is Elementwise-only"
                 )
             },
-            unary: &|op, x| {
+            &|op, x| {
                 if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
                 }
             },
-            binary: &|op, a, b| {
+            &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
                 }
             },
-            select: &|c, a, b| {
+            &|c, a, b| {
                 if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
                 }
             },
-        },
+        ),
     );
     let stored = match plan.dtype {
         ElementKind::F16 => format!("__float2half({epi})"),
@@ -3561,37 +3590,37 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     };
     let epi = lower_expr(
         epilogue,
-        &Lowering {
-            leaf: &|i| unreachable!("contraction v1 epilogue has no Input leaf: in{i}"),
-            reduced: &red,
-            coord: &|d| {
+        &cuda_lowering(
+            &|i| unreachable!("contraction v1 epilogue has no Input leaf: in{i}"),
+            &red,
+            &|d| {
                 panic!(
                     "cuda backend: Coord({d}) reached the split-K contraction variant — \
                      Coord is Elementwise-only"
                 )
             },
-            unary: &|op, x| {
+            &|op, x| {
                 if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
                 }
             },
-            binary: &|op, a, b| {
+            &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
                 }
             },
-            select: &|c, a, b| {
+            &|c, a, b| {
                 if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
                 }
             },
-        },
+        ),
     );
     let stored = match plan.dtype {
         ElementKind::F16 => format!("__float2half({epi})"),
@@ -3906,38 +3935,38 @@ fn emit_row_reduce_impl(
     let lower = |e: &ScalarExpr| {
         lower_expr(
             e,
-            &Lowering {
-                leaf: &load,
-                reduced: &red,
-                coord: &|d| {
+            &cuda_lowering(
+                &load,
+                &red,
+                &|d| {
                     panic!(
                         "cuda backend: Coord({d}) reached the RowReduce emitter — the \
                          (row, j) space is not the elementwise coordinate space; Coord \
                          is Elementwise-only"
                     )
                 },
-                unary: &|op, x| {
+                &|op, x| {
                     if dbl {
                         unary_f64(op, x)
                     } else {
                         unary_f32(op, x)
                     }
                 },
-                binary: &|op, a, b| {
+                &|op, a, b| {
                     if dbl {
                         binary_f64(op, a, b)
                     } else {
                         binary_f32(op, a, b)
                     }
                 },
-                select: &|c, a, b| {
+                &|c, a, b| {
                     if dbl {
                         select_f64(c, a, b)
                     } else {
                         select_f32(c, a, b)
                     }
                 },
-            },
+            ),
         )
     };
 
@@ -4313,7 +4342,7 @@ fn type_extreme_lit(dt: ElementKind, most_negative: bool) -> String {
             "9223372036854775807LL"
         }
         .to_string(),
-        ElementKind::S8 => if most_negative {
+        ElementKind::I8 => if most_negative {
             "((signed char)-128)"
         } else {
             "((signed char)127)"
@@ -4513,74 +4542,74 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     // running prefix, so a Reduced leaf panics (validate_scan rejects it).
     let pre_str = lower_expr(
         pre,
-        &Lowering {
-            leaf: &load,
-            reduced: &|s| {
+        &cuda_lowering(
+            &load,
+            &|s| {
                 panic!(
                     "cuda backend: Scan pre-map read Reduced({s}) — no running prefix in the pre-map"
                 )
             },
-            coord: &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
-            unary: &|op, x| {
+            &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
+            &|op, x| {
                 if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
                 }
             },
-            binary: &|op, a, b| {
+            &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
                 }
             },
-            select: &|c, a, b| {
+            &|c, a, b| {
                 if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
                 }
             },
-        },
+        ),
     );
     // `post` (the per-element epilogue) lowers over the running-prefix register,
     // bound to the `prefix` variable (Reduced(0)); the identity post yields
     // `"prefix"`, so the store is byte-simple.
     let post_str = lower_expr(
         post,
-        &Lowering {
-            leaf: &load,
-            reduced: &|s| {
+        &cuda_lowering(
+            &load,
+            &|s| {
                 assert_eq!(
                     s, 0,
                     "Scan post references Reduced({s}); only 0 (the running prefix) exists"
                 );
                 "prefix".to_string()
             },
-            coord: &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
-            unary: &|op, x| {
+            &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
+            &|op, x| {
                 if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
                 }
             },
-            binary: &|op, a, b| {
+            &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
                 }
             },
-            select: &|c, a, b| {
+            &|c, a, b| {
                 if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
                 }
             },
-        },
+        ),
     );
     let store = |v: &str| -> String {
         match plan.dtype {
@@ -5080,73 +5109,73 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // yet, so a Reduced leaf panics (validate_window rejects it).
     let pre_str = lower_expr(
         pre,
-        &Lowering {
-            leaf: &load,
-            reduced: &|s| {
+        &cuda_lowering(
+            &load,
+            &|s| {
                 panic!(
                     "cuda backend: Window pre-map read Reduced({s}) — no window result in the pre-map"
                 )
             },
-            coord: &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
-            unary: &|op, x| {
+            &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
+            &|op, x| {
                 if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
                 }
             },
-            binary: &|op, a, b| {
+            &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
                 }
             },
-            select: &|c, a, b| {
+            &|c, a, b| {
                 if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
                 }
             },
-        },
+        ),
     );
     // `post` (per-output epilogue) lowers over the finalized window result, bound to
     // the `prefix` register (Reduced(0)); the identity post yields `"prefix"`.
     let post_str = lower_expr(
         post,
-        &Lowering {
-            leaf: &load,
-            reduced: &|s| {
+        &cuda_lowering(
+            &load,
+            &|s| {
                 assert_eq!(
                     s, 0,
                     "Window post references Reduced({s}); only 0 (the window result) exists"
                 );
                 "prefix".to_string()
             },
-            coord: &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
-            unary: &|op, x| {
+            &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
+            &|op, x| {
                 if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
                 }
             },
-            binary: &|op, a, b| {
+            &|op, a, b| {
                 if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
                 }
             },
-            select: &|c, a, b| {
+            &|c, a, b| {
                 if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
                 }
             },
-        },
+        ),
     );
     let store = |v: &str| -> String {
         match plan.dtype {
@@ -6595,7 +6624,7 @@ const CAST_MATRIX_DTYPES: [ElementKind; 8] = [
     ElementKind::F64,
     ElementKind::I32,
     ElementKind::I64,
-    ElementKind::S8,
+    ElementKind::I8,
     ElementKind::U8,
 ];
 
@@ -6799,7 +6828,7 @@ fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String
         // speller — legal for the bitwise/shift/logical vocabulary only
         // (binary_int backstop-panics on everything else, behind the plan
         // gate's validate-reject).
-        ElementKind::I32 | ElementKind::I64 | ElementKind::S8 | ElementKind::U8 => {
+        ElementKind::I32 | ElementKind::I64 | ElementKind::I8 | ElementKind::U8 => {
             binary_int(op, a, b, dtype)
         }
         other => panic!("cuda backend: no binary math for dtype {other:?}"),
@@ -7641,7 +7670,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -7681,7 +7710,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -8517,7 +8546,7 @@ mod tests {
         let k_one = structure_key(OpCategory::Reduction, &[a], ArchSku::Sm89);
         let plan = unpopped::build_plan(&op, &k_one);
         assert!(
-            Cuda.lower_variants(&plan).is_empty(),
+            Cuda.lower_variants(&plan).unwrap().is_empty(),
             "1-operand key: no variant"
         );
     }
@@ -8720,7 +8749,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -9205,8 +9234,8 @@ mod tests {
         // pass-through and the truncation to 8 bits happens via the `signed char*`
         // output pointer's implicit (wrapping, two's-complement) assignment
         // conversion — KISS-OPS-6.2-0002.
-        let op = OpDef::reduction("s", 1, &[ElementKind::S8], input(0), ReduceOp::Sum);
-        let k = generate(&op, &reduce_key(ElementKind::S8), &Cuda);
+        let op = OpDef::reduction("s", 1, &[ElementKind::I8], input(0), ReduceOp::Sum);
+        let k = generate(&op, &reduce_key(ElementKind::I8), &Cuda);
         assert!(k.source.contains("const signed char* __restrict__ in0"));
         assert!(k.source.contains("signed char* __restrict__ out")); // out == in dtype
         assert!(k.source.contains("long long acc = 0;"));
@@ -9253,12 +9282,12 @@ mod tests {
         let mut op = OpDef::reduction(
             "count_s8",
             1,
-            &[ElementKind::S8],
+            &[ElementKind::I8],
             input(0).binary(BinaryOp::CmpNe, konst(0.0)),
             ReduceOp::Sum,
         );
         op.out_dtype = Some(ElementKind::I64);
-        let k = generate(&op, &reduce_key(ElementKind::S8), &Cuda);
+        let k = generate(&op, &reduce_key(ElementKind::I8), &Cuda);
         assert!(k.source.contains("acc += (in0[idx] != 0 ? 1 : 0);"));
         assert!(k.source.contains("long long* __restrict__ out")); // I64 hetero out
         assert!(
@@ -9307,8 +9336,8 @@ mod tests {
         // extent must fold to the dtype MINIMUM (KISS-OPS-6.11-0002), not 0 — so
         // any real element in a non-empty fold still compares as `>` the
         // identity. Signed case: -128.
-        let op = OpDef::reduction("m", 1, &[ElementKind::S8], input(0), ReduceOp::Max);
-        let k = generate(&op, &reduce_key(ElementKind::S8), &Cuda);
+        let op = OpDef::reduction("m", 1, &[ElementKind::I8], input(0), ReduceOp::Max);
+        let k = generate(&op, &reduce_key(ElementKind::I8), &Cuda);
         assert!(k.source.contains("const signed char* __restrict__ in0"));
         assert!(
             k.source
@@ -9347,13 +9376,13 @@ mod tests {
         // S8 Max over the OUTER (non-contiguous-last) axis: the general
         // strided-fold path (the second emit site) — same empty-axis identity
         // must apply here too, not just the InnerContig fast path.
-        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::S8, 256);
-        let out = OperandDesc::new(1, &[8], &[1], ElementKind::S8, 256);
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::I8, 256);
+        let out = OperandDesc::new(1, &[8], &[1], ElementKind::I8, 256);
         let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
         let op = OpDef::reduction_axes(
             "m",
             1,
-            &[ElementKind::S8],
+            &[ElementKind::I8],
             input(0),
             ReduceOp::Max,
             AxisMask(0b01),
@@ -10602,7 +10631,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -10645,28 +10674,36 @@ mod tests {
         // supports_dtype says yes — and the per-OP legality lives in
         // dtype_compatible / the plan gate, NOT here (a uniform-U8 Div region
         // still declines; pinned in jit.rs). Both directions:
+        // unpopped 0.2.0 (723fdb0) made `bool` its own kind: `scalar_ctype(Bool)`
+        // is now Some (uint8_t), so supports_dtype — the STORAGE/spellability gate —
+        // admits it. Its op-level split (arithmetic DECLINES, logical ADMITS) is the
+        // plan gate's job, tested in `logical_and_at_i32` and the arith-decline
+        // tests, NOT here. So Bool moved from the decline list into the spellable one.
         for dt in [
             ElementKind::U8,
-            ElementKind::S8,
+            ElementKind::I8,
             ElementKind::I32,
             ElementKind::I64,
+            ElementKind::Bool, // 0.2.0: spellable (uint8_t); arith/logical split is the plan gate's
         ] {
             assert!(
-                Cuda.supports_dtype(dt),
-                "{dt:?} is an audited compute dtype"
+                Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into()),
+                "{dt:?} is spellable (supports_dtype is storage, not op legality)"
             );
         }
-        for dt in [
-            ElementKind::Bool, // FKC has no Bool — masks ride as U8
-            ElementKind::S4,
-            ElementKind::U4,
-            ElementKind::Bin,
-            ElementKind::Fp8E4M3,
-            ElementKind::Fp8E5M2,
-            ElementKind::Complex32,
-            ElementKind::Complex64,
-        ] {
-            assert!(!Cuda.supports_dtype(dt), "{dt:?} must keep declining");
+        // unpopped 0.2.0 made `scalar_ctype` the STORAGE gate: Fp8 (byte +
+        // fp8_helpers), I4/U4/B1 (packed in a byte), and Complex64/128
+        // (unpopped_c64/c128 structs) are now all SPELLABLE — supports_dtype admits
+        // them. Their COMPUTE legality (arch-gated fp8, op-gated complex, sub-byte
+        // packing) is the plan gate's, NOT this storage gate — the storage-vs-compute
+        // split. The ONE dtype Cuda still declines here is U32: it has a ctype
+        // ("unsigned int") but rides ONLY as a gather/scatter index-LOAD type, never
+        // a value/compute dtype, so Cuda excludes it explicitly.
+        for dt in [ElementKind::U32] {
+            assert!(
+                !Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into()),
+                "{dt:?} must keep declining (index-load-only, Cuda-excluded)"
+            );
         }
         // The u8-OUT predicate path is unchanged by the flip.
         let k = generate(
@@ -10908,8 +10945,8 @@ mod tests {
             "no defeating casts — promotion is the contract"
         );
         let ks = generate(
-            &int_op("shr", BinaryOp::Shr, ElementKind::S8),
-            &binary_scalar_key(ElementKind::S8, 1),
+            &int_op("shr", BinaryOp::Shr, ElementKind::I8),
+            &binary_scalar_key(ElementKind::I8, 1),
             &Cuda,
         );
         assert_eq!(ks.name, "baracuda_gen_shr_i8_scalar");
@@ -10926,8 +10963,8 @@ mod tests {
         );
         assert!(ka.source.contains("out[i] = (in0[i] & in1[i]);"));
         let kx = generate(
-            &int_op("bxor", BinaryOp::BitXor, ElementKind::S8),
-            &binary_scalar_key(ElementKind::S8, 1),
+            &int_op("bxor", BinaryOp::BitXor, ElementKind::I8),
+            &binary_scalar_key(ElementKind::I8, 1),
             &Cuda,
         );
         assert!(kx.source.contains("out[i] = (in0[i] ^ in1[i]);"));
@@ -10989,8 +11026,8 @@ mod tests {
             !ku.source.contains("float"),
             "no float detour in a u8 kernel"
         );
-        let muls = OpDef::elementwise("mul", 2, &[ElementKind::S8], input(0) * input(1));
-        let ks = generate(&muls, &binary_scalar_key(ElementKind::S8, 1), &Cuda);
+        let muls = OpDef::elementwise("mul", 2, &[ElementKind::I8], input(0) * input(1));
+        let ks = generate(&muls, &binary_scalar_key(ElementKind::I8, 1), &Cuda);
         assert_eq!(ks.name, "baracuda_gen_mul_i8_scalar");
         assert!(ks.source.contains("out[i] = (in0[i] * in1[i]);"));
         let subl = OpDef::elementwise("sub", 2, &[ElementKind::I64], input(0) - input(1));
@@ -11069,9 +11106,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "U8 (Bool)-only")]
+    #[should_panic(expected = "bespoke BOOL surface")]
     fn logical_and_at_i32_is_rejected_at_the_plan_gate() {
-        // Bespoke logical instantiates ONLY uint8_t — wider ints miss honestly.
+        // 0.2.0 (unpopped 723fdb0) re-pinned the logical surface from U8-the-
+        // representation to Bool-the-dtype (still uint8_t-instantiated); wider
+        // ints miss honestly. Message moved "U8 (Bool)-only" → "bespoke BOOL surface".
         let op = int_op("land", BinaryOp::LogicalAnd, ElementKind::I32);
         let key = binary_scalar_key(ElementKind::I32, 4);
         let _ = unpopped::build_plan(&op, &key);
@@ -11188,10 +11227,10 @@ mod tests {
         let op = OpDef::elementwise(
             "shlamt",
             2,
-            &[ElementKind::S8],
+            &[ElementKind::I8],
             input(0).binary(BinaryOp::Shl, input(0) + input(1)),
         );
-        let key = binary_scalar_key(ElementKind::S8, 1);
+        let key = binary_scalar_key(ElementKind::I8, 1);
         let _ = unpopped::build_plan(&op, &key);
     }
 
@@ -11265,7 +11304,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -11293,11 +11332,11 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
-    #[should_panic(expected = "bespoke logical surface")]
+    #[should_panic(expected = "bespoke BOOL surface")]
     fn logical_at_wide_int_is_refused_by_the_emitter_backstop() {
         use unpopped::backend::Backend;
         use unpopped::plan::{KernelPlan, Schedule};
@@ -11321,7 +11360,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -11353,7 +11392,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -11384,7 +11423,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     // ===== increment 0d: Coord(axis) — the iota/coordinate leaf =============
@@ -11658,7 +11697,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -11699,7 +11738,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -11727,7 +11766,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -11759,7 +11798,7 @@ mod tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -12238,7 +12277,7 @@ mod tests {
             base_offsets: &[BaseOffset::Runtime, BaseOffset::Zero],
             out_base_offset: BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -12268,7 +12307,7 @@ mod tests {
             base_offsets: &[BaseOffset::Runtime, BaseOffset::Zero],
             out_base_offset: BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -12309,7 +12348,7 @@ mod tests {
             base_offsets: &[BaseOffset::Runtime], // WRONG: offset is Elementwise-only.
             out_base_offset: BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 }
 
@@ -12668,8 +12707,8 @@ mod multi_output_tests {
         use unpopped::optimize::optimize;
         let b0 = (input(0) * input(2)).0;
         let b1 = ((input(0) * input(2)) * input(1)).0;
-        let o0 = optimize(&b0);
-        let o1 = optimize(&b1);
+        let o0 = optimize(&b0, unpopped_vocab::ElementKind::F32);
+        let o1 = optimize(&b1, unpopped_vocab::ElementKind::F32);
         let dag = ExprDag::from_exprs(&[&o0, &o1]);
         // Body 0's optimized root is the shared dy*b node, referenced by body 1.
         assert!(
@@ -13040,7 +13079,7 @@ mod dropout_hetero_tests {
         let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
         let plan = build_plan(&op, &key);
         assert_eq!(plan.dtype, ElementKind::F64);
-        let k = Cuda.lower(&plan); // emits (no panic) — the plan layer passed f64 through
+        let k = Cuda.lower(&plan).unwrap(); // emits (no panic) — the plan layer passed f64 through
         assert!(k.source.contains(", double p0)"), "{}", k.source);
     }
 
@@ -13145,7 +13184,7 @@ mod dropout_hetero_tests {
         let extra = [input(0).binary(BinaryOp::CmpLt, input(1)).0];
         let extra_dt = [Some(ElementKind::I32)];
         let plan = hetero_plan_slots(&key, &body0, &extra, &extra_dt, Schedule::Scalar);
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -13164,7 +13203,7 @@ mod dropout_hetero_tests {
             &extra_dt,
             Schedule::Vectorized { width: 4 },
         );
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     // ---- source dump for ondevice/dropout_validate.cu ----
@@ -13377,8 +13416,8 @@ mod scan_tests {
         // The gate uses an explicit FP+I32/I64 allowlist, NOT is_int_dtype (which
         // admits S8/U8); a mutation to is_int_dtype must fail this.
         for (op, dt) in [
-            (ReduceOp::Sum, ElementKind::S8),
-            (ReduceOp::Max, ElementKind::S8),
+            (ReduceOp::Sum, ElementKind::I8),
+            (ReduceOp::Max, ElementKind::I8),
             (ReduceOp::Sum, ElementKind::U8),
             (ReduceOp::Min, ElementKind::U8),
             (ReduceOp::Prod, ElementKind::U8),
@@ -14457,7 +14496,7 @@ mod im2col_tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     /// Manual dump tool (not a wired assertion): regenerate the im2col `.cu` sources
@@ -15311,7 +15350,7 @@ mod sort_tests {
             base_offsets: &[],
             out_base_offset: BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -15395,7 +15434,7 @@ mod sort_tests {
             base_offsets: &[],
             out_base_offset: BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -15443,7 +15482,7 @@ mod sort_tests {
             base_offsets: &[],
             out_base_offset: BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     #[test]
@@ -16397,7 +16436,7 @@ mod select_tests {
             base_offsets: &[],
             out_base_offset: unpopped::ir::BaseOffset::Zero,
         };
-        let _ = Cuda.lower(&plan);
+        let _ = Cuda.lower(&plan).unwrap();
     }
 
     // ---- source dump for ondevice/select_validate.cu ----

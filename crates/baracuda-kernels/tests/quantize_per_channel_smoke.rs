@@ -77,7 +77,7 @@ fn quantize_per_channel_f32_s8_rank3_axis1() {
         q_min: -128,
         q_max: 127,
         input_element: ElementKind::F32,
-        output_element: ElementKind::S8,
+        output_element: ElementKind::I8,
     };
     let plan = QuantizePerChannelPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");

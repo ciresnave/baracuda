@@ -98,7 +98,7 @@ fn check_op(ctx: &Context, stream: &Stream, region_op: &str, fused_id: &str, is_
         n_inputs: 2,
         op_category: OpCategory::BinaryElementwise,
         operands,
-        arch: ArchSku::Sm89,
+        target: ArchSku::Sm89.into(),
         fused_op_id: fused_id.to_string(),
         budget: JitBudget {
             max_compile_ms: 5000,

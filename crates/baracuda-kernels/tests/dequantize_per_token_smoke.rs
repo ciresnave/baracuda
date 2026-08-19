@@ -47,7 +47,7 @@ fn dequantize_per_token_f32_s8_basic() {
         n,
         d,
         input_element: ElementKind::F32,
-        output_element: ElementKind::S8,
+        output_element: ElementKind::I8,
     };
     let plan = DequantizePerTokenPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select");

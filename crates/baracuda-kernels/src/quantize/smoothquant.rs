@@ -110,8 +110,8 @@ impl SmoothQuantLinearDescriptor {
             n,
             k,
             act_scale,
-            activation_element: ElementKind::S8,
-            weight_element: ElementKind::S8,
+            activation_element: ElementKind::I8,
+            weight_element: ElementKind::I8,
             output_element: TIn::KIND,
         }
     }
@@ -192,7 +192,7 @@ impl<TIn: Element, TWQ: IntElement> SmoothQuantLinearPlan<TIn, TWQ> {
                 "SmoothQuantLinearPlan: descriptor weight_element != TWQ",
             ));
         }
-        if desc.activation_element != ElementKind::S8 {
+        if desc.activation_element != ElementKind::I8 {
             return Err(Error::Unsupported(
                 "SmoothQuantLinearPlan: trailblazer only wires S8 activation \
                  (matches underlying quantized_linear_w8a8 kernel)",
@@ -206,7 +206,7 @@ impl<TIn: Element, TWQ: IntElement> SmoothQuantLinearPlan<TIn, TWQ> {
                  output (f16 / bf16 follow when quantized_linear_w8a8 grows them)",
             ));
         }
-        if TWQ::KIND != ElementKind::S8 {
+        if TWQ::KIND != ElementKind::I8 {
             return Err(Error::Unsupported(
                 "SmoothQuantLinearPlan: trailblazer only wires S8 weight (U8 deferred)",
             ));

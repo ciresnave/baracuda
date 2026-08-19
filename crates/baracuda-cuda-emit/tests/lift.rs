@@ -1,18 +1,24 @@
 //! Hand-written-CUDA lifter round-trip tests that re-emit through a real backend
-//! (`&Cuda`, plus `&CpuC`). Relocated from baracuda-kernelgen `src/lift.rs`'s `mod
+//! (`&Cuda`; the `&CpuC` leg is DEFERRED — unpopped 0.2.0 `c584818`). Relocated from baracuda-kernelgen `src/lift.rs`'s `mod
 //! tests` during the Unpopped carve (step 3). The neutral lifter tests (parse /
 //! refusal / KISS-Consume categories) stayed in kernelgen; only the two that
 //! re-emit to CUDA moved here. Public-API only (no widening needed).
 
 use baracuda_cuda_emit::Cuda;
+use unpopped::generate;
 use unpopped::lift::lift_elementwise;
-use unpopped::{CpuC, generate};
 use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
 const F32: &[ElementKind] = &[ElementKind::F32];
 
+// DEFERRED COVERAGE (unpopped 0.2.0, commit c584818): the `&CpuC` leg — and the
+// CUDA-vs-CpuC cross-backend agreement — was dropped when the CpuC/Slang emitters
+// left `unpopped`'s core for the (currently unpublished) `unpopped-cpu-c` /
+// `unpopped-slang` crates. A dev-dep on an unpublished crate would re-block the sk4
+// merge. RESTORE when those publish: re-add `CpuC`, the `cpuc` re-emit, and the
+// host-loop assertion. The CUDA round-trip below is unaffected.
 #[test]
-fn round_trip_reemits_to_cuda_and_cpuc() {
+fn round_trip_reemits_to_cuda() {
     // A hand-written CUDA elementwise kernel a "copy-paster" might have.
     let src = "__global__ void mul(const float* in0, const float* in1, float* out, long long n) {\n\
                long long i = blockIdx.x*blockDim.x + threadIdx.x;\n\
@@ -20,32 +26,23 @@ fn round_trip_reemits_to_cuda_and_cpuc() {
                for (; i < n; i += step) { out[i] = in0[i] * in1[i]; }\n}";
     let lifted = lift_elementwise(src, "lifted_mul", F32).unwrap();
     assert_eq!(lifted.n_inputs, 2);
-    // Re-emit the SAME lifted IR to two different backends. `align = 4`
-    // yields the Scalar (non-vectorized) schedule the CpuC v1 backend serves.
+    // `align = 4` yields the Scalar (non-vectorized) schedule.
     let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 4);
     let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
     let cuda = generate(&lifted.op, &key, &Cuda);
-    let cpuc = generate(&lifted.op, &key, &CpuC);
-    // Both backends read both inputs — the op survived source → IR → re-emit.
-    for s in [&cuda.source, &cpuc.source] {
-        assert!(
-            s.contains("in0[") && s.contains("in1["),
-            "missing an input:\n{s}"
-        );
-    }
+    // The op survived source → IR → re-emit: both inputs read, real CUDA kernel.
+    assert!(
+        cuda.source.contains("in0[") && cuda.source.contains("in1["),
+        "missing an input:\n{}",
+        cuda.source
+    );
     assert!(
         cuda.source.contains("__global__"),
         "not a CUDA kernel:\n{}",
         cuda.source
     );
-    assert!(
-        cpuc.source.contains("for (long long i"),
-        "not a CpuC host loop:\n{}",
-        cpuc.source
-    );
     // Visible payoff (run with --nocapture).
     println!("=== re-emitted CUDA ===\n{}", cuda.source);
-    println!("=== re-emitted CpuC ===\n{}", cpuc.source);
 }
 
 /// Dump the lift round-trip PAIR for the on-device differential validator

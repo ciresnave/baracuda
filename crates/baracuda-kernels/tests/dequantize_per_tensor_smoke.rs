@@ -41,7 +41,7 @@ fn dequantize_per_tensor_s8_f32_exact_inverse() {
     let desc = DequantizePerTensorDescriptor {
         numel,
         input_element: ElementKind::F32,
-        output_element: ElementKind::S8,
+        output_element: ElementKind::I8,
     };
     let plan =
         DequantizePerTensorPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())

@@ -17,7 +17,7 @@
 //! - `op ∈ {N, T, C}`. `T` is real-only (plain transpose); `C` is
 //!   the conjugate-transpose variant for complex dtypes. Complex +
 //!   `op = T` is rejected as mathematically unusual for Householder.
-//! - `dtype ∈ {f32, f64, Complex32, Complex64}`. The real dtypes match
+//! - `dtype ∈ {f32, f64, Complex64, Complex128}`. The real dtypes match
 //!   [`super::qr_batched`] coverage; the complex dtypes accept inputs
 //!   produced by non-batched `cusolverDn{C,Z}geqrf` looped per slot
 //!   (Milestone 6.14's `BatchedQrPlan` does not yet ship complex).
@@ -102,8 +102,8 @@ pub struct BatchedOrmqrDescriptor {
     /// [`BatchedOrmqrOp::T`] (apply `Q^T`, real only), or
     /// [`BatchedOrmqrOp::C`] (apply `Q^H`, complex only).
     pub op: BatchedOrmqrOp,
-    /// Element type. Must be one of `F32`, `F64`, `Complex32`, or
-    /// `Complex64`.
+    /// Element type. Must be one of `F32`, `F64`, `Complex64`, or
+    /// `Complex128`.
     pub element: ElementKind,
 }
 
@@ -145,7 +145,7 @@ pub struct BatchedOrmqrArgs<'a, T: Element> {
 /// [`super::BatchedQrPlan`] which produces the packed `A` + `tau`
 /// inputs.
 ///
-/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64`. Complex +
+/// **Dtypes**: `f32`, `f64`, `Complex64`, `Complex128`. Complex +
 /// `op = T` is rejected (use `C` for the conjugate-transpose adjoint
 /// of unitary `Q`).
 ///
@@ -178,11 +178,11 @@ impl<T: Element> BatchedOrmqrPlan<T> {
             ));
         }
         let is_real = matches!(T::KIND, ElementKind::F32 | ElementKind::F64);
-        let is_complex = matches!(T::KIND, ElementKind::Complex32 | ElementKind::Complex64);
+        let is_complex = matches!(T::KIND, ElementKind::Complex64 | ElementKind::Complex128);
         if !(is_real || is_complex) {
             return Err(Error::Unsupported(
                 "baracuda-kernels::BatchedOrmqrPlan: dtype must be one of \
-                 {f32, f64, Complex32, Complex64}",
+                 {f32, f64, Complex64, Complex128}",
             ));
         }
         // Op × dtype gating: T is real-only (LAPACK convention), C is complex-only.
@@ -231,7 +231,7 @@ impl<T: Element> BatchedOrmqrPlan<T> {
         }
 
         let math_precision = match T::KIND {
-            ElementKind::F64 | ElementKind::Complex64 => MathPrecision::F64,
+            ElementKind::F64 | ElementKind::Complex128 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -363,7 +363,7 @@ impl<T: Element> BatchedOrmqrPlan<T> {
                     stream_ptr,
                 )
             },
-            ElementKind::Complex32 => unsafe {
+            ElementKind::Complex64 => unsafe {
                 baracuda_kernels_batched_ormqr_complex32_run(
                     self.desc.batch_size,
                     self.desc.m,
@@ -379,7 +379,7 @@ impl<T: Element> BatchedOrmqrPlan<T> {
                     stream_ptr,
                 )
             },
-            ElementKind::Complex64 => unsafe {
+            ElementKind::Complex128 => unsafe {
                 baracuda_kernels_batched_ormqr_complex64_run(
                     self.desc.batch_size,
                     self.desc.m,

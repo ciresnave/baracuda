@@ -1607,9 +1607,9 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "unpopped"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73382449cd1f987095ca2d7067e3c5091f015c1ba3228821c5427c527d9066d5"
+checksum = "ca00e987aac5374c5ddb065e8c1db63c4e6719fc6f8c0a7c8d9132f3fd9a4171"
 dependencies = [
  "fuel-kernel-seam-types",
  "libm",
@@ -1623,9 +1623,9 @@ dependencies = [
 
 [[package]]
 name = "unpopped-vocab"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "888b91fce50927b092f9119c1a78938f3698c3433fedb90f19c3bcf8241c66ac"
+checksum = "0deafa3af380e46ef5a509c8f388d67283262c80e896f9a593dc5d0ca02f37c3"
 dependencies = [
  "float8",
  "half",
