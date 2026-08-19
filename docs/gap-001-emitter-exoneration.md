@@ -12,7 +12,7 @@ Originally scoped to the VERSION BISECT only; the intermittent was unattributed 
 
 - The emitted `relu(add)` f32 kernel — scalar **and** vectorized — is **byte-identical across the 77→78 bump** (Baracuda on-device gate 5, commit `7bd90baf`, RTX 4070). No golden `.cu` changed; the `emit_scalar` signature is unchanged; the delta was a hoist refactor, behaviorally identical.
 - The `count_unit` launch contract (`count_unit: elements`, class `elementwise`, `n = elem_count() = 7`) is **emitted correctly and read in the same unit** by the Fuel consumer. Emit and launch agree.
-- Fuel's GAP-001 discriminator (Fuel lane `fuel-gap029-qwen2`, 2026-08-19) measured a **~25% NONDETERMINISTIC** failure at kernelgen `=0.0.1-alpha.78`: **20 fresh-process repeats, NaN-prefilled output → 15/20 clean, 5/20 all-7-elements-never-written**, with the **mock-PTX control passing 20/20** through the identical loader / launcher / prefill / readback.
+- Fuel's GAP-001 discriminator (Fuel lane `fuel-gap029-qwen2`, 2026-08-19) measured a **~25% NONDETERMINISTIC** failure at kernelgen `=0.0.1-alpha.78`: **20 fresh-process repeats, NaN-prefilled output → 15/20 clean, 5/20 all-7-elements-never-written**, with the **mock-PTX control passing 20/20** (a *sound* control — it launched on its own live device and correctly answered "does the loader/launcher work"; see §Resolution for why 20/20 didn't validate the subject).
 - A ~25% intermittent across three single bisect runs yields `PASS/PASS/FAIL` by chance (p ≈ 0.25 per trial). **There is no version boundary.**
 
 ## 2. The ~25% intermittent is a separate, currently UNATTRIBUTED defect
@@ -32,14 +32,18 @@ Originally scoped to the VERSION BISECT only; the intermittent was unattributed 
 
 Fuel's lane added a launch-side probe recording which kernel each dispatch actually executed. In **both failing and passing runs**, the live Baracuda test launched `fuel_test_jit_relu_add_f32_scalar` — **Fuel's hand-written mock PTX** — not the synthesized `baracuda_gen_jit_relu_..._f32_scalar`. The Baracuda kernel was adopted, printed, placed in its own slot, and **never launched.**
 
-Mechanism, all measured by Fuel:
+Mechanism, all measured by Fuel (corrected 2026-08-19 against Fuel `origin/main`):
 
-- An earlier mock test synthesizes the same `relu_add_region()` at f32 on `Cuda`, so both adopt the identical **`FusedOpId(32768)`**.
-- Lookup on the collided id returns the **first** registration — the mock's slot-0 dispatcher.
-- The mock's `CudaFunc` is bound to a per-test `CudaDevice` that is **already dropped** by then. Launching from a destroyed context is undefined — sometimes it writes correctly, sometimes it silently writes nothing. **That is the ~40–50%.**
-- Both kernels compute `relu(add)` on f32, so when the stale kernel happens to work it yields the *correct* answer and the assertion passes — a **vacuous test with a flake attached**, exercising the mock while naming the synthesizer.
+- The `FusedOpId(32768)` collision is **by design**: an earlier mock synthesizes the same `relu_add_region()` at f32 on `Cuda`, and Fuel dedups on `region_base_map_hash` (documented — same shape, different names → same id), treating co-id kernels as **alternatives** at one decision point. So the mock and the synthesized Baracuda kernel share id 32768, and **both are registered** — the Baracuda kernel as alternative 1.
+- **Defect 1 — selection (Fuel GAP-213):** `alts.first()` (`fuel-dispatch/src/kernel.rs:1318`) always returns the **first** registration — the mock's slot-0 dispatcher — so the live Baracuda kernel, though registered, is never chosen. **Nothing is discarded; the wrong alternative is selected.**
+- **Defect 2 — slot lifetime (Fuel GAP-214):** the mock's `CudaFunc` is bound to a per-test `CudaDevice` that is **already dropped** by then. Launching from a destroyed context is undefined — sometimes it writes correctly, sometimes it silently writes nothing. **That is the ~40–50%.**
+- Both kernels compute `relu(add)` on f32, so when the stale launch happens to work it yields the *correct* answer and the assertion passes — a **vacuous test with a flake attached**, exercising the mock while naming the synthesizer.
 
-**No version of `baracuda-kernelgen` / `baracuda-cuda-emit` was in the symptom or in the oracle.** Gate 5/6 and the 20/20 sweep were both correct and were both weighed against a measurement that was not measuring Baracuda. Fuel owns the fix end to end: two distinct JIT kernels colliding on one `FusedOpId` in a process-global registry, the second adopter's kernel silently discarded.
+**No version of `baracuda-kernelgen` / `baracuda-cuda-emit` was in the symptom or in the oracle.** Gate 5/6 and the 20/20 sweep were both correct and were both weighed against a measurement that was not measuring Baracuda. Fuel owns the fix: the id collision is intentional (documented dedup → per-decision-point alternatives, nothing discarded); the bugs are **selection** (GAP-213) and **slot lifetime** (GAP-214).
+
+### The control was sound; the subject was misidentified
+
+The mock-PTX control that passed 40/40 was **not** contaminated — it launched on its own live device and answered "does the loader/launcher work" correctly. The flaw was that the *subject* was misidentified: the "live" test never exercised live synthesis (it launched the mock via the id collision), so a sound instrument answered a question nobody was asking. **The instrument was sound and aimed where the property wasn't.** This is operationally distinct from a contaminated control: a contaminated control is caught by *varying the control*; a misidentified subject is caught only by *probing what actually executed* — no strengthening of the control reaches it.
 
 ### Generalizable lesson — a clean emitter sweep is not self-sufficient
 
