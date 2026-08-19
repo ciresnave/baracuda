@@ -8,7 +8,7 @@
 
 use baracuda_cuda_emit::Cuda;
 use unpopped::convert::{lift_elementwise_slang, lift_reduction_cuda};
-use unpopped::{CpuC, generate};
+use unpopped::generate;
 use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
 const F32: &[ElementKind] = &[ElementKind::F32];
@@ -22,16 +22,19 @@ const SLANG_MUL: &str = "StructuredBuffer<float> input0;\n\
         output[i] = input0[i] * input1[i];\n\
     }";
 
+// DEFERRED COVERAGE (unpopped 0.2.0, c584818): the `&CpuC` re-emit leg was dropped
+// when the CpuC emitter left `unpopped`'s core for the (unpublished) `unpopped-cpu-c`
+// crate. RESTORE when it publishes: re-add `CpuC` + the `cpuc` port assertion. The
+// Slang→CUDA cross-language port below is unaffected — the Slang *lifter* is the
+// `convert` feature's parser, not the emitter that left the core.
 #[test]
-fn round_trip_reemits_to_cuda_and_cpuc() {
-    // Lift a Slang kernel, re-emit to CUDA AND portable-C — cross-language port.
+fn round_trip_reemits_to_cuda() {
+    // Lift a Slang kernel, re-emit to CUDA — cross-language port.
     let lifted = lift_elementwise_slang(SLANG_MUL, "ported", F32).unwrap();
     let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 4);
     let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
     let cuda = generate(&lifted.op, &key, &Cuda);
-    let cpuc = generate(&lifted.op, &key, &CpuC);
     assert!(cuda.source.contains("in0[") && cuda.source.contains("in1["));
-    assert!(cpuc.source.contains("for (long long i"));
 }
 
 #[test]

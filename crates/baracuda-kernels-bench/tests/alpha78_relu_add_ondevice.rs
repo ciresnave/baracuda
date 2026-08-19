@@ -244,3 +244,95 @@ fn relu_add_f32_vectorized_launches_by_count_unit_on_device() {
         "PASS: vectorized relu(add) launched by count_unit (n=elements/{w}) writes the correct answer on the RTX 4070."
     );
 }
+
+#[test]
+#[ignore = "GAP-001 emitter-attribution sweep — requires a CUDA device + nvrtc"]
+fn gap001_relu_add_n7_fuel_geometry_sweep() {
+    // GAP-001 attribution: does the EMITTED relu(add) kernel, at Fuel's exact
+    // failing geometry (n=7, their a/b), launched with a CORRECT synced launch,
+    // reliably write all 7 elements? Fuel measures a ~40% intermittent (pooled
+    // 16/40 across kernelgen .77+.78), all-7-unwritten / never-partial signature,
+    // on THEIR live-synthesis launch path. This isolates the emitted kernel.
+    // BOUND (asymmetric, per the durable record docs/gap-001-emitter-exoneration.md):
+    // a FAILURE here implicates the emitted side decisively; a CLEAN 20 clears the
+    // kernel ONLY under a correct n=7 launch (bounds the rate <~14% at 95% vs the
+    // excluded ~40%) — it does NOT reproduce Fuel's launcher, so it points at the
+    // consumer's grid/buffer/sync path and does not clear the emitted code across
+    // all geometries. Emit via `generate` = the same kernel the synthesizer emits;
+    // f32 relu(add) is byte-identical across the vocab bump (gate 5, 77->78).
+    let (ctx, stream) = setup_device();
+    let op = OpDef::elementwise(
+        "relu_add",
+        2,
+        &[ElementKind::F32],
+        (input(0) + input(1)).relu(),
+    );
+    let n: i64 = 7;
+    let desc = OperandDesc::new(1, &[n], &[1], ElementKind::F32, 4);
+    let key = structure_key(
+        OpCategory::BinaryElementwise,
+        &[desc, desc, desc],
+        ArchSku::Sm89,
+    );
+    let k = generate(&op, &key, &Cuda);
+    println!("=== GAP-001 kernel: {} ===", k.name);
+    // Fuel's EXACT fixture.
+    let a = vec![1.0f32, -5.0, 2.0, -0.5, 3.0, -7.0, 0.0];
+    let b = vec![2.0f32, 3.0, -10.0, 0.5, -1.0, 7.0, 4.0];
+    let expected = vec![3.0f32, 0.0, 0.0, 0.0, 2.0, 0.0, 4.0];
+
+    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let ptx = String::from_utf8(
+        compiler
+            .compile(&k.source, &k.name, 30_000)
+            .unwrap_or_else(|e| panic!("nvrtc: {e}")),
+    )
+    .expect("ptx");
+    let module = Module::load_ptx(&ctx, &ptx).expect("load");
+    let f = module.get_function(&k.name).expect("func");
+
+    let block = 256u32;
+    let grid = (n as u32).div_ceil(block); // grid from elem_count()=7 (Fuel geometry) -> 1
+    let repeats = 20;
+    let (mut never_wrote, mut wrong, mut clean) = (0usize, 0usize, 0usize);
+    for r in 0..repeats {
+        let d_in0 = DeviceBuffer::from_slice(&ctx, &a).expect("in0");
+        let d_in1 = DeviceBuffer::from_slice(&ctx, &b).expect("in1");
+        let d_out = DeviceBuffer::from_slice(&ctx, &vec![f32::NAN; n as usize]).expect("out");
+        unsafe {
+            f.launch()
+                .grid(grid)
+                .block(block)
+                .stream(&stream)
+                .arg(&d_in0)
+                .arg(&d_in1)
+                .arg(&d_out)
+                .arg(&n)
+                .launch()
+                .unwrap_or_else(|e| panic!("launch: {e}"));
+        }
+        stream.synchronize().expect("sync");
+        let mut got = vec![0f32; n as usize];
+        d_out.copy_to_host(&mut got).expect("download");
+        let n_nan = got.iter().filter(|x| x.is_nan()).count();
+        if n_nan == n as usize {
+            never_wrote += 1;
+            println!("run {r}: ALL-{n}-UNWRITTEN (NaN sentinel survived)");
+        } else if got != expected {
+            wrong += 1;
+            println!("run {r}: WRONG got={got:?} expected={expected:?}");
+        } else {
+            clean += 1;
+        }
+    }
+    println!(
+        "GAP-001 sweep @ n=7 Fuel geometry, correct-sync launch: {clean}/{repeats} clean, \
+         {never_wrote} all-unwritten, {wrong} wrong"
+    );
+    assert_eq!(
+        never_wrote + wrong,
+        0,
+        "EMITTED SIDE IMPLICATED: kernel failed {}/{repeats} at Fuel's n=7 geometry",
+        never_wrote + wrong
+    );
+}

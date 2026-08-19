@@ -55,7 +55,14 @@ impl Backend for Cuda {
         }
     }
 
-    fn supports_dtype(&self, dtype: ElementKind) -> bool {
+    fn supports_dtype(&self, dtype: ElementKind, _target: unpopped_vocab::TargetId) -> bool {
+        // `target` is the 0.2.0 third-state hook (Backend::supports_dtype gained a
+        // TargetId so a backend WITH capability data can arch-condition). Cuda's
+        // answer here is deliberately target-INDEPENDENT: this gate is "can we spell
+        // a scalar C type" (storage/emitability), NOT "can this arch COMPUTE it" —
+        // the arch-compute gating lives in dtype_compatible / the plan gate (see the
+        // dtype comment below). We ignore `target` until a cuda capability manifest
+        // (baracuda-cuda-vocab / KISS #171) exists to condition on honestly.
         // Increment 0c replaced the 0b uniform-u8 hold with the audited int
         // story: U8 and S8 are now COMPUTE dtypes (wrapping add/sub/mul via
         // integer promotion + store truncation; the bitwise/shift/logical
@@ -10667,28 +10674,36 @@ mod tests {
         // supports_dtype says yes — and the per-OP legality lives in
         // dtype_compatible / the plan gate, NOT here (a uniform-U8 Div region
         // still declines; pinned in jit.rs). Both directions:
+        // unpopped 0.2.0 (723fdb0) made `bool` its own kind: `scalar_ctype(Bool)`
+        // is now Some (uint8_t), so supports_dtype — the STORAGE/spellability gate —
+        // admits it. Its op-level split (arithmetic DECLINES, logical ADMITS) is the
+        // plan gate's job, tested in `logical_and_at_i32` and the arith-decline
+        // tests, NOT here. So Bool moved from the decline list into the spellable one.
         for dt in [
             ElementKind::U8,
             ElementKind::I8,
             ElementKind::I32,
             ElementKind::I64,
+            ElementKind::Bool, // 0.2.0: spellable (uint8_t); arith/logical split is the plan gate's
         ] {
             assert!(
-                Cuda.supports_dtype(dt),
-                "{dt:?} is an audited compute dtype"
+                Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into()),
+                "{dt:?} is spellable (supports_dtype is storage, not op legality)"
             );
         }
-        for dt in [
-            ElementKind::Bool, // FKC has no Bool — masks ride as U8
-            ElementKind::I4,
-            ElementKind::U4,
-            ElementKind::B1,
-            ElementKind::Fp8E4M3FN,
-            ElementKind::Fp8E5M2,
-            ElementKind::Complex64,
-            ElementKind::Complex128,
-        ] {
-            assert!(!Cuda.supports_dtype(dt), "{dt:?} must keep declining");
+        // unpopped 0.2.0 made `scalar_ctype` the STORAGE gate: Fp8 (byte +
+        // fp8_helpers), I4/U4/B1 (packed in a byte), and Complex64/128
+        // (unpopped_c64/c128 structs) are now all SPELLABLE — supports_dtype admits
+        // them. Their COMPUTE legality (arch-gated fp8, op-gated complex, sub-byte
+        // packing) is the plan gate's, NOT this storage gate — the storage-vs-compute
+        // split. The ONE dtype Cuda still declines here is U32: it has a ctype
+        // ("unsigned int") but rides ONLY as a gather/scatter index-LOAD type, never
+        // a value/compute dtype, so Cuda excludes it explicitly.
+        for dt in [ElementKind::U32] {
+            assert!(
+                !Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into()),
+                "{dt:?} must keep declining (index-load-only, Cuda-excluded)"
+            );
         }
         // The u8-OUT predicate path is unchanged by the flip.
         let k = generate(
@@ -11091,9 +11106,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "U8 (Bool)-only")]
+    #[should_panic(expected = "bespoke BOOL surface")]
     fn logical_and_at_i32_is_rejected_at_the_plan_gate() {
-        // Bespoke logical instantiates ONLY uint8_t — wider ints miss honestly.
+        // 0.2.0 (unpopped 723fdb0) re-pinned the logical surface from U8-the-
+        // representation to Bool-the-dtype (still uint8_t-instantiated); wider
+        // ints miss honestly. Message moved "U8 (Bool)-only" → "bespoke BOOL surface".
         let op = int_op("land", BinaryOp::LogicalAnd, ElementKind::I32);
         let key = binary_scalar_key(ElementKind::I32, 4);
         let _ = unpopped::build_plan(&op, &key);
@@ -11319,7 +11336,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "bespoke logical surface")]
+    #[should_panic(expected = "bespoke BOOL surface")]
     fn logical_at_wide_int_is_refused_by_the_emitter_backstop() {
         use unpopped::backend::Backend;
         use unpopped::plan::{KernelPlan, Schedule};
@@ -12690,8 +12707,8 @@ mod multi_output_tests {
         use unpopped::optimize::optimize;
         let b0 = (input(0) * input(2)).0;
         let b1 = ((input(0) * input(2)) * input(1)).0;
-        let o0 = optimize(&b0);
-        let o1 = optimize(&b1);
+        let o0 = optimize(&b0, unpopped_vocab::ElementKind::F32);
+        let o1 = optimize(&b1, unpopped_vocab::ElementKind::F32);
         let dag = ExprDag::from_exprs(&[&o0, &o1]);
         // Body 0's optimized root is the shared dy*b node, referenced by body 1.
         assert!(

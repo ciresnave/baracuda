@@ -125,9 +125,12 @@ pub fn current_hwstamp(device: &Device) -> Option<HwStamp> {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     Some(HwStamp {
-        arch,
+        // 0.2.0 generalized HwStamp off cuda-specific naming: `arch: ArchSku` →
+        // `target: TargetId` (via `From<ArchSku>`), `cuda_version` → `runtime_version`
+        // (opaque here — the namespace owner spells it, §6.8-0004).
+        target: arch.into(),
         device_name,
-        cuda_version,
+        runtime_version: cuda_version,
         captured_unix_s,
     })
 }
@@ -798,7 +801,11 @@ mod gate_tests {
         let (ctx, stream) = setup_device();
         let device = Device::get(0).expect("device");
         let stamp = current_hwstamp(&device).expect("hwstamp");
-        assert_eq!(stamp.arch, ArchSku::Sm89, "RTX 4070 is Ada/sm89");
+        assert_eq!(
+            stamp.target,
+            baracuda_kernels_types::TargetId::from(ArchSku::Sm89),
+            "RTX 4070 is Ada/sm89"
+        );
         assert!(!stamp.device_name.is_empty());
 
         let a = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);

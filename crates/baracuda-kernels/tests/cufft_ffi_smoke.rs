@@ -29,7 +29,7 @@ use baracuda_kernels_sys::{
 
 // Use the workspace `Complex64` so DeviceBuffer<Complex64> trait bounds
 // pass without locally re-declaring a custom DeviceRepr type.
-use baracuda_types::Complex64 as C32;
+use baracuda_types::Complex32 as C32;
 
 fn setup() -> (Context, Stream) {
     init().expect("driver init");

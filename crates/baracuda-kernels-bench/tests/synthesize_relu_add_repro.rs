@@ -66,7 +66,7 @@ fn run_case(
         n_inputs: 2,
         op_category: OpCategory::BinaryElementwise,
         operands: operands.clone(),
-        arch: ArchSku::Sm89,
+        target: ArchSku::Sm89.into(),
         fused_op_id: "jit_relu_add".to_string(),
         budget: JitBudget {
             max_compile_ms: 5000,

@@ -36,8 +36,8 @@ fn variant_gate_loop_end_to_end() {
     let (ctx, stream) = setup_device();
     let device = Device::get(0).expect("device");
     let stamp = current_hwstamp(&device).expect("hwstamp");
-    if stamp.arch != ArchSku::Sm89 {
-        eprintln!("skipping: cell is keyed sm89, device is {:?}", stamp.arch);
+    if stamp.target != ArchSku::Sm89.into() {
+        eprintln!("skipping: cell is keyed sm89, device is {:?}", stamp.target);
         return;
     }
 
@@ -236,8 +236,8 @@ fn smemrow_variant_is_bit_identical_and_gated() {
     let (ctx, stream) = setup_device();
     let device = Device::get(0).expect("device");
     let stamp = current_hwstamp(&device).expect("hwstamp");
-    if stamp.arch != ArchSku::Sm89 {
-        eprintln!("skipping: cell is keyed sm89, device is {:?}", stamp.arch);
+    if stamp.target != ArchSku::Sm89.into() {
+        eprintln!("skipping: cell is keyed sm89, device is {:?}", stamp.target);
         return;
     }
 

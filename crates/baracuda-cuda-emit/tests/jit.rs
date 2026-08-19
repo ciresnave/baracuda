@@ -35,7 +35,7 @@ fn req(region: PatternNode, n_inputs: u8, dt: ElementKind, id: &str) -> JitReque
         n_inputs,
         op_category: OpCategory::BinaryElementwise,
         operands,
-        arch: ArchSku::Sm89,
+        target: ArchSku::Sm89.into(),
         fused_op_id: id.to_string(),
         budget: JitBudget {
             max_compile_ms: 1000,
