@@ -62,12 +62,21 @@ jobs:
         run: cargo doc -p baracuda-cuda-emit --no-deps
       # ---- feature-gated surfaces the default --workspace build never compiles.
       # These features are deliberately CI-safe: `cuvs` is a lazy dynamic loader
-      # (no RAPIDS needed to build/test; GPU-touching tests are #[ignore]d), and
-      # cuda-emit's `seam` pulls only crates.io Rust deps (its real `nvrtc`
-      # feature needs the toolkit, so it is validated on the CUDA runner, not
-      # here; toolkit-dependent tests are #[ignore]d). Regression guard for the
-      # class of bug where `missing_docs = deny` (and clippy) never fired on a
-      # feature-gated module because CI never compiled it.
+      # (no RAPIDS needed to build/test; GPU-touching tests are #[ignore]d),
+      # cuda-emit's `seam` pulls only crates.io Rust deps, and `convert` pulls
+      # unpopped's cc-built tree-sitter grammars (a C compiler, not CUDA). All
+      # build here. Regression guard for the class of bug where `missing_docs =
+      # deny` (and clippy) never fired on a feature-gated module because CI never
+      # compiled it — and its sharper variant, a whole test file (tests/convert.rs)
+      # that broke against an unpopped API rename while CI stayed green because
+      # nothing ever built it. A test absent from the build graph is
+      # indistinguishable from a passing one.
+      #
+      # COVERED by these no-CUDA runners: default, `seam`, `convert`, and `cuvs`
+      # (on the cuvs crates). NOT COVERED here: `nvrtc` — and therefore
+      # `--all-features`, which enables it — because nvrtc needs the CUDA toolkit;
+      # those are validated on the CUDA runner / on-device box, not on this job.
+      # If you add a feature, add its build here or it joins the uncovered set.
       - name: clippy cuvs surfaces (feature-gated)
         run: cargo clippy -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs -- -D warnings
       - name: test cuvs surfaces (feature-gated)
@@ -76,3 +85,7 @@ jobs:
         run: cargo clippy -p baracuda-cuda-emit --features seam -- -D warnings
       - name: test cuda-emit seam (feature-gated)
         run: cargo test -p baracuda-cuda-emit --features seam
+      - name: clippy cuda-emit convert (feature-gated)
+        run: cargo clippy -p baracuda-cuda-emit --features convert -- -D warnings
+      - name: test cuda-emit convert (feature-gated)
+        run: cargo test -p baracuda-cuda-emit --features convert
