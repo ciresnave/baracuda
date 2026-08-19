@@ -27,5 +27,9 @@ baracuda-driver.workspace = true
 thiserror.workspace = true
 half = { workspace = true, optional = true }
 
+[dev-dependencies]
+# `require_optional!` on-device-skip primitive (declare-and-report).
+baracuda-driver = { workspace = true, features = ["test-support"] }
+
 [lints]
 workspace = true

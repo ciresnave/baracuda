@@ -3,6 +3,7 @@
 
 use baracuda_cuda_sys::types::{CUdeviceptr, CUstreamBatchMemOpParams, CUstreamWriteValue_flags};
 
+use baracuda_driver::require_optional;
 use baracuda_runtime::driver_entry::{self, DriverEntryPoint};
 use baracuda_runtime::{Device, DeviceBuffer, Graph, Library, Stream};
 
@@ -34,14 +35,19 @@ fn stream_batch_mem_op_write_and_readback() {
     // cudaStreamBatchMemOp is frequently not exported from the
     // Windows cudart DLL (the op is driver-only on WDDM). Skip cleanly
     // if the symbol is missing.
-    match unsafe { stream.batch_mem_op(&mut params, 0) } {
-        Ok(()) => {}
-        Err(baracuda_runtime::Error::Loader(_)) => {
-            eprintln!("cudaStreamBatchMemOp unavailable on this build — skipping");
-            return;
-        }
+    // cudaStreamBatchMemOp is driver-only on WDDM and frequently NOT exported
+    // from the Windows cudart DLL, so a missing symbol is a legitimate skip
+    // even on the box → require_optional! (declared, not silent). Any OTHER
+    // error is a real failure and still panics.
+    let op = match unsafe { stream.batch_mem_op(&mut params, 0) } {
+        Ok(()) => Some(()),
+        Err(baracuda_runtime::Error::Loader(_)) => None,
         Err(e) => panic!("batch_mem_op: {e:?}"),
-    }
+    };
+    require_optional!(
+        op,
+        "cudaStreamBatchMemOp export (driver-only on WDDM; often absent on Windows)"
+    );
     stream.synchronize().unwrap();
 
     let mut out = [0u32; 2];

@@ -8,7 +8,7 @@
 use baracuda_cuda_sys::types::{CUarray3D_flags, CUarrayMapInfo};
 use baracuda_driver::array::ArrayFormat;
 use baracuda_driver::memcpy3d::{self, Array3D};
-use baracuda_driver::{Context, Device, Stream};
+use baracuda_driver::{Context, Device, Stream, require_optional};
 
 #[test]
 fn array_map_info_size_and_builder_layout() {
@@ -45,21 +45,18 @@ fn map_array_async_on_sparse_capable_device() {
 
     // Try to create a sparse 3D array. If the device doesn't support
     // sparse arrays, creation itself fails — treat as skip.
-    let arr = match Array3D::with_flags(
-        &ctx,
-        256,
-        256,
-        1,
-        ArrayFormat::F32,
-        1,
-        CUarray3D_flags::SPARSE,
-    ) {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("sparse Array3D creation rejected (expected on non-sparse HW): {e:?}");
-            return;
-        }
-    };
+    let arr = require_optional!(
+        Array3D::with_flags(
+            &ctx,
+            256,
+            256,
+            1,
+            ArrayFormat::F32,
+            1,
+            CUarray3D_flags::SPARSE,
+        ),
+        "sparse CUDA array support (optional device capability — absent on non-sparse HW)"
+    );
 
     // Call with an empty array — should be a trivial OK.
     memcpy3d::map_array_async(&mut [], &stream).unwrap();

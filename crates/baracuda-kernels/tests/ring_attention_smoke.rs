@@ -9,7 +9,7 @@
 
 #![cfg(feature = "ring_attention")]
 
-use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, require_optional};
 use baracuda_kernels::{
     ElementKind, FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, PlanPreference,
     RingAttentionArgs, RingAttentionDescriptor, RingAttentionPlan, TensorMut, TensorRef, Workspace,
@@ -136,13 +136,10 @@ fn ring_attention_f16_single_rank_matches_flash_sdpa() {
     stream.synchronize().expect("sync flash");
 
     // Ring Attention — single-rank communicator.
-    let comm = match Communicator::new_single_gpu(0) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("NCCL not available on this host; skipping ({:?})", e);
-            return;
-        }
-    };
+    let comm = require_optional!(
+        Communicator::new_single_gpu(0),
+        "NCCL single-GPU communicator (ring attention)"
+    );
     assert_eq!(comm.world_size(), 1);
     assert_eq!(comm.rank(), 0);
 
@@ -309,13 +306,10 @@ fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
         .expect("flash run");
     stream.synchronize().expect("sync flash");
 
-    let comm = match Communicator::new_single_gpu(0) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("NCCL not available on this host; skipping ({:?})", e);
-            return;
-        }
-    };
+    let comm = require_optional!(
+        Communicator::new_single_gpu(0),
+        "NCCL single-GPU communicator (ring attention)"
+    );
 
     let ring_desc = RingAttentionDescriptor {
         batch_size: B,
@@ -472,13 +466,10 @@ fn ring_attention_f16_single_rank_causal() {
         .expect("flash run");
     stream.synchronize().expect("sync flash");
 
-    let comm = match Communicator::new_single_gpu(0) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("NCCL not available on this host; skipping ({:?})", e);
-            return;
-        }
-    };
+    let comm = require_optional!(
+        Communicator::new_single_gpu(0),
+        "NCCL single-GPU communicator (ring attention)"
+    );
 
     let ring_desc = RingAttentionDescriptor {
         batch_size: B,

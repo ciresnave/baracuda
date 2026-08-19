@@ -12,6 +12,7 @@
 //!
 //! The non-ignored test exercises the pure-Rust `Dims` helper and always runs.
 
+use baracuda_driver::require_optional;
 use baracuda_tensorrt::{Dims, Runtime};
 
 #[test]
@@ -34,7 +35,16 @@ fn dims_new_and_slice_roundtrip() {
 #[test]
 #[ignore = "requires a working TensorRT install + the C-ABI shim (see AUDIT.md)"]
 fn version_reports_trt10_or_newer() {
-    let v = baracuda_tensorrt::version().expect("getInferLibVersion");
+    // TensorRT absent (libnvinfer not loadable) is a legitimate skip under
+    // `cargo gpu-test`, but a non-Loader error means TRT is present and
+    // misbehaving -- a real regression -- so only a Loader error declares-skip;
+    // anything else panics (don't let require_optional! swallow it).
+    let probe = match baracuda_tensorrt::version() {
+        Ok(v) => Some(v),
+        Err(baracuda_tensorrt::Error::Loader(_)) => None,
+        Err(e) => panic!("getInferLibVersion returned a non-absence error: {e}"),
+    };
+    let v = require_optional!(probe, "TensorRT runtime (getInferLibVersion)");
     // TRT version is MAJOR*1000 + MINOR*100 + PATCH; we wrap TRT 10+.
     assert!(v >= 10_000, "expected TensorRT >= 10, got encoded {v}");
 }
@@ -44,13 +54,10 @@ fn version_reports_trt10_or_newer() {
 fn deserialize_garbage_blob_is_graceful() {
     // A runtime built without a logger; older TRT may refuse (returns null),
     // which surfaces as Err — that is itself an acceptable graceful outcome.
-    let rt = match Runtime::with_null_logger() {
-        Ok(rt) => rt,
-        Err(e) => {
-            eprintln!("runtime creation refused without logger (acceptable): {e}");
-            return;
-        }
-    };
+    let rt = require_optional!(
+        Runtime::with_null_logger(),
+        "TensorRT runtime + C-ABI shim (Runtime::with_null_logger)"
+    );
     // Feeding a non-engine blob must error, never panic / UB.
     let bogus = [0u8; 32];
     let res = rt.deserialize_engine(&bogus);

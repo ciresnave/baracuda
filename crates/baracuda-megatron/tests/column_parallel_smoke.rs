@@ -7,7 +7,7 @@
 //! stream-ordered D2D copies in this case, exercising the full
 //! Megatron path without needing multi-GPU hardware.
 
-use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, require_optional};
 use baracuda_megatron::{ColumnParallelLinearPlan, Error as MegError, TensorParallelContext};
 use baracuda_nccl::Communicator;
 
@@ -80,10 +80,7 @@ fn column_parallel_f32_forward_single_rank_matches_linear() {
     let ctx = Context::new(&device).unwrap();
     let stream = Stream::new(&ctx).unwrap();
 
-    let comm = match try_bringup(0) {
-        Some(c) => c,
-        None => return,
-    };
+    let comm = require_optional!(try_bringup(0), "NCCL single-rank communicator bring-up");
     assert_eq!(comm.world_size(), 1, "expected single-rank comm");
 
     let batch = 4usize;
@@ -131,10 +128,7 @@ fn column_parallel_f32_backward_single_rank_matches_linear() {
     let ctx = Context::new(&device).unwrap();
     let stream = Stream::new(&ctx).unwrap();
 
-    let comm = match try_bringup(0) {
-        Some(c) => c,
-        None => return,
-    };
+    let comm = require_optional!(try_bringup(0), "NCCL single-rank communicator bring-up");
 
     let batch = 6usize;
     let in_f = 24usize;

@@ -239,6 +239,8 @@ half = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+# `require!` / `require_optional!` on-device-skip primitives (declare-and-report).
+baracuda-driver = { workspace = true, features = ["test-support"] }
 float8 = { workspace = true }
 # erf / erff for the unary GELU smoke test's CPU reference (Rust stable
 # does not expose `erf` from std).

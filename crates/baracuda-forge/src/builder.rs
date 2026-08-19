@@ -571,7 +571,10 @@ impl KernelBuilder {
                     };
                     return Err(Error::CompilationFailed {
                         path: kernel_file.clone(),
-                        message: format!("{lead}nvcc exited with {}:\n{stdout}\n{stderr}", output.status),
+                        message: format!(
+                            "{lead}nvcc exited with {}:\n{stdout}\n{stderr}",
+                            output.status
+                        ),
                     });
                 }
 
@@ -798,7 +801,10 @@ impl KernelBuilder {
                     };
                     return Err(Error::CompilationFailed {
                         path: kernel_file.to_path_buf(),
-                        message: format!("{lead}nvcc exited with {}:\n{stdout}\n{stderr}", output.status),
+                        message: format!(
+                            "{lead}nvcc exited with {}:\n{stdout}\n{stderr}",
+                            output.status
+                        ),
                     });
                 }
 

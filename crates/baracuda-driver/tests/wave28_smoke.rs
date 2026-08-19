@@ -5,7 +5,7 @@
 use baracuda_cuda_sys::types::{CUcoredumpSettings, CUdevice_P2PAttribute, CUexecAffinityType};
 use baracuda_driver::array::{Array, ArrayFormat};
 use baracuda_driver::library::Library;
-use baracuda_driver::{Context, Device, Event, coredump};
+use baracuda_driver::{Context, Device, Event, coredump, require};
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
@@ -43,14 +43,12 @@ fn ctx_record_and_wait_event() {
     let ctx = Context::new(&device).unwrap();
 
     let event = Event::new(&ctx).unwrap();
-    match ctx.record_event(&event) {
-        Ok(()) => eprintln!("cuCtxRecordEvent OK"),
-        Err(e) => {
-            eprintln!("cuCtxRecordEvent not supported on this driver: {e:?}");
-            return;
-        }
-    }
-    // Wait + synchronize to complete the sequence.
+    require!(
+        ctx.record_event(&event),
+        "cuCtxRecordEvent — context-level event record"
+    );
+    // Wait + synchronize to complete the sequence — these unwraps are the
+    // assertion (a failing wait/sync panics), so no explicit assert! is needed.
     ctx.wait_event(&event).unwrap();
     event.synchronize().unwrap();
 }

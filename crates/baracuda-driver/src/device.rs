@@ -189,7 +189,13 @@ impl Device {
     pub fn luid(&self) -> Result<([u8; 8], u32)> {
         let d = driver()?;
         let cu = d.cu_device_get_luid()?;
-        let mut luid = [0i8; 8];
+        // `cuDeviceGetLuid`'s first param is `*mut c_char` (see
+        // `PFN_cuDeviceGetLuid`). `c_char` is `i8` on x86_64/Windows but `u8`
+        // on aarch64 Linux (ARM `char` is unsigned), so a fixed `[i8; 8]`
+        // buffer mismatches the binding and fails to compile on aarch64. Use
+        // `c_char` so the pointer type matches on every target; `b as u8`
+        // normalizes the byte back out regardless of signedness.
+        let mut luid = [0 as core::ffi::c_char; 8];
         let mut mask: core::ffi::c_uint = 0;
         check(unsafe { cu(luid.as_mut_ptr(), &mut mask, self.0) })?;
         Ok((luid.map(|b| b as u8), mask))

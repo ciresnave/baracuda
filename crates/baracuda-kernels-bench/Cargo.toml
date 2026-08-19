@@ -94,6 +94,8 @@ criterion = { workspace = true }
 # (the carve); `generate_variants`/`OpDef`/etc. in the neutral `unpopped`.
 unpopped = { workspace = true }
 baracuda-cuda-emit = { path = "../baracuda-cuda-emit", features = ["nvrtc"] }
+# `require!` on-device-skip primitive (declare-and-report) for variant_gate.
+baracuda-driver = { workspace = true, features = ["test-support"] }
 
 # Criterion's `#[bench]` story requires explicit `[[bench]]` entries
 # with `harness = false`. Each entry maps to one file under `benches/`.

@@ -30,6 +30,10 @@ futures-core = { workspace = true, optional = true }
 # `wave2_smoke` uses NVRTC to compile a fixture kernel at test time,
 # avoiding hand-written PTX fragility.
 baracuda-nvrtc = { path = "../baracuda-nvrtc" }  # path-only: avoid publish cycle on cargo 1.90+ (dev-dep, dropped from published manifest)
+# Self dev-dep to enable the `test-support` feature (the `require!` /
+# `require_optional!` on-device-skip primitives) for this crate's own
+# integration tests, without turning it on for the normal build.
+baracuda-driver = { path = ".", features = ["test-support"] }
 
 [lints]
 workspace = true

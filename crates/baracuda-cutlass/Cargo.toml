@@ -44,6 +44,10 @@ baracuda-ozimmu = { workspace = true, optional = true }
 half = { workspace = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+# `require!` on-device-skip primitive (declare-and-report).
+baracuda-driver = { workspace = true, features = ["test-support"] }
+
 # Same docs.rs guard as baracuda-cutlass-kernels-sys: avoid the mutually
 # exclusive `sm90a` + `cutlass-2-11` combo that --all-features would pick.
 [package.metadata.docs.rs]

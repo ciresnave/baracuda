@@ -6,16 +6,14 @@
 
 use core::ffi::c_void;
 
+use baracuda_driver::require_optional;
 use baracuda_nvcomp::{lz4, nvcompBatchedLZ4DecompressOpts_t, nvcompBatchedLZ4Opts_t};
 use baracuda_runtime::{Device, DeviceBuffer, Stream};
 
 #[test]
 #[ignore = "requires nvCOMP installed + NVIDIA GPU"]
 fn lz4_compress_decompress_roundtrip() {
-    if baracuda_nvcomp::probe().is_err() {
-        eprintln!("nvCOMP not installed — skipping");
-        return;
-    }
+    require_optional!(baracuda_nvcomp::probe(), "nvCOMP runtime library installed");
 
     Device::from_ordinal(0).set_current().unwrap();
     let stream = Stream::new().unwrap();

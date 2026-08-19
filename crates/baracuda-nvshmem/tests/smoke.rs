@@ -3,6 +3,7 @@
 //! `mpirun`). On hosts without it, or when run as a plain `cargo test` single
 //! process, these skip gracefully instead of failing — hence `#[ignore]`.
 
+use baracuda_driver::require_optional;
 use baracuda_nvshmem::{Context, Team, version};
 
 #[test]
@@ -35,10 +36,10 @@ fn context_init_and_pe_discovery() {
 #[test]
 #[ignore = "requires NVSHMEM runtime + a PE launcher"]
 fn symmetric_heap_alloc_and_self_put() {
-    let Ok(ctx) = Context::init() else {
-        eprintln!("NVSHMEM init failed. Skipping.");
-        return;
-    };
+    let ctx = require_optional!(
+        Context::init(),
+        "NVSHMEM runtime + PE launcher (Context::init)"
+    );
     let src = ctx.malloc::<f32>(256).expect("symmetric malloc src");
     let dst = ctx.malloc::<f32>(256).expect("symmetric malloc dst");
     // Self-put (pe == my_pe) is a degenerate but valid exercise of the path.
@@ -50,10 +51,10 @@ fn symmetric_heap_alloc_and_self_put() {
 #[test]
 #[ignore = "requires NVSHMEM runtime + a PE launcher"]
 fn world_team_matches_context() {
-    let Ok(ctx) = Context::init() else {
-        eprintln!("NVSHMEM init failed. Skipping.");
-        return;
-    };
+    let ctx = require_optional!(
+        Context::init(),
+        "NVSHMEM runtime + PE launcher (Context::init)"
+    );
     let world = ctx.world();
     assert_eq!(world, Team::WORLD);
     assert_eq!(world.n_pes().expect("team n_pes"), ctx.n_pes());

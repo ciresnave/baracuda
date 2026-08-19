@@ -14,7 +14,7 @@
 
 #![cfg(feature = "awq")]
 
-use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, require};
 use baracuda_kernels::{
     Int4AwqGemmArgs, Int4AwqGemmDescriptor, Int4AwqGemmPlan, PlanPreference, TensorMut, TensorRef,
     Workspace, contiguous_stride,
@@ -35,11 +35,10 @@ fn setup() -> Option<(Context, Stream)> {
 #[test]
 #[ignore = "device-gated: select() needs a Stream, so this rejection-path check silently skips on a CUDA-absent host (was a vacuous default-run green). Run via `cargo gpu-test`; interim pending the declare-and-report skippability primitive."]
 fn awq_plan_select_rejects_invalid_descriptor() {
-    let Some((_ctx, stream)) = setup() else {
-        // No GPU on this host — skip the validation tests too because
-        // select() needs a Stream.
-        return;
-    };
+    let (_ctx, stream) = require!(
+        setup(),
+        "a CUDA device + stream (AWQ select() needs a Stream)"
+    );
 
     // OC not divisible by 64.
     let bad_oc = Int4AwqGemmDescriptor::new(1, 256, 48);
@@ -68,10 +67,7 @@ fn awq_plan_select_rejects_invalid_descriptor() {
 #[test]
 #[ignore]
 fn awq_gemm_zero_weights_smoke() {
-    let Some((ctx, stream)) = setup() else {
-        eprintln!("awq_smoke: no CUDA device, skipping");
-        return;
-    };
+    let (ctx, stream) = require!(setup(), "a CUDA device + stream (AWQ GEMM smoke)");
     let m: i32 = 1;
     let ic: i32 = 256;
     let oc: i32 = 64;
