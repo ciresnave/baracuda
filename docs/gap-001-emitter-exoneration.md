@@ -6,7 +6,7 @@
 
 ## Scope
 
-**This exonerates the VERSION BISECT. It does NOT clear the emitted code of the intermittent** (see §2).
+Originally scoped to the VERSION BISECT only; the intermittent was unattributed at authoring (§2). **UPDATE 2026-08-19: the intermittent's root cause was found and is entirely Fuel-side — the failing test never launched the Baracuda kernel at all (§Resolution). The emitter is fully cleared.**
 
 ## 1. No version boundary — the alpha.78-specific accusation is invalid
 
@@ -27,6 +27,23 @@
 - **Emitter attribution — RUN, RESULT: 20/20 clean.** A high-repeat on-device sweep of the emitted kernel on the RTX 4070 at Fuel's exact failing geometry (`OperandDesc::new(1,&[7],&[1],F32,4)`×3, grid from `elem_count()`=7, `ArchSku::Sm89`, Fuel's exact a/b), NaN-prefilled output, **correct-sync launch, 20 repeats** (`baracuda-kernels-bench/tests/alpha78_relu_add_ondevice.rs::gap001_relu_add_n7_fuel_geometry_sweep`): **20/20 clean, 0 all-unwritten, 0 wrong.** Sizing: 0/20 bounds the true rate **below ~14% at 95% confidence**; the excluded rate is the measured **~40%** — no overlap, so this is a real discrimination.
   - **Asymmetric bound.** A *failure* would have implicated the emitted side decisively; the *clean* result clears the kernel-body **only under a correct-sync launch at n=7**. It does **not** reproduce Fuel's launcher (grid-from-`layouts[n_inputs].shape().elem_count()`, buffer lifetime, sync ordering) and exercises **one geometry, not the space** — so it does not clear the emitted code generally.
   - **Where the intermittent lives, by this result:** the **consumer's grid / buffer / sync path**. The all-7-unwritten / never-partial signature plus Fuel's **load-sensitive** failure rate reads as a **timing/sync hazard** in the live-synthesis launch (module-load ordering, an async DtoH copy not synced before readback, stream sync) rather than a static out-of-bounds write in the kernel body — a static OOB fires at a layout-set rate, not a load-set one. The load-variation falsifier (rate climbs under GPU load → timing, not OOB) is Fuel's to run; the emitter sweep produced no failures to vary.
+
+## Resolution (2026-08-19) — root cause found, emitter fully cleared
+
+Fuel's lane added a launch-side probe recording which kernel each dispatch actually executed. In **both failing and passing runs**, the live Baracuda test launched `fuel_test_jit_relu_add_f32_scalar` — **Fuel's hand-written mock PTX** — not the synthesized `baracuda_gen_jit_relu_..._f32_scalar`. The Baracuda kernel was adopted, printed, placed in its own slot, and **never launched.**
+
+Mechanism, all measured by Fuel:
+
+- An earlier mock test synthesizes the same `relu_add_region()` at f32 on `Cuda`, so both adopt the identical **`FusedOpId(32768)`**.
+- Lookup on the collided id returns the **first** registration — the mock's slot-0 dispatcher.
+- The mock's `CudaFunc` is bound to a per-test `CudaDevice` that is **already dropped** by then. Launching from a destroyed context is undefined — sometimes it writes correctly, sometimes it silently writes nothing. **That is the ~40–50%.**
+- Both kernels compute `relu(add)` on f32, so when the stale kernel happens to work it yields the *correct* answer and the assertion passes — a **vacuous test with a flake attached**, exercising the mock while naming the synthesizer.
+
+**No version of `baracuda-kernelgen` / `baracuda-cuda-emit` was in the symptom or in the oracle.** Gate 5/6 and the 20/20 sweep were both correct and were both weighed against a measurement that was not measuring Baracuda. Fuel owns the fix end to end: two distinct JIT kernels colliding on one `FusedOpId` in a process-global registry, the second adopter's kernel silently discarded.
+
+### Generalizable lesson — a clean emitter sweep is not self-sufficient
+
+The 20/20 sweep cleared the emitted kernel *"at n=7 under a correct-sync launch."* That bound held for a reason the sweep itself could not see: **the launcher never reached the kernel.** From the emitter's side, *"clean at geometry G"* and *"the code was never on the path"* are **indistinguishable** — only a **consumer-side launch probe** (which kernel actually executed) separates them. So a clean emitter-side sweep is **not** "exonerated by testing" until the consumer confirms the code was invoked. The next cross-project attribution should read a clean emitter sweep as *"consistent with correctness OR with never-invoked"* until the consumer closes that gap.
 
 ## Provenance
 
