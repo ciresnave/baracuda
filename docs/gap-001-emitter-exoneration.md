@@ -13,7 +13,7 @@ Originally scoped to the VERSION BISECT only; the intermittent was unattributed 
 - The emitted `relu(add)` f32 kernel — scalar **and** vectorized — is **byte-identical across the 77→78 bump** (Baracuda on-device gate 5, commit `7bd90baf`, RTX 4070). No golden `.cu` changed; the `emit_scalar` signature is unchanged; the delta was a hoist refactor, behaviorally identical.
 - The `count_unit` launch contract (`count_unit: elements`, class `elementwise`, `n = elem_count() = 7`) is **emitted correctly and read in the same unit** by the Fuel consumer. Emit and launch agree.
 - Fuel's GAP-001 discriminator (Fuel lane `fuel-gap029-qwen2`, 2026-08-19) measured a **~25% NONDETERMINISTIC** failure at kernelgen `=0.0.1-alpha.78`: **20 fresh-process repeats, NaN-prefilled output → 15/20 clean, 5/20 all-7-elements-never-written**, with the **mock-PTX control passing 20/20** (a *sound* control — it launched on its own live device and correctly answered "does the loader/launcher work"; see §Resolution for why 20/20 didn't validate the subject).
-- A ~25% intermittent across three single bisect runs yields `PASS/PASS/FAIL` by chance (p ≈ 0.25 per trial). **There is no version boundary.**
+- The **per-run failure rate is ≈ 0.25** — that is what 0.25 refers to, *not* the probability of the observed sequence. A lone FAIL is therefore ~25% likely at *any* single bisect point regardless of version, and the specific `PASS/PASS/FAIL` across three single runs arises by chance with probability 0.75 × 0.75 × 0.25 ≈ 0.14. Three single runs cannot place a boundary at 78. **There is no version boundary.**
 
 ## 2. The ~25% intermittent is a separate, currently UNATTRIBUTED defect
 
