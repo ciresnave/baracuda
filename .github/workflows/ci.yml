@@ -56,6 +56,14 @@ jobs:
         run: cargo build -p baracuda-cuda-emit
       - name: cargo clippy (driver-free surface)
         run: cargo clippy -p baracuda-cuda-emit -- -D warnings
+      # Also lint in TEST mode. The step above compiles the lib with cfg(test)
+      # FALSE, so a lint in an inline `#[cfg(test)]` module or in an integration
+      # test file (tests/*.rs) is never compiled and never seen — the same "CI
+      # never built it" gap as the feature surfaces below (a `single_element_loop`
+      # in a lib inline test rode in unnoticed until a `--tests` run found it).
+      # `--tests` compiles the lib-test target plus every tests/*.rs.
+      - name: cargo clippy (driver-free surface, tests)
+        run: cargo clippy -p baracuda-cuda-emit --tests -- -D warnings
       - name: cargo test (driver-free surface, no GPU)
         run: cargo test -p baracuda-cuda-emit
       - name: cargo doc (driver-free surface)
@@ -83,9 +91,13 @@ jobs:
         run: cargo test -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs
       - name: clippy cuda-emit seam (feature-gated)
         run: cargo clippy -p baracuda-cuda-emit --features seam -- -D warnings
+      - name: clippy cuda-emit seam (feature-gated, tests)
+        run: cargo clippy -p baracuda-cuda-emit --features seam --tests -- -D warnings
       - name: test cuda-emit seam (feature-gated)
         run: cargo test -p baracuda-cuda-emit --features seam
       - name: clippy cuda-emit convert (feature-gated)
         run: cargo clippy -p baracuda-cuda-emit --features convert -- -D warnings
+      - name: clippy cuda-emit convert (feature-gated, tests)
+        run: cargo clippy -p baracuda-cuda-emit --features convert --tests -- -D warnings
       - name: test cuda-emit convert (feature-gated)
         run: cargo test -p baracuda-cuda-emit --features convert
