@@ -18,7 +18,18 @@
 | `clippy/clippy --tests/test --features seam` | `baracuda-cuda-emit` |
 | `clippy/clippy --tests/test --features convert` | `baracuda-cuda-emit` |
 
-**There is NO CUDA/GPU/self-hosted runner.** `ci.yml` comments say the CUDA crates and cuda-emit's real `nvrtc` feature are "validated on the CUDA runner" — **no such runner exists in the workflow.** That validation happens only on the maintainer's local RTX 4070 box. The comment implies a CI coverage that is actually local-only; a reader believes CI covers it.
+**There is NO CUDA/GPU/self-hosted runner.** `ci.yml` comments said the CUDA crates and cuda-emit's real `nvrtc` feature are "validated on the CUDA runner" — **no such runner existed in the workflow.** That validation happens only on the maintainer's local RTX 4070 box. (Fixed in this PR: the comments now say "validated locally on the 4070 box; there is no CI CUDA runner.")
+
+**This is a distinct, sharper shape than "a check that runs but cannot fail" — name it separately.** A non-signalling check comes in four kinds, worst last:
+
+| shape | what it looks like |
+|-------|--------------------|
+| ALWAYS-PENDING | never blocks, never passes — visibly stuck |
+| ALWAYS-NEUTRAL | completes, gets counted as coverage (e.g. Codeac `neutral` on every commit) |
+| ABSENT ENTIRELY | looks like a repo nobody has broken |
+| **DOCUMENTED-ABSENT** | **looks like a repo somebody IS checking — and a reader has been told so** |
+
+The first three are silent; **DOCUMENTED-ABSENT actively answers the question a careful reader would ask.** Someone auditing coverage reads the comment, concludes the CUDA path is validated in CI, and stops looking. That is why fixing the comment ranks ABOVE the coverage gap itself: 2-of-70-in-CI is a known, budgetable state — a comment that misrepresents it is what keeps it unknown.
 
 ---
 
@@ -89,7 +100,7 @@ The last row is the point: a row that can never fail is not coverage. The CUDA s
 1. **Doc-links (§3.1): GATE.** `cargo doc --workspace --no-deps` on the no-CUDA subset + the rustdoc-deny lint. Small, born-red-able.
 2. **Test-in-wrong-crate (§3.2): GATE.** The walk-guard with the two honesty checks. Reclassify `backend_declines.rs` (move to `unpopped-conformance`, or keep with an explicit "consumer-side contract" justification — it is a judgment, not a mechanical move).
 3. **Toolchain axis (§2): RECORD, do not fix.** Pending the portfolio pin ruling.
-4. **CUDA surface (68 crates, nvrtc, on-device): RECORD as intentionally CI-uncovered.** It is validated on the local 4070 by design (no-CUDA runners cannot build it). **Fix the `ci.yml` comment** that says "validated on the CUDA runner" to say "validated locally on the 4070 box; there is no CI CUDA runner" — so the coverage claim matches reality.
+4. **CUDA surface (68 crates, nvrtc, on-device): RECORD as intentionally CI-uncovered** — validated on the local 4070 by design (no-CUDA runners cannot build it). **TOP-PRIORITY sub-item, APPLIED IN THIS PR:** fixed the `ci.yml` DOCUMENTED-ABSENT comment so the coverage claim matches reality. This ranks above the coverage gap: the gap is a known, budgetable state; the false comment is what kept it unknown.
 5. **Cross-crate `#[should_panic]` (§3.3): LEAVE, note the polarity.** Flips red when unpopped 0.6.0 fixes the pinned defect; that is the design.
 
 **What this audit does NOT do:** it does not run `cargo doc --workspace` (needs the no-CUDA subset resolved) or build the guards. It enumerates. The guards are follow-up work; naming the uncovered rows is the output, so the next gap is read rather than rediscovered.
