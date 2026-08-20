@@ -1,0 +1,12 @@
+# Dump-test scratch. The `dump_*` tests (dump_scan_sources, dump_sort_sources,
+# dump_window_sources, …) and the *_gen.cuh helper dumps (cast_gen, coord_unravel_gen,
+# dtype_promote_gen) write generated CUDA to the CRATE ROOT when their output-dir
+# env var is unset — regenerable emitter output, never source. Left untracked they
+# pile up (344 at one point) and make `git status` unreadable, which is how an
+# authored-but-uncommitted file can hide in plain sight.
+#
+# Root-anchored (leading `/`) so these match ONLY the crate root, never the
+# committed goldens in src/goldens/ (which are the byte-identity fixtures and MUST
+# stay tracked).
+/baracuda_gen_*.cu
+/*_gen.cuh
