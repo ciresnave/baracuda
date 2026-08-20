@@ -10,11 +10,9 @@
 //! `lift.rs` / `fuzz.rs` / `convert.rs`; the CpuC×Slang pair is owned by
 //! `unpopped-conformance`. This file adds the refusal contracts, not that coverage.
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
-
 use unpopped::backend::LowerError;
 use unpopped::ir::BinaryOp;
-use unpopped::{OpDef, UnaryOp, generate, input, try_generate};
+use unpopped::{OpDef, UnaryOp, input, try_generate};
 use unpopped_cpu_c::CpuC;
 use unpopped_slang::Slang;
 use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
@@ -61,31 +59,22 @@ fn cpuc_declines_half_dtypes_and_emits_f32() {
 }
 
 /// Slang declines `Copysign` / `Nextafter` (no base-profile Slang intrinsic) and
-/// emits for the binaries it supports. Unlike CpuC's dtype decline, this op-level
-/// refusal is a **`panic!`**, not a typed `Err` — the documented "honest
-/// panic-boundary" (unpopped-slang 0.1.0 `lib.rs`: `Copysign | Nextafter =>
-/// panic!(...)`). So it is asserted with `catch_unwind`, paired with a positive
-/// control in the same test.
+/// emits for the binaries it supports. As of unpopped-slang 0.3.0 this op-level
+/// refusal is a **typed `LowerError`**, not a panic: the seam returns
+/// `Ok(Spelling::Declined(Decline::UnsupportedOp { op: DeclinedOp::Binary(..), .. }))`,
+/// which `lower_dag` folds into `Err(LowerError::UnsupportedOp { detail })` at the top
+/// of the lowering (`detail` carries the `{op:?}` prefix, so it names the refused op).
+/// So it is asserted with a `Result` match, paired with a positive control in the same
+/// test.
 ///
-/// TWO durability notes for whoever touches this next:
-///
-/// 1. **`catch_unwind` requires `panic = "unwind"`.** Under a `panic = "abort"`
-///    profile it never returns — the process dies instead of the assertion failing.
-///    This workspace uses the default (unwind) and sets no abort profile; if you add
-///    one for binary size, this test needs `panic = "unwind"` or a `#[cfg]` guard.
-///
-/// 2. **This asserts unpopped-slang 0.1.0's op-level PANIC convention** (both that it
-///    panics AND that the panic carries the documented "declined" message). If it
-///    fails after an `unpopped-slang` upgrade, first check whether the decline became
-///    a typed `Err(LowerError::…)` — that is an upstream IMPROVEMENT, and the fix is
-///    to convert this to an `Err` match, NOT to restore the panic. (A reworded panic
-///    message would also trip the payload check; loosen the marker in that case.) A
-///    green→red here can mean the boundary got better, not that something regressed.
-///
-/// (The expected panics print "thread panicked …" to stderr even though the test
-/// passes — that is `catch_unwind`'s default hook. The hook is process-global, so it
-/// is deliberately NOT suppressed: silencing it would risk masking a genuine panic in
-/// a test running concurrently.)
+/// Durability note for whoever touches this next: this asserts the 0.3.0 **typed**
+/// decline (both that it is `Err(LowerError::UnsupportedOp)` AND that the `detail`
+/// names the refused op). If it fails after an `unpopped-slang` upgrade, first check
+/// whether the decline stopped being typed — a `panic!` boundary or a bare `String`
+/// reason would be a REGRESSION here (it was already typed), the inverse of the
+/// pre-0.3.0 note: a green→red now means the decline got WORSE, not better. (This
+/// inverts the old `catch_unwind` panic-boundary assertion, which the 0.1.0 op-level
+/// panic convention required and 0.3.0's typed-decline seam retired.)
 #[test]
 fn slang_declines_copysign_nextafter_and_emits_pow() {
     let a = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 4);
@@ -98,15 +87,18 @@ fn slang_declines_copysign_nextafter_and_emits_pow() {
         &[ElementKind::F32],
         input(0).binary(BinaryOp::Pow, input(1)),
     );
-    let emitted = catch_unwind(AssertUnwindSafe(|| generate(&pow, &key, &Slang).source))
-        .expect("Slang should EMIT for Pow (supported), not panic");
+    let k = try_generate(&pow, &key, &Slang)
+        .unwrap_or_else(|e| panic!("Slang should EMIT for Pow (supported), but declined: {e:?}"));
     assert!(
-        emitted.contains("output["),
-        "Slang emitted no output store for Pow:\n{emitted}"
+        k.source.contains("output["),
+        "Slang emitted no output store for Pow:\n{}",
+        k.source
     );
 
-    // DECLINE (panic boundary): Copysign / Nextafter have no base-profile Slang
-    // intrinsic and panic-decline by design.
+    // DECLINE (typed `LowerError`): Copysign / Nextafter have no base-profile Slang
+    // intrinsic and decline by design. Assert it is the DOCUMENTED op-level decline
+    // that names the refused op — otherwise "declines Copysign" would be satisfied by
+    // any unrelated `UnsupportedOp`.
     for op_kind in [BinaryOp::Copysign, BinaryOp::Nextafter] {
         let op = OpDef::elementwise(
             "d",
@@ -114,23 +106,17 @@ fn slang_declines_copysign_nextafter_and_emits_pow() {
             &[ElementKind::F32],
             input(0).binary(op_kind, input(1)),
         );
-        let payload = catch_unwind(AssertUnwindSafe(|| generate(&op, &key, &Slang).source))
-            .err()
-            .unwrap_or_else(|| {
-                panic!("Slang should panic-decline {op_kind:?} (v0.1.0 op-level boundary), but it emitted a kernel")
-            });
-        // Confirm it is the DOCUMENTED op-level decline, not some unrelated panic —
-        // otherwise "declines Copysign" would be satisfied by any crash at all. The
-        // v0.1.0 message is `slang backend v1: {op} … — declined (a follow-up)`.
-        let msg = payload
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| payload.downcast_ref::<&str>().copied())
-            .unwrap_or("");
-        assert!(
-            msg.contains("declined") && msg.contains(&format!("{op_kind:?}")),
-            "Slang panicked on {op_kind:?} but not with the documented op-level decline \
-             (message was {msg:?}); an unrelated panic must not satisfy this contract"
-        );
+        match try_generate(&op, &key, &Slang) {
+            Err(LowerError::UnsupportedOp { detail }) => assert!(
+                detail.contains(&format!("{op_kind:?}")),
+                "Slang typed-declined {op_kind:?} but the detail did not name it \
+                 (detail = {detail:?}); an unrelated UnsupportedOp must not satisfy this \
+                 contract"
+            ),
+            other => panic!(
+                "Slang should typed-decline {op_kind:?} as LowerError::UnsupportedOp \
+                 (unpopped-slang 0.3.0 typed-decline seam), got {other:?}"
+            ),
+        }
     }
 }
