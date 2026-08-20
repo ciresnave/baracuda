@@ -10699,6 +10699,12 @@ mod tests {
         // split. The ONE dtype Cuda still declines here is U32: it has a ctype
         // ("unsigned int") but rides ONLY as a gather/scatter index-LOAD type, never
         // a value/compute dtype, so Cuda excludes it explicitly.
+        //
+        // Kept as a loop (not a direct binding) to parallel the spellable-set
+        // assertion above and to admit new declined dtypes without a diff-shape
+        // change — clippy's `single_element_loop` is a false positive for this
+        // deliberate symmetry, so it is allowed here rather than broken.
+        #[allow(clippy::single_element_loop)]
         for dt in [ElementKind::U32] {
             assert!(
                 !Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into()),
