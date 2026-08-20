@@ -1837,8 +1837,10 @@ fn assert_views_lowerable(plan: &KernelPlan<'_>) {
 /// These USED TO PANIC; per KISS-EMIT §6.8-0004 the emitter cannot verify the
 /// "unreachable" claim across the crate boundary, so it returns a typed decline
 /// naming the inherited plan-gate invariant instead (the caller may still treat
-/// it as fatal). (Name kept for call-site stability; they no longer panic.)
-fn multi_reduced_panic(op_name: &str) -> impl Fn(u8) -> Result<Spelling, LowerError> + '_ {
+/// it as fatal). Named `_decline`, not `_panic`: a `_panic` name on a fn that
+/// returns a decline is a false positive for a §6.8-0004 grep audit and a lie to
+/// anyone reading the name — a name, unlike a comment, is believed.
+fn multi_reduced_decline(op_name: &str) -> impl Fn(u8) -> Result<Spelling, LowerError> + '_ {
     move |i| {
         Ok(Spelling::Declined(Decline::UnsupportedOp {
             op: DeclinedOp::Reduced(i),
@@ -1848,7 +1850,7 @@ fn multi_reduced_panic(op_name: &str) -> impl Fn(u8) -> Result<Spelling, LowerEr
         }))
     }
 }
-fn multi_coord_panic(op_name: &str) -> impl Fn(u8) -> Result<Spelling, LowerError> + '_ {
+fn multi_coord_decline(op_name: &str) -> impl Fn(u8) -> Result<Spelling, LowerError> + '_ {
     move |d| {
         Ok(Spelling::Declined(Decline::UnsupportedOp {
             op: DeclinedOp::Coord(d),
@@ -1916,8 +1918,8 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKern
         ctype,
         &cuda_lowering(
             &acc,
-            &multi_reduced_panic(plan.op_name),
-            &multi_coord_panic(plan.op_name),
+            &multi_reduced_decline(plan.op_name),
+            &multi_coord_decline(plan.op_name),
             &|op, x| cuda_unary(op, x, plan.dtype),
             &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
@@ -2039,8 +2041,8 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKer
         ctype,
         &cuda_lowering(
             &acc,
-            &multi_reduced_panic(plan.op_name),
-            &multi_coord_panic(plan.op_name),
+            &multi_reduced_decline(plan.op_name),
+            &multi_coord_decline(plan.op_name),
             &|op, x| cuda_unary(op, x, plan.dtype),
             &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
@@ -2132,8 +2134,8 @@ fn emit_vectorized_multi(
             sctype,
             &cuda_lowering(
                 &acc,
-                &multi_reduced_panic(plan.op_name),
-                &multi_coord_panic(plan.op_name),
+                &multi_reduced_decline(plan.op_name),
+                &multi_coord_decline(plan.op_name),
                 &|op, x| cuda_unary(op, x, plan.dtype),
                 &|op, a, b| cuda_binary(op, a, b, plan.dtype),
                 &|c, a, b| cuda_select(c, a, b, plan.dtype),
@@ -2223,8 +2225,8 @@ fn emit_vectorized_packed_multi(
             pk.pair_ty,
             &cuda_lowering(
                 &acc,
-                &multi_reduced_panic(plan.op_name),
-                &multi_coord_panic(plan.op_name),
+                &multi_reduced_decline(plan.op_name),
+                &multi_coord_decline(plan.op_name),
                 &|op, x| packed_unary(op, x, plan.dtype),
                 &|op, a, b| packed_binary(op, a, b, plan.dtype),
                 // Plan-gate invariant: `bodies_pack` (all-`body_packs`) excludes
