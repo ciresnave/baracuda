@@ -103,6 +103,8 @@ dependencies = [
  "fuel-kernel-seam",
  "fuel-kernel-seam-types",
  "unpopped",
+ "unpopped-cpu-c",
+ "unpopped-slang",
  "unpopped-vocab",
 ]
 
@@ -1618,6 +1620,26 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-cuda",
  "tree-sitter-slang",
+ "unpopped-vocab",
+]
+
+[[package]]
+name = "unpopped-cpu-c"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6069f08ab8c805460a0a1292ffce51a000cee756867cf7a3d06970c4f4f9f9c7"
+dependencies = [
+ "unpopped",
+ "unpopped-vocab",
+]
+
+[[package]]
+name = "unpopped-slang"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74c9b943b6fa37415ca85b0b91b824cd820739bfea71df318bfd150efc73bb75"
+dependencies = [
+ "unpopped",
  "unpopped-vocab",
 ]
 

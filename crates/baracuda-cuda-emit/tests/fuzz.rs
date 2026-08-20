@@ -40,6 +40,9 @@ use unpopped::{
 };
 // `Cuda` moved to the sibling `baracuda-cuda-emit`; reached via the dev-dep cycle.
 use baracuda_cuda_emit::Cuda;
+// The sibling backends, published from the Unpopped extraction (test-only dev-deps).
+use unpopped_cpu_c::CpuC;
+use unpopped_slang::Slang;
 use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey, structure_key};
 
 // ---------------------------------------------------------------------------
@@ -420,21 +423,18 @@ fn cuda_full_op_emit_never_panics() {
     }
 }
 
-// DEFERRED COVERAGE (unpopped 0.2.0, commit c584818): this was a THREE-way
-// robustness check (CUDA / CpuC / Slang each emit a real output store without
-// panicking over the shared `Lowering` seam) — the one that surfaced Slang's
-// intentional Copysign/Nextafter decline. The CpuC/Slang emitters left `unpopped`'s
-// core for the (currently unpublished) `unpopped-cpu-c` / `unpopped-slang` crates,
-// so the cross-backend legs are deferred. The two-way (CpuC/Slang) share can be
-// recovered in `unpopped-conformance` (which dev-deps both) without a publish;
-// genuine THREE-way agreement including CUDA can only live here and returns when
-// those crates publish. RESTORE: re-add `CpuC`/`Slang` to the import and the two
-// extra rows. The CUDA robustness fuzz below is unaffected.
 #[test]
-fn cuda_scalar_emit_never_panics() {
-    // Scoped to the liftable palette at F32 with the Scalar schedule (align 4) — the
-    // common ground every backend serves: single-output contiguous elementwise,
-    // finite consts, no Coord/Param/Select. A panic here is a real lowering-seam gap.
+fn tri_backend_scalar_emit_never_panics() {
+    // The genuinely CROSS-backend robustness check: the same random body emitted
+    // through all THREE backends (CUDA / CpuC / Slang), which share the neutral
+    // `Lowering` seam. Scoped to the liftable palette at F32 with the Scalar
+    // schedule (align 4) — the common ground every backend serves: single-output
+    // contiguous elementwise, finite consts, no Coord/Param/Select (CpuC/Slang v1
+    // decline those). The palette (TRI_BINARY) also excludes Slang's op-level
+    // panic-declines (Copysign/Nextafter, asserted separately in
+    // `backend_declines.rs`), so every backend emits — a panic here is a real
+    // lowering-seam gap. This three-way emit is the agreement CUDA-plus-a-published-
+    // emitter buys, which `unpopped-conformance`'s CpuC×Slang pair cannot reach.
     let mut rng = Rng::new(0xB11_0003);
     for _ in 0..4000 {
         let n_inputs = 1 + rng.below(3);
@@ -445,15 +445,21 @@ fn cuda_scalar_emit_never_panics() {
             gen_expr(&mut rng, 4, n_inputs, &TRI_BACKEND),
         );
         let key = scalar_key(n_inputs);
-        // Assert CUDA emits a REAL output store (`out[i]`), not merely non-empty
-        // source — every emitter writes a header comment first, so `!is_empty()`
-        // would pass even for a dropped-store regression.
-        let src = generate(&op, &key, &Cuda).source;
-        assert!(
-            src.contains("out["),
-            "cuda emitted no output store (`out[`) for body: {:?}\n{src}",
-            op.body
-        );
+        // Assert each backend emits a REAL output store (its own store token), not
+        // merely non-empty source — every emitter writes a header comment first, so
+        // `!is_empty()` would pass even for a dropped-store regression. CUDA/CpuC
+        // store to `out[i]`, Slang to `output[i]`.
+        for (name, src, store) in [
+            ("cuda", generate(&op, &key, &Cuda).source, "out["),
+            ("cpu_c", generate(&op, &key, &CpuC).source, "out["),
+            ("slang", generate(&op, &key, &Slang).source, "output["),
+        ] {
+            assert!(
+                src.contains(store),
+                "{name} emitted no output store (`{store}`) for body: {:?}\n{src}",
+                op.body
+            );
+        }
     }
 }
 
