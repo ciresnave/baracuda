@@ -7,8 +7,8 @@
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
 use unpopped::backend::{
-    Backend, GeneratedKernel, LowerError, Lowering, Variant, VariantFidelity, lower_dag,
-    lower_dag_all, lower_dag_multi, lower_expr,
+    Backend, Decline, DeclinedOp, GeneratedKernel, LowerError, Lowering, Spelling, Variant,
+    VariantFidelity, lower_dag, lower_dag_all, lower_dag_multi, lower_expr,
 };
 use unpopped::cfamily::{
     assert_no_int_div_or_const, binary_f32, binary_f64, binary_int, cast_scalar, demote_store_f32,
@@ -121,7 +121,7 @@ impl Backend for Cuda {
     }
 
     fn lower(&self, plan: &KernelPlan<'_>) -> Result<GeneratedKernel, LowerError> {
-        Ok((|| -> GeneratedKernel {
+        (|| -> Result<GeneratedKernel, LowerError> {
             // U32 has a `scalar_ctype` ("unsigned int") ONLY as an index/address
             // dtype — it must never reach an ARITHMETIC compute path (a U32
             // elementwise add would silently lower to an `unsigned int` kernel and
@@ -281,7 +281,7 @@ impl Backend for Cuda {
                     ),
                 }
                 for e in exprs {
-                    assert_coord_lowerable(e, plan);
+                    assert_coord_lowerable(e, plan)?;
                 }
             }
             // Increment 0b/0e: a hetero-output plan reaches only emitters with an
@@ -406,7 +406,7 @@ impl Backend for Cuda {
                     // in `emit_strided` as its unconditional base.
                     match plan.write_index.scatter() {
                         Some((_, _, combine, _, _)) if combine.is_fp_atomic_add(plan.out_dtype) => {
-                            emit_scatter_gathersum(plan, ctype)
+                            Ok(emit_scatter_gathersum(plan, ctype))
                         }
                         _ => emit_strided(plan, ctype),
                     }
@@ -425,12 +425,12 @@ impl Backend for Cuda {
                 // Increment 8 SORT_PERM: the per-output RANK-sort base (any k, no smem,
                 // no barriers). The cooperative smem bitonic pair-sort is produced
                 // separately by `row_sort_bitonic_variant`, never routed through `lower()`.
-                Schedule::RowSort { .. } => emit_row_sort(plan, ctype),
+                Schedule::RowSort { .. } => Ok(emit_row_sort(plan, ctype)),
                 // Increment 11 IM2COL: one thread per output cell (grid-stride) computes
                 // the closed-form source coord and RAW-BIT copies it (or stores the typed
                 // zero for an OOB tap) — no fold, no variant (each output is an
                 // independent read-or-zero + store, BitIdentical).
-                Schedule::Im2Col { .. } => emit_im2col(plan, ctype),
+                Schedule::Im2Col { .. } => Ok(emit_im2col(plan, ctype)),
                 // `Schedule` is `#[non_exhaustive]`: a new neutral schedule must be taught
                 // an emitter here. Fail loud rather than silently emit the wrong kernel.
                 _ => panic!(
@@ -439,7 +439,7 @@ impl Backend for Cuda {
                     plan.schedule
                 ),
             }
-        })())
+        })()
     }
 }
 
@@ -447,12 +447,12 @@ impl Backend for Cuda {
 /// The CUDA emitters spell all six of these seams explicitly and never override
 /// `constant` (it keeps its `const_lit` default), so no emitted byte changes.
 fn cuda_lowering<'a>(
-    leaf: &'a dyn Fn(u8) -> String,
-    reduced: &'a dyn Fn(u8) -> String,
-    coord: &'a dyn Fn(u8) -> String,
-    unary: &'a dyn Fn(UnaryOp, String) -> String,
-    binary: &'a dyn Fn(BinaryOp, String, String) -> String,
-    select: &'a dyn Fn(String, String, String) -> String,
+    leaf: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
+    reduced: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
+    coord: &'a dyn Fn(u8) -> Result<Spelling, LowerError>,
+    unary: &'a dyn Fn(UnaryOp, String) -> Result<Spelling, LowerError>,
+    binary: &'a dyn Fn(BinaryOp, String, String) -> Result<Spelling, LowerError>,
+    select: &'a dyn Fn(String, String, String) -> Result<Spelling, LowerError>,
 ) -> Lowering<'a> {
     Lowering::builder(leaf, unary, binary)
         .reduced(reduced)
@@ -573,18 +573,25 @@ fn pair_parts(dt: ElementKind) -> (&'static str, &'static str, &'static str) {
 /// and re-join. Operand strings are always leaf refs or hoisted `tmp` names
 /// ([`unpopped::backend::lower_dag_all`]), so the `{x}` duplication below never
 /// duplicates a computation.
-fn packed_unary(op: UnaryOp, x: String, dt: ElementKind) -> String {
-    match op {
-        UnaryOp::Neg => format!("__hneg2({x})"),
-        UnaryOp::Abs => format!("__habs2({x})"),
-        UnaryOp::Sqr => format!("__hmul2({x}, {x})"),
+fn packed_unary(op: UnaryOp, x: String, dt: ElementKind) -> Result<Spelling, LowerError> {
+    Ok(match op {
+        UnaryOp::Neg => Spelling::Spelled(format!("__hneg2({x})")),
+        UnaryOp::Abs => Spelling::Spelled(format!("__habs2({x})")),
+        UnaryOp::Sqr => Spelling::Spelled(format!("__hmul2({x}, {x})")),
         _ => {
             let (lo, hi, join) = pair_parts(dt);
-            let l = cuda_unary(op, format!("{lo}({x})"), dt);
-            let h = cuda_unary(op, format!("{hi}({x})"), dt);
-            format!("{join}({l}, {h})")
+            let l = cuda_unary(op, format!("{lo}({x})"), dt)?;
+            let h = cuda_unary(op, format!("{hi}({x})"), dt)?;
+            // `.spelled()` gives an exhaustive `Ok`/`Err` (Spelling is
+            // `#[non_exhaustive]`, so a tuple match on its variants is not).
+            match (l.spelled(), h.spelled()) {
+                (Ok(l), Ok(h)) => Spelling::Spelled(format!("{join}({l}, {h})")),
+                // Preserve a decline from either half — never fabricate a join
+                // over an unspelled operand.
+                (Err(d), _) | (_, Err(d)) => Spelling::Declined(d),
+            }
         }
-    }
+    })
 }
 
 /// Packed binary speller — every binary function op is **Tier B** (pair-split
@@ -594,11 +601,23 @@ fn packed_unary(op: UnaryOp, x: String, dt: ElementKind) -> String {
 /// intrinsic. `FmaxIeee`/`FminIeee` *could* one day take `__hmax2`/`__hmin2` as
 /// Tier A, but only behind the item-09 bit-identity sweep — not assumed here.
 /// `Nextafter` never reaches this speller ([`cuda_binary`] refuses halves).
-fn packed_binary(op: BinaryOp, a: String, b: String, dt: ElementKind) -> String {
+fn packed_binary(
+    op: BinaryOp,
+    a: String,
+    b: String,
+    dt: ElementKind,
+) -> Result<Spelling, LowerError> {
     let (lo, hi, join) = pair_parts(dt);
-    let l = cuda_binary(op, format!("{lo}({a})"), format!("{lo}({b})"), dt);
-    let h = cuda_binary(op, format!("{hi}({a})"), format!("{hi}({b})"), dt);
-    format!("{join}({l}, {h})")
+    let l = cuda_binary(op, format!("{lo}({a})"), format!("{lo}({b})"), dt)?;
+    let h = cuda_binary(op, format!("{hi}({a})"), format!("{hi}({b})"), dt)?;
+    // `.spelled()` gives an exhaustive `Ok`/`Err` (Spelling is `#[non_exhaustive]`,
+    // so a tuple match on its variants is not).
+    Ok(match (l.spelled(), h.spelled()) {
+        (Ok(l), Ok(h)) => Spelling::Spelled(format!("{join}({l}, {h})")),
+        // Preserve a decline from either half — never fabricate a join over an
+        // unspelled operand.
+        (Err(d), _) | (_, Err(d)) => Spelling::Declined(d),
+    })
 }
 
 fn header(plan: &KernelPlan<'_>, name: &str) -> String {
@@ -621,7 +640,11 @@ fn header(plan: &KernelPlan<'_>, name: &str) -> String {
     h
 }
 
-fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> GeneratedKernel {
+fn emit_vectorized(
+    plan: &KernelPlan<'_>,
+    vty: &str,
+    lanes: &[&str],
+) -> Result<GeneratedKernel, LowerError> {
     let name = format!(
         "baracuda_gen_{}_{}_co_v{}",
         plan.op_name,
@@ -650,25 +673,28 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
     // collide across lanes.
     let sctype = scalar_ctype(plan.dtype).expect("vectorized dtype has a scalar ctype");
     for lane in lanes {
-        let acc = |idx: u8| format!("v{idx}.{lane}");
+        let acc = |idx: u8| Ok(Spelling::Spelled(format!("v{idx}.{lane}")));
         let (prelude, root) = lower_dag(
             &ExprDag::from_expr(plan.body),
             sctype,
             &cuda_lowering(
                 &acc,
-                &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+                &reduced_decline_no_rowreduce,
                 &|d| {
-                    panic!(
-                        "cuda backend: Coord({d}) reached the vectorized emitter — Coord \
-                         bodies lower via Strided only (the linear-index kernels have no \
-                         per-axis coordinates)"
-                    )
+                    Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Coord(d),
+                        why: format!(
+                            "cuda backend: Coord({d}) reached the vectorized emitter — Coord \
+                             bodies lower via Strided only (the linear-index kernels have no \
+                             per-axis coordinates) — plan-gate invariant, unpopped 0.5.0"
+                        ),
+                    }))
                 },
                 &|op, x| cuda_unary(op, x, plan.dtype),
                 &|op, a, b| cuda_binary(op, a, b, plan.dtype),
                 &|c, a, b| cuda_select(c, a, b, plan.dtype),
             ),
-        );
+        )?;
         if prelude.is_empty() {
             s.push_str(&format!("        vo.{lane} = {root};\n"));
         } else {
@@ -680,7 +706,7 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
         }
     }
     s.push_str("        out[i] = vo;\n    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Emit a **packed** f16/bf16 vectorized elementwise kernel: one `width`-halves
@@ -694,7 +720,10 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
 /// Lowered with [`lower_dag_all`] (every non-leaf hoisted to a pair-typed `tmp`)
 /// so Tier B's pair-split never duplicates a computation, only a `tmp` name —
 /// deep Tier-B chains stay linear in the source.
-fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKernel {
+fn emit_vectorized_packed(
+    plan: &KernelPlan<'_>,
+    pk: &PackedKind,
+) -> Result<GeneratedKernel, LowerError> {
     let width = pk.fields.len() * 2;
     let name = format!(
         "baracuda_gen_{}_{}_co_v{}",
@@ -738,34 +767,40 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
     }
     s.push_str(&format!("        {vec_ty} vo;\n"));
     for field in pk.fields {
-        let acc = |idx: u8| format!("v{idx}.{field}");
+        let acc = |idx: u8| Ok(Spelling::Spelled(format!("v{idx}.{field}")));
         let (prelude, root) = lower_dag_all(
             &ExprDag::from_expr(plan.body),
             pk.pair_ty,
             &cuda_lowering(
                 &acc,
-                &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
-                // Doubly unreachable: `body_packs` is Input-leaf-only AND the
-                // packed dtypes are outside Coord's f32/f64 gate.
+                &reduced_decline_no_rowreduce,
+                // Doubly plan-gate-invariant: `body_packs` is Input-leaf-only AND
+                // the packed dtypes are outside Coord's f32/f64 gate.
                 &|d| {
-                    panic!(
-                        "cuda backend: Coord({d}) reached the packed emitter — Coord \
-                         bodies lower via Strided only (and halves are outside the \
-                         Coord dtype gate)"
-                    )
+                    Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Coord(d),
+                        why: format!(
+                            "cuda backend: Coord({d}) reached the packed emitter — Coord \
+                             bodies lower via Strided only (and halves are outside the \
+                             Coord dtype gate) — plan-gate invariant, unpopped 0.5.0"
+                        ),
+                    }))
                 },
                 &|op, x| packed_unary(op, x, plan.dtype),
                 &|op, a, b| packed_binary(op, a, b, plan.dtype),
-                // Unreachable: `body_packs` excludes Select (G7), so a select
-                // body never reaches the packed pair path — panic backstop.
+                // Plan-gate invariant: `body_packs` excludes Select (G7), so a
+                // select body never reaches the packed pair path.
                 &|_, _, _| {
-                    panic!(
-                        "cuda backend: Select reached the packed emitter — body_packs \
-                         excludes select bodies (they decline to the scalar path)"
-                    )
+                    Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Select,
+                        why: "cuda backend: Select reached the packed emitter — body_packs \
+                              excludes select bodies (they decline to the scalar path) — \
+                              plan-gate invariant, unpopped 0.5.0"
+                            .to_string(),
+                    }))
                 },
             ),
-        );
+        )?;
         if prelude.is_empty() {
             // Body is a bare Input leaf (a copy) — no tmp needed.
             s.push_str(&format!("        vo.{field} = {root};\n"));
@@ -778,10 +813,10 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
         }
     }
     s.push_str("        out[i] = vo;\n    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
-fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, LowerError> {
     let name = format!(
         "baracuda_gen_{}_{}_scalar",
         plan.op_name,
@@ -800,25 +835,28 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     ));
     s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
-    let acc = |idx: u8| format!("in{idx}[i]");
+    let acc = |idx: u8| Ok(Spelling::Spelled(format!("in{idx}[i]")));
     let (prelude, root) = lower_dag(
         &ExprDag::from_expr(plan.body),
         ctype,
         &cuda_lowering(
             &acc,
-            &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            &reduced_decline_no_rowreduce,
             &|d| {
-                panic!(
-                    "cuda backend: Coord({d}) reached the scalar emitter — Coord bodies \
-                     lower via Strided only (the linear-index kernels have no per-axis \
-                     coordinates)"
-                )
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(d),
+                    why: format!(
+                        "cuda backend: Coord({d}) reached the scalar emitter — Coord bodies \
+                         lower via Strided only (the linear-index kernels have no per-axis \
+                         coordinates) — plan-gate invariant, unpopped 0.5.0"
+                    ),
+                }))
             },
             &|op, x| cuda_unary(op, x, plan.dtype),
             &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
         ),
-    );
+    )?;
     let store = store_expr_of(plan, 0, root);
     if prelude.is_empty() {
         s.push_str(&format!("    for (; i < n; i += step) out[i] = {store};\n"));
@@ -832,10 +870,10 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("        out[i] = {store};\n    }}\n"));
     }
     s.push_str("}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
-fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, LowerError> {
     let rank = plan.key.rank as usize;
     let n = plan.n_inputs as usize;
     // Increment 4: the single GATHERED input (or `None` for an index-free op).
@@ -1082,12 +1120,14 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         None => offset_expr(plan.key.operands[n], "so", rank, None),
     };
     s.push_str(&format!("        long long oo = {oo};\n"));
-    let acc = |idx: u8| {
-        if is_fully_broadcast(plan.key.operands[idx as usize], rank) {
-            format!("h{idx}")
-        } else {
-            format!("in{idx}[o{idx}]")
-        }
+    let acc = |idx: u8| -> Result<Spelling, LowerError> {
+        Ok(Spelling::Spelled(
+            if is_fully_broadcast(plan.key.operands[idx as usize], rank) {
+                format!("h{idx}")
+            } else {
+                format!("in{idx}[o{idx}]")
+            },
+        ))
     };
     // Coord(d) reads the unraveled per-axis coordinate `c{d}` — emitted
     // UNCONDITIONALLY above for every axis (the output-offset unravel), so the
@@ -1096,34 +1136,48 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // axis extent fits the dtype's exact-integer range (f32: 2^24, f64: 2^53
     // — the documented caller precondition); the plan gate + the
     // `assert_coord_lowerable` backstop pin the dtype to f32/f32s/f64 and the
-    // axis to `< rank` before this closure can run.
-    let coord = |d: u8| {
-        assert!(
-            (d as usize) < rank,
-            "cuda backend: Coord({d}) axis out of range for the rank-{rank} strided \
-             unravel (the backstop should have refused this plan)"
-        );
-        match plan.dtype {
+    // axis to `< rank` before this closure can run. The former assert!/panic!
+    // invariants are now typed declines (KISS-EMIT §6.8-0004: no panic on any
+    // input, and the emitter cannot verify the "backstop refused this" claim).
+    let coord = |d: u8| -> Result<Spelling, LowerError> {
+        if (d as usize) >= rank {
+            return Ok(Spelling::Declined(Decline::UnsupportedOp {
+                op: DeclinedOp::Coord(d),
+                why: format!(
+                    "cuda backend: Coord({d}) axis out of range for the rank-{rank} strided \
+                     unravel (the backstop should have refused this plan) — plan-gate \
+                     invariant, unpopped 0.5.0"
+                ),
+            }));
+        }
+        Ok(Spelling::Spelled(match plan.dtype {
             ElementKind::F32 | ElementKind::F32Strict => format!("(float)c{d}"),
             ElementKind::F64 => format!("(double)c{d}"),
-            other => panic!(
-                "cuda backend: Coord({d}) has no {other:?} coordinate spelling — \
-                 f32/f64 only (the backstop should have refused this plan)"
-            ),
-        }
+            other => {
+                return Ok(Spelling::Declined(Decline::UnsupportedDtypeForOp {
+                    op: DeclinedOp::Coord(d),
+                    dtype: other,
+                    why: format!(
+                        "cuda backend: Coord({d}) has no {other:?} coordinate spelling — \
+                         f32/f64 only (the backstop should have refused this plan) — \
+                         plan-gate invariant, unpopped 0.5.0"
+                    ),
+                }));
+            }
+        }))
     };
     let (prelude, root) = lower_dag(
         &ExprDag::from_expr(plan.body),
         ctype,
         &cuda_lowering(
             &acc,
-            &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            &reduced_decline_no_rowreduce,
             &coord,
             &|op, x| cuda_unary(op, x, plan.dtype),
             &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
         ),
-    );
+    )?;
     for decl in &prelude {
         s.push_str(&format!("        {decl}\n"));
     }
@@ -1168,7 +1222,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         }
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Spell a [`WriteCombine`] store of the lowered body `root` into `out[oo]`,
@@ -1468,7 +1522,9 @@ fn scatter_atomic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         return None; // deterministic combine ⇒ the base IS the atomic scatter.
     }
     let ctype = scalar_ctype(plan.dtype)?;
-    let atomic = emit_strided(plan, ctype);
+    // A lowering decline/error ⇒ don't offer the variant (never-worse: the
+    // deterministic gather-sum base still serves the cell).
+    let atomic = emit_strided(plan, ctype).ok()?;
     let entry = atomic.name.clone();
     Some(Variant::new(
         "atomic",
@@ -1775,22 +1831,47 @@ fn assert_views_lowerable(plan: &KernelPlan<'_>) {
     }
 }
 
-/// Panicking `reduced`/`coord` closures for the multi-output elementwise
+/// Declining `reduced`/`coord` closures for the multi-output elementwise
 /// emitters: v1 multi-output bodies carry neither leaf (rejected at the plan
-/// gate + emitter backstops), so reaching one is a bug, not an honest miss.
-fn multi_reduced_panic(op_name: &str) -> impl Fn(u8) -> String + '_ {
+/// gate + emitter backstops), so reaching one is a plan-gate-invariant miss.
+/// These USED TO PANIC; per KISS-EMIT §6.8-0004 the emitter cannot verify the
+/// "unreachable" claim across the crate boundary, so it returns a typed decline
+/// naming the inherited plan-gate invariant instead (the caller may still treat
+/// it as fatal). (Name kept for call-site stability; they no longer panic.)
+fn multi_reduced_panic(op_name: &str) -> impl Fn(u8) -> Result<Spelling, LowerError> + '_ {
     move |i| {
-        panic!(
-            "cuda backend: Reduced({i}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (no reduction)"
-        )
+        Ok(Spelling::Declined(Decline::UnsupportedOp {
+            op: DeclinedOp::Reduced(i),
+            why: format!(
+                "cuda backend: Reduced({i}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (no reduction) — plan-gate invariant, unpopped 0.5.0"
+            ),
+        }))
     }
 }
-fn multi_coord_panic(op_name: &str) -> impl Fn(u8) -> String + '_ {
+fn multi_coord_panic(op_name: &str) -> impl Fn(u8) -> Result<Spelling, LowerError> + '_ {
     move |d| {
-        panic!(
-            "cuda backend: Coord({d}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (Coord bodies are deferred)"
-        )
+        Ok(Spelling::Declined(Decline::UnsupportedOp {
+            op: DeclinedOp::Coord(d),
+            why: format!(
+                "cuda backend: Coord({d}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (Coord bodies are deferred) — plan-gate invariant, unpopped 0.5.0"
+            ),
+        }))
     }
+}
+
+/// The `reduced` seam for every emitter EXCEPT the RowReduce path: only a
+/// row-reduction body contains a [`ScalarExpr::Reduced`] leaf, so reaching this
+/// elsewhere is a plan-gate-invariant miss. USED TO `unreachable!`; per
+/// KISS-EMIT §6.8-0004 the emitter cannot verify the "unreachable" claim across
+/// the crate boundary, so it returns a typed decline naming the inherited
+/// invariant (a caller may still treat it as fatal).
+fn reduced_decline_no_rowreduce(i: u8) -> Result<Spelling, LowerError> {
+    Ok(Spelling::Declined(Decline::UnsupportedOp {
+        op: DeclinedOp::Reduced(i),
+        why: format!(
+            "no Reduced leaf outside RowReduce: red{i} — plan-gate invariant, unpopped 0.5.0"
+        ),
+    }))
 }
 
 /// Emit a **multi-output scalar** elementwise kernel (increment 1): one linear
@@ -1800,7 +1881,7 @@ fn multi_coord_panic(op_name: &str) -> impl Fn(u8) -> String + '_ {
 /// `dy` load, an interior product — is emitted once (hoisted `tmp` / shared load)
 /// and referenced by each store: strictly fewer global loads than N separate
 /// kernels. The store loop grows to N `out{j}[i] = …;`.
-fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, LowerError> {
     let n_in = plan.n_inputs as usize;
     let n_out = plan.n_outputs as usize;
     let name = format!(
@@ -1828,7 +1909,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     ));
     s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
-    let acc = |idx: u8| format!("in{idx}[i]");
+    let acc = |idx: u8| Ok(Spelling::Spelled(format!("in{idx}[i]")));
     let dag = ExprDag::from_exprs(&plan.output_bodies());
     let (prelude, roots) = lower_dag_multi(
         &dag,
@@ -1842,7 +1923,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
         ),
         false,
-    );
+    )?;
     s.push_str("    for (; i < n; i += step) {\n");
     for decl in &prelude {
         s.push_str(&format!("        {decl}\n"));
@@ -1857,7 +1938,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         ));
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Emit a **multi-output strided** elementwise kernel (increment 1): the
@@ -1867,7 +1948,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 /// hoist), and the shared body-DAG is lowered once — so a strided multi-output
 /// cell (a shape the contig-only bespoke backward siblings cannot serve without
 /// a materialization pass) still loads each input once.
-fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, LowerError> {
     let rank = plan.key.rank as usize;
     let n_in = plan.n_inputs as usize;
     let n_out = plan.n_outputs as usize;
@@ -1943,12 +2024,14 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         let oo = offset_expr(plan.key.operands[n_in + j], &format!("so{j}"), rank, None);
         s.push_str(&format!("        long long oo{j} = {oo};\n"));
     }
-    let acc = |idx: u8| {
-        if is_fully_broadcast(plan.key.operands[idx as usize], rank) {
-            format!("h{idx}")
-        } else {
-            format!("in{idx}[o{idx}]")
-        }
+    let acc = |idx: u8| -> Result<Spelling, LowerError> {
+        Ok(Spelling::Spelled(
+            if is_fully_broadcast(plan.key.operands[idx as usize], rank) {
+                format!("h{idx}")
+            } else {
+                format!("in{idx}[o{idx}]")
+            },
+        ))
     };
     let dag = ExprDag::from_exprs(&plan.output_bodies());
     let (prelude, roots) = lower_dag_multi(
@@ -1963,7 +2046,7 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
         ),
         false,
-    );
+    )?;
     for decl in &prelude {
         s.push_str(&format!("        {decl}\n"));
     }
@@ -1977,7 +2060,7 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         ));
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Backstop for the multi-output VECTORIZED emitters (native + packed): each
@@ -2005,7 +2088,11 @@ fn assert_multi_outputs_uniform(plan: &KernelPlan<'_>, emitter: &str) {
 /// native `float4`/`float2`/`double2` path with `n_outputs` output vectors. Each
 /// input vector is loaded once (`v{i} = in{i}[i]`); each lane lowers ALL output
 /// bodies through the shared DAG, assigning `vo{j}.{lane}`; then N vector stores.
-fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> GeneratedKernel {
+fn emit_vectorized_multi(
+    plan: &KernelPlan<'_>,
+    vty: &str,
+    lanes: &[&str],
+) -> Result<GeneratedKernel, LowerError> {
     assert_multi_outputs_uniform(plan, "emit_vectorized_multi");
     let n_in = plan.n_inputs as usize;
     let n_out = plan.n_outputs as usize;
@@ -2039,7 +2126,7 @@ fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Ge
     let sctype = scalar_ctype(plan.dtype).expect("vectorized dtype has a scalar ctype");
     let dag = ExprDag::from_exprs(&plan.output_bodies());
     for lane in lanes {
-        let acc = |idx: u8| format!("v{idx}.{lane}");
+        let acc = |idx: u8| Ok(Spelling::Spelled(format!("v{idx}.{lane}")));
         let (prelude, roots) = lower_dag_multi(
             &dag,
             sctype,
@@ -2052,7 +2139,7 @@ fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Ge
                 &|c, a, b| cuda_select(c, a, b, plan.dtype),
             ),
             false,
-        );
+        )?;
         if prelude.is_empty() {
             for (j, root) in roots.iter().enumerate() {
                 s.push_str(&format!("        vo{j}.{lane} = {root};\n"));
@@ -2072,7 +2159,7 @@ fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Ge
         s.push_str(&format!("        out{j}[i] = vo{j};\n"));
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Emit a **multi-output packed** f16/bf16 vectorized kernel (increment 1): the
@@ -2080,7 +2167,10 @@ fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Ge
 /// ([`bodies_pack`]) — all leaves `Input`, no params — so the pair spellers apply
 /// per lane; hoisting-all (via [`lower_dag_multi`]'s `hoist_all`) keeps Tier-B
 /// pair-splits from duplicating text across the shared DAG.
-fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKernel {
+fn emit_vectorized_packed_multi(
+    plan: &KernelPlan<'_>,
+    pk: &PackedKind,
+) -> Result<GeneratedKernel, LowerError> {
     assert_multi_outputs_uniform(plan, "emit_vectorized_packed_multi");
     let width = pk.fields.len() * 2;
     let n_in = plan.n_inputs as usize;
@@ -2127,7 +2217,7 @@ fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> Gener
     }
     let dag = ExprDag::from_exprs(&plan.output_bodies());
     for field in pk.fields {
-        let acc = |idx: u8| format!("v{idx}.{field}");
+        let acc = |idx: u8| Ok(Spelling::Spelled(format!("v{idx}.{field}")));
         let (prelude, roots) = lower_dag_multi(
             &dag,
             pk.pair_ty,
@@ -2137,18 +2227,20 @@ fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> Gener
                 &multi_coord_panic(plan.op_name),
                 &|op, x| packed_unary(op, x, plan.dtype),
                 &|op, a, b| packed_binary(op, a, b, plan.dtype),
-                // Unreachable: `bodies_pack` (all-`body_packs`) excludes any
-                // select body from the packed multi path — panic backstop.
+                // Plan-gate invariant: `bodies_pack` (all-`body_packs`) excludes
+                // any select body from the packed multi path.
                 &|_, _, _| {
-                    panic!(
-                        "cuda backend: Select reached the packed multi-output emitter — \
-                         body_packs excludes select bodies (they decline to the scalar \
-                         path)"
-                    )
+                    Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Select,
+                        why: "cuda backend: Select reached the packed multi-output emitter — \
+                              body_packs excludes select bodies (they decline to the scalar \
+                              path) — plan-gate invariant, unpopped 0.5.0"
+                            .to_string(),
+                    }))
                 },
             ),
             true,
-        );
+        )?;
         if prelude.is_empty() {
             for (j, root) in roots.iter().enumerate() {
                 s.push_str(&format!("        vo{j}.{field} = {root};\n"));
@@ -2168,7 +2260,7 @@ fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> Gener
         s.push_str(&format!("        out{j}[i] = vo{j};\n"));
     }
     s.push_str("    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Emit a **reduction** (one thread per output element, sequential fold). Two
@@ -2197,7 +2289,7 @@ fn emit_reduction(
     ctype: &str,
     rop: ReduceOp,
     precision: bool,
-) -> GeneratedKernel {
+) -> Result<GeneratedKernel, LowerError> {
     let tag = match rop {
         ReduceOp::Sum => "sum",
         ReduceOp::Mean => "mean",
@@ -2384,45 +2476,55 @@ fn emit_reduction(
             _ => None,
         }
     };
-    let elem = int_reduction_predicate(plan.body, &load, &|i| {
+    // `load` is a String speller shared with the int-predicate path below, so it
+    // stays `-> String` and is wrapped into the seam's `Ok(Spelling::Spelled(..))`
+    // here. A decline surfaced by `lower_expr` becomes this emitter's typed
+    // LowerError via `?.spelled()?` (the `?` on `spelled()`'s `Decline` uses
+    // `From<Decline> for LowerError`).
+    let elem = match int_reduction_predicate(plan.body, &load, &|i| {
         unreachable!("no Reduced leaf outside RowReduce: red{i}")
-    })
-    .unwrap_or_else(|| {
-        lower_expr(
+    }) {
+        Some(s) => s,
+        None => lower_expr(
             plan.body,
             &cuda_lowering(
-                &load,
-                &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+                &|i| Ok(Spelling::Spelled(load(i))),
+                &reduced_decline_no_rowreduce,
                 &|d| {
-                    panic!(
-                        "cuda backend: Coord({d}) reached the reduction emitter — Coord is \
-                         Elementwise-only (a coordinate along a folded axis is ambiguous)"
-                    )
+                    Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Coord(d),
+                        why: format!(
+                            "cuda backend: Coord({d}) reached the reduction emitter — Coord is \
+                             Elementwise-only (a coordinate along a folded axis is ambiguous) — \
+                             plan-gate invariant, unpopped 0.5.0"
+                        ),
+                    }))
                 },
                 &|op, x| {
-                    if dbl {
+                    Ok(Spelling::Spelled(if dbl {
                         unary_f64(op, x)
                     } else {
                         unary_f32(op, x)
-                    }
+                    }))
                 },
                 &|op, a, b| {
-                    if dbl {
+                    Ok(Spelling::Spelled(if dbl {
                         binary_f64(op, a, b)
                     } else {
                         binary_f32(op, a, b)
-                    }
+                    }))
                 },
                 &|c, a, b| {
-                    if dbl {
+                    Ok(Spelling::Spelled(if dbl {
                         select_f64(c, a, b)
                     } else {
                         select_f32(c, a, b)
-                    }
+                    }))
                 },
             ),
-        )
-    });
+        )?
+        .spelled()?,
+    };
     // Convert an accumulator-width value to the output store. Uniform-dtype is
     // byte-identical to pre-0e (f16/bf16 demote, else native). A 0e hetero-out
     // converts the accumulator to the output dtype: U8 for a boolean any/all
@@ -2452,15 +2554,19 @@ fn emit_reduction(
     // call site emits a single `<lvalue> = <rhs>;` byte-identical to pre-0e; a
     // real post yields the `{acc} red0 = <finalized>;` decl plus the posted rhs.
     let post_is_identity = matches!(post, ScalarExpr::Reduced(0));
-    let post_apply = |finalized: String| -> (Option<String>, String) {
+    // `post_apply` now returns a `Result`: a decline from lowering the post-expr
+    // becomes the emitter's typed `LowerError` at the call site's `?`. `post_leaf`
+    // / `post_reduced` stay `-> String` (shared with the int-predicate path) and
+    // are lifted into the seams here; `post_reduced` is a real spelling (`red0`).
+    let post_apply = |finalized: String| -> Result<(Option<String>, String), LowerError> {
         if post_is_identity {
-            return (None, store(finalized));
+            return Ok((None, store(finalized)));
         }
         let post_leaf = |i: u8| -> String {
             panic!(
                 "cuda backend: reduction post-expr Input({i}) reached the emitter \
-                 — the post reads Reduced(0)/Const/Param only (validated by \
-                 plan::assert_valid_reduction_post)"
+                     — the post reads Reduced(0)/Const/Param only (validated by \
+                     plan::assert_valid_reduction_post)"
             )
         };
         let post_reduced = |s: u8| -> String {
@@ -2470,43 +2576,76 @@ fn emit_reduction(
             );
             "red0".to_string()
         };
-        let posted =
-            int_reduction_predicate(post, &post_leaf, &post_reduced).unwrap_or_else(|| {
-                lower_expr(
-                    post,
-                    &cuda_lowering(
-                        &post_leaf,
-                        &post_reduced,
-                        &|d| {
-                            panic!(
-                                "cuda backend: reduction post-expr Coord({d}) is Elementwise-only"
-                            )
-                        },
-                        &|op, x| {
-                            if dbl {
-                                unary_f64(op, x)
-                            } else {
-                                unary_f32(op, x)
-                            }
-                        },
-                        &|op, a, b| {
-                            if dbl {
-                                binary_f64(op, a, b)
-                            } else {
-                                binary_f32(op, a, b)
-                            }
-                        },
-                        &|c, a, b| {
-                            if dbl {
-                                select_f64(c, a, b)
-                            } else {
-                                select_f32(c, a, b)
-                            }
-                        },
-                    ),
-                )
-            });
-        (Some(format!("{acc} red0 = {finalized};")), store(posted))
+        let posted = match int_reduction_predicate(post, &post_leaf, &post_reduced) {
+            Some(s) => s,
+            None => lower_expr(
+                post,
+                &cuda_lowering(
+                    // A post-expr Input is a plan-gate-invariant miss (validated
+                    // away) — a typed decline through the seam, not the panic the
+                    // String `post_leaf` still carries on the int-predicate path.
+                    &|i| {
+                        Ok(Spelling::Declined(Decline::UnsupportedOp {
+                            op: DeclinedOp::Leaf(i),
+                            why: format!(
+                                "cuda backend: reduction post-expr Input({i}) reached the \
+                                     emitter — the post reads Reduced(0)/Const/Param only \
+                                     (validated by plan::assert_valid_reduction_post) — \
+                                     plan-gate invariant, unpopped 0.5.0"
+                            ),
+                        }))
+                    },
+                    // Only Reduced(0) (the fold result `red0`) exists — a higher
+                    // index is a plan-gate-invariant miss (the String `post_reduced`
+                    // still `assert_eq!`s it on the int-predicate path); a typed
+                    // decline through the seam.
+                    &|s| {
+                        if s != 0 {
+                            return Ok(Spelling::Declined(Decline::UnsupportedOp {
+                                op: DeclinedOp::Reduced(s),
+                                why: format!(
+                                    "cuda backend: reduction post references Reduced({s}); \
+                                     only 0 exists — plan-gate invariant, unpopped 0.5.0"
+                                ),
+                            }));
+                        }
+                        Ok(Spelling::Spelled("red0".to_string()))
+                    },
+                    &|d| {
+                        Ok(Spelling::Declined(Decline::UnsupportedOp {
+                            op: DeclinedOp::Coord(d),
+                            why: format!(
+                                "cuda backend: reduction post-expr Coord({d}) is \
+                                     Elementwise-only — plan-gate invariant, unpopped 0.5.0"
+                            ),
+                        }))
+                    },
+                    &|op, x| {
+                        Ok(Spelling::Spelled(if dbl {
+                            unary_f64(op, x)
+                        } else {
+                            unary_f32(op, x)
+                        }))
+                    },
+                    &|op, a, b| {
+                        Ok(Spelling::Spelled(if dbl {
+                            binary_f64(op, a, b)
+                        } else {
+                            binary_f32(op, a, b)
+                        }))
+                    },
+                    &|c, a, b| {
+                        Ok(Spelling::Spelled(if dbl {
+                            select_f64(c, a, b)
+                        } else {
+                            select_f32(c, a, b)
+                        }))
+                    },
+                ),
+            )?
+            .spelled()?,
+        };
+        Ok((Some(format!("{acc} red0 = {finalized};")), store(posted)))
     };
 
     if class == ReduceAxisClass::InnerContig && !precision {
@@ -2614,7 +2753,7 @@ fn emit_reduction(
         }
         // The block_* helpers broadcast the result to all threads; thread 0 applies
         // the 0e post-expr (identity ⇒ byte-identical) and writes.
-        let (decl, rhs) = post_apply("r".to_string());
+        let (decl, rhs) = post_apply("r".to_string())?;
         match decl {
             None => s.push_str(&format!(
                 "        if (threadIdx.x == 0) out[row] = {rhs};\n"
@@ -2627,7 +2766,7 @@ fn emit_reduction(
             }
         }
         s.push_str("    }\n}\n");
-        return GeneratedKernel::new(name, s);
+        return Ok(GeneratedKernel::new(name, s));
     }
 
     // ---------- General path: outer / middle / multi axis, strided input, keepdim. ----------
@@ -2852,13 +2991,13 @@ fn emit_reduction(
         "acc".to_string()
     };
     // 0e post-expr (identity ⇒ byte-identical single store line).
-    let (decl, rhs) = post_apply(finalized);
+    let (decl, rhs) = post_apply(finalized)?;
     if let Some(d) = decl {
         s.push_str(&format!("        {d}\n"));
     }
     s.push_str(&format!("        out[oo] = {rhs};\n"));
     s.push_str("    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Precision-first variant ([`VariantFidelity::MorePrecise`]) — a `double`-
@@ -2916,7 +3055,9 @@ fn precision_first_reduction(plan: &KernelPlan<'_>, rop: ReduceOp) -> Option<Var
         return None;
     }
     let ctype = scalar_ctype(plan.dtype)?;
-    let kernel = emit_reduction(plan, ctype, rop, true);
+    // A lowering decline/error ⇒ don't offer the variant (never-worse: the base
+    // reduction still serves the cell).
+    let kernel = emit_reduction(plan, ctype, rop, true).ok()?;
     let det = VariantFidelity::MorePrecise.determinism_str();
     Some(Variant::new(
         "prec",
@@ -2974,7 +3115,8 @@ fn precision_first_rowreduce(plan: &KernelPlan<'_>) -> Option<Variant> {
         return None;
     }
     let ctype = scalar_ctype(plan.dtype)?;
-    let kernel = emit_row_reduce_impl(plan, ctype, false, true);
+    // A lowering decline/error ⇒ don't offer the variant (never-worse).
+    let kernel = emit_row_reduce_impl(plan, ctype, false, true).ok()?;
     let det = VariantFidelity::MorePrecise.determinism_str();
     Some(Variant::new(
         "prec",
@@ -3102,40 +3244,48 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         ElementKind::F32Strict => format!("(double)in{i}[idx]"),
         _ => format!("in{i}[idx]"),
     };
+    // A lowering decline/error ⇒ don't offer the variant (never-worse: the base
+    // reduction path still serves the cell). `load` is a local String speller,
+    // lifted into the seam here.
     let elem = lower_expr(
         plan.body,
         &cuda_lowering(
-            &load,
-            &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            &|i| Ok(Spelling::Spelled(load(i))),
+            &reduced_decline_no_rowreduce,
             &|d| {
-                panic!(
-                    "cuda backend: Coord({d}) reached the split-K reduction variant — \
-                     Coord is Elementwise-only"
-                )
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(d),
+                    why: format!(
+                        "cuda backend: Coord({d}) reached the split-K reduction variant — \
+                         Coord is Elementwise-only — plan-gate invariant, unpopped 0.5.0"
+                    ),
+                }))
             },
             &|op, x| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
-                }
+                }))
             },
             &|op, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
-                }
+                }))
             },
             &|c, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
-                }
+                }))
             },
         ),
-    );
+    )
+    .ok()
+    .and_then(|sp| sp.spelled().ok())?;
     let store = |finalized: String| -> String {
         match plan.dtype {
             ElementKind::F16 => format!("__float2half({finalized})"),
@@ -3291,7 +3441,7 @@ fn operand_stride_binding(
 /// policy — deterministic, sequential K order per output. Larger M/tiled/MMA
 /// schedules join as bench-gated variants; all-`Large` cells route to the
 /// vendor via the §7 gate and are never generated.
-fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, LowerError> {
     let Access::Contraction { epilogue, axes, .. } = plan.access else {
         unreachable!("emit_contraction requires Access::Contraction");
     };
@@ -3346,59 +3496,78 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     );
 
     // Epilogue over the K-sum: Reduced(0) is the per-(row, col) accumulator.
-    let red = |s: u8| {
-        assert_eq!(s, 0, "contraction epilogue reads Reduced(0) only");
-        "r0".to_string()
-    };
     let epi = lower_expr(
         epilogue,
         &cuda_lowering(
             // The only admissible epilogue Input is the fused bias `in{i}` (i>=2),
             // a per-column `[N]` bias read at `col` and up-converted to the
-            // accumulator width, exactly as the operand loads are.
+            // accumulator width, exactly as the operand loads are. A sub-2 leaf is
+            // a plan-gate-invariant miss (was an `assert!`), now a typed decline.
             &|i| {
-                assert!(
-                    i >= 2,
-                    "contraction epilogue Input leaf must be the fused bias (>=2): in{i}"
-                );
+                if i < 2 {
+                    return Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Leaf(i),
+                        why: format!(
+                            "contraction epilogue Input leaf must be the fused bias (>=2): \
+                             in{i} — plan-gate invariant, unpopped 0.5.0"
+                        ),
+                    }));
+                }
                 let e = format!("in{i}[col]");
-                match plan.dtype {
+                Ok(Spelling::Spelled(match plan.dtype {
                     ElementKind::F16 => format!("__half2float({e})"),
                     ElementKind::Bf16 => format!("__bfloat162float({e})"),
                     _ => e,
-                }
+                }))
             },
-            &red,
+            // Only Reduced(0) (the accumulator `r0`) exists — a higher index is a
+            // plan-gate-invariant miss (was an `assert_eq!`), now a typed decline.
+            &|s| {
+                if s != 0 {
+                    return Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Reduced(s),
+                        why: format!(
+                            "cuda backend: contraction epilogue reads Reduced(0) only; got \
+                             Reduced({s}) — plan-gate invariant, unpopped 0.5.0"
+                        ),
+                    }));
+                }
+                Ok(Spelling::Spelled("r0".to_string()))
+            },
             &|d| {
-                panic!(
-                    "cuda backend: Coord({d}) reached the contraction emitter — the \
-                     (m, n) epilogue space is not the elementwise coordinate space; \
-                     Coord is Elementwise-only"
-                )
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(d),
+                    why: format!(
+                        "cuda backend: Coord({d}) reached the contraction emitter — the \
+                         (m, n) epilogue space is not the elementwise coordinate space; \
+                         Coord is Elementwise-only — plan-gate invariant, unpopped 0.5.0"
+                    ),
+                }))
             },
             &|op, x| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
-                }
+                }))
             },
             &|op, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
-                }
+                }))
             },
             &|c, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
-                }
+                }))
             },
         ),
-    );
+    )?
+    .spelled()?;
     let stored = match plan.dtype {
         ElementKind::F16 => format!("__float2half({epi})"),
         ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
@@ -3475,7 +3644,7 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         "                out[{ob}mm * n + col] = {stored};\n"
     ));
     s.push_str("            }\n        }\n    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Split-K schedule **variant** for the contraction cell — the fix for the
@@ -3584,44 +3753,68 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     p.push_str("    }\n}\n");
 
     // ---- Kernel 2: fold the chunk partials; epilogue + store narrowing. ----
-    let red = |s: u8| {
-        assert_eq!(s, 0, "contraction epilogue reads Reduced(0) only");
-        "r0".to_string()
-    };
+    // A lowering decline/error ⇒ don't offer the variant (never-worse: the base
+    // contraction path still serves the cell).
     let epi = lower_expr(
         epilogue,
         &cuda_lowering(
-            &|i| unreachable!("contraction v1 epilogue has no Input leaf: in{i}"),
-            &red,
+            &|i| {
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Leaf(i),
+                    why: format!(
+                        "contraction v1 epilogue has no Input leaf: in{i} — plan-gate \
+                         invariant, unpopped 0.5.0"
+                    ),
+                }))
+            },
+            // Only Reduced(0) (the accumulator `r0`) exists — a higher index is a
+            // plan-gate-invariant miss (was an `assert_eq!`), now a typed decline.
+            &|s| {
+                if s != 0 {
+                    return Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Reduced(s),
+                        why: format!(
+                            "cuda backend: contraction epilogue reads Reduced(0) only; got \
+                             Reduced({s}) — plan-gate invariant, unpopped 0.5.0"
+                        ),
+                    }));
+                }
+                Ok(Spelling::Spelled("r0".to_string()))
+            },
             &|d| {
-                panic!(
-                    "cuda backend: Coord({d}) reached the split-K contraction variant — \
-                     Coord is Elementwise-only"
-                )
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(d),
+                    why: format!(
+                        "cuda backend: Coord({d}) reached the split-K contraction variant — \
+                         Coord is Elementwise-only — plan-gate invariant, unpopped 0.5.0"
+                    ),
+                }))
             },
             &|op, x| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
-                }
+                }))
             },
             &|op, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
-                }
+                }))
             },
             &|c, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
-                }
+                }))
             },
         ),
-    );
+    )
+    .ok()
+    .and_then(|sp| sp.spelled().ok())?;
     let stored = match plan.dtype {
         ElementKind::F16 => format!("__float2half({epi})"),
         ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
@@ -3694,7 +3887,7 @@ fn size_tag(s: unpopped_vocab::SizeClass) -> char {
 /// return, so a refactor to per-thread row mapping would deadlock. `__shfl_down_sync`
 /// uses the full `0xffffffff` mask; the launch contract caps `blockDim.x <= 1024`
 /// and (for warp uniformity) a multiple of 32.
-fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, LowerError> {
     emit_row_reduce_impl(plan, ctype, false, false)
 }
 
@@ -3739,7 +3932,8 @@ fn row_reduce_materialize_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let ctype = scalar_ctype(plan.dtype)?;
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let (acc, asz) = if dbl { ("double", 8) } else { ("float", 4) };
-    let k = emit_row_reduce_impl(plan, ctype, true, false);
+    // A lowering decline/error ⇒ don't offer the variant (never-worse).
+    let k = emit_row_reduce_impl(plan, ctype, true, false).ok()?;
     let kname = k.name.clone();
     Some(Variant::new(
         "smemrow",
@@ -3805,7 +3999,7 @@ fn emit_row_reduce_impl(
     ctype: &str,
     materialize: bool,
     precision: bool,
-) -> GeneratedKernel {
+) -> Result<GeneratedKernel, LowerError> {
     let Access::RowReduce { stages, epilogue } = plan.access else {
         unreachable!("emit_row_reduce requires Access::RowReduce");
     };
@@ -3932,42 +4126,48 @@ fn emit_row_reduce_impl(
             format!("r{s}")
         }
     };
-    let lower = |e: &ScalarExpr| {
-        lower_expr(
+    // `load`/`red` are String spellers, lifted into the seams here; a decline
+    // from lowering becomes this emitter's typed LowerError via `?.spelled()?`.
+    let lower = |e: &ScalarExpr| -> Result<String, LowerError> {
+        Ok(lower_expr(
             e,
             &cuda_lowering(
-                &load,
-                &red,
+                &|i| Ok(Spelling::Spelled(load(i))),
+                &|s| Ok(Spelling::Spelled(red(s))),
                 &|d| {
-                    panic!(
-                        "cuda backend: Coord({d}) reached the RowReduce emitter — the \
-                         (row, j) space is not the elementwise coordinate space; Coord \
-                         is Elementwise-only"
-                    )
+                    Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Coord(d),
+                        why: format!(
+                            "cuda backend: Coord({d}) reached the RowReduce emitter — the \
+                             (row, j) space is not the elementwise coordinate space; Coord \
+                             is Elementwise-only — plan-gate invariant, unpopped 0.5.0"
+                        ),
+                    }))
                 },
                 &|op, x| {
-                    if dbl {
+                    Ok(Spelling::Spelled(if dbl {
                         unary_f64(op, x)
                     } else {
                         unary_f32(op, x)
-                    }
+                    }))
                 },
                 &|op, a, b| {
-                    if dbl {
+                    Ok(Spelling::Spelled(if dbl {
                         binary_f64(op, a, b)
                     } else {
                         binary_f32(op, a, b)
-                    }
+                    }))
                 },
                 &|c, a, b| {
-                    if dbl {
+                    Ok(Spelling::Spelled(if dbl {
                         select_f64(c, a, b)
                     } else {
                         select_f32(c, a, b)
-                    }
+                    }))
                 },
             ),
-        )
+        )?
+        .spelled()?)
     };
 
     // Preamble: comment + dtype include + the block-reduce helpers (only the
@@ -4057,7 +4257,7 @@ fn emit_row_reduce_impl(
     for (i, st) in stages.iter().enumerate() {
         // The materialized variant caches the LAST stage's per-element values.
         let cache = materialize && i + 1 == stages.len();
-        let pre = lower(&st.pre);
+        let pre = lower(&st.pre)?;
         s.push_str(&format!("        // stage {i}: {:?}\n", st.op));
         match st.op {
             // Prod stages are rejected at the plan gate (`validate_row_reduce`);
@@ -4148,7 +4348,7 @@ fn emit_row_reduce_impl(
     } else {
         epilogue
     };
-    let epi = lower(epi_src);
+    let epi = lower(epi_src)?;
     let stored = match plan.dtype {
         ElementKind::F16 => format!("__float2half({epi})"),
         ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
@@ -4159,7 +4359,7 @@ fn emit_row_reduce_impl(
     s.push_str(&format!("            out[idx] = {stored};\n"));
     s.push_str("        }\n");
     s.push_str("    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Append the warp/block tree-reduce device helpers for the `ops` actually used,
@@ -4359,7 +4559,7 @@ fn type_extreme_lit(dt: ElementKind, most_negative: bool) -> String {
 }
 
 /// The serial-fold scan BASE (`block = false`) — [`unpopped::backend::VariantFidelity::BitIdentical`].
-fn emit_scan(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+fn emit_scan(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, LowerError> {
     emit_scan_impl(plan, ctype, false)
 }
 
@@ -4415,7 +4615,11 @@ fn emit_block_scanners(s: &mut String, acc: &str, sop: ReduceOp, stem: &str, is_
 /// scan + cross-warp exclusive-offset carry INLINE (headerless — `smem_scan` does
 /// not exist in this crate), chunking the row so a `k > blockDim` row threads its
 /// running carry across tiles; it is FP `Sum`/`Prod` only.
-fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedKernel {
+fn emit_scan_impl(
+    plan: &KernelPlan<'_>,
+    ctype: &str,
+    block: bool,
+) -> Result<GeneratedKernel, LowerError> {
     let (pre, post) = match plan.access {
         Access::Scan { pre, post, .. } => (pre, post),
         _ => unreachable!("emit_scan requires Access::Scan"),
@@ -4543,74 +4747,103 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     let pre_str = lower_expr(
         pre,
         &cuda_lowering(
-            &load,
+            &|i| Ok(Spelling::Spelled(load(i))),
             &|s| {
-                panic!(
-                    "cuda backend: Scan pre-map read Reduced({s}) — no running prefix in the pre-map"
-                )
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Reduced(s),
+                    why: format!(
+                        "cuda backend: Scan pre-map read Reduced({s}) — no running prefix in \
+                         the pre-map — plan-gate invariant, unpopped 0.5.0"
+                    ),
+                }))
             },
-            &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
+            &|d| {
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(d),
+                    why: format!(
+                        "cuda backend: Scan Coord({d}) is Elementwise-only — plan-gate \
+                         invariant, unpopped 0.5.0"
+                    ),
+                }))
+            },
             &|op, x| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
-                }
+                }))
             },
             &|op, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
-                }
+                }))
             },
             &|c, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
-                }
+                }))
             },
         ),
-    );
+    )?
+    .spelled()?;
     // `post` (the per-element epilogue) lowers over the running-prefix register,
     // bound to the `prefix` variable (Reduced(0)); the identity post yields
     // `"prefix"`, so the store is byte-simple.
     let post_str = lower_expr(
         post,
         &cuda_lowering(
-            &load,
+            &|i| Ok(Spelling::Spelled(load(i))),
             &|s| {
-                assert_eq!(
-                    s, 0,
-                    "Scan post references Reduced({s}); only 0 (the running prefix) exists"
-                );
-                "prefix".to_string()
+                // Only Reduced(0) (the running prefix) exists — a higher index is a
+                // plan-gate-invariant miss (was an `assert_eq!`), now a typed decline.
+                if s != 0 {
+                    return Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Reduced(s),
+                        why: format!(
+                            "cuda backend: Scan post references Reduced({s}); only 0 (the \
+                             running prefix) exists — plan-gate invariant, unpopped 0.5.0"
+                        ),
+                    }));
+                }
+                Ok(Spelling::Spelled("prefix".to_string()))
             },
-            &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
+            &|d| {
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(d),
+                    why: format!(
+                        "cuda backend: Scan Coord({d}) is Elementwise-only — plan-gate \
+                         invariant, unpopped 0.5.0"
+                    ),
+                }))
+            },
             &|op, x| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
-                }
+                }))
             },
             &|op, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
-                }
+                }))
             },
             &|c, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
-                }
+                }))
             },
         ),
-    );
+    )?
+    .spelled()?;
     let store = |v: &str| -> String {
         match plan.dtype {
             ElementKind::F16 => format!("__float2half({v})"),
@@ -4828,7 +5061,7 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     }
 
     s.push_str("    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 /// Block-scan schedule VARIANT for the scan cell — a Kogge-Stone warp scan +
@@ -4920,7 +5153,8 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         return None;
     }
     let ctype = scalar_ctype(plan.dtype)?;
-    let k = emit_scan_impl(plan, ctype, true);
+    // A lowering decline/error ⇒ don't offer the variant (never-worse).
+    let k = emit_scan_impl(plan, ctype, true).ok()?;
     // Only FP Sum/Prod reassociate (the warp tree rounds differently than the base's
     // sequential fold). FP Max/Min, integer Sum/Prod, integer Max/Min are all
     // BitIdentical to the base (max/min select the same element bit-for-bit; modular
@@ -4978,7 +5212,7 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
 /// runtime launch args — the `k_in → k_out` relationship is the caller's
 /// window-arithmetic precondition (the structure key carries no extents; see
 /// `plan::validate_window`).
-fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, LowerError> {
     let (pre, post) = match plan.access {
         Access::Window { pre, post, .. } => (pre, post),
         _ => unreachable!("emit_window requires Access::Window"),
@@ -5110,73 +5344,102 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let pre_str = lower_expr(
         pre,
         &cuda_lowering(
-            &load,
+            &|i| Ok(Spelling::Spelled(load(i))),
             &|s| {
-                panic!(
-                    "cuda backend: Window pre-map read Reduced({s}) — no window result in the pre-map"
-                )
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Reduced(s),
+                    why: format!(
+                        "cuda backend: Window pre-map read Reduced({s}) — no window result in \
+                         the pre-map — plan-gate invariant, unpopped 0.5.0"
+                    ),
+                }))
             },
-            &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
+            &|d| {
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(d),
+                    why: format!(
+                        "cuda backend: Window Coord({d}) is Elementwise-only — plan-gate \
+                         invariant, unpopped 0.5.0"
+                    ),
+                }))
+            },
             &|op, x| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
-                }
+                }))
             },
             &|op, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
-                }
+                }))
             },
             &|c, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
-                }
+                }))
             },
         ),
-    );
+    )?
+    .spelled()?;
     // `post` (per-output epilogue) lowers over the finalized window result, bound to
     // the `prefix` register (Reduced(0)); the identity post yields `"prefix"`.
     let post_str = lower_expr(
         post,
         &cuda_lowering(
-            &load,
+            &|i| Ok(Spelling::Spelled(load(i))),
             &|s| {
-                assert_eq!(
-                    s, 0,
-                    "Window post references Reduced({s}); only 0 (the window result) exists"
-                );
-                "prefix".to_string()
+                // Only Reduced(0) (the window result) exists — a higher index is a
+                // plan-gate-invariant miss (was an `assert_eq!`), now a typed decline.
+                if s != 0 {
+                    return Ok(Spelling::Declined(Decline::UnsupportedOp {
+                        op: DeclinedOp::Reduced(s),
+                        why: format!(
+                            "cuda backend: Window post references Reduced({s}); only 0 (the \
+                             window result) exists — plan-gate invariant, unpopped 0.5.0"
+                        ),
+                    }));
+                }
+                Ok(Spelling::Spelled("prefix".to_string()))
             },
-            &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
+            &|d| {
+                Ok(Spelling::Declined(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(d),
+                    why: format!(
+                        "cuda backend: Window Coord({d}) is Elementwise-only — plan-gate \
+                         invariant, unpopped 0.5.0"
+                    ),
+                }))
+            },
             &|op, x| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     unary_f64(op, x)
                 } else {
                     unary_f32(op, x)
-                }
+                }))
             },
             &|op, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     binary_f64(op, a, b)
                 } else {
                     binary_f32(op, a, b)
-                }
+                }))
             },
             &|c, a, b| {
-                if dbl {
+                Ok(Spelling::Spelled(if dbl {
                     select_f64(c, a, b)
                 } else {
                     select_f32(c, a, b)
-                }
+                }))
             },
         ),
-    );
+    )?
+    .spelled()?;
     let store = |v: &str| -> String {
         match plan.dtype {
             ElementKind::F16 => format!("__float2half({v})"),
@@ -5302,7 +5565,7 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     }
 
     s.push_str("    }\n}\n");
-    GeneratedKernel::new(name, s)
+    Ok(GeneratedKernel::new(name, s))
 }
 
 // ============================================================================
@@ -6756,8 +7019,8 @@ fn zero_store_literal(octype: &str) -> &'static str {
 /// float (convert → f32 math → convert) — correct for every op, and it avoids
 /// the incomplete `__half2` math-intrinsic set (no `h2tanh`/`h2erf`). Packed
 /// `__half2` SIMD is a perf follow-up. Integer dtypes have no unary math.
-fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
-    match dtype {
+fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> Result<Spelling, LowerError> {
+    Ok(Spelling::Spelled(match dtype {
         ElementKind::F32 | ElementKind::F32Strict => unary_f32(op, x),
         ElementKind::F64 => unary_f64(op, x),
         ElementKind::F16 => {
@@ -6772,8 +7035,17 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
                 unary_f32(op, format!("__bfloat162float({x})"))
             )
         }
-        other => panic!("cuda backend: no unary math for dtype {other:?}"),
-    }
+        // DTYPE decline (was a panic): this op has no lowering at this dtype. An
+        // honest capability statement — the JIT gates it, an AOT author declared
+        // it — never a fall-through to wrong math.
+        other => {
+            return Ok(Spelling::Declined(Decline::UnsupportedDtypeForOp {
+                op: DeclinedOp::Unary(op),
+                dtype: other,
+                why: format!("cuda backend: no unary math for dtype {other:?}"),
+            }));
+        }
+    }))
 }
 
 /// Lower a non-infix binary op for `dtype` (f32/f64 native; f16/bf16 compute in
@@ -6797,15 +7069,26 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
 /// the f32 value of the same class and order), so the f32 compare decides
 /// identically to a native half compare, and demoting the exact 1.0f/0.0f
 /// result is exact — no lattice is stepped, unlike Nextafter.
-fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
+fn cuda_binary(
+    op: BinaryOp,
+    a: String,
+    b: String,
+    dtype: ElementKind,
+) -> Result<Spelling, LowerError> {
     if matches!(dtype, ElementKind::F16 | ElementKind::Bf16) && matches!(op, BinaryOp::Nextafter) {
-        panic!(
-            "cuda backend: Nextafter has no half-precision lowering — the \
-             promote-to-f32 path would step the f32 lattice, not the {dtype:?} \
-             one (declare f32/f64 only, or miss honestly)"
-        );
+        // DTYPE decline (was a panic): Nextafter has no half lowering — miss
+        // honestly rather than step the wrong lattice.
+        return Ok(Spelling::Declined(Decline::UnsupportedDtypeForOp {
+            op: DeclinedOp::Binary(op),
+            dtype,
+            why: format!(
+                "cuda backend: Nextafter has no half-precision lowering — the \
+                 promote-to-f32 path would step the f32 lattice, not the {dtype:?} \
+                 one (declare f32/f64 only, or miss honestly)"
+            ),
+        }));
     }
-    match dtype {
+    Ok(Spelling::Spelled(match dtype {
         ElementKind::F32 | ElementKind::F32Strict => binary_f32(op, a, b),
         ElementKind::F64 => binary_f64(op, a, b),
         ElementKind::F16 => format!(
@@ -6831,8 +7114,15 @@ fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String
         ElementKind::I32 | ElementKind::I64 | ElementKind::I8 | ElementKind::U8 => {
             binary_int(op, a, b, dtype)
         }
-        other => panic!("cuda backend: no binary math for dtype {other:?}"),
-    }
+        // DTYPE decline (was a panic): honest capability statement.
+        other => {
+            return Ok(Spelling::Declined(Decline::UnsupportedDtypeForOp {
+                op: DeclinedOp::Binary(op),
+                dtype: other,
+                why: format!("cuda backend: no binary math for dtype {other:?}"),
+            }));
+        }
+    }))
 }
 
 /// Lower a ternary select for `dtype` — the DEDICATED speller, never routed
@@ -6858,8 +7148,13 @@ fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String
 /// - **int dtypes**: PANIC — the independent emitter backstop behind the plan
 ///   gate (`assert_int_op_admissibility`): v1 select is float-only (an int
 ///   select would raise the 0c U8/I8 cond-observer question).
-fn cuda_select(c: String, a: String, b: String, dtype: ElementKind) -> String {
-    match dtype {
+fn cuda_select(
+    c: String,
+    a: String,
+    b: String,
+    dtype: ElementKind,
+) -> Result<Spelling, LowerError> {
+    Ok(Spelling::Spelled(match dtype {
         ElementKind::F32 | ElementKind::F32Strict => select_f32(c, a, b),
         ElementKind::F64 => select_f64(c, a, b),
         ElementKind::F16 => {
@@ -6868,12 +7163,20 @@ fn cuda_select(c: String, a: String, b: String, dtype: ElementKind) -> String {
         ElementKind::Bf16 => {
             format!("(__bfloat162float({c}) != 0.0f ? (__nv_bfloat16)({a}) : (__nv_bfloat16)({b}))")
         }
-        other => panic!(
-            "cuda backend: Select has no {other:?} lowering — v1 select is float-only \
-             (f32/f32s/f64/f16/bf16); an integer select must miss honestly at the plan \
-             gate (the 0c cond-observer question is unresolved)"
-        ),
-    }
+        // DTYPE decline (was a panic): v1 select is float-only; an int select
+        // misses honestly at the plan gate.
+        other => {
+            return Ok(Spelling::Declined(Decline::UnsupportedDtypeForOp {
+                op: DeclinedOp::Select,
+                dtype: other,
+                why: format!(
+                    "cuda backend: Select has no {other:?} lowering — v1 select is float-only \
+                     (f32/f32s/f64/f16/bf16); an integer select must miss honestly at the plan \
+                     gate (the 0c cond-observer question is unresolved)"
+                ),
+            }));
+        }
+    }))
 }
 
 /// Emitter backstop for [`ScalarExpr::Coord`] (increment 0d): panic if the
@@ -6886,52 +7189,76 @@ fn cuda_select(c: String, a: String, b: String, dtype: ElementKind) -> String {
 /// body and every reduction-class stage/epilogue (the same coverage as
 /// [`assert_no_int_div_or_const`]); messages are cuda-prefixed, distinct from
 /// the plan gate's.
-fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) {
+fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) -> Result<(), LowerError> {
+    // The three former `assert!`s are now typed declines (KISS-EMIT §6.8-0004: no
+    // panic on any input, and the emitter cannot verify the "plan gate rejects
+    // this" claim across the crate boundary). Each names the inherited plan-gate
+    // invariant it enforces. A decline here is terminal for the whole lowering, so
+    // it is surfaced as this emitter's `LowerError` via `From<Decline>` at the `?`.
     match e {
         ScalarExpr::Input(_)
         | ScalarExpr::Const(_)
         | ScalarExpr::Param(_)
         | ScalarExpr::Reduced(_) => {}
         ScalarExpr::Coord(d) => {
-            assert!(
-                matches!(plan.access, Access::Elementwise),
-                "cuda backend: Coord({d}) under a non-Elementwise access — the \
-                 reduction-class emitters iterate fold/row/contraction coordinate \
-                 spaces, not the elementwise output space; the plan gate rejects this"
-            );
-            assert!(
-                matches!(
-                    plan.dtype,
-                    ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
-                ),
-                "cuda backend: Coord({d}) at non-float dtype {:?} — the coordinate is \
-                 spelled as a float/double cast, which rounds past 2048 at half \
-                 precision and injects float math into an integer kernel; the plan \
-                 gate rejects this",
-                plan.dtype
-            );
-            assert!(
-                *d < plan.key.rank,
-                "cuda backend: Coord({d}) axis out of range for rank {} — no c{d} \
-                 coordinate exists to read; the plan gate rejects this",
-                plan.key.rank
-            );
+            if !matches!(plan.access, Access::Elementwise) {
+                return Err(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(*d),
+                    why: format!(
+                        "cuda backend: Coord({d}) under a non-Elementwise access — the \
+                         reduction-class emitters iterate fold/row/contraction coordinate \
+                         spaces, not the elementwise output space; the plan gate rejects \
+                         this — plan-gate invariant, unpopped 0.5.0"
+                    ),
+                }
+                .into());
+            }
+            if !matches!(
+                plan.dtype,
+                ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
+            ) {
+                return Err(Decline::UnsupportedDtypeForOp {
+                    op: DeclinedOp::Coord(*d),
+                    dtype: plan.dtype,
+                    why: format!(
+                        "cuda backend: Coord({d}) at non-float dtype {:?} — the coordinate is \
+                         spelled as a float/double cast, which rounds past 2048 at half \
+                         precision and injects float math into an integer kernel; the plan \
+                         gate rejects this — plan-gate invariant, unpopped 0.5.0",
+                        plan.dtype
+                    ),
+                }
+                .into());
+            }
+            if *d >= plan.key.rank {
+                return Err(Decline::UnsupportedOp {
+                    op: DeclinedOp::Coord(*d),
+                    why: format!(
+                        "cuda backend: Coord({d}) axis out of range for rank {} — no c{d} \
+                         coordinate exists to read; the plan gate rejects this — plan-gate \
+                         invariant, unpopped 0.5.0",
+                        plan.key.rank
+                    ),
+                }
+                .into());
+            }
         }
-        ScalarExpr::Unary(_, x) => assert_coord_lowerable(x, plan),
+        ScalarExpr::Unary(_, x) => assert_coord_lowerable(x, plan)?,
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
         | ScalarExpr::Mul(a, b)
         | ScalarExpr::Div(a, b)
         | ScalarExpr::Binary(_, a, b) => {
-            assert_coord_lowerable(a, plan);
-            assert_coord_lowerable(b, plan);
+            assert_coord_lowerable(a, plan)?;
+            assert_coord_lowerable(b, plan)?;
         }
         ScalarExpr::Select(c, a, b) => {
-            assert_coord_lowerable(c, plan);
-            assert_coord_lowerable(a, plan);
-            assert_coord_lowerable(b, plan);
+            assert_coord_lowerable(c, plan)?;
+            assert_coord_lowerable(a, plan)?;
+            assert_coord_lowerable(b, plan)?;
         }
     }
+    Ok(())
 }
 
 /// Like [`param_args`], but over the UNION of params used across several
