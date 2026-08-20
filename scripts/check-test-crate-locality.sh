@@ -28,6 +28,16 @@ exempt=(
 is_exempt() { local f="$1" e; for e in "${exempt[@]}"; do [ "$f" = "$e" ] && return 0; done; return 1; }
 libname() { local c; c=$(basename "$(dirname "$(dirname "$1")")"); echo "${c//-/_}"; }
 
+# Strip `//` comments and report whether $2 (the lib name) survives. NOTE: this
+# MUST run sed to completion into a variable and feed grep a here-string — NOT
+# `sed … | grep -q …`. Under `set -o pipefail`, `grep -q` exits at the first
+# match and closes the pipe, `sed` gets SIGPIPE while still writing a large
+# file, and pipefail then promotes sed's 141 to the pipeline status — turning a
+# file that DOES name its crate into a false violation. Size-dependent, so it
+# passes on small files and on MSYS (which masks the SIGPIPE) and only fires on
+# a Linux runner against a big test file. Do not turn this back into a pipe.
+names_crate() { local stripped; stripped=$(sed 's|//.*||' "$1"); grep -q "$2" <<<"$stripped"; }
+
 scanned=0
 violations=()
 for d in crates/*/; do
@@ -35,7 +45,7 @@ for d in crates/*/; do
   for t in "$d"tests/*.rs; do
     [ -f "$t" ] || continue
     scanned=$((scanned + 1))
-    if ! sed 's|//.*||' "$t" | grep -q "$lib"; then
+    if ! names_crate "$t" "$lib"; then
       is_exempt "$t" && continue
       violations+=("$t")
     fi
@@ -54,7 +64,7 @@ for e in "${exempt[@]}"; do
     echo "GUARD STALE: exempt file '$e' no longer exists — remove it from the allowlist."
     exit 2
   fi
-  if sed 's|//.*||' "$e" | grep -q "$(libname "$e")"; then
+  if names_crate "$e" "$(libname "$e")"; then
     echo "GUARD STALE: exempt file '$e' now names its own crate — the exemption is unnecessary, remove it."
     exit 2
   fi
