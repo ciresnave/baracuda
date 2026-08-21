@@ -4,6 +4,16 @@ members = ["crates/*", "xtask", "examples"]
 
 [workspace.package]
 edition = "2024"
+# MSRV, DELIBERATELY SCOPED — inherited (`rust-version.workspace = true`) ONLY by
+# the driver-free crates a CI job actually builds under exactly this version:
+# baracuda-{cuda-emit, types, types-derive, build, core}. It is NOT inherited by
+# the CUDA `-sys`/driver/kernels crates: they cannot be built without the CUDA
+# toolkit and this repo has no CUDA CI runner, so their floor is untestable here
+# — and it is in fact higher than 1.85 (baracuda-cuda-sys hand-derives `Default`
+# on `*mut c_void` fields, and `impl Default for *mut T` landed after 1.85; exact
+# version not measured). An UNSTATED floor on those crates is honest; a false
+# 1.85 was not. DO NOT add `rust-version.workspace = true` to a crate unless a CI
+# job builds that crate under this version — an untested floor is a false promise.
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 authors = ["The baracuda contributors"]

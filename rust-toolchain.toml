@@ -1,3 +1,9 @@
 [toolchain]
-channel = "stable"
+# Literal version, not the "stable" alias: a moving alias resolves to a
+# different rustc on two machines (1.97.1 locally vs 1.98.0 in CI once), which
+# makes lint/warning reproducibility non-deterministic. Pin the exact version CI
+# resolved so `cargo clippy`/`fmt` see the same diagnostic set everywhere. The
+# `components` line is per-toolchain-name and must stay, or a bare pin reds
+# clippy/fmt. Bump this deliberately, in lockstep with the portfolio.
+channel = "1.98.0"
 components = ["rustfmt", "clippy"]
