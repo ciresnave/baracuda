@@ -8,7 +8,7 @@
 //!
 //! The **driver-free classifier vocabulary** — the dtype / layout / op-family
 //! tags, the [`Element`] trait hierarchy, [`StructureKey`] / [`OperandDesc`] +
-//! [`structure_key`], the dispatch-table types, and the plan descriptors — was
+//! [`structure_key`](mod@structure_key), the dispatch-table types, and the plan descriptors — was
 //! carved into the leaf crate [`unpopped_vocab`] so that neutral
 //! consumers (the kernel generator, kernel selectors, Fuel's seam) can depend on
 //! the vocabulary WITHOUT this crate's `baracuda-driver` → `baracuda-cuda-sys`

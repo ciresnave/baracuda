@@ -66,8 +66,24 @@ jobs:
         run: cargo clippy -p baracuda-cuda-emit --tests -- -D warnings
       - name: cargo test (driver-free surface, no GPU)
         run: cargo test -p baracuda-cuda-emit
-      - name: cargo doc (driver-free surface)
-        run: cargo doc -p baracuda-cuda-emit --no-deps
+      # `cargo doc` is also the ENFORCEMENT point for `[workspace.lints.rustdoc]`
+      # (broken_intra_doc_links + private_intra_doc_links = deny). A broken
+      # `[`Type`]` link is invisible to build/clippy/test — it renders as a live
+      # cross-reference and is dead on click — so without a doc build in CI a link
+      # that stopped resolving after a rename ships silently. Scoped to the
+      # driver-free crates that document without the CUDA toolkit; a pre-declared
+      # 8-of-8 born-red sweep confirmed the deny actually fires on each crate
+      # named here (a crate that failed to redden would be silently un-gated).
+      # CUDA-only crates' rustdoc is checked when documented on the on-device box.
+      - name: cargo doc (driver-free surface — enforces rustdoc deny)
+        run: >
+          cargo doc --no-deps
+          -p baracuda-cuda-emit
+          -p baracuda-types
+          -p baracuda-types-derive
+          -p baracuda-build
+          -p baracuda-core
+          -p baracuda-kernels-types
       # ---- feature-gated surfaces the default --workspace build never compiles.
       # These features are deliberately CI-safe: `cuvs` is a lazy dynamic loader
       # (no RAPIDS needed to build/test; GPU-touching tests are #[ignore]d),
@@ -89,6 +105,8 @@ jobs:
         run: cargo clippy -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs -- -D warnings
       - name: test cuvs surfaces (feature-gated)
         run: cargo test -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs
+      - name: cargo doc cuvs surfaces (feature-gated — enforces rustdoc deny)
+        run: cargo doc --no-deps -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs
       - name: clippy cuda-emit seam (feature-gated)
         run: cargo clippy -p baracuda-cuda-emit --features seam -- -D warnings
       - name: clippy cuda-emit seam (feature-gated, tests)

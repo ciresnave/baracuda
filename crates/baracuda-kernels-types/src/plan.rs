@@ -4,7 +4,7 @@
 //! are driver-free and live in [`unpopped_vocab::plan`]; they are
 //! re-exported here so the `baracuda_kernels_types::plan::{PlanPreference,
 //! PrecisionGuarantee}` paths are unchanged. Only [`Workspace`] — which borrows
-//! a device [`DeviceSliceMut`](baracuda_driver::DeviceSliceMut) — needs the
+//! a device [`DeviceSliceMut`] — needs the
 //! driver, so it stays in this crate.
 
 use baracuda_driver::DeviceSliceMut;

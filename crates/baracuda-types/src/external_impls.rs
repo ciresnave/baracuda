@@ -7,15 +7,15 @@
 //!
 //! # `half-crate`
 //!
-//! Implements [`ValidAsZeroBits`] for `half::f16` and `half::bf16` (their
-//! [`DeviceRepr`] impls live in `baracuda-kernel-vocab`, the trait's owner).
+//! Implements [`ValidAsZeroBits`](crate::ValidAsZeroBits) for `half::f16` and `half::bf16` (their
+//! [`DeviceRepr`](crate::DeviceRepr) impls live in `baracuda-kernel-vocab`, the trait's owner).
 //! Both types are `#[repr(transparent)] over u16` in the `half` crate, so
 //! zero bytes represent `0.0`.
 //!
 //! # `f8-crate`
 //!
-//! Implements [`ValidAsZeroBits`] for `float8::F8E4M3` and `float8::F8E5M2`
-//! (their [`DeviceRepr`] impls live in `baracuda-kernel-vocab`). The `float8`
+//! Implements [`ValidAsZeroBits`](crate::ValidAsZeroBits) for `float8::F8E4M3` and `float8::F8E5M2`
+//! (their [`DeviceRepr`](crate::DeviceRepr) impls live in `baracuda-kernel-vocab`). The `float8`
 //! crate currently ships these two
 //! variants only; Fuel's wider F4/F6/F8E8M0 coverage will require either
 //! a richer upstream crate or baracuda growing its own newtypes in
