@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn reexported_trait_covers_primitives_and_aggregates() {
-        // Confirms the re-export from baracuda-kernel-vocab resolves and that
+        // Confirms the re-export from unpopped-vocab resolves and that
         // its primitive / array / tuple impls are visible through this crate.
         assert_device_repr::<f32>();
         assert_device_repr::<[u8; 16]>();

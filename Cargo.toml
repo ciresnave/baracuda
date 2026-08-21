@@ -188,6 +188,19 @@ all = { level = "warn", priority = -1 }
 too_many_arguments = "allow"
 type_complexity = "allow"
 
+[workspace.lints.rustdoc]
+# A broken intra-doc link is a silent doc defect: `cargo build`/`clippy`/`test`
+# never look at it, so a `[`Type`]` that stopped resolving after a rename reads
+# as a live cross-reference in the rendered docs and is dead on click. Deny it,
+# like missing_docs above, so the docs cannot regress as symbols move. CI's
+# no-CUDA job runs `cargo doc` over the driver-free subset (the crates that build
+# without the CUDA toolkit) so this deny is actually EXERCISED there, not merely
+# declared; the CUDA-only crates are checked when documented on the on-device box.
+broken_intra_doc_links = "deny"
+# A public item whose docs link to a private one renders a dead link for every
+# external reader (the target isn't in the public docs). Deny it too.
+private_intra_doc_links = "deny"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

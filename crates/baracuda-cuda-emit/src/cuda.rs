@@ -6791,7 +6791,7 @@ fn emit_unravel_offset_fn(s: &mut String, n: usize, k: usize) {
 /// arithmetic is bit-identical to the hand-written helper (same row-major walk,
 /// same `s == 0` guard, same signed-stride and stride-0-broadcast behavior), so
 /// the two are drop-in-equivalent per rank. The decomposition is emitted by the
-/// shared [`emit_unravel_decomp`] — the same routine the inline strided kernels
+/// shared `emit_unravel_decomp` — the same routine the inline strided kernels
 /// use — which is the single-source-of-truth point that makes generator
 /// improvements propagate into the helper.
 ///

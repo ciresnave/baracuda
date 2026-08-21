@@ -122,7 +122,7 @@ mod ffi {
     pub struct cuvsError_t(pub c_int);
 
     impl cuvsError_t {
-        /// `CUVS_ERROR` — the call failed; see [`cuvsGetLastErrorText`].
+        /// `CUVS_ERROR` — the call failed; see `cuvsGetLastErrorText`.
         pub const ERROR: Self = Self(0);
         /// `CUVS_SUCCESS`.
         pub const SUCCESS: Self = Self(1);

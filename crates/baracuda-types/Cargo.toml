@@ -23,7 +23,7 @@ bytemuck = ["dep:bytemuck"]
 f8-crate = ["dep:float8"]
 
 [dependencies]
-# DeviceRepr is canonically owned by baracuda-kernel-vocab (the driver-free
+# DeviceRepr is canonically owned by unpopped-vocab (the driver-free
 # vocabulary crate). baracuda-types re-exports it and adds impls for its own
 # numeric wrapper types. Non-optional: the re-export is part of the public API.
 unpopped-vocab = { workspace = true }
