@@ -1,3 +1,10 @@
+# Enforce LF in the REPO for every text file, so line-ending consistency does
+# not depend on each contributor having core.autocrlf set. Git auto-detects binary
+# (NUL bytes) and leaves it alone; checkout still honours the platform (CRLF on
+# Windows working trees). The specific `eol=lf` rules below override this for the
+# few files that must be LF even in a Windows *working tree* (byte-compared / bash).
+* text=auto
+
 # Golden CUDA source is compared byte-for-byte against the emitter's LF output
 # (`include_str!` in the contraction byte-identity tests). The emitter always
 # writes '\n'; force these goldens to LF on checkout so byte-identity holds on
