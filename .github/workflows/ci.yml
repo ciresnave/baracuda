@@ -38,6 +38,14 @@ jobs:
         # NUL-delimited throughout (-z / -0) so paths with spaces or other
         # shell-special characters are handled robustly, never word-split.
         run: git ls-files -z -- '*.rs' | grep -zv '^tools/' | xargs -0 -n 40 rustfmt --check --edition 2024 --style-edition 2024
+      # Test-crate-locality guard: a test in crates/A/tests/ runs only under
+      # `cargo test -p A`, so a test that exercises crate B's behaviour from A's
+      # tests/ runs in a context whose property it does not guard, with its count
+      # right and its coverage misplaced. This is a structural check no cargo
+      # invocation makes; see docs/design/2026-08-20-ci-coverage-matrix.md §3.2.
+      - name: test-crate-locality guard
+        shell: bash
+        run: bash scripts/check-test-crate-locality.sh
       # ---- The workspace steps below are scoped to the DRIVER-FREE surface.
       # This is a CUDA library: its `-sys` kernel crates compile `.cu` via nvcc
       # in their build scripts, so a full `--workspace` build genuinely cannot

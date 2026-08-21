@@ -10,3 +10,8 @@ crates/baracuda-cuda-emit/src/goldens/*.cu text eol=lf
 # checkout — autocrlf would otherwise rewrite them to CRLF on Windows and break
 # the hash. Slash-less pattern → matches at root and in every crate dir.
 LICENSE-* text eol=lf
+
+# Shell scripts run under `shell: bash` in CI (Git Bash on windows-latest, which
+# defaults autocrlf=true). A `.sh` checked out with CRLF makes bash choke on the
+# `\r`. Pin them to LF so `bash scripts/*.sh` runs identically on every runner.
+*.sh text eol=lf
