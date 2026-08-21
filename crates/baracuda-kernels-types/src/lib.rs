@@ -33,7 +33,7 @@ pub mod operand_desc_ext;
 pub mod plan;
 pub mod tensor;
 
-// The classifier vocabulary now lives in `baracuda-kernel-vocab`. Re-export it
+// The classifier vocabulary now lives in `unpopped-vocab`. Re-export it
 // wholesale — flat items and module paths both — so this crate's public surface
 // is unchanged. The local `plan` module (device-coupled `Workspace`) shadows the
 // glob-imported vocabulary `plan` module and re-exports its descriptors.

@@ -1,7 +1,7 @@
 //! The device-view adapter: build a driver-free [`OperandDesc`] from a borrowed
 //! device [`TensorRef`].
 //!
-//! [`OperandDesc`] is defined in the driver-free `baracuda-kernel-vocab` crate,
+//! [`OperandDesc`] is defined in the driver-free `unpopped-vocab` crate,
 //! so its `from_tensor_ref` constructor — which needs the device-coupled
 //! [`TensorRef`] — cannot be an inherent method there (orphan rule + the driver
 //! dependency). It lives here as the [`OperandDescExt`] extension trait instead;
