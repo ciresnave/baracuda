@@ -265,10 +265,10 @@ impl Drop for Array3DInner {
         if !self.owned || self.handle.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_array_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_array_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -407,10 +407,10 @@ impl Drop for MipmappedArray {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mipmapped_array_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mipmapped_array_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

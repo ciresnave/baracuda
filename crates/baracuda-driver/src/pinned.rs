@@ -179,10 +179,10 @@ impl<T: DeviceRepr> Drop for PinnedBuffer<T> {
         if self.len == 0 || self.ptr.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mem_free_host() {
-                let _ = unsafe { cu(self.ptr as *mut c_void) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mem_free_host()
+        {
+            let _ = unsafe { cu(self.ptr as *mut c_void) };
         }
     }
 }
@@ -256,10 +256,10 @@ impl<T: DeviceRepr> Drop for PinnedRegistration<'_, T> {
         if self.ptr.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mem_host_unregister() {
-                let _ = unsafe { cu(self.ptr as *mut c_void) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mem_host_unregister()
+        {
+            let _ = unsafe { cu(self.ptr as *mut c_void) };
         }
     }
 }

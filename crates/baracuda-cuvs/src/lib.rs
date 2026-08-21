@@ -290,10 +290,10 @@ mod imp {
 
     impl Drop for Resources {
         fn drop(&mut self) {
-            if let Ok(c) = cuvs() {
-                if let Ok(f) = c.cuvs_resources_destroy() {
-                    let _ = unsafe { f(self.raw) };
-                }
+            if let Ok(c) = cuvs()
+                && let Ok(f) = c.cuvs_resources_destroy()
+            {
+                let _ = unsafe { f(self.raw) };
             }
         }
     }
@@ -481,10 +481,10 @@ mod imp {
                     _marker: PhantomData,
                 }),
                 Err(e) => {
-                    if !index.is_null() {
-                        if let Ok(f) = c.cuvs_ivf_flat_index_destroy() {
-                            let _ = unsafe { f(index) };
-                        }
+                    if !index.is_null()
+                        && let Ok(f) = c.cuvs_ivf_flat_index_destroy()
+                    {
+                        let _ = unsafe { f(index) };
                     }
                     Err(e)
                 }
@@ -579,10 +579,10 @@ mod imp {
             if self.raw.is_null() {
                 return;
             }
-            if let Ok(c) = cuvs() {
-                if let Ok(f) = c.cuvs_ivf_flat_index_destroy() {
-                    let _ = unsafe { f(self.raw) };
-                }
+            if let Ok(c) = cuvs()
+                && let Ok(f) = c.cuvs_ivf_flat_index_destroy()
+            {
+                let _ = unsafe { f(self.raw) };
             }
         }
     }
@@ -657,10 +657,10 @@ mod imp {
                     _marker: PhantomData,
                 }),
                 Err(e) => {
-                    if !index.is_null() {
-                        if let Ok(f) = c.cuvs_brute_force_index_destroy() {
-                            let _ = unsafe { f(index) };
-                        }
+                    if !index.is_null()
+                        && let Ok(f) = c.cuvs_brute_force_index_destroy()
+                    {
+                        let _ = unsafe { f(index) };
                     }
                     Err(e)
                 }
@@ -735,10 +735,10 @@ mod imp {
             if self.raw.is_null() {
                 return;
             }
-            if let Ok(c) = cuvs() {
-                if let Ok(f) = c.cuvs_brute_force_index_destroy() {
-                    let _ = unsafe { f(self.raw) };
-                }
+            if let Ok(c) = cuvs()
+                && let Ok(f) = c.cuvs_brute_force_index_destroy()
+            {
+                let _ = unsafe { f(self.raw) };
             }
         }
     }

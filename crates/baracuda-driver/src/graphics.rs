@@ -187,10 +187,10 @@ impl Drop for GraphicsResourceInner {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_graphics_unregister_resource() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_graphics_unregister_resource()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

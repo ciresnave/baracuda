@@ -460,7 +460,7 @@ impl DeviceBuffer<u8> {
             };
         }
         assert!(
-            self.len % elem == 0,
+            self.len.is_multiple_of(elem),
             "DeviceBuffer<u8>::view_as: byte length {} not divisible by size_of::<{}>() = {}",
             self.len,
             core::any::type_name::<U>(),
@@ -485,7 +485,7 @@ impl DeviceBuffer<u8> {
             };
         }
         assert!(
-            self.len % elem == 0,
+            self.len.is_multiple_of(elem),
             "DeviceBuffer<u8>::view_as_mut: byte length {} not divisible by size_of::<{}>() = {}",
             self.len,
             core::any::type_name::<U>(),
@@ -687,10 +687,10 @@ impl<T: DeviceRepr> Drop for ManagedBuffer<T> {
         if self.ptr.0 == 0 {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mem_free() {
-                let _ = unsafe { cu(self.ptr) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mem_free()
+        {
+            let _ = unsafe { cu(self.ptr) };
         }
     }
 }
@@ -983,14 +983,14 @@ impl<T: DeviceRepr> Drop for DeviceBuffer<T> {
         // use-after-free this path exists to prevent. Leak instead (the owning
         // context, still held in `self.context`/the stream, reclaims it at
         // teardown). The error path is unreachable on a healthy stream.
-        if let Some(stream) = &self.stream {
-            if let Ok(cu) = d.cu_mem_free_async() {
-                let _ = check(unsafe { cu(self.ptr, stream.as_raw()) });
-                return;
-            }
-            // `cuMemFreeAsync` unavailable (pre-CUDA-11.2): no async buffer
-            // should exist on such a driver, but fall through defensively.
+        if let Some(stream) = &self.stream
+            && let Ok(cu) = d.cu_mem_free_async()
+        {
+            let _ = check(unsafe { cu(self.ptr, stream.as_raw()) });
+            return;
         }
+        // `cuMemFreeAsync` unavailable (pre-CUDA-11.2): no async buffer
+        // should exist on such a driver, but fall through defensively.
         // Synchronous free: the path for sync-allocated buffers (`stream` ==
         // None), plus the pre-11.2 defensive fallback above.
         if let Ok(cu) = d.cu_mem_free() {

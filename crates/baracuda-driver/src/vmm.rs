@@ -134,10 +134,10 @@ impl Drop for AddressRangeInner {
         if self.ptr.0 == 0 {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mem_address_free() {
-                let _ = unsafe { cu(self.ptr, self.size) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mem_address_free()
+        {
+            let _ = unsafe { cu(self.ptr, self.size) };
         }
     }
 }
@@ -221,10 +221,10 @@ impl Drop for PhysicalMemoryInner {
         if self.handle == 0 {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mem_release() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mem_release()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -330,10 +330,10 @@ impl Drop for MappedRange {
         if self.range.as_raw().0 == 0 {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mem_unmap() {
-                let _ = unsafe { cu(self.as_raw(), self.size) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mem_unmap()
+        {
+            let _ = unsafe { cu(self.as_raw(), self.size) };
         }
         // keep `physical` alive here so the above unmap precedes release
         let _ = &self.physical;

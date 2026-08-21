@@ -223,10 +223,10 @@ impl Library {
 
 impl Drop for LibraryInner {
     fn drop(&mut self) {
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_library_unload() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_library_unload()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
