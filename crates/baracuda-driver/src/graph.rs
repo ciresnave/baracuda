@@ -877,10 +877,10 @@ impl Drop for GraphInner {
         if !self.owned || self.handle.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_graph_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_graph_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -1048,10 +1048,10 @@ impl GraphExec {
 
 impl Drop for GraphExecInner {
     fn drop(&mut self) {
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_graph_exec_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_graph_exec_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

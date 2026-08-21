@@ -176,10 +176,10 @@ impl Drop for GreenContextInner {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_green_ctx_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_green_ctx_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

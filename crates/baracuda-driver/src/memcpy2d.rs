@@ -107,10 +107,10 @@ impl<T: DeviceRepr> Drop for PitchedBuffer<T> {
         if self.ptr.0 == 0 {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mem_free() {
-                let _ = unsafe { cu(self.ptr) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mem_free()
+        {
+            let _ = unsafe { cu(self.ptr) };
         }
     }
 }

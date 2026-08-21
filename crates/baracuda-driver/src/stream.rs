@@ -462,12 +462,12 @@ impl Drop for StreamInner {
         if !self.owned {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_stream_destroy() {
-                // SAFETY: owned handle (cuStreamCreate or transferred via
-                // from_raw); last Arc drop, so the handle is unique.
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_stream_destroy()
+        {
+            // SAFETY: owned handle (cuStreamCreate or transferred via
+            // from_raw); last Arc drop, so the handle is unique.
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

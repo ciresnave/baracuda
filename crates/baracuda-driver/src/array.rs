@@ -303,10 +303,10 @@ impl Drop for ArrayInner {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_array_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_array_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -454,10 +454,10 @@ impl Drop for TextureObject {
         if self.handle == 0 {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_tex_object_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_tex_object_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -507,10 +507,10 @@ impl Drop for SurfaceObject {
         if self.handle == 0 {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_surf_object_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_surf_object_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

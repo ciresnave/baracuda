@@ -157,10 +157,10 @@ impl Drop for MulticastObjectInner {
         if self.handle == 0 {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mem_release() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mem_release()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

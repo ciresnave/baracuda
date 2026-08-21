@@ -254,10 +254,10 @@ impl Drop for MemoryPoolInner {
         if !self.owned || self.handle.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_mem_pool_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_mem_pool_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

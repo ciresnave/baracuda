@@ -187,11 +187,11 @@ impl Drop for EventInner {
         if !self.owned {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_event_destroy() {
-                // SAFETY: owned handle (cuEventCreate or transferred via from_raw).
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_event_destroy()
+        {
+            // SAFETY: owned handle (cuEventCreate or transferred via from_raw).
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

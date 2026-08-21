@@ -99,10 +99,10 @@ impl Drop for UserObject {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_user_object_release() {
-                let _ = unsafe { cu(self.handle, 1) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_user_object_release()
+        {
+            let _ = unsafe { cu(self.handle, 1) };
         }
     }
 }

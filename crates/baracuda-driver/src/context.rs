@@ -335,12 +335,12 @@ impl Drop for ContextInner {
         if !self.owned {
             return;
         }
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_ctx_destroy() {
-                // SAFETY: an owned handle (cuCtxCreate or transferred via
-                // from_raw), not destroyed elsewhere (we're dropping the last Arc).
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_ctx_destroy()
+        {
+            // SAFETY: an owned handle (cuCtxCreate or transferred via
+            // from_raw), not destroyed elsewhere (we're dropping the last Arc).
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -405,10 +405,10 @@ impl PrimaryContext {
 
 impl Drop for PrimaryContext {
     fn drop(&mut self) {
-        if let Ok(d) = driver() {
-            if let Ok(cu) = d.cu_device_primary_ctx_release() {
-                let _ = unsafe { cu(self.device.0) };
-            }
+        if let Ok(d) = driver()
+            && let Ok(cu) = d.cu_device_primary_ctx_release()
+        {
+            let _ = unsafe { cu(self.device.0) };
         }
     }
 }
