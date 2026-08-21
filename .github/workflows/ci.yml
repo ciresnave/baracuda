@@ -117,11 +117,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85.0
       - uses: Swatinem/rust-cache@v2
-      - name: build the crates that declare rust-version=1.85, under 1.85.0
-        run: >
-          cargo +1.85.0 build
-          -p baracuda-cuda-emit
-          -p baracuda-types
-          -p baracuda-types-derive
-          -p baracuda-build
-          -p baracuda-core
+      - name: MSRV — build exactly the crates that declare rust-version=1.85, under 1.85.0
+        shell: bash
+        # Derive the set to build from `cargo metadata` (the per-crate Cargo.toml
+        # declarations are the source of truth), assert it is non-empty AND equals
+        # the expected enumeration, then build that derived set. A HARDCODED -p list
+        # drifts silently from the declarations: delete a crate's `rust-version` and
+        # its floor stops being tested while this job still passes green. Here a
+        # deletion from EITHER side reds — the gate discriminates on its own
+        # configuration, not only on code. (metadata, not a glob, is what caught
+        # xtask slipping into the 1.85 set in the first place.)
+        run: |
+          expected="baracuda-build baracuda-core baracuda-cuda-emit baracuda-types baracuda-types-derive"
+          exp=$(printf '%s\n' $expected | sort | tr '\n' ' '); exp="${exp% }"
+          names=$(cargo +1.85.0 metadata --no-deps --format-version 1 \
+            | python3 -c "import json,sys; print(' '.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('rust_version')=='1.85')))")
+          echo "crates declaring rust-version=1.85: [$names]"
+          [ -n "$names" ] || { echo "GUARD BROKEN: no crate declares rust-version=1.85 — this job would build nothing."; exit 2; }
+          [ "$names" = "$exp" ] || { echo "MSRV DRIFT: {declares 1.85}=[$names] != {expected}=[$exp]. A crate gained or lost its 1.85 floor, or the 'expected' list was edited — reconcile the Cargo.toml declarations with the list in this step."; exit 1; }
+          args=(); for n in $names; do args+=(-p "$n"); done
+          cargo +1.85.0 build "${args[@]}"
