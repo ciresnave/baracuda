@@ -48,7 +48,10 @@ jobs:
       # neutral generator + classifier vocab it consumes are now the external
       # `unpopped` / `unpopped-vocab`, guarded in their own repo) — for
       # missing_docs, clippy, and tests. The CUDA-dependent crates (and
-      # cuda-emit's real `nvrtc` feature) are validated on the CUDA runner.
+      # cuda-emit's real `nvrtc` feature) are validated LOCALLY on the maintainer's
+      # RTX 4070 box — there is NO CI CUDA runner (this workflow is one no-CUDA job
+      # on ubuntu+windows). A prose claim of a runner that does not exist reads to a
+      # careful reviewer as coverage that isn't there; see docs/design/2026-08-20-ci-coverage-matrix.md.
       # (build.rs of baracuda-cutlass-kernels-sys now degrades gracefully when
       # nvcc is absent, so an accidental CUDA-crate build here warns instead of
       # panicking — but it is still not built by this job.)
@@ -83,7 +86,8 @@ jobs:
       # COVERED by these no-CUDA runners: default, `seam`, `convert`, and `cuvs`
       # (on the cuvs crates). NOT COVERED here: `nvrtc` — and therefore
       # `--all-features`, which enables it — because nvrtc needs the CUDA toolkit;
-      # those are validated on the CUDA runner / on-device box, not on this job.
+      # those are validated LOCALLY on the 4070 box — there is no CI CUDA runner —
+      # not on this job.
       # If you add a feature, add its build here or it joins the uncovered set.
       - name: clippy cuvs surfaces (feature-gated)
         run: cargo clippy -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs -- -D warnings
