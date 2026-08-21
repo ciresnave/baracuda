@@ -28,14 +28,22 @@ exempt=(
 is_exempt() { local f="$1" e; for e in "${exempt[@]}"; do [ "$f" = "$e" ] && return 0; done; return 1; }
 libname() { local c; c=$(basename "$(dirname "$(dirname "$1")")"); echo "${c//-/_}"; }
 
-# Strip `//` comments and report whether $2 (the lib name) survives. NOTE: this
-# MUST run sed to completion into a variable and feed grep a here-string — NOT
-# `sed … | grep -q …`. Under `set -o pipefail`, `grep -q` exits at the first
-# match and closes the pipe, `sed` gets SIGPIPE while still writing a large
-# file, and pipefail then promotes sed's 141 to the pipeline status — turning a
-# file that DOES name its crate into a false violation. Size-dependent, so it
-# passes on small files and on MSYS (which masks the SIGPIPE) and only fires on
-# a Linux runner against a big test file. Do not turn this back into a pipe.
+# Strip `//` comments and report whether $2 (the lib name) survives. This runs
+# sed to completion into a variable and greps a here-string; it is NOT `sed … |
+# grep -q …`, and re-piping it is a measured regression, not a stylistic one:
+#
+#   MEASURED (this guard's first live CI run, PR #27): the pipe form false-flagged
+#   8 tests on ubuntu-latest that DO name their crate, while passing on
+#   windows-latest and the local Git-Bash box — an 8/0/0 split by platform.
+#
+# Mechanism: under `set -o pipefail`, `grep -q` exits at the first match and
+# closes the pipe; sed, still writing a file larger than the pipe buffer, takes
+# SIGPIPE (exit 141); pipefail promotes 141 to the pipeline status even though
+# grep SUCCEEDED, and `if !` inverts it into a violation. It fires only where the
+# OS delivers SIGPIPE to a producer still writing after the reader closes — Linux
+# does, MSYS/Git-Bash masks it — so it is invisible on every Windows box and reds
+# only a Linux runner. The here-string has no sed→grep pipe, so nothing can
+# SIGPIPE and pipefail has nothing to promote. Re-piping reintroduces the split.
 names_crate() { local stripped; stripped=$(sed 's|//.*||' "$1"); grep -q "$2" <<<"$stripped"; }
 
 scanned=0
