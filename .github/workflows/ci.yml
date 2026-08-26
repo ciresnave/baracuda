@@ -3,8 +3,23 @@ name: CI
 on:
   push:
     branches: [main]
+
+  # NO `branches:` filter on pull_request, deliberately. With `branches: [main]`
+  # a PR based on any other branch got NO CI AT ALL — not red, not pending,
+  # ABSENT — so a stacked PR was indistinguishable from a PR with nothing wrong,
+  # the one failure shape that leaves no artefact to misread. Hit stacking #34 on
+  # #33: it carried only third-party checks until a close/reopen forced a run.
+  #
+  # Retargeting a PR's base fires `edited`, which is NOT in the default
+  # opened/synchronize/reopened set, so a retarget alone still starts no run —
+  # push to the PR, or close and reopen it. Opting `edited` in would fix the
+  # retarget case but also fire on every title/body edit, trading a frequent
+  # waste for a rare inconvenience, so we don't.
+  #
+  # `push` stays scoped to main on purpose: an open PR already gets a run on
+  # every push via `synchronize`, so widening this would double every run rather
+  # than close a gap. Shape adopted from vulkane#31 — same blind spot, same fix.
   pull_request:
-    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
