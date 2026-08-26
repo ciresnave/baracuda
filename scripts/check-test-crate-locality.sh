@@ -21,7 +21,11 @@ set -euo pipefail
 # Consumer-side / convention exemptions — files that legitimately do not name
 # their host crate. Each MUST stay a would-be violation (honesty check 2).
 exempt=(
-  "crates/baracuda-cuda-emit/tests/backend_declines.rs"       # CpuC/Slang decline contracts (consumer-side)
+  # backend_declines.rs WAS here (CpuC/Slang decline contracts, consumer-side) —
+  # removed 2026-08-26: it now also carries the Nextafter@f16 CUDA wiring test,
+  # which uses baracuda_cuda_emit::Cuda, so it legitimately names its own crate and
+  # is no longer a would-be violation. The guard's honesty-check-2 caught the stale
+  # exemption the moment the file stopped qualifying for it — as designed.
   "crates/baracuda-types-derive/tests/derive_device_repr.rs" # proc-macro test drives the consumer crate
   "crates/baracuda-runtime/tests/external_smoke.rs"          # external-binding smoke
 )
