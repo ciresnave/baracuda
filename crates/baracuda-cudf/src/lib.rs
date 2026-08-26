@@ -125,11 +125,11 @@ impl Drop for Column {
         if !self.owned {
             return;
         }
-        if let Ok(c) = sys::cudf() {
-            if let Ok(f) = c.cudf_column_destroy() {
-                unsafe {
-                    let _ = f(self.raw);
-                }
+        if let Ok(c) = sys::cudf()
+            && let Ok(f) = c.cudf_column_destroy()
+        {
+            unsafe {
+                let _ = f(self.raw);
             }
         }
     }
@@ -227,11 +227,11 @@ impl Table {
 
 impl Drop for Table {
     fn drop(&mut self) {
-        if let Ok(c) = sys::cudf() {
-            if let Ok(f) = c.cudf_table_destroy() {
-                unsafe {
-                    let _ = f(self.raw);
-                }
+        if let Ok(c) = sys::cudf()
+            && let Ok(f) = c.cudf_table_destroy()
+        {
+            unsafe {
+                let _ = f(self.raw);
             }
         }
     }

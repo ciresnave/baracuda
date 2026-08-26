@@ -339,10 +339,10 @@ impl Communicator {
 
 impl Drop for Communicator {
     fn drop(&mut self) {
-        if let Ok(n) = nccl() {
-            if let Ok(cu) = n.nccl_comm_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(n) = nccl()
+            && let Ok(cu) = n.nccl_comm_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -721,10 +721,10 @@ impl NcclMem {
 
 impl Drop for NcclMem {
     fn drop(&mut self) {
-        if let Ok(n) = nccl() {
-            if let Ok(cu) = n.nccl_mem_free() {
-                let _ = unsafe { cu(self.ptr) };
-            }
+        if let Ok(n) = nccl()
+            && let Ok(cu) = n.nccl_mem_free()
+        {
+            let _ = unsafe { cu(self.ptr) };
         }
     }
 }

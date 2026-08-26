@@ -103,10 +103,10 @@ impl GreenContext {
 
 impl Drop for GreenContext {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_green_ctx_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_green_ctx_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

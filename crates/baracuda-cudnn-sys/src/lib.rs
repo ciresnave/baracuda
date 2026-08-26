@@ -2362,20 +2362,20 @@ fn cudnn_candidates() -> Vec<String> {
 ///   2. Fall back to scanning `CUDA_PATH_V<NN>_<M>` env vars and
 ///      picking the highest `<NN>` present.
 fn detect_cuda_major() -> Option<u32> {
-    if let Ok(p) = std::env::var("CUDA_PATH") {
-        if let Some(n) = parse_cuda_major_from_path(&p) {
-            return Some(n);
-        }
+    if let Ok(p) = std::env::var("CUDA_PATH")
+        && let Some(n) = parse_cuda_major_from_path(&p)
+    {
+        return Some(n);
     }
     // CUDA_PATH_V12_6=... CUDA_PATH_V11_8=... — pick the highest.
     let mut best: Option<u32> = None;
     for (k, _) in std::env::vars() {
         if let Some(rest) = k.strip_prefix("CUDA_PATH_V") {
             // rest looks like "12_6"
-            if let Some((maj, _)) = rest.split_once('_') {
-                if let Ok(n) = maj.parse::<u32>() {
-                    best = Some(best.map_or(n, |b| b.max(n)));
-                }
+            if let Some((maj, _)) = rest.split_once('_')
+                && let Ok(n) = maj.parse::<u32>()
+            {
+                best = Some(best.map_or(n, |b| b.max(n)));
             }
         }
     }
@@ -2497,13 +2497,13 @@ fn ensure_cudnn_on_path(extra_dirs: &[PathBuf]) {
         let existing = std::env::var("PATH").unwrap_or_default();
         let mut prefix = String::new();
         for dir in extra_dirs {
-            if let Some(s) = dir.to_str() {
-                if !existing.split(';').any(|p| p == s) {
-                    if !prefix.is_empty() {
-                        prefix.push(';');
-                    }
-                    prefix.push_str(s);
+            if let Some(s) = dir.to_str()
+                && !existing.split(';').any(|p| p == s)
+            {
+                if !prefix.is_empty() {
+                    prefix.push(';');
                 }
+                prefix.push_str(s);
             }
         }
         if !prefix.is_empty() {

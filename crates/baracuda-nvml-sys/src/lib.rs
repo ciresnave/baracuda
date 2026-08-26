@@ -616,11 +616,11 @@ fn nvml_candidates() -> &'static [&'static str] {
 
 fn nvml_extra_search_dirs() -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if cfg!(target_os = "windows") {
-        if let Ok(pf) = std::env::var("ProgramFiles") {
-            // NVSMI is where older drivers kept nvml.dll.
-            out.push(PathBuf::from(pf).join("NVIDIA Corporation").join("NVSMI"));
-        }
+    if cfg!(target_os = "windows")
+        && let Ok(pf) = std::env::var("ProgramFiles")
+    {
+        // NVSMI is where older drivers kept nvml.dll.
+        out.push(PathBuf::from(pf).join("NVIDIA Corporation").join("NVSMI"));
     }
     out
 }

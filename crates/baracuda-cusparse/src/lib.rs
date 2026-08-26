@@ -296,10 +296,10 @@ impl Handle {
 
 impl Drop for Handle {
     fn drop(&mut self) {
-        if let Ok(c) = cusparse() {
-            if let Ok(cu) = c.cusparse_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cusparse()
+            && let Ok(cu) = c.cusparse_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -575,10 +575,10 @@ impl<T> SpMat<'_, T> {
 
 impl<T> Drop for SpMat<'_, T> {
     fn drop(&mut self) {
-        if let Ok(c) = cusparse() {
-            if let Ok(cu) = c.cusparse_destroy_sp_mat() {
-                let _ = unsafe { cu(self.descr) };
-            }
+        if let Ok(c) = cusparse()
+            && let Ok(cu) = c.cusparse_destroy_sp_mat()
+        {
+            let _ = unsafe { cu(self.descr) };
         }
     }
 }
@@ -636,10 +636,10 @@ impl<T> DnVec<'_, T> {
 
 impl<T> Drop for DnVec<'_, T> {
     fn drop(&mut self) {
-        if let Ok(c) = cusparse() {
-            if let Ok(cu) = c.cusparse_destroy_dn_vec() {
-                let _ = unsafe { cu(self.descr) };
-            }
+        if let Ok(c) = cusparse()
+            && let Ok(cu) = c.cusparse_destroy_dn_vec()
+        {
+            let _ = unsafe { cu(self.descr) };
         }
     }
 }
@@ -704,10 +704,10 @@ impl<T> DnMat<'_, T> {
 
 impl<T> Drop for DnMat<'_, T> {
     fn drop(&mut self) {
-        if let Ok(c) = cusparse() {
-            if let Ok(cu) = c.cusparse_destroy_dn_mat() {
-                let _ = unsafe { cu(self.descr) };
-            }
+        if let Ok(c) = cusparse()
+            && let Ok(cu) = c.cusparse_destroy_dn_mat()
+        {
+            let _ = unsafe { cu(self.descr) };
         }
     }
 }
@@ -905,10 +905,10 @@ impl SpGEMMPlan {
 
 impl Drop for SpGEMMPlan {
     fn drop(&mut self) {
-        if let Ok(c) = cusparse() {
-            if let Ok(cu) = c.cusparse_spgemm_destroy_descr() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(c) = cusparse()
+            && let Ok(cu) = c.cusparse_spgemm_destroy_descr()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -1055,10 +1055,10 @@ impl SpSVPlan {
 
 impl Drop for SpSVPlan {
     fn drop(&mut self) {
-        if let Ok(c) = cusparse() {
-            if let Ok(cu) = c.cusparse_spsv_destroy_descr() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(c) = cusparse()
+            && let Ok(cu) = c.cusparse_spsv_destroy_descr()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -1178,10 +1178,10 @@ impl SpSMPlan {
 
 impl Drop for SpSMPlan {
     fn drop(&mut self) {
-        if let Ok(c) = cusparse() {
-            if let Ok(cu) = c.cusparse_spsm_destroy_descr() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(c) = cusparse()
+            && let Ok(cu) = c.cusparse_spsm_destroy_descr()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }

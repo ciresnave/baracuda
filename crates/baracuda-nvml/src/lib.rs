@@ -586,10 +586,10 @@ impl EventSet {
 
 impl Drop for EventSet {
     fn drop(&mut self) {
-        if let Ok(n) = nvml() {
-            if let Ok(cu) = n.nvml_event_set_free() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(n) = nvml()
+            && let Ok(cu) = n.nvml_event_set_free()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }

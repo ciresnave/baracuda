@@ -174,12 +174,12 @@ impl Drop for Linker {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(n) = nvjitlink() {
-            if let Ok(cu) = n.nv_jit_link_destroy() {
-                // nvJitLinkDestroy takes `nvJitLinkHandle*` — pass the
-                // address of our handle slot; the driver zeroes it.
-                let _ = unsafe { cu(&mut self.handle) };
-            }
+        if let Ok(n) = nvjitlink()
+            && let Ok(cu) = n.nv_jit_link_destroy()
+        {
+            // nvJitLinkDestroy takes `nvJitLinkHandle*` — pass the
+            // address of our handle slot; the driver zeroes it.
+            let _ = unsafe { cu(&mut self.handle) };
         }
     }
 }

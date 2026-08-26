@@ -397,10 +397,10 @@ pub fn version() -> Result<i32> {
 
 impl Drop for GeneratorInner {
     fn drop(&mut self) {
-        if let Ok(c) = curand() {
-            if let Ok(cu) = c.curand_destroy_generator() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = curand()
+            && let Ok(cu) = c.curand_destroy_generator()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

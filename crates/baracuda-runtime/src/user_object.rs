@@ -94,10 +94,10 @@ impl Drop for UserObject {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_user_object_release() {
-                let _ = unsafe { cu(self.handle, 1) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_user_object_release()
+        {
+            let _ = unsafe { cu(self.handle, 1) };
         }
     }
 }

@@ -510,10 +510,10 @@ impl GraphNode {
 
 impl Drop for GraphInner {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_graph_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_graph_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -617,10 +617,10 @@ impl UpdateResult {
 
 impl Drop for GraphExecInner {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_graph_exec_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_graph_exec_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

@@ -110,10 +110,10 @@ impl Handle {
 
 impl Drop for HandleInner {
     fn drop(&mut self) {
-        if let Ok(c) = cublas() {
-            if let Ok(cu) = c.cublas_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cublas()
+            && let Ok(cu) = c.cublas_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

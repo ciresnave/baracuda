@@ -213,10 +213,10 @@ impl Drop for ArrayInner {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_free_array() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_free_array()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -286,10 +286,10 @@ impl MipmappedArray {
 
 impl Drop for MipmappedArrayInner {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_free_mipmapped_array() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_free_mipmapped_array()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -396,10 +396,10 @@ impl TextureObject {
 
 impl Drop for TextureObject {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_destroy_texture_object() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_destroy_texture_object()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -455,10 +455,10 @@ impl SurfaceObject {
 
 impl Drop for SurfaceObject {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_destroy_surface_object() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_destroy_surface_object()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

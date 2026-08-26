@@ -46,6 +46,16 @@ jobs:
       - name: test-crate-locality guard
         shell: bash
         run: bash scripts/check-test-crate-locality.sh
+      # Feature-coverage guard: a `#[cfg(feature="X")]`-gated body that no CI job
+      # builds is invisible — a break there ships green (the class that broke
+      # Fuel's `--features vulkan` for 72 min). Asserts every feature-gated crate
+      # is classified + covered, over the SET not a count, that the ALL_FEATURES
+      # steps actually exist here, and that no `--all-features` step pulls an
+      # unconditional-nvcc crate (which SKIPS not fails on a no-CUDA runner =
+      # vacuous green). See docs/design/2026-08-20-ci-coverage-matrix.md §Feature.
+      - name: feature-coverage guard
+        shell: bash
+        run: bash scripts/check-feature-coverage.sh
       # ---- The workspace steps below are scoped to the DRIVER-FREE surface.
       # This is a CUDA library: its `-sys` kernel crates compile `.cu` via nvcc
       # in their build scripts, so a full `--workspace` build genuinely cannot
@@ -133,6 +143,35 @@ jobs:
         run: cargo clippy -p baracuda-cuda-emit --features convert --tests -- -D warnings
       - name: test cuda-emit convert (feature-gated)
         run: cargo test -p baracuda-cuda-emit --features convert
+      # ---- FEATURE-COVERAGE: clippy the CUDA-FREE feature-gated surface under
+      # `--all-features`. Only 7 crates invoke nvcc; the rest of the CUDA wrapper
+      # stack is lazy-libloading and builds without the toolkit, so its
+      # feature-gated code (half-crate impls on cudnn/nccl/megatron/cuvs, the
+      # umbrella's 20 `pub use` gates, driver test-support, runtime interop, nvrtc)
+      # is CI-buildable and was previously unbuilt — the blind spot this closes.
+      # `--all-features` is self-maintaining (a new feature auto-joins); verified
+      # via `--message-format json` that this graph pulls NO nvcc crate, so it
+      # compiles real wrapper code rather than skipping-green on a toolkit-less
+      # runner. The feature-coverage guard enforces both properties.
+      - name: clippy feature-gated surface (--all-features, CUDA-free)
+        run: >
+          cargo clippy --all-features
+          -p baracuda
+          -p baracuda-build
+          -p baracuda-types
+          -p baracuda-cudnn
+          -p baracuda-nccl
+          -p baracuda-megatron
+          -p baracuda-runtime
+          -p baracuda-driver
+          -p baracuda-cuvs
+          -p baracuda-cuvs-sys
+          -p baracuda-cuda-emit
+          -- -D warnings
+      # baracuda-optim is MIXED: `distributed_optim` is CUDA-free but `sm80/89/90a`
+      # invoke nvcc, so `--all-features` can't be used — enumerate the CUDA-free one.
+      - name: clippy baracuda-optim distributed_optim (feature-gated, CUDA-free)
+        run: cargo clippy -p baracuda-optim --features distributed_optim -- -D warnings
 
   msrv-driver-free:
     name: MSRV 1.85 (driver-free surface)
