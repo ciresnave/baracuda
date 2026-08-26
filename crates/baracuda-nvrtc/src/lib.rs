@@ -130,10 +130,10 @@ impl Program {
 
 impl Drop for Program {
     fn drop(&mut self) {
-        if let Ok(n) = nvrtc() {
-            if let Ok(cu) = n.nvrtc_destroy_program() {
-                let _ = unsafe { cu(&mut self.prog) };
-            }
+        if let Ok(n) = nvrtc()
+            && let Ok(cu) = n.nvrtc_destroy_program()
+        {
+            let _ = unsafe { cu(&mut self.prog) };
         }
     }
 }

@@ -124,10 +124,10 @@ impl Instance {
 
 impl Drop for Instance {
     fn drop(&mut self) {
-        if let Ok(n) = nvimgcodec() {
-            if let Ok(destroy) = n.nvimgcodec_instance_destroy() {
-                let _ = unsafe { destroy(self.raw) };
-            }
+        if let Ok(n) = nvimgcodec()
+            && let Ok(destroy) = n.nvimgcodec_instance_destroy()
+        {
+            let _ = unsafe { destroy(self.raw) };
         }
     }
 }
@@ -229,10 +229,10 @@ impl CodeStream<'static> {
 
 impl Drop for CodeStream<'_> {
     fn drop(&mut self) {
-        if let Ok(n) = nvimgcodec() {
-            if let Ok(destroy) = n.nvimgcodec_code_stream_destroy() {
-                let _ = unsafe { destroy(self.raw) };
-            }
+        if let Ok(n) = nvimgcodec()
+            && let Ok(destroy) = n.nvimgcodec_code_stream_destroy()
+        {
+            let _ = unsafe { destroy(self.raw) };
         }
     }
 }
@@ -359,10 +359,10 @@ impl<'buf> Image<'buf> {
 
 impl Drop for Image<'_> {
     fn drop(&mut self) {
-        if let Ok(n) = nvimgcodec() {
-            if let Ok(destroy) = n.nvimgcodec_image_destroy() {
-                let _ = unsafe { destroy(self.raw) };
-            }
+        if let Ok(n) = nvimgcodec()
+            && let Ok(destroy) = n.nvimgcodec_image_destroy()
+        {
+            let _ = unsafe { destroy(self.raw) };
         }
     }
 }
@@ -461,10 +461,10 @@ impl Decoder {
 
 impl Drop for Decoder {
     fn drop(&mut self) {
-        if let Ok(n) = nvimgcodec() {
-            if let Ok(destroy) = n.nvimgcodec_decoder_destroy() {
-                let _ = unsafe { destroy(self.raw) };
-            }
+        if let Ok(n) = nvimgcodec()
+            && let Ok(destroy) = n.nvimgcodec_decoder_destroy()
+        {
+            let _ = unsafe { destroy(self.raw) };
         }
     }
 }
@@ -526,10 +526,10 @@ impl Future {
 
 impl Drop for Future {
     fn drop(&mut self) {
-        if let Ok(n) = nvimgcodec() {
-            if let Ok(destroy) = n.nvimgcodec_future_destroy() {
-                let _ = unsafe { destroy(self.raw) };
-            }
+        if let Ok(n) = nvimgcodec()
+            && let Ok(destroy) = n.nvimgcodec_future_destroy()
+        {
+            let _ = unsafe { destroy(self.raw) };
         }
     }
 }

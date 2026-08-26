@@ -147,10 +147,10 @@ impl Handle {
 
 impl Drop for Handle {
     fn drop(&mut self) {
-        if let Ok(n) = nvjpeg() {
-            if let Ok(cu) = n.nvjpeg_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(n) = nvjpeg()
+            && let Ok(cu) = n.nvjpeg_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -207,10 +207,10 @@ impl State {
 
 impl Drop for State {
     fn drop(&mut self) {
-        if let Ok(n) = nvjpeg() {
-            if let Ok(cu) = n.nvjpeg_jpeg_state_destroy() {
-                let _ = unsafe { cu(self.state) };
-            }
+        if let Ok(n) = nvjpeg()
+            && let Ok(cu) = n.nvjpeg_jpeg_state_destroy()
+        {
+            let _ = unsafe { cu(self.state) };
         }
     }
 }
@@ -377,10 +377,10 @@ impl EncoderState {
 
 impl Drop for EncoderState {
     fn drop(&mut self) {
-        if let Ok(n) = nvjpeg() {
-            if let Ok(cu) = n.nvjpeg_encoder_state_destroy() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(n) = nvjpeg()
+            && let Ok(cu) = n.nvjpeg_encoder_state_destroy()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -449,10 +449,10 @@ impl EncoderParams {
 
 impl Drop for EncoderParams {
     fn drop(&mut self) {
-        if let Ok(n) = nvjpeg() {
-            if let Ok(cu) = n.nvjpeg_encoder_params_destroy() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(n) = nvjpeg()
+            && let Ok(cu) = n.nvjpeg_encoder_params_destroy()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -625,10 +625,10 @@ impl Decoder {
 
 impl Drop for Decoder {
     fn drop(&mut self) {
-        if let Ok(n) = nvjpeg() {
-            if let Ok(cu) = n.nvjpeg_decoder_destroy() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(n) = nvjpeg()
+            && let Ok(cu) = n.nvjpeg_decoder_destroy()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -723,10 +723,10 @@ impl JpegStream {
 
 impl Drop for JpegStream {
     fn drop(&mut self) {
-        if let Ok(n) = nvjpeg() {
-            if let Ok(cu) = n.nvjpeg_jpeg_stream_destroy() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(n) = nvjpeg()
+            && let Ok(cu) = n.nvjpeg_jpeg_stream_destroy()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -777,10 +777,10 @@ impl BufferPinned {
 
 impl Drop for BufferPinned {
     fn drop(&mut self) {
-        if let Ok(n) = nvjpeg() {
-            if let Ok(cu) = n.nvjpeg_buffer_pinned_destroy() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(n) = nvjpeg()
+            && let Ok(cu) = n.nvjpeg_buffer_pinned_destroy()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -828,10 +828,10 @@ impl BufferDevice {
 
 impl Drop for BufferDevice {
     fn drop(&mut self) {
-        if let Ok(n) = nvjpeg() {
-            if let Ok(cu) = n.nvjpeg_buffer_device_destroy() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(n) = nvjpeg()
+            && let Ok(cu) = n.nvjpeg_buffer_device_destroy()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -897,10 +897,10 @@ impl DecodeParams {
 
 impl Drop for DecodeParams {
     fn drop(&mut self) {
-        if let Ok(n) = nvjpeg() {
-            if let Ok(cu) = n.nvjpeg_decode_params_destroy() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(n) = nvjpeg()
+            && let Ok(cu) = n.nvjpeg_decode_params_destroy()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }

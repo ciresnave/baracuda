@@ -106,10 +106,10 @@ impl Drop for ExternalMemoryInner {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_destroy_external_memory() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_destroy_external_memory()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -187,10 +187,10 @@ impl Drop for ExternalSemaphoreInner {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_destroy_external_semaphore() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_destroy_external_semaphore()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

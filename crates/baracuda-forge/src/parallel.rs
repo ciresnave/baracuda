@@ -75,18 +75,18 @@ impl ParallelConfig {
         let filename_component = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
 
         self.nvcc_thread_file_patterns.iter().any(|pattern| {
-            if pattern.contains('*') || pattern.contains('?') || pattern.contains('[') {
-                if let Ok(compiled) = Pattern::new(pattern) {
-                    if !pattern.contains('/')
-                        && !pattern.contains('\\')
-                        && compiled.matches(filename_component)
-                    {
-                        return true;
-                    }
+            if (pattern.contains('*') || pattern.contains('?') || pattern.contains('['))
+                && let Ok(compiled) = Pattern::new(pattern)
+            {
+                if !pattern.contains('/')
+                    && !pattern.contains('\\')
+                    && compiled.matches(filename_component)
+                {
+                    return true;
+                }
 
-                    if compiled.matches(path_str) {
-                        return true;
-                    }
+                if compiled.matches(path_str) {
+                    return true;
                 }
             }
             path_str.contains(pattern)
@@ -95,16 +95,16 @@ impl ParallelConfig {
 
     /// Calculate the number of threads to use.
     pub fn thread_count(&self) -> usize {
-        if let Ok(env_threads) = std::env::var("BARACUDA_FORGE_THREADS") {
-            if let Ok(n) = usize::from_str(&env_threads) {
-                return n.max(1);
-            }
+        if let Ok(env_threads) = std::env::var("BARACUDA_FORGE_THREADS")
+            && let Ok(n) = usize::from_str(&env_threads)
+        {
+            return n.max(1);
         }
 
-        if let Ok(env_threads) = std::env::var("RAYON_NUM_THREADS") {
-            if let Ok(n) = usize::from_str(&env_threads) {
-                return n.max(1);
-            }
+        if let Ok(env_threads) = std::env::var("RAYON_NUM_THREADS")
+            && let Ok(n) = usize::from_str(&env_threads)
+        {
+            return n.max(1);
         }
 
         // Cargo passes `-j` to build scripts as NUM_JOBS. Honour it as an upper

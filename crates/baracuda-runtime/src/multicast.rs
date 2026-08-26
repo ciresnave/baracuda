@@ -135,10 +135,10 @@ impl MulticastObject {
 
 impl Drop for MulticastObject {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_mem_release() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_mem_release()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

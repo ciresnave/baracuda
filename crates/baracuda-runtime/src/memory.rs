@@ -187,14 +187,14 @@ impl<T: DeviceRepr> Drop for DeviceBuffer<T> {
         // use-after-free this path exists to prevent. Leak instead (reclaimed at
         // device/context teardown). The error path is unreachable on a healthy
         // stream.
-        if let Some(stream) = &self.stream {
-            if let Ok(cu) = r.cuda_free_async() {
-                let _ = check(unsafe { cu(self.ptr, stream.as_raw()) });
-                return;
-            }
-            // `cudaFreeAsync` unavailable (pre-CUDA-11.2): no async buffer
-            // should exist on such a runtime, but fall through defensively.
+        if let Some(stream) = &self.stream
+            && let Ok(cu) = r.cuda_free_async()
+        {
+            let _ = check(unsafe { cu(self.ptr, stream.as_raw()) });
+            return;
         }
+        // `cudaFreeAsync` unavailable (pre-CUDA-11.2): no async buffer
+        // should exist on such a runtime, but fall through defensively.
         // Synchronous free: the path for sync-allocated buffers (`stream` ==
         // None), plus the pre-11.2 defensive fallback above.
         if let Ok(cu) = r.cuda_free() {
@@ -365,10 +365,10 @@ impl<T: DeviceRepr> Drop for ManagedBuffer<T> {
         if self.ptr.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_free() {
-                let _ = unsafe { cu(self.ptr as *mut c_void) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_free()
+        {
+            let _ = unsafe { cu(self.ptr as *mut c_void) };
         }
     }
 }
@@ -482,10 +482,10 @@ impl<T: DeviceRepr> Drop for PinnedHostBuffer<T> {
         if self.ptr.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_free_host() {
-                let _ = unsafe { cu(self.ptr as *mut c_void) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_free_host()
+        {
+            let _ = unsafe { cu(self.ptr as *mut c_void) };
         }
     }
 }
@@ -552,10 +552,10 @@ impl<T: DeviceRepr> Drop for PinnedRegistration<'_, T> {
         if self.ptr.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_host_unregister() {
-                let _ = unsafe { cu(self.ptr as *mut c_void) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_host_unregister()
+        {
+            let _ = unsafe { cu(self.ptr as *mut c_void) };
         }
     }
 }

@@ -37,13 +37,20 @@ The first three are silent; **DOCUMENTED-ABSENT actively answers the question a 
 
 Axes: **crate × feature × target-kind × platform × toolchain.**
 
-### Crate (70 total)
-- **COVERED (2):** `baracuda-cuda-emit`, `baracuda-cuvs(-sys)`. These build without the CUDA toolkit.
-- **UNCOVERED (68):** every `-sys` binding + wrapper crate (`baracuda-driver`, `baracuda-kernels`, `baracuda-cutlass`, `baracuda-cublas`, `baracuda-flashinfer`, … 68 of them). Their build scripts compile `.cu` via `nvcc`, so they cannot build on a no-CUDA runner and **there is no runner where they do.** Validated only on the local 4070. `baracuda-kernels` alone has 513 test files that no CI job compiles.
+> **LEGEND — two kinds of UNCOVERED, and stamping them the same hides which is actionable.**
+> - **CONSTRAINT ("needs-CUDA-can't"):** the code cannot build without the CUDA toolkit (a `build.rs` that invokes `nvcc`, or `cc`-built CUDA/TensorRT headers). No CI runner has the toolkit, so it is uncovered *by hardware*, not by omission. Not fixable here.
+> - **OMISSION ("could-build-doesn't"):** the code builds without the toolkit and simply isn't built by any job. **Fixable** — and dangerous precisely because a matrix that stamps it identically to a CONSTRAINT tells a reader it has the same, unfixable status.
+> The original version of this row (below, struck) conflated them; the correction is the substance of the feature-coverage PR.
 
-### Feature
-- **COVERED:** default, `seam`, `convert`, `cuvs`.
-- **UNCOVERED:** `nvrtc` (needs the toolkit) and therefore `--all-features`. Recorded honestly in the `ci.yml` comment already — this row is a stated gap, not a hidden one.
+### Crate (70 total) — CORRECTED
+- **COVERED without the toolkit — far more than first stated.** Only **7 crates actually invoke `nvcc`** (`baracuda-kernels-sys`, `baracuda-cutlass-sys`, `baracuda-cutlass-kernels-sys`, `baracuda-ozimmu-sys`, `baracuda-transformer-engine-sys`, `baracuda-kernels-bench`, and `baracuda-optim` *only with an `sm8x/9x` arch feature*), plus `baracuda-tensorrt-sys` *only with its `cc`-built `shim`*. **CONSTRAINT** = those. **Every other `-sys`/wrapper crate is lazy-libloading** (its `build.rs` emits only rerun hints; symbols resolve at runtime), so it builds CUDA-free — it was **OMISSION**, not constraint.
+- ~~UNCOVERED (68): every `-sys` binding + wrapper crate … compile `.cu` via `nvcc`, so they cannot build on a no-CUDA runner.~~ **This was wrong** — it attributed CONSTRAINT to ~61 crates that are OMISSION. Corrected by measuring the build scripts (nvcc/`cc`/`links` greps), not assuming the stack needs the toolkit.
+
+### Feature — CORRECTED (this row under-counted the dimension it named)
+- **COVERED (before this PR):** default, `seam`, `convert`, `cuvs`.
+- **OMISSION, now COVERED by this PR:** the CUDA-free feature-gated code that no job built — `baracuda-types` (`half-crate`/`f8-crate`/`num-complex-crate`/`derive`), `half-crate` on `cudnn`/`nccl`/`megatron`/`cuvs`, the `baracuda` umbrella's 20 `pub use` gates, `baracuda-driver/test-support`, `baracuda-runtime/driver-interop`, `baracuda-cuda-emit/nvrtc` (clippy/build; its *tests* need a GPU), `baracuda-optim/distributed_optim`. Now gated by a `clippy --all-features` step over the CUDA-free surface + the `feature-coverage` guard.
+- **CONSTRAINT (still uncovered by design):** every feature routing through the 7 nvcc crates (kernels' `fa2`/`flashinfer`/`marlin`/… , cutlass' `sm8x`/`ozimmu`, optim's `sm8x/9x`) and `tensorrt-sys/shim`. Recorded in the guard's `CUDA_ONLY`/`CUDA_FEATURES` lists, not swept.
+- **The old row said only `nvrtc` + `--all-features` were uncovered** — it named the Feature axis and then enumerated only the CUDA half of it, which is more dangerous than an uncovered axis because the `--features` steps present made the dimension *look* handled.
 
 ### Target-kind (for the covered crates)
 - **COVERED:** `lib`, `--tests` (added in #21 after a lib inline-test lint rode in unnoticed), integration `tests/*.rs`.

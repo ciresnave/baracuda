@@ -338,10 +338,10 @@ impl Stream {
 
 impl Drop for StreamInner {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_stream_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_stream_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

@@ -119,17 +119,16 @@ impl ExternalDependency {
     }
 
     fn fetch_with_lock(&self, dep_dir: &PathBuf) -> Result<PathBuf> {
-        if dep_dir.join("include").exists() {
-            if let Ok(current_commit) = self.get_current_commit(dep_dir) {
-                if current_commit == self.commit {
-                    println!(
-                        "cargo:warning=Using cached {} at {}",
-                        self.name,
-                        dep_dir.display()
-                    );
-                    return Ok(dep_dir.clone());
-                }
-            }
+        if dep_dir.join("include").exists()
+            && let Ok(current_commit) = self.get_current_commit(dep_dir)
+            && current_commit == self.commit
+        {
+            println!(
+                "cargo:warning=Using cached {} at {}",
+                self.name,
+                dep_dir.display()
+            );
+            return Ok(dep_dir.clone());
         }
 
         if !dep_dir.exists() {
@@ -275,20 +274,17 @@ impl ExternalDependency {
         ];
 
         for lock_file in &lock_files {
-            if lock_file.exists() {
-                if let Ok(metadata) = lock_file.metadata() {
-                    if let Ok(modified) = metadata.modified() {
-                        if let Ok(elapsed) = modified.elapsed() {
-                            if elapsed.as_secs() > 600 {
-                                println!(
-                                    "cargo:warning=Removing stale git lock file: {}",
-                                    lock_file.display()
-                                );
-                                let _ = std::fs::remove_file(lock_file);
-                            }
-                        }
-                    }
-                }
+            if lock_file.exists()
+                && let Ok(metadata) = lock_file.metadata()
+                && let Ok(modified) = metadata.modified()
+                && let Ok(elapsed) = modified.elapsed()
+                && elapsed.as_secs() > 600
+            {
+                println!(
+                    "cargo:warning=Removing stale git lock file: {}",
+                    lock_file.display()
+                );
+                let _ = std::fs::remove_file(lock_file);
             }
         }
     }
@@ -358,14 +354,14 @@ impl DependencyManager {
         }
 
         for dep in &self.dependencies {
-            if dep.name == "cutlass" {
-                if let Some(env_args) = cutlass_args_from_env() {
-                    println!(
-                        "cargo:warning=baracuda-forge: using CUTLASS from baracuda-cutlass-sys (DEP_CUTLASS_INCLUDE)"
-                    );
-                    include_args.extend(env_args);
-                    continue;
-                }
+            if dep.name == "cutlass"
+                && let Some(env_args) = cutlass_args_from_env()
+            {
+                println!(
+                    "cargo:warning=baracuda-forge: using CUTLASS from baracuda-cutlass-sys (DEP_CUTLASS_INCLUDE)"
+                );
+                include_args.extend(env_args);
+                continue;
             }
             let dep_dir = dep.fetch(out_dir)?;
             include_args.extend(dep.include_args(&dep_dir));

@@ -112,10 +112,10 @@ impl Handle {
 
 impl Drop for Handle {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -308,10 +308,10 @@ impl TensorDescriptor {
 
 impl Drop for TensorDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_tensor_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_tensor_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -394,10 +394,10 @@ impl ActivationDescriptor {
 
 impl Drop for ActivationDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_activation_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_activation_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -505,10 +505,10 @@ impl FilterDescriptor {
 
 impl Drop for FilterDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_filter_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_filter_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -714,10 +714,10 @@ impl ConvolutionDescriptor {
 
 impl Drop for ConvolutionDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_convolution_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_convolution_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -1160,10 +1160,10 @@ impl PoolingDescriptor {
 
 impl Drop for PoolingDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_pooling_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_pooling_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -1627,10 +1627,10 @@ impl DropoutDescriptor {
 
 impl Drop for DropoutDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_dropout_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_dropout_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -1750,10 +1750,10 @@ impl LrnDescriptor {
 
 impl Drop for LrnDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_lrn_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_lrn_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -1835,10 +1835,10 @@ impl OpTensorDescriptor {
 
 impl Drop for OpTensorDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_op_tensor_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_op_tensor_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -1979,10 +1979,10 @@ impl ReduceTensorDescriptor {
 
 impl Drop for ReduceTensorDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_reduce_tensor_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_reduce_tensor_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -2139,10 +2139,10 @@ impl BackendDescriptor {
 
 impl Drop for BackendDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_backend_destroy_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_backend_destroy_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -2195,10 +2195,10 @@ impl CtcLossDescriptor {
 
 impl Drop for CtcLossDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_ctc_loss_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_ctc_loss_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -2320,10 +2320,10 @@ impl SpatialTransformerDescriptor {
 
 impl Drop for SpatialTransformerDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_spatial_transformer_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_spatial_transformer_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -3040,10 +3040,10 @@ impl RnnDescriptor {
 }
 impl Drop for RnnDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_rnn_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_rnn_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -3078,10 +3078,10 @@ impl RnnDataDescriptor {
 }
 impl Drop for RnnDataDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_rnn_data_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_rnn_data_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -3206,10 +3206,10 @@ impl AttnDescriptor {
 }
 impl Drop for AttnDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_attn_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_attn_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }
@@ -3284,10 +3284,10 @@ impl SeqDataDescriptor {
 }
 impl Drop for SeqDataDescriptor {
     fn drop(&mut self) {
-        if let Ok(c) = cudnn() {
-            if let Ok(cu) = c.cudnn_destroy_seq_data_descriptor() {
-                let _ = unsafe { cu(self.desc) };
-            }
+        if let Ok(c) = cudnn()
+            && let Ok(cu) = c.cudnn_destroy_seq_data_descriptor()
+        {
+            let _ = unsafe { cu(self.desc) };
         }
     }
 }

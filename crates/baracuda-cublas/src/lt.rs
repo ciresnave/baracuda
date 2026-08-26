@@ -129,10 +129,10 @@ impl LtHandle {
 
 impl Drop for LtHandle {
     fn drop(&mut self) {
-        if let Ok(lt) = cublas_lt() {
-            if let Ok(d) = lt.cublas_lt_destroy() {
-                let _ = unsafe { d(self.raw) };
-            }
+        if let Ok(lt) = cublas_lt()
+            && let Ok(d) = lt.cublas_lt_destroy()
+        {
+            let _ = unsafe { d(self.raw) };
         }
     }
 }
@@ -262,10 +262,10 @@ impl MatmulDesc {
 
 impl Drop for MatmulDesc {
     fn drop(&mut self) {
-        if let Ok(lt) = cublas_lt() {
-            if let Ok(d) = lt.cublas_lt_matmul_desc_destroy() {
-                let _ = unsafe { d(self.raw) };
-            }
+        if let Ok(lt) = cublas_lt()
+            && let Ok(d) = lt.cublas_lt_matmul_desc_destroy()
+        {
+            let _ = unsafe { d(self.raw) };
         }
     }
 }
@@ -319,10 +319,10 @@ impl MatrixLayout {
 
 impl Drop for MatrixLayout {
     fn drop(&mut self) {
-        if let Ok(lt) = cublas_lt() {
-            if let Ok(d) = lt.cublas_lt_matrix_layout_destroy() {
-                let _ = unsafe { d(self.raw) };
-            }
+        if let Ok(lt) = cublas_lt()
+            && let Ok(d) = lt.cublas_lt_matrix_layout_destroy()
+        {
+            let _ = unsafe { d(self.raw) };
         }
     }
 }
@@ -368,10 +368,10 @@ impl MatmulPreference {
 
 impl Drop for MatmulPreference {
     fn drop(&mut self) {
-        if let Ok(lt) = cublas_lt() {
-            if let Ok(d) = lt.cublas_lt_matmul_preference_destroy() {
-                let _ = unsafe { d(self.raw) };
-            }
+        if let Ok(lt) = cublas_lt()
+            && let Ok(d) = lt.cublas_lt_matmul_preference_destroy()
+        {
+            let _ = unsafe { d(self.raw) };
         }
     }
 }

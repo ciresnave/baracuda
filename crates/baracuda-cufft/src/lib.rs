@@ -232,10 +232,10 @@ impl Plan1d {
 
 impl Drop for Plan1d {
     fn drop(&mut self) {
-        if let Ok(c) = cufft() {
-            if let Ok(cu) = c.cufft_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cufft()
+            && let Ok(cu) = c.cufft_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -314,10 +314,10 @@ impl Plan2d {
 
 impl Drop for Plan2d {
     fn drop(&mut self) {
-        if let Ok(c) = cufft() {
-            if let Ok(cu) = c.cufft_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cufft()
+            && let Ok(cu) = c.cufft_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -382,10 +382,10 @@ impl Plan3d {
 
 impl Drop for Plan3d {
     fn drop(&mut self) {
-        if let Ok(c) = cufft() {
-            if let Ok(cu) = c.cufft_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cufft()
+            && let Ok(cu) = c.cufft_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -566,10 +566,10 @@ impl PlanMany {
 
 impl Drop for PlanMany {
     fn drop(&mut self) {
-        if let Ok(c) = cufft() {
-            if let Ok(cu) = c.cufft_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cufft()
+            && let Ok(cu) = c.cufft_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -944,10 +944,10 @@ impl Plan {
 
 impl Drop for Plan {
     fn drop(&mut self) {
-        if let Ok(c) = cufft() {
-            if let Ok(cu) = c.cufft_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cufft()
+            && let Ok(cu) = c.cufft_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

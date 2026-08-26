@@ -50,12 +50,11 @@ impl BuildCache {
     pub fn load(build_dir: &Path) -> Self {
         let cache_path = build_dir.join(CACHE_FILENAME);
 
-        if cache_path.exists() {
-            if let Ok(contents) = fs::read_to_string(&cache_path) {
-                if let Ok(cache) = serde_json::from_str::<BuildCache>(&contents) {
-                    return cache;
-                }
-            }
+        if cache_path.exists()
+            && let Ok(contents) = fs::read_to_string(&cache_path)
+            && let Ok(cache) = serde_json::from_str::<BuildCache>(&contents)
+        {
+            return cache;
         }
 
         Self::default()

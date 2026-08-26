@@ -129,10 +129,10 @@ pub fn op_status_error_string(status: CUfileOpError) -> Result<String> {
 
 impl Drop for Driver {
     fn drop(&mut self) {
-        if let Ok(c) = cufile() {
-            if let Ok(cu) = c.cu_file_driver_close() {
-                let _ = unsafe { cu() };
-            }
+        if let Ok(c) = cufile()
+            && let Ok(cu) = c.cu_file_driver_close()
+        {
+            let _ = unsafe { cu() };
         }
     }
 }
@@ -231,10 +231,10 @@ impl Drop for FileHandle {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(c) = cufile() {
-            if let Ok(cu) = c.cu_file_handle_deregister() {
-                unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cufile()
+            && let Ok(cu) = c.cu_file_handle_deregister()
+        {
+            unsafe { cu(self.handle) };
         }
     }
 }
@@ -270,10 +270,10 @@ impl BufRegistration {
 
 impl Drop for BufRegistration {
     fn drop(&mut self) {
-        if let Ok(c) = cufile() {
-            if let Ok(cu) = c.cu_file_buf_deregister() {
-                let _ = unsafe { cu(self.ptr) };
-            }
+        if let Ok(c) = cufile()
+            && let Ok(cu) = c.cu_file_buf_deregister()
+        {
+            let _ = unsafe { cu(self.ptr) };
         }
     }
 }
@@ -307,10 +307,10 @@ impl StreamRegistration {
 
 impl Drop for StreamRegistration {
     fn drop(&mut self) {
-        if let Ok(c) = cufile() {
-            if let Ok(cu) = c.cu_file_stream_deregister() {
-                let _ = unsafe { cu(self.stream) };
-            }
+        if let Ok(c) = cufile()
+            && let Ok(cu) = c.cu_file_stream_deregister()
+        {
+            let _ = unsafe { cu(self.stream) };
         }
     }
 }
@@ -471,10 +471,10 @@ impl BatchIO {
 
 impl Drop for BatchIO {
     fn drop(&mut self) {
-        if let Ok(c) = cufile() {
-            if let Ok(cu) = c.cu_file_batch_io_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cufile()
+            && let Ok(cu) = c.cu_file_batch_io_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

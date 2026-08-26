@@ -98,10 +98,11 @@ fn parse_gpu_codes(output: &str) -> Vec<usize> {
     let mut codes = Vec::new();
     for line in output.lines() {
         let parts: Vec<&str> = line.split('_').collect();
-        if parts.len() >= 2 && parts.contains(&"sm") {
-            if let Ok(code) = parts[1].parse::<usize>() {
-                codes.push(code);
-            }
+        if parts.len() >= 2
+            && parts.contains(&"sm")
+            && let Ok(code) = parts[1].parse::<usize>()
+        {
+            codes.push(code);
         }
     }
     codes.sort();

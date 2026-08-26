@@ -105,11 +105,11 @@ impl Tensor {
 
 impl Drop for Tensor {
     fn drop(&mut self) {
-        if let Ok(c) = cvcuda() {
-            if let Ok(cu) = c.nvcv_tensor_dec_ref() {
-                let mut _new_ref: i32 = 0;
-                let _ = unsafe { cu(self.handle, &mut _new_ref) };
-            }
+        if let Ok(c) = cvcuda()
+            && let Ok(cu) = c.nvcv_tensor_dec_ref()
+        {
+            let mut _new_ref: i32 = 0;
+            let _ = unsafe { cu(self.handle, &mut _new_ref) };
         }
     }
 }
@@ -122,10 +122,10 @@ struct OpHandle {
 
 impl Drop for OpHandle {
     fn drop(&mut self) {
-        if let Ok(c) = cvcuda() {
-            if let Ok(cu) = c.operator_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cvcuda()
+            && let Ok(cu) = c.operator_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

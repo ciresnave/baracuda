@@ -169,10 +169,10 @@ impl Drop for GraphicsResourceInner {
         if self.handle.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_graphics_unregister_resource() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_graphics_unregister_resource()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

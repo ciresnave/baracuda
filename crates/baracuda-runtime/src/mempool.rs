@@ -267,10 +267,10 @@ impl Drop for MemoryPoolInner {
         if !self.owned || self.handle.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_mem_pool_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_mem_pool_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

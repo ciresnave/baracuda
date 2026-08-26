@@ -101,10 +101,10 @@ impl Event {
 
 impl Drop for EventInner {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_event_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_event_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

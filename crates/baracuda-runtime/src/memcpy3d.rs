@@ -76,10 +76,10 @@ impl<T: DeviceRepr> Drop for Pitched3dBuffer<T> {
         if self.ptr.ptr.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_free() {
-                let _ = unsafe { cu(self.ptr.ptr) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_free()
+        {
+            let _ = unsafe { cu(self.ptr.ptr) };
         }
     }
 }

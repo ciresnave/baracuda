@@ -64,10 +64,10 @@ impl XtHandle {
 
 impl Drop for XtHandle {
     fn drop(&mut self) {
-        if let Ok(c) = cublas() {
-            if let Ok(f) = c.cublas_xt_destroy() {
-                let _ = unsafe { f(self.raw) };
-            }
+        if let Ok(c) = cublas()
+            && let Ok(f) = c.cublas_xt_destroy()
+        {
+            let _ = unsafe { f(self.raw) };
         }
     }
 }

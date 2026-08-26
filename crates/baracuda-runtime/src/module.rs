@@ -115,10 +115,10 @@ impl Library {
 
 impl Drop for LibraryInner {
     fn drop(&mut self) {
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_library_unload() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(r) = runtime()
+            && let Ok(cu) = r.cuda_library_unload()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }

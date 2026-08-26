@@ -110,10 +110,10 @@ impl DnHandle {
 
 impl Drop for DnHandle {
     fn drop(&mut self) {
-        if let Ok(c) = cusolver() {
-            if let Ok(cu) = c.cusolver_dn_destroy() {
-                let _ = unsafe { cu(self.handle) };
-            }
+        if let Ok(c) = cusolver()
+            && let Ok(cu) = c.cusolver_dn_destroy()
+        {
+            let _ = unsafe { cu(self.handle) };
         }
     }
 }
@@ -1305,10 +1305,10 @@ impl SyevjInfo {
 
 impl Drop for SyevjInfo {
     fn drop(&mut self) {
-        if let Ok(c) = cusolver() {
-            if let Ok(cu) = c.cusolver_dn_destroy_syevj_info() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(c) = cusolver()
+            && let Ok(cu) = c.cusolver_dn_destroy_syevj_info()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -1337,10 +1337,10 @@ impl GesvdjInfo {
 
 impl Drop for GesvdjInfo {
     fn drop(&mut self) {
-        if let Ok(c) = cusolver() {
-            if let Ok(cu) = c.cusolver_dn_destroy_gesvdj_info() {
-                let _ = unsafe { cu(self.raw) };
-            }
+        if let Ok(c) = cusolver()
+            && let Ok(cu) = c.cusolver_dn_destroy_gesvdj_info()
+        {
+            let _ = unsafe { cu(self.raw) };
         }
     }
 }
@@ -2254,10 +2254,10 @@ pub mod mg {
 
     impl Drop for Handle {
         fn drop(&mut self) {
-            if let Ok(mg) = cusolver_mg() {
-                if let Ok(cu) = mg.cusolver_mg_destroy() {
-                    let _ = unsafe { cu(self.raw) };
-                }
+            if let Ok(mg) = cusolver_mg()
+                && let Ok(cu) = mg.cusolver_mg_destroy()
+            {
+                let _ = unsafe { cu(self.raw) };
             }
         }
     }
@@ -2301,10 +2301,10 @@ pub mod mg {
 
     impl Drop for DeviceGrid {
         fn drop(&mut self) {
-            if let Ok(mg) = cusolver_mg() {
-                if let Ok(cu) = mg.cusolver_mg_destroy_grid() {
-                    let _ = unsafe { cu(self.raw) };
-                }
+            if let Ok(mg) = cusolver_mg()
+                && let Ok(cu) = mg.cusolver_mg_destroy_grid()
+            {
+                let _ = unsafe { cu(self.raw) };
             }
         }
     }
@@ -2351,10 +2351,10 @@ pub mod mg {
 
     impl Drop for MatrixDesc {
         fn drop(&mut self) {
-            if let Ok(mg) = cusolver_mg() {
-                if let Ok(cu) = mg.cusolver_mg_destroy_matrix_desc() {
-                    let _ = unsafe { cu(self.raw) };
-                }
+            if let Ok(mg) = cusolver_mg()
+                && let Ok(cu) = mg.cusolver_mg_destroy_matrix_desc()
+            {
+                let _ = unsafe { cu(self.raw) };
             }
         }
     }
@@ -2654,10 +2654,10 @@ pub mod xapi {
 
     impl Drop for Params {
         fn drop(&mut self) {
-            if let Ok(c) = cusolver() {
-                if let Ok(cu) = c.cusolver_dn_destroy_params() {
-                    let _ = unsafe { cu(self.raw) };
-                }
+            if let Ok(c) = cusolver()
+                && let Ok(cu) = c.cusolver_dn_destroy_params()
+            {
+                let _ = unsafe { cu(self.raw) };
             }
         }
     }
@@ -2885,10 +2885,10 @@ pub mod sparse {
 
     impl Drop for SpHandle {
         fn drop(&mut self) {
-            if let Ok(c) = cusolver() {
-                if let Ok(cu) = c.cusolver_sp_destroy() {
-                    let _ = unsafe { cu(self.raw) };
-                }
+            if let Ok(c) = cusolver()
+                && let Ok(cu) = c.cusolver_sp_destroy()
+            {
+                let _ = unsafe { cu(self.raw) };
             }
         }
     }
@@ -3028,10 +3028,10 @@ pub mod refactor {
 
     impl Drop for RfHandle {
         fn drop(&mut self) {
-            if let Ok(c) = cusolver() {
-                if let Ok(cu) = c.cusolver_rf_destroy() {
-                    let _ = unsafe { cu(self.raw) };
-                }
+            if let Ok(c) = cusolver()
+                && let Ok(cu) = c.cusolver_rf_destroy()
+            {
+                let _ = unsafe { cu(self.raw) };
             }
         }
     }
