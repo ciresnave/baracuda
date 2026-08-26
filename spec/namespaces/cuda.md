@@ -15,9 +15,8 @@ This annex is **normative**: it defines what a conformant `cuda:` *producer* MUS
 and what a conformant *consumer* MUST admit. It is written spec-first, not as a
 description of one implementation.
 
-Baracuda's `cuda:` codec (in `unpopped-vocab`, consumed via `baracuda-kernels-types`)
-implements the §6.7 `target_capability` codec for this namespace; kiss-ref's
-`kiss-classify-vocab` is dtype-only and produces no `cuda:` tokens. A second
+Baracuda is the reference `cuda:` producer; kiss-ref's `kiss-classify-vocab` is
+dtype-only and produces no `cuda:` tokens. A second
 producer (kiss-ref, or any other) is conformant when it satisfies THIS annex, not when
 it matches Baracuda. The §8-0004 freeze gate's second same-namespace producer validates
 against §1–§3 below.
