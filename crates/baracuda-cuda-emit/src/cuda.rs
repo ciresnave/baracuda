@@ -146,17 +146,28 @@ impl Backend for Cuda {
             let Some(ctype) = scalar_ctype(plan.dtype) else {
                 panic!("cuda backend: unsupported dtype {:?}", plan.dtype);
             };
-            assert!(
-                plan.output_bodies()
-                    .iter()
-                    .all(|b| params_used(b).is_empty())
-                    || matches!(
-                        plan.dtype,
-                        ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
+            // §6.8-0004: this is SEAM-REACHABLE (a plan-admissible f16/bf16 elementwise op
+            // that uses a scalar Param reaches here through `try_generate`), so it must be a
+            // TYPED decline, not an abort — the reachability fuzz (`fuzz.rs`) caught it
+            // panicking. It stays a backend `UnsupportedDtype` (the plan gate admits half
+            // elementwise; only THIS backend's v1 scalar-param spelling is f32/f64-only).
+            if !(plan
+                .output_bodies()
+                .iter()
+                .all(|b| params_used(b).is_empty())
+                || matches!(
+                    plan.dtype,
+                    ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
+                ))
+            {
+                return Err(LowerError::UnsupportedDtype {
+                    dtype: plan.dtype,
+                    detail: format!(
+                        "cuda backend v1: scalar params are f32/f64-only for now (dtype {:?})",
+                        plan.dtype
                     ),
-                "cuda backend v1: scalar params are f32/f64-only for now (dtype {:?})",
-                plan.dtype
-            );
+                });
+            }
             // Increment 0c: infix `Div` and `Const` are spelled by shared,
             // dtype-blind backend code (`lower_expr` emits C `/` and an f64
             // literal with no dtype context) — the only two REJECT rows of the
