@@ -20,6 +20,11 @@ homepage.workspace = true
 # ships that release we CONSUME it, which keeps a single source and no transitional
 # dual-ownership window — the exact drift this crate exists to prevent.)
 unpopped-vocab = { workspace = true }
+# JSON emission for the §6.8-0008 machine manifest. Pure-Rust, driver-free, and
+# well below the 1.85 floor — the crate stays driver-free/MSRV-honest. Serialize
+# only in the lib; the round-trip self-test uses serde_json's parser (dev-dep).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [lints]
 workspace = true
