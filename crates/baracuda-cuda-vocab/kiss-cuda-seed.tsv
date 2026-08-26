@@ -1,0 +1,33 @@
+# Vendored snapshot of KISS's SSOT seed — the `cuda:` vocabulary's normative source.
+#
+# Source:  ThinkersJournal/KISS  spec/namespaces/cuda.md
+#          ("Appendix: machine-readable capability set (SSOT seed)").
+# Pinned:  becf90fc  — the #336 merge ("the SSOT seed gains the Sm90 row"), 2026-08-26.
+#
+# The SEMANTIC-agreement gate (`semantic_agreement_with_the_pinned_kiss_seed` in
+# src/manifest.rs) compares this crate's manifest members to the rows below BY KEY
+# (token, class, sm_number). Pinned, NOT live: a gate reading KISS's `main` at test
+# time would red on KISS's unrelated edits and couple this crate's CI to KISS's
+# availability, trading a drift problem for a flakiness one.
+#
+# ⚠ BUMPING THE PIN IS A DELIBERATE ACT, and the pin has NO automatic liveness
+# signal: neither the freshness gate nor the semantic gate reds when THIS snapshot
+# is stale, because they measure AGAINST it — a stale pin is invisible to them by
+# construction (a vendored copy is a fork the moment its currency stops being
+# checked; this header is what keeps it a copy). To check whether the pin is behind
+# upstream, on demand:
+#
+#   gh api "repos/ThinkersJournal/KISS/contents/spec/namespaces/cuda.md?ref=main" \
+#     --jq .content | base64 -d | sed -n '/machine-readable capability set/,/^```$/p'
+#
+# If the seed changed: re-vendor the rows here, update the `Pinned:` line to the new
+# KISS commit + date, and re-run the semantic gate (it will agree or point at the
+# real disagreement). A choice, deliberately taken — not an event that breaks CI.
+#
+# Format: tab-separated `sku` (the Rust `ArchSku` variant), `token`, `arch`, `notes`.
+# The gate parses the `token` column only (whitespace-tolerant) and derives the rest.
+sku	token	arch	notes
+Sm80	cuda:sm80	ampere	forward-compatible fallback on Ada/Hopper
+Sm89	cuda:sm89	ada	FP8 tensor cores; requires the sm89 feature
+Sm90	cuda:sm90	hopper	base Hopper; no arch-specific feature required (`cuda:sm90a` is a different cell, §2)
+Sm90a	cuda:sm90a	hopper	accelerated features; requires the sm90a feature
