@@ -1,0 +1,49 @@
+{
+  "schema": "kiss-namespace-vocabulary-v1",
+  "namespace": "cuda",
+  "vocabulary_version": 1,
+  "kind": "enumerated",
+  "maintainer": "baracuda",
+  "reference_implementation": "baracuda-cuda-vocab",
+  "generated_from": "baracuda-cuda-vocab (unpopped-vocab `From<ArchSku>` codec)",
+  "grammar": "cuda:sm<digits>[a]",
+  "encoding": {
+    "charset_after_prefix": "[a-z0-9]",
+    "comparison": "byte-exact",
+    "capability_set_shape": "single-scalar"
+  },
+  "members": [
+    {
+      "token": "cuda:sm80",
+      "class": "base",
+      "target": "sm_80",
+      "sm_number": 80
+    },
+    {
+      "token": "cuda:sm89",
+      "class": "base",
+      "target": "sm_89",
+      "sm_number": 89
+    },
+    {
+      "token": "cuda:sm90",
+      "class": "base",
+      "target": "sm_90",
+      "sm_number": 90
+    },
+    {
+      "token": "cuda:sm90a",
+      "class": "a",
+      "target": "sm_90a",
+      "sm_number": 90
+    }
+  ],
+  "device_admission": {
+    "device_sm_number": "major*10 + minor",
+    "base_clause": "device D admits base token T iff T.sm_number <= D.sm_number",
+    "a_clause": "device D admits a-token T iff T.sm_number == D.sm_number"
+  },
+  "ordering": "sort by (sm_number ascending, variant: base < a)",
+  "coverage_note": "closed enumeration; a cuda: capability-set is a single scalar token (§4), so the §6.8-0007 length-digest and §6.8-0013 vector obligations do not apply",
+  "versioning": "adding or removing a token, altering an admission relation, or changing the encoding layer is a version bump"
+}
