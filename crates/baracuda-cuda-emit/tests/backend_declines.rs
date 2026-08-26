@@ -120,3 +120,64 @@ fn slang_declines_copysign_nextafter_and_emits_pow() {
         }
     }
 }
+
+/// `Nextafter@f16` WIRING TEST — the concrete payoff of unpopped 0.6.0's plan-gate
+/// decline channel. Before 0.6.0, `try_generate` called `build_plan`, so an
+/// inadmissible (op, dtype) ABORTED — a panic indistinguishable from a crash. 0.6.0
+/// routes `try_generate` through `try_build_plan`, so the same input now returns a
+/// TYPED `LowerError::InadmissiblePlan { source }` that names the dtype.
+///
+/// The two legs are deliberately the SAME op at two dtypes, so the test proves the
+/// two outcomes are DISTINGUISHABLE where 0.5.0 conflated one of them with a crash:
+///   Nextafter @ f32  → EMITS (CUDA has a real f32 nextafter lowering)   [positive control]
+///   Nextafter @ f16  → InadmissiblePlan naming F16 (no half lowering)   [the 0.6.0 win]
+/// It reds if `try_generate` ever reverts to `build_plan` (the f16 leg would panic,
+/// not match), which is exactly the regression the 0.6.0 wiring must not undo.
+#[test]
+fn nextafter_f16_is_a_typed_inadmissible_plan_not_a_panic() {
+    use baracuda_cuda_emit::Cuda;
+    let op_at = |dt: ElementKind| {
+        OpDef::elementwise(
+            "na",
+            2,
+            &[dt],
+            input(0).binary(BinaryOp::Nextafter, input(1)),
+        )
+    };
+    let key_at = |dt: ElementKind| {
+        let a = OperandDesc::new(1, &[1 << 16], &[1], dt, 4);
+        structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
+    };
+
+    // POSITIVE CONTROL: f32 has a real lowering — it MUST emit the nextafter intrinsic,
+    // not merely succeed. Without this, the f16 decline below is satisfied by a backend
+    // that refuses Nextafter at every dtype.
+    let f32 = op_at(ElementKind::F32);
+    let k = try_generate(&f32, &key_at(ElementKind::F32), &Cuda)
+        .unwrap_or_else(|e| panic!("Nextafter@f32 should EMIT, but declined: {e:?}"));
+    assert!(
+        k.source.contains("nextafter"),
+        "Nextafter@f32 emitted no nextafter intrinsic (vacuous positive control):\n{}",
+        k.source
+    );
+
+    // THE 0.6.0 WIN: f16 has no half lowering → a TYPED InadmissiblePlan that names the
+    // dtype, where 0.5.0 panicked. A generic InadmissiblePlan that did not name F16, or
+    // a panic (an unmatched `other`), both fail this contract.
+    let f16 = op_at(ElementKind::F16);
+    match try_generate(&f16, &key_at(ElementKind::F16), &Cuda) {
+        Err(LowerError::InadmissiblePlan { source }) => {
+            let s = format!("{source:?}");
+            assert!(
+                s.contains("F16"),
+                "Nextafter@f16 gave an InadmissiblePlan that did not name the f16 dtype \
+                 (source = {s:?}); a generic plan decline must not satisfy this contract"
+            );
+        }
+        other => panic!(
+            "Nextafter@f16 should be a typed LowerError::InadmissiblePlan (0.6.0 plan-gate \
+             decline; was a panic pre-0.6.0). If this is a panic, try_generate reverted to \
+             build_plan. Got: {other:?}"
+        ),
+    }
+}

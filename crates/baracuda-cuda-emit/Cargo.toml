@@ -38,8 +38,8 @@ fuel-kernel-seam = { version = "0.10.3", optional = true }
 # 0.3.0 (the version this crate is on), so no version skew. Test-only: no lib
 # code depends on them. Kept as registry deps (not path) so `cargo package`
 # ships a tree that resolves for downloaders.
-unpopped-cpu-c = "0.3.0"
-unpopped-slang = "0.3.0"
+unpopped-cpu-c = "0.4.0"
+unpopped-slang = "0.4.0"
 
 [lints]
 workspace = true
