@@ -12,10 +12,16 @@
 //! `spec/namespaces/cuda.md`; agreement between this manifest and that annex is a
 //! separate relation, owed by the agreement gate (a follow-on to this generator).
 //!
-//! This module builds the manifest and self-checks it (well-formed, round-trips
-//! [`CATALOG`], byte-deterministic). It deliberately does **not** wire the
-//! agreement gate against the registered annex — that binds a document in the KISS
-//! tree and is built once its comparison shape is settled.
+//! This module builds the manifest, self-checks it (well-formed, round-trips
+//! [`CATALOG`], byte-deterministic), and carries both §6.8-0011 gates:
+//! - a **freshness** gate — byte-diff the committed `cuda-vocab-manifest.json`
+//!   against the regenerator; a red means the GENERATOR drifted;
+//! - a **semantic-agreement** gate — the members agree with KISS's registered SSOT
+//!   seed, vendored at a pinned commit (`kiss-cuda-seed.tsv`); a red means the
+//!   VOCABULARY disagrees with the pinned seed.
+//!
+//! The two relations are kept unconflatable in name and message, so a red names
+//! its own cause and never costs a misdirected investigation.
 
 use crate::{CATALOG, Entry, TokenClass};
 use serde::{Deserialize, Serialize};
@@ -264,6 +270,83 @@ mod tests {
             "FRESHNESS: committed cuda-vocab-manifest.json no longer matches the generator (the \
              GENERATOR drifted, not KISS). Regenerate: `BLESS_CUDA_MANIFEST=1 cargo test -p \
              baracuda-cuda-vocab freshness_committed_manifest_matches_the_generator`"
+        );
+    }
+
+    /// SEMANTIC-AGREEMENT gate (§6.8-0011 of KISS-Classify, the agreement half):
+    /// the manifest's members agree with KISS's registered SSOT seed. Not a
+    /// byte-diff — the seed is a TSV in a Markdown fence, the manifest is JSON — so
+    /// it compares the (token, class, sm_number) SET, DERIVED from each side's
+    /// tokens (the same derivation `Entry` uses, applied to the seed's token column,
+    /// so a stored-field mismatch cannot hide). Comparison is BY KEY, not by row
+    /// position, so seed row order stays non-semantic.
+    ///
+    /// The seed is VENDORED at a PINNED KISS commit (see kiss-cuda-seed.tsv's
+    /// header: becf90fc, the #336 merge) — pinned, not live, so KISS's unrelated
+    /// edits can't red this and it needs no network. A STALE pin is invisible to
+    /// this gate by construction (it measures AGAINST the pin), so the vendored file
+    /// carries a currency-check command and a "bumping is a deliberate act" note
+    /// rather than being a silent third copy.
+    ///
+    /// Three failure meanings, kept distinct so a red never costs an investigation:
+    ///   - vendored seed MALFORMED  → panics `"vendored seed unparseable: …"`
+    ///   - members DISAGREE w/ seed → asserts `"SEMANTIC … bump the pin or reconcile"`
+    ///   - vendored file MISSING    → `include_str!` is a COMPILE error, not a run
+    ///
+    /// A red here NEVER means the generator drifted — that is the freshness gate.
+    #[test]
+    fn semantic_agreement_with_the_pinned_kiss_seed() {
+        // (token, class, sm_number) from a token — the manifest's own derivation.
+        fn key_from_token(tok: &str) -> (String, &'static str, u32) {
+            let digits: String = tok
+                .strip_prefix("cuda:sm")
+                .unwrap_or_else(|| {
+                    panic!("vendored seed unparseable: {tok:?} is not a cuda: token")
+                })
+                .chars()
+                .take_while(char::is_ascii_digit)
+                .collect();
+            let sm = digits
+                .parse()
+                .unwrap_or_else(|_| panic!("vendored seed unparseable: {tok:?} has no sm_number"));
+            let class = if tok.ends_with('a') { "a" } else { "base" };
+            (tok.to_string(), class, sm)
+        }
+
+        // Parse the vendored seed's token column (field 1), skipping the `#` header
+        // comments and the `sku token …` header row. Whitespace-tolerant, so
+        // tabs-vs-spaces and a Windows CRLF checkout don't matter (a token parse,
+        // not a byte compare).
+        let seed = include_str!("../kiss-cuda-seed.tsv");
+        let mut seed_keys: Vec<(String, &str, u32)> = seed
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#') && !l.starts_with("sku"))
+            .map(|row| {
+                let token = row.split_whitespace().nth(1).unwrap_or_else(|| {
+                    panic!("vendored seed unparseable: row {row:?} has no token column")
+                });
+                key_from_token(token)
+            })
+            .collect();
+        seed_keys.sort();
+
+        let mut member_keys: Vec<(String, &str, u32)> = Manifest::generate()
+            .members
+            .iter()
+            .map(|m| {
+                let class = if m.class == "a" { "a" } else { "base" };
+                (m.token.clone(), class, m.sm_number)
+            })
+            .collect();
+        member_keys.sort();
+
+        assert_eq!(
+            member_keys, seed_keys,
+            "SEMANTIC AGREEMENT: this crate's manifest members disagree with KISS's PINNED seed \
+             (becf90fc). Bump the pin (re-vendor kiss-cuda-seed.tsv at a newer KISS commit) if \
+             KISS changed the vocabulary, or reconcile the vocabulary. This is NOT generator \
+             drift — that is the freshness gate."
         );
     }
 
