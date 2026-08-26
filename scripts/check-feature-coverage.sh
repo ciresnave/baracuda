@@ -37,8 +37,8 @@ declare -A CUDA_FEATURES=( [baracuda-optim]="sm80 sm89 sm90a" )
 # design (no CI CUDA runner); recorded so the absence is a stated blindness, not a
 # gap someone "fixes" by adding a step that then skips-green on the runner.
 CUDA_ONLY=(
-  baracuda-cutlass baracuda-flashinfer-sys baracuda-flashinfer
-  baracuda-kernels-sys baracuda-kernels baracuda-tensorrt-sys
+  baracuda-cutlass baracuda-cutlass-kernels-sys baracuda-flashinfer-sys
+  baracuda-flashinfer baracuda-kernels-sys baracuda-kernels baracuda-tensorrt-sys
 )
 # Crates whose build.rs invokes nvcc UNCONDITIONALLY (graph membership is enough —
 # no feature guard). If an ALL_FEATURES `--all-features` graph pulls one of these,
@@ -54,7 +54,12 @@ in_list() { local x="$1"; shift; local e; for e in "$@"; do [ "$e" = "$x" ] && r
 gated=()
 for d in crates/*/; do
   c=$(basename "$d")
-  grep -rqE 'cfg\(feature *= *"' "$d"src/ 2>/dev/null && gated+=("$c")
+  # Match feature= inside ANY cfg form — cfg(feature=), cfg(any(feature=…)),
+  # cfg(all(test, feature=…)). The narrow `cfg\(feature` pattern missed
+  # cfg(any(...)) and made a whole nvcc crate (cutlass-kernels-sys) invisible to
+  # this classifier — the exact vocabulary-narrower-than-the-population defect
+  # this guard exists to catch, so don't re-narrow it.
+  grep -rqE 'cfg\(.*feature *= *"' "$d"src/ 2>/dev/null && gated+=("$c")
 done
 [ "${#gated[@]}" -gt 0 ] || fail "GUARD BROKEN: found 0 crates with cfg(feature=) code — the grep is wrong or the layout changed."
 
@@ -70,8 +75,10 @@ done
 # ── 3. ENUMERATED crates: every cfg-gating feature is listed or CUDA-denylisted ─
 for c in "${!ENUMERATED[@]}"; do
   listed=" ${ENUMERATED[$c]} ${CUDA_FEATURES[$c]:-} "
-  # feature names appearing in cfg(feature="X") across the crate's src
-  for f in $(grep -rhoE 'cfg\(feature *= *"[^"]+"' "crates/$c/src/" 2>/dev/null | sed -E 's/.*"([^"]+)".*/\1/' | sort -u); do
+  # feature names in ANY cfg form (feature="X" appears in every cfg gate form;
+  # in .rs a bare `feature = "…"` is a cfg predicate) — same broadening as the
+  # GATED grep, so cfg(any(feature=…)) is not silently skipped here either.
+  for f in $(grep -rhoE 'feature *= *"[^"]+"' "crates/$c/src/" 2>/dev/null | sed -E 's/.*"([^"]+)".*/\1/' | sort -u); do
     [[ "$listed" == *" $f "* ]] || fail "$c gates code on feature '$f', which is neither CI-covered (ENUMERATED='${ENUMERATED[$c]}') nor CUDA-denylisted (CUDA_FEATURES='${CUDA_FEATURES[$c]:-}'). A new non-CUDA feature has silently rejoined the uncovered set — add it to the CI step + ENUMERATED, or to CUDA_FEATURES if it needs the toolkit."
   done
 done
@@ -98,9 +105,17 @@ done
 
 # ── 6. Anti-vacuous: no ALL_FEATURES --all-features graph pulls an always-nvcc crate
 for c in "${ALL_FEATURES[@]}"; do
-  tree=$(cargo tree -p "$c" --all-features -e no-dev 2>/dev/null || true)
+  # Do NOT `|| true`: a `cargo tree` failure means the anti-vacuous check could
+  # not run, and a guard that swallows its own inability to run reports success
+  # on a run it knows was incomplete. Fail loud instead.
+  tree=$(cargo tree -p "$c" --all-features -e no-dev 2>&1) \
+    || fail "GUARD BROKEN: 'cargo tree -p $c --all-features' failed, so the anti-vacuous check could not run: $tree"
   for n in $ALWAYS_NVCC; do
-    echo "$tree" | grep -qE "\b$n v" && fail "'$c --all-features' pulls '$n' (unconditional-nvcc) into its graph — on a no-CUDA runner its build.rs SKIPS, so the CI step passes GREEN while covering nothing (vacuous). Either the crate gained a CUDA dep, or it belongs in CUDA_ONLY."
+    # POSIX-safe word boundary: `\b` is a GNU extension, undefined on BSD/macOS
+    # grep — on such a runner it would silently make THIS anti-vacuous check never
+    # fire, on the one guard whose job is catching things that never fire. Match
+    # start-of-line or a non-name char so a suffix like x-$n doesn't false-match.
+    echo "$tree" | grep -qE "(^|[^-a-z0-9])$n v" && fail "'$c --all-features' pulls '$n' (unconditional-nvcc) into its graph — on a no-CUDA runner its build.rs SKIPS, so the CI step passes GREEN while covering nothing (vacuous). Either the crate gained a CUDA dep, or it belongs in CUDA_ONLY."
   done
 done
 
