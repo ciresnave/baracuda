@@ -609,13 +609,40 @@ fn no_panic_reachable_through_the_lowering_seam() {
     use unpopped::backend::LowerError;
     use unpopped::try_generate;
 
-    // Silence the panic hook's stderr spam for the deliberate control/born-red panics.
-    let prev = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
+    // RAII silence: save the current panic hook, install a silent one, restore the
+    // saved hook on Drop — so a silenced window can NEVER outlive its scope and leak
+    // into the rest of this binary. In a test binary whose whole job is surfacing
+    // panics, a leaked silent hook would hide every LATER test's panic output (a
+    // silenced instrument reporting clean) — the exact failure this test exists to
+    // catch, so it must not commit it itself. (Copilot, PR #34.)
+    struct SilenceHook(Option<Box<dyn Fn(&std::panic::PanicHookInfo<'_>) + Sync + Send + 'static>>);
+    impl SilenceHook {
+        fn install() -> Self {
+            let prev = std::panic::take_hook();
+            std::panic::set_hook(Box::new(|_| {}));
+            SilenceHook(Some(prev))
+        }
+    }
+    impl Drop for SilenceHook {
+        fn drop(&mut self) {
+            if let Some(prev) = self.0.take() {
+                std::panic::set_hook(prev);
+            }
+        }
+    }
+    // Catch `f`'s unwind with its (deliberate, expected) panic output silenced, the
+    // silence RAII-scoped to this one call. Only the KNOWN panics below are wrapped;
+    // every ASSERT runs under the real hook, so if one of THEM fires (a broken
+    // harness, or the born-red anchor catching a seam regression) its message is
+    // visible instead of being eaten by the silence it set up.
+    fn caught_silently<R>(f: impl FnOnce() -> R) -> std::thread::Result<R> {
+        let _silence = SilenceHook::install();
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+    }
 
     // LIVENESS: the instrument must be able to fail.
     assert!(
-        catch_unwind(|| panic!("liveness control")).is_err(),
+        caught_silently(|| panic!("liveness control")).is_err(),
         "catch_unwind did not catch a control panic — a dead harness reports seam panics as clean"
     );
 
@@ -641,7 +668,7 @@ fn no_panic_reachable_through_the_lowering_seam() {
     );
     let nkey = key_at(ElementKind::F16, 2);
     assert!(
-        catch_unwind(AssertUnwindSafe(|| generate(&na, &nkey, &Cuda))).is_err(),
+        caught_silently(|| generate(&na, &nkey, &Cuda)).is_err(),
         "the panicking entry `generate` did NOT panic on Nextafter@f16 — the reachability \
          sweep would then be testing a panic-immune population, and its green would be vacuous"
     );
@@ -667,6 +694,11 @@ fn no_panic_reachable_through_the_lowering_seam() {
     // Collect DISTINCT seam-reachable panics (dedup by message), rather than aborting
     // on the first, so one run scopes the whole §6.8-0004 gap instead of N runs.
     let mut panics: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    // Silence the sweep so a RED run reports ONLY the deduped summary below, not one
+    // raw hook line per panicking iteration. RAII: restored even if a non-caught
+    // panic escapes the loop, and explicitly dropped before the report/coverage
+    // panics so THOSE print under the real hook.
+    let silence = SilenceHook::install();
     for _ in 0..4000 {
         let n = 1 + rng.below(3);
         let dt = dtypes[rng.below(dtypes.len())];
@@ -692,7 +724,7 @@ fn no_panic_reachable_through_the_lowering_seam() {
             Ok(Err(_)) => declined += 1,
         }
     }
-    std::panic::set_hook(prev);
+    drop(silence);
 
     if !panics.is_empty() {
         let mut report = format!(
