@@ -1,0 +1,25 @@
+[package]
+name = "baracuda-cuda-vocab"
+version = "0.0.1-alpha.79"
+description = "Owner source for the `cuda:` KISS §6.8 namespace vocabulary: the closed sm-token set (sm80/sm89/sm90/sm90a), their base|`a` classes, and the two admission relations (§cuda-3.1 `≤`, §cuda-3.2 `==`). The reference implementation the §6.8-0003 registry points at, and the source a generated §6.8-0008 machine annex + owner drift-gate build on. Driver-free: consumes `unpopped-vocab`'s `ArchSku` codec as the byte source of truth for token spellings, and owns the class + admission content the spec annex `spec/namespaces/cuda.md` states in prose."
+edition.workspace = true
+# Driver-free (an enum + a comparison — no CUDA toolkit), and a CI job builds it
+# under exactly this version, so the floor is honest per the workspace note.
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+# The byte source of truth for the `cuda:` token spellings: `ArchSku` and its
+# `From<ArchSku> for TargetId` codec live here, and every token this crate names
+# is derived from that codec, never hand-spelled — so a token can never drift
+# from what a conforming peer emits. (The RFC's end state migrates `ArchSku`
+# ownership INTO this crate and makes unpopped-vocab token-opaque; until Unpopped
+# ships that release we CONSUME it, which keeps a single source and no transitional
+# dual-ownership window — the exact drift this crate exists to prevent.)
+unpopped-vocab = { workspace = true }
+
+[lints]
+workspace = true

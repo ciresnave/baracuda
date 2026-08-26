@@ -76,11 +76,12 @@ jobs:
       # in their build scripts, so a full `--workspace` build genuinely cannot
       # succeed on a machine without the CUDA toolkit (the arch features that
       # drive the nvcc build are default-on and deeply chained). The purpose of
-      # this job is to guard the Baracuda crate that IS designed to build
+      # this job is to guard the Baracuda crates that ARE designed to build
       # anywhere — the CUDA emitter `baracuda-cuda-emit` (pure-Rust IR->.cu; the
       # neutral generator + classifier vocab it consumes are now the external
-      # `unpopped` / `unpopped-vocab`, guarded in their own repo) — for
-      # missing_docs, clippy, and tests. The CUDA-dependent crates (and
+      # `unpopped` / `unpopped-vocab`, guarded in their own repo) and the `cuda:`
+      # §6.8 vocabulary owner `baracuda-cuda-vocab` — for missing_docs, clippy,
+      # and tests. The CUDA-dependent crates (and
       # cuda-emit's real `nvrtc` feature) are validated LOCALLY on the maintainer's
       # RTX 4070 box — there is NO CI CUDA runner (this workflow is one no-CUDA job
       # on ubuntu+windows). A prose claim of a runner that does not exist reads to a
@@ -89,9 +90,9 @@ jobs:
       # nvcc is absent, so an accidental CUDA-crate build here warns instead of
       # panicking — but it is still not built by this job.)
       - name: cargo build (driver-free surface)
-        run: cargo build -p baracuda-cuda-emit
+        run: cargo build -p baracuda-cuda-emit -p baracuda-cuda-vocab
       - name: cargo clippy (driver-free surface)
-        run: cargo clippy -p baracuda-cuda-emit -- -D warnings
+        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -- -D warnings
       # Also lint in TEST mode. The step above compiles the lib with cfg(test)
       # FALSE, so a lint in an inline `#[cfg(test)]` module or in an integration
       # test file (tests/*.rs) is never compiled and never seen — the same "CI
@@ -99,9 +100,9 @@ jobs:
       # in a lib inline test rode in unnoticed until a `--tests` run found it).
       # `--tests` compiles the lib-test target plus every tests/*.rs.
       - name: cargo clippy (driver-free surface, tests)
-        run: cargo clippy -p baracuda-cuda-emit --tests -- -D warnings
+        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab --tests -- -D warnings
       - name: cargo test (driver-free surface, no GPU)
-        run: cargo test -p baracuda-cuda-emit
+        run: cargo test -p baracuda-cuda-emit -p baracuda-cuda-vocab
       # `cargo doc` is also the ENFORCEMENT point for `[workspace.lints.rustdoc]`
       # (broken_intra_doc_links + private_intra_doc_links = deny). A broken
       # `[`Type`]` link is invisible to build/clippy/test — it renders as a live
@@ -109,14 +110,17 @@ jobs:
       # that stopped resolving after a rename ships silently. Scoped to the
       # driver-free crates that document without the CUDA toolkit. A pre-declared
       # born-red sweep (inject one broken link per crate, expect all to redden)
-      # hit 8 of 8 across THIS JOB'S TWO doc steps — the 6 crates below plus the 2
-      # cuvs crates in the feature-gated `cargo doc cuvs surfaces` step later —
-      # confirming the deny actually fires on each (a crate that failed to redden
-      # would be silently un-gated). CUDA-only crates' rustdoc is checked on-device.
+      # confirmed the deny fires on each: 8 of 8 in the original sweep, plus
+      # baracuda-cuda-vocab born-red-verified when it was added (exit 101,
+      # `-D rustdoc::broken-intra-doc-links`). Across THIS JOB'S TWO doc steps that is
+      # the 7 crates below plus the 2 cuvs crates in the feature-gated
+      # `cargo doc cuvs surfaces` step later (a crate that failed to redden would be
+      # silently un-gated). CUDA-only crates' rustdoc is checked on-device.
       - name: cargo doc (driver-free surface — enforces rustdoc deny)
         run: >
           cargo doc --no-deps
           -p baracuda-cuda-emit
+          -p baracuda-cuda-vocab
           -p baracuda-types
           -p baracuda-types-derive
           -p baracuda-build
@@ -214,7 +218,7 @@ jobs:
         # configuration, not only on code. (metadata, not a glob, is what caught
         # xtask slipping into the 1.85 set in the first place.)
         run: |
-          expected="baracuda-build baracuda-core baracuda-cuda-emit baracuda-types baracuda-types-derive"
+          expected="baracuda-build baracuda-core baracuda-cuda-emit baracuda-cuda-vocab baracuda-types baracuda-types-derive"
           exp=$(printf '%s\n' $expected | sort | tr '\n' ' '); exp="${exp% }"
           names=$(cargo +1.85.0 metadata --no-deps --format-version 1 \
             | python3 -c "import json,sys; print(' '.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('rust_version')=='1.85')))")
