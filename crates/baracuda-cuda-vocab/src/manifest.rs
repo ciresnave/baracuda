@@ -273,12 +273,57 @@ mod tests {
         );
     }
 
+    /// The semantic gate's token→key derivation, run on BOTH sides of its
+    /// comparison (the seed's token column and the manifest's member tokens), so the
+    /// gate compares two independent derivations of the SAME key rather than a
+    /// derivation against a stored projection. Yields `(token, class, sm_number)`
+    /// from a token; a token it cannot parse panics with a distinct
+    /// `"vendored seed unparseable"` rather than guessing (KISS-CLASSIFY-6.8-0010's
+    /// abstention rule), so a malformed input never reads as a disagreement. Class is
+    /// the token's trailing `a` (§cuda-1.3), exhaustive for the grammar, so there is
+    /// no unrecognized class to normalize away.
+    fn key_from_token(tok: &str) -> (String, &'static str, u32) {
+        let digits: String = tok
+            .strip_prefix("cuda:sm")
+            .unwrap_or_else(|| panic!("vendored seed unparseable: {tok:?} is not a cuda: token"))
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        let sm = digits
+            .parse()
+            .unwrap_or_else(|_| panic!("vendored seed unparseable: {tok:?} has no sm_number"));
+        let class = if tok.ends_with('a') { "a" } else { "base" };
+        (tok.to_string(), class, sm)
+    }
+
+    /// Pins [`key_from_token`] against the grammar — the same obligation
+    /// `derivation_matches_the_grammar` carries for `Entry`. Required because the
+    /// semantic gate runs `key_from_token` on BOTH sides: a bug in it would produce
+    /// the same wrong key on each side and cancel out, staying green. This is what
+    /// makes "same helper both sides" safe rather than circular.
+    #[test]
+    fn key_from_token_matches_the_grammar() {
+        assert_eq!(
+            key_from_token("cuda:sm80"),
+            ("cuda:sm80".into(), "base", 80)
+        );
+        assert_eq!(
+            key_from_token("cuda:sm89"),
+            ("cuda:sm89".into(), "base", 89)
+        );
+        assert_eq!(
+            key_from_token("cuda:sm90"),
+            ("cuda:sm90".into(), "base", 90)
+        );
+        assert_eq!(key_from_token("cuda:sm90a"), ("cuda:sm90a".into(), "a", 90));
+    }
+
     /// SEMANTIC-AGREEMENT gate (§6.8-0011 of KISS-Classify, the agreement half):
     /// the manifest's members agree with KISS's registered SSOT seed. Not a
     /// byte-diff — the seed is a TSV in a Markdown fence, the manifest is JSON — so
     /// it compares the (token, class, sm_number) SET, DERIVED from each side's
-    /// tokens (the same derivation `Entry` uses, applied to the seed's token column,
-    /// so a stored-field mismatch cannot hide). Comparison is BY KEY, not by row
+    /// tokens via the same [`key_from_token`] helper (not from the manifest's stored
+    /// class/sm_number), so a stored-field mismatch cannot hide. Comparison is BY KEY, not by row
     /// position, so seed row order stays non-semantic.
     ///
     /// The seed is VENDORED at a PINNED KISS commit (see kiss-cuda-seed.tsv's
@@ -296,23 +341,6 @@ mod tests {
     /// A red here NEVER means the generator drifted — that is the freshness gate.
     #[test]
     fn semantic_agreement_with_the_pinned_kiss_seed() {
-        // (token, class, sm_number) from a token — the manifest's own derivation.
-        fn key_from_token(tok: &str) -> (String, &'static str, u32) {
-            let digits: String = tok
-                .strip_prefix("cuda:sm")
-                .unwrap_or_else(|| {
-                    panic!("vendored seed unparseable: {tok:?} is not a cuda: token")
-                })
-                .chars()
-                .take_while(char::is_ascii_digit)
-                .collect();
-            let sm = digits
-                .parse()
-                .unwrap_or_else(|_| panic!("vendored seed unparseable: {tok:?} has no sm_number"));
-            let class = if tok.ends_with('a') { "a" } else { "base" };
-            (tok.to_string(), class, sm)
-        }
-
         // Parse the vendored seed's token column (field 1), skipping the `#` header
         // comments and the `sku token …` header row. Whitespace-tolerant, so
         // tabs-vs-spaces and a Windows CRLF checkout don't matter (a token parse,
@@ -331,13 +359,14 @@ mod tests {
             .collect();
         seed_keys.sort();
 
+        // Member side: DERIVE from each member's token via the SAME helper — not
+        // from the stored `m.class`/`m.sm_number`. So an unrecognized class fails the
+        // gate (abstain, don't guess — KISS-CLASSIFY-6.8-0010) instead of silently
+        // normalizing to `base`, and both sides are independent token derivations.
         let mut member_keys: Vec<(String, &str, u32)> = Manifest::generate()
             .members
             .iter()
-            .map(|m| {
-                let class = if m.class == "a" { "a" } else { "base" };
-                (m.token.clone(), class, m.sm_number)
-            })
+            .map(|m| key_from_token(&m.token))
             .collect();
         member_keys.sort();
 
