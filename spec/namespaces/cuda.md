@@ -5,7 +5,7 @@ registry. Per §6.8-0004 this document — not a KISS clause — defines the `cu
 vocabulary and its admission relations.
 
 - **Namespace:** `cuda`
-- **Maintainer:** Baracuda (`baracuda-kernel-vocab`)
+- **Maintainer:** Baracuda
 - **Vocabulary version:** `cuda-vocab v1`
 - **Registry vocabulary pointer:** this file.
 
@@ -15,9 +15,8 @@ This annex is **normative**: it defines what a conformant `cuda:` *producer* MUS
 and what a conformant *consumer* MUST admit. It is written spec-first, not as a
 description of one implementation.
 
-Baracuda's `baracuda-kernel-vocab` is, at time of writing, the **sole** implementation
-of the §6.7 `target_capability` codec for this namespace — kiss-ref's
-`kiss-classify-vocab` is dtype-only and produces no `cuda:` tokens yet. A second
+Baracuda is the reference `cuda:` producer; kiss-ref's `kiss-classify-vocab` is
+dtype-only and produces no `cuda:` tokens. A second
 producer (kiss-ref, or any other) is conformant when it satisfies THIS annex, not when
 it matches Baracuda. The §8-0004 freeze gate's second same-namespace producer validates
 against §1–§3 below.
@@ -45,10 +44,10 @@ meaningful.
 
 ## 2. Vocabulary — `cuda-vocab v1`
 
-The **closed, exhaustive** set of valid sm-tokens. (Baracuda's `ArchSku` with its
-matched `arch_code` / `arch_from_code` emit/parse pair in
-`baracuda-kernel-vocab/src/structure_key.rs`; the parser rejects any token not in this
-set, so the vocabulary is closed, not an open grammar.)
+The **closed, exhaustive** set of valid sm-tokens. Baracuda's `ArchSku` enumerates them
+and emit/parses via `TargetId` — the old `arch_code`/`arch_from_code` pair is retired —
+in `unpopped-vocab`, re-exported through `baracuda-kernels-types`. The parser rejects any
+token not in this set, so the vocabulary is closed, not an open grammar.
 
 | token | class | CUDA target | notes |
 |-------|-------|-------------|-------|
@@ -132,10 +131,9 @@ not by a cross-repo reference.** A test in the KISS conformance suite, landed wi
 annex, asserts that every token enumerated in §2 matches `^sm[0-9]+a?$` (a single scalar,
 no list/range separator); a range/list token added to the §2 table therefore fails a test
 in the **same** repository that carries this claim, rather than silently falsifying this
-paragraph. Baracuda's emitter *separately* guards the same invariant on its own side
-(`baracuda-kernel-vocab`'s `cuda_tokens_are_single_scalar`), but that test protects the
-emitter, not this document's claim — two guards, distinct scopes, neither load-bearing
-for the other. (Any role a range token might serve is served by the §3 admission
+paragraph. Baracuda's emitter *separately* guards the same invariant on its own side, but that
+guard protects the emitter, not this document's claim — two guards, distinct scopes,
+neither load-bearing for the other. (Any role a range token might serve is served by the §3 admission
 relations, not by the token.)
 
 ## 5. Canonical ordering
