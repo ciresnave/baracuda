@@ -580,3 +580,175 @@ fn oracle_elementwise_matches_independent_evaluator() {
         });
     }
 }
+
+/// §6.8-0004 REACHABILITY guard — NAMED FOR WHAT IT MEASURES: no panic is reachable
+/// through the conforming lowering seam (`try_generate`, the §6.1-0001 `(OpDef, key)`
+/// entry). Deliberately NOT a `grep 'panic!'` of the source: a whole-file grep
+/// false-fails the ~115 trusted-AOT backstops no input can reach, and a seam-only grep
+/// over-claims. The clause is REACHABILITY, and the only honest instrument for
+/// reachability is FEEDING INPUTS and catching what returns. On unpopped 0.5.0 this
+/// input space produced 640 panics (the plan gate ABORTED on inadmissible (op,dtype));
+/// 0.6.0 routes `try_generate` through `try_build_plan`, so each is now a TYPED `Err`.
+/// A panic here = a seam-reachable abort = a §6.8-0004 violation.
+///
+/// Non-vacuity is defended three ways, because "nothing panicked" is
+/// untested-by-construction (#274):
+///  - LIVENESS: `catch_unwind` must actually catch a control panic, else a dead
+///    harness reports every real seam panic as clean.
+///  - BORN-RED / panic-capable population: for a known-inadmissible input
+///    (Nextafter@f16), the OLD panicking entry `generate` MUST still panic while the
+///    conforming `try_generate` declines — proving the sweep tests inputs that CAN
+///    panic and that the seam is what converts the panic to a typed decline. If
+///    `try_generate` ever reverted to `build_plan` it would panic like `generate`,
+///    and the sweep below would catch it.
+///  - COVERAGE: the random sweep must REACH the plan gate (>=1 InadmissiblePlan), else
+///    it swept only admissible inputs and "no panic" proves nothing.
+#[test]
+fn no_panic_reachable_through_the_lowering_seam() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    use unpopped::backend::LowerError;
+    use unpopped::try_generate;
+
+    // RAII silence: save the current panic hook, install a silent one, restore the
+    // saved hook on Drop — so a silenced window can NEVER outlive its scope and leak
+    // into the rest of this binary. In a test binary whose whole job is surfacing
+    // panics, a leaked silent hook would hide every LATER test's panic output (a
+    // silenced instrument reporting clean) — the exact failure this test exists to
+    // catch, so it must not commit it itself. (Copilot, PR #34.)
+    struct SilenceHook(Option<Box<dyn Fn(&std::panic::PanicHookInfo<'_>) + Sync + Send + 'static>>);
+    impl SilenceHook {
+        fn install() -> Self {
+            let prev = std::panic::take_hook();
+            std::panic::set_hook(Box::new(|_| {}));
+            SilenceHook(Some(prev))
+        }
+    }
+    impl Drop for SilenceHook {
+        fn drop(&mut self) {
+            if let Some(prev) = self.0.take() {
+                std::panic::set_hook(prev);
+            }
+        }
+    }
+    // Catch `f`'s unwind with its (deliberate, expected) panic output silenced, the
+    // silence RAII-scoped to this one call. Only the KNOWN panics below are wrapped;
+    // every ASSERT runs under the real hook, so if one of THEM fires (a broken
+    // harness, or the born-red anchor catching a seam regression) its message is
+    // visible instead of being eaten by the silence it set up.
+    fn caught_silently<R>(f: impl FnOnce() -> R) -> std::thread::Result<R> {
+        let _silence = SilenceHook::install();
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+    }
+
+    // LIVENESS: the instrument must be able to fail.
+    assert!(
+        caught_silently(|| panic!("liveness control")).is_err(),
+        "catch_unwind did not catch a control panic — a dead harness reports seam panics as clean"
+    );
+
+    let key_at = |dt: ElementKind, n: usize| -> StructureKey {
+        let a = OperandDesc::new(1, &[1 << 12], &[1], dt, 4);
+        let cat = match n {
+            1 => OpCategory::UnaryElementwise,
+            2 => OpCategory::BinaryElementwise,
+            _ => OpCategory::TernaryElementwise,
+        };
+        structure_key(cat, &vec![a; n + 1], ArchSku::Sm89)
+    };
+
+    // BORN-RED / panic-capable anchor: Nextafter@f16 is inadmissible (no half lowering).
+    // The OLD entry `generate` MUST panic on it (the population is genuinely
+    // panic-capable); the conforming `try_generate` MUST decline it typed. This is what
+    // makes "no seam panic" below non-vacuous, and it reds if the seam stops converting.
+    let na = OpDef::elementwise(
+        "na",
+        2,
+        &[ElementKind::F16],
+        input(0).binary(BinaryOp::Nextafter, input(1)),
+    );
+    let nkey = key_at(ElementKind::F16, 2);
+    assert!(
+        caught_silently(|| generate(&na, &nkey, &Cuda)).is_err(),
+        "the panicking entry `generate` did NOT panic on Nextafter@f16 — the reachability \
+         sweep would then be testing a panic-immune population, and its green would be vacuous"
+    );
+    assert!(
+        matches!(
+            try_generate(&na, &nkey, &Cuda),
+            Err(LowerError::InadmissiblePlan { .. })
+        ),
+        "the conforming `try_generate` did NOT convert the Nextafter@f16 panic into a typed \
+         InadmissiblePlan — the seam regressed (likely reverted to build_plan)"
+    );
+
+    // THE SWEEP: the full float op surface at admissible AND inadmissible dtypes,
+    // through the conforming seam. Any panic is a §6.8-0004 violation.
+    let dtypes = [
+        ElementKind::F16,
+        ElementKind::Bf16,
+        ElementKind::F32,
+        ElementKind::F64,
+    ];
+    let mut rng = Rng::new(0x6804_0001);
+    let (mut lowered, mut declined, mut inadmissible) = (0usize, 0usize, 0usize);
+    // Collect DISTINCT seam-reachable panics (dedup by message), rather than aborting
+    // on the first, so one run scopes the whole §6.8-0004 gap instead of N runs.
+    let mut panics: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    // Silence the sweep so a RED run reports ONLY the deduped summary below, not one
+    // raw hook line per panicking iteration. RAII: restored even if a non-caught
+    // panic escapes the loop, and explicitly dropped before the report/coverage
+    // panics so THOSE print under the real hook.
+    let silence = SilenceHook::install();
+    for _ in 0..4000 {
+        let n = 1 + rng.below(3);
+        let dt = dtypes[rng.below(dtypes.len())];
+        let op = OpDef::elementwise("reach", n as u8, &[dt], gen_expr(&mut rng, 4, n, &FULL));
+        let key = key_at(dt, n);
+        match catch_unwind(AssertUnwindSafe(|| try_generate(&op, &key, &Cuda))) {
+            Err(payload) => {
+                let msg = payload
+                    .downcast_ref::<String>()
+                    .map(String::as_str)
+                    .or_else(|| payload.downcast_ref::<&str>().copied())
+                    .unwrap_or("<non-string panic payload>")
+                    .to_string();
+                panics
+                    .entry(msg)
+                    .or_insert_with(|| format!("{dt:?} :: {:?}", op.body));
+            }
+            Ok(Ok(_)) => lowered += 1,
+            Ok(Err(LowerError::InadmissiblePlan { .. })) => {
+                declined += 1;
+                inadmissible += 1;
+            }
+            Ok(Err(_)) => declined += 1,
+        }
+    }
+    drop(silence);
+
+    if !panics.is_empty() {
+        let mut report = format!(
+            "{} DISTINCT seam-reachable panic(s) through try_generate (§6.8-0004 violations — \
+             each must be a typed LowerError, not a panic). lowered={lowered} declined={declined}:\n",
+            panics.len()
+        );
+        for (msg, first) in &panics {
+            report.push_str(&format!("  • {msg}\n      first seen: {first}\n"));
+        }
+        panic!("{report}");
+    }
+
+    // COVERAGE: the sweep must have reached the plan gate, and must not be
+    // uniformly-declining (which would pass for a seam that refuses everything).
+    assert!(
+        inadmissible > 0,
+        "0 InadmissiblePlan declines across {} sweep inputs — the sweep never reached the \
+         plan gate (the population that used to panic), so 'no seam-reachable panic' is vacuous",
+        lowered + declined
+    );
+    assert!(
+        lowered > 0,
+        "0 lowered inputs — the sweep declined everything; a uniformly-declining seam would \
+         pass this test without ever emitting"
+    );
+}
