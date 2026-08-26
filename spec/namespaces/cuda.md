@@ -44,10 +44,10 @@ meaningful.
 
 ## 2. Vocabulary — `cuda-vocab v1`
 
-The **closed, exhaustive** set of valid sm-tokens. (Baracuda's `ArchSku` with its
-emit/parse via `TargetId` (the `arch_code`/`arch_from_code` pair was retired) in
-`unpopped-vocab`, re-exported through `baracuda-kernels-types`; the parser rejects any token not in this
-set, so the vocabulary is closed, not an open grammar.)
+The **closed, exhaustive** set of valid sm-tokens. Baracuda's `ArchSku` enumerates them
+and emit/parses via `TargetId` — the old `arch_code`/`arch_from_code` pair is retired —
+in `unpopped-vocab`, re-exported through `baracuda-kernels-types`. The parser rejects any
+token not in this set, so the vocabulary is closed, not an open grammar.
 
 | token | class | CUDA target | notes |
 |-------|-------|-------------|-------|
