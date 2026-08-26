@@ -24,6 +24,8 @@
 //! window — the very drift this crate exists to prevent. The §6.8-0008 manifest
 //! generator + agreement gate build on [`CATALOG`] in follow-on work.)
 
+pub mod manifest;
+
 use unpopped_vocab::{ArchSku, TargetId};
 
 /// The class of an sm-token (`spec/namespaces/cuda.md` §2), which selects its

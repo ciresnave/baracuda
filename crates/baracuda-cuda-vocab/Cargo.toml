@@ -20,6 +20,13 @@ homepage.workspace = true
 # ships that release we CONSUME it, which keeps a single source and no transitional
 # dual-ownership window — the exact drift this crate exists to prevent.)
 unpopped-vocab = { workspace = true }
+# JSON emission for the §6.8-0008 machine manifest. Pure-Rust, driver-free, and
+# well below the 1.85 floor — the crate stays driver-free/MSRV-honest. Both are
+# normal (library) deps: serde derives the manifest structs, and serde_json's
+# `to_string_pretty` runs in `Manifest::to_json()` (lib code) — the self-tests
+# also use serde_json's parser, but the lib use is what makes it a normal dep.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [lints]
 workspace = true

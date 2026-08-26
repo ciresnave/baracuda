@@ -122,6 +122,8 @@ dependencies = [
 name = "baracuda-cuda-vocab"
 version = "0.0.1-alpha.79"
 dependencies = [
+ "serde",
+ "serde_json",
  "unpopped-vocab",
 ]
 
