@@ -227,6 +227,46 @@ mod tests {
         assert_eq!(manifest_json(), manifest_json());
     }
 
+    /// FRESHNESS gate (§6.8-0011 of KISS-Classify, the freshness half): the
+    /// committed `cuda-vocab-manifest.json` equals what the generator emits NOW.
+    /// A byte-diff against a manifest committed in THIS repo, beside its generator
+    /// — the artefact lives where the thing that validates it lives — the Vulkane
+    /// `vocabulary_manifest.rs` pattern.
+    ///
+    /// A red here means the GENERATOR drifted from the committed bytes: someone
+    /// changed `CATALOG` or the manifest shape and did not regenerate. It never
+    /// means KISS drifted — that is the SEPARATE semantic-agreement gate. The two
+    /// relations must not be conflatable in the output, so this test's name and
+    /// message both say "freshness / committed-vs-generated"; a failure names its
+    /// own relation. Being fully local, it can and MUST pass today — a red is our
+    /// generator being non-deterministic, not an external event.
+    ///
+    /// Regenerate the committed file when the generator legitimately changes:
+    ///   `BLESS_CUDA_MANIFEST=1 cargo test -p baracuda-cuda-vocab
+    ///    freshness_committed_manifest_matches_the_generator`
+    #[test]
+    fn freshness_committed_manifest_matches_the_generator() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/cuda-vocab-manifest.json");
+        let generated = manifest_json();
+        if std::env::var_os("BLESS_CUDA_MANIFEST").is_some() {
+            std::fs::write(path, &generated).expect("write committed cuda-vocab-manifest.json");
+            return;
+        }
+        let committed = std::fs::read_to_string(path).unwrap_or_else(|e| {
+            panic!(
+                "committed cuda-vocab-manifest.json is unreadable ({e}); bless it with \
+                 `BLESS_CUDA_MANIFEST=1 cargo test -p baracuda-cuda-vocab \
+                 freshness_committed_manifest_matches_the_generator`"
+            )
+        });
+        assert_eq!(
+            generated, committed,
+            "FRESHNESS: committed cuda-vocab-manifest.json no longer matches the generator (the \
+             GENERATOR drifted, not KISS). Regenerate: `BLESS_CUDA_MANIFEST=1 cargo test -p \
+             baracuda-cuda-vocab freshness_committed_manifest_matches_the_generator`"
+        );
+    }
+
     /// The §6.8-0008 required fields are present under their required names. Guards
     /// against a rename dropping a field the schema mandates.
     #[test]
