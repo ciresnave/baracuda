@@ -30,12 +30,12 @@ meaningful.
 
 1. **§cuda-1.1.** A `cuda:` capability token is the ASCII string `cuda:` immediately
    followed by exactly one sm-token (§2), with no whitespace: `cuda:` `<sm-token>`.
-2. **§cuda-1.2.** The token occupies a single field of the SK3 structure key (fields
-   `|`-delimited, e.g. `sk3|gem|f32|cuda:sm89|ix32|…`). It is compared **byte-exact**
+2. **§cuda-1.2.** The token occupies a single field of the SK4 structure key (fields
+   `|`-delimited, e.g. `sk4|gem|f32|cuda:sm89|ix32|…`). It is compared **byte-exact**
    (§6.8-0002): not case-folded, not normalized. The literal bytes are the identity.
 3. **§cuda-1.3.** The sm-token character set after the `cuda:` prefix is `[a-z0-9]` only
    (literal `sm`, decimal digits, an optional trailing `a`). Any byte outside `[a-z0-9]`
-   — including the SK3 separator `|`, whitespace, `;`, `/`, or a second `:` (§6.8-0005) —
+   — including the SK4 separator `|`, whitespace, `;`, `/`, or a second `:` (§6.8-0005) —
    makes the token **malformed**. No escaping rule is defined, because no byte requiring
    escaping is ever admissible.
 4. **§cuda-1.4.** A `cuda:` capability-set contains **exactly one** token (a single
