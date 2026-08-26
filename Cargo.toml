@@ -42,6 +42,7 @@ baracuda-kernels-sys = { version = "0.0.1-alpha.79", path = "crates/baracuda-ker
 baracuda-kernels = { version = "0.0.1-alpha.79", path = "crates/baracuda-kernels" }
 baracuda-kernels-bench = { version = "0.0.1-alpha.79", path = "crates/baracuda-kernels-bench" }
 baracuda-cuda-emit = { version = "0.0.1-alpha.79", path = "crates/baracuda-cuda-emit" }
+baracuda-cuda-vocab = { version = "0.0.1-alpha.79", path = "crates/baracuda-cuda-vocab" }
 # The neutral kernel generator + its classifier vocab were carved out and PUBLISHED
 # as the standalone vendor-neutral `unpopped` / `unpopped-vocab` (crates.io). Baracuda
 # is now a CONSUMER of the published crates, not their host — the local

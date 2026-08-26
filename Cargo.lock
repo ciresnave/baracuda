@@ -119,6 +119,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-cuda-vocab"
+version = "0.0.1-alpha.79"
+dependencies = [
+ "unpopped-vocab",
+]
+
+[[package]]
 name = "baracuda-cudf"
 version = "0.0.1-alpha.79"
 dependencies = [
