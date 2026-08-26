@@ -48,8 +48,8 @@ Read **build scripts, dependency edges, and whether the dep is `optional`** — 
 
 **Worked example (Baracuda + Fuel, four of the five kinds in two repos):**
 - Baracuda's ~61 lazy-libloading `-sys`/wrapper crates: no toolkit needed → **OMISSION** (now covered by a `--all-features` clippy step). The audit first called all 68 "uncovered because nvcc"; only 7 invoke nvcc.
-- Baracuda's 7 nvcc crates: nvcc *installs* on ubuntu, so not PLATFORM; but `baracuda-kernels-sys` forges ~426 kernels (~56 min) pulled by workspace membership → **COST-EXCLUDED** (a scoped build or a kernel cache would change the cost).
-- Fuel's `fuel-cuda-backend`: `baracuda-kernels-sys` is a **mandatory** dep (`optional` absent), and `cargo check` runs its build script, so **no feature combination compiles it without the forge** → **UNAVOIDABLE-COST**, not COST-EXCLUDED. (Fuel's sibling `fuel-dispatch --features baracuda-types` is a *different target* that pulls no forge — cheap and already covered; the two were fused in one file and only the second is a live question.)
+- Baracuda's 7 nvcc crates: nvcc *installs* on ubuntu, so not PLATFORM; but `baracuda-kernels-sys`'s build script compiles ~426 GPU kernels (~56 min), pulled in by workspace membership → **COST-EXCLUDED** (a scoped build or a kernel cache would change the cost).
+- Fuel's `fuel-cuda-backend`: `baracuda-kernels-sys` is a **mandatory** dep (`optional` absent), and `cargo check` runs its build script, so **no feature combination compiles it without that ~426-kernel build** → **UNAVOIDABLE-COST**, not COST-EXCLUDED. (Fuel's sibling `fuel-dispatch --features baracuda-types` is a *different target* that pulls no forge — cheap and already covered; the two were fused in one file and only the second is a live question.)
 - GPU-**runtime** validation (capture-replay, compute-sanitizer, kernel execution): no GPU runner → **PLATFORM.**
 
 ## The trap when you add a step
