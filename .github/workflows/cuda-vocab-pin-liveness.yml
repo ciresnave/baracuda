@@ -21,6 +21,15 @@ permissions:
   contents: read
   issues: write
 
+# Serialize runs. A manual `workflow_dispatch` can overlap the weekly scheduled run
+# (or another dispatch), and two runs executing the `gh issue list` → `gh issue
+# create` dedupe concurrently could both observe "no open issue" and both create one
+# — a TOCTOU race that defeats the dedupe. `cancel-in-progress: false` queues a later
+# run behind the in-flight one rather than cancelling it mid-`issue create`.
+concurrency:
+  group: cuda-vocab-pin-liveness
+  cancel-in-progress: false
+
 jobs:
   pin-liveness:
     name: Is the KISS seed pin current?
