@@ -170,6 +170,32 @@ pub fn manifest_json() -> String {
 mod tests {
     use super::*;
 
+    /// The RENDERED string values carry no stray whitespace runs. A byte-diff
+    /// freshness gate compares these exact bytes, and a `\` line-continuation in a
+    /// source string literal keeps the next line's leading whitespace — a known
+    /// footgun where "deterministic" is not "clean" (deterministic stray spaces are
+    /// still deterministic, so the round-trip/determinism tests can't see it). This
+    /// reads the RENDERED values, not the source: it parses the manifest and asserts
+    /// no string value contains a run of spaces. JSON indentation is structural and
+    /// lives outside string values, so this checks content, not layout.
+    #[test]
+    fn string_values_carry_no_whitespace_runs() {
+        fn check(v: &serde_json::Value) {
+            match v {
+                serde_json::Value::String(s) => {
+                    assert!(
+                        !s.contains("  "),
+                        "string value has a whitespace run: {s:?}"
+                    )
+                }
+                serde_json::Value::Array(a) => a.iter().for_each(check),
+                serde_json::Value::Object(o) => o.values().for_each(check),
+                _ => {}
+            }
+        }
+        check(&serde_json::from_str(&manifest_json()).unwrap());
+    }
+
     /// Well-formed + stable: the JSON round-trips through `serde_json` back to an
     /// equal `Manifest`. Proves the emitted bytes are valid JSON and lossless.
     #[test]
