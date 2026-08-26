@@ -1,0 +1,83 @@
+name: cuda-vocab pin liveness
+
+# The `cuda:` vocabulary manifest is validated LOCALLY against a PINNED snapshot of
+# KISS's SSOT seed (crates/baracuda-cuda-vocab/kiss-cuda-seed.tsv). Neither the
+# freshness gate nor the semantic gate reds when that pin is STALE — they measure
+# AGAINST it — so a KISS seed change is invisible to CI by construction. This is the
+# fourth relation ("upstream moved; decide whether to follow"): it fetches KISS's
+# seed at `main`, diffs it against the pin, and WARNS / opens an issue on divergence.
+#
+# It NEVER reds a build (being behind is legitimate — bumping the pin is a deliberate
+# act, per the vendored file's header) and runs ONLY on a schedule / on demand, never
+# on a PR, so it cannot flake the merge path. The warning/issue names WHICH tokens
+# moved, not merely that something did — a bare "the pin is behind" is a notification
+# people learn to dismiss, which is the very failure the header already documents.
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  pin-liveness:
+    name: Is the KISS seed pin current?
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diff the pinned seed against KISS main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SEED=crates/baracuda-cuda-vocab/kiss-cuda-seed.tsv
+
+          # The pin SHA (for the report) + the pinned token set, from the vendored file.
+          # Data rows begin with the `ArchSku` variant (Sm…); `#` comments and the
+          # `sku` header do not, so `^Sm` selects exactly the rows.
+          PIN=$(grep -oE 'Pinned:[[:space:]]*[0-9a-f]{7,40}' "$SEED" | grep -oE '[0-9a-f]{7,40}' | head -1)
+          pinned=$(grep '^Sm' "$SEED" | awk '{print $2}' | sort -u)
+
+          # KISS main's seed token set (the same slice of its cuda.md appendix).
+          main_md=$(gh api "repos/ThinkersJournal/KISS/contents/spec/namespaces/cuda.md?ref=main" --jq .content | base64 -d)
+          main_tokens=$(printf '%s\n' "$main_md" \
+            | sed -n '/machine-readable capability set/,/^```$/p' \
+            | grep '^Sm' | awk '{print $2}' | sort -u)
+
+          if [ "$pinned" = "$main_tokens" ]; then
+            echo "Pin $PIN is CURRENT — the vendored seed matches KISS main."
+            echo "cuda-vocab pin \`$PIN\` is current — token set agrees with KISS main." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Divergent: report the SPECIFIC diff, not just that they differ.
+          added=$(comm -13 <(echo "$pinned") <(echo "$main_tokens") | paste -sd' ' -)
+          removed=$(comm -23 <(echo "$pinned") <(echo "$main_tokens") | paste -sd' ' -)
+          body=$(printf '%s\n' \
+            "The \`cuda:\` vocabulary pin is BEHIND KISS main. This is not a build failure — being behind is legitimate, and bumping the pin is a deliberate act." \
+            "" \
+            "- **Pinned commit:** \`$PIN\` (\`crates/baracuda-cuda-vocab/kiss-cuda-seed.tsv\`)" \
+            "- **Tokens added on KISS main since the pin:** ${added:-(none)}" \
+            "- **Tokens removed on KISS main since the pin:** ${removed:-(none)}" \
+            "" \
+            "To follow: re-vendor the seed at the new KISS commit, update the \`Pinned:\` line + date in \`kiss-cuda-seed.tsv\`, and re-run the semantic gate (\`cargo test -p baracuda-cuda-vocab semantic_agreement\`). The file header carries the exact fetch command.")
+
+          echo "::warning::cuda-vocab pin $PIN is behind KISS main — added: ${added:-none}; removed: ${removed:-none}"
+          { echo "### ⚠️ cuda-vocab pin is behind KISS main"; echo; echo "$body"; } >> "$GITHUB_STEP_SUMMARY"
+
+          # Open a divergence issue, deduped by a stable title so a persisting
+          # divergence does not open a fresh issue every week.
+          TITLE="cuda-vocab: KISS seed pin ($PIN) is behind upstream"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title cuda-vocab: KISS seed pin" --json number --jq '.[0].number // empty' || true)
+          if [ -n "$existing" ]; then
+            echo "divergence issue already open (#$existing) — not duplicating."
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$body"
+          fi
+
+          # NEVER red — being behind is legitimate; the signal is the warning + issue.
+          exit 0
