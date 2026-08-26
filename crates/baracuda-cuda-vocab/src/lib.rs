@@ -4,30 +4,32 @@
 //! This crate is the machine-readable owner of what `spec/namespaces/cuda.md`
 //! states in prose: the closed sm-token set (§2), each token's `base`|`a` class
 //! (§2), and the two admission relations (§3). It exists so the §6.8-0008 machine
-//! annex can be **generated** from a single source and **drift-gated** against the
-//! KISS-committed copy — the mechanism that makes a `cuda:sm90`-class skew (§2 and
+//! annex can be **generated** from a single source and **agreement-gated** against
+//! the prose annex — the mechanism that makes a `cuda:sm90`-class skew (§2 and
 //! §4/§6 disagreeing on membership) impossible rather than merely caught late.
 //!
-//! **Token spellings are never hand-written here.** Each entry names an
-//! [`unpopped_vocab::ArchSku`], and the `cuda:` bytes come from that crate's
-//! `From<ArchSku> for TargetId` codec ([`Entry::token`]) — so a catalog token can
-//! never drift from what a conforming peer emits. (The namespace-machine-spec RFC's
-//! end state migrates `ArchSku` ownership *into* this crate and makes
-//! `unpopped-vocab` token-opaque; until that release ships we CONSUME its codec,
-//! which keeps one source and no transitional dual-ownership window — the very
-//! drift this crate exists to prevent.)
+//! **Nothing derived is hand-written.** An [`Entry`] holds only its
+//! [`unpopped_vocab::ArchSku`]; the token bytes come from that crate's
+//! `From<ArchSku> for TargetId` codec ([`Entry::token`]), and the `sm_number`
+//! ([`Entry::sm_number`]) and class ([`Entry::class`]) — the two values the
+//! admission relations actually read — are **parsed from that token**, not stored.
+//! So the fields `admits` keys on cannot drift from the codec's spelling: a wrong
+//! `sm_number` for `sm90a` is not representable, because there is no `sm_number`
+//! field to get wrong. The only hand-authored fact is CATALOG *membership* (which
+//! `ArchSku` variants are in v1), and that is asserted against the §2/§6 set.
 //!
-//! What lives here vs. not: the token set, classes, and admission relations are
-//! this crate's to own. It does not re-implement the codec (that stays in
-//! `unpopped-vocab`), and the §6.8-0008 manifest generator + drift-gate build on
-//! [`CATALOG`] in follow-on work.
+//! (The namespace-machine-spec RFC's end state migrates `ArchSku` ownership *into*
+//! this crate and makes `unpopped-vocab` token-opaque; until that release ships we
+//! CONSUME its codec, which keeps one source and no transitional dual-ownership
+//! window — the very drift this crate exists to prevent. The §6.8-0008 manifest
+//! generator + agreement gate build on [`CATALOG`] in follow-on work.)
 
 use unpopped_vocab::{ArchSku, TargetId};
 
 /// The class of an sm-token (`spec/namespaces/cuda.md` §2), which selects its
-/// admission relation in §3. The class — not the token bytes — is what makes the
-/// vocabulary a `(sm_number, class)` space rather than a flat set: `sm90` and
-/// `sm90a` share `sm_number` 90 but differ here, and admit under opposite clauses.
+/// admission relation in §3. The class is what makes the vocabulary a
+/// `(sm_number, class)` space rather than a flat set: `sm90` and `sm90a` share
+/// `sm_number` 90 but differ here, and admit under opposite clauses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenClass {
     /// No trailing `a`. Forward-compatible up-arch (PTX/JIT). Admits under the
@@ -38,37 +40,61 @@ pub enum TokenClass {
     Exclusive,
 }
 
-/// One `cuda-vocab v1` entry: an sm-token, its class, and its `sm_number`.
-///
-/// The token spelling is **not** stored — it is derived from `sku` via
-/// `unpopped-vocab`'s codec ([`Entry::token`]), so a catalog token can never drift
-/// from what a conforming peer emits.
-#[derive(Debug, Clone, Copy)]
+/// One `cuda-vocab v1` entry. It holds **only** its [`ArchSku`]; everything the
+/// admission relations read is derived from the codec-produced token, so it cannot
+/// drift from what a conforming peer emits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Entry {
-    /// The arch SKU — the byte source of truth for the token spelling.
+    /// The arch SKU — the single source of truth for this entry.
     pub sku: ArchSku,
-    /// `base` | `a` (§2), which selects the admission clause (§3).
-    pub class: TokenClass,
-    /// The decimal after `sm`, e.g. `sm90a`.`sm_number` = 90 (§3 definition).
-    pub sm_number: u32,
 }
 
 impl Entry {
     /// The canonical `cuda:` token bytes, from `unpopped-vocab`'s `From<ArchSku>`
-    /// codec. Never hand-spelled — this is the anti-drift lock.
+    /// codec. Never hand-spelled — this is the byte source of truth from which
+    /// [`Self::sm_number`] and [`Self::class`] are then derived.
     pub fn token(&self) -> String {
         TargetId::from(self.sku).as_str()
+    }
+
+    /// The `sm_number` (§3), **parsed from the token** — the decimal run after
+    /// `cuda:sm`, e.g. `cuda:sm90a` → 90. Derived, not stored, so it cannot be
+    /// given a value inconsistent with the token the codec emits.
+    pub fn sm_number(&self) -> u32 {
+        let token = self.token();
+        let digits: String = token
+            .strip_prefix("cuda:sm")
+            .expect("a cuda: token from the codec begins `cuda:sm`")
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        digits
+            .parse()
+            .expect("a cuda: token carries at least one digit after `sm`")
+    }
+
+    /// The class (§2), **derived from the token's trailing `a`** (§cuda-1.3's
+    /// optional suffix): an `a`-suffixed token is [`TokenClass::Exclusive`], every
+    /// other is [`TokenClass::Base`]. Derived, not stored — the class and the token
+    /// suffix cannot disagree.
+    pub fn class(&self) -> TokenClass {
+        if self.token().ends_with('a') {
+            TokenClass::Exclusive
+        } else {
+            TokenClass::Base
+        }
     }
 
     /// §3 admission: whether a device at compute capability `device_sm` (encoded
     /// `major × 10 + minor`, e.g. Hopper 9.0 → 90) admits a kernel bearing this
     /// token. Base tokens admit forward-compatibly (`≤`, §cuda-3.1); `a` tokens
     /// admit only on an exact arch match (`==`, §cuda-3.2) — never widen an `a`
-    /// token to `≤`, which is the silent-merge hazard §3 exists to prevent.
+    /// token to `≤`, which is the silent-merge hazard §3 exists to prevent. Both
+    /// operands (`sm_number`, `class`) are token-derived, so this reads the codec.
     pub fn admits(&self, device_sm: u32) -> bool {
-        match self.class {
-            TokenClass::Base => self.sm_number <= device_sm,
-            TokenClass::Exclusive => self.sm_number == device_sm,
+        match self.class() {
+            TokenClass::Base => self.sm_number() <= device_sm,
+            TokenClass::Exclusive => self.sm_number() == device_sm,
         }
     }
 }
@@ -77,29 +103,16 @@ impl Entry {
 /// §2 table / §6 set): `{ sm80, sm89, sm90, sm90a }`, in §5 canonical order
 /// (`sm_number` ascending, then `base` before `a`).
 ///
-/// `cuda:sm90` is a member: KISS's §6.7 reference vectors name it, so a reader
-/// that drops it rejects conforming vectors. (`unpopped-vocab`'s `ArchSku::Sm90`
-/// doc says as much.)
+/// The only hand-authored fact here is *membership* — which `ArchSku` variants
+/// are in v1. `cuda:sm90` is one: KISS's §6.7 reference vectors name it, so a
+/// reader that drops it rejects conforming vectors. (`unpopped-vocab`'s
+/// `ArchSku::Sm90` doc says as much.)
 pub const CATALOG: &[Entry] = &[
-    Entry {
-        sku: ArchSku::Sm80,
-        class: TokenClass::Base,
-        sm_number: 80,
-    },
-    Entry {
-        sku: ArchSku::Sm89,
-        class: TokenClass::Base,
-        sm_number: 89,
-    },
-    Entry {
-        sku: ArchSku::Sm90,
-        class: TokenClass::Base,
-        sm_number: 90,
-    },
+    Entry { sku: ArchSku::Sm80 },
+    Entry { sku: ArchSku::Sm89 },
+    Entry { sku: ArchSku::Sm90 },
     Entry {
         sku: ArchSku::Sm90a,
-        class: TokenClass::Exclusive,
-        sm_number: 90,
     },
 ];
 
@@ -118,7 +131,8 @@ mod tests {
 
     /// The catalog is exactly `cuda-vocab v1`'s four members (§2 table / §6 set),
     /// `cuda:sm90` included — the membership KISS's §6.7 vectors require and that
-    /// PR #37 reconciled §4/§5/§6 to match §2 on.
+    /// PR #37 reconciled §4/§5/§6 to match §2 on. Membership is the one
+    /// hand-authored fact, so it is the one asserted against the expected set.
     #[test]
     fn catalog_is_cuda_vocab_v1() {
         assert_eq!(CATALOG.len(), 4);
@@ -129,10 +143,29 @@ mod tests {
         );
     }
 
+    /// The derivation is correct for each member: `sm_number` and `class` come out
+    /// of the token exactly as §2 states. This tests the PARSER — the mechanism
+    /// that makes the derived fields trustworthy — against the known grammar, so a
+    /// bug in `sm_number`/`class` can't ride in behind the token byte-lock.
+    #[test]
+    fn derivation_matches_the_grammar() {
+        let expect = [
+            ("cuda:sm80", 80, TokenClass::Base),
+            ("cuda:sm89", 89, TokenClass::Base),
+            ("cuda:sm90", 90, TokenClass::Base),
+            ("cuda:sm90a", 90, TokenClass::Exclusive),
+        ];
+        for (e, (tok, sm, class)) in CATALOG.iter().zip(expect) {
+            assert_eq!(e.token(), tok);
+            assert_eq!(e.sm_number(), sm, "sm_number of {tok}");
+            assert_eq!(e.class(), class, "class of {tok}");
+        }
+    }
+
     /// §5 canonical order: `sm_number` ascending, then `base` before `a` at a tie.
     #[test]
     fn catalog_is_in_canonical_order() {
-        let sort_key = |e: &Entry| (e.sm_number, matches!(e.class, TokenClass::Exclusive));
+        let sort_key = |e: &Entry| (e.sm_number(), matches!(e.class(), TokenClass::Exclusive));
         for w in CATALOG.windows(2) {
             assert!(
                 sort_key(&w[0]) < sort_key(&w[1]),
@@ -147,7 +180,7 @@ mod tests {
     #[test]
     fn base_tokens_admit_forward_compatibly() {
         let sm80 = CATALOG[0];
-        assert_eq!(sm80.class, TokenClass::Base);
+        assert_eq!(sm80.class(), TokenClass::Base);
         assert!(sm80.admits(80)); // its own arch
         assert!(sm80.admits(89)); // up-arch Ada
         assert!(sm80.admits(90)); // up-arch Hopper
@@ -160,7 +193,7 @@ mod tests {
     #[test]
     fn exclusive_tokens_admit_only_on_exact_match() {
         let sm90a = CATALOG[3];
-        assert_eq!(sm90a.class, TokenClass::Exclusive);
+        assert_eq!(sm90a.class(), TokenClass::Exclusive);
         assert!(sm90a.admits(90)); // its target, Hopper
         assert!(!sm90a.admits(100)); // NOT forward-compatible up-arch
         assert!(!sm90a.admits(89)); // NOT backward
@@ -174,8 +207,8 @@ mod tests {
     fn the_two_90s_take_opposite_admission_clauses() {
         let sm90 = CATALOG[2];
         let sm90a = CATALOG[3];
-        assert_eq!(sm90.sm_number, sm90a.sm_number);
-        assert_ne!(sm90.class, sm90a.class);
+        assert_eq!(sm90.sm_number(), sm90a.sm_number());
+        assert_ne!(sm90.class(), sm90a.class());
         assert!(sm90.admits(100)); // base rides `≤` — runs up-arch on Blackwell
         assert!(!sm90a.admits(100)); // `a` rides `==` — does not
     }
