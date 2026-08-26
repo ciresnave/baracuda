@@ -11,6 +11,13 @@
 # Windows too (autocrlf would otherwise convert them to CRLF and fail the test).
 crates/baracuda-cuda-emit/src/goldens/*.cu text eol=lf
 
+# The cuda-vocab §6.8-0008 machine manifest is byte-compared against the generator's
+# LF output by the freshness gate (`freshness_committed_manifest_matches_the_generator`).
+# serde_json always writes '\n'; force the committed file to LF on checkout so the
+# byte-diff holds on Windows too (autocrlf would convert it to CRLF and red the gate
+# for a line-ending reason, not a real drift — a local-green-≠-CI-green trap).
+crates/baracuda-cuda-vocab/cuda-vocab-manifest.json text eol=lf
+
 # LICENSE-MIT / LICENSE-APACHE are byte-identical to their canonical upstream
 # (Apache-2.0 = apache.org/licenses/LICENSE-2.0.txt, sha256 cfc7749b…). The
 # published tarball must stay byte-identical, so pin them to LF on every
