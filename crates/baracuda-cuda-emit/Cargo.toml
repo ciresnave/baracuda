@@ -34,10 +34,12 @@ fuel-kernel-seam = { version = "0.10.3", optional = true }
 
 [dev-dependencies]
 # The sibling backends published from the Unpopped extraction, used ONLY by the
-# cross-backend agreement tests (lift/fuzz/convert). They depend on `unpopped`
-# 0.3.0 (the version this crate is on), so no version skew. Test-only: no lib
-# code depends on them. Kept as registry deps (not path) so `cargo package`
-# ships a tree that resolves for downloaders.
+# cross-backend agreement tests (lift/fuzz/convert). They track the SAME `unpopped`
+# line this crate depends on — bumped in lockstep with the workspace pin — so there
+# is no version skew. (Stated as the alignment invariant, not a hardcoded version:
+# a number here becomes a citation with no invalidation the next time either bumps.)
+# Test-only: no lib code depends on them. Kept as registry deps (not path) so
+# `cargo package` ships a tree that resolves for downloaders.
 unpopped-cpu-c = "0.4.0"
 unpopped-slang = "0.4.0"
 
