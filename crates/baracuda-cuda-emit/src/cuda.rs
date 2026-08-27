@@ -13,7 +13,7 @@ use unpopped::backend::{
 use unpopped::cfamily::{
     assert_no_int_div_or_const, binary_f32, binary_f64, binary_int, cast_scalar, demote_store_f32,
     dtype_tag, out_ctype_of, param_args, param_ctype, params_used, promote_load_f32, scalar_ctype,
-    select_f32, select_f64, store_expr_of, unary_f32, unary_f64,
+    select_f32, select_f64, store_expr_of,
 };
 use unpopped::ir::{
     Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
@@ -22,6 +22,32 @@ use unpopped::ir::{
 use unpopped::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use unpopped_vocab::structure_key::LayoutOrder;
 use unpopped_vocab::{AxisMask, Contiguity, ElementKind, OperandKey};
+
+/// Unary spelling for the CUDA backend. `Rsqrt` is spelled as the CUDA hardware
+/// intrinsic (`rsqrtf`/`rsqrt`) **here**, in the backend, rather than inherited from
+/// the neutral [`unpopped::cfamily`] default: the neutral core must not hardcode
+/// CUDA-specific names (a `pub`, "backend-neutral" API that emits `rsqrtf` is a wart),
+/// so the CUDA-specific spelling is the CUDA backend's to own. Every other op delegates
+/// to `cfamily` unchanged. This is byte-identical to `cfamily` under unpopped 0.6.0
+/// (which still emits the intrinsic) — a no-op today — and pins the spelling so a future
+/// `cfamily` change to `1.0/sqrt` cannot silently move `RmsNorm`/`LayerNorm` off the
+/// intrinsic (slower, and a shift in the declared `max_ulp` FKC contract). Changing the
+/// spelling to `1.0/sqrt` would be a deliberate contract decision, not a dep side effect.
+fn unary_f32(op: UnaryOp, x: String) -> String {
+    match op {
+        UnaryOp::Rsqrt => format!("rsqrtf({x})"),
+        other => unpopped::cfamily::unary_f32(other, x),
+    }
+}
+
+/// f64 sibling of [`unary_f32`]: `Rsqrt` → the CUDA `rsqrt` (double) intrinsic; every
+/// other op delegates to [`unpopped::cfamily::unary_f64`] unchanged.
+fn unary_f64(op: UnaryOp, x: String) -> String {
+    match op {
+        UnaryOp::Rsqrt => format!("rsqrt({x})"),
+        other => unpopped::cfamily::unary_f64(other, x),
+    }
+}
 
 /// The CUDA C++ backend. Lowers a [`KernelPlan`] to `.cu` source.
 #[derive(Copy, Clone, Debug, Default)]
