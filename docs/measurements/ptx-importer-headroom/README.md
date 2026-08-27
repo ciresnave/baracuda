@@ -37,6 +37,13 @@ This **refutes the premise (the levers CUDA C can't reach), not the possibility*
 specific per-kernel wins. The int8 GEMM's cp.async gap is a real per-kernel
 hand-optimization — it is just not systematic free-headroom capture.
 
+**Scope — the importer premise only, not the emitter.** This survey measures whether a
+PTX *importer* (read nvcc's PTX from the hand-tuned kernels, re-optimize, re-emit) has
+headroom over the kernels. It does **not** address a PTX *emitter + loader* (generating
+PTX from an IR and loading it), which rests on separate arguments this survey did not
+examine. A null on the importer is **not** a verdict on the emitter; the two proposals
+have travelled together, and this evidence bears only on the first.
+
 ## The instrument error this survey survived — record it, don't hide it
 
 The first pass reported **"read-only cache: 0 of 9 — headroom."** That was wrong, and
