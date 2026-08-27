@@ -14,12 +14,18 @@ set -uo pipefail
 DIR=$(for d in target/debug/build/baracuda-kernels-sys-*/out; do
         [ -d "$d" ] && echo "$(find "$d" -maxdepth 1 -name '*.o' | wc -l) $d"
       done | sort -rn | head -1 | awk '{print $2}')
+if [ -z "$DIR" ]; then
+  echo "no baracuda-kernels-sys build found under target/ — build it first:" >&2
+  echo "  cargo build -p baracuda-kernels-sys" >&2
+  exit 1
+fi
 echo "object dir: $DIR"
 echo
 
 for key_glob in \
   "elementwise:binary_add:binary_add_fp-*.o" \
   "reduction:softmax:gumbel_softmax_fp-*.o" \
+  "reduction:rms_norm:rms_norm_fp-*.o" \
   "gemm:int8_tiled:gemm_s8_rrr_sm80-*.o" \
   "gemv:memory_bound:gemv_dense-*.o" \
   "attention:flash_bwd:flash_bwd_hdim128_bf16_causal_sm80-*.o" \

@@ -20,7 +20,7 @@ that are not, nvcc chose not to emit.** The hand-tuned kernels have largely capt
 what a PTX importer could see. Residual headroom is narrow, and it is one of three
 kinds, none of which is "free win a rewriter picks up":
 
-1. **Already captured** (read-only cache): present in 8/8 sampled kernels, *in the PTX*.
+1. **Already captured** (read-only cache): present in 9/9 sampled kernels, *in the PTX*.
 2. **nvcc declined it** (load/store vectorization): absent in 7/8, but nvcc emitted
    scalar having seen the C++ types, alignment, and access pattern. The importer reads
    lowered scalar PTX with *less* information than nvcc had, and sits downstream of the
@@ -39,14 +39,14 @@ hand-optimization — it is just not systematic free-headroom capture.
 
 ## The instrument error this survey survived — record it, don't hide it
 
-The first pass reported **"read-only cache: 0 of 8 — headroom."** That was wrong, and
+The first pass reported **"read-only cache: 0 of 9 — headroom."** That was wrong, and
 the wrong version pointed the design at *build the importer*.
 
 The grep looked for the SASS token `.CI` (the read-only/non-coherent cache modifier on
 some architectures). On this toolchain's SASS the modifier is spelled **`.CONSTANT`**
 (and in PTX it is `ld.global.nc`). A correct grep for the wrong spelling returned a
 false absence. The corrected count is the **opposite**: read-only cache is used in
-**8 of 8** sampled kernels — 7 via `.CONSTANT` loads, and flash via the superior
+**9 of 9** sampled kernels — 8 via `.CONSTANT` loads, and flash via the superior
 cp.async path that needs no read-only hint.
 
 This is a false absence produced by a correct command answering an adjacent question —
@@ -55,6 +55,14 @@ cost weeks rather than minutes. It was caught mid-survey by verifying the actual
 notation in the SASS (`cuobjdump -sass | grep -oE 'LDG[.A-Z0-9]*' | sort | uniq -c`)
 before trusting the count. **A survey that records the instrument error it survived is
 worth more than one that presents only the corrected table.**
+
+The same shape struck the *sample itself*, one level up at the query: the sweep's
+kernel glob spelled the RMS-norm object `rmsnorm*`, but it ships as `rms_norm_*` — so
+the ninth kernel silently matched nothing and an early draft tabulated 8 while the prose
+said 9. The fix was to correct the spelling and *measure the ninth* (it exists and is a
+distinct reduction shape), not to drop the claim to 8 — the row was missing, not the
+kernel. It reinforces the table rather than changing it (`rms_norm`: 498/498 read-only,
+0-spill, partial 64-bit vectorization).
 
 ## Method — ship-exact, and validated as such
 
@@ -71,9 +79,9 @@ worth more than one that presents only the corrected table.**
   confirming the reconstructed invocation is the one that ships. Without this check
   every number would be about a configuration nobody ships.
 - **Sample:** 9 kernels spanning shapes known to differ — elementwise, reduction
-  (softmax), int8 tiled GEMM, dense GEMV, flash-attention backward, arbitrary-mask
-  attention, dequantize, topk. This is **9 of 426**; absences are reported as
-  "N of 9 sampled," never "the kernels don't use it."
+  (softmax), reduction/norm (RMS-norm), int8 tiled GEMM, dense GEMV, flash-attention
+  backward, arbitrary-mask attention, dequantize, topk. This is **9 of 426**; absences
+  are reported as "N of 9 sampled," never "the kernels don't use it."
 
 ## Per-kernel lever inventory (sm_80, ship-exact)
 
@@ -85,6 +93,7 @@ Counts are occurrences in the object's SASS unless marked *(PTX)*. `readonly` =
 |----------------|-----------|---------|----------|----------------|-------------------------|----------------------|-------------------|-------------|
 | binary_add (elementwise) | 42 | 224–288 | 0 | 216 / 216 | 0 / 16 | 0 | 0 | — |
 | gumbel_softmax (reduction) | 46 | 288 | 0 | 542 / 542 | 0 / 306 | 0 | 0 | — |
+| rms_norm (reduction/norm) | 54 | 224–288 | 512 | 498 / 498 | 0 / 289 | 0 | 0 | — |
 | gemm_s8_rrr (int8 tiled GEMM) | 96 | 0 | 4096 | 128 / 128 | 0 / 0 | 0 | **0** | IMMA `m16n8k32.s8` (16) |
 | gemv_dense (memory-bound GEMV) | 32 | 0 | 0 | 186 / 192 | 0 / 0 | 0 | 0 | — |
 | flash_bwd hdim128 bf16 (attention) | **255** | 176 | dyn | 0 | 32 / 16 | **528** | **672** | HMMA (5760) |
@@ -103,7 +112,7 @@ PTX-substrate spot-checks (what a PTX importer would actually read):
 
 Read across the rows:
 
-- **Read-only cache:** 8/8. Captured, and captured *in the PTX*.
+- **Read-only cache:** 9/9. Captured, and captured *in the PTX*.
 - **Vectorization:** present only in flash (`LDG/STG/LDGSTS .128`); scalar in the other
   7, including the memory-bound GEMV (all `.CONSTANT` scalar `u16`/`f32`) and the
   elementwise/reduction kernels. This is the one importer-addressable gap — see the crux.
@@ -145,6 +154,14 @@ The reason is the same in every row, which is why a wider sample would not move 
 conclusion: more kernels already emitting `ld.global.nc` does not change it, and more
 kernels lacking `.v4` does not either — the cause is representational, not a count.
 
+> **Cross-project note (per the Portfolio PM, not verified here):** the PM reports that
+> the same conclusion was reached independently from two other directions — Unpopped
+> from the representational side, and the Fuel architect from the compiler side — that
+> nvcc's PTX is post-optimization output, so the information a rewriter would need has
+> already been discarded. This survey measured only Baracuda's emitted kernels; the
+> convergence across the three is the PM's synthesis, recorded here as their claim, not
+> as a finding of this measurement.
+
 ## What survives as real headroom
 
 **The int8 GEMM's `cp.async` gap.** It stages global→shared synchronously
@@ -169,8 +186,11 @@ emitter handles badly. It is a per-kernel hand-optimization, not systematic capt
 
 ```bash
 # 1. Locate a populated ship-exact object dir (built with the shipping flags).
+#    The `[ -d "$d" ]` guard matters: on a clean/unbuilt tree the glob does not expand,
+#    and the loop would otherwise run `find` against the literal pattern string.
 DIR=$(for d in target/debug/build/baracuda-kernels-sys-*/out; do \
-        echo "$(find "$d" -maxdepth 1 -name '*.o' | wc -l) $d"; done | sort -rn | head -1 | awk '{print $2}')
+        [ -d "$d" ] && echo "$(find "$d" -maxdepth 1 -name '*.o' | wc -l) $d"; done | sort -rn | head -1 | awk '{print $2}')
+[ -z "$DIR" ] && { echo "no baracuda-kernels-sys build found — build it first (cargo build -p baracuda-kernels-sys)"; exit 1; }
 
 # 2. Ship-exact SASS + resource usage per kernel (no recompile).
 cuobjdump -sass       "$DIR"/binary_add_fp-*.o
