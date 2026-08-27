@@ -25,6 +25,12 @@ crates/baracuda-cuda-vocab/cuda-vocab-manifest.json text eol=lf
 # the hash. Slash-less pattern → matches at root and in every crate dir.
 LICENSE-* text eol=lf
 
+# The KISS #329 device-measurement dumps are reproducibility artifacts: a reader
+# regenerates the PTX/SASS with nvcc/cuobjdump (which emit '\n') and diffs against
+# the committed copy. Pin the whole measurement dir to LF so a Windows checkout does
+# not present CRLF working copies that spuriously byte-diff against a fresh LF dump.
+docs/measurements/kiss-329-cuda-nan-payload/* text eol=lf
+
 # Shell scripts run under `shell: bash` in CI (Git Bash on windows-latest, which
 # defaults autocrlf=true). A `.sh` checked out with CRLF makes bash choke on the
 # `\r`. Pin them to LF so `bash scripts/*.sh` runs identically on every runner.
