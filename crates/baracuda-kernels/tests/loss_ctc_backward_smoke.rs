@@ -21,8 +21,11 @@
 //! negated). Correct factor for `(1/P)·exp(α + β − logp)` is
 //! `exp(α + β − logp + nll) = exp(α + β − logp + fw_loss)` since
 //! `fw_loss` stores the positive nll value. The finite-difference
-//! helpers below were a red herring — they measured ∂L/∂log_probs,
-//! which differs from the kernel's PyTorch-convention output.
+//! checks below (`ctc_bw_{f32,f64}_finite_difference`) measure
+//! ∂L/∂log_probs = −γ and reconcile with the kernel's
+//! PyTorch-convention `exp(log_probs) − γ` output by subtracting
+//! `exp(log_probs)`; they now run on-device as value-level guards
+//! (the row-sum invariant is only the necessary condition).
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -389,7 +392,11 @@ fn fd_check_f32(eps: f32, tol: f32) {
             s_max,
         );
         let numerical = (loss_plus[n_] - loss_minus[n_]) / (2.0 * eps);
-        let analytic = got_grad[idx];
+        // Convention reconciliation: the kernel emits PyTorch's `exp(log_probs) − γ`,
+        // but the central difference of the FW loss measures ∂L/∂log_probs = −γ.
+        // Recover −γ from the kernel output by subtracting exp(log_probs) so the two
+        // are directly comparable.
+        let analytic = got_grad[idx] - host_lp[idx].exp();
         let diff = (numerical - analytic).abs();
         assert!(
             diff <= tol,
@@ -400,8 +407,8 @@ fn fd_check_f32(eps: f32, tol: f32) {
 
 fn fd_check_f64(eps: f64, tol: f64) {
     let (ctx, stream) = setup();
-    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
-    let host_lp: Vec<f64> = host_lp_f32.iter().map(|&v| v as f64).collect();
+    // Native f64 inputs (not f32-then-upcast) so the f64 guard exercises f64 precision.
+    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs_f64();
     let host_dloss = vec![1f64; n as usize];
     let got_grad = run_bw::<f64>(
         &ctx,
@@ -454,7 +461,11 @@ fn fd_check_f64(eps: f64, tol: f64) {
             s_max,
         );
         let numerical = (loss_plus[n_] - loss_minus[n_]) / (2.0 * eps);
-        let analytic = got_grad[idx];
+        // Convention reconciliation: the kernel emits PyTorch's `exp(log_probs) − γ`,
+        // but the central difference of the FW loss measures ∂L/∂log_probs = −γ.
+        // Recover −γ from the kernel output by subtracting exp(log_probs) so the two
+        // are directly comparable.
+        let analytic = got_grad[idx] - host_lp[idx].exp();
         let diff = (numerical - analytic).abs();
         assert!(
             diff <= tol,
@@ -508,15 +519,23 @@ fn ctc_bw_f32_uniform_t2_hand_computed() {
     }
 }
 
-// The finite-difference helpers measure ∂L/∂log_probs (= −γ), but the
-// kernel emits PyTorch's convention `exp(log_probs) − γ`. Helpers
-// retained for diagnostic use but not exposed as tests — the row-sum
-// invariant below is the right PyTorch-convention check.
-fn _ctc_bw_f32_finite_difference_helper() {
+// Value-level finite-difference guard. The kernel emits PyTorch's convention
+// `exp(log_probs) − γ`, while the central difference of the FW loss measures
+// ∂L/∂log_probs = −γ; `fd_check_*` reconciles the two by subtracting exp(log_probs)
+// from the kernel output. Promoted 2026-08-27 from dormant `_helper` fns to live GPU
+// tests so the value-level gradient is guarded — not only the necessary-condition
+// row-sum invariant (`Σ_c grad = 0`), which catches the γ-collapse regression but
+// passes for any wrong gradient that still sums to zero. `#[ignore]` like the sibling
+// CTC BW tests: runs on-device via `cargo gpu-test`.
+#[test]
+#[ignore]
+fn ctc_bw_f32_finite_difference() {
     fd_check_f32(1e-3, 5e-3);
 }
 
-fn _ctc_bw_f64_finite_difference_helper() {
+#[test]
+#[ignore]
+fn ctc_bw_f64_finite_difference() {
     fd_check_f64(1e-5, 1e-7);
 }
 
