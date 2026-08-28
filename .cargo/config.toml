@@ -16,4 +16,13 @@
 #   cargo gpu-test -p <crate> --test <name> -- --nocapture
 #
 # Compiles UNLOCKED, then runs the device tests LOCKED. See `xtask test-gpu`.
+#
+# ⚠ Because the COMPILE is unlocked, its ~45-90 min CUDA forge does NOT enter the
+# machine-wide `cuda-build` slot budget, so it can oversubscribe host address space
+# against a concurrent CUDA build in ANOTHER project on the same box (the forge warns
+# with `ptxas 'Memory allocation failure'`, and the build gets killed). If that hits
+# you, cap the forge and reuse a warm object cache:
+#   BARACUDA_FORGE_THREADS=6 cargo gpu-test -p <crate> --test <name>
+# (A cross-project slot-mutex that spans the compile phase is the real fix — tracked
+# with the Fuel architect; until then, the env cap + warm target/ is the workaround.)
 gpu-test = "run -q -p xtask -- test-gpu"
