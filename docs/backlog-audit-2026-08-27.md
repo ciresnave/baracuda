@@ -6,7 +6,9 @@ extracted from `ROADMAP.md` (the live backlog), `OP-MATRIX.md` (per-op status), 
 excluded. This is a **dated snapshot** — `ROADMAP.md` remains the authoritative source;
 re-audit against it rather than trusting this file once it ages.
 
-~95 distinct incomplete items. The shape: the bulk of recent high-velocity work is
+~98 numbered items (a few since verified resolved or reclassified during the PR-49
+reconciliation — e.g. CtcLoss #79 is fixed, SdpaPlan #33 narrowed — corrected inline
+below). The shape: the bulk of recent high-velocity work is
 **attention** and **quantization**, each shipped as a "Tier-1 trailblazer" with a
 consistent tail of Tier-2 deferrals (backward passes, GQA broadcast, paged-KV, bf16).
 The second-largest theme is **distributed/training-time** work, where nearly everything
@@ -24,12 +26,17 @@ strided siblings). Recurring deferral reasons: *Tier-2 cadence / trailblazer-onl
    headers are ~1.5 months stale; several "planned" phase headings below are already
    shipped as a result — a refresh pass is warranted.
 2. **OP-MATRIX ⟂ ROADMAP conflicts (do NOT treat as open work):** OP-MATRIX lists two
-   items as still-deferred that ROADMAP marks CLOSED — (a) the `_can_implement`-companion
-   -per-`_run` fanout (ROADMAP: closed in the alpha.64 prep cycle), (b) strided FFI
+   items as still-deferred that ROADMAP marks CLOSED — (a) the `_can_implement`-companion-per-`_run`
+   fanout (measured 2026-08-27 at ~2747/2912 ≈ 94%, a ~165 tail — not the ~660/~2700 the
+   doc claimed), (b) strided FFI
    siblings for normalizer/shape ops (ROADMAP: closed Phase 72, 88 symbols). Also
    OP-MATRIX's Pooling header still says FractionalMaxPool/LpPool are stubbed but its own
-   table rows show them shipped (Phase 16.x); and ROADMAP's "Phase 20 MoE (planned)" /
-   "Phase 22 linalg (complex ORMQR)" headings are stale (both shipped).
+   table rows show them shipped (Phase 16.x). (CORRECTION, PR-49 verification: the
+   ROADMAP "Phase 20 MoE (planned)" / "Phase 22 (complex ORMQR)" headings are NOT fresh
+   stale claims — they are historical write-ups covered by a global disclaimer at the top
+   of ROADMAP.md. And **Phase 22 complex ORMQR is genuinely still pending** — both ROADMAP
+   and OP-MATRIX agree it needs `cunmqr`; the `cunmqr` binding existing in `cusolver-sys`
+   ≠ the plan shipping. Neither was actually a conflict; left unchanged.)
 3. **One real conflict to verify (a correctness claim):** `CtcLoss` backward
    γ-accumulation — OP-MATRIX says it is an **open** correctness bug (smoke-tested only);
    ROADMAP says it was **fixed 2026-05-16**. These disagree and need a real check; not
@@ -89,8 +96,9 @@ upstream; callers fall back to the bespoke 3-kernel SDPA BW. 26. head_dim outsid
 
 **sm_89 Flash SDPA (Phase 17 carry):** 31. sm_89 Flash BW strided (routes through sm_80
 baseline today). 32. sm_89 FW mask support (accepts no mask today). 33. Reference
-`SdpaPlan` BW + GQA broadcast (still `Error::Unsupported` per OP-MATRIX — reconcile vs
-ROADMAP's Phase 17.2 note).
+`SdpaPlan` BW **GQA-broadcast case** (`stride_k[head]==0`) is `Error::Unsupported` (needs
+atomicAdd for dK/dV). VERIFIED 2026-08-27: the reference BW itself SHIPS (`✓ via
+SdpaBackwardPlan`); only the GQA-broadcast sub-case is the gap — not the whole BW.
 
 ## C. Quantization (~12 items)
 
@@ -148,8 +156,10 @@ parallelism (also §D). 73. Phase 20 Option 2 — refresh + FFI-expose existing 
 ## I. Loss (Phase 47 FLCE)
 
 74–78. `label_smoothing`, `lse_square_scale`, `softcap`, `ce_weight` (per-class),
-`return_z_loss` — all "mechanical fanout" through the same kernel. 79. **CtcLoss BW
-γ-accumulation** — open per OP-MATRIX / fixed per ROADMAP; see reconciliation flag #3. 80.
+`return_z_loss` — all "mechanical fanout" through the same kernel. 79. ~~CtcLoss BW
+γ-accumulation~~ — **NOT a backlog item**: verified FIXED from the code (the correct
+`+fw_loss`/`1/P` factor in `baracuda_ctc.cuh`); see reconciliation flag #3. Retained here
+only to correct the earlier listing. 80.
 CTC bespoke flake under parallel tests (`cudnn_ctc_f32_uniform_t2_c2` — cuDNN handle
 contention; test-infra, not correctness).
 
