@@ -24,9 +24,11 @@
 # ~50% of cores, and each nvcc spawns `cicc`/`ptxas` children (~2 processes/thread), which
 # can exceed the host address-space ceiling by itself — with NO other project building
 # (observed 2026-08-27; Fuel's build log was clean at the time). A concurrent CUDA build
-# in another project can compound it but is possible-not-observed. Note
-# `cargo -j N` does NOT cap the forge (it has its own rayon pool); only
-# `BARACUDA_FORGE_THREADS` does. If it hits you, cap the forge and reuse a warm cache:
+# in another project can compound it but is possible-not-observed. Both `cargo -j N` and
+# `BARACUDA_FORGE_THREADS` cap the forge: `-j N` is honoured as an UPPER bound (it lowers
+# the ~50%-of-cores default, never raises it — see `baracuda-forge`'s `parallel.rs`), and
+# `BARACUDA_FORGE_THREADS` is an absolute override checked first. If it hits you, cap the
+# forge and reuse a warm cache:
 #   $env:BARACUDA_FORGE_THREADS=6; cargo gpu-test -p <crate> --test <name>   # PowerShell (primary)
 #   BARACUDA_FORGE_THREADS=6 cargo gpu-test -p <crate> --test <name>         # bash
 # (A machine-wide `cuda-build` slot-mutex spanning the compile phase is the broader
