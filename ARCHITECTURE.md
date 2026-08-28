@@ -805,7 +805,7 @@ The original "Phase 11 = Hopper sm_90a" and "Phase 12 = 1.0 freeze"
 items remain valid targets but are sequenced behind ongoing
 downstream-driven work.
 
-The workspace is at **v0.0.1-alpha.77**. The most recent structural
+The workspace is at **v0.0.1-alpha.79**. The most recent structural
 addition is the `baracuda-kernelgen` kernel-generation layer described
 above — published at alpha.76 so Fuel can build the live JIT synthesizer
 from crates.io. Consult `CHANGELOG.md` for the release-by-release detail;
