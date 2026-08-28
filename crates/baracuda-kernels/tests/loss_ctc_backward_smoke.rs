@@ -21,8 +21,11 @@
 //! negated). Correct factor for `(1/P)·exp(α + β − logp)` is
 //! `exp(α + β − logp + nll) = exp(α + β − logp + fw_loss)` since
 //! `fw_loss` stores the positive nll value. The finite-difference
-//! helpers below were a red herring — they measured ∂L/∂log_probs,
-//! which differs from the kernel's PyTorch-convention output.
+//! checks below (`ctc_bw_{f32,f64}_finite_difference`) measure
+//! ∂L/∂log_probs = −γ and reconcile with the kernel's
+//! PyTorch-convention `exp(log_probs) − γ` output by subtracting
+//! `exp(log_probs)`; they now run on-device as value-level guards
+//! (the row-sum invariant is only the necessary condition).
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -404,8 +407,8 @@ fn fd_check_f32(eps: f32, tol: f32) {
 
 fn fd_check_f64(eps: f64, tol: f64) {
     let (ctx, stream) = setup();
-    let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
-    let host_lp: Vec<f64> = host_lp_f32.iter().map(|&v| v as f64).collect();
+    // Native f64 inputs (not f32-then-upcast) so the f64 guard exercises f64 precision.
+    let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs_f64();
     let host_dloss = vec![1f64; n as usize];
     let got_grad = run_bw::<f64>(
         &ctx,
