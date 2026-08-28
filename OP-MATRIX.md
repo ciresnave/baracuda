@@ -2,7 +2,9 @@
 
 Baseline generated for **baracuda-kernels** on **RTX 4070 (sm_89)**; the body
 has since been re-annotated with the **baracuda-kernelgen op-matrix audit**
-(rounds through **2026-07-03**), current as of the **v0.0.1-alpha.77** line.
+(rounds through **2026-07-03**). The workspace is now at **v0.0.1-alpha.79**
+(2026-08-15); this audit body reflects the alpha.77 line — re-audit for
+alpha.78/79 deltas.
 See the per-op "Kernelgen audit" notes below for the generated-vs-bespoke
 dispatch calls.
 
@@ -169,7 +171,7 @@ support `{None, Mean, Sum}` reduction. CtcLossCudnnPlan is the exception
 | `MultilabelMarginLossPlan<T>` | Bespoke | FP-family | rank-2 | ✓ | ✓ | |
 | `MultilabelSoftMarginLossPlan<T>` | Bespoke | FP-family | rank-2 | ✓ | ✓ | |
 | `TripletMarginLossPlan<T>` | Bespoke | FP-family | rank-2 triplets | ✓ | ✓ | |
-| `CtcLossPlan<T>` | Bespoke | FP-family | variable-length DP | ✓ | partial | FW validated; BW has documented γ-accumulation correctness bug (smoke-tested only). FD helper code retained for re-validation. |
+| `CtcLossPlan<T>` | Bespoke | FP-family | variable-length DP | ✓ | ✓ | FW validated; BW γ-accumulation correctness bug FIXED 2026-05-16 (correct `1/P` factor = `+fw_loss` in `baracuda_ctc.cuh`; verified 2026-08-27 by reading the gradient math, not the fix comment). Guarded on-device by the `Σ_c grad = 0` invariant (`ctc_bw_*_pytorch_invariant`, `#[ignore]`/gpu-test). The stronger value-level finite-difference helper is retained but **dormant** (`_ctc_bw_*_finite_difference_helper`, not a `#[test]`) — a convention adjustment (`∂L/∂log_probs = −γ` vs the emitted `exp(log_probs)−γ`) is needed to promote it to a live guard. |
 | `CtcLossCudnnPlan<T>` | Cudnn | `{f32, f64}` | variable-length | ✓ | ✓ | Phase 7 sibling; Fuel's autotuner races against bespoke. Gated by `cudnn` feature. |
 
 ---
@@ -264,8 +266,8 @@ Phase 7; Phase 11.8 added 1D / 3D + Adaptive fanout via the rank-agnostic
 `kernel = ceil(in/out); stride = floor(in/out); pad = 0` approximation —
 diverges from PyTorch by ±1 input cell when `in_i % out_i != 0` (bit-exact
 adaptive pool deferred — see [`ROADMAP.md`](ROADMAP.md)). FractionalMaxPool
-and LpPool are stubbed (`Error::Unsupported` at `select()`) pending bespoke
-kernels.
+(Phase 16.3) and LpPool (Phase 16.2) ship as bespoke kernels — see the rows
+below and the "shipped" reconciliation list further down.
 
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
@@ -440,10 +442,11 @@ The live backlog with priority + effort estimates lives in
   (RMSNorm / LayerNorm / Softmax / LogSoftmax) — needs
   `block_reduce_sum_f64` in `baracuda_smem_reduce.cuh` (~1 day).
   BN / GN / IN already f64-safe by construction (Phase 65d).
-- **`_can_implement` companion for every `_run` FFI symbol** — ~2000
-  symbol backlog. Tracked as a future fanout phase; convention is one
-  validator per `_run`, currently realized for ~660 of ~2700 `_run`
-  symbols.
+- **`_can_implement` companion for every `_run` FFI symbol** — convention
+  is one validator per `_run`. The ~660-of-~2700 figure predated the
+  alpha.64 fanout; measured 2026-08-27 it is now realized for the large
+  majority — **~2747 of ~2912** distinct `_run` symbols (grep-measured, so
+  approximate), a ~165-symbol tail rather than the original ~2000.
 - **Strided FFI siblings** for normalizer / shape ops
   (`rms_norm` / `layer_norm` / `softmax` / `log_softmax` / `flip` /
   `roll` / `permute`) — 4 contig dtypes each, no strided siblings.
