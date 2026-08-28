@@ -154,7 +154,7 @@ baracuda-flashinfer = { version = "0.0.1-alpha.79", path = "crates/baracuda-flas
 
 # External crates used across the workspace
 libloading = "0.8"
-thiserror = "1"
+thiserror = "2"
 
 # Build-time crates
 bindgen = "0.69"
