@@ -17,13 +17,19 @@
 #
 # Compiles UNLOCKED, then runs the device tests LOCKED. See `xtask test-gpu`.
 #
-# ⚠ Because the COMPILE is unlocked, its ~45-90 min CUDA forge does NOT enter the
-# machine-wide `cuda-build` slot budget, so it can oversubscribe host address space
-# against a concurrent CUDA build in ANOTHER project on the same box (the forge warns
-# with `ptxas 'Memory allocation failure'`, and the build gets killed). If that hits
-# you, cap the forge and reuse a warm object cache:
+# ⚠ The COMPILE is unlocked, so its ~45-90 min CUDA forge does NOT enter the machine-wide
+# `cuda-build` slot budget, and it can oversubscribe host address space (the forge warns
+# `ptxas 'Memory allocation failure'` and the build is killed). The MEASURED cause is
+# SELF-oversubscription: one `cargo build` forges TWO -sys crates concurrently
+# (`baracuda-kernels-sys` + `baracuda-cutlass-kernels-sys`), each spinning a nvcc pool at
+# ~50% of cores — together ~2× that, enough to exceed the address-space ceiling with NO
+# other project building (observed 2026-08-27; Fuel's build log was clean at the time). A
+# concurrent CUDA build in another project can compound it but is possible-not-observed.
+# Note `cargo -j N` does NOT cap the forge (it has its own rayon pool); only
+# `BARACUDA_FORGE_THREADS` does. If it hits you, cap the forge and reuse a warm cache:
 #   $env:BARACUDA_FORGE_THREADS=6; cargo gpu-test -p <crate> --test <name>   # PowerShell (primary)
 #   BARACUDA_FORGE_THREADS=6 cargo gpu-test -p <crate> --test <name>         # bash
-# (A cross-project slot-mutex that spans the compile phase is the real fix — tracked
-# with the Fuel architect; until then, the env cap + warm target/ is the workaround.)
+# (A machine-wide `cuda-build` slot-mutex spanning the compile phase is the broader
+# cross-project coordination fix — tracked with the Fuel architect; but the env cap is
+# what fixes the self-oversubscription today.)
 gpu-test = "run -q -p xtask -- test-gpu"
