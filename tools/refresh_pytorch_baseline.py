@@ -56,6 +56,15 @@ Ops covered (Phase 73.2 fanout):
   - flash_sdpa_gqa:
                  `F.scaled_dot_product_attention(q,k,v, is_causal=True)`
                                                            × {f16, bf16}
+  - mse:         `F.mse_loss(pred, target)`               × {f32}
+  - l1:          `F.l1_loss(pred, target)`                × {f32}
+  - cross_entropy:
+                 `F.cross_entropy(logits, class_idx)`     × {f32}
+  - nll:         `F.nll_loss(log_probs, class_idx)`       × {f32}
+
+Loss family (Wave-1 proof increment): reduction='mean' on both sides;
+shape key `R{rows}_C{cols}`. f32 only for the proof (dtype fanout is the
+Loss-20 wave).
 
 mmvq (GGUF-quantized matrix-vector) intentionally skipped — PyTorch has
 no direct equivalent op; baseline would need a separate design.
@@ -153,6 +162,14 @@ SDPA_DTYPES: tuple[tuple[str, torch.dtype], ...] = (
     ("f16", torch.float16),
     ("bf16", torch.bfloat16),
 )
+
+# Loss family sweep — mirrors `LOSS_ROW_SWEEP` / `LOSS_COL_SWEEP` in
+# `baracuda-kernels-bench/src/lib.rs`. Shape key `R{rows}_C{cols}` is
+# shared with `benches/loss.rs`. Wave-1 proof increment: f32 only (dtype
+# fanout is the Loss-20 wave). For cross_entropy / nll `cols` is the class
+# count; for mse / l1 it is the per-row feature width.
+LOSS_ROW_SWEEP: tuple[int, ...] = (512, 2048)
+LOSS_COL_SWEEP: tuple[int, ...] = (1024, 4096)
 
 
 # ---------------------------------------------------------------------
@@ -557,6 +574,65 @@ def sdpa_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
             yield ("flash_sdpa_gqa", shape, dtype_name, launch)
 
 
+def mse_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.mse_loss(pred, target)` (reduction='mean') over LOSS_ROW × LOSS_COL.
+
+    Matches baracuda's `MseLossPlan` with `LossReduction::Mean`. Fills are
+    non-equal (loss ≠ 0) but timing is data-independent (dense kernel).
+    """
+    device = torch.device("cuda")
+    for rows in LOSS_ROW_SWEEP:
+        for cols in LOSS_COL_SWEEP:
+            shape = f"R{rows}_C{cols}"
+            pred = torch.ones((rows, cols), dtype=torch.float32, device=device)
+            target = torch.full((rows, cols), 0.5, dtype=torch.float32, device=device)
+            launch = lambda p=pred, t=target: torch.nn.functional.mse_loss(p, t)
+            yield ("mse", shape, "f32", launch)
+
+
+def l1_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.l1_loss(pred, target)` (reduction='mean'). Sibling to `mse_cases`."""
+    device = torch.device("cuda")
+    for rows in LOSS_ROW_SWEEP:
+        for cols in LOSS_COL_SWEEP:
+            shape = f"R{rows}_C{cols}"
+            pred = torch.ones((rows, cols), dtype=torch.float32, device=device)
+            target = torch.full((rows, cols), 0.5, dtype=torch.float32, device=device)
+            launch = lambda p=pred, t=target: torch.nn.functional.l1_loss(p, t)
+            yield ("l1", shape, "f32", launch)
+
+
+def cross_entropy_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.cross_entropy(input, target)` (mean) — logits `[rows, classes]`,
+    i64 class-index target `[rows]`. Matches baracuda's `CrossEntropyLossPlan`
+    with `ClassIndex` targets. `cols` is the class count.
+    """
+    device = torch.device("cuda")
+    for rows in LOSS_ROW_SWEEP:
+        for cols in LOSS_COL_SWEEP:
+            shape = f"R{rows}_C{cols}"
+            inp = torch.full((rows, cols), 0.1, dtype=torch.float32, device=device)
+            target = (torch.arange(rows, device=device) % cols).to(torch.int64)
+            launch = lambda x=inp, t=target: torch.nn.functional.cross_entropy(x, t)
+            yield ("cross_entropy", shape, "f32", launch)
+
+
+def nll_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.nll_loss(log_probs, target)` (mean) — log-probabilities
+    `[rows, classes]`, i64 class-index target `[rows]`. Matches baracuda's
+    `NllLossPlan`, whose input is log-probs; a constant -1.0 is a valid
+    log-prob and keeps the timing data-independent.
+    """
+    device = torch.device("cuda")
+    for rows in LOSS_ROW_SWEEP:
+        for cols in LOSS_COL_SWEEP:
+            shape = f"R{rows}_C{cols}"
+            logp = torch.full((rows, cols), -1.0, dtype=torch.float32, device=device)
+            target = (torch.arange(rows, device=device) % cols).to(torch.int64)
+            launch = lambda x=logp, t=target: torch.nn.functional.nll_loss(x, t)
+            yield ("nll", shape, "f32", launch)
+
+
 # Op registry — name → cases generator. Extend per-op for fanout.
 OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], None]]]]] = {
     "gemm": gemm_cases,
@@ -575,6 +651,10 @@ OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], N
     "batch_norm": batch_norm_cases,
     "topk": topk_cases,
     "sdpa": sdpa_cases,
+    "mse": mse_cases,
+    "l1": l1_cases,
+    "cross_entropy": cross_entropy_cases,
+    "nll": nll_cases,
 }
 
 
@@ -603,6 +683,51 @@ def _cuda_version_short() -> str:
     """`'13.0'` → `'130'` for filename use."""
     v = torch.version.cuda or "unknown"
     return v.replace(".", "")
+
+
+def _check_torch_drift(output_path: Path) -> tuple[bool, str]:
+    """Compare the INSTALLED torch against each recorded provenance run's
+    `torch_version` in the baseline at `output_path`.
+
+    This closes the axis the scheduled `pytorch-baseline-liveness` probe does
+    NOT cover. That probe compares RECORDED vs LATEST-RELEASED (is the frozen
+    baseline behind the newest torch on PyPI?); this compares INSTALLED vs
+    RECORDED (does the frozen baseline describe the torch actually on THIS
+    box?). A drift means the box's torch changed without a same-box refresh —
+    the frozen timings then describe a torch nobody here runs, and a
+    same-box comparison would silently mix two implementations.
+
+    Returns `(all_current, report)`. `all_current` is True when the file is
+    absent (nothing yet to contradict) or every provenance run's
+    `torch_version` matches the installed one; a legacy file with no
+    `provenance_runs` cannot be checked and is reported as current.
+    """
+    installed = _torch_version_short()
+    if not output_path.exists():
+        return (True, f"no baseline at {output_path.name} — nothing to check against installed torch {installed}")
+    try:
+        data = json.loads(output_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        return (False, f"could not read {output_path.name}: {e}")
+    runs = data.get("metadata", {}).get("provenance_runs", [])
+    if not runs:
+        return (True, f"{output_path.name} has no provenance_runs (v1/legacy) — cannot check torch drift")
+    lines = [f"Installed torch: {installed}"]
+    drift: list[tuple[str, str]] = []
+    for r in runs:
+        rec = (r.get("torch_version") or "?").split("+", 1)[0]
+        run_id = r.get("run_id", "?")
+        ok = rec == installed
+        lines.append(f"  run {run_id}: recorded torch {rec} - {'OK' if ok else 'DRIFT'}")
+        if not ok:
+            drift.append((run_id, rec))
+    if drift:
+        lines.append(
+            f"DRIFT: {len(drift)} provenance run(s) recorded a torch != installed {installed}. "
+            "Regenerate on this box (`python tools/refresh_pytorch_baseline.py`) so the frozen "
+            "timings describe the torch actually running here."
+        )
+    return (len(drift) == 0, "\n".join(lines))
 
 
 def _default_output_path() -> Path:
@@ -784,11 +909,29 @@ def main() -> int:
     )
     p.add_argument("--samples", type=int, default=11, help="Outer batch count (default 11).")
     p.add_argument("--inner", type=int, default=50, help="Inner launches per batch (default 50).")
+    p.add_argument(
+        "--check-drift",
+        action="store_true",
+        help="Only check installed-vs-recorded torch drift for the baseline and exit "
+        "(0 = current, 1 = drift). No refresh; complements the PyPI liveness probe.",
+    )
     args = p.parse_args()
 
     if not torch.cuda.is_available():
         print("ERROR: torch.cuda.is_available() == False — install a CUDA-enabled PyTorch wheel.", file=sys.stderr)
         return 2
+
+    output_path = args.output or _default_output_path()
+
+    # Installed-vs-recorded torch drift. Standalone (`--check-drift`) it is the
+    # Wave-1 validation gate; on a normal refresh it prints as a preflight so a
+    # drift is visible before the (about-to-fix-it) regen runs.
+    current, report = _check_torch_drift(output_path)
+    print("Torch drift check (installed vs recorded):")
+    print(report)
+    print()
+    if args.check_drift:
+        return 0 if current else 1
 
     ops = [o.strip() for o in args.ops.split(",") if o.strip()]
     for op in ops:
@@ -796,7 +939,6 @@ def main() -> int:
             print(f"ERROR: unknown op '{op}'. Known: {','.join(OP_REGISTRY)}", file=sys.stderr)
             return 2
 
-    output_path = args.output or _default_output_path()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Device: {torch.cuda.get_device_name(0)}")
