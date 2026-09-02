@@ -22,8 +22,8 @@ use baracuda_kernels::{
     Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns, setup_device,
-    time_with_events, warmup,
+    LiveScalar, PhaseTwentyNineRow, PytorchBaseline, append_csv_row, assert_cell_live,
+    measure_median_ns, setup_device, time_with_events, warmup,
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::f16;
@@ -51,7 +51,7 @@ fn bench<T>(
     fill: T,
     baseline: Option<&PytorchBaseline>,
 ) where
-    T: baracuda_kernels::Element + Copy + 'static,
+    T: baracuda_kernels::Element + Copy + 'static + LiveScalar,
 {
     let (ctx, stream) = setup_device();
     let mut group = c.benchmark_group(format!("concat/{dtype_label}"));
@@ -117,6 +117,9 @@ fn bench<T>(
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda concat");
         });
+        // Liveness (NOT a reference): warmup populated dev_y; assert it's live
+        // before timing — a bench over garbage output is fast and meaningless.
+        assert_cell_live(&format!("concat/{dtype_label}/{label}"), &dev_y, y_numel);
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = ConcatArgs::<T, 3> {
                 a: TensorRef {

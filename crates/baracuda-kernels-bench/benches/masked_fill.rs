@@ -30,6 +30,13 @@ fn leak_str(s: &str) -> &'static str {
     Box::leak(s.to_owned().into_boxed_str())
 }
 
+// NOTE: this bench is DELIBERATELY not `assert_cell_live`-instrumented, unlike
+// the other self-benches. masked_fill's correct output is `-inf` on masked
+// cells (the canonical attention-mask value, `f32::NEG_INFINITY`), so the
+// liveness finiteness arm would red on the FIXED state — a guard
+// false-of-the-correct-output. A shape-only check would be the only applicable
+// arm and adds little here. This absence is a considered exclusion, not an
+// unproven arm.
 fn bench<T>(
     c: &mut Criterion,
     dtype_label: &str,
