@@ -19,7 +19,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use half::{bf16, f16};
 
 #[cfg(feature = "sm89")]
-use baracuda_kernels::{Fp8E4M3, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan};
+use baracuda_kernels::{Fp8E4M3FN, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan};
 
 /// Float GEMM bench — generic over `T: Element` so the same body covers
 /// `f32`, `f16`, `bf16` against the CUTLASS-RCR plan.
@@ -284,9 +284,9 @@ fn bench_fp8_gemm(c: &mut Criterion) {
             let k = kn;
             let shape = format!("M{m}_N{n}_K{k}");
 
-            // Fp8E4M3(0x38) ≈ 1.0 (exponent bias 7, mantissa 0).
-            let host_a: Vec<Fp8E4M3> = vec![Fp8E4M3(0x38); (m * k) as usize];
-            let host_b: Vec<Fp8E4M3> = vec![Fp8E4M3(0x38); (k * n) as usize];
+            // Fp8E4M3FN(0x38) ≈ 1.0 (exponent bias 7, mantissa 0).
+            let host_a: Vec<Fp8E4M3FN> = vec![Fp8E4M3FN(0x38); (m * k) as usize];
+            let host_b: Vec<Fp8E4M3FN> = vec![Fp8E4M3FN(0x38); (k * n) as usize];
             let dev_a = match DeviceBuffer::from_slice(&ctx, &host_a) {
                 Ok(b) => b,
                 Err(_) => continue,
@@ -295,11 +295,11 @@ fn bench_fp8_gemm(c: &mut Criterion) {
                 Ok(b) => b,
                 Err(_) => continue,
             };
-            let mut dev_d: DeviceBuffer<Fp8E4M3> = match DeviceBuffer::zeros(&ctx, (m * n) as usize)
-            {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
+            let mut dev_d: DeviceBuffer<Fp8E4M3FN> =
+                match DeviceBuffer::zeros(&ctx, (m * n) as usize) {
+                    Ok(b) => b,
+                    Err(_) => continue,
+                };
 
             let desc = Fp8GemmDescriptor {
                 m,
@@ -309,7 +309,7 @@ fn bench_fp8_gemm(c: &mut Criterion) {
                 epilogue: EpilogueKind::Identity,
             };
             let plan =
-                match Fp8GemmPlan::<Fp8E4M3>::select(&stream, &desc, PlanPreference::default()) {
+                match Fp8GemmPlan::<Fp8E4M3FN>::select(&stream, &desc, PlanPreference::default()) {
                     Ok(p) => p,
                     Err(_) => continue,
                 };
@@ -317,7 +317,7 @@ fn bench_fp8_gemm(c: &mut Criterion) {
             group.throughput(Throughput::Elements(gemm_flops(m, n, k)));
             group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
                 warmup(&stream, || {
-                    let args = Fp8GemmArgs::<Fp8E4M3> {
+                    let args = Fp8GemmArgs::<Fp8E4M3FN> {
                         a: MatrixRef {
                             data: dev_a.as_slice(),
                             rows: m,
@@ -347,7 +347,7 @@ fn bench_fp8_gemm(c: &mut Criterion) {
 
                 bb.iter_custom(|iters| {
                     time_with_events(&ctx, &stream, iters, || {
-                        let args = Fp8GemmArgs::<Fp8E4M3> {
+                        let args = Fp8GemmArgs::<Fp8E4M3FN> {
                             a: MatrixRef {
                                 data: dev_a.as_slice(),
                                 rows: m,
