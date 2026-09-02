@@ -26,6 +26,13 @@ Thanks for your interest! baracuda is early-stage; the best contributions right 
 - Dynamic loading: never `#[link]` an NVIDIA library except behind a `static-link` feature.
 - Safe APIs never expose raw FFI handles on public signatures except via `as_raw()` / `from_raw()` escape hatches.
 - Error types per safe crate; all implement `baracuda_types::CudaStatus`.
+- Lockstep versioning: the `baracuda-*` crates share one version and publish
+  together. Bump them as a set (a per-crate bump splits a `-sys` / wrapper pair
+  across versions). When publishing to crates.io — which is immutable, so a
+  wrong order costs a fresh version, not a retry — publish each dependency
+  before the crate that depends on it (`-sys` before its safe crate); prove the
+  order with a per-crate `cargo publish --dry-run` rather than discovering it
+  mid-sequence.
 
 See `docs/design/` for more detail.
 

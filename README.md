@@ -260,6 +260,15 @@ baracuda-kernels = { version = "0.0.1-alpha.79", features = ["sm89", "cudnn"] }
 baracuda-driver  = "0.0.1-alpha.79"
 ```
 
+> **The `baracuda-*` crates publish in lockstep** — every publishable crate
+> shares one version and is released together, so pin and upgrade them as a set:
+> move all `baracuda-*` dependencies to the same version in one change. A tool
+> that bumps them per-crate — Dependabot cannot see a lockstep family — can
+> produce an individually-plausible but jointly-impossible upgrade (two versions
+> of the same crate in one graph, or a `-sys` / wrapper pair split across
+> versions). If a `baracuda-*` upgrade does not compile, first check that every
+> `baracuda-*` dependency moved to the same version.
+
 A representative example — single-axis numerically stable softmax over a
 device-resident tensor:
 
