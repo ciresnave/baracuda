@@ -73,6 +73,7 @@ import json
 import os
 import re
 import statistics
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -611,15 +612,43 @@ def _default_output_path() -> Path:
     )
 
 
+def _git_sha() -> str | None:
+    """The generating source tree's commit SHA, so a baseline is pinnable to
+    the exact code it was produced against. `None` if not in a git checkout
+    (the reader then knows the tree is unattributable — better than a lie)."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parent,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    sha = out.stdout.strip()
+    return sha if out.returncode == 0 and sha else None
+
+
 def _metadata(samples: int, inner: int) -> dict[str, object]:
-    """Self-describing block written into the JSON header."""
+    """Self-describing block written into the JSON header (schema v2).
+
+    v2 over v1 adds `generator_git_sha`, `attribution`, and `regen_trigger`
+    — the provenance + staleness-detectability the baseline needs to be a
+    checkable claim rather than an unfalsifiable "we match PyTorch". See the
+    plan doc: docs/planning/foundational/13-benchmark-suite-pytorch-completion.md.
+    """
+    device_name = torch.cuda.get_device_name(0)
+    generated_at = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+    sha = _git_sha()
+    torch_major = int(torch.__version__.split(".", 1)[0])
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "torch_version": torch.__version__,
         "cuda_version": torch.version.cuda,
-        "device_name": torch.cuda.get_device_name(0),
+        "device_name": device_name,
         "device_capability": list(torch.cuda.get_device_capability(0)),
-        "generated_at_utc": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+        "generated_at_utc": generated_at,
         "sample_count": samples,
         "inner_iters": inner,
         "warmup_launches": WARMUP_LAUNCHES,
@@ -628,6 +657,42 @@ def _metadata(samples: int, inner: int) -> dict[str, object]:
             "median of per-batch averages. Matches baracuda's "
             "measure_median_ns in baracuda-kernels-bench/src/lib.rs."
         ),
+        # Provenance: what tree produced these numbers. A timing baseline
+        # generated on different hardware is not a reference — device_name +
+        # this SHA + generated_at is what makes the comparison attributable.
+        "generator_git_sha": sha,
+        "attribution": (
+            f"generated on device '{device_name}' at {generated_at} "
+            f"under torch {torch.__version__} / CUDA {torch.version.cuda}"
+            + (f"; source tree pinned at git {sha}" if sha else
+               "; NOT in a git checkout — source tree UNATTRIBUTABLE")
+            + ". Same-box baseline: run on the device recorded above in this "
+              "session. A consumer must confirm device_name matches its own "
+              "target hardware before trusting the timing comparison."
+        ),
+        # Staleness detectability (a stated CONDITION, never a date): see the
+        # scheduled .github/workflows/pytorch-baseline-liveness.yml, which
+        # WARNS (never reds) when condition (1) fires.
+        "regen_trigger": {
+            "policy": (
+                "Regenerate when ANY holds: (1) a PyTorch MAJOR bump vs "
+                "torch_version; (2) a documented PyTorch numerics change "
+                "(reduction algorithm, dtype-promotion default, or a covered "
+                "op's kernel) affecting a covered op; (3) the target device or "
+                "its CUDA toolchain changes; (4) new ops added to the suite. "
+                "(1) is auto-detected by the liveness workflow; (2)-(4) are "
+                "documented conditions a human evaluates against the covered "
+                "ops. Never a date."
+            ),
+            "torch_major_at_gen": torch_major,
+            "covered_op_numerics_notes": (
+                "Timing-only baseline: no numerical values are stored, so a "
+                "numerics change cannot silently corrupt a stored reference — "
+                "it only means the TIMING was measured against a different "
+                "implementation, which condition (2) exists to catch. "
+                "Correctness lives in kiss-ref-diff + on-device parity tests."
+            ),
+        },
     }
 
 

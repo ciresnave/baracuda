@@ -633,6 +633,39 @@ pub struct PytorchBaselineMetadata {
     pub warmup_launches: u32,
     /// Human-readable methodology blurb.
     pub methodology: String,
+    /// Commit SHA of the source tree the baseline was generated against.
+    /// `None` for v1 baselines (the field postdates them) — a v1 file that
+    /// predates the field is honestly unattributable, not silently attributed.
+    #[serde(default)]
+    pub generator_git_sha: Option<String>,
+    /// Human-readable attribution: what device / tree / toolchain produced
+    /// these numbers, and (for provisional baselines) what is UNVERIFIED
+    /// about that. `None` on v1.
+    #[serde(default)]
+    pub attribution: Option<String>,
+    /// The stated CONDITION (never a date) under which this baseline must be
+    /// regenerated, plus the torch major it was frozen at. `None` on v1 —
+    /// a baseline without a regen-trigger has no detectable staleness, so
+    /// [`PytorchBaseline::load_from`] warns when it is absent.
+    #[serde(default)]
+    pub regen_trigger: Option<PytorchRegenTrigger>,
+}
+
+/// The regeneration-trigger policy from a v2 baseline. The bench harness does
+/// not act on it directly (staleness DETECTION is the scheduled
+/// `pytorch-baseline-liveness` workflow's job); it is carried so a reader —
+/// human or the liveness job — can see the stated condition and the torch
+/// major the baseline was frozen at.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PytorchRegenTrigger {
+    /// The stated condition under which to regenerate (a condition, not a date).
+    pub policy: String,
+    /// The PyTorch MAJOR version the baseline was generated under. The
+    /// liveness workflow compares this against the current released major.
+    pub torch_major_at_gen: u32,
+    /// Notes on which covered ops' numerics the baseline depends on.
+    #[serde(default)]
+    pub covered_op_numerics_notes: Option<String>,
 }
 
 /// One per-cell timing entry in the baseline.
@@ -676,11 +709,29 @@ impl PytorchBaseline {
                 path.display()
             )
         })?;
-        if parsed.metadata.schema_version != 1 {
+        // v1 (timing-only, no provenance/regen-trigger) and v2 (adds
+        // generator_git_sha + attribution + regen_trigger) are both readable —
+        // v2's new fields are `#[serde(default)]`, so a v1 file parses with them
+        // as `None`. A future incompatible change bumps past 2 and lands here.
+        if !(1..=2).contains(&parsed.metadata.schema_version) {
             return Err(format!(
-                "pytorch baseline: schema_version {} not supported (expected 1)",
+                "pytorch baseline: schema_version {} not supported (expected 1 or 2)",
                 parsed.metadata.schema_version
             ));
+        }
+        // Condition 2 (regen-trigger) visibility: a baseline with no stated
+        // regen-trigger has UNDETECTABLE staleness — surface that at load time
+        // rather than letting the comparison silently age. Not an error: a v1
+        // baseline is still usable, it is just not self-describing about when
+        // to refresh it.
+        if parsed.metadata.regen_trigger.is_none() {
+            eprintln!(
+                "pytorch baseline: WARNING — {} (schema_version {}) carries no regen_trigger; \
+                 its staleness is undetectable. Regenerate with tools/refresh_pytorch_baseline.py \
+                 to stamp a v2 provenance + regen-trigger block.",
+                path.display(),
+                parsed.metadata.schema_version,
+            );
         }
         let by_key = parsed
             .results
@@ -790,6 +841,67 @@ mod gate_tests {
         assert_eq!(arch_sku_of(8, 6), Some(ArchSku::Sm80)); // consumer Ampere
         assert_eq!(arch_sku_of(9, 0), Some(ArchSku::Sm90a)); // Hopper
         assert_eq!(arch_sku_of(7, 5), None); // Turing — no built cell
+    }
+
+    // The v1→v2 provenance/regen-trigger fields are `#[serde(default)]`, so
+    // these serde tests are the driver-free proof that (a) a v2 baseline's
+    // provenance round-trips and (b) a v1 baseline still parses with the new
+    // fields defaulting to `None` (backward compatibility). Pure serde — no
+    // GPU, runs in the CI-safe test path.
+
+    const V2_METADATA: &str = r#"{
+        "schema_version": 2,
+        "torch_version": "2.11.0+cu130",
+        "cuda_version": "13.0",
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "device_capability": [8, 9],
+        "generated_at_utc": "2026-06-04T15:02:50+00:00",
+        "sample_count": 11, "inner_iters": 50, "warmup_launches": 10,
+        "methodology": "…",
+        "generator_git_sha": null,
+        "attribution": "provisional — device MODEL matches; machine UNVERIFIED",
+        "regen_trigger": {
+            "policy": "regenerate on a torch MAJOR bump or a documented numerics change",
+            "torch_major_at_gen": 2,
+            "covered_op_numerics_notes": "timing-only"
+        }
+    }"#;
+
+    const V1_METADATA: &str = r#"{
+        "schema_version": 1,
+        "torch_version": "2.11.0+cu130",
+        "cuda_version": "13.0",
+        "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "device_capability": [8, 9],
+        "generated_at_utc": "2026-06-04T15:02:50+00:00",
+        "sample_count": 11, "inner_iters": 50, "warmup_launches": 10,
+        "methodology": "…"
+    }"#;
+
+    #[test]
+    fn pytorch_baseline_v2_provenance_round_trips() {
+        let m: PytorchBaselineMetadata = serde_json::from_str(V2_METADATA).expect("v2 parses");
+        assert_eq!(m.schema_version, 2);
+        assert_eq!(m.generator_git_sha, None); // provisional file: honestly absent
+        assert!(m.attribution.is_some());
+        let t = m.regen_trigger.expect("v2 carries a regen_trigger");
+        assert_eq!(t.torch_major_at_gen, 2);
+        assert!(t.policy.contains("MAJOR"));
+        assert_eq!(t.covered_op_numerics_notes.as_deref(), Some("timing-only"));
+    }
+
+    #[test]
+    fn pytorch_baseline_v1_parses_with_defaulted_provenance() {
+        // Backward compatibility: a v1 file (no new fields) must still parse,
+        // with the v2 fields defaulting to `None` — NOT falsely attributed.
+        let m: PytorchBaselineMetadata = serde_json::from_str(V1_METADATA).expect("v1 parses");
+        assert_eq!(m.schema_version, 1);
+        assert_eq!(m.generator_git_sha, None);
+        assert_eq!(m.attribution, None);
+        assert!(
+            m.regen_trigger.is_none(),
+            "a v1 baseline has no regen-trigger; the loader warns on this"
+        );
     }
 
     /// On-device smoke: the RTX 4070 stamps as sm89, and `gate_cell` times two

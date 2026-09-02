@@ -1,0 +1,127 @@
+name: pytorch baseline liveness
+
+# The bench suite's PyTorch comparison is a FROZEN timing baseline on disk
+# (crates/baracuda-kernels-bench/bench-baselines/pytorch_*.json), generated
+# once under a pinned PyTorch. A frozen timing ref is stable for arithmetic but
+# NOT for PyTorch-the-implementation: a major release can change a covered op's
+# kernel, and then the baseline silently describes a PyTorch nobody runs. The
+# baseline carries a stated `regen_trigger` (condition 1: a torch MAJOR bump);
+# this job DETECTS that condition so the staleness is visible rather than
+# assumed away.
+#
+# It NEVER reds a build (being behind a torch release is legitimate — a regen is
+# a deliberate, GPU-bound act) and runs ONLY on a schedule / on demand, never on
+# a PR, so it cannot flake the merge path. The warning/issue names the specific
+# major gap, not merely that something moved — a bare "the baseline is behind" is
+# the dismissible notification the regen_trigger policy exists to avoid.
+#
+# It checks ONLY condition (1) (torch MAJOR) because that is the one machine-
+# detectable trigger. Conditions (2)-(4) — a documented numerics change, a device
+# / toolchain change, new ops — are human-evaluated; the job prints them as a
+# periodic reminder alongside the automated check.
+on:
+  schedule:
+    - cron: '23 6 * * 1' # Mondays 06:23 UTC (offset from cuda-vocab's :17)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+# Serialize runs so a manual dispatch overlapping the weekly run cannot race the
+# `gh issue list` → `gh issue create` dedupe into creating two issues.
+concurrency:
+  group: pytorch-baseline-liveness
+  cancel-in-progress: false
+
+jobs:
+  baseline-liveness:
+    name: Is the PyTorch baseline's major current?
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare the frozen torch major against the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=crates/baracuda-kernels-bench/bench-baselines
+
+          # Resolve the single frozen baseline (the loader enforces exactly one).
+          BASELINE=$(ls "$DIR"/pytorch_*.json 2>/dev/null | head -1 || true)
+          if [ -z "$BASELINE" ]; then
+            echo "No pytorch_*.json baseline in $DIR — nothing to check."
+            echo "No PyTorch baseline present; liveness check is a no-op." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "Baseline: $BASELINE"
+
+          # The frozen torch version + the major the regen_trigger was set at.
+          # Prefer the explicit regen_trigger.torch_major_at_gen (v2); fall back
+          # to parsing torch_version (v1 has no trigger block).
+          FROZEN_VER=$(python3 -c "import json,sys; print(json.load(open('$BASELINE'))['metadata']['torch_version'])")
+          FROZEN_MAJOR=$(python3 -c "
+          import json
+          m = json.load(open('$BASELINE'))['metadata']
+          rt = m.get('regen_trigger')
+          if rt and 'torch_major_at_gen' in rt:
+              print(rt['torch_major_at_gen'])
+          else:
+              print(m['torch_version'].split('.', 1)[0])
+          ")
+          echo "Frozen: torch $FROZEN_VER (major $FROZEN_MAJOR)"
+
+          # Latest RELEASED torch major from PyPI (stable only — skip pre-releases).
+          LATEST_VER=$(python3 - <<'PY'
+          import json, urllib.request
+          with urllib.request.urlopen("https://pypi.org/pypi/torch/json", timeout=30) as r:
+              data = json.load(r)
+          # `info.version` is the latest stable release.
+          print(data["info"]["version"])
+          PY
+          )
+          LATEST_MAJOR=$(printf '%s' "$LATEST_VER" | cut -d. -f1)
+          echo "Latest released: torch $LATEST_VER (major $LATEST_MAJOR)"
+
+          REMINDER=$(printf '%s\n' \
+            "Automated check covers condition (1) only (torch MAJOR). Also regenerate if a HUMAN observes:" \
+            "  (2) a documented PyTorch numerics change (reduction algorithm, dtype-promotion default, or a covered op's kernel);" \
+            "  (3) the target device or its CUDA toolchain changed;" \
+            "  (4) new ops were added to the bench suite." \
+            "Regenerate with: python tools/refresh_pytorch_baseline.py  (on the target GPU box; stamps a fresh v2 provenance + git SHA).")
+
+          if [ "$LATEST_MAJOR" -le "$FROZEN_MAJOR" ]; then
+            echo "Baseline major $FROZEN_MAJOR is CURRENT (latest released major is $LATEST_MAJOR)."
+            { echo "### ✅ PyTorch baseline major is current"; echo;
+              echo "Frozen at torch \`$FROZEN_VER\` (major $FROZEN_MAJOR); latest released is \`$LATEST_VER\` (major $LATEST_MAJOR)."; echo;
+              echo "$REMINDER"; } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # A newer major is out — regen_trigger condition (1) has fired.
+          body=$(printf '%s\n' \
+            "The bench suite's PyTorch timing baseline is frozen at torch major $FROZEN_MAJOR (\`$FROZEN_VER\`), but torch major $LATEST_MAJOR (\`$LATEST_VER\`) has been released. This is NOT a build failure — being behind a torch release is legitimate, and a regen is a deliberate, GPU-bound act." \
+            "" \
+            "- **Baseline:** \`$BASELINE\`" \
+            "- **Frozen major:** $FROZEN_MAJOR (\`$FROZEN_VER\`)" \
+            "- **Latest released major:** $LATEST_MAJOR (\`$LATEST_VER\`)" \
+            "" \
+            "$REMINDER")
+
+          echo "::warning::PyTorch baseline frozen at major $FROZEN_MAJOR but major $LATEST_MAJOR is released — regen_trigger condition (1) fired."
+          { echo "### ⚠️ PyTorch baseline is a major behind"; echo; echo "$body"; } >> "$GITHUB_STEP_SUMMARY"
+
+          # Dedup by a stable title so a persisting gap does not open a fresh
+          # issue every week.
+          TITLE="pytorch-baseline: frozen major $FROZEN_MAJOR is behind released major $LATEST_MAJOR"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title pytorch-baseline: frozen major" --json number --jq '.[0].number // empty' || true)
+          if [ -n "$existing" ]; then
+            echo "regen issue already open (#$existing) — not duplicating."
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$body"
+          fi
+
+          # NEVER red — being behind is legitimate; the signal is the warning + issue.
+          exit 0

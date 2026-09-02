@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "schema_version": 1,
+    "schema_version": 2,
     "torch_version": "2.11.0+cu130",
     "cuda_version": "13.0",
     "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
@@ -12,7 +12,14 @@
     "sample_count": 11,
     "inner_iters": 50,
     "warmup_launches": 10,
-    "methodology": "wall-clock around torch.cuda.synchronize() per batch; median of per-batch averages. Matches baracuda's measure_median_ns in baracuda-kernels-bench/src/lib.rs."
+    "methodology": "wall-clock around torch.cuda.synchronize() per batch; median of per-batch averages. Matches baracuda's measure_median_ns in baracuda-kernels-bench/src/lib.rs.",
+    "generator_git_sha": null,
+    "attribution": "provisional — device MODEL (RTX 4070 Laptop GPU) matches the target box, but physical-machine identity and thermal/power state at generation are UNVERIFIED; generated under CUDA 13.0 / torch 2.11.0 on 2026-06-04 (committed by Eric Evans that day). NO generator git SHA (these rows predate the field). Treat these 319 timing rows as provisional until regenerated on the target box, which will carry generator_git_sha + a same-box guarantee.",
+    "regen_trigger": {
+      "policy": "Regenerate this baseline when ANY of the following CONDITIONS holds (a stated condition, NEVER a date): (1) a PyTorch MAJOR version bump vs torch_version above; (2) a documented PyTorch numerics change (reduction algorithm, dtype-promotion default, or a covered op's kernel) that alters an op this baseline covers; (3) the target device or its CUDA toolchain changes; (4) new ops are added to the bench suite. Detection of (1) is automated by .github/workflows/pytorch-baseline-liveness.yml (scheduled, WARNS, never reds a build). Conditions (2)-(4) are documented triggers a human evaluates against the covered-ops list; the liveness workflow prints them as a periodic reminder.",
+      "torch_major_at_gen": 2,
+      "covered_op_numerics_notes": "Timing-only baseline: no numerical values are stored, so a numerics change does not silently corrupt a stored reference — it only means the TIMING was measured against a different implementation, which condition (2) exists to catch. Correctness is validated separately (kiss-ref-diff + on-device parity tests), not here."
+    }
   },
   "results": [
     {
