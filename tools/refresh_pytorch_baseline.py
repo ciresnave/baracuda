@@ -618,7 +618,20 @@ def _git_exe() -> str | None:
     absolute path (not a bare `"git"`) avoids resolving the executable through
     PATH at call time — a PATH-injection hazard on a developer box, minor but
     real (bandit B607). `None` if git is not on PATH (the tree is then
-    unattributable — honestly None, not a lie)."""
+    unattributable — honestly None, not a lie).
+
+    CONTRADICTORY SCANNERS — do NOT try to reach zero findings on this line.
+    bandit B607 fires on a LITERAL executable ("git"); semgrep
+    dangerous-subprocess-use-audit fires on a NON-literal executable (this
+    resolved variable). The two rules are mutually exclusive on the same call,
+    so no edit satisfies both — a "clean board" is unreachable here, and
+    optimizing the count just trades one red for the other (verified: switching
+    "git" -> shutil.which turned 1 bandit finding into 2 semgrep ones). We run
+    the better code (resolve once, absolute path is inspectable) and carry BOTH
+    reds as known, dispositioned in the PR body. The semgrep audit passes: the
+    "non-static string" is shutil.which() of a LITERAL, controlled by no external
+    actor. Disposition VOID the moment the executable or any subprocess argument
+    list derives from a path / ref / env var / op name / anything read off disk."""
     return shutil.which("git")
 
 
