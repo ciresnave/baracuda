@@ -23,8 +23,8 @@ use baracuda_kernels::{
     Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP, PhaseTwentyNineRow, PytorchBaseline, append_csv_row,
-    measure_median_ns, setup_device, time_with_events, warmup,
+    CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP, LiveScalar, PhaseTwentyNineRow, PytorchBaseline,
+    append_csv_row, assert_cell_live, measure_median_ns, setup_device, time_with_events, warmup,
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::f16;
@@ -41,7 +41,7 @@ fn bench_baracuda<T>(
     fill: T,
     baseline: Option<&PytorchBaseline>,
 ) where
-    T: baracuda_kernels::Element + Copy + 'static,
+    T: baracuda_kernels::Element + Copy + 'static + LiveScalar,
 {
     let (ctx, stream) = setup_device();
     let mut group = c.benchmark_group(format!("layernorm_vs_cudnn/baracuda/{dtype_label}"));
@@ -138,6 +138,10 @@ fn bench_baracuda<T>(
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda layernorm");
             });
+            // Liveness (NOT a reference): warmup just populated dev_y; assert it
+            // is live (finite, right shape) before timing it — a bench over
+            // NaN/garbage output is fast and meaningless.
+            assert_cell_live(&format!("layernorm/{dtype_label}/{shape}"), &dev_y, numel);
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = LayerNormArgs::<T, 2> {
                     x: TensorRef {

@@ -602,6 +602,116 @@ pub const CROSS_MMVQ_FORMATS: &[baracuda_kernels::GgufBlockFormat] = &[
 ];
 
 // =====================================================================
+// Liveness — a bench that times garbage is fast and meaningless.
+// =====================================================================
+
+/// A scalar whose finiteness the liveness check can test. Implemented for the
+/// float element types the benches produce (`f32`, `f64`, `half::f16`,
+/// `half::bf16`).
+///
+/// This is deliberately NOT a numerical reference: it says nothing about
+/// whether a value is *correct*, only whether it is finite. "This op ran and
+/// produced live output" vs "this op agrees with PyTorch" — only the latter is
+/// the oracle's job (`kiss-ref-diff` + on-device parity tests).
+pub trait LiveScalar: Copy {
+    /// True if the value is finite (not NaN, not ±Inf).
+    fn cell_is_finite(&self) -> bool;
+    /// The additive identity, to fill a host readback buffer.
+    fn live_zero() -> Self;
+}
+
+impl LiveScalar for f32 {
+    fn cell_is_finite(&self) -> bool {
+        f32::is_finite(*self)
+    }
+    fn live_zero() -> Self {
+        0.0
+    }
+}
+impl LiveScalar for f64 {
+    fn cell_is_finite(&self) -> bool {
+        f64::is_finite(*self)
+    }
+    fn live_zero() -> Self {
+        0.0
+    }
+}
+impl LiveScalar for half::f16 {
+    fn cell_is_finite(&self) -> bool {
+        half::f16::is_finite(*self)
+    }
+    fn live_zero() -> Self {
+        half::f16::ZERO
+    }
+}
+impl LiveScalar for half::bf16 {
+    fn cell_is_finite(&self) -> bool {
+        half::bf16::is_finite(*self)
+    }
+    fn live_zero() -> Self {
+        half::bf16::ZERO
+    }
+}
+
+/// Liveness SHAPE arm — the output's element count must match the declared
+/// extent. Split out from [`assert_cell_live`] so it is testable without a GPU
+/// (born-red: a length mismatch must panic). Panics on mismatch.
+fn check_cell_shape(label: &str, actual_len: usize, expected_numel: usize) {
+    assert_eq!(
+        actual_len, expected_numel,
+        "{label}: liveness — output length {actual_len} != expected numel {expected_numel} (wrong shape)",
+    );
+}
+
+/// Liveness FINITENESS arm — every host-side element must be finite. Split out
+/// from [`assert_cell_live`] so it is testable without a GPU (born-red: a slice
+/// carrying a NaN or ±Inf must panic). Panics on the first non-finite element.
+fn check_cell_finite<T: LiveScalar>(label: &str, host: &[T]) {
+    if let Some(i) = host.iter().position(|v| !v.cell_is_finite()) {
+        panic!(
+            "{label}: liveness — element {i} of {} is non-finite (NaN/Inf); \
+             a benchmark timing garbage is meaningless",
+            host.len(),
+        );
+    }
+}
+
+/// LIVENESS assertion for one benched cell — NOT a numerical reference.
+///
+/// A benchmark that times an op returning NaN, the wrong shape, or exiting
+/// early on a degenerate input still produces a fast number, and today that is
+/// silent. This copies the op's output back once (call it OUTSIDE the timed
+/// loop, after `warmup` has populated the output) and asserts the output is
+/// live via its two runtime arms: element count matches `expected_numel`
+/// ([`check_cell_shape`]) and every element is finite ([`check_cell_finite`]).
+/// It distinguishes "this op ran" from "this op is correct"; only correctness
+/// belongs to the oracle (`kiss-ref-diff` + on-device parity tests).
+///
+/// DTYPE is deliberately NOT a runtime arm: the signature is
+/// `assert_cell_live<T>(&DeviceBuffer<T>, _)`, so the cell's dtype *is* `T` by
+/// construction and a wrong-dtype buffer is UNREPRESENTABLE — the type system
+/// enforces it, which is strictly stronger than a runtime check. Hence there is
+/// no dtype born-red case (there is no failing input to construct), and its
+/// absence is a statement, not an unproven arm.
+///
+/// Panics — a benchmark over dead output is not worth timing. `T: Element`
+/// carries `DeviceRepr` (the `DeviceBuffer<T>` bound) as a supertrait.
+pub fn assert_cell_live<T>(
+    label: &str,
+    output: &baracuda_driver::DeviceBuffer<T>,
+    expected_numel: usize,
+) where
+    T: baracuda_kernels::Element + LiveScalar,
+{
+    check_cell_shape(label, output.len(), expected_numel);
+    let mut host = vec![T::live_zero(); expected_numel];
+    output
+        .copy_to_host(&mut host)
+        .unwrap_or_else(|e| panic!("{label}: liveness — copy_to_host failed: {e}"));
+    check_cell_finite(label, &host);
+}
+
+// =====================================================================
 // Phase 73.1 — PyTorch frozen-JSON baseline loader.
 // =====================================================================
 
@@ -897,6 +1007,67 @@ mod gate_tests {
         assert_eq!(arch_sku_of(8, 6), Some(ArchSku::Sm80)); // consumer Ampere
         assert_eq!(arch_sku_of(9, 0), Some(ArchSku::Sm90a)); // Hopper
         assert_eq!(arch_sku_of(7, 5), None); // Turing — no built cell
+    }
+
+    // Liveness helper — UNIVERSAL born-red: each runtime arm reds on ITS OWN
+    // violation, AND both arms pass on correct input (the sign-flipped check —
+    // a guard false-of-the-fixed-state is the same error as one true-of-the-
+    // broken-state). Driver-free: these exercise the pure `check_cell_*` /
+    // `cell_is_finite` split-outs, so they run in the CI-safe path; the
+    // device-copy path in `assert_cell_live` is validated on-device. Dtype has
+    // NO born-red case by design — it is type-enforced (a wrong-dtype buffer is
+    // unrepresentable), documented on `assert_cell_live`.
+
+    #[test]
+    fn cell_is_finite_discriminates_per_dtype() {
+        // true on finite, false on NaN/±Inf — for every dtype the benches use.
+        assert!(1.0f32.cell_is_finite());
+        assert!(!f32::NAN.cell_is_finite());
+        assert!(!f32::INFINITY.cell_is_finite());
+        assert!(!f32::NEG_INFINITY.cell_is_finite());
+        assert!(1.0f64.cell_is_finite());
+        assert!(!f64::NAN.cell_is_finite());
+        assert!(!f64::INFINITY.cell_is_finite());
+        assert!(half::f16::ONE.cell_is_finite());
+        assert!(!half::f16::NAN.cell_is_finite());
+        assert!(!half::f16::INFINITY.cell_is_finite());
+        assert!(half::bf16::ONE.cell_is_finite());
+        assert!(!half::bf16::NAN.cell_is_finite());
+        assert!(!half::bf16::INFINITY.cell_is_finite());
+    }
+
+    // FINITE arm — reds on its own violation (NaN, +Inf; a half NaN too).
+    #[test]
+    #[should_panic(expected = "non-finite")]
+    fn check_cell_finite_reds_on_nan() {
+        check_cell_finite("t", &[1.0f32, f32::NAN, 2.0]);
+    }
+    #[test]
+    #[should_panic(expected = "non-finite")]
+    fn check_cell_finite_reds_on_inf() {
+        check_cell_finite("t", &[f32::INFINITY]);
+    }
+    #[test]
+    #[should_panic(expected = "non-finite")]
+    fn check_cell_finite_reds_on_f16_nan() {
+        check_cell_finite("t", &[half::f16::ONE, half::f16::NAN]);
+    }
+    // FINITE arm — passes on correct (not false-of-the-fixed-state).
+    #[test]
+    fn check_cell_finite_passes_on_all_finite() {
+        check_cell_finite("t", &[1.0f32, 2.0, 3.0]);
+        check_cell_finite("t", &[half::bf16::ONE, half::bf16::ZERO]);
+    }
+
+    // SHAPE arm — reds on a length mismatch, passes on a match.
+    #[test]
+    #[should_panic(expected = "wrong shape")]
+    fn check_cell_shape_reds_on_mismatch() {
+        check_cell_shape("t", 5, 6);
+    }
+    #[test]
+    fn check_cell_shape_passes_on_match() {
+        check_cell_shape("t", 6, 6);
     }
 
     // These driver-free serde tests prove (a) a v2 baseline's per-run
