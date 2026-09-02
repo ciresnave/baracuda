@@ -41,8 +41,8 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BiasElement, ElementKind, EpilogueKind, IntElement, LayoutSku, MatrixMut, MatrixRef,
-    PlanPreference, PrecisionGuarantee, S4, U4, VectorRef, Workspace,
+    ArchSku, BiasElement, BiasElementKind, ElementKind, EpilogueKind, IntElement, LayoutSku,
+    MatrixMut, MatrixRef, PlanPreference, PrecisionGuarantee, S4, U4, VectorRef, Workspace,
 };
 
 // Reuse the SKU descriptor from baracuda-cutlass — it carries the same
