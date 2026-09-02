@@ -20,8 +20,8 @@ use baracuda_kernels::{
     TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns, setup_device,
-    time_with_events, warmup,
+    LiveScalar, PhaseTwentyNineRow, PytorchBaseline, append_csv_row, assert_cell_live,
+    measure_median_ns, setup_device, time_with_events, warmup,
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::f16;
@@ -64,7 +64,7 @@ fn bench<T>(
     fill: T,
     baseline: Option<&PytorchBaseline>,
 ) where
-    T: baracuda_kernels::Element + Copy + 'static,
+    T: baracuda_kernels::Element + Copy + 'static + LiveScalar,
 {
     let (ctx, stream) = setup_device();
     let mut group = c.benchmark_group(format!("embedding/{dtype_label}"));
@@ -130,6 +130,13 @@ fn bench<T>(
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda embedding");
         });
+        // Liveness (NOT a reference): warmup populated dev_out; assert it's live
+        // before timing — a bench over garbage output is fast and meaningless.
+        assert_cell_live(
+            &format!("embedding/{dtype_label}/{label}"),
+            &dev_out,
+            out_numel,
+        );
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = EmbeddingArgs::<T, i32> {
                 weight: TensorRef {
