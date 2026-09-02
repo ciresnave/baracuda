@@ -77,6 +77,16 @@ jobs:
           print(data["info"]["version"])  # info.version is the latest stable release
           PY
           )
+          # A command-substitution assignment does NOT trip `set -e` on failure, so a
+          # failed PyPI fetch leaves LATEST_VER empty rather than aborting — and the
+          # comparison below would then read empty as "behind" and open a spurious
+          # regen issue on a transient network blip. Guard it: skip this run (exit 0,
+          # this job never reds anyway) rather than warn about a fetch that didn't happen.
+          if [ -z "$LATEST_VER" ]; then
+            echo "::warning::PyPI torch-version fetch returned empty; skipping this liveness run."
+            echo "PyPI fetch failed (empty); liveness check skipped this run — not a staleness signal." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           LATEST_MAJOR=$(printf '%s' "$LATEST_VER" | cut -d. -f1)
           echo "Latest released: torch $LATEST_VER (major $LATEST_MAJOR)"
 
