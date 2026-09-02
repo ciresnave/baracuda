@@ -31,13 +31,23 @@ So this gate is **harden + extend**, not build-from-scratch.
 The baseline is a *checkable claim* only if it carries its provenance and its
 staleness is detectable. Two conditions, both first-class in the schema:
 
-1. **Provenance per baseline.** The metadata block records `torch_version`,
-   `cuda_version`, `device_name`, `device_capability`, `generated_at_utc`,
-   the sample/inner/warmup counts, a methodology string, and (v2)
-   `generator_git_sha`. A timing reference generated on different hardware is
-   not a reference — `device_name` + git SHA + `generated_at_utc` is what makes
-   the comparison attributable. **A consumer must confirm `device_name` matches
-   its own target before trusting the numbers.**
+1. **Provenance per generation run, not per file.** A generation run is the
+   thing that actually has a torch version, a device, a git SHA and a dirty
+   bit, so provenance is keyed on the run: `metadata.provenance_runs[]` holds
+   one record per run (`run_id`, `torch_version`, `cuda_version`, `device_name`,
+   `device_capability`, `generated_at_utc`, `generator_git_sha`,
+   `generator_dirty`, sample/inner/warmup counts, `attribution`), and **each
+   result row names the run that produced it** (`"run": <run_id>`). A full
+   refresh yields one run every row references; a partial `--ops` refresh
+   appends a run and repoints only the rows it touched — so a file-level stamp
+   can never relabel untouched rows with a provenance that did not produce them
+   (the run-keyed indirection makes that drift structurally impossible rather
+   than merely currently-absent). A dirty generating tree is *recorded*
+   (`generator_dirty: true`), never suppressed or refused — a bare SHA implying
+   a clean tree is the lie. A timing reference from different hardware is not a
+   reference, so `device_name` + git SHA + dirty bit + `generated_at_utc` per
+   run is what makes each row attributable. **A consumer must confirm a run's
+   `device_name` matches its own target before trusting that run's numbers.**
 2. **A stated regeneration trigger (a condition, never a date).** The metadata
    `regen_trigger` block states the conditions under which the baseline must be
    regenerated: (1) a PyTorch MAJOR bump; (2) a documented PyTorch numerics

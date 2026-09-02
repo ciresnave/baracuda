@@ -630,52 +630,83 @@ def _git_sha() -> str | None:
     return sha if out.returncode == 0 and sha else None
 
 
-def _metadata(samples: int, inner: int) -> dict[str, object]:
-    """Self-describing block written into the JSON header (schema v2).
+def _git_dirty() -> bool | None:
+    """Whether the generating tree has uncommitted changes (`git status
+    --porcelain` non-empty). A dirty tree means the SHA does not fully describe
+    the code that produced the numbers — the normal case while iterating. We
+    RECORD it (never suppress, never refuse): a bare SHA implying a clean tree
+    is the lie. `None` if git can't be queried."""
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=Path(__file__).resolve().parent,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.strip() != ""
 
-    v2 over v1 adds `generator_git_sha`, `attribution`, and `regen_trigger`
-    — the provenance + staleness-detectability the baseline needs to be a
-    checkable claim rather than an unfalsifiable "we match PyTorch". See the
-    plan doc: docs/planning/foundational/13-benchmark-suite-pytorch-completion.md.
-    """
+
+def _provenance_run(run_id: str, samples: int, inner: int) -> dict[str, object]:
+    """One generation run's provenance record. The natural key for "what
+    produced these numbers": a run has one torch version, one device, one SHA,
+    one dirty bit. Result rows reference it by `run_id`, so a partial `--ops`
+    refresh (which appends a run and repoints only the rows it touched) cannot
+    relabel untouched rows with a provenance that did not produce them."""
     device_name = torch.cuda.get_device_name(0)
-    generated_at = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
     sha = _git_sha()
-    torch_major = int(torch.__version__.split(".", 1)[0])
+    dirty = _git_dirty()
+    dirty_note = (
+        "" if dirty is None
+        else ("; tree DIRTY (SHA does not fully describe it)" if dirty
+              else "; tree clean")
+    )
     return {
-        "schema_version": 2,
+        "run_id": run_id,
         "torch_version": torch.__version__,
         "cuda_version": torch.version.cuda,
         "device_name": device_name,
         "device_capability": list(torch.cuda.get_device_capability(0)),
-        "generated_at_utc": generated_at,
+        "generated_at_utc": run_id,  # run_id is the ISO generation timestamp
+        "generator_git_sha": sha,
+        "generator_dirty": dirty,
         "sample_count": samples,
         "inner_iters": inner,
         "warmup_launches": WARMUP_LAUNCHES,
+        "attribution": (
+            f"generated on device '{device_name}' at {run_id} "
+            f"under torch {torch.__version__} / CUDA {torch.version.cuda}"
+            + (f"; source tree pinned at git {sha}" if sha else
+               "; NOT in a git checkout — source tree UNATTRIBUTABLE")
+            + dirty_note
+            + ". Same-box run: measured on the device recorded above. A consumer "
+              "must confirm device_name matches its own target hardware before "
+              "trusting the timing comparison."
+        ),
+    }
+
+
+def _file_metadata(torch_major: int, provenance_runs: list[dict[str, object]]) -> dict[str, object]:
+    """File-level metadata (schema v2): only the facts INVARIANT across runs.
+    Per-run facts live in `provenance_runs`. See the plan doc:
+    docs/planning/foundational/13-benchmark-suite-pytorch-completion.md."""
+    return {
+        "schema_version": 2,
         "methodology": (
             "wall-clock around torch.cuda.synchronize() per batch; "
             "median of per-batch averages. Matches baracuda's "
             "measure_median_ns in baracuda-kernels-bench/src/lib.rs."
-        ),
-        # Provenance: what tree produced these numbers. A timing baseline
-        # generated on different hardware is not a reference — device_name +
-        # this SHA + generated_at is what makes the comparison attributable.
-        "generator_git_sha": sha,
-        "attribution": (
-            f"generated on device '{device_name}' at {generated_at} "
-            f"under torch {torch.__version__} / CUDA {torch.version.cuda}"
-            + (f"; source tree pinned at git {sha}" if sha else
-               "; NOT in a git checkout — source tree UNATTRIBUTABLE")
-            + ". Same-box baseline: run on the device recorded above in this "
-              "session. A consumer must confirm device_name matches its own "
-              "target hardware before trusting the timing comparison."
         ),
         # Staleness detectability (a stated CONDITION, never a date): see the
         # scheduled .github/workflows/pytorch-baseline-liveness.yml, which
         # WARNS (never reds) when condition (1) fires.
         "regen_trigger": {
             "policy": (
-                "Regenerate when ANY holds: (1) a PyTorch MAJOR bump vs "
+                "Regenerate when ANY holds: (1) a PyTorch MAJOR bump vs a run's "
                 "torch_version; (2) a documented PyTorch numerics change "
                 "(reduction algorithm, dtype-promotion default, or a covered "
                 "op's kernel) affecting a covered op; (3) the target device or "
@@ -693,6 +724,7 @@ def _metadata(samples: int, inner: int) -> dict[str, object]:
                 "Correctness lives in kiss-ref-diff + on-device parity tests."
             ),
         },
+        "provenance_runs": provenance_runs,
     }
 
 
@@ -746,6 +778,10 @@ def main() -> int:
     print(f"Total cells: {total_cells}")
     print()
 
+    # One provenance run per invocation; every row this run measures stamps it.
+    # A partial `--ops` run therefore only ever attributes the rows it touched.
+    run_id = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+
     cell_index = 0
     for op in ops:
         for (op_label, shape, dtype_name, launch) in OP_REGISTRY[op]():
@@ -763,31 +799,54 @@ def main() -> int:
                     "shape": shape,
                     "dtype": dtype_name,
                     "median_ns": round(median_ns, 3),
+                    "run": run_id,
                 }
             )
 
     # Merge with the existing baseline, replacing only the (op, shape, dtype)
-    # keys that this run measured. This lets `--ops <subset>` refresh just
-    # those ops without wiping coverage of the ones we didn't ask for.
+    # keys that this run measured — `--ops <subset>` refreshes just those ops
+    # without wiping the rest. CRUCIAL: each row keeps a `run` link, so a
+    # partial refresh repoints ONLY the rows it touched to this run's
+    # provenance; untouched rows keep the run that actually produced them, and a
+    # file-level stamp can never relabel them (Sourcery #54.1).
     merged: dict[tuple[str, str, str], dict[str, object]] = {}
+    existing_runs: list[dict[str, object]] = []
     if output_path.exists():
         try:
             existing = json.loads(output_path.read_text(encoding="utf-8"))
+            existing_runs = existing.get("metadata", {}).get("provenance_runs", [])
             for entry in existing.get("results", []):
                 key = (entry["op"], entry["shape"], entry["dtype"])
+                entry.setdefault("run", "")  # v1 rows carried no run link
                 merged[key] = entry
         except (json.JSONDecodeError, KeyError) as e:
             print(f"WARN: ignoring existing {output_path} ({e}); writing fresh", file=sys.stderr)
     for entry in results:
         key = (entry["op"], entry["shape"], entry["dtype"])
-        merged[key] = entry
+        merged[key] = entry  # touched rows now point at run_id
+
+    merged_rows = list(merged.values())
+
+    # Keep only the runs still referenced by some row, plus this run — drops
+    # provenance for a run whose every row was overwritten (no orphan records),
+    # and never carries a run that describes nothing.
+    referenced = {row.get("run", "") for row in merged_rows}
+    new_run = _provenance_run(run_id, args.samples, args.inner)
+    kept_runs = [r for r in existing_runs if r.get("run_id") in referenced and r.get("run_id") != run_id]
+    kept_runs.append(new_run)
+    torch_major = int(torch.__version__.split(".", 1)[0])
+
     payload = {
-        "metadata": _metadata(args.samples, args.inner),
-        "results": list(merged.values()),
+        "metadata": _file_metadata(torch_major, kept_runs),
+        "results": merged_rows,
     }
     output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print()
-    print(f"Wrote {len(merged)} cells to {output_path} ({len(results)} refreshed this run)")
+    print(
+        f"Wrote {len(merged_rows)} cells to {output_path} "
+        f"({len(results)} refreshed this run as run '{run_id}'; "
+        f"{len(kept_runs)} provenance run(s) retained)"
+    )
     return 0
 
 
