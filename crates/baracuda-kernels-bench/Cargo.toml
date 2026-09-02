@@ -219,6 +219,10 @@ harness = false
 name = "topk"
 harness = false
 
+[[bench]]
+name = "loss"
+harness = false
+
 [package.metadata.docs.rs]
 # This crate is a bench harness — no docs to publish. Keep the metadata
 # minimal so docs.rs doesn't try to build benchmarks.

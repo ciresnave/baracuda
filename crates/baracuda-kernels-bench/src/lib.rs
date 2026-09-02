@@ -535,6 +535,16 @@ pub const CROSS_HIDDEN_SWEEP: &[i32] = &[1024, 4096];
 /// 256, satisfying every k-quant block-size constraint.
 pub const CROSS_MMVQ_SHAPES: &[(i32, i32)] = &[(4096, 4096), (11008, 4096), (32000, 4096)];
 
+/// Loss bench sweep — row count (batch·seqlen) for the Phase-29 loss
+/// family (mse / l1 / cross_entropy / nll). Short (512) and long (2048).
+pub const LOSS_ROW_SWEEP: &[i32] = &[512, 2048];
+/// Loss bench sweep — feature / class extent. For cross_entropy / nll
+/// this is the class count (vocab-like); for mse / l1 it is the per-row
+/// feature width. 1024 and 4096 bracket a small head and an LLM hidden
+/// size. The shape key is `R{rows}_C{cols}`, shared with the PyTorch
+/// baseline generator (`tools/refresh_pytorch_baseline.py`).
+pub const LOSS_COL_SWEEP: &[i32] = &[1024, 4096];
+
 // Conv2d shape set — same as `CONV2D_SWEEP` (the Phase-10 sweep is
 // already minimal at 3 picks).
 

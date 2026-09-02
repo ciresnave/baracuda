@@ -117,6 +117,10 @@ OP_ORDER: tuple[str, ...] = (
     "conv2d",
     "maxpool2d",
     "flash_sdpa_gqa",
+    "mse",
+    "l1",
+    "cross_entropy",
+    "nll",
     "mmvq",
 )
 
