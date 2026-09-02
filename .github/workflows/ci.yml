@@ -227,3 +227,44 @@ jobs:
           [ "$names" = "$exp" ] || { echo "MSRV DRIFT: {declares 1.85}=[$names] != {expected}=[$exp]. A crate gained or lost its 1.85 floor, or the 'expected' list was edited — reconcile the Cargo.toml declarations with the list in this step."; exit 1; }
           args=(); for n in $names; do args+=(-p "$n"); done
           cargo +1.85.0 build "${args[@]}"
+
+  arch-gated-check:
+    name: Arch-gated Rust surface (DOCS_RS check, no CUDA)
+    # THE CLASS behind the int4_gemm sm89 break this workflow's PR fixes:
+    # `baracuda-kernels` has arch-gated Rust (`#[cfg(feature = "sm80" | "sm89" |
+    # "sm90a")]`) that NO other CI job compiles. The default driver-free build
+    # skips it (arch features off), and the real forge build (`--features smXX`)
+    # only runs on the maintainer's RTX 4070 box — there is no CI CUDA runner. So
+    # a name-resolution / type error in an arch-gated path ships GREEN: an int4
+    # bias path matched `BiasElementKind::{F32,I32}` while importing only the
+    # `BiasElement` trait, and `cargo bench --features sm89` (the bench suite's
+    # documented invocation) failed to compile on main with E0433 x32 — nothing
+    # said so, because CI never built that surface.
+    #
+    # This type-checks the arch-gated surface WITHOUT the CUDA toolkit: `DOCS_RS`
+    # makes BOTH baracuda-kernels-sys and baracuda-cutlass-kernels-sys skip their
+    # nvcc build (each build.rs early-returns before any toolkit lookup), and
+    # `cargo check` type-checks without linking, so the absent kernel symbols
+    # never matter. It compiles the exact `#[cfg(feature = smXX)]` Rust the forge
+    # build would — catching the E0433 class on a driver-free runner in ~10-30s.
+    #
+    # Born-red verified: with the `BiasElementKind` import removed this check reds
+    # (`error[E0433]` x32, exit 101) on `--features sm89`; with the fix it is exit
+    # 0 on all three arches, and 0 nvcc/cicc/ptxas processes spawn — the forge is
+    # genuinely skipped, so this is safe on a toolkit-less runner. See
+    # docs/design/2026-08-20-ci-coverage-matrix.md for the surrounding no-CUDA
+    # coverage rationale.
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [sm80, sm89, sm90a]
+    runs-on: ubuntu-latest
+    env:
+      # kernels-sys + cutlass-kernels-sys skip nvcc under DOCS_RS → driver-free.
+      DOCS_RS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check baracuda-kernels --features ${{ matrix.arch }}
+        run: cargo check -p baracuda-kernels --features ${{ matrix.arch }}
