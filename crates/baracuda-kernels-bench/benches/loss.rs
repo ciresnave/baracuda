@@ -133,7 +133,13 @@ macro_rules! percell_loss_bench {
     };
 }
 
-percell_loss_bench!(bench_mse, "mse", MseLossPlan, MseLossDescriptor, MseLossArgs);
+percell_loss_bench!(
+    bench_mse,
+    "mse",
+    MseLossPlan,
+    MseLossDescriptor,
+    MseLossArgs
+);
 percell_loss_bench!(bench_l1, "l1", L1LossPlan, L1LossDescriptor, L1LossArgs);
 
 /// CrossEntropy: logits `[n_rows, class_extent]` + i64 class-index target.
@@ -185,31 +191,40 @@ fn bench_cross_entropy(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
                     Ok(b) => b,
                     Err(_) => continue,
                 };
-            bench_tail!(ctx, stream, group, "cross_entropy", shape, dev_y, baseline, {
-                plan.run(
-                    &stream,
-                    Workspace::Borrowed(dev_ws.as_slice_mut()),
-                    CrossEntropyLossArgs {
-                        input: TensorRef {
-                            data: dev_inp.as_slice(),
-                            shape: ishape,
-                            stride: ist,
+            bench_tail!(
+                ctx,
+                stream,
+                group,
+                "cross_entropy",
+                shape,
+                dev_y,
+                baseline,
+                {
+                    plan.run(
+                        &stream,
+                        Workspace::Borrowed(dev_ws.as_slice_mut()),
+                        CrossEntropyLossArgs {
+                            input: TensorRef {
+                                data: dev_inp.as_slice(),
+                                shape: ishape,
+                                stride: ist,
+                            },
+                            target: Some(TensorRef {
+                                data: dev_t.as_slice(),
+                                shape: tshape,
+                                stride: tst,
+                            }),
+                            soft_target: None,
+                            out: TensorMut {
+                                data: dev_y.as_slice_mut(),
+                                shape: [1],
+                                stride: [1],
+                            },
                         },
-                        target: Some(TensorRef {
-                            data: dev_t.as_slice(),
-                            shape: tshape,
-                            stride: tst,
-                        }),
-                        soft_target: None,
-                        out: TensorMut {
-                            data: dev_y.as_slice_mut(),
-                            shape: [1],
-                            stride: [1],
-                        },
-                    },
-                )
-                .expect("baracuda cross_entropy");
-            });
+                    )
+                    .expect("baracuda cross_entropy");
+                }
+            );
         }
     }
     group.finish();
@@ -252,11 +267,10 @@ fn bench_nll(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
                 reduction: LossReduction::Mean,
                 element: ElementKind::F32,
             };
-            let plan =
-                match NllLossPlan::<f32>::select(&stream, &desc, PlanPreference::default()) {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
+            let plan = match NllLossPlan::<f32>::select(&stream, &desc, PlanPreference::default()) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
             let mut dev_ws: DeviceBuffer<u8> =
                 match DeviceBuffer::zeros(&ctx, plan.workspace_size().max(1)) {
                     Ok(b) => b,
