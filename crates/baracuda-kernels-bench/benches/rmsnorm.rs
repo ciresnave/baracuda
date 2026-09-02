@@ -17,8 +17,8 @@ use baracuda_kernels::{
     contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP, PhaseTwentyNineRow, PytorchBaseline, append_csv_row,
-    measure_median_ns, setup_device, time_with_events, warmup,
+    CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP, LiveScalar, PhaseTwentyNineRow, PytorchBaseline,
+    append_csv_row, assert_cell_live, measure_median_ns, setup_device, time_with_events, warmup,
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::{bf16, f16};
@@ -31,7 +31,7 @@ fn leak_str(s: &str) -> &'static str {
 
 fn bench<T>(c: &mut Criterion, dtype_label: &str, fill: T, baseline: Option<&PytorchBaseline>)
 where
-    T: baracuda_kernels::Element + Copy + 'static,
+    T: baracuda_kernels::Element + Copy + 'static + LiveScalar,
 {
     let (ctx, stream) = setup_device();
     let mut group = c.benchmark_group(format!("rmsnorm/{dtype_label}"));
@@ -107,6 +107,10 @@ where
                 plan.run(&stream, Workspace::None, args)
                     .expect("baracuda rmsnorm");
             });
+            // Liveness (NOT a reference): warmup just populated dev_y; assert it
+            // is live (finite, right shape) before timing it — a bench over
+            // NaN/garbage output is fast and meaningless.
+            assert_cell_live(&format!("rmsnorm/{dtype_label}/{shape}"), &dev_y, numel);
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                 let args = RMSNormArgs::<T, 2> {
                     x: TensorRef {
