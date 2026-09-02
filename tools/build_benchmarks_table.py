@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import pathlib
 import re
 import sys
@@ -124,6 +125,37 @@ OP_ORDER: tuple[str, ...] = (
 # placeholder reference labels are uninteresting).
 LIBRARY_COLUMNS: tuple[str, ...] = ("cuBLAS", "cuDNN", "PyTorch", "FA2", "mHC")
 
+# Ops with NO PyTorch (or NVIDIA-library) equivalent — their rows are baracuda
+# ABSOLUTE timings, not a comparison. Declared explicitly so the artifact
+# distinguishes "no equivalent exists" (a fact) from "reference not yet
+# generated" (missing data): a self-only op that lacks a PyTorch column is
+# CORRECT; a torch-mappable op that lacks one is a gap. Without this, both
+# render as an absent column and a reader can't tell which. (mmvq is the
+# existing instance — GGUF matrix-vector has no direct torch op; the
+# GGUF/AWQ/Marlin quant family joins here as it is benched.)
+SELF_ONLY_OPS: frozenset[str] = frozenset({"mmvq", "mmvq_multim"})
+
+
+def _baseline_torch_versions() -> str:
+    """Distinct torch version(s) from the committed baseline's provenance runs,
+    for the rollup header — DERIVED, not hardcoded (a hardcoded version drifts
+    the moment the baseline is regenerated, as it did at 2.11.0→2.14.0). Reads
+    the single `pytorch_*.json` under bench-baselines; returns 'unknown' if the
+    count is not exactly one (the same ambiguity rule the loader uses)."""
+    base = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "crates" / "baracuda-kernels-bench" / "bench-baselines"
+    )
+    files = sorted(base.glob("pytorch_*.json")) if base.is_dir() else []
+    if len(files) != 1:
+        return "unknown"
+    try:
+        meta = json.loads(files[0].read_text(encoding="utf-8")).get("metadata", {})
+        vers = sorted({r.get("torch_version", "?") for r in meta.get("provenance_runs", [])})
+        return ", ".join(vers) if vers else "unknown"
+    except (json.JSONDecodeError, OSError):
+        return "unknown"
+
 
 def _format_ns(v: float | None) -> str:
     if v is None:
@@ -174,8 +206,10 @@ def emit_markdown(cells: dict[tuple[str, str, str], dict[str, float]]) -> str:
     out.append("`target/criterion/phase29/`. Do not edit by hand — re-run the")
     out.append("script after a fresh `cargo bench` to refresh.")
     out.append("")
-    out.append("Hardware: RTX 4070 Laptop GPU (sm_89), CUDA 13.0, cuDNN 9.x.")
-    out.append("PyTorch baseline: 2.11.0+cu130 (frozen JSON in `bench-baselines/`).")
+    out.append("Hardware: RTX 4070 Laptop GPU (sm_89).")
+    out.append(
+        f"PyTorch baseline: {_baseline_torch_versions()} (frozen JSON in `bench-baselines/`)."
+    )
     out.append("")
     out.append("Speedup column convention: `library_ns / baracuda_ns`.")
     out.append("`> 1` (bolded) means baracuda is faster than that library at this cell.")
@@ -196,6 +230,16 @@ def emit_markdown(cells: dict[tuple[str, str, str], dict[str, float]]) -> str:
 
         out.append(f"### `{op}`")
         out.append("")
+        if op in SELF_ONLY_OPS:
+            # State the absence as a fact, not missing data: this op has no
+            # PyTorch/library equivalent, so its baracuda column is an absolute
+            # timing, not a comparison. (A torch-mappable op that lacked a
+            # column would instead be a not-yet-generated gap.)
+            out.append(
+                "_Self-only: no PyTorch/library equivalent — baracuda timings "
+                "below are absolute, not a comparison._"
+            )
+            out.append("")
         header_cells = ["dtype", "shape", "baracuda"]
         for lib in libs:
             header_cells.append(lib)
