@@ -41,9 +41,15 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BiasElement, BiasElementKind, ElementKind, EpilogueKind, IntElement, LayoutSku,
-    MatrixMut, MatrixRef, PlanPreference, PrecisionGuarantee, S4, U4, VectorRef, Workspace,
+    ArchSku, BiasElement, ElementKind, EpilogueKind, IntElement, LayoutSku, MatrixMut, MatrixRef,
+    PlanPreference, PrecisionGuarantee, S4, U4, VectorRef, Workspace,
 };
+// `BiasElementKind` is matched on ONLY in the int4-bias run methods, which are
+// all `#[cfg(feature = "sm89")]` (int4 GEMM is sm89-only). Gate the import to
+// match, so a default-feature build (which cfg's those methods out) doesn't
+// carry it as an unused import.
+#[cfg(feature = "sm89")]
+use baracuda_kernels_types::BiasElementKind;
 
 // Reuse the SKU descriptor from baracuda-cutlass — it carries the same
 // (arch, layout, epilogue, element, bias_element) tuple the int-GEMM
