@@ -18,8 +18,8 @@ use baracuda_kernels::{
     Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns, setup_device,
-    time_with_events, warmup,
+    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, assert_cell_live, measure_median_ns,
+    setup_device, time_with_events, warmup,
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
@@ -112,6 +112,9 @@ fn bench_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda topk");
         });
+        // Liveness (NOT a reference) on the VALUES output; indices (dev_i, i32)
+        // aren't finiteness-checked. Asserts the top-k values are live before timing.
+        assert_cell_live(&format!("topk/f32/{label}"), &dev_v, out_numel);
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = TopkArgs::<f32> {
                 input: TensorRef {

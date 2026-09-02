@@ -14,8 +14,8 @@ use baracuda_kernels::{
     UnaryArgs, UnaryDescriptor, UnaryKind, UnaryPlan, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns, setup_device,
-    time_with_events, warmup,
+    LiveScalar, PhaseTwentyNineRow, PytorchBaseline, append_csv_row, assert_cell_live,
+    measure_median_ns, setup_device, time_with_events, warmup,
 };
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use half::f16;
@@ -36,7 +36,7 @@ fn bench_binary<T>(
     fill: T,
     baseline: Option<&PytorchBaseline>,
 ) where
-    T: baracuda_kernels::Element + Copy + 'static,
+    T: baracuda_kernels::Element + Copy + 'static + LiveScalar,
 {
     let (ctx, stream) = setup_device();
     let mut group = c.benchmark_group(format!("elementwise/{kind_label}_{dtype_label}"));
@@ -90,6 +90,13 @@ fn bench_binary<T>(
             };
             plan.run(&stream, Workspace::None, args).expect("binary ew");
         });
+        // Liveness (NOT a reference): all binary ops at fill=1.0 are finite;
+        // assert the output is live before timing.
+        assert_cell_live(
+            &format!("elementwise/{kind_label}_{dtype_label}/{shape_str}"),
+            &dev_y,
+            n as usize,
+        );
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
             let args = BinaryArgs::<T, 1> {
                 a: TensorRef {
@@ -162,7 +169,7 @@ fn bench_unary<T>(
     fill: T,
     baseline: Option<&PytorchBaseline>,
 ) where
-    T: baracuda_kernels::Element + Copy + 'static,
+    T: baracuda_kernels::Element + Copy + 'static + LiveScalar,
 {
     let (ctx, stream) = setup_device();
     let mut group = c.benchmark_group(format!("elementwise/{kind_label}_{dtype_label}"));
@@ -206,6 +213,13 @@ fn bench_unary<T>(
             };
             plan.run(&stream, Workspace::None, args).expect("unary ew");
         });
+        // Liveness (NOT a reference): every unary op at fill=1.0 is finite
+        // (relu/gelu/silu/tanh/exp/log(1)=0/sqrt/rsqrt/…); assert live before timing.
+        assert_cell_live(
+            &format!("elementwise/{kind_label}_{dtype_label}/{shape_str}"),
+            &dev_y,
+            n as usize,
+        );
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
             let args = UnaryArgs::<T, 1> {
                 x: TensorRef {
