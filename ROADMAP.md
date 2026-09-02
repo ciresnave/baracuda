@@ -1398,32 +1398,38 @@ priority within the section.
 
 ### Cross-implementation benchmark suite vs PyTorch / cuDNN / cuBLAS
 
-The current Phase 29 bench harness in `crates/baracuda-kernels-bench/`
-covers ~10 ops with cuBLAS / cuDNN reference comparisons (no PyTorch —
-the Phase 29 subprocess-shim attempt was rejected as too slow). For
+The Phase 29 bench harness in `crates/baracuda-kernels-bench/` already
+covers **~58 ops / 319 rows** with cuBLAS / cuDNN reference comparisons
+AND a frozen-on-disk PyTorch timing baseline (measured 2026-09-01 —
+this text previously said "~10 ops, no PyTorch", which was stale). For
 1.0 we want a perf-vs-baseline table per release across the full op
-matrix, with both NVIDIA-library references AND a viable PyTorch
-comparison strategy.
+matrix, with both NVIDIA-library references and the PyTorch comparison.
 
-**Scope:**
+**The PyTorch comparison path is DECIDED and implemented, not open:**
+candidate 2 (frozen reference values on disk) — `refresh_pytorch_baseline.py`
+generates per-cell timings under PyTorch's CUDA path once, dumps them to
+`bench-baselines/pytorch_*.json`, and the harness reads that in-process
+(no build/test PyTorch dep). Candidate 1 (`tch-rs`, a LibTorch build +
+distribution dep) and candidate 3 (out-of-process Python, rejected in
+Phase 29 as too slow) were declined. The baseline is **timing-only**;
+numerical correctness lives in `kiss-ref-diff` + on-device parity tests,
+not here. Full plan + the remaining work:
+`docs/planning/foundational/13-benchmark-suite-pytorch-completion.md`.
 
-- Extend the criterion + CUDA-event harness from ~10 ops to the full
-  op matrix (~120 ops in `OP-MATRIX.md`).
-- Land a viable PyTorch comparison path. Open design question — three
-  candidates:
-  1. **In-process via `tch-rs`** (LibTorch bindings) — fast, but adds
-     a heavy build-time dep + LibTorch artifact distribution problem.
-  2. **Frozen reference values on disk** — run PyTorch once per op,
-     dump numerical reference + timing baseline to JSON, check
-     baracuda's output against the frozen values in-process. No
-     runtime PyTorch dep. Trades fidelity (frozen baseline ages) for
-     simplicity.
-  3. **Out-of-process Python harness wrapping bench binaries** —
-     Python script invokes baracuda's bench binary, parses CSV, runs
-     PyTorch for the same shapes, emits side-by-side report. No
-     in-process coupling but loses the per-op criterion ergonomics.
-- Publish per-release perf-vs-baseline rollup in `BENCHMARKS.md`
-  (today only the Phase 29 results are there).
+**Scope (remaining):**
+
+- Extend the criterion + CUDA-event harness from ~58 ops to the full
+  op matrix (`OP-MATRIX.md` — 167 Plan rows across 21 categories),
+  ordered by value (Loss, Linalg, Quantization, Sort, Segment, Image,
+  FFT, Indexing, then backward passes). Needs a PyTorch env on the
+  target GPU box to regenerate refs.
+- Harden the frozen-ref contract: per-baseline provenance (device +
+  git SHA) and a stated regeneration trigger with scheduled drift
+  detection (`pytorch-baseline-liveness.yml`). **Done** — see the plan.
+- Add a per-cell liveness assertion (finite / shape / dtype) — a
+  liveness check, not a numerical reference.
+- Auto-generate the `BENCHMARKS.md` rollup from the per-bench CSVs via
+  `tools/build_benchmarks_table.py` (today a hand-maintained step).
 
 **Why pre-1.0:** 1.0 needs a credible perf story. "Faster than X /
 within Y of Z" claims belong in the release announcement, and the

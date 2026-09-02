@@ -605,9 +605,12 @@ pub const CROSS_MMVQ_FORMATS: &[baracuda_kernels::GgufBlockFormat] = &[
 // Phase 73.1 — PyTorch frozen-JSON baseline loader.
 // =====================================================================
 
-/// Metadata block from the PyTorch baseline JSON. Self-describing so a
-/// reader can verify the baseline was produced under hardware + PyTorch
-/// + CUDA versions comparable to the current run.
+/// File-level metadata block from the PyTorch baseline JSON. Holds only the
+/// facts that are INVARIANT across generation runs. Per-run facts (torch/cuda
+/// version, device, git SHA, dirty bit, sample counts, attribution) live in
+/// [`provenance_runs`](Self::provenance_runs), one record per run, and each
+/// result row names the run that produced it — so a partial `--ops` refresh
+/// cannot relabel untouched rows with a provenance that did not produce them.
 ///
 /// Schema authored in `tools/refresh_pytorch_baseline.py`.
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -615,6 +618,31 @@ pub struct PytorchBaselineMetadata {
     /// JSON schema version. Increment if the format changes
     /// incompatibly; loaders should refuse mismatched versions.
     pub schema_version: u32,
+    /// Human-readable methodology blurb (invariant across runs).
+    pub methodology: String,
+    /// The stated CONDITION (never a date) under which this baseline must be
+    /// regenerated, plus the torch major it was frozen at. `None` on v1 —
+    /// a baseline without a regen-trigger has no detectable staleness, so
+    /// [`PytorchBaseline::load_from`] warns when it is absent.
+    #[serde(default)]
+    pub regen_trigger: Option<PytorchRegenTrigger>,
+    /// One provenance record per generation run. A full refresh yields one
+    /// run that every row references; a partial `--ops` refresh appends a run
+    /// and repoints only the rows it regenerated. Empty on a v1 (flat-metadata)
+    /// baseline — the loader warns, since such rows are unattributed.
+    #[serde(default)]
+    pub provenance_runs: Vec<PytorchProvenanceRun>,
+}
+
+/// One generation run's provenance — the natural key for "what produced these
+/// numbers." A generation run is the thing that actually has a torch version, a
+/// device, a git SHA and a dirty bit; keying provenance on the run (rather than
+/// duplicating twelve fields across every row) makes drift between a row and its
+/// provenance structurally impossible instead of merely currently-absent.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PytorchProvenanceRun {
+    /// Stable id the result rows reference (e.g. `"provisional-2026-06-04"`).
+    pub run_id: String,
     /// e.g. `"2.11.0+cu130"`.
     pub torch_version: String,
     /// e.g. `"13.0"`.
@@ -623,16 +651,46 @@ pub struct PytorchBaselineMetadata {
     pub device_name: String,
     /// `(major, minor)` from `torch.cuda.get_device_capability(0)`.
     pub device_capability: [u32; 2],
-    /// ISO-8601 UTC timestamp from the refresh run.
+    /// ISO-8601 UTC timestamp of the run.
     pub generated_at_utc: String,
+    /// Commit SHA of the source tree the run was generated against. `None` when
+    /// unknown (e.g. the provisional run predates the field) — honestly absent,
+    /// not silently attributed.
+    #[serde(default)]
+    pub generator_git_sha: Option<String>,
+    /// Whether the generating tree was dirty (`git status --porcelain`
+    /// non-empty). `Some(true)` means the SHA does not fully describe the tree;
+    /// `None` when unknown (predates the field). Never suppressed — a bare SHA
+    /// that implies a clean tree is the lie this records against.
+    #[serde(default)]
+    pub generator_dirty: Option<bool>,
     /// Number of independent timing batches the median is over.
     pub sample_count: u32,
     /// Launches per timing batch.
     pub inner_iters: u32,
     /// Warmup launches before the first timed sample.
     pub warmup_launches: u32,
-    /// Human-readable methodology blurb.
-    pub methodology: String,
+    /// Human-readable attribution: what device / tree / toolchain produced
+    /// these numbers, and (for provisional runs) what is UNVERIFIED about that.
+    #[serde(default)]
+    pub attribution: Option<String>,
+}
+
+/// The regeneration-trigger policy from a v2 baseline. The bench harness does
+/// not act on it directly (staleness DETECTION is the scheduled
+/// `pytorch-baseline-liveness` workflow's job); it is carried so a reader —
+/// human or the liveness job — can see the stated condition and the torch
+/// major the baseline was frozen at.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PytorchRegenTrigger {
+    /// The stated condition under which to regenerate (a condition, not a date).
+    pub policy: String,
+    /// The PyTorch MAJOR version the baseline was generated under. The
+    /// liveness workflow compares this against the current released major.
+    pub torch_major_at_gen: u32,
+    /// Notes on which covered ops' numerics the baseline depends on.
+    #[serde(default)]
+    pub covered_op_numerics_notes: Option<String>,
 }
 
 /// One per-cell timing entry in the baseline.
@@ -646,6 +704,10 @@ pub struct PytorchBaselineEntry {
     pub dtype: String,
     /// Median per-launch wall-clock nanoseconds from PyTorch.
     pub median_ns: f64,
+    /// The [`PytorchProvenanceRun::run_id`] that produced this row. Empty on a
+    /// v1 (flat-metadata) baseline whose rows carried no per-run link.
+    #[serde(default)]
+    pub run: String,
 }
 
 /// In-memory representation of a PyTorch baseline JSON file. Built by
@@ -676,11 +738,41 @@ impl PytorchBaseline {
                 path.display()
             )
         })?;
-        if parsed.metadata.schema_version != 1 {
+        // v1 (timing-only, no provenance/regen-trigger) and v2 (adds
+        // generator_git_sha + attribution + regen_trigger) are both readable —
+        // v2's new fields are `#[serde(default)]`, so a v1 file parses with them
+        // as `None`. A future incompatible change bumps past 2 and lands here.
+        if !(1..=2).contains(&parsed.metadata.schema_version) {
             return Err(format!(
-                "pytorch baseline: schema_version {} not supported (expected 1)",
+                "pytorch baseline: schema_version {} not supported (expected 1 or 2)",
                 parsed.metadata.schema_version
             ));
+        }
+        // Condition 2 (regen-trigger) visibility: a baseline with no stated
+        // regen-trigger has UNDETECTABLE staleness — surface that at load time
+        // rather than letting the comparison silently age. Not an error: a v1
+        // baseline is still usable, it is just not self-describing about when
+        // to refresh it.
+        if parsed.metadata.regen_trigger.is_none() {
+            eprintln!(
+                "pytorch baseline: WARNING — {} (schema_version {}) carries no regen_trigger; \
+                 its staleness is undetectable. Regenerate with tools/refresh_pytorch_baseline.py \
+                 to stamp a v2 provenance + regen-trigger block.",
+                path.display(),
+                parsed.metadata.schema_version,
+            );
+        }
+        // Provenance visibility: v2 rows name the run that produced them; a file
+        // with no provenance_runs (a v1 flat-metadata baseline, or a malformed
+        // one) has UNATTRIBUTED rows. Surface it rather than presenting
+        // unattributed timings as if they were attributed.
+        if parsed.metadata.provenance_runs.is_empty() {
+            eprintln!(
+                "pytorch baseline: WARNING — {} carries no provenance_runs; its timing rows \
+                 are unattributed (no device / torch / git-SHA on record). Regenerate to stamp \
+                 per-run provenance.",
+                path.display(),
+            );
         }
         let by_key = parsed
             .results
@@ -737,13 +829,28 @@ impl PytorchBaseline {
             }
             1 => match Self::load_from(&entries[0]) {
                 Ok(b) => {
+                    // Summarize the provenance run(s) — a v2 file usually has one
+                    // (a full refresh); a partial-refresh file has more. Name them
+                    // so the startup line stays honest about which torch/device the
+                    // cells came from, rather than implying a single run.
+                    let runs = &b.metadata.provenance_runs;
+                    let run_summary = if runs.is_empty() {
+                        "unattributed (no provenance_runs)".to_string()
+                    } else {
+                        runs.iter()
+                            .map(|r| {
+                                format!(
+                                    "{} [torch {}, {}]",
+                                    r.run_id, r.torch_version, r.device_name
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    };
                     eprintln!(
-                        "pytorch baseline: loaded {} ({} cells, torch {}, cuda {}, device {})",
+                        "pytorch baseline: loaded {} ({} cells; run(s): {run_summary})",
                         entries[0].display(),
                         b.by_key.len(),
-                        b.metadata.torch_version,
-                        b.metadata.cuda_version,
-                        b.metadata.device_name,
                     );
                     Some(b)
                 }
@@ -790,6 +897,105 @@ mod gate_tests {
         assert_eq!(arch_sku_of(8, 6), Some(ArchSku::Sm80)); // consumer Ampere
         assert_eq!(arch_sku_of(9, 0), Some(ArchSku::Sm90a)); // Hopper
         assert_eq!(arch_sku_of(7, 5), None); // Turing — no built cell
+    }
+
+    // These driver-free serde tests prove (a) a v2 baseline's per-run
+    // provenance round-trips, (b) a partial-refresh file with TWO runs keeps
+    // each row's provenance distinct, and (c) a v1 (flat-metadata) file still
+    // parses with provenance_runs empty — unattributed, NOT falsely attributed.
+    // Pure serde — no GPU, runs in the CI-safe test path.
+
+    const V2_FILE: &str = r#"{
+        "metadata": {
+            "schema_version": 2,
+            "methodology": "…",
+            "regen_trigger": {
+                "policy": "regenerate on a torch MAJOR bump or a documented numerics change",
+                "torch_major_at_gen": 2,
+                "covered_op_numerics_notes": "timing-only"
+            },
+            "provenance_runs": [
+                {
+                    "run_id": "provisional-2026-06-04",
+                    "torch_version": "2.11.0+cu130", "cuda_version": "13.0",
+                    "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+                    "device_capability": [8, 9],
+                    "generated_at_utc": "2026-06-04T15:02:50+00:00",
+                    "generator_git_sha": null, "generator_dirty": null,
+                    "sample_count": 11, "inner_iters": 50, "warmup_launches": 10,
+                    "attribution": "provisional — device MODEL matches; machine UNVERIFIED"
+                },
+                {
+                    "run_id": "2026-09-02T00:00:00+00:00",
+                    "torch_version": "2.11.0+cu130", "cuda_version": "13.0",
+                    "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+                    "device_capability": [8, 9],
+                    "generated_at_utc": "2026-09-02T00:00:00+00:00",
+                    "generator_git_sha": "abc1234", "generator_dirty": true,
+                    "sample_count": 11, "inner_iters": 50, "warmup_launches": 10,
+                    "attribution": "same-box; dirty tree"
+                }
+            ]
+        },
+        "results": [
+            {"op": "gemm", "shape": "M1_K2048", "dtype": "f32", "median_ns": 100.0, "run": "provisional-2026-06-04"},
+            {"op": "gemm", "shape": "M1_K2048", "dtype": "f16", "median_ns": 90.0, "run": "2026-09-02T00:00:00+00:00"}
+        ]
+    }"#;
+
+    // v1: flat metadata, no provenance_runs, rows carry no `run`.
+    const V1_FILE: &str = r#"{
+        "metadata": {
+            "schema_version": 1,
+            "torch_version": "2.11.0+cu130", "cuda_version": "13.0",
+            "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+            "device_capability": [8, 9],
+            "generated_at_utc": "2026-06-04T15:02:50+00:00",
+            "sample_count": 11, "inner_iters": 50, "warmup_launches": 10,
+            "methodology": "…"
+        },
+        "results": [
+            {"op": "gemm", "shape": "M1_K2048", "dtype": "f32", "median_ns": 100.0}
+        ]
+    }"#;
+
+    #[test]
+    fn pytorch_baseline_v2_per_run_provenance_round_trips() {
+        let f: PytorchBaselineFile = serde_json::from_str(V2_FILE).expect("v2 parses");
+        assert_eq!(f.metadata.schema_version, 2);
+        let t = f
+            .metadata
+            .regen_trigger
+            .expect("v2 carries a regen_trigger");
+        assert_eq!(t.torch_major_at_gen, 2);
+        // TWO runs, and each row names a DISTINCT one — a partial refresh cannot
+        // relabel the untouched row.
+        assert_eq!(f.metadata.provenance_runs.len(), 2);
+        let prov = &f.metadata.provenance_runs[0];
+        assert_eq!(prov.run_id, "provisional-2026-06-04");
+        assert_eq!(prov.generator_git_sha, None); // honestly absent
+        assert_eq!(prov.generator_dirty, None); // unknown, not "clean"
+        assert!(prov.attribution.is_some());
+        let dirty_run = &f.metadata.provenance_runs[1];
+        assert_eq!(dirty_run.generator_git_sha.as_deref(), Some("abc1234"));
+        assert_eq!(dirty_run.generator_dirty, Some(true)); // recorded, never suppressed
+        assert_eq!(f.results[0].run, "provisional-2026-06-04");
+        assert_eq!(f.results[1].run, "2026-09-02T00:00:00+00:00");
+    }
+
+    #[test]
+    fn pytorch_baseline_v1_parses_unattributed_not_falsely_attributed() {
+        // Backward compatibility: a v1 (flat-metadata) file still parses, with
+        // provenance_runs EMPTY and rows carrying no run — unattributed, which
+        // the loader warns on. It is NOT silently attributed to a synthesized run.
+        let f: PytorchBaselineFile = serde_json::from_str(V1_FILE).expect("v1 parses");
+        assert_eq!(f.metadata.schema_version, 1);
+        assert!(f.metadata.regen_trigger.is_none());
+        assert!(
+            f.metadata.provenance_runs.is_empty(),
+            "a v1 baseline has no provenance_runs; the loader warns it is unattributed"
+        );
+        assert_eq!(f.results[0].run, ""); // no per-run link on v1 rows
     }
 
     /// On-device smoke: the RTX 4070 stamps as sm89, and `gate_cell` times two
