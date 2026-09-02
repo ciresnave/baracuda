@@ -35,3 +35,25 @@
 # cross-project coordination fix — tracked with the Fuel architect; but the env cap is
 # what fixes the self-oversubscription today.)
 gpu-test = "run -q -p xtask -- test-gpu"
+
+# Cap the CUDA forge at the cross-project protocol width (K=4) for UNWRAPPED builds.
+# `cargo check --workspace --all-targets` at default features IS a CUDA build
+# (`baracuda-kernels-sys` forges unconditionally) and takes neither the machine-wide
+# `cuda-build` slot-mutex nor its thread cap — so without this a plain workspace check
+# forges at ~50% of cores and can oversubscribe host commit against a concurrent CUDA
+# build in another project (the `ptxas 'Memory allocation failure'` kill). K=4 is the
+# ruled protocol value (N=2 slots, fuel GAP-151 @63dccd3c); a baracuda cold build peaks
+# ~4.6 GB commit delta at K=4, two concurrent ~9.2 GB — well under headroom. This is a
+# build-PARALLELISM cap, not a `[build] rustflags` codegen change: kernel output is
+# byte-identical across thread counts, so it does not fight the "intentionally minimal"
+# rule above.
+#
+# PLAIN `[env]`, NEVER `force = true`. A plain entry DEFERS to an ambient value: a WRAPPED
+# build (`cuda-build.ps1` sets `BARACUDA_FORGE_THREADS` ambiently) still gets whatever
+# width the wrapper chose, and a developer who owns the box can override upward
+# (`$env:BARACUDA_FORGE_THREADS=16`) for speed. `force = true` would silently OVERRIDE the
+# wrapper — and the wrapper would still log "OVERRIDING pre-existing…" while cargo ignored
+# its value: a mechanism that reports success while being overridden. Verified by a
+# build-script probe: `[env]="4"` + ambient=9 → 9 (defers, correct); `force` + ambient=9 → 4.
+[env]
+BARACUDA_FORGE_THREADS = "4"
