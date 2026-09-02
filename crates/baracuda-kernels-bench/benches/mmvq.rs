@@ -24,8 +24,8 @@ use baracuda_kernels::{
     TensorRef, U8, Workspace,
 };
 use baracuda_kernels_bench::{
-    CROSS_MMVQ_FORMATS, CROSS_MMVQ_SHAPES, PhaseTwentyNineRow, append_csv_row, measure_median_ns,
-    setup_device, time_with_events, warmup,
+    CROSS_MMVQ_FORMATS, CROSS_MMVQ_SHAPES, LiveScalar, PhaseTwentyNineRow, append_csv_row,
+    assert_cell_live, measure_median_ns, setup_device, time_with_events, warmup,
 };
 use baracuda_kernels_types::contiguous_stride;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
@@ -53,7 +53,7 @@ fn block_label(fmt: GgufBlockFormat) -> &'static str {
 /// Generic MMVQ bench body — one (block format × activation dtype) group.
 fn bench_mmvq<T>(c: &mut Criterion, act_label: &str, fill: T)
 where
-    T: GgufMmvqActivation + Copy + 'static,
+    T: GgufMmvqActivation + Copy + 'static + baracuda_kernels::Element + LiveScalar,
 {
     let (ctx, stream) = setup_device();
 
@@ -125,6 +125,13 @@ where
                     .expect("mmvq warmup");
             });
 
+            // Liveness (NOT a reference): warmup populated dev_out; assert live
+            // before timing — a bench over garbage output is fast and meaningless.
+            assert_cell_live(
+                &format!("mmvq/{act_label}/{fmt_lbl}/{shape}"),
+                &dev_out,
+                nrows as usize,
+            );
             let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
                 let args = GgufMmvqArgs::<T> {
                     weight: TensorRef {
@@ -307,6 +314,13 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
                     .expect("multim warmup");
             });
 
+            // Liveness (NOT a reference): warmup populated dev_out; assert live
+            // before timing — a bench over garbage output is fast and meaningless.
+            assert_cell_live(
+                &format!("mmvq_multim/f32/{fmt_lbl}/{shape}"),
+                &dev_out,
+                (m * nrows) as usize,
+            );
             let multim_ns = measure_median_ns(&ctx, &stream, 11, 100, || {
                 let args = GgufMmvqMultiMArgs::<f32> {
                     weight: TensorRef {

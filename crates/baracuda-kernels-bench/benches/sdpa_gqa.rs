@@ -21,8 +21,8 @@ use baracuda_kernels::{
     TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, flash_flops, measure_median_ns,
-    setup_device, time_with_events, warmup,
+    LiveScalar, PhaseTwentyNineRow, PytorchBaseline, append_csv_row, assert_cell_live, flash_flops,
+    measure_median_ns, setup_device, time_with_events, warmup,
 };
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use half::{bf16, f16};
@@ -41,7 +41,7 @@ fn leak_str(s: &str) -> &'static str {
 
 fn bench<T>(c: &mut Criterion, dtype_label: &str, fill: T, baseline: Option<&PytorchBaseline>)
 where
-    T: baracuda_kernels::Element + Copy + 'static,
+    T: baracuda_kernels::Element + Copy + 'static + LiveScalar,
 {
     let (ctx, stream) = setup_device();
     let mut group = c.benchmark_group(format!("sdpa_gqa/{dtype_label}"));
@@ -272,6 +272,9 @@ where
             };
             plan.run(&stream, ws, args).expect("baracuda flash gqa");
         });
+        // Liveness (NOT a reference) on the attention output dy; assert it's live
+        // before timing — a bench over garbage output is fast and meaningless.
+        assert_cell_live(&format!("sdpa_gqa/{dtype_label}/{label}"), &dy, y_numel);
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 20, || {
             let args = FlashSdpaArgs::<T> {
                 q: TensorRef {

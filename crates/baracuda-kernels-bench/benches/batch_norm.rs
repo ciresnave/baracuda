@@ -22,8 +22,8 @@ use baracuda_kernels::{
     TensorRef, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    POOL_SWEEP, PhaseTwentyNineRow, PoolShape, PytorchBaseline, append_csv_row, measure_median_ns,
-    setup_device, time_with_events, warmup,
+    LiveScalar, POOL_SWEEP, PhaseTwentyNineRow, PoolShape, PytorchBaseline, append_csv_row,
+    assert_cell_live, measure_median_ns, setup_device, time_with_events, warmup,
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use half::f16;
@@ -41,7 +41,7 @@ fn bench<T>(
     fill: T,
     baseline: Option<&PytorchBaseline>,
 ) where
-    T: baracuda_kernels::Element + Copy + 'static,
+    T: baracuda_kernels::Element + Copy + 'static + LiveScalar,
 {
     let (ctx, stream) = setup_device();
     let mut group = c.benchmark_group(format!("batch_norm/{dtype_label}"));
@@ -139,6 +139,9 @@ fn bench<T>(
             plan.run(&stream, Workspace::None, args)
                 .expect("baracuda batch_norm");
         });
+        // Liveness (NOT a reference): warmup populated dev_y; assert it's live
+        // before timing. eps=1e-5 keeps the constant-input (var=0) output finite.
+        assert_cell_live(&format!("batch_norm/{dtype_label}/{label}"), &dev_y, numel);
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
             let args = BatchNormArgs::<T, 4> {
                 x: TensorRef {
