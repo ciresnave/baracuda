@@ -72,6 +72,7 @@ import datetime as _dt
 import json
 import os
 import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -612,13 +613,29 @@ def _default_output_path() -> Path:
     )
 
 
-def _git_sha() -> str | None:
+def _git_exe() -> str | None:
+    """Absolute path to `git`, resolved through PATH ONCE. Invoking the resolved
+    absolute path (not a bare `"git"`) avoids resolving the executable through
+    PATH at call time — a PATH-injection hazard on a developer box, minor but
+    real (bandit B607). `None` if git is not on PATH (the tree is then
+    unattributable — honestly None, not a lie)."""
+    return shutil.which("git")
+
+
+def _git_sha(git: str) -> str | None:
     """The generating source tree's commit SHA, so a baseline is pinnable to
-    the exact code it was produced against. `None` if not in a git checkout
-    (the reader then knows the tree is unattributable — better than a lie)."""
+    the exact code it was produced against. `None` on failure (the reader then
+    knows the tree is unattributable — better than a lie). `git` is the absolute
+    path from [`_git_exe`], never a bare name.
+
+    NOTE (bandit B404/B603 disposition): this shells out to git BY DESIGN — the
+    feature is reading provenance from the working tree. The argument list is a
+    literal (`rev-parse HEAD`), `shell=False`, and no element derives from the
+    environment, the corpus, or user input. Disposition VOID if any future edit
+    interpolates a path / ref / env var / op name into this list."""
     try:
         out = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+            [git, "rev-parse", "HEAD"],
             cwd=Path(__file__).resolve().parent,
             capture_output=True,
             text=True,
@@ -630,15 +647,20 @@ def _git_sha() -> str | None:
     return sha if out.returncode == 0 and sha else None
 
 
-def _git_dirty() -> bool | None:
+def _git_dirty(git: str) -> bool | None:
     """Whether the generating tree has uncommitted changes (`git status
     --porcelain` non-empty). A dirty tree means the SHA does not fully describe
     the code that produced the numbers — the normal case while iterating. We
     RECORD it (never suppress, never refuse): a bare SHA implying a clean tree
-    is the lie. `None` if git can't be queried."""
+    is the lie. `git` is the absolute path from [`_git_exe`]; `None` if git
+    can't be queried.
+
+    NOTE (bandit B404/B603 disposition): same as [`_git_sha`] — a literal
+    argument list, `shell=False`, nothing interpolated. Disposition VOID if any
+    future edit interpolates a value into this list."""
     try:
         out = subprocess.run(
-            ["git", "status", "--porcelain"],
+            [git, "status", "--porcelain"],
             cwd=Path(__file__).resolve().parent,
             capture_output=True,
             text=True,
@@ -658,8 +680,9 @@ def _provenance_run(run_id: str, samples: int, inner: int) -> dict[str, object]:
     refresh (which appends a run and repoints only the rows it touched) cannot
     relabel untouched rows with a provenance that did not produce them."""
     device_name = torch.cuda.get_device_name(0)
-    sha = _git_sha()
-    dirty = _git_dirty()
+    git = _git_exe()
+    sha = _git_sha(git) if git else None
+    dirty = _git_dirty(git) if git else None
     dirty_note = (
         "" if dirty is None
         else ("; tree DIRTY (SHA does not fully describe it)" if dirty
@@ -681,7 +704,7 @@ def _provenance_run(run_id: str, samples: int, inner: int) -> dict[str, object]:
             f"generated on device '{device_name}' at {run_id} "
             f"under torch {torch.__version__} / CUDA {torch.version.cuda}"
             + (f"; source tree pinned at git {sha}" if sha else
-               "; NOT in a git checkout — source tree UNATTRIBUTABLE")
+               "; git unavailable or not a checkout — source tree UNATTRIBUTABLE")
             + dirty_note
             + ". Same-box run: measured on the device recorded above. A consumer "
               "must confirm device_name matches its own target hardware before "
