@@ -17,7 +17,7 @@ use unpopped::cfamily::{
 };
 use unpopped::ir::{
     Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
-    is_admissible_int_reduction_operand,
+    is_admissible_int_reduction_operand, is_bit_or_sign_move,
 };
 use unpopped::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use unpopped_vocab::structure_key::LayoutOrder;
@@ -617,8 +617,13 @@ fn packed_unary(op: UnaryOp, x: String, dt: ElementKind) -> Result<Spelling, Low
         UnaryOp::Sqr => Spelling::Spelled(format!("__hmul2({x}, {x})")),
         _ => {
             let (lo, hi, join) = pair_parts(dt);
-            let l = cuda_unary(op, format!("{lo}({x})"), dt)?;
-            let h = cuda_unary(op, format!("{hi}({x})"), dt)?;
+            // `bit_move: false` is exact here, not a default: the only bit/sign-move
+            // unaries are `Neg`/`Abs`, and both are Tier A above (`__hneg2`/`__habs2`
+            // — native sign-bit ops, which is why they were already bit-identical
+            // per lane). Tier B only ever sees computing unaries, which must keep
+            // the float path.
+            let l = cuda_unary(op, format!("{lo}({x})"), dt, false)?;
+            let h = cuda_unary(op, format!("{hi}({x})"), dt, false)?;
             // `.spelled()` gives an exhaustive `Ok`/`Err` (Spelling is
             // `#[non_exhaustive]`, so a tuple match on its variants is not).
             match (l.spelled(), h.spelled()) {
@@ -643,10 +648,15 @@ fn packed_binary(
     a: String,
     b: String,
     dt: ElementKind,
+    bit_move: bool,
 ) -> Result<Spelling, LowerError> {
     let (lo, hi, join) = pair_parts(dt);
-    let l = cuda_binary(op, format!("{lo}({a})"), format!("{lo}({b})"), dt)?;
-    let h = cuda_binary(op, format!("{hi}({a})"), format!("{hi}({b})"), dt)?;
+    // `bit_move` rides through to the scalar speller: `Max`/`Min`/`Copysign` are
+    // Tier B (pair-split), so a packed bit-move body must spell each HALF as the
+    // raw-bit move too — otherwise the packed path silently keeps the float
+    // bridge the scalar path just shed, and the two disagree on NaN.
+    let l = cuda_binary(op, format!("{lo}({a})"), format!("{lo}({b})"), dt, bit_move)?;
+    let h = cuda_binary(op, format!("{hi}({a})"), format!("{hi}({b})"), dt, bit_move)?;
     // `.spelled()` gives an exhaustive `Ok`/`Err` (Spelling is `#[non_exhaustive]`,
     // so a tuple match on its variants is not).
     Ok(match (l.spelled(), h.spelled()) {
@@ -711,7 +721,17 @@ fn emit_vectorized(
     let sctype = scalar_ctype(plan.dtype).expect("vectorized dtype has a scalar ctype");
     for lane in lanes {
         let acc = |idx: u8| Ok(Spelling::Spelled(format!("v{idx}.{lane}")));
-        let (prelude, root) = lower_dag(
+        let bit_move = body_is_bit_move(plan);
+        // A bit-move spelling names each operand several times, so hoist EVERY
+        // node: a repeat is then a `tmp` name, not a re-inlined subexpression
+        // (text linear in depth, values identical). Non-bit-move bodies keep
+        // `lower_dag` so existing goldens do not move.
+        let lower = if bit_move && body_has_minmax(plan.body) {
+            lower_dag_all
+        } else {
+            lower_dag
+        };
+        let (prelude, root) = lower(
             &ExprDag::from_expr(plan.body),
             sctype,
             &cuda_lowering(
@@ -727,8 +747,8 @@ fn emit_vectorized(
                         ),
                     }))
                 },
-                &|op, x| cuda_unary(op, x, plan.dtype),
-                &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+                &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
+                &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
                 &|c, a, b| cuda_select(c, a, b, plan.dtype),
             ),
         )?;
@@ -805,6 +825,7 @@ fn emit_vectorized_packed(
     s.push_str(&format!("        {vec_ty} vo;\n"));
     for field in pk.fields {
         let acc = |idx: u8| Ok(Spelling::Spelled(format!("v{idx}.{field}")));
+        let bit_move = body_is_bit_move(plan);
         let (prelude, root) = lower_dag_all(
             &ExprDag::from_expr(plan.body),
             pk.pair_ty,
@@ -824,7 +845,7 @@ fn emit_vectorized_packed(
                     }))
                 },
                 &|op, x| packed_unary(op, x, plan.dtype),
-                &|op, a, b| packed_binary(op, a, b, plan.dtype),
+                &|op, a, b| packed_binary(op, a, b, plan.dtype, bit_move),
                 // Plan-gate invariant: `body_packs` excludes Select (G7), so a
                 // select body never reaches the packed pair path.
                 &|_, _, _| {
@@ -873,7 +894,17 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
     s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
     let acc = |idx: u8| Ok(Spelling::Spelled(format!("in{idx}[i]")));
-    let (prelude, root) = lower_dag(
+    let bit_move = body_is_bit_move(plan);
+    // A bit-move spelling names each operand several times, so hoist EVERY
+    // node: a repeat is then a `tmp` name, not a re-inlined subexpression
+    // (text linear in depth, values identical). Non-bit-move bodies keep
+    // `lower_dag` so existing goldens do not move.
+    let lower = if bit_move && body_has_minmax(plan.body) {
+        lower_dag_all
+    } else {
+        lower_dag
+    };
+    let (prelude, root) = lower(
         &ExprDag::from_expr(plan.body),
         ctype,
         &cuda_lowering(
@@ -889,8 +920,8 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
                     ),
                 }))
             },
-            &|op, x| cuda_unary(op, x, plan.dtype),
-            &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
+            &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
         ),
     )?;
@@ -1203,15 +1234,25 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, L
             }
         }))
     };
-    let (prelude, root) = lower_dag(
+    let bit_move = body_is_bit_move(plan);
+    // A bit-move spelling names each operand several times, so hoist EVERY
+    // node: a repeat is then a `tmp` name, not a re-inlined subexpression
+    // (text linear in depth, values identical). Non-bit-move bodies keep
+    // `lower_dag` so existing goldens do not move.
+    let lower = if bit_move && body_has_minmax(plan.body) {
+        lower_dag_all
+    } else {
+        lower_dag
+    };
+    let (prelude, root) = lower(
         &ExprDag::from_expr(plan.body),
         ctype,
         &cuda_lowering(
             &acc,
             &reduced_decline_no_rowreduce,
             &coord,
-            &|op, x| cuda_unary(op, x, plan.dtype),
-            &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
+            &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
         ),
     )?;
@@ -1950,6 +1991,7 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKern
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
     let acc = |idx: u8| Ok(Spelling::Spelled(format!("in{idx}[i]")));
     let dag = ExprDag::from_exprs(&plan.output_bodies());
+    let bit_move = multi_body_is_bit_move(plan);
     let (prelude, roots) = lower_dag_multi(
         &dag,
         ctype,
@@ -1957,8 +1999,8 @@ fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKern
             &acc,
             &multi_reduced_decline(plan.op_name),
             &multi_coord_decline(plan.op_name),
-            &|op, x| cuda_unary(op, x, plan.dtype),
-            &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
+            &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
         ),
         false,
@@ -2073,6 +2115,7 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKer
         ))
     };
     let dag = ExprDag::from_exprs(&plan.output_bodies());
+    let bit_move = multi_body_is_bit_move(plan);
     let (prelude, roots) = lower_dag_multi(
         &dag,
         ctype,
@@ -2080,8 +2123,8 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKer
             &acc,
             &multi_reduced_decline(plan.op_name),
             &multi_coord_decline(plan.op_name),
-            &|op, x| cuda_unary(op, x, plan.dtype),
-            &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
+            &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
             &|c, a, b| cuda_select(c, a, b, plan.dtype),
         ),
         false,
@@ -2166,6 +2209,7 @@ fn emit_vectorized_multi(
     let dag = ExprDag::from_exprs(&plan.output_bodies());
     for lane in lanes {
         let acc = |idx: u8| Ok(Spelling::Spelled(format!("v{idx}.{lane}")));
+        let bit_move = multi_body_is_bit_move(plan);
         let (prelude, roots) = lower_dag_multi(
             &dag,
             sctype,
@@ -2173,8 +2217,8 @@ fn emit_vectorized_multi(
                 &acc,
                 &multi_reduced_decline(plan.op_name),
                 &multi_coord_decline(plan.op_name),
-                &|op, x| cuda_unary(op, x, plan.dtype),
-                &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+                &|op, x| cuda_unary(op, x, plan.dtype, bit_move),
+                &|op, a, b| cuda_binary(op, a, b, plan.dtype, bit_move),
                 &|c, a, b| cuda_select(c, a, b, plan.dtype),
             ),
             false,
@@ -2257,6 +2301,7 @@ fn emit_vectorized_packed_multi(
     let dag = ExprDag::from_exprs(&plan.output_bodies());
     for field in pk.fields {
         let acc = |idx: u8| Ok(Spelling::Spelled(format!("v{idx}.{field}")));
+        let bit_move = multi_body_is_bit_move(plan);
         let (prelude, roots) = lower_dag_multi(
             &dag,
             pk.pair_ty,
@@ -2265,7 +2310,7 @@ fn emit_vectorized_packed_multi(
                 &multi_reduced_decline(plan.op_name),
                 &multi_coord_decline(plan.op_name),
                 &|op, x| packed_unary(op, x, plan.dtype),
-                &|op, a, b| packed_binary(op, a, b, plan.dtype),
+                &|op, a, b| packed_binary(op, a, b, plan.dtype, bit_move),
                 // Plan-gate invariant: `bodies_pack` (all-`body_packs`) excludes
                 // any select body from the packed multi path.
                 &|_, _, _| {
@@ -7054,11 +7099,115 @@ fn zero_store_literal(octype: &str) -> &'static str {
     }
 }
 
+/// The `(to-bits, from-bits)` CUDA intrinsic pair for a NARROW float's storage
+/// type — the raw-bit seam a KISS §6.16-0009 move / sign-edit needs. `None` for
+/// every other dtype: f32/f64 edit their own bits natively (no conversion is
+/// interposed, so nothing is lost), and integer dtypes never reach these
+/// spellings.
+fn narrow_bit_casts(dt: ElementKind) -> Option<(&'static str, &'static str)> {
+    match dt {
+        ElementKind::F16 => Some(("__half_as_ushort", "__ushort_as_half")),
+        ElementKind::Bf16 => Some(("__bfloat16_as_ushort", "__ushort_as_bfloat16")),
+        _ => None,
+    }
+}
+
+/// Whether this body must be lowered as a RAW-BIT move rather than computed —
+/// KISS-OPS §6.16-0009, routed on [`is_bit_or_sign_move`], `unpopped`'s SHARED
+/// predicate.
+///
+/// The clause lives in the neutral core on purpose: "which decompositions move
+/// bits" is normative text, and a second copy of it in this backend is the
+/// second-copy defect — two definitions of one rule that must stay identical.
+/// So this asks rather than re-derives. It admits `Input`, `Max`/`Min`,
+/// `Select`, the sign-edit unaries `Neg`/`Abs`, and `Copysign` — NOT the
+/// rounding atoms (`floor`/`ceil`/…), which genuinely compute a new value and
+/// are governed by §6.7-0002.
+///
+/// Narrow-only: the defect this routes around is the f16/bf16 conversion pair.
+/// A wide body already moves its own bits.
+fn body_is_bit_move(plan: &KernelPlan<'_>) -> bool {
+    narrow_bit_casts(plan.dtype).is_some() && is_bit_or_sign_move(plan.body)
+}
+
+/// [`body_is_bit_move`] for a MULTI-output plan: EVERY root must be a bit/sign
+/// move.
+///
+/// All-or-nothing because one `Lowering` serves every root. A mixed plan (one
+/// moving root, one computing root) keeps the compute path — §6.16-0010-correct
+/// for the computing root, and it leaves the moving root on the old path, which
+/// is a known conservative gap rather than a wrong answer.
+///
+/// The alternative — spelling raw-bit unconditionally — is NOT safe, and this is
+/// why the routing is per-body rather than per-op: in `max(a + b, c)` the body
+/// CONTAINS arithmetic, so §6.16-0010 requires a quiet result, but a raw-bit
+/// `max` would hand back `c`'s signalling bits untouched. Removing the round
+/// trip globally satisfies §6.16-0009 and breaks §6.16-0010.
+/// Whether a bit-move body contains a `Max`/`Min` — the one spelling above that
+/// names each operand FIVE times (two NaN tests, the ordering compare, and the
+/// arm). Nested min/max would then duplicate whole subexpression *text* per
+/// reference, exponential in depth, so those bodies lower with `lower_dag_all`
+/// and every operand becomes a `tmp` name instead.
+///
+/// A `Select` / `Neg` / `Abs` / `Copysign` body names each operand once or twice
+/// and needs no hoisting — gating on this keeps those bodies on `lower_dag`, so
+/// their emitted text (already conforming, already golden) does not move.
+///
+/// Purely a spelling-mechanics question — how many times THIS backend writes an
+/// operand — so it is a local walk, not a second copy of a normative rule. Only
+/// ever called on a bit-move body, where the variants are exactly `Input`,
+/// `Neg`/`Abs`, `Copysign`, `Max`/`Min` and `Select`.
+fn body_has_minmax(e: &ScalarExpr) -> bool {
+    match e {
+        ScalarExpr::Binary(BinaryOp::Max | BinaryOp::Min, _, _) => true,
+        ScalarExpr::Unary(_, a) => body_has_minmax(a),
+        ScalarExpr::Binary(_, a, b) | ScalarExpr::Select(_, a, b) => {
+            body_has_minmax(a) || body_has_minmax(b)
+        }
+        _ => false,
+    }
+}
+
+fn multi_body_is_bit_move(plan: &KernelPlan<'_>) -> bool {
+    narrow_bit_casts(plan.dtype).is_some()
+        && plan.output_bodies().iter().all(|b| is_bit_or_sign_move(b))
+}
+
 /// Lower a unary op for `dtype`. f32/f64 use native math; f16/bf16 compute in
 /// float (convert → f32 math → convert) — correct for every op, and it avoids
 /// the incomplete `__half2` math-intrinsic set (no `h2tanh`/`h2erf`). Packed
 /// `__half2` SIMD is a perf follow-up. Integer dtypes have no unary math.
-fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> Result<Spelling, LowerError> {
+///
+/// `bit_move` is the body-level §6.16-0009 routing ([`body_is_bit_move`]). When
+/// set, `neg`/`abs` are spelled as RAW-BIT sign edits on the storage word
+/// instead of `promote → f32 → demote`. They are defined to change exactly one
+/// bit, and the float bridge does not: the demote canonicalizes EVERY NaN
+/// encoding, so payload and sign are both destroyed. MEASURED on sm_89 —
+/// `bf16 neg(0x7F81)` gave `0x7FFF` where the clause requires `0xFF81`, and
+/// `abs(0xFF81)` gave `0x7FFF` where it requires `0x7F81`. Same defect, same
+/// mechanism, and the same fix `unpopped-cpu-c` made for `f8e5m2`.
+fn cuda_unary(
+    op: UnaryOp,
+    x: String,
+    dtype: ElementKind,
+    bit_move: bool,
+) -> Result<Spelling, LowerError> {
+    let bit_casts = if bit_move && matches!(op, UnaryOp::Neg | UnaryOp::Abs) {
+        narrow_bit_casts(dtype)
+    } else {
+        None
+    };
+    if let Some((to_bits, from_bits)) = bit_casts {
+        // Neg flips the sign bit; Abs clears it. Everything else — exponent,
+        // mantissa, NaN payload — is carried through untouched.
+        let (sym, mask) = match op {
+            UnaryOp::Neg => ("^", "0x8000u"),
+            _ => ("&", "0x7fffu"),
+        };
+        return Ok(Spelling::Spelled(format!(
+            "{from_bits}((unsigned short)({to_bits}({x}) {sym} {mask}))"
+        )));
+    }
     Ok(Spelling::Spelled(match dtype {
         ElementKind::F32 | ElementKind::F32Strict => unary_f32(op, x),
         ElementKind::F64 => unary_f64(op, x),
@@ -7095,25 +7244,75 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> Result<Spelling, Lo
 /// here **except `Nextafter`**, which is therefore refused (the JIT gates it in
 /// `dtype_compatible`; reaching this panic means an AOT author declared f16/bf16
 /// on a Nextafter body). Why the others are safe: half→f32 is exact, and
-/// demoting rounds a correctly-computed f32 value once — for `Copysign`
-/// specifically the result's magnitude is the *input's own* (exactly
-/// representable) magnitude with the sign bit swapped, and a half NaN payload
-/// round-trips half→f32→half bit-exactly (the same guarantee the whole scalar
-/// half path leans on, swept by `packed_validate.cu`), so bit-level sign
-/// transfer survives the promotion. `Nextafter` does not: the f32 neighbor of a
-/// promoted half is ~2¹³ f32 steps closer than the next *half*, so the demote
-/// rounds straight back to `a` — a silently wrong no-op, hence the honest miss.
+/// demoting rounds a correctly-computed f32 value once. `Nextafter` does not:
+/// the f32 neighbor of a promoted half is ~2¹³ f32 steps closer than the next
+/// *half*, so the demote rounds straight back to `a` — a silently wrong no-op,
+/// hence the honest miss.
 /// The `Cmp*` predicates promote EXACTLY: half→f32 is a lossless,
 /// order-preserving embedding (every f16/bf16 value, ±0, ±inf, and NaN maps to
 /// the f32 value of the same class and order), so the f32 compare decides
 /// identically to a native half compare, and demoting the exact 1.0f/0.0f
 /// result is exact — no lattice is stepped, unlike Nextafter.
+///
+/// ⚠️ CORRECTED (KISS #355): this doc previously justified routing `Copysign`
+/// (and, by the same reasoning, `min`/`max`) through the round trip by claiming
+/// "a half NaN payload round-trips half→f32→half bit-exactly". **That claim is
+/// false and was the premise this defect rested on.** MEASURED on sm_89:
+/// `__float2bfloat16`/`__float2half` canonicalize EVERY NaN encoding to
+/// `0x7FFF` — a moved sNaN is quieted, a quiet NaN loses its payload, and the
+/// sign is lost with it. `bf16 max(0x7F81, 1.0)`, `neg(0x7F81)` and
+/// `copysign(0x7F81, −)` all gave `0x7FFF`. Value-correctness for FINITE
+/// operands was never in doubt; NaN was, and it was asserted rather than
+/// measured. `bit_move` (see [`body_is_bit_move`]) now routes the
+/// move / sign-edit ops off this path entirely.
 fn cuda_binary(
     op: BinaryOp,
     a: String,
     b: String,
     dtype: ElementKind,
+    bit_move: bool,
 ) -> Result<Spelling, LowerError> {
+    // KISS-OPS §6.16-0009: an op whose reference decomposition contains NO
+    // arithmetic yields one operand's BYTES (at most a sign-bit edit) — so it
+    // must never cross the float bridge, whose demote canonicalizes NaN. Routed
+    // on `unpopped`'s shared `is_bit_or_sign_move`, never a local re-derivation.
+    // (`if bit_move && let ..` would be a let-chain — Rust 1.88, above the 1.85 MSRV.)
+    let bit_casts = if bit_move {
+        narrow_bit_casts(dtype)
+    } else {
+        None
+    };
+    if let Some((to_bits, from_bits)) = bit_casts {
+        match op {
+            // NaN-propagating, a-biased on ties (`>=` / `<=` pick `a`, which is
+            // also what ±0 needs: an EXPLICIT select makes the tie a property of
+            // this code rather than an artefact of whatever the hardware does).
+            // The comparison promotes — that is exact and order-preserving, and
+            // its value is only TESTED — while the arms stay raw storage words,
+            // so the winner is moved bit-for-bit. Each operand is named several
+            // times, which is why a bit-move body lowers with `lower_dag_all`:
+            // every operand is then a `tmp` name, never a re-inlined expression.
+            BinaryOp::Max | BinaryOp::Min => {
+                let (pa, pb) = (promote_load_f32(dtype, &a), promote_load_f32(dtype, &b));
+                let cmp = if matches!(op, BinaryOp::Max) {
+                    ">="
+                } else {
+                    "<="
+                };
+                return Ok(Spelling::Spelled(format!(
+                    "({pa} != {pa} ? {a} : ({pb} != {pb} ? {b} : ({pa} {cmp} {pb} ? {a} : {b})))"
+                )));
+            }
+            // Magnitude bits from `a`, sign bit from `b` — one bit changes.
+            BinaryOp::Copysign => {
+                return Ok(Spelling::Spelled(format!(
+                    "{from_bits}((unsigned short)(({to_bits}({a}) & 0x7fffu) | \
+                     ({to_bits}({b}) & 0x8000u)))"
+                )));
+            }
+            _ => {}
+        }
+    }
     if matches!(dtype, ElementKind::F16 | ElementKind::Bf16) && matches!(op, BinaryOp::Nextafter) {
         // DTYPE decline (was a panic): Nextafter has no half lowering — miss
         // honestly rather than step the wrong lattice.
@@ -10567,12 +10766,160 @@ mod tests {
                     &binary_scalar_key(ElementKind::F16, 2),
                     &Cuda,
                 );
-                assert!(
-                    kh.source.contains(&format!(
+                // KISS-OPS §6.16-0009: `copysign` yields `a`'s magnitude bits with
+                // `b`'s sign — one bit changes and nothing is computed — so its
+                // narrow lowering is a RAW-BIT splice, never a promote round trip
+                // (which would canonicalize a NaN and lose payload AND sign).
+                //
+                // Every OTHER op in this sweep genuinely computes and MUST keep the
+                // float path — this is the half of the pair that catches an
+                // over-broad fix. `FmaxIeee`/`FminIeee` especially: they are the
+                // NaN-SUPPRESSING IEEE ops, a different op from the NaN-propagating
+                // `Max`/`Min`, deliberately excluded from `is_bit_or_sign_move`.
+                let want = if matches!(bop, BinaryOp::Copysign) {
+                    "out[i] = __ushort_as_half((unsigned short)((__half_as_ushort(in0[i]) \
+                     & 0x7fffu) | (__half_as_ushort(in1[i]) & 0x8000u)));"
+                        .to_string()
+                } else {
+                    format!(
                         "out[i] = __float2half({f32_fn}(__half2float(in0[i]), __half2float(in1[i])));"
-                    )),
-                    "{bop:?} f16 promote golden missing in:\n{}",
+                    )
+                };
+                assert!(
+                    kh.source.contains(&want),
+                    "{bop:?} f16 golden missing in:\n{}",
                     kh.source
+                );
+            }
+        }
+    }
+
+    /// KISS-OPS §6.16-0009 born-red: a narrow bit/sign-move body must MOVE the
+    /// operand's bits and never cross the float bridge.
+    ///
+    /// ⚠️ Every assertion here is on EXACT BYTES, and the negative half — that
+    /// `__float2bfloat16` / `__float2half` is ABSENT — is what makes this a test
+    /// rather than a restatement. "A NaN came out" is satisfied by BOTH
+    /// lowerings, because the flattened `0x7FFF` is still a NaN, so a NaN-ness
+    /// predicate would pass the exact implementation this replaces. What
+    /// separates them is the re-encode.
+    ///
+    /// MEASURED on sm_89 before the fix: `bf16 max(0x7F81, 1.0)`, `neg(0x7F81)`,
+    /// `abs(0xFF81)` and `copysign(0x7F81, −)` all returned `0x7FFF` — sNaN
+    /// quieted, payload gone, sign gone — where the clause requires `0x7F81` /
+    /// `0xFF81` / `0x7F81` / `0xFF81`.
+    #[test]
+    fn narrow_bit_move_bodies_move_raw_bits_and_never_re_encode() {
+        use unpopped::ir::UnaryOp;
+        for (dt, align, to_bits, from_bits, promote, demote) in [
+            (
+                ElementKind::Bf16,
+                2u32,
+                "__bfloat16_as_ushort",
+                "__ushort_as_bfloat16",
+                "__bfloat162float",
+                "__float2bfloat16(",
+            ),
+            (
+                ElementKind::F16,
+                2u32,
+                "__half_as_ushort",
+                "__ushort_as_half",
+                "__half2float",
+                "__float2half(",
+            ),
+        ] {
+            // max: NaN-propagating and a-biased, comparing on the (exact,
+            // order-preserving) promotion while the ARMS stay storage words.
+            let k = generate(
+                &OpDef::elementwise("v", 2, &[dt], input(0).max(input(1))),
+                &binary_scalar_key(dt, align),
+                &Cuda,
+            );
+            assert!(
+                k.source
+                    .contains(&format!("{promote}(in0[i]) != {promote}(in0[i]) ? in0[i]")),
+                "{dt:?} max must test on the promotion and move the raw operand:\n{}",
+                k.source
+            );
+            assert!(
+                !k.source.contains(demote),
+                "{dt:?} max must NOT re-encode — the demote is the defect:\n{}",
+                k.source
+            );
+
+            // neg flips exactly one bit; abs clears exactly one bit.
+            for (uop, sym, mask) in [
+                (UnaryOp::Neg, "^", "0x8000u"),
+                (UnaryOp::Abs, "&", "0x7fffu"),
+            ] {
+                let k = generate(
+                    &OpDef::elementwise("v", 1, &[dt], input(0).unary(uop)),
+                    &unary_scalar_key(dt, align),
+                    &Cuda,
+                );
+                assert!(
+                    k.source.contains(&format!(
+                        "{from_bits}((unsigned short)({to_bits}(in0[i]) {sym} {mask}))"
+                    )),
+                    "{dt:?} {uop:?} must be a raw-bit sign edit:\n{}",
+                    k.source
+                );
+                assert!(
+                    !k.source.contains(demote),
+                    "{dt:?} {uop:?} must NOT re-encode:\n{}",
+                    k.source
+                );
+            }
+        }
+    }
+
+    /// The PAIRED guard (KISS-OPS §6.16-0010) — a body that CONTAINS arithmetic
+    /// must KEEP the promote→f32→demote round trip, because arithmetic is
+    /// required to deliver a QUIET NaN and the demote is what quiets it.
+    ///
+    /// ⚠️ This is the half an over-broad fix fails. Removing the round trip
+    /// *globally* satisfies §6.16-0009 and BREAKS §6.16-0010 — and a
+    /// §6.16-0009-only suite goes green on exactly that mistake. Two shapes:
+    ///
+    ///   * `max(a, b) + k` — a move under an arithmetic root.
+    ///   * `(a + b) max k` — arithmetic under a MOVE root. This is the sharp one:
+    ///     a raw-bit `max` would hand back `k`'s bits untouched from a body that
+    ///     computes, so a signalling operand could survive un-quieted.
+    ///
+    /// Both are why the routing keys on the whole BODY (`is_bit_or_sign_move`)
+    /// rather than on the op at hand.
+    #[test]
+    fn a_body_containing_arithmetic_still_rounds() {
+        for (dt, align, demote) in [
+            (ElementKind::Bf16, 2u32, "__float2bfloat16("),
+            (ElementKind::F16, 2u32, "__float2half("),
+        ] {
+            // NB: infix `+ - * /` are NOT on this path at all — CUDA overloads them
+            // for `__half`/`__nv_bfloat16`, so they emit `(in0[i] + in1[i])`
+            // natively and never touch the float bridge. Only NON-INFIX function
+            // ops route through `cuda_binary`, so the cases below use one.
+            for (label, body) in [
+                ("move under arithmetic", input(0).max(input(1)) + konst(1.0)),
+                (
+                    "arithmetic under move",
+                    (input(0) + input(1)).max(konst(1.0)),
+                ),
+                (
+                    "non-infix arithmetic",
+                    input(0).binary(BinaryOp::Atan2, input(1)),
+                ),
+            ] {
+                let k = generate(
+                    &OpDef::elementwise("v", 2, &[dt], body),
+                    &binary_scalar_key(dt, align),
+                    &Cuda,
+                );
+                assert!(
+                    k.source.contains(demote),
+                    "{dt:?} [{label}] contains arithmetic, so it MUST keep the \
+                     round trip (§6.16-0010 requires a quiet NaN):\n{}",
+                    k.source
                 );
             }
         }
