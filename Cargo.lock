@@ -1638,9 +1638,9 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "unpopped"
-version = "0.8.2"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a18e3aad5839796692412d76bad937c837bdb38b6063240f128903b1d7eb863d"
+checksum = "e0009c81ea5ad9588788539f4112bebafd85e23206b504c5c164304ecb78bd6a"
 dependencies = [
  "fuel-kernel-seam-types",
  "libm",

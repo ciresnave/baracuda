@@ -17,7 +17,7 @@ use unpopped::cfamily::{
 };
 use unpopped::ir::{
     Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
-    is_admissible_int_reduction_operand, is_bit_or_sign_move,
+    is_admissible_int_reduction_operand, is_bit_move_reduce, is_bit_or_sign_move,
 };
 use unpopped::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use unpopped_vocab::structure_key::LayoutOrder;
@@ -2444,14 +2444,67 @@ fn emit_reduction(
     // for int (the `_` arm below) and up-converts only f16/bf16/f32-strict.
     // `precision` forces double even for plain f32 (the MorePrecise variant).
     let dbl = precision || matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
-    let acc = if int_acc {
+    // KISS-OPS §6.16-0009 (ruled for reductions in KISS #416): a max/min fold
+    // MOVES — its result IS one of the input elements, selected by comparison,
+    // with no arithmetic — so it must carry the operand's BYTES. Accumulating in
+    // `float` and narrowing at the end destroys them: the demote canonicalizes
+    // every NaN encoding (MEASURED on sm_89: bf16 `reduce_max` over data
+    // containing 0x7F81 returned 0x7FFF, payload and sign gone).
+    //
+    // The fix is to accumulate in the STORAGE dtype — the accumulator of a
+    // min/max fold IS a moved operand, so it wants to be `__nv_bfloat16` all the
+    // way through, including the warp shuffle. MEASURED that this works before
+    // relying on it: `__shfl_down_sync` has narrow-type overloads, the `!=` /
+    // `>` comparisons carry IEEE NaN semantics, and a warp-level max over a lane
+    // holding 0x7F81 returns 0x7F81 bit-exact.
+    //
+    // Routed on `is_bit_move_reduce(op, expr)` — unpopped's SHARED predicate,
+    // whose `matches!(op, Max | Min)` half encodes the KISS ruling. Pairing the
+    // OP with the expression is the whole point: `is_bit_or_sign_move` alone
+    // answers TRUE for a sum-fold's element expression exactly as for a
+    // max-fold's, and routing on it would make sum/mean/prod move raw bits and
+    // stop quieting — violating §6.16-0010 exactly as an over-broad fix does.
+    //
+    // ⚠️ -0009 attaches to the OP'S OBSERVABLE RESULT, not to the fold (KISS
+    // #416). Classify the KERNEL by what reaches its OUTPUT, not by its stages.
+    // Two consequences, and the second is easy to miss:
+    //
+    //  1. `Access::RowReduce` (emit_row_reduce) is NOT routed here. Its stages
+    //     feed an epilogue, so softmax's stability-max moves bits that are then
+    //     consumed by `exp(x - m)` — the output is a COMPUTED value and
+    //     §6.16-0010 governs it. Preserving that stage's bits would be an
+    //     obligation no conformance vector could observe, because an
+    //     intermediate inside a fused kernel is not visible at the conformance
+    //     boundary. (A RowReduce whose epilogue is ITSELF a pure select does put
+    //     -0009 back on the whole kernel — a third case, not handled here.)
+    //
+    //  2. The SAME reasoning applies WITHIN `Access::Reduction`, which is why this
+    //     gate is not just `is_bit_move_reduce`. A fused non-identity `post`
+    //     makes the fold's result an internal intermediate exactly as
+    //     RowReduce's epilogue does: under `post = Reduced(0) * 2`, the output is
+    //     computed and must quiet. Only the IDENTITY post makes the fold's
+    //     result the observable output. `is_bit_or_sign_move` cannot express
+    //     this — its leaf case is `Input(_)`, and a post's leaf is `Reduced(0)`,
+    //     which falls to `_ => false` — so a post that is itself a pure move
+    //     (`Neg(Reduced(0))`) is NOT routed either. That is the same third case
+    //     as RowReduce's select-epilogue, and it is left unrouted deliberately
+    //     rather than mis-routed.
+    let post_moves_nothing = matches!(post, ScalarExpr::Reduced(0));
+    let bit_move = narrow_bit_casts(plan.dtype).is_some()
+        && post_moves_nothing
+        && is_bit_move_reduce(rop, plan.body);
+    let acc = if bit_move {
+        ctype
+    } else if int_acc {
         "long long"
     } else if dbl {
         "double"
     } else {
         "float"
     };
-    let zero = if int_acc {
+    let zero = if bit_move {
+        zero_store_literal(ctype)
+    } else if int_acc {
         "0"
     } else if dbl {
         "0.0"
@@ -2485,6 +2538,12 @@ fn emit_reduction(
     };
     let load = |i: u8| match plan.dtype {
         ElementKind::F32Strict => format!("(double)in{i}[idx]"),
+        // A narrow bit-move fold accumulates in the STORAGE type, so the element
+        // IS the raw stored value. Promoting here would re-introduce exactly the
+        // round trip §6.16-0009 forbids — the widen is harmless on its own, but
+        // it forces a narrowing at the store, and THAT is what canonicalizes the
+        // payload.
+        _ if bit_move => format!("in{i}[idx]"),
         // f16/bf16 widen via the shared promotion intrinsic; f32/f64/int native.
         k => promote_load_f32(k, &format!("in{i}[idx]")),
     };
@@ -2626,6 +2685,12 @@ fn emit_reduction(
                 ElementKind::I64 => format!("(long long)({v})"),
                 other => unreachable!("validated hetero out dtype {other:?}"),
             };
+        }
+        if bit_move {
+            // The accumulator never widened, so there is nothing to narrow — and
+            // the narrowing is precisely the step that would canonicalize the
+            // moved NaN (MEASURED: `__float2bfloat16` maps 0x7F81 to 0x7FFF).
+            return v;
         }
         demote_store_f32(plan.dtype, &v)
     };
@@ -8391,6 +8456,141 @@ mod tests {
                 .contains("struct __align__(4) baracuda_gen_add_f16_co_v2_vec { __half2 a; };")
         );
         assert!(!k.source.contains("vo.b"));
+    }
+
+    /// Writes the bf16 `reduce_max` emission to `$BARACUDA_DUMP_DIR` for the
+    /// on-device differential. Dumping the EMITTER'S OWN output (rather than
+    /// pasting it into a fixture) is the point: a hand-copied kernel validates a
+    /// transcription, not the generator.
+    #[test]
+    #[ignore = "writes the bf16 reduce_max emission for the on-device validator"]
+    fn dump_bf16_reduce_max() {
+        use unpopped::ir::ReduceOp;
+        let op = OpDef::reduction("r", 1, &[ElementKind::Bf16], input(0), ReduceOp::Max);
+        let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], ElementKind::Bf16, 256);
+        let o = OperandDesc::new(1, &[128], &[1], ElementKind::Bf16, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let dir = std::env::var("BARACUDA_DUMP_DIR").expect("BARACUDA_DUMP_DIR");
+        let src = generate(&op, &key, &Cuda).source;
+        std::fs::write(std::path::Path::new(&dir).join("reduce_max_bf16.cu"), src).unwrap();
+    }
+
+    /// KISS-OPS §6.16-0009 on the REDUCTION surface (KISS #416): a narrow
+    /// `max`/`min` fold MOVES, so it must carry the winning element's bytes to
+    /// the output. Accumulating in `float` and narrowing at the end destroys
+    /// them — MEASURED on sm_89 before this fix, a bf16 `reduce_max` over data
+    /// containing `0x7F81` returned `0x7FFF`.
+    ///
+    /// ⚠️ This is a PAIR, and neither half means anything alone. `max` must move
+    /// raw bits; `sum` over the SAME dtype must KEEP the promote/demote round
+    /// trip, because a sum COMPUTES and §6.16-0010 requires it to quiet. A fix
+    /// that simply deleted the round trip everywhere would satisfy the max half
+    /// and silently break the sum half, so only the pair distinguishes "routed
+    /// by decomposition" from "removed the conversion".
+    ///
+    /// The third bucket pins the `post` gate: a fused non-identity epilogue makes
+    /// the fold's result an internal intermediate, so -0009 no longer attaches to
+    /// it and the round trip must come back.
+    #[test]
+    fn narrow_minmax_reductions_move_raw_bits_and_sums_still_round() {
+        use unpopped::ir::{ReduceOp, reduced};
+        for (dt, cty, promote, demote) in [
+            (
+                ElementKind::Bf16,
+                "__nv_bfloat16",
+                "__bfloat162float",
+                "__float2bfloat16",
+            ),
+            (ElementKind::F16, "__half", "__half2float", "__float2half"),
+        ] {
+            let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], dt, 256);
+            let o = OperandDesc::new(1, &[128], &[1], dt, 256);
+            let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+            let emit = |op: &OpDef| generate(op, &key, &Cuda).source;
+
+            for rop in [ReduceOp::Max, ReduceOp::Min] {
+                let src = emit(&OpDef::reduction("r", 1, &[dt], input(0), rop));
+                let stem = if matches!(rop, ReduceOp::Max) {
+                    "max"
+                } else {
+                    "min"
+                };
+                // HARNESS CONTROL, checked FIRST and derived independently of the
+                // accumulator routing: if this fails, the test never reached the
+                // kernel it is about (wrong access shape, renamed entry point,
+                // declined lowering) and the assertions below would be reporting
+                // on something else. A true alarm with a false cause is worse
+                // than a clean red, so name the two apart.
+                assert!(
+                    src.contains(&format!("reduce_{stem}(")),
+                    "HARNESS BROKE, not the kernel: no `reduce_{stem}` entry point in \
+                     the {dt:?} emission — this test did not reach a {stem} \
+                     reduction, so its conformance assertions prove nothing:\n{src}"
+                );
+                // The fold's accumulator, its shuffle, and its store all stay in
+                // the storage type. The narrow shuffle is MEASURED to work on
+                // sm_89: `__shfl_down_sync` has narrow overloads and a warp max
+                // over a lane holding 0x7F81 returns 0x7F81 bit-exact.
+                assert!(
+                    src.contains(&format!("{cty} acc =")),
+                    "§6.16-0009: {dt:?} {stem} must accumulate in the STORAGE type \
+                     — a float accumulator forces a narrowing store, and THAT is \
+                     what canonicalizes the moved payload:\n{src}"
+                );
+                assert!(
+                    src.contains(&format!("{cty} block_{stem}_")),
+                    "§6.16-0009: {dt:?} {stem} block reducer must be typed on the \
+                     storage type so the shuffle carries the operand's bytes:\n{src}"
+                );
+                assert!(
+                    !src.contains(&format!("{promote}(in0[")),
+                    "§6.16-0009: {dt:?} {stem} must load the RAW stored element — \
+                     promoting here is what forces the demote at the store:\n{src}"
+                );
+                assert!(
+                    !src.contains(&format!("{demote}(r)")),
+                    "§6.16-0009: {dt:?} {stem} must NOT re-encode the result — the \
+                     demote is the defect (it maps every NaN to a canonical \
+                     quiet one):\n{src}"
+                );
+            }
+
+            // PAIRED NEGATIVE — a sum COMPUTES, so §6.16-0010 governs it and the
+            // round trip is REQUIRED. This half is what makes the max half
+            // evidence of routing rather than of deletion.
+            let s = emit(&OpDef::reduction("r", 1, &[dt], input(0), ReduceOp::Sum));
+            assert!(
+                s.contains("float acc =") && s.contains(&format!("{promote}(in0[")),
+                "§6.16-0010: {dt:?} sum must keep its widened accumulator — if this \
+                 red fires together with the max asserts passing, the round trip \
+                 was DELETED globally rather than routed per decomposition:\n{s}"
+            );
+            assert!(
+                s.contains(&format!("{demote}(")),
+                "§6.16-0010: {dt:?} sum must still re-encode its computed result:\n{s}"
+            );
+
+            // THIRD BUCKET — a fused non-identity post makes the fold's result an
+            // internal intermediate, exactly as RowReduce's epilogue does, so the
+            // OUTPUT is computed and must quiet. Pins the `post` gate: without it
+            // the max above would route here too and stop quieting a computed
+            // value.
+            let p = emit(&OpDef::reduction_post(
+                "r",
+                1,
+                &[dt],
+                input(0),
+                ReduceOp::Max,
+                reduced(0).sqrt(),
+            ));
+            assert!(
+                p.contains("float acc ="),
+                "§6.16-0010: {dt:?} max under a fused arithmetic post must keep the \
+                 widened accumulator — the fold's result is an INTERNAL \
+                 intermediate there, and the kernel's observable output is a \
+                 COMPUTED value:\n{p}"
+            );
+        }
     }
 
     #[test]
