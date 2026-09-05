@@ -5510,9 +5510,25 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
 
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let int_acc = unpopped::plan::is_int_dtype(plan.dtype);
+    // KISS-OPS §6.16-0009, the WINDOW surface — the fourth instance of one defect
+    // (after binary elementwise, `Access::Reduction` and `Access::Scan`). A
+    // max/min pool MOVES: the pooled output IS one of the window's input
+    // elements, chosen by comparison, with no arithmetic, so it must carry that
+    // element's BYTES. Sum/Mean pooling COMPUTES and keeps its round trip
+    // (§6.16-0010 requires the quiet).
+    //
+    // Gate is the same three clauses as `emit_reduction` / `emit_scan_impl`, for
+    // the same reasons — the OP must be Max/Min, the per-element `pre` must be a
+    // move, and the `post` epilogue must be the identity.
+    let bit_move = narrow_bit_casts(plan.dtype).is_some()
+        && matches!(post, ScalarExpr::Reduced(0))
+        && is_bit_move_reduce(wop, pre);
     // Accumulator: double for f64/f32-strict, native ctype for integers (wrapping
-    // sum-pool / exact max-pool), float otherwise (incl. f16/bf16 up-convert).
-    let acc = if dbl {
+    // sum-pool / exact max-pool), the STORAGE type for a narrow bit-move pool,
+    // float otherwise (incl. f16/bf16 up-convert).
+    let acc = if bit_move {
+        ctype
+    } else if dbl {
         "double"
     } else if int_acc {
         ctype
@@ -5554,6 +5570,9 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
             RrRole::RowScalar => unreachable!("row-scalar handled above"),
         };
         match plan.dtype {
+            // Guard first: a bit-move pool folds in the storage type, so the
+            // element IS the raw stored word; promoting forces the demote.
+            _ if bit_move => format!("in{i}[{pos}]"),
             ElementKind::F16 => format!("__half2float(in{i}[{pos}])"),
             ElementKind::Bf16 => format!("__bfloat162float(in{i}[{pos}])"),
             ElementKind::F32Strict => format!("(double)in{i}[{pos}]"),
@@ -5663,6 +5682,9 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
     .spelled()?;
     let store = |v: &str| -> String {
         match plan.dtype {
+            // Guard first: nothing widened, so nothing may narrow — the
+            // narrowing is what canonicalizes the moved payload.
+            _ if bit_move => v.to_string(),
             ElementKind::F16 => format!("__float2half({v})"),
             ElementKind::Bf16 => format!("__float2bfloat16({v})"),
             _ => v.to_string(),
@@ -5712,6 +5734,8 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
     for i in 0..plan.n_inputs {
         if rr_role(plan.key.operands[i as usize], last) == RrRole::RowScalar {
             let conv = match plan.dtype {
+                // Guard first: the accumulator is the storage type here.
+                _ if bit_move => format!("in{i}[row]"),
                 ElementKind::F16 => format!("__half2float(in{i}[row])"),
                 ElementKind::Bf16 => format!("__bfloat162float(in{i}[row])"),
                 ElementKind::F32Strict => format!("(double)in{i}[row]"),
@@ -5761,7 +5785,17 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
             } else {
                 "<"
             };
-            let ident = scan_identity(wop, plan.dtype); // type min (Max) / max (Min)
+            // Type min (Max) / max (Min). A bit-move pool needs it spelled in the
+            // STORAGE type — `scan_identity` gives a `float` ±inf bit-cast, which
+            // is the wrong TYPE once `acc` is `__half`/`__nv_bfloat16`. Reached
+            // by an all-pad window, which emits the identity as its output.
+            let ident = match bit_move
+                .then(|| narrow_extreme_lit(plan.dtype, matches!(wop, ReduceOp::Max)))
+                .flatten()
+            {
+                Some(lit) => lit,
+                None => scan_identity(wop, plan.dtype),
+            };
             s.push_str(&format!("        {acc} best = {ident}; int have = 0;\n"));
             s.push_str(&format!("        for (int kk = 0; kk < {sz}; ++kk) {{\n"));
             s.push_str(&format!(
@@ -15061,6 +15095,128 @@ mod window_tests {
         let a = OperandDesc::new(2, &[8, k_in], &[k_in, 1], dt, 256);
         let o = OperandDesc::new(2, &[8, k_out], &[k_out, 1], dt, 256);
         structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    /// Writes the bf16 max-pool emission for the on-device validator.
+    #[test]
+    #[ignore = "writes the bf16 window max-pool emission for the on-device validator"]
+    fn dump_bf16_maxpool() {
+        let dir = std::env::var("BARACUDA_DUMP_DIR").expect("BARACUDA_DUMP_DIR");
+        let dt = ElementKind::Bf16;
+        let p = OpDef::window_simple("pool", &[dt], ReduceOp::Max, 1, 3, 2, 1, 1, 1, false);
+        let src = generate(&p, &window_key(dt, 128, 64), &Cuda).source;
+        std::fs::write(std::path::Path::new(&dir).join("maxpool_bf16.cu"), src).unwrap();
+    }
+
+    /// KISS-OPS §6.16-0009 on the WINDOW surface — the fourth instance of one
+    /// defect (binary elementwise #67, `Access::Reduction` #70, `Access::Scan`
+    /// #72). A max/min POOL moves: the pooled output IS one of the window's input
+    /// elements, chosen by comparison, with no arithmetic.
+    ///
+    /// Found by ENUMERATING the `Schedule::` dispatch match rather than by
+    /// grepping — a grep finds sites, not paths, and cannot say what it missed.
+    /// Same PAIR discipline: sum-pool over the SAME dtype must KEEP its round
+    /// trip, or nothing distinguishes routing from deleting the conversion.
+    #[test]
+    fn narrow_window_minmax_moves_raw_bits_and_sumpool_still_rounds() {
+        use unpopped::ir::{input, konst, reduced};
+        for (dt, cty, promote, demote, neg_inf) in [
+            (
+                ElementKind::Bf16,
+                "__nv_bfloat16",
+                "__bfloat162float",
+                "__float2bfloat16",
+                "__ushort_as_bfloat16((unsigned short)0xff80u)",
+            ),
+            (
+                ElementKind::F16,
+                "__half",
+                "__half2float",
+                "__float2half",
+                "__ushort_as_half((unsigned short)0xfc00u)",
+            ),
+        ] {
+            let pool = |op: ReduceOp| {
+                let p = OpDef::window_simple("pool", &[dt], op, 1, 3, 2, 1, 1, 1, false);
+                generate(&p, &window_key(dt, 128, 64), &Cuda).source
+            };
+            for (op, stem) in [(ReduceOp::Max, "max"), (ReduceOp::Min, "min")] {
+                let s = pool(op);
+                // HARNESS CONTROL first, independent of the routing.
+                assert!(
+                    s.contains(&format!("window_{stem}")),
+                    "HARNESS BROKE, not the kernel: no `window_{stem}` entry point                      in the {dt:?} emission:
+{s}"
+                );
+                assert!(
+                    s.contains(&format!("{cty} best =")),
+                    "§6.16-0009: {dt:?} {stem}-pool must hold the running best in                      the STORAGE type — a float accumulator forces a narrowing                      store, and THAT canonicalizes the payload:
+{s}"
+                );
+                assert!(
+                    !s.contains(&format!("{promote}(in0[")),
+                    "§6.16-0009: {dt:?} {stem}-pool must load the RAW element:
+{s}"
+                );
+                assert!(
+                    !s.contains(&format!("{demote}(prefix)")),
+                    "§6.16-0009: {dt:?} {stem}-pool must NOT re-encode the pooled                      result — the demote is the defect:
+{s}"
+                );
+                if matches!(op, ReduceOp::Max) {
+                    // An all-pad window emits the identity AS ITS OUTPUT, so the
+                    // identity has to be storage-typed too.
+                    assert!(
+                        s.contains(neg_inf),
+                        "{dt:?} max-pool identity must be the narrow -inf {neg_inf}:
+{s}"
+                    );
+                }
+            }
+
+            // PAIRED NEGATIVE — sum-pool COMPUTES, so §6.16-0010 requires the
+            // round trip. Without this half, the asserts above cannot tell
+            // "routed by decomposition" from "conversion deleted".
+            let s = pool(ReduceOp::Sum);
+            assert!(
+                s.contains("float acc =") && s.contains(&format!("{promote}(in0[")),
+                "§6.16-0010: {dt:?} sum-pool must keep its widened accumulator — if                  this reds while the max asserts pass, the round trip was DELETED                  globally rather than routed:
+{s}"
+            );
+            assert!(
+                s.contains(&format!("{demote}(")),
+                "§6.16-0010: {dt:?} sum-pool must still re-encode its computed                  result:
+{s}"
+            );
+
+            // The `pre` and `post` clauses, one bucket each.
+            let with = |pre, post| {
+                let p = OpDef::window(
+                    "pool",
+                    1,
+                    &[dt],
+                    ReduceOp::Max,
+                    1,
+                    3,
+                    2,
+                    1,
+                    1,
+                    1,
+                    false,
+                    pre,
+                    post,
+                );
+                generate(&p, &window_key(dt, 128, 64), &Cuda).source
+            };
+            assert!(
+                with(input(0) + konst(1.0), reduced(0)).contains("float "),
+                "§6.16-0010: {dt:?} max-pool over an ARITHMETIC pre-map must keep                  the widened accumulator"
+            );
+            assert!(
+                with(input(0), reduced(0) + konst(1.0)).contains("float "),
+                "§6.16-0010: {dt:?} max-pool under an ARITHMETIC epilogue must keep                  the widened accumulator — the OUTPUT is a computed value"
+            );
+        }
     }
 
     #[test]
