@@ -56,15 +56,15 @@ Ops covered (Phase 73.2 fanout):
   - flash_sdpa_gqa:
                  `F.scaled_dot_product_attention(q,k,v, is_causal=True)`
                                                            × {f16, bf16}
-  - mse:         `F.mse_loss(pred, target)`               × {f32}
-  - l1:          `F.l1_loss(pred, target)`                × {f32}
+  - mse:         `F.mse_loss(pred, target)`      × {f32, f16, bf16}
+  - l1:          `F.l1_loss(pred, target)`       × {f32, f16, bf16}
   - cross_entropy:
-                 `F.cross_entropy(logits, class_idx)`     × {f32}
-  - nll:         `F.nll_loss(log_probs, class_idx)`       × {f32}
+                 `F.cross_entropy(logits, class_idx)` × {f32, f16, bf16}
+  - nll:         `F.nll_loss(log_probs, class_idx)` × {f32,f16,bf16}
 
-Loss family (Wave-1 proof increment): reduction='mean' on both sides;
-shape key `R{rows}_C{cols}`. f32 only for the proof (dtype fanout is the
-Loss-20 wave).
+Loss family (Wave-1): reduction='mean' on both sides; shape key
+`R{rows}_C{cols}`. The narrow dtypes are a genuinely NEW measurement, not a
+scaled f32 one — baracuda promotes to f32, computes, and narrows on store.
 
 mmvq (GGUF-quantized matrix-vector) intentionally skipped — PyTorch has
 no direct equivalent op; baseline would need a separate design.
@@ -165,11 +165,19 @@ SDPA_DTYPES: tuple[tuple[str, torch.dtype], ...] = (
 
 # Loss family sweep — mirrors `LOSS_ROW_SWEEP` / `LOSS_COL_SWEEP` in
 # `baracuda-kernels-bench/src/lib.rs`. Shape key `R{rows}_C{cols}` is
-# shared with `benches/loss.rs`. Wave-1 proof increment: f32 only (dtype
-# fanout is the Loss-20 wave). For cross_entropy / nll `cols` is the class
+# shared with `benches/loss.rs`. For cross_entropy / nll `cols` is the class
 # count; for mse / l1 it is the per-row feature width.
 LOSS_ROW_SWEEP: tuple[int, ...] = (512, 2048)
 LOSS_COL_SWEEP: tuple[int, ...] = (1024, 4096)
+# Loss dtypes. The narrow ones are a genuinely NEW measurement, not a scaled
+# f32 one — baracuda promotes each element to f32, computes, and narrows on
+# store, so the work per cell differs in kind, not only in width. Generated on
+# the box alongside f32 rather than derived from it.
+LOSS_DTYPES: tuple[tuple[str, torch.dtype], ...] = (
+    ("f32", torch.float32),
+    ("f16", torch.float16),
+    ("bf16", torch.bfloat16),
+)
 
 
 # ---------------------------------------------------------------------
@@ -584,10 +592,11 @@ def mse_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     for rows in LOSS_ROW_SWEEP:
         for cols in LOSS_COL_SWEEP:
             shape = f"R{rows}_C{cols}"
-            pred = torch.ones((rows, cols), dtype=torch.float32, device=device)
-            target = torch.full((rows, cols), 0.5, dtype=torch.float32, device=device)
-            launch = lambda p=pred, t=target: torch.nn.functional.mse_loss(p, t)
-            yield ("mse", shape, "f32", launch)
+            for dtype_name, dtype in LOSS_DTYPES:
+                pred = torch.ones((rows, cols), dtype=dtype, device=device)
+                target = torch.full((rows, cols), 0.5, dtype=dtype, device=device)
+                launch = lambda p=pred, t=target: torch.nn.functional.mse_loss(p, t)
+                yield ("mse", shape, dtype_name, launch)
 
 
 def l1_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
@@ -596,10 +605,11 @@ def l1_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     for rows in LOSS_ROW_SWEEP:
         for cols in LOSS_COL_SWEEP:
             shape = f"R{rows}_C{cols}"
-            pred = torch.ones((rows, cols), dtype=torch.float32, device=device)
-            target = torch.full((rows, cols), 0.5, dtype=torch.float32, device=device)
-            launch = lambda p=pred, t=target: torch.nn.functional.l1_loss(p, t)
-            yield ("l1", shape, "f32", launch)
+            for dtype_name, dtype in LOSS_DTYPES:
+                pred = torch.ones((rows, cols), dtype=dtype, device=device)
+                target = torch.full((rows, cols), 0.5, dtype=dtype, device=device)
+                launch = lambda p=pred, t=target: torch.nn.functional.l1_loss(p, t)
+                yield ("l1", shape, dtype_name, launch)
 
 
 def cross_entropy_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
@@ -611,10 +621,11 @@ def cross_entropy_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     for rows in LOSS_ROW_SWEEP:
         for cols in LOSS_COL_SWEEP:
             shape = f"R{rows}_C{cols}"
-            inp = torch.full((rows, cols), 0.1, dtype=torch.float32, device=device)
             target = (torch.arange(rows, device=device) % cols).to(torch.int64)
-            launch = lambda x=inp, t=target: torch.nn.functional.cross_entropy(x, t)
-            yield ("cross_entropy", shape, "f32", launch)
+            for dtype_name, dtype in LOSS_DTYPES:
+                inp = torch.full((rows, cols), 0.1, dtype=dtype, device=device)
+                launch = lambda x=inp, t=target: torch.nn.functional.cross_entropy(x, t)
+                yield ("cross_entropy", shape, dtype_name, launch)
 
 
 def nll_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
@@ -627,10 +638,11 @@ def nll_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     for rows in LOSS_ROW_SWEEP:
         for cols in LOSS_COL_SWEEP:
             shape = f"R{rows}_C{cols}"
-            logp = torch.full((rows, cols), -1.0, dtype=torch.float32, device=device)
             target = (torch.arange(rows, device=device) % cols).to(torch.int64)
-            launch = lambda x=logp, t=target: torch.nn.functional.nll_loss(x, t)
-            yield ("nll", shape, "f32", launch)
+            for dtype_name, dtype in LOSS_DTYPES:
+                logp = torch.full((rows, cols), -1.0, dtype=dtype, device=device)
+                launch = lambda x=logp, t=target: torch.nn.functional.nll_loss(x, t)
+                yield ("nll", shape, dtype_name, launch)
 
 
 # Op registry — name → cases generator. Extend per-op for fanout.
