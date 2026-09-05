@@ -362,8 +362,12 @@ impl<T: Element> DenseGemmPlan<T> {
             ElementKind::F64 => (MathPrecision::F64, ElementKind::F64),
             // f32 — cuBLAS default math mode: true IEEE binary32
             // multiply-add, NOT TF32 (unlike GemmPlan<f32>'s CUTLASS
-            // tensor-core SKU). Process-wide NVIDIA_TF32_OVERRIDE=1
-            // would silently force TF32 — see the facade module docs.
+            // tensor-core SKU). MEASURED on sm_89 / CUDA 13.3: the
+            // default mode is bit-identical to CUBLAS_PEDANTIC_MATH,
+            // and differs from CUBLAS_TF32_TENSOR_OP_MATH — so the
+            // binary32 claim here is checked, not assumed. What CAN
+            // change it is a caller's own `cublasSetMathMode`; see the
+            // facade module docs.
             _ => (MathPrecision::F32, ElementKind::F32),
         };
         PrecisionGuarantee {
