@@ -4630,6 +4630,26 @@ fn emit_block_reducers(
 /// are plain C literals). `Sum → 0`, `Prod → 1`, `Max → the type MINIMUM` (an
 /// empty-set max), `Min → the type MAXIMUM`. Used for the exclusive scan's first
 /// position (the identity probe) and the block-scan's out-of-range lane padding.
+/// The Max/Min monoid identity spelled in the STORAGE type, for a narrow
+/// bit-move scan whose accumulator never widens (see the `bit_move` gate in
+/// `emit_scan_impl`). `scan_identity` spells these as `float` ±infinity, which is
+/// the wrong TYPE once the accumulator is `__half`/`__nv_bfloat16`.
+///
+/// Written as a raw bit pattern rather than `__float2bfloat16(-INFINITY)` to keep
+/// it a compile-time constant, and because the whole point of the bit-move path
+/// is that no value on it round-trips through `float`. (An infinity would in fact
+/// convert exactly — unlike a NaN — so this is consistency, not correctness.)
+fn narrow_extreme_lit(dt: ElementKind, is_max: bool) -> Option<String> {
+    // Max's identity is the type MINIMUM (-inf); Min's is the maximum (+inf).
+    let (from_bits, neg_inf, pos_inf) = match dt {
+        ElementKind::F16 => ("__ushort_as_half", "0xfc00u", "0x7c00u"),
+        ElementKind::Bf16 => ("__ushort_as_bfloat16", "0xff80u", "0x7f80u"),
+        _ => return None,
+    };
+    let bits = if is_max { neg_inf } else { pos_inf };
+    Some(format!("{from_bits}((unsigned short){bits})"))
+}
+
 fn scan_identity(sop: ReduceOp, dt: ElementKind) -> String {
     let int_acc = unpopped::plan::is_int_dtype(dt);
     let dbl = matches!(dt, ElementKind::F64 | ElementKind::F32Strict);
@@ -4839,16 +4859,52 @@ fn emit_scan_impl(
 
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let int_acc = unpopped::plan::is_int_dtype(plan.dtype);
+    // KISS-OPS §6.16-0009, the SCAN surface — the same defect and the same fix as
+    // the reduction one, reached by the same argument the architect ruled for
+    // reductions (KISS #416): a cumulative max/min MOVES. Each output position
+    // holds one of the input elements, selected by comparison, with no arithmetic,
+    // so each output must carry that element's BYTES.
+    //
+    // Accumulating in `float` and narrowing at every store destroys them. MEASURED
+    // in the SHIPPED corpus, `baracuda_gen_cummax_bf16_scan_max.cu`:
+    //
+    //     float v = __bfloat162float(in0[idx]);   // promote
+    //     ...
+    //     out[idx] = __float2bfloat16(prefix);    // demote -> canonicalizes
+    //
+    // Same gate as `emit_reduction`, and it needs all three clauses for the same
+    // reasons: the OP must be Max/Min (a cumsum COMPUTES and §6.16-0010 requires it
+    // to quiet), the per-element `pre` must be a move, and the `post` epilogue must
+    // be the identity — a non-identity post makes each prefix an internal
+    // intermediate whose observable output is COMPUTED.
+    //
+    // ⚠️ `pre` and `post` are BOTH used here, and they are NOT interchangeable:
+    // `Access::Scan` carries the element expression in `pre` (identity `Input(0)`)
+    // and the epilogue in `post` (identity `Reduced(0)`). Verified against the
+    // variant's own field docs, not assumed from `Access::Reduction`, whose
+    // element expression lives in `plan.body` instead.
+    let bit_move = narrow_bit_casts(plan.dtype).is_some()
+        && matches!(post, ScalarExpr::Reduced(0))
+        && is_bit_move_reduce(sop, pre);
     // Base: float/double for FP, the native ctype (wrapping) for integers. Variant:
-    // FP-only (asserted), so float/double.
-    let acc = if dbl {
+    // FP-only (asserted), so float/double. A bit-move scan keeps the STORAGE type
+    // end to end, exactly as the integer path already does.
+    let acc = if bit_move {
+        ctype
+    } else if dbl {
         "double"
     } else if int_acc {
         ctype
     } else {
         "float"
     };
-    let ident = scan_identity(sop, plan.dtype);
+    let ident = match bit_move
+        .then(|| narrow_extreme_lit(plan.dtype, matches!(sop, ReduceOp::Max)))
+        .flatten()
+    {
+        Some(lit) => lit,
+        None => scan_identity(sop, plan.dtype),
+    };
 
     let combine_tag = match sop {
         ReduceOp::Sum => "sum",
@@ -4885,6 +4941,13 @@ fn emit_scan_impl(
             RrRole::RowScalar => unreachable!("row-scalar handled above"),
         };
         match plan.dtype {
+            // ⚠️ MUST precede the F16/Bf16 arms — a guard arm placed after them
+            // never matches for the very dtypes it exists to serve.
+            //
+            // A bit-move scan folds in the storage type, so the element IS the
+            // raw stored word. Promoting here is what forces the demote at the
+            // store, and the demote is the defect.
+            _ if bit_move => format!("in{i}[{pos}]"),
             ElementKind::F16 => format!("__half2float(in{i}[{pos}])"),
             ElementKind::Bf16 => format!("__bfloat162float(in{i}[{pos}])"),
             ElementKind::F32Strict => format!("(double)in{i}[{pos}]"),
@@ -4995,6 +5058,10 @@ fn emit_scan_impl(
     .spelled()?;
     let store = |v: &str| -> String {
         match plan.dtype {
+            // Guard first, as above. The accumulator never widened, so there is
+            // nothing to narrow — and the narrowing is what canonicalizes the
+            // moved payload (MEASURED: `__float2bfloat16` maps 0x7F81 to 0x7FFF).
+            _ if bit_move => v.to_string(),
             ElementKind::F16 => format!("__float2half({v})"),
             ElementKind::Bf16 => format!("__float2bfloat16({v})"),
             _ => v.to_string(),
@@ -5035,6 +5102,11 @@ fn emit_scan_impl(
     for i in 0..plan.n_inputs {
         if rr_role(plan.key.operands[i as usize], last) == RrRole::RowScalar {
             let conv = match plan.dtype {
+                // Guard first. A bit-move scan's accumulator is the storage
+                // type, so a row-scalar operand must stay a storage word too —
+                // promoting it would assign a float into a narrow register and
+                // re-introduce the round trip on that operand.
+                _ if bit_move => format!("in{i}[row]"),
                 ElementKind::F16 => format!("__half2float(in{i}[row])"),
                 ElementKind::Bf16 => format!("__bfloat162float(in{i}[row])"),
                 ElementKind::F32Strict => format!("(double)in{i}[row]"),
@@ -8473,6 +8545,25 @@ mod tests {
         let dir = std::env::var("BARACUDA_DUMP_DIR").expect("BARACUDA_DUMP_DIR");
         let src = generate(&op, &key, &Cuda).source;
         std::fs::write(std::path::Path::new(&dir).join("reduce_max_bf16.cu"), src).unwrap();
+    }
+
+    /// Writes both bf16 `cummax` variants for the on-device differential — the
+    /// serial base AND the blockscan, because they are separate code paths and
+    /// only the blockscan exercises `__shfl_up_sync` on a narrow type.
+    #[test]
+    #[ignore = "writes the bf16 cummax emissions for the on-device validator"]
+    fn dump_bf16_cummax() {
+        use unpopped::generate_variants;
+        use unpopped::ir::ReduceOp;
+        let dir = std::env::var("BARACUDA_DUMP_DIR").expect("BARACUDA_DUMP_DIR");
+        let dt = ElementKind::Bf16;
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let sc = OpDef::scan_simple("cummax", &[dt], ReduceOp::Max, 1, false, false);
+        for v in generate_variants(&sc, &key, &Cuda) {
+            let path = std::path::Path::new(&dir).join(format!("cummax_bf16_{}.cu", v.tag));
+            std::fs::write(path, &v.kernels[0].source).unwrap();
+        }
     }
 
     /// KISS-OPS §6.16-0009 on the REDUCTION surface (KISS #416): a narrow
@@ -14428,6 +14519,153 @@ mod scan_tests {
         // exclusive cummax: position-0 emits the Max identity (-inf) via `wexc`.
         let cmax_x = blockscan_src("cummax", ReduceOp::Max, ElementKind::F32, true);
         assert!(cmax_x.contains("if (lane == 0) wexc = __int_as_float(0xff800000u);"));
+    }
+
+    /// KISS-OPS §6.16-0009 on the SCAN surface. A cumulative max/min MOVES —
+    /// each output position holds one of the input elements, selected by
+    /// comparison, with no arithmetic — so each output must carry that element's
+    /// BYTES. Folding in `float` and narrowing at every store destroys them.
+    ///
+    /// ⚠️ The existing `blockscan_maxmin_emission_goldens` covers **F32 and I32
+    /// only**. It is a live, correctly-aimed golden on this exact code, and it
+    /// stayed green straight through this defect, because the dtypes that carry
+    /// the bug are the ones its population excludes. That is why this test names
+    /// its dtypes explicitly.
+    ///
+    /// Same PAIR discipline as the reduction surface: `cummax`/`cummin` must move
+    /// raw bits, and `cumsum` over the SAME dtype must KEEP the round trip
+    /// (§6.16-0010 — a sum computes and must quiet). Neither half alone separates
+    /// "routed by decomposition" from "conversion deleted globally".
+    #[test]
+    fn narrow_cumulative_minmax_moves_raw_bits_and_cumsum_still_rounds() {
+        use unpopped::ir::{input, konst, reduced};
+        for (dt, cty, promote, demote, neg_inf) in [
+            (
+                ElementKind::Bf16,
+                "__nv_bfloat16",
+                "__bfloat162float",
+                "__float2bfloat16",
+                "__ushort_as_bfloat16((unsigned short)0xff80u)",
+            ),
+            (
+                ElementKind::F16,
+                "__half",
+                "__half2float",
+                "__float2half",
+                "__ushort_as_half((unsigned short)0xfc00u)",
+            ),
+        ] {
+            let src = |op: ReduceOp, tag: &str| {
+                let sc = OpDef::scan_simple("c", &[dt], op, 1, false, false);
+                generate_variants(&sc, &scan_key(dt), &Cuda)
+                    .into_iter()
+                    .find(|v| v.tag == tag)
+                    .expect("variant")
+                    .kernels
+                    .remove(0)
+                    .source
+            };
+
+            for (rop, stem) in [(ReduceOp::Max, "max"), (ReduceOp::Min, "min")] {
+                for variant in ["base", "blockscan"] {
+                    let s = src(rop, variant);
+                    // HARNESS CONTROL, first and independent of the routing: if
+                    // this fails the test never reached the kernel it is about,
+                    // and everything below would be reporting on something else.
+                    assert!(
+                        s.contains(&format!("scan_{stem}")),
+                        "HARNESS BROKE, not the kernel: no `scan_{stem}` in the \
+                         {dt:?}/{variant} emission — the conformance assertions \
+                         below prove nothing:\n{s}"
+                    );
+                    assert!(
+                        s.contains(&format!("{cty} acc =")) || s.contains(&format!("{cty} v =")),
+                        "§6.16-0009: {dt:?} cum{stem}/{variant} must carry the fold \
+                         in the STORAGE type — a float accumulator forces a \
+                         narrowing store, and THAT canonicalizes the payload:\n{s}"
+                    );
+                    assert!(
+                        !s.contains(&format!("{promote}(in0[")),
+                        "§6.16-0009: {dt:?} cum{stem}/{variant} must load the RAW \
+                         stored element:\n{s}"
+                    );
+                    assert!(
+                        !s.contains(&format!("{demote}(prefix)")),
+                        "§6.16-0009: {dt:?} cum{stem}/{variant} must NOT re-encode \
+                         the prefix — the demote is the defect:\n{s}"
+                    );
+                }
+                // The Max/Min monoid identity must be spelled in the storage type
+                // too; the `float` ±inf literal is the wrong TYPE once the
+                // accumulator is narrow.
+                if matches!(rop, ReduceOp::Max) {
+                    assert!(
+                        src(rop, "base").contains(neg_inf),
+                        "{dt:?} cummax identity must be the narrow -inf {neg_inf}"
+                    );
+                }
+            }
+
+            // PAIRED NEGATIVE — a cumsum COMPUTES, so the round trip is REQUIRED.
+            // This half is what makes the max half evidence of ROUTING rather
+            // than of deletion.
+            for variant in ["base", "blockscan"] {
+                let s = src(ReduceOp::Sum, variant);
+                assert!(
+                    s.contains("float ") && s.contains(&format!("{promote}(in0[")),
+                    "§6.16-0010: {dt:?} cumsum/{variant} must keep its widened \
+                     accumulator — if this reds while the max asserts pass, the \
+                     round trip was DELETED globally, not routed:\n{s}"
+                );
+                assert!(
+                    s.contains(&format!("{demote}(")),
+                    "§6.16-0010: {dt:?} cumsum/{variant} must still re-encode its \
+                     computed result:\n{s}"
+                );
+            }
+
+            // The `pre` and `post` clauses of the gate, one bucket each. A scan
+            // whose per-element pre-map COMPUTES, or whose epilogue COMPUTES,
+            // makes the observable output a computed value — §6.16-0010 governs
+            // and the round trip must come back.
+            let computed_pre = OpDef::scan(
+                "c",
+                1,
+                &[dt],
+                ReduceOp::Max,
+                1,
+                false,
+                false,
+                input(0) + konst(1.0),
+                reduced(0),
+            );
+            assert!(
+                generate_variants(&computed_pre, &scan_key(dt), &Cuda)[0].kernels[0]
+                    .source
+                    .contains("float "),
+                "§6.16-0010: {dt:?} cummax over an ARITHMETIC pre-map must keep the \
+                 widened accumulator — the element entering the fold is computed"
+            );
+            let computed_post = OpDef::scan(
+                "c",
+                1,
+                &[dt],
+                ReduceOp::Max,
+                1,
+                false,
+                false,
+                input(0),
+                reduced(0) + konst(1.0),
+            );
+            assert!(
+                generate_variants(&computed_post, &scan_key(dt), &Cuda)[0].kernels[0]
+                    .source
+                    .contains("float "),
+                "§6.16-0010: {dt:?} cummax under an ARITHMETIC epilogue must keep \
+                 the widened accumulator — each prefix is an internal \
+                 intermediate and the OUTPUT is computed"
+            );
+        }
     }
 
     #[test]
