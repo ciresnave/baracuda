@@ -1638,9 +1638,9 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "unpopped"
-version = "0.6.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81ab52bbe16f43fda0c0f0e5fcd9d077c7df5a629023ef8c744b6a67aa989383"
+checksum = "6181ad9d7e650b3a6912854d9c0d9fc51700b515cb6304f863ec9860f556a606"
 dependencies = [
  "fuel-kernel-seam-types",
  "libm",
@@ -1654,9 +1654,9 @@ dependencies = [
 
 [[package]]
 name = "unpopped-cpu-c"
-version = "0.4.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db58fa937fe6d972a2b0d124d2b218318e02a2ddd380e51cbc706aab1816af9e"
+checksum = "33ba04d8d97a821e48516f3a882eaa06e0749703f30ed6c2d5679832faf475ba"
 dependencies = [
  "unpopped",
  "unpopped-vocab",
@@ -1664,9 +1664,9 @@ dependencies = [
 
 [[package]]
 name = "unpopped-slang"
-version = "0.4.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca3b79a3a653f33a97a941ca354ca5dd404156887a023dd10a56feb43d3a3ac6"
+checksum = "67b6d5b30f33985a7ef2be774698d874ebb9be6a6721ceca7d224a6847cd6c1d"
 dependencies = [
  "unpopped",
  "unpopped-vocab",
@@ -1674,9 +1674,9 @@ dependencies = [
 
 [[package]]
 name = "unpopped-vocab"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4c2fbf75222eab3d0ba525af4810347dcb08129344438caf711e5139bb79de4"
+checksum = "00d8b2815e0caa55d7ae20db774b2a4e7545352efa08fc1b97c9906863c78c52"
 dependencies = [
  "float8",
  "half",
