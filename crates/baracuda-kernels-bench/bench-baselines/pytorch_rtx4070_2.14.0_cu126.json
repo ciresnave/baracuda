@@ -26,7 +26,7 @@
         "attribution": "generated on device 'NVIDIA GeForce RTX 4070 Laptop GPU' at 2026-09-02T13:25:04+00:00 under torch 2.14.0+cu126 / CUDA 12.6; source tree pinned at git 38be793729c2db080f683309fef7d620009f8dd6; tree clean. Same-box run: measured on the device recorded above. A consumer must confirm device_name matches its own target hardware before trusting the timing comparison."
       },
       {
-        "run_id": "2026-09-02T17:52:38+00:00",
+        "run_id": "2026-09-05T12:36:55+00:00",
         "torch_version": "2.14.0+cu126",
         "cuda_version": "12.6",
         "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
@@ -34,13 +34,13 @@
           8,
           9
         ],
-        "generated_at_utc": "2026-09-02T17:52:38+00:00",
-        "generator_git_sha": "da635b04c94b94ca80d60a79527cafd12a931a0e",
-        "generator_dirty": true,
+        "generated_at_utc": "2026-09-05T12:36:55+00:00",
+        "generator_git_sha": "83ad5b2be26639ec4d698ac066eb017eec954c29",
+        "generator_dirty": false,
         "sample_count": 11,
         "inner_iters": 50,
         "warmup_launches": 10,
-        "attribution": "generated on device 'NVIDIA GeForce RTX 4070 Laptop GPU' at 2026-09-02T17:52:38+00:00 under torch 2.14.0+cu126 / CUDA 12.6; source tree pinned at git da635b04c94b94ca80d60a79527cafd12a931a0e; tree DIRTY (SHA does not fully describe it). Same-box run: measured on the device recorded above. A consumer must confirm device_name matches its own target hardware before trusting the timing comparison."
+        "attribution": "generated on device 'NVIDIA GeForce RTX 4070 Laptop GPU' at 2026-09-05T12:36:55+00:00 under torch 2.14.0+cu126 / CUDA 12.6; source tree pinned at git 83ad5b2be26639ec4d698ac066eb017eec954c29; tree clean. Same-box run: measured on the device recorded above. A consumer must confirm device_name matches its own target hardware before trusting the timing comparison."
       }
     ]
   },
@@ -2282,113 +2282,113 @@
       "op": "mse",
       "shape": "R512_C1024",
       "dtype": "f32",
-      "median_ns": 107032.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 100028.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "mse",
       "shape": "R512_C4096",
       "dtype": "f32",
-      "median_ns": 94230.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 121338.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "mse",
       "shape": "R2048_C1024",
       "dtype": "f32",
-      "median_ns": 104454.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 100034.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "mse",
       "shape": "R2048_C4096",
       "dtype": "f32",
-      "median_ns": 723400.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 725002.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "l1",
       "shape": "R512_C1024",
       "dtype": "f32",
-      "median_ns": 141742.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 133150.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "l1",
       "shape": "R512_C4096",
       "dtype": "f32",
-      "median_ns": 122956.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 128718.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "l1",
       "shape": "R2048_C1024",
       "dtype": "f32",
-      "median_ns": 120392.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 160728.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "l1",
       "shape": "R2048_C4096",
       "dtype": "f32",
-      "median_ns": 903402.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 904706.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "cross_entropy",
       "shape": "R512_C1024",
       "dtype": "f32",
-      "median_ns": 64538.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 68826.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "cross_entropy",
       "shape": "R512_C4096",
       "dtype": "f32",
-      "median_ns": 54108.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 57280.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "cross_entropy",
       "shape": "R2048_C1024",
       "dtype": "f32",
-      "median_ns": 62132.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 52398.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "cross_entropy",
       "shape": "R2048_C4096",
       "dtype": "f32",
-      "median_ns": 355366.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 355844.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "nll",
       "shape": "R512_C1024",
       "dtype": "f32",
-      "median_ns": 32264.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 39198.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "nll",
       "shape": "R512_C4096",
       "dtype": "f32",
-      "median_ns": 36880.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 35724.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "nll",
       "shape": "R2048_C1024",
       "dtype": "f32",
-      "median_ns": 33278.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 37786.0,
+      "run": "2026-09-05T12:36:55+00:00"
     },
     {
       "op": "nll",
       "shape": "R2048_C4096",
       "dtype": "f32",
-      "median_ns": 34096.0,
-      "run": "2026-09-02T17:52:38+00:00"
+      "median_ns": 34990.0,
+      "run": "2026-09-05T12:36:55+00:00"
     }
   ]
 }
