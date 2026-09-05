@@ -61,10 +61,19 @@
 //! The f32 path uses cuBLAS's **default math mode** — full IEEE 754
 //! binary32 multiply-add, NOT TF32 (this differs from the CUTLASS
 //! `GemmPlan<f32>` SKU, which routes through TF32 tensor cores).
-//! Caveat: the process-wide `NVIDIA_TF32_OVERRIDE=1` environment
-//! variable forces TF32 inside cuBLAS's default math mode — the
-//! facade does not (and cannot cheaply) defend against it; don't set
-//! it if you rely on the binary32 guarantee. f16 / bf16 accumulate in
+//! ⚠️ CORRECTED (measured, sm_89 / CUDA 13.3): this previously warned
+//! that the process-wide `NVIDIA_TF32_OVERRIDE=1` environment variable
+//! "forces TF32 inside cuBLAS's default math mode". **It does not.**
+//! The same SGEMM was run with the variable unset, `=1` and `=0`, and
+//! the default mode stayed bit-identical to `CUBLAS_PEDANTIC_MATH`
+//! every time, while `CUBLAS_TF32_TENSOR_OP_MATH` differed (the
+//! positive control that the probe can see TF32 at all). The variable
+//! is a DISABLE switch — `=0` turns TF32 off where a library would
+//! otherwise use it — so the old caveat had its direction backwards.
+//! The real way the f32 path stops being binary32 is a CALLER setting
+//! `cublasSetMathMode(CUBLAS_TF32_TENSOR_OP_MATH)` on a handle it owns;
+//! the facade's own handles are left in the default mode.
+//! f16 / bf16 accumulate in
 //! f32, matching the reduce family's convention. Run-to-run
 //! determinism follows cuBLAS's guarantee, INCLUDING its condition:
 //! bitwise-reproducible for identical (shape, dtype, arch, SM count,
