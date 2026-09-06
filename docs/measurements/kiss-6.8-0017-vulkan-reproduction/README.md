@@ -67,10 +67,35 @@ manifest and this reproduction, which is why it carries its citation.**
 | 2 | the digest is over **UTF-8 bytes** | every pinned `digest_input` is pure ASCII |
 | 3 | hex is **lowercase, zero-padded to 16** | both pinned digests happen to have no leading-zero nibble |
 | 4 | how a **width-agnostic** input maps to `sgdyn` | all 12 vectors pass an integer subgroup |
-| 5 | `saturating` is **not spelled** into the coop tuple | all 12 have `saturating: false`; a producer that appended it passes every vector |
+| 5 | whether `saturating` is spelled into the coop tuple | ⚠️ **my conclusion was WRONG and the finding stands — see below.** all 12 have `saturating: false`, so a producer that appends a suffix and one that does not **both** pass every vector |
 | 6 | tiebreak **field order** when two coop shapes share m,n,k | no vector has two such shapes |
 | 7 | `transpose` is **not spelled** | ⚠️ **corrected — see below. The flag is real; it is absent from every vector.** |
 | 8 | the unnamed escape `x<n>` sorts **numerically** | `x0,x1,x2` and `x1000..x1023` are equal-width runs, so numeric and lexicographic agree on every pinned case |
+
+### ⚠️ (5) — my CONCLUSION was wrong, my PREMISE was right, and the premise was the finding
+
+**I wrote: *"`saturating` is not spelled into the coop tuple."* It is.** vulkane measured it while writing my conclusion into a vector note, and the token contradicted the note:
+
+```
+cm-11-10-16-f16-f16-f32-f32,11-10-16-f16-f16-f32-f32-sat
+                                                    ^^^^
+```
+
+**A trailing `-sat`, with the saturating and non-saturating shapes kept as separate tuples.** So `produce.py` emits **wrong bytes** for any `saturating: true` shape, and scored 12/12 against a corpus that cannot contain one.
+
+⚠️ **But look at what the premise said:** *"all 12 vectors have saturating=false, so a producer that appended it would still match every one."* **That is true whether the suffix exists or not** — a producer that appends and one that does not both pass all 12. **The premise is exactly why the vectors could not answer the question, and it is correct under either conclusion. The remedy is identical either way.** A finding that survives its own conclusion being wrong.
+
+⚠️ **And this one is WORSE than (7), which is the part neither of us saw at the time:**
+
+```
+transpose    described in `field_spec` prose, absent from every vector
+saturating   absent from the PROSE TOO — "M-N-K plus four component types"
+             and stops. NO vector, NO description, in NEITHER half.
+```
+
+**There was no reading of the manifest, however careful, that would have produced `-sat`.** Inferring it from the uniformly-`false` vectors was the only route that existed — which is precisely the condition -0017 exists to surface. Both halves are fixed upstream now.
+
+**`produce.py` is NOT corrected.** It is the artifact of what a manifest-only reader produced; silently patching it with knowledge from the maintainer would destroy the only thing it measures. The wrong spelling stays, with the correction recorded at it.
 
 ### ⚠️ (7) — this reproduction's first diagnosis was WRONG, and the correction is the better finding
 
