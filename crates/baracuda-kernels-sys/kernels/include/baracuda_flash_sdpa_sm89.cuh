@@ -73,8 +73,21 @@
 //   sAlpha      : float[Br]                    (per-row α scratch)
 //
 // f16/bf16 at d=128, Br=Bc=64, N=2 stages:
-//   sQ = 16K, 2·sK = 16K, 2·sV = 16K, sS = 16K, sO = 32K, sM+sL+sAlpha < 1K
-//   total ≈ 97 KiB — under the 99 KiB cap. Tight but it fits.
+//   sQ = 16K, 2·sK = 32K, 2·sV = 32K, sS = 16K, sO = 32K, sM+sL+sAlpha < 1K
+//   total = 131840 B = 128.8 KiB — ⚠️ OVER the 99 KiB (101376 B) cap.
+//   IT DOES NOT FIT, and `launch_flash_sdpa_sm89_fp` now declines this shape
+//   with status 3 rather than failing the carveout and returning an opaque 1001.
+//
+//   ⚠️ AN EARLIER VERSION OF THIS BLOCK READ "2·sK = 16K, 2·sV = 16K ... total
+//   ≈ 97 KiB — under the 99 KiB cap. Tight but it fits." It announced `N = 2
+//   stages` on the line above and then did not apply that factor to the two
+//   double-buffered tiles, halving both. The arithmetic error produced the
+//   REASSURING answer, next to a `kMaxD = 128` that permits the shape.
+//   MEASURED on sm_89: the launcher's own `flash_sm89_smem_bytes` returns
+//   131840 B for this cell, matching the corrected sum to the byte.
+//
+//   At d = 64 the same sum is 74496 B (72.8 KiB) and genuinely does fit; that
+//   is the case the original note was true of.
 //
 // Status codes match the family.
 
