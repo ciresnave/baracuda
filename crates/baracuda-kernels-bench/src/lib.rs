@@ -627,6 +627,71 @@ pub fn append_csv_row(bench: &str, row: &PhaseTwentyNineRow) {
 pub const PHASE29_CSV_HEADER: &str = "op,shape,dtype,baracuda_ns,reference_ns,reference,delta,\
      pytorch_ns,pytorch_delta,samples,min_ns,p90_ns,max_ns";
 
+/// Resolve (and create) the phase-29 CSV path for `bench`. `None` if the
+/// directory cannot be made — the caller skips the row rather than failing the
+/// bench.
+fn phase29_csv_path(bench: &str) -> Option<std::path::PathBuf> {
+    let dir = std::path::PathBuf::from("target")
+        .join("criterion")
+        .join("phase29");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("phase29 csv: mkdir {} failed: {e}", dir.display());
+        return None;
+    }
+    Some(dir.join(format!("{bench}.csv")))
+}
+
+/// ⚠️ STALE-HEADER HAZARD. The header used to be written only when the file was
+/// ABSENT, so widening the row format would have appended 13-field rows under a
+/// 9-field header — every later column silently shifted by four, mapping
+/// `samples` onto `pytorch_delta`, with no error anywhere. These files live
+/// under `target/` and survive across runs, so "it is a fresh build" is not a
+/// safe assumption.
+///
+/// So: read the existing header and, if it is not the one we write, start the
+/// file over. A truncate loses rows from a PREVIOUS run only — the same thing
+/// `cargo clean` does, and strictly better than emitting misaligned ones.
+fn drop_csv_if_header_is_stale(path: &std::path::Path) {
+    let Ok(existing) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let stale = existing
+        .lines()
+        .next()
+        .is_some_and(|first| first != PHASE29_CSV_HEADER);
+    if stale {
+        eprintln!(
+            "phase29 csv: {} has an older header; rewriting it rather than \
+             appending misaligned rows",
+            path.display()
+        );
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// The four spread columns, empty when the bench measured no spread.
+fn spread_fields(spread: Option<&Spread>) -> (String, String, String, String) {
+    match spread {
+        Some(s) => (
+            s.samples.to_string(),
+            format!("{:.3}", s.min_ns),
+            format!("{:.3}", s.p90_ns),
+            format!("{:.3}", s.max_ns),
+        ),
+        None => (String::new(), String::new(), String::new(), String::new()),
+    }
+}
+
+/// Format an `Option<f64>` column: three decimals, or empty.
+fn opt_ns(v: Option<f64>) -> String {
+    v.map(|x| format!("{x:.3}")).unwrap_or_default()
+}
+
+/// Format an `Option<f64>` ratio column: four decimals, or empty.
+fn opt_ratio(v: Option<f64>) -> String {
+    v.map(|x| format!("{x:.4}")).unwrap_or_default()
+}
+
 /// [`append_csv_row`] plus the measurement's dispersion.
 ///
 /// The four spread columns are always present and empty when `spread` is
@@ -635,41 +700,10 @@ pub const PHASE29_CSV_HEADER: &str = "op,shape,dtype,baracuda_ns,reference_ns,re
 pub fn append_csv_row_with_spread(bench: &str, row: &PhaseTwentyNineRow, spread: Option<&Spread>) {
     use std::io::Write;
 
-    let dir = std::path::PathBuf::from("target")
-        .join("criterion")
-        .join("phase29");
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        eprintln!("phase29 csv: mkdir {} failed: {e}", dir.display());
+    let Some(path) = phase29_csv_path(bench) else {
         return;
-    }
-    let path = dir.join(format!("{bench}.csv"));
-
-    // ⚠️ STALE-HEADER HAZARD. The header used to be written only when the file
-    // was absent, so widening the format would have appended wide rows under a
-    // narrow header — every later column silently shifted by four, and a CSV
-    // reader would have mapped `samples` onto `pytorch_delta` without
-    // complaining. These files live under `target/` and survive across runs, so
-    // "it is a fresh build" is not a safe assumption.
-    //
-    // So: read the existing header and, if it is not the one we write, start
-    // the file over. A truncate loses rows from a PREVIOUS run only, which is
-    // the same thing a `cargo clean` does and is strictly better than emitting
-    // misaligned ones.
-    let stale = match std::fs::read_to_string(&path) {
-        Ok(existing) => existing
-            .lines()
-            .next()
-            .is_some_and(|first| first != PHASE29_CSV_HEADER),
-        Err(_) => false,
     };
-    if stale {
-        eprintln!(
-            "phase29 csv: {} has an older header; rewriting it rather than \
-             appending misaligned rows",
-            path.display()
-        );
-        let _ = std::fs::remove_file(&path);
-    }
+    drop_csv_if_header_is_stale(&path);
     let exists = path.exists();
     let mut f = match std::fs::OpenOptions::new()
         .create(true)
@@ -685,31 +719,7 @@ pub fn append_csv_row_with_spread(bench: &str, row: &PhaseTwentyNineRow, spread:
     if !exists {
         let _ = writeln!(f, "{PHASE29_CSV_HEADER}");
     }
-    let ref_ns = row
-        .reference_ns
-        .map(|x| format!("{x:.3}"))
-        .unwrap_or_else(|| "".into());
-    let delta = row
-        .delta()
-        .map(|x| format!("{x:.4}"))
-        .unwrap_or_else(|| "".into());
-    let pytorch_ns = row
-        .pytorch_ns
-        .map(|x| format!("{x:.3}"))
-        .unwrap_or_else(|| "".into());
-    let pytorch_delta = row
-        .pytorch_delta()
-        .map(|x| format!("{x:.4}"))
-        .unwrap_or_else(|| "".into());
-    let (sn, mn, p9, mx) = match spread {
-        Some(s) => (
-            s.samples.to_string(),
-            format!("{:.3}", s.min_ns),
-            format!("{:.3}", s.p90_ns),
-            format!("{:.3}", s.max_ns),
-        ),
-        None => (String::new(), String::new(), String::new(), String::new()),
-    };
+    let (sn, mn, p9, mx) = spread_fields(spread);
     let _ = writeln!(
         f,
         "{op},{shape},{dtype},{ba:.3},{rf},{rl},{dl},{pn},{pd},{sn},{mn},{p9},{mx}",
@@ -717,11 +727,11 @@ pub fn append_csv_row_with_spread(bench: &str, row: &PhaseTwentyNineRow, spread:
         shape = row.shape,
         dtype = row.dtype,
         ba = row.baracuda_ns,
-        rf = ref_ns,
+        rf = opt_ns(row.reference_ns),
         rl = row.reference,
-        dl = delta,
-        pn = pytorch_ns,
-        pd = pytorch_delta,
+        dl = opt_ratio(row.delta()),
+        pn = opt_ns(row.pytorch_ns),
+        pd = opt_ratio(row.pytorch_delta()),
     );
 }
 
