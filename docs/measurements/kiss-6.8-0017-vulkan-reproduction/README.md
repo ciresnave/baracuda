@@ -37,7 +37,7 @@ No docs.rs, no source, no asking them.
 party, which is exactly the thing -0017 exists to be suspicious of, so it is
 recorded as an assertion rather than left to read as protocol.
 
-## Seven guessed, two derived
+## Eight guessed, two derived
 
 A guess that turned out **right** is still listed: the array records what the
 document failed to determine, not what the reproduction got wrong. A successful
@@ -142,8 +142,8 @@ one"*, names the length-conditional switch as the reason, and designates
 asks and answers it.
 
 Of the eight items, **six are unexercised corner cases** a wider vector set closes
-mechanically, **one is a self-contradiction** (7), and **one is not closable by
-vectors at any size** (1).
+mechanically, **one is documented only in the prose half** (7 — the flag is real
+and no vector carries it), and **one is not closable by vectors at any size** (1).
 
 **Single strongest fix: pin the FNV parameters in `declarative`.**
 
@@ -151,9 +151,44 @@ vectors at any size** (1).
 
 | file | what it is |
 |---|---|
-| `produce.py` | the producer, ~250 lines, stdlib only. Every guess tagged in place and printed on every run. |
+| `produce.py` | the producer, ~280 lines, stdlib only. The residue is a **declared** table (`LEDGER`) printed in full on every run; the call sites only mark a row exercised. See the note below on why it is not accumulated. |
 | `vulkan-vocabulary.json` | the exact 24,633-byte input, copied unmodified from `kiss-vulkan-vocab` 0.4.1 for reproducibility. Upstream is vulkane's, MIT/Apache-2.0, and is theirs — it is vendored here only so this measurement can be re-run against the same bytes. |
 
 ```
-python produce.py        # 12 passed, 0 failed, then the guess list
+python produce.py        # 12 passed, 0 failed, then the full 8+2 ledger
 ```
+
+## ⚠️ The ledger itself had the defect this exercise exists to find
+
+**The first version of `produce.py` accumulated the residue at run time**: each
+`guess("GUESS-n", "...")` appended its text when that branch executed. The list
+was therefore built by *what the code did*, and it printed **seven** guesses
+from a file that declared **eight**.
+
+The missing one is **GUESS-4**, and the mechanism is self-referential:
+
+```
+GUESS-4's content : "no vector exercises `sgdyn` ... all 12 pass an integer"
+measured          : subgroup across all vectors = [32 x 10], sgdyn count = 0
+consequence       : the branch never runs -> the append never happens
+```
+
+**The exact property that makes an item a finding — nothing in the manifest
+reaches it — is the property that keeps it out of the finding list.** An
+accumulate-on-execution ledger cannot report an unexercised path *by
+construction*, and its output is indistinguishable from a file that simply had
+one fewer entry. Nothing errors; the count is just quietly smaller, and a
+smaller residue reads as a **better** result for the manifest.
+
+⚠️ **It propagated.** The prose heading of this README said *"Seven guessed"*
+while the table beneath it listed eight, and the count was relayed onward as
+seven — a program's output, a document's heading, and a message to a peer all
+agreeing on a number that the same document's own table contradicted.
+
+**Fixed by declaring the residue instead of accumulating it.** `LEDGER` is a
+literal, `guess()`/`derived()` only add a tag to `EXERCISED`, an undeclared tag
+raises rather than creating a row, and the report prints every declared item
+with unreached ones marked `[NOT EXERCISED]` plus an explicit line saying how
+many an accumulating ledger would have dropped. **A path no vector reaches is
+the strongest thing this report can say about that item, not a reason to omit
+it.**

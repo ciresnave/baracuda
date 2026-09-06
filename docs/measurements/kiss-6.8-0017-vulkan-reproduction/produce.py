@@ -36,24 +36,120 @@ MANIFEST = next(p for p in (_HERE / "vulkan-vocabulary.json",
 M = json.loads(MANIFEST.read_text(encoding="utf-8"))
 D = M["declarative"]
 
-GUESSES: list[str] = []
-DERIVED: list[str] = []
+# --------------------------------------------------------------------------
+# The residue ledger is DECLARED HERE, not accumulated at run time.
+#
+# WARNING: it used to be accumulated -- each `guess(...)` call appended its
+# text when the branch executed -- and that structurally hid an item. GUESS-4
+# is about the width-agnostic subgroup input, and its CONTENT is "no vector
+# exercises this path". So the branch never ran, the append never happened,
+# and the report printed SEVEN guesses from a file that declared EIGHT. The
+# exact property that makes an item a finding -- nothing in the manifest
+# reaches it -- was the property that kept it out of the finding list. An
+# accumulate-on-execution ledger cannot report an unexercised path BY
+# CONSTRUCTION, and its output is indistinguishable from a file that simply
+# had one fewer entry.
+#
+# So: the full residue is the literal below, `guess()`/`derived()` only MARK a
+# tag exercised, an undeclared tag is a hard error rather than a new row, and
+# `main` prints every declared item with the ones no vector reached called out
+# as [NOT EXERCISED] -- which is the strongest thing this report can say about
+# them, not a reason to omit them.
+# --------------------------------------------------------------------------
+LEDGER: dict[str, tuple[str, str]] = {
+    "GUESS-1": (
+        "guess",
+        "FNV-1a-64 offset basis 0xcbf29ce484222325 and prime "
+        "0x100000001b3 — the manifest names the algorithm and the "
+        "marker shape but not its constants",
+    ),
+    "GUESS-2": (
+        "guess",
+        "the digest is over UTF-8 bytes — every pinned digest_input is "
+        "pure ASCII, so no vector discriminates the encoding",
+    ),
+    "GUESS-3": (
+        "guess",
+        "hex is LOWERCASE and ZERO-PADDED to 16 — both pinned digests "
+        "happen to have no leading-zero nibble, so padding is unpinned",
+    ),
+    "GUESS-4": (
+        "guess",
+        "an input meaning 'width-agnostic' maps to `sgdyn` — no vector "
+        "exercises it, so its INPUT representation is unpinned (all 12 "
+        "vectors pass an integer)",
+    ),
+    "GUESS-5": (
+        "guess",
+        "`saturating` is not spelled into the coop tuple — all 12 "
+        "vectors have saturating=false, so a producer that appended it "
+        "would still match every one",
+    ),
+    "GUESS-6": (
+        "guess",
+        "tuples with equal m,n,k tie-break on (a,b,c,result) in that "
+        "order, ranked by component_types index — no vector has two "
+        "shapes agreeing on m,n,k, so the tiebreak field ORDER is "
+        "unpinned (the component RANKING is derivable)",
+    ),
+    "GUESS-7": (
+        "guess",
+        "`transpose` is not spelled — 56 coopvec combos across the "
+        "vectors, transpose=true in ZERO, `-t` in ZERO tokens. The flag "
+        "IS real (vulkane: spell() appends `-t`) but appears only in "
+        "field_spec prose, so a manifest-only reader cannot learn it "
+        "exists",
+    ),
+    "GUESS-8": (
+        "guess",
+        "the unnamed escape `x<n>` sorts NUMERICALLY on n and after all "
+        "named types — every pinned run is equal-width (x0,x1,x2 / "
+        "x1000..x1023), so no vector distinguishes numeric from "
+        "lexicographic here",
+    ),
+    "DERIVED-1": (
+        "derived",
+        "the `<namespace>:` prefix and the field ORDER — stated "
+        "verbatim by the top-level `grammar` field, "
+        "\"vulkan:<subgroup>.<ops>.<arith>.<coop>.<coopvec>\"",
+    ),
+    "DERIVED-2": (
+        "derived",
+        "the canonical sort order for component types is the "
+        "`component_types` ARRAY INDEX — the manifest gives it as an "
+        "ordered array, and `ops_alphabet` and `arith_names` are used "
+        "the same way for `<ops>` and `<arith>`, so the convention "
+        "appears in THREE places; vector[9] (u8 before u32) pins it",
+    ),
+}
+
+EXERCISED: set[str] = set()
 
 
-def derived(tag: str, what: str) -> None:
-    """An item the manifest STATES, or that its own conventions entail.
+def _mark(tag: str, kind: str) -> None:
+    entry = LEDGER.get(tag)
+    if entry is None:
+        raise KeyError(f"{tag} is not declared in LEDGER - declare it, do not "
+                       f"invent a row at run time")
+    if entry[0] != kind:
+        raise ValueError(f"{tag} is declared {entry[0]!r}, marked {kind!r}")
+    EXERCISED.add(tag)
 
-    Per KISS-CLASSIFY-6.8-0017: not `guessed`, but it MUST still be named, and
+
+def derived(tag: str) -> None:
+    """Mark a DERIVED item reached.
+
+    An item the manifest STATES, or that its own conventions entail. Per
+    KISS-CLASSIFY-6.8-0017: not `guessed`, but it MUST still be named, and
     every entry must say WHERE in the manifest the derivation is available.
     "It was entailed" is not checkable; "it appears in these three places" is.
     """
-    if tag not in [d.split(":", 1)[0] for d in DERIVED]:
-        DERIVED.append(f"{tag}: {what}")
+    _mark(tag, "derived")
 
 
-def guess(tag: str, what: str) -> None:
-    if tag not in [g.split(":", 1)[0] for g in GUESSES]:
-        GUESSES.append(f"{tag}: {what}")
+def guess(tag: str) -> None:
+    """Mark a GUESSED item reached. The text lives in `LEDGER`."""
+    _mark(tag, "guess")
 
 
 # --------------------------------------------------------------------------
@@ -69,13 +165,10 @@ FNV64_PRIME = 0x100000001B3
 
 
 def fnv1a64(s: str) -> str:
-    guess("GUESS-1", "FNV-1a-64 offset basis 0xcbf29ce484222325 and prime "
-                     "0x100000001b3 — the manifest names the algorithm and the "
-                     "marker shape but not its constants")
+    guess("GUESS-1")
     # GUESS-2: hashed over UTF-8 bytes. The digest_input strings are pure ASCII
     # so UTF-8 vs ASCII vs Latin-1 cannot be distinguished by any vector here.
-    guess("GUESS-2", "the digest is over UTF-8 bytes — every pinned digest_input "
-                     "is pure ASCII, so no vector discriminates the encoding")
+    guess("GUESS-2")
     h = FNV64_OFFSET
     for b in s.encode("utf-8"):
         h ^= b
@@ -83,9 +176,7 @@ def fnv1a64(s: str) -> str:
     # GUESS-3: lowercase, zero-padded to 16. Inferred from the two pinned
     # digests being 16 lowercase hex chars; a value with a leading zero nibble
     # would discriminate padding and neither pinned digest has one.
-    guess("GUESS-3", "hex is LOWERCASE and ZERO-PADDED to 16 — both pinned "
-                     "digests happen to have no leading-zero nibble, so padding "
-                     "is unpinned")
+    guess("GUESS-3")
     return f"fnv1a64-{h:016x}"
 
 
@@ -98,9 +189,7 @@ def field_subgroup(v) -> str:
     # No vector exercises `sgdyn`; all 12 pass an integer. None/"dyn" is my
     # choice of spelling for the absent case.
     if v is None or v == "dyn":
-        guess("GUESS-4", "an input meaning 'width-agnostic' maps to `sgdyn` — no "
-                         "vector exercises it, so its INPUT representation is "
-                         "unpinned (all 12 vectors pass an integer)")
+        guess("GUESS-4")
         return "sgdyn"
     return f"sg{v}"
 
@@ -132,9 +221,7 @@ def _coop_tuple(t: dict) -> str:
     # GUESS-5: `saturating` is NOT spelled. Every vector has saturating=false,
     # so a producer that appended it would pass all 12 — the input carries a
     # field the token has no place for, and nothing pins that.
-    guess("GUESS-5", "`saturating` is not spelled into the coop tuple — all 12 "
-                     "vectors have saturating=false, so a producer that appended "
-                     "it would still match every one")
+    guess("GUESS-5")
     return "-".join([str(t["m"]), str(t["n"]), str(t["k"]),
                      t["a"], t["b"], t["c"], t["result"]])
 
@@ -145,10 +232,7 @@ def _coop_key(t: dict):
     # GUESS-6: the tiebreak ORDER AMONG THE COMPONENT fields (a,b,c,result) is
     # their tuple order. No vector has two shapes with equal m,n,k and differing
     # components, so the tiebreak is unpinned.
-    guess("GUESS-6", "tuples with equal m,n,k tie-break on (a,b,c,result) in "
-                     "that order, ranked by component_types index — no vector "
-                     "has two shapes agreeing on m,n,k, so the tiebreak field "
-                     "ORDER is unpinned (the component RANKING is derivable)")
+    guess("GUESS-6")
     order = {c: i for i, c in enumerate(D["component_types"])}
     rank = lambda c: order.get(c, len(order))
     return (t["m"], t["n"], t["k"],
@@ -178,11 +262,7 @@ def _coopvec_tuple(t: dict) -> str:
     # description of a guess must not remove the guess: the array records what
     # the DOCUMENT failed to determine, and that is unchanged by my having
     # mis-diagnosed why.
-    guess("GUESS-7", "`transpose` is not spelled — 56 coopvec combos across the "
-                     "vectors, transpose=true in ZERO, `-t` in ZERO tokens. The "
-                     "flag IS real (vulkane: spell() appends `-t`) but appears "
-                     "only in field_spec prose, so a manifest-only reader cannot "
-                     "learn it exists")
+    guess("GUESS-7")
     return "-".join([t["input"], t["input_interpretation"],
                      t["matrix_interpretation"], t["bias_interpretation"],
                      t["result"]])
@@ -199,12 +279,7 @@ def _coopvec_key(t: dict):
     # never says in prose that its order is the sort order — but ops_alphabet and
     # arith_names are used exactly that way, so the convention is derivable and
     # the vector pins it. Recorded as DERIVED, not as a guess.
-    derived("DERIVED-2", "the canonical sort order for component types is the "
-                         "`component_types` ARRAY INDEX — the manifest gives it "
-                         "as an ordered array, and `ops_alphabet` and "
-                         "`arith_names` are used the same way for `<ops>` and "
-                         "`<arith>`, so the convention appears in THREE places; "
-                         "vector[9] (u8 before u32) pins it")
+    derived("DERIVED-2")
     order = {c: i for i, c in enumerate(D["component_types"])}
 
     def rank(c: str):
@@ -215,10 +290,7 @@ def _coopvec_key(t: dict):
         # are equal-width, so lexicographic and numeric agree on every pinned
         # case and NOTHING discriminates them. A device exposing x9 and x10
         # together would.
-        guess("GUESS-8", "the unnamed escape `x<n>` sorts NUMERICALLY on n and "
-                         "after all named types — every pinned run is "
-                         "equal-width (x0,x1,x2 / x1000..x1023), so no vector "
-                         "distinguishes numeric from lexicographic here")
+        guess("GUESS-8")
         n = int(c[1:]) if c.startswith("x") and c[1:].isdigit() else -1
         return (1, n, 0)
 
@@ -253,9 +325,7 @@ def token(inp: dict) -> str:
     #
     # This move makes both the manifest and this reproduction look better, which
     # is the exact incentive -0017 warns about — so it carries its citation.
-    derived("DERIVED-1", "the `<namespace>:` prefix and the field ORDER — stated "
-                         "verbatim by the top-level `grammar` field, "
-                         "\"vulkan:<subgroup>.<ops>.<arith>.<coop>.<coopvec>\"")
+    derived("DERIVED-1")
     fields = [
         field_subgroup(inp.get("subgroup")),
         field_ops(inp.get("ops") or []),
@@ -294,12 +364,21 @@ def main() -> int:
         else:
             skipped += 1
     print(f"\n{ok} passed, {bad} failed, {skipped} skipped, of {len(M['vectors'])} vectors")
-    print(f"\n=== {len(GUESSES)} GUESSED — the manifest did not supply these ===")
-    for g in GUESSES:
-        print(f"  {g}")
-    print(f"\n=== {len(DERIVED)} DERIVED — stated by the manifest; each cites WHERE ===")
-    for d in DERIVED:
-        print(f"  {d}")
+    for kind, heading in (
+        ("guess", "GUESSED — the manifest did not supply these"),
+        ("derived", "DERIVED — stated by the manifest; each cites WHERE"),
+    ):
+        rows = [(t, e[1]) for t, e in LEDGER.items() if e[0] == kind]
+        cold = [t for t, _ in rows if t not in EXERCISED]
+        print(f"\n=== {len(rows)} {heading} ===")
+        for tag, text in rows:
+            flag = "" if tag in EXERCISED else "[NOT EXERCISED] "
+            print(f"  {flag}{tag}: {text}")
+        if cold:
+            print(f"  ({len(cold)} of {len(rows)} reached by no vector: "
+                  f"{', '.join(cold)}. Declared, so they are reported; an "
+                  f"accumulating ledger would have printed "
+                  f"{len(rows) - len(cold)} and looked complete.)")
     print(
         "\nAn item in NEITHER list asserts that the manifest determined it "
         "(KISS-CLASSIFY-6.8-0017)."
