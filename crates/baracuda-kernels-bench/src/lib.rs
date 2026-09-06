@@ -1052,6 +1052,40 @@ pub struct PytorchBaselineEntry {
     /// v1 (flat-metadata) baseline whose rows carried no per-run link.
     #[serde(default)]
     pub run: String,
+    /// Fastest per-launch sample. `None` on a row written before the reference
+    /// column carried a spread.
+    #[serde(default)]
+    pub min_ns: Option<f64>,
+    /// 90th-percentile per-launch sample.
+    #[serde(default)]
+    pub p90_ns: Option<f64>,
+    /// Slowest per-launch sample.
+    #[serde(default)]
+    pub max_ns: Option<f64>,
+    /// How many samples the row summarises.
+    #[serde(default)]
+    pub samples: Option<usize>,
+}
+
+impl PytorchBaselineEntry {
+    /// This row's dispersion, or `None` if it predates the spread fields.
+    ///
+    /// ⚠️ **The reference column used to be a bare median while the baracuda
+    /// column carried an error bar**, and a cross-implementation table where
+    /// only one side has error bars gets quoted as if both did. Same caveat as
+    /// [`Spread`]: each sample is the mean over the tool's `inner` launches, so
+    /// this is the error bar for a median OF THOSE SAMPLES, not the per-launch
+    /// variation.
+    #[must_use]
+    pub fn spread(&self) -> Option<Spread> {
+        Some(Spread {
+            samples: self.samples?,
+            min_ns: self.min_ns?,
+            median_ns: self.median_ns,
+            p90_ns: self.p90_ns?,
+            max_ns: self.max_ns?,
+        })
+    }
 }
 
 /// In-memory representation of a PyTorch baseline JSON file. Built by
@@ -1062,6 +1096,9 @@ pub struct PytorchBaseline {
     pub metadata: PytorchBaselineMetadata,
     /// `(op, shape, dtype) → median_ns`. O(1) lookup.
     by_key: std::collections::HashMap<(String, String, String), f64>,
+    /// The same keys, carrying each row's dispersion where it has one.
+    /// Separate from `by_key` so the median lookup stays a `Copy` read.
+    spread_by_key: std::collections::HashMap<(String, String, String), Spread>,
 }
 
 #[derive(serde::Deserialize)]
@@ -1118,14 +1155,19 @@ impl PytorchBaseline {
                 path.display(),
             );
         }
-        let by_key = parsed
-            .results
-            .into_iter()
-            .map(|e| ((e.op, e.shape, e.dtype), e.median_ns))
-            .collect();
+        let mut by_key = std::collections::HashMap::new();
+        let mut spread_by_key = std::collections::HashMap::new();
+        for e in parsed.results {
+            let key = (e.op.clone(), e.shape.clone(), e.dtype.clone());
+            if let Some(sp) = e.spread() {
+                spread_by_key.insert(key.clone(), sp);
+            }
+            by_key.insert(key, e.median_ns);
+        }
         Ok(Self {
             metadata: parsed.metadata,
             by_key,
+            spread_by_key,
         })
     }
 
@@ -1221,6 +1263,20 @@ impl PytorchBaseline {
     /// matching `(op, shape, dtype)` cell, or `None` if absent.
     pub fn lookup(&self, op: &str, shape: &str, dtype: &str) -> Option<f64> {
         self.by_key
+            .get(&(op.to_owned(), shape.to_owned(), dtype.to_owned()))
+            .copied()
+    }
+
+    /// The reference row's dispersion, when it has one.
+    ///
+    /// ⚠️ `None` means the row predates the spread fields, NOT that the
+    /// measurement was tight. A caller printing an error bar must say which of
+    /// the two it is looking at, or it will report a stale row as a precise
+    /// one — the same absent-vs-zero confusion that made an empty PyTorch
+    /// column indistinguishable from a cell with no reference by design.
+    #[must_use]
+    pub fn lookup_spread(&self, op: &str, shape: &str, dtype: &str) -> Option<Spread> {
+        self.spread_by_key
             .get(&(op.to_owned(), shape.to_owned(), dtype.to_owned()))
             .copied()
     }
@@ -1438,5 +1494,75 @@ mod gate_tests {
         )]);
         merge(&mut table, &[entry]);
         assert!(table.lookup(&key).is_some(), "cell is routed after merge");
+    }
+
+    /// A row written before the reference carried a spread yields `None` — and
+    /// that must be distinguishable from "the reference was tight", which is
+    /// the absent-vs-zero confusion that made an empty PyTorch column
+    /// indistinguishable from a cell with no reference by design.
+    #[test]
+    fn reference_row_without_spread_fields_reports_no_spread() {
+        let e = PytorchBaselineEntry {
+            op: "cholesky".into(),
+            shape: "N256".into(),
+            dtype: "f32".into(),
+            median_ns: 422_328.0,
+            run: String::new(),
+            min_ns: None,
+            p90_ns: None,
+            max_ns: None,
+            samples: None,
+        };
+        assert!(
+            e.spread().is_none(),
+            "a row with no spread fields must not fabricate one"
+        );
+    }
+
+    /// The control: the same accessor DOES produce a spread when the fields are
+    /// present, so the `None` above is a fact about the row and not about a
+    /// broken accessor.
+    #[test]
+    fn reference_row_with_spread_fields_reports_it() {
+        let e = PytorchBaselineEntry {
+            op: "cholesky".into(),
+            shape: "N256".into(),
+            dtype: "f32".into(),
+            median_ns: 422_328.0,
+            run: String::new(),
+            min_ns: Some(400_000.0),
+            p90_ns: Some(460_000.0),
+            max_ns: Some(520_000.0),
+            samples: Some(11),
+        };
+        let sp = e
+            .spread()
+            .expect("fields present, so a spread must be produced");
+        assert_eq!(sp.samples, 11);
+        assert_eq!(sp.median_ns, 422_328.0);
+        assert!((sp.p90_over_median() - 460_000.0 / 422_328.0).abs() < 1e-12);
+        assert!((sp.max_over_min() - 520_000.0 / 400_000.0).abs() < 1e-12);
+    }
+
+    /// ⚠️ A PARTIAL row must NOT half-produce a spread. `spread()` is written
+    /// with `?` on every field, so one missing field yields `None` rather than
+    /// a struct with a plausible-looking zero in it.
+    #[test]
+    fn reference_row_with_a_missing_field_reports_no_spread() {
+        let e = PytorchBaselineEntry {
+            op: "lu".into(),
+            shape: "N512".into(),
+            dtype: "f32".into(),
+            median_ns: 1_242_638.0,
+            run: String::new(),
+            min_ns: Some(1_000_000.0),
+            p90_ns: None, // the one that is missing
+            max_ns: Some(1_400_000.0),
+            samples: Some(11),
+        };
+        assert!(
+            e.spread().is_none(),
+            "a partially-populated row must not yield a spread with a hole in it"
+        );
     }
 }

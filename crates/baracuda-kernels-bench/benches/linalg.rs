@@ -205,6 +205,26 @@ fn record(
     );
 
     let pytorch_ns = baseline.and_then(|b| b.lookup(op, &shape, dtype_label));
+    // ⚠️ Print the REFERENCE's error bar too, or the reader sees a precise
+    // baracuda figure beside a bare torch number and reads both as exact. A
+    // `None` here means the baseline row predates the spread fields — NOT that
+    // the reference measurement was tight — so it says so rather than printing
+    // nothing.
+    if let Some(pt) = pytorch_ns {
+        match baseline.and_then(|b| b.lookup_spread(op, &shape, dtype_label)) {
+            Some(ps) => println!(
+                "      torch {:.2} us  p90/median {:.2}  max/min {:.2}  (n={})",
+                pt / 1000.0,
+                ps.p90_over_median(),
+                ps.max_over_min(),
+                ps.samples,
+            ),
+            None => println!(
+                "      torch {:.2} us  (no spread recorded — this baseline row                  predates the reference error bar; regenerate to get one)",
+                pt / 1000.0
+            ),
+        }
+    }
     let mut group = c.benchmark_group(format!("{op}/{dtype_label}"));
     group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
         bb.iter_custom(|iters| {
