@@ -58,3 +58,8 @@ criterion/
 
 # ---- Claude Code session-local state -------------------------------------
 .claude/
+
+# Python bytecode from the tools/ scripts (build_benchmarks_table.py,
+# refresh_pytorch_baseline.py). Created on every run; never checked in.
+__pycache__/
+*.pyc
