@@ -44,6 +44,44 @@
 //! factorization is milliseconds where an elementwise kernel is microseconds;
 //! the usual `samples = 11, inner = 50` would be 550 launches per cell.
 //!
+//! ⚠️ **READ THE NUMBERS THIS BENCH PRODUCES AS ±20-40%, NOT AS PRECISE.**
+//! `tests/linalg_sample_convergence.rs` measures the single-iteration
+//! distribution on this box, and it is wide. Three consecutive runs:
+//!
+//! ```text
+//! run  median    p90/median   max/min   criterion/median
+//!  1   865 us      1.39        3.26          0.933
+//!  2   988 us      1.21        2.87          0.817
+//!  3   849 us      1.41        5.55          0.951
+//! ```
+//!
+//! ⚠️ **A first version of that test compared the ladder ends against a fixed
+//! ±5% and printed a directional verdict. Run twice, minutes apart, it said
+//! "MOVES DOWN (-7.6%)" and then "CONVERGES UPWARD (+9.9%)" — opposite
+//! conclusions from the same code on the same machine.** It was reporting
+//! run-to-run variance as a trend, and it would have produced a confident story
+//! either way. It now derives its threshold from the run's own dispersion and
+//! declines to claim a direction inside it.
+//!
+//! **The same coincidence nearly shipped as a finding.** The first CSV lined up
+//! below criterion on 4 of 4 cells, which reads as a systematic bias; repeated
+//! sampling shows `criterion/median` landing anywhere in 0.82-0.99, i.e.
+//! criterion's figure sits INSIDE the spread and there is no bias. **Four
+//! same-direction draws is p = 1/16 — not rare enough to mean anything.**
+//!
+//! **Measured environment,** because the dispersion is a property of this box
+//! and not of cuSOLVER: no other compute process was on the GPU, and
+//! `nvidia-smi` reported `SW Thermal Slowdown: Active`, `SW Power Cap: Active`,
+//! SM clock **1605 MHz against a 3105 MHz maximum**. ⚠️ **That clock range is
+//! 1.93x and the observed timing spread is 2.87-5.55x, so throttling is a
+//! contributor and NOT a full explanation. I have not identified the rest and
+//! am not guessing at it.**
+//!
+//! **Consequence: a single median from this bench is not a publishable figure
+//! on its own.** `PhaseTwentyNineRow` has no dispersion field today, so the CSV
+//! carries a point estimate with no spread beside it — that gap is named here
+//! rather than left for a reader to discover, and closing it is the next piece.
+//!
 //! Tranche 1 covers `cholesky` and `lu`. Deliberately excluded, so
 //! the absence is a decision rather than an oversight:
 //!
