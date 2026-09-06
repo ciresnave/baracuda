@@ -33,6 +33,13 @@ const BLOCK: u32 = 256;
 #[test]
 #[ignore = "requires a CUDA device + nvrtc"]
 fn variant_gate_loop_end_to_end() {
+    // ⚠️ Held for the WHOLE body, not just the timing call. Two device tests
+    // sharing one GPU flip this gate's winner 2 runs in 3 — and a lock inside
+    // `gate_cell` does NOT fix it, because the interference is the other test's
+    // UNMEASURED launches and copies. See `DEVICE_TIMING_LOCK`.
+    let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let (ctx, stream) = setup_device();
     let device = Device::get(0).expect("device");
     let stamp = current_hwstamp(&device).expect("hwstamp");
@@ -244,7 +251,14 @@ fn variant_gate_loop_end_to_end() {
 /// **memcmp-identical**, not merely close.
 #[test]
 #[ignore = "requires a CUDA device + nvrtc"]
-fn smemrow_variant_is_bit_identical_and_gated() {
+fn smemrow_variant_is_deterministic_and_close_and_gated() {
+    // ⚠️ Held for the WHOLE body, not just the timing call. Two device tests
+    // sharing one GPU flip this gate's winner 2 runs in 3 — and a lock inside
+    // `gate_cell` does NOT fix it, because the interference is the other test's
+    // UNMEASURED launches and copies. See `DEVICE_TIMING_LOCK`.
+    let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     use unpopped::{ReduceStage, reduced};
 
     let (ctx, stream) = setup_device();
@@ -289,7 +303,7 @@ fn smemrow_variant_is_bit_identical_and_gated() {
         .iter()
         .find(|v| v.tag == "smemrow")
         .expect("the smemrow variant must be offered for this row-reduce cell");
-    assert_eq!(smemrow.fidelity, VariantFidelity::BitIdentical);
+    assert_eq!(smemrow.fidelity, VariantFidelity::ReassociatedDeterministic);
     assert!(
         variants.iter().any(|v| v.tag == "base"),
         "the base variant must always be offered"
@@ -359,7 +373,10 @@ fn smemrow_variant_is_bit_identical_and_gated() {
         }
     };
 
-    // The BitIdentical oracle: raw u32 output buffers must match exactly.
+    // ⚠️ THIS ASSERTED BIT-IDENTITY AND THE VARIANT IS NOT BIT-IDENTICAL (#99):
+    // 12,283,172 of 16,777,216 elements differ, worst 11 ULP. The claim was
+    // wrong, not the kernel. So assert what `ReassociatedDeterministic`
+    // actually promises, which is two things and neither is bit-identity.
     launch_base();
     launch_smem();
     stream.synchronize().expect("sync");
@@ -367,15 +384,42 @@ fn smemrow_variant_is_bit_identical_and_gated() {
     let mut b = vec![0.0f32; n];
     d_base.copy_to_host(&mut a).expect("copy a");
     d_smem.copy_to_host(&mut b).expect("copy b");
+
+    // PROMISE 1 — DETERMINISTIC for a fixed launch configuration. This is the
+    // load-bearing half of the label and the only way to check it is to run it
+    // again and compare, so that is what this does.
+    launch_smem();
+    stream.synchronize().expect("sync");
+    let mut b2 = vec![0.0f32; n];
+    d_smem.copy_to_host(&mut b2).expect("copy b2");
+    let unstable = (0..n)
+        .filter(|&i| b[i].to_bits() != b2[i].to_bits())
+        .count();
+    assert_eq!(
+        unstable, 0,
+        "ReassociatedDeterministic promises run-to-run stability for a fixed          launch; {unstable} of {n} elements moved between two identical launches"
+    );
+
+    // PROMISE 2 — still the same computation, so it must stay CLOSE. Bounded
+    // at 64 ULP against a measured worst of 11, wide enough not to be a
+    // tripwire on a noisy box and far tighter than a different algorithm.
+    const MAX_ULP: i64 = 64;
+    let mut worst = 0i64;
+    let mut worst_at = 0usize;
     for i in 0..n {
-        assert_eq!(
-            a[i].to_bits(),
-            b[i].to_bits(),
-            "bit mismatch at {i}: base {:08x} smemrow {:08x}",
-            a[i].to_bits(),
-            b[i].to_bits()
-        );
+        let d = (i64::from(a[i].to_bits()) - i64::from(b[i].to_bits())).abs();
+        if d > worst {
+            worst = d;
+            worst_at = i;
+        }
     }
+    assert!(
+        worst <= MAX_ULP,
+        "smemrow drifted {worst} ULP from base at element {worst_at} (base {:08x}          smemrow {:08x}); the variant may diverge but not by this much",
+        a[worst_at].to_bits(),
+        b[worst_at].to_bits()
+    );
+    eprintln!("smemrow vs base: worst {worst} ULP over {n} elements (bound {MAX_ULP})");
 
     // Gate the pair; report the measured margin (regime-dependent — occupancy
     // vs saved traffic — so no winner is asserted; the table records it).
