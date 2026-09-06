@@ -2459,7 +2459,8 @@ fn emit_reduction(
     // `>` comparisons carry IEEE NaN semantics, and a warp-level max over a lane
     // holding 0x7F81 returns 0x7F81 bit-exact.
     //
-    // Routed on `is_bit_move_reduce(op, expr)` — unpopped's SHARED predicate,
+    // Routed on `is_bit_move_fold_output(op, element, post)` — unpopped's SHARED
+    // predicate,
     // whose `matches!(op, Max | Min)` half encodes the KISS ruling. Pairing the
     // OP with the expression is the whole point: `is_bit_or_sign_move` alone
     // answers TRUE for a sum-fold's element expression exactly as for a
@@ -2480,16 +2481,28 @@ fn emit_reduction(
     //     -0009 back on the whole kernel — a third case, not handled here.)
     //
     //  2. The SAME reasoning applies WITHIN `Access::Reduction`, which is why this
-    //     gate is not just `is_bit_move_reduce`. A fused non-identity `post`
-    //     makes the fold's result an internal intermediate exactly as
-    //     RowReduce's epilogue does: under `post = Reduced(0) * 2`, the output is
-    //     computed and must quiet. Only the IDENTITY post makes the fold's
-    //     result the observable output. `is_bit_or_sign_move` cannot express
-    //     this — its leaf case is `Input(_)`, and a post's leaf is `Reduced(0)`,
-    //     which falls to `_ => false` — so a post that is itself a pure move
-    //     (`Neg(Reduced(0))`) is NOT routed either. That is the same third case
-    //     as RowReduce's select-epilogue, and it is left unrouted deliberately
-    //     rather than mis-routed.
+    //     gate is not just `is_bit_move_reduce`. An ARITHMETIC `post` makes the
+    //     fold's result an internal intermediate exactly as RowReduce's epilogue
+    //     does: under `post = Reduced(0) * 2`, the output is computed and must
+    //     quiet.
+    //
+    //     ⚠️ A post that is itself a PURE MOVE is a different case and IS routed
+    //     — deliberately, and this paragraph used to say the opposite. §6.16-0011
+    //     (KISS `origin/main` 3db1f994, `spec/ops.md:1536`) says to "trace the
+    //     whole path from the op's inputs to that output, the fold itself
+    //     included: if every transformation on the path is a move ... §6.16-0009
+    //     governs the whole op", and forbids classifying "by its fold operator
+    //     alone, or by its epilogue alone — both directions fail". So a max-fold
+    //     under `Neg(Reduced(0))` is all-moves end to end: routing it is REQUIRED,
+    //     and the old "only the IDENTITY post" rule was an epilogue-alone
+    //     classification in the strict direction — one of the two the clause names.
+    //     `is_bit_move_fold_output` gets this right because `moves(post, true)`
+    //     treats `Reduced(_)` as a leaf once the caller has accounted for the fold.
+    //
+    //     The stale text described `is_bit_or_sign_move`, which the gate has not
+    //     called for some time. Found by Unpopped (2026-09-06) reading the
+    //     predicate against this comment; verified here from the clause and from
+    //     `moves`, not taken on report.
     let bit_move =
         narrow_bit_casts(plan.dtype).is_some() && is_bit_move_fold_output(rop, plan.body, post);
     let acc = if bit_move {
@@ -8872,6 +8885,34 @@ got:
                     .source
                     .contains("float acc ="),
                 "§6.16-0010: {dt:?} max under an ARITHMETIC epilogue must keep the                  widened accumulator"
+            );
+
+            // ⚠️ THE OTHER DIRECTION, and the row this test was missing. The two
+            // negatives above both make the EPILOGUE or the ELEMENT arithmetic;
+            // this one keeps every visible transformation a move and makes the
+            // FOLD arithmetic. §6.16-0011 spends a sentence on exactly this:
+            // "a sum-reduction is a computed op even when its epilogue is a pure
+            // move, because the fold is itself one of the transformations
+            // traced." An implementation MUST NOT classify "by its epilogue
+            // alone — both directions fail", and a gate that looked only at the
+            // post would route this and stop quieting.
+            //
+            // Added 2026-09-06 after Unpopped observed that a test written by
+            // either party alone was least likely to include it — the clause
+            // enumerates it, neither implementation suggests it.
+            let sum_move_post = OpDef::reduction_post(
+                "r",
+                1,
+                &[dt],
+                input(0),
+                ReduceOp::Sum,
+                reduced(0).unary(UnaryOp::Neg),
+            );
+            assert!(
+                generate(&sum_move_post, &key, &Cuda)
+                    .source
+                    .contains("float acc ="),
+                "§6.16-0010: {dt:?} SUM under a pure-move epilogue is COMPUTED —                  the fold is one of the traced transformations, so the widened                  accumulator must stay"
             );
         }
     }
