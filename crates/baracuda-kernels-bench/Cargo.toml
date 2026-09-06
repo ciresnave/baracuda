@@ -243,3 +243,7 @@ no-default-features = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "linalg"
+harness = false

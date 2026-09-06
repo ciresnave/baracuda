@@ -646,6 +646,66 @@ def nll_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
 
 
 # Op registry — name → cases generator. Extend per-op for fanout.
+# ---------------------------------------------------------------------
+# Linalg (Wave-2). cuSOLVER backs baracuda's dense Linalg and its dense API
+# is f32 + f64 only, so there is no f16/bf16 axis here - that is a property
+# of the backend, not a gap in the sweep.
+#
+# WARNING: THE TWO SIDES HAVE DIFFERENT OUTPUT DISCIPLINES AND THE COMPARISON
+# MUST BE READ WITH THAT IN VIEW.
+#   baracuda  a: TensorMut - factors IN PLACE into a caller-owned buffer.
+#   torch     returns a NEW tensor (and lu_factor a pair), so each call
+#             allocates through the caching allocator.
+# After warmup those allocations are cache hits and small against an O(n^3)
+# factorization, but they are NOT zero and they are on torch's side only.
+# The bench's restore copy is fenced out of baracuda's number by its own
+# event pair, so neither side is charged for preparing its input.
+#
+# `N_SWEEP` / dtype here MUST track `benches/linalg.rs`; the row key is
+# (op, shape, dtype) and a mismatch silently yields no baseline rather than
+# an error - the PyTorch column just comes back empty.
+# ---------------------------------------------------------------------
+
+LINALG_N_SWEEP: tuple[int, ...] = (256, 512)
+LINALG_DTYPES: tuple[tuple[str, torch.dtype], ...] = (("f32", torch.float32),)
+
+
+def _spd(n: int, dtype: torch.dtype) -> "torch.Tensor":
+    """Symmetric, diagonally dominant - SPD by Gershgorin, so Cholesky
+    succeeds, and well-conditioned enough that LU is not a pathological case.
+    Mirrors `spd_host` in `benches/linalg.rs`."""
+    device = torch.device("cuda")
+    a = torch.full((n, n), 0.5, dtype=dtype, device=device)
+    a.fill_diagonal_(float(n))
+    return a
+
+
+def cholesky_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`torch.linalg.cholesky(A)` against baracuda's `CholeskyPlan` (lower)."""
+    for n in LINALG_N_SWEEP:
+        shape = f"N{n}"
+        for dtype_name, dtype in LINALG_DTYPES:
+            a = _spd(n, dtype)
+            launch = lambda m=a: torch.linalg.cholesky(m)
+            yield ("cholesky", shape, dtype_name, launch)
+
+
+def lu_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`torch.linalg.lu_factor(A)` against baracuda's `LuPlan`.
+
+    `lu_factor` is the partial-pivoting factorization that returns (LU, pivots)
+    in one packed buffer - the same object cuSOLVER's `getrf` produces, and the
+    correct counterpart. `torch.linalg.lu` (which splits P, L, U) does strictly
+    more work and would flatter baracuda.
+    """
+    for n in LINALG_N_SWEEP:
+        shape = f"N{n}"
+        for dtype_name, dtype in LINALG_DTYPES:
+            a = _spd(n, dtype)
+            launch = lambda m=a: torch.linalg.lu_factor(m)
+            yield ("lu", shape, dtype_name, launch)
+
+
 OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], None]]]]] = {
     "gemm": gemm_cases,
     "softmax": softmax_cases,
@@ -667,6 +727,8 @@ OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], N
     "l1": l1_cases,
     "cross_entropy": cross_entropy_cases,
     "nll": nll_cases,
+    "cholesky": cholesky_cases,
+    "lu": lu_cases,
 }
 
 
