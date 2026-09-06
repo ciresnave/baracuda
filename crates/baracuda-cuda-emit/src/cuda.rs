@@ -5787,8 +5787,19 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
             };
             // Type min (Max) / max (Min). A bit-move pool needs it spelled in the
             // STORAGE type — `scan_identity` gives a `float` ±inf bit-cast, which
-            // is the wrong TYPE once `acc` is `__half`/`__nv_bfloat16`. Reached
-            // by an all-pad window, which emits the identity as its output.
+            // is the wrong TYPE once `acc` is `__half`/`__nv_bfloat16`, and this
+            // literal initializes an `{acc}`-typed register.
+            //
+            // ⚠️ It is a TYPE requirement, not a value one. An earlier version of
+            // this comment said the literal was "reached by an all-pad window,
+            // which emits the identity as its output" — that is FALSE, and the
+            // avg_pool comment ~25 lines above already said so: the shared plan
+            // gate asserts `2*pad_lo <= span` and `2*pad_hi <= span` precisely so
+            // that "an entire low-edge window would fall in padding" cannot
+            // happen (unpopped plan.rs:3399/3405). MEASURED: building
+            // `window_simple(.., size=3, pad_lo=3, ..)` panics on that assertion;
+            // the legal shape builds. So every window has at least one real tap,
+            // `have` is always 1, and the `({ident})` arm below is unreachable.
             let ident = match bit_move
                 .then(|| narrow_extreme_lit(plan.dtype, matches!(wop, ReduceOp::Max)))
                 .flatten()
@@ -5810,7 +5821,9 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
             ));
             s.push_str("            }\n");
             s.push_str("        }\n");
-            // An all-pad window (no valid tap) emits the monoid identity.
+            // Defensive: `have == 0` is unreachable because the plan gate
+            // forbids an all-pad window (`2*pad <= span`), so this arm never
+            // selects the identity in practice.
             s.push_str(&format!(
                 "        {acc} prefix = have ? best : ({ident});\n"
             ));
@@ -15164,8 +15177,10 @@ mod window_tests {
 {s}"
                 );
                 if matches!(op, ReduceOp::Max) {
-                    // An all-pad window emits the identity AS ITS OUTPUT, so the
-                    // identity has to be storage-typed too.
+                    // The identity initializes an `{acc}`-typed register, so it
+                    // must be storage-typed. ⚠️ NOT because an all-pad window
+                    // outputs it — the plan gate forbids that shape
+                    // (`2*pad <= span`), measured. This is a TYPE requirement.
                     assert!(
                         s.contains(neg_inf),
                         "{dt:?} max-pool identity must be the narrow -inf {neg_inf}:
