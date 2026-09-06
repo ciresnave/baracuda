@@ -35,3 +35,8 @@ docs/measurements/kiss-329-cuda-nan-payload/* text eol=lf
 # defaults autocrlf=true). A `.sh` checked out with CRLF makes bash choke on the
 # `\r`. Pin them to LF so `bash scripts/*.sh` runs identically on every runner.
 *.sh text eol=lf
+
+# The KISS-CLASSIFY-6.8-0017 reproduction is an artifact a foreign party re-runs:
+# the digest is over the manifest bytes, so a CRLF checkout would change every
+# hash. Pin the whole dir to LF, as the #329 measurement already is.
+docs/measurements/kiss-6.8-0017-vulkan-reproduction/* text eol=lf
