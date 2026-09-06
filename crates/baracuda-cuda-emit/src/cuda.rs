@@ -9820,7 +9820,14 @@ got:
             .find(|v| v.tag == "smemrow")
             .expect("smemrow variant offered");
         assert_eq!(sm.tag, "smemrow");
-        assert_eq!(sm.fidelity, VariantFidelity::BitIdentical);
+        // ⚠️ THIS ASSERTED `BitIdentical` THREE LINES ABOVE ITS OWN REFUTATION
+        // (#99). The assertions below establish that the epilogue READS THE
+        // CACHE instead of recomputing — "exactly ONE expf remains, vs two in
+        // the base kernel" — and that is precisely why the outputs are not
+        // bit-identical: measured, 12,283,172 of 16,777,216 elements differ by
+        // up to 11 ULP. The test proved the mechanism and asserted the
+        // conclusion it rules out.
+        assert_eq!(sm.fidelity, VariantFidelity::ReassociatedDeterministic);
         let src = &sm.kernels[0].source;
         assert!(sm.kernels[0].name.ends_with("_rowreduce_smemrow"));
         assert!(src.contains("extern __shared__ float baracuda_row_smem[];"));
