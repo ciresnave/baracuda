@@ -70,13 +70,24 @@
 //! figure sits INSIDE the spread and there is no bias. **Four same-direction
 //! draws is p = 1/16 — not rare enough to mean anything.**
 //!
-//! **Measured environment,** because the dispersion is a property of this box
-//! and not of cuSOLVER: no other compute process was on the GPU, and
-//! `nvidia-smi` reported `SW Thermal Slowdown: Active`, `SW Power Cap: Active`,
-//! SM clock **1605 MHz against a 3105 MHz maximum**. ⚠️ **That clock range is
-//! 1.93x and the observed timing spread is 2.87-5.55x, so throttling is a
-//! contributor and NOT a full explanation. I have not identified the rest and
-//! am not guessing at it.**
+//! ⚠️ **EVERY NUMBER IN THIS FILE WAS MEASURED ON A LOADED MACHINE.** This box
+//! runs ~17 other agent processes at 77-100% CPU and **an unloaded baseline is
+//! not obtainable on it** — so "measured on the 4070" names a machine, not a
+//! machine at rest.
+//!
+//! **Persistent GPU state, at 0% utilization and 57 C:** `SW Thermal Slowdown:
+//! Active`, `SW Power Cap: Active`, SM clock **1605 MHz against a 3105 MHz
+//! maximum**. A 1.93x range, present while idle and cool.
+//!
+//! **The obvious candidate — this session's own concurrent cargo builds — was
+//! TESTED AND ELIMINATED.** Three runs with them fully drained gave `max/min`
+//! of 2.73, **14.57** and 3.08: not lower, and the middle one is the worst
+//! ever measured here.
+//!
+//! ⚠️ **So the `2.87-5.55x` recorded above is itself a SAMPLE of a wider
+//! spread — the error bar has an error bar, and a reader taking 5.55 as the
+//! worst case understates it nearly threefold.** Two mechanisms named, one
+//! measured away, and no third proposed.
 //!
 //! **Consequence: a single median from this bench is not a publishable figure
 //! on its own — so it no longer ships as one.** The CSV now carries
