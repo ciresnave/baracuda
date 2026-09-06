@@ -77,6 +77,19 @@ where
                         Err(_) => continue,
                     };
 
+                // ⚠️ This bench passed `Workspace::None` at every call site while
+                // every sibling (flash_decoding, conv2d, conv2d_vs_cudnn)
+                // allocates from `plan.workspace_size()`. Shapes whose plan wants
+                // a workspace therefore failed with "workspace too small (need N,
+                // got 0)" — MEASURED at bf16 H32 D128, needing 128/256/512 KiB.
+                // They were invisible because an earlier shape aborted the run
+                // first.
+                let mut ws: DeviceBuffer<u8> =
+                    match DeviceBuffer::zeros(&ctx, plan.workspace_size().max(1)) {
+                        Ok(b) => b,
+                        Err(_) => continue,
+                    };
+
                 let sq = [b, h, q, d];
                 let sk = [b, h, k, d];
                 let sv = [b, h, k, d];
@@ -87,6 +100,57 @@ where
                 let stv = contiguous_stride(sv);
                 let sty = contiguous_stride(sy);
                 let stl = contiguous_stride(sl);
+
+                // ⚠️ PRE-FLIGHT: a shape `select()` ACCEPTS can still be
+                // unlaunchable. The per-block dynamic-SMEM requirement scales
+                // with `sizeof(T) * head_dim`, while the launcher's `d_k <= 128`
+                // bound does not know the dtype. MEASURED on sm_89 (opt-in cap
+                // 101376 B): f32 at d=128 needs 147968 B and cannot launch;
+                // f16 at d=128 needs 98816 B and can.
+                //
+                // Decline it here, the same way an unsupported `select` is
+                // declined above, instead of letting the warmup panic. ⚠️ That
+                // matters well beyond this bench: `cargo bench` ABORTS THE WHOLE
+                // RUN on the first failing target, so ONE unlaunchable shape
+                // hides EVERY later target — and a rollup built from the
+                // surviving CSVs then silently drops those ops from
+                // BENCHMARKS.md with nothing in the output saying so.
+                {
+                    let probe = FlashSdpaArgs::<T> {
+                        q: TensorRef {
+                            data: dq.as_slice(),
+                            shape: sq,
+                            stride: stq,
+                        },
+                        k: TensorRef {
+                            data: dk.as_slice(),
+                            shape: sk,
+                            stride: stk,
+                        },
+                        v: TensorRef {
+                            data: dv.as_slice(),
+                            shape: sv,
+                            stride: stv,
+                        },
+                        y: TensorMut {
+                            data: dy.as_slice_mut(),
+                            shape: sy,
+                            stride: sty,
+                        },
+                        lse: TensorMut {
+                            data: dlse.as_slice_mut(),
+                            shape: sl,
+                            stride: stl,
+                        },
+                        mask: None,
+                        alibi_slopes: None,
+                    };
+                    if let Err(e) = plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), probe)
+                    {
+                        eprintln!("flash_attention: skipping {shape} — {e}");
+                        continue;
+                    }
+                }
 
                 group.throughput(Throughput::Elements(flash_flops(b, h, q, k, d)));
                 group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
@@ -120,7 +184,7 @@ where
                             mask: None,
                             alibi_slopes: None,
                         };
-                        plan.run(&stream, Workspace::None, args)
+                        plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                             .expect("flash sdpa warmup run");
                     });
 
@@ -155,7 +219,7 @@ where
                                 mask: None,
                                 alibi_slopes: None,
                             };
-                            plan.run(&stream, Workspace::None, args)
+                            plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                                 .expect("flash sdpa run");
                         })
                     });
@@ -255,6 +319,19 @@ where
                         Err(_) => continue,
                     };
 
+                // ⚠️ This bench passed `Workspace::None` at every call site while
+                // every sibling (flash_decoding, conv2d, conv2d_vs_cudnn)
+                // allocates from `plan.workspace_size()`. Shapes whose plan wants
+                // a workspace therefore failed with "workspace too small (need N,
+                // got 0)" — MEASURED at bf16 H32 D128, needing 128/256/512 KiB.
+                // They were invisible because an earlier shape aborted the run
+                // first.
+                let mut ws: DeviceBuffer<u8> =
+                    match DeviceBuffer::zeros(&ctx, plan.workspace_size().max(1)) {
+                        Ok(b) => b,
+                        Err(_) => continue,
+                    };
+
                 let sq = [b, h, q, d];
                 let sk = [b, h, k, d];
                 let sv = [b, h, k, d];
@@ -265,6 +342,47 @@ where
                 let stv = contiguous_stride(sv);
                 let sty = contiguous_stride(sy);
                 let stl = contiguous_stride(sl);
+
+                // ⚠️ PRE-FLIGHT, same reason as the sibling body above: a shape
+                // `select()` ACCEPTS can still be unlaunchable, and `cargo bench`
+                // ABORTS THE WHOLE RUN on the first failing target — so one
+                // unlaunchable shape hides every later one, and the rollup built
+                // from the surviving CSVs then drops those ops from BENCHMARKS.md
+                // with nothing saying so.
+                {
+                    let probe = FlashSdpaSm89Args::<T> {
+                        q: TensorRef {
+                            data: dq.as_slice(),
+                            shape: sq,
+                            stride: stq,
+                        },
+                        k: TensorRef {
+                            data: dk.as_slice(),
+                            shape: sk,
+                            stride: stk,
+                        },
+                        v: TensorRef {
+                            data: dv.as_slice(),
+                            shape: sv,
+                            stride: stv,
+                        },
+                        y: TensorMut {
+                            data: dy.as_slice_mut(),
+                            shape: sy,
+                            stride: sty,
+                        },
+                        lse: TensorMut {
+                            data: dlse.as_slice_mut(),
+                            shape: sl,
+                            stride: stl,
+                        },
+                    };
+                    if let Err(e) = plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), probe)
+                    {
+                        eprintln!("flash_attention_sm89: skipping {shape} — {e}");
+                        continue;
+                    }
+                }
 
                 group.throughput(Throughput::Elements(flash_flops(b, h, q, k, d)));
                 group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
@@ -296,7 +414,7 @@ where
                                 stride: stl,
                             },
                         };
-                        plan.run(&stream, Workspace::None, args)
+                        plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                             .expect("flash sdpa sm89 warmup run");
                     });
 
@@ -329,7 +447,7 @@ where
                                     stride: stl,
                                 },
                             };
-                            plan.run(&stream, Workspace::None, args)
+                            plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
                                 .expect("flash sdpa sm89 run");
                         })
                     });

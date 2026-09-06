@@ -87,6 +87,39 @@ inline cudaError_t set_dynamic_smem_serialized(const void* func, size_t bytes) {
         (int)bytes);
 }
 
+// -----------------------------------------------------------------------------
+// Does this device's opt-in dynamic-SMEM carveout hold `bytes`?
+//
+// ⚠️ The `d_k > kMaxD` gate below is DTYPE-BLIND, and the SMEM requirement is
+// not. MEASURED on sm_89 (RTX 4070, opt-in cap 101376 B) with Br=Bc=64:
+//
+//     d=64   f32   82432 B   fits
+//     d=128  f16   98816 B   fits, by 2560 B
+//     d=128  f32  147968 B   DOES NOT FIT
+//
+// so `kMaxD = 128` is right for f16/bf16 and wrong for f32. Without this check
+// the launcher asked `cudaFuncSetAttribute` for 144.5 KiB against a 99 KiB cap,
+// got `cudaError 1`, and surfaced it as the opaque status `1001` — from a plan
+// that `can_implement()` had already ACCEPTED. Returning `3` (unsupported)
+// instead lets the caller decline the shape rather than fail at launch.
+//
+// The cap is queried once per process and cached; it is a device property, and
+// every kernel here launches on the current device.
+inline bool dynamic_smem_fits(size_t bytes) {
+    static const int cap = [] {
+        int dev = 0;
+        if (cudaGetDevice(&dev) != cudaSuccess) return 0;
+        int v = 0;
+        if (cudaDeviceGetAttribute(
+                &v, cudaDevAttrMaxSharedMemoryPerBlockOptin, dev) != cudaSuccess) {
+            return 0;
+        }
+        return v;
+    }();
+    // A failed query yields 0, which declines rather than guessing a cap.
+    return cap > 0 && bytes <= (size_t)cap;
+}
+
 // =============================================================================
 // Tile geometry.
 //
@@ -507,6 +540,7 @@ __host__ inline int32_t launch_flash_sdpa_fp(
     // Opt into the full sm_80+ dynamic SMEM budget. Default carveout is
     // 48 KiB on most archs; this kernel can exceed that for f32/f64.
     if (smem > 48 * 1024) {
+        if (!dynamic_smem_fits(smem)) return 3;
         cudaError_t serr = set_dynamic_smem_serialized(
             (const void*)flash_sdpa_fw_kernel<T>, smem);
         if (serr != cudaSuccess) return 1000 + (int32_t)serr;
@@ -1086,6 +1120,7 @@ __host__ inline int32_t launch_flash_sdpa_backward_fp(
             dim3 block((unsigned)kThreadsPerBlock);
             size_t smem = flash_bw_dQ_smem_bytes<T>(d_k, d_v);
             if (smem > 48 * 1024) {
+                if (!dynamic_smem_fits(smem)) return 3;
                 cudaError_t serr = set_dynamic_smem_serialized(
                     (const void*)flash_sdpa_bw_dQ_kernel<T>, smem);
                 if (serr != cudaSuccess) return 1000 + (int32_t)serr;
@@ -1105,6 +1140,7 @@ __host__ inline int32_t launch_flash_sdpa_backward_fp(
             dim3 block((unsigned)kThreadsPerBlock);
             size_t smem = flash_bw_dKdV_smem_bytes<T>(d_k, d_v);
             if (smem > 48 * 1024) {
+                if (!dynamic_smem_fits(smem)) return 3;
                 cudaError_t serr = set_dynamic_smem_serialized(
                     (const void*)flash_sdpa_bw_dKdV_kernel<T>, smem);
                 if (serr != cudaSuccess) return 1000 + (int32_t)serr;
