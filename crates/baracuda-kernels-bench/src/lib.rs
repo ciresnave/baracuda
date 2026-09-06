@@ -174,6 +174,59 @@ pub fn gate_cell<'a>(
 // CUDA-event-timed measurement
 // ---------------------------------------------------------------------
 
+/// Time `iters` invocations of `launch`, running `restore` before each one
+/// and **excluding it from the measurement**.
+///
+/// ⚠️ For an op that consumes its input IN PLACE, the plain
+/// [`time_with_events`] loop measures the wrong thing, and not by a little:
+/// iteration 1 sees the real input and iterations `2..iters` see whatever the
+/// op left behind.
+///
+/// Every op in the Linalg family takes `a: TensorMut` and overwrites it
+/// (`cholesky`, `lu`, `qr`, `svd`, `eigh`, `inverse`, `solve`, `lstsq` — all
+/// eight). Cholesky is the sharpest case: after the first call the buffer holds
+/// `L`, which is not symmetric positive-definite, so cuSOLVER halts at the
+/// failing minor and returns early. The later iterations measure a FAILURE PATH,
+/// the mean comes out far below the true cost, and nothing errors — the `info`
+/// vector reports it and a timing loop never reads `info`.
+///
+/// So `restore` re-establishes the pristine input (a device-to-device copy from
+/// a pristine replica) and is fenced out of the timed region by a per-iteration
+/// event pair. That costs two event records per iteration, ~2 µs, against
+/// millisecond-scale factorizations.
+///
+/// Use [`time_with_events`] for ops that do not mutate their inputs — it uses a
+/// single event pair for the whole loop and has strictly less overhead.
+pub fn time_with_events_restored<S, F>(
+    ctx: &Context,
+    stream: &Stream,
+    iters: u64,
+    mut restore: S,
+    mut launch: F,
+) -> Duration
+where
+    S: FnMut(),
+    F: FnMut(),
+{
+    let start = Event::new(ctx).expect("Event::new(start)");
+    let end = Event::new(ctx).expect("Event::new(end)");
+    let mut total_ms = 0.0_f64;
+
+    for _ in 0..iters {
+        restore();
+        // Fence the restore out of the measurement: it is enqueued on the same
+        // stream, so recording `start` after it means the timed span begins when
+        // the restore has completed, not when it was submitted.
+        start.record(stream).expect("start.record");
+        launch();
+        end.record(stream).expect("end.record");
+        end.synchronize().expect("end.synchronize");
+        total_ms += f64::from(Event::elapsed_time_ms(&start, &end).expect("elapsed_time_ms"));
+    }
+
+    Duration::from_secs_f64(total_ms / 1000.0)
+}
+
 /// Time `iters` invocations of `launch` under a single CUDA event pair
 /// and return the **total** wall-clock duration (criterion divides by
 /// `iters` itself when computing per-iter cost).
@@ -434,6 +487,31 @@ pub fn measure_median_ns<F: FnMut()>(
     let mut measurements: Vec<f64> = Vec::with_capacity(samples);
     for _ in 0..samples {
         let dur = time_with_events(ctx, stream, inner, &mut launch);
+        let ns = dur.as_secs_f64() * 1e9 / inner as f64;
+        measurements.push(ns);
+    }
+    measurements.sort_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
+    measurements[measurements.len() / 2]
+}
+
+/// [`measure_median_ns`] for an op that consumes its input IN PLACE: `restore`
+/// runs before every launch and is excluded from the timing.
+///
+/// ⚠️ The CSV value this produces is what reaches `BENCHMARKS.md`, so an
+/// in-place op measured with the plain [`measure_median_ns`] publishes a wrong
+/// number rather than merely reporting one. See
+/// [`time_with_events_restored`] for why the error is large and silent.
+pub fn measure_median_ns_restored<S: FnMut(), F: FnMut()>(
+    ctx: &Context,
+    stream: &Stream,
+    samples: usize,
+    inner: u64,
+    mut restore: S,
+    mut launch: F,
+) -> f64 {
+    let mut measurements: Vec<f64> = Vec::with_capacity(samples);
+    for _ in 0..samples {
+        let dur = time_with_events_restored(ctx, stream, inner, &mut restore, &mut launch);
         let ns = dur.as_secs_f64() * 1e9 / inner as f64;
         measurements.push(ns);
     }
