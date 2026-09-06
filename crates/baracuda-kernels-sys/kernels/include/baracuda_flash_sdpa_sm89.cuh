@@ -25,7 +25,22 @@
 //      with `d_k = d_v = 128` blows past the 99 KiB per-block dynamic-
 //      smem cap (would need ~225 KiB). The async double-buffer adds
 //      ~16 KiB per dtype (one extra `sK_next` + `sV_next` tile) on top
-//      of the baseline 60 KiB, so total stays well under 99 KiB.
+//      of the baseline 60 KiB.
+//
+//      ⚠️ THAT BUDGET HOLDS AT d = 64 AND NOT AT d = 128, and an earlier
+//      version of this note said "so total stays well under 99 KiB"
+//      without the qualifier — twenty lines above a `kMaxD = 128` that
+//      declares d=128 supported. MEASURED on sm_89 (cap 101376 B):
+//
+//          f16/bf16 d=64    74496 B  (72.8 KiB)  fits
+//          f16/bf16 d=128  131840 B (128.8 KiB)  EXCEEDS
+//
+//      The double-buffer is why this path is tighter than the sm_80
+//      baseline at the same shape: `kNumStages = 2` doubles the K and V
+//      tiles, so f16 d=128 costs 131840 B here versus 98816 B there —
+//      same dtype, same head_dim, opposite verdicts, because the tile
+//      SCHEDULE differs. A bound over `d_k` alone cannot express that,
+//      which is why the launchers now check the requirement itself.
 //
 // What this trailblazer does *not* yet do (documented as follow-ups):
 //
@@ -58,8 +73,21 @@
 //   sAlpha      : float[Br]                    (per-row α scratch)
 //
 // f16/bf16 at d=128, Br=Bc=64, N=2 stages:
-//   sQ = 16K, 2·sK = 16K, 2·sV = 16K, sS = 16K, sO = 32K, sM+sL+sAlpha < 1K
-//   total ≈ 97 KiB — under the 99 KiB cap. Tight but it fits.
+//   sQ = 16K, 2·sK = 32K, 2·sV = 32K, sS = 16K, sO = 32K, sM+sL+sAlpha < 1K
+//   total = 131840 B = 128.8 KiB — ⚠️ OVER the 99 KiB (101376 B) cap.
+//   IT DOES NOT FIT, and `launch_flash_sdpa_sm89_fp` now declines this shape
+//   with status 3 rather than failing the carveout and returning an opaque 1001.
+//
+//   ⚠️ AN EARLIER VERSION OF THIS BLOCK READ "2·sK = 16K, 2·sV = 16K ... total
+//   ≈ 97 KiB — under the 99 KiB cap. Tight but it fits." It announced `N = 2
+//   stages` on the line above and then did not apply that factor to the two
+//   double-buffered tiles, halving both. The arithmetic error produced the
+//   REASSURING answer, next to a `kMaxD = 128` that permits the shape.
+//   MEASURED on sm_89: the launcher's own `flash_sm89_smem_bytes` returns
+//   131840 B for this cell, matching the corrected sum to the byte.
+//
+//   At d = 64 the same sum is 74496 B (72.8 KiB) and genuinely does fit; that
+//   is the case the original note was true of.
 //
 // Status codes match the family.
 
@@ -504,6 +532,17 @@ __host__ inline int32_t launch_flash_sdpa_sm89_fp(
     dim3 block((unsigned)kThreadsPerBlock);
     size_t smem = flash_sm89_smem_bytes<T>(d_k, d_v);
     if (smem > 48 * 1024) {
+        // The `d_k > kMaxD` gate above is DTYPE- AND SCHEDULE-BLIND; the SMEM
+        // requirement is neither. MEASURED on sm_89 (opt-in cap 101376 B):
+        //
+        //     f16/bf16 d=64    74496 B   fits
+        //     f16/bf16 d=128  131840 B   DOES NOT FIT
+        //
+        // so `kMaxD = 128` promises a shape this path cannot launch. Without
+        // this check the launcher asked for 128.8 KiB against a 99 KiB cap, got
+        // `cudaError 1`, and surfaced the opaque `1001` — from a plan
+        // `can_implement()` had already ACCEPTED. Decline typed instead.
+        if (!baracuda::flash_sdpa::dynamic_smem_fits(smem)) return 3;
         cudaError_t serr = baracuda::flash_sdpa::set_dynamic_smem_serialized(
             (const void*)flash_sdpa_sm89_fw_kernel<T>, smem);
         if (serr != cudaSuccess) return 1000 + (int32_t)serr;
@@ -827,6 +866,17 @@ __host__ inline int32_t launch_flash_sdpa_sm89_fp_strided(
     dim3 block((unsigned)kThreadsPerBlock);
     size_t smem = flash_sm89_smem_bytes<T>(d_k, d_v);
     if (smem > 48 * 1024) {
+        // The `d_k > kMaxD` gate above is DTYPE- AND SCHEDULE-BLIND; the SMEM
+        // requirement is neither. MEASURED on sm_89 (opt-in cap 101376 B):
+        //
+        //     f16/bf16 d=64    74496 B   fits
+        //     f16/bf16 d=128  131840 B   DOES NOT FIT
+        //
+        // so `kMaxD = 128` promises a shape this path cannot launch. Without
+        // this check the launcher asked for 128.8 KiB against a 99 KiB cap, got
+        // `cudaError 1`, and surfaced the opaque `1001` — from a plan
+        // `can_implement()` had already ACCEPTED. Decline typed instead.
+        if (!baracuda::flash_sdpa::dynamic_smem_fits(smem)) return 3;
         cudaError_t serr = baracuda::flash_sdpa::set_dynamic_smem_serialized(
             (const void*)flash_sdpa_sm89_fw_kernel_strided<T>, smem);
         if (serr != cudaSuccess) return 1000 + (int32_t)serr;
