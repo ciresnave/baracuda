@@ -298,6 +298,35 @@ BEGIN_MARKER = "<!-- BEGIN auto-generated phase29 rollup -->"
 END_MARKER = "<!-- END auto-generated phase29 rollup -->"
 
 
+# ---------------------------------------------------------------------
+# Drop guard.
+#
+# This script rewrites the WHOLE marked section from whatever CSVs it finds, so
+# an op whose bench did not run is DELETED from the table rather than left
+# stale -- and nothing in the output says so. A partial run does not produce a
+# partial table; it produces a COMPLETE-LOOKING table that is missing things.
+#
+# Not hypothetical: mmvq, mmvq_multim, flash_decoding and flash_decoding_gqa sat
+# missing from the published table for an unknown period after an earlier
+# partial regen, and a reader would have concluded baracuda does not benchmark
+# them. They were noticed only by diffing a fresh full regen against main by
+# hand -- a comparison nothing performs and nobody was asked to.
+#
+# The table has no EDGE: it renders as finished at every size. This makes the
+# tool answer "did this regen lose a family?" itself, and REFUSE rather than
+# warn -- a warning on a 450-row rollup is one line of scrollback.
+# ---------------------------------------------------------------------
+
+FAMILY_HEADING = re.compile(r"^### `([^`]+)`", re.M)
+
+
+def families_in(text: str) -> set:
+    """Op families named by the ``### `name` `` headings of a rollup section."""
+    if BEGIN_MARKER in text and END_MARKER in text:
+        text = text.split(BEGIN_MARKER, 1)[1].split(END_MARKER, 1)[0]
+    return set(FAMILY_HEADING.findall(text))
+
+
 def splice_into(md_path: pathlib.Path, new_section: str) -> bool:
     """Replace content between markers in `md_path`. Returns True if file changed."""
     text = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
@@ -336,6 +365,16 @@ def main() -> int:
         default="crates/baracuda-kernels-bench/BENCHMARKS.md",
         help="BENCHMARKS.md path to splice into.",
     )
+    p.add_argument(
+        "--allow-drop",
+        action="store_true",
+        help=(
+            "Permit this regen to REMOVE op families that the current "
+            "BENCHMARKS.md has. Without it the script refuses, because a "
+            "partial bench run silently deletes rows rather than leaving them "
+            "stale. Pass it only when an op was deliberately retired."
+        ),
+    )
     args = p.parse_args()
 
     csv_dir = pathlib.Path(args.csv_dir)
@@ -350,6 +389,35 @@ def main() -> int:
 
     section = emit_markdown(cells)
     md_path = pathlib.Path(args.md_path)
+
+    # Refuse to silently drop families. See the drop-guard note above.
+    existing = families_in(md_path.read_text(encoding="utf-8")) if md_path.exists() else set()
+    dropped = sorted(existing - families_in(section))
+    if dropped and not args.allow_drop:
+        plural = "y" if len(dropped) == 1 else "ies"
+        print(
+            f"ERROR: this regen would REMOVE {len(dropped)} op famil{plural} "
+            f"from {md_path}:",
+            file=sys.stderr,
+        )
+        for fam in dropped:
+            print(f"  - {fam}", file=sys.stderr)
+        print(
+            "",
+            file=sys.stderr,
+        )
+        print(
+            "That is what a PARTIAL bench run looks like: the table is rewritten "
+            "from whatever CSVs exist, so an op whose bench did not run is "
+            "DELETED rather than left stale, and the result still looks "
+            "complete. Run the full suite (the benches calling append_csv_row), "
+            "or pass --allow-drop if these ops were deliberately retired.",
+            file=sys.stderr,
+        )
+        return 3
+    if dropped:
+        print(f"WARNING: --allow-drop given; removing {len(dropped)}: {', '.join(dropped)}")
+
     changed = splice_into(md_path, section)
     summary = f"{len(cells)} cells, {len({op for (op, _, _) in cells})} op families"
     if changed:
