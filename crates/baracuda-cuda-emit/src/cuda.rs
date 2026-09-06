@@ -17,7 +17,7 @@ use unpopped::cfamily::{
 };
 use unpopped::ir::{
     Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
-    is_admissible_int_reduction_operand, is_bit_move_reduce, is_bit_or_sign_move,
+    is_admissible_int_reduction_operand, is_bit_move_fold_output, is_bit_or_sign_move,
 };
 use unpopped::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use unpopped_vocab::structure_key::LayoutOrder;
@@ -2489,10 +2489,8 @@ fn emit_reduction(
     //     (`Neg(Reduced(0))`) is NOT routed either. That is the same third case
     //     as RowReduce's select-epilogue, and it is left unrouted deliberately
     //     rather than mis-routed.
-    let post_moves_nothing = matches!(post, ScalarExpr::Reduced(0));
-    let bit_move = narrow_bit_casts(plan.dtype).is_some()
-        && post_moves_nothing
-        && is_bit_move_reduce(rop, plan.body);
+    let bit_move =
+        narrow_bit_casts(plan.dtype).is_some() && is_bit_move_fold_output(rop, plan.body, post);
     let acc = if bit_move {
         ctype
     } else if int_acc {
@@ -2644,25 +2642,41 @@ fn emit_reduction(
                     }))
                 },
                 &|op, x| {
-                    Ok(Spelling::Spelled(if dbl {
-                        unary_f64(op, x)
+                    // ⚠️ On the bit-move path `x` is a RAW STORAGE WORD, and the native
+                    // narrow operators DESTROY a NaN payload — MEASURED on sm_89:
+                    // `-bf16(0x7F81)` = 0x7FFF and `__habs` the same, both dtypes. So a
+                    // sign edit inside a moved element or epilogue has to take the
+                    // raw-bit speller, exactly as the elementwise surface does.
+                    // Off the bit-move path `x` is already promoted, so the float
+                    // spellers stay and the emission is byte-identical.
+                    if bit_move {
+                        cuda_unary(op, x, plan.dtype, true)
+                    } else if dbl {
+                        Ok(Spelling::Spelled(unary_f64(op, x)))
                     } else {
-                        unary_f32(op, x)
-                    }))
+                        Ok(Spelling::Spelled(unary_f32(op, x)))
+                    }
                 },
                 &|op, a, b| {
-                    Ok(Spelling::Spelled(if dbl {
-                        binary_f64(op, a, b)
+                    if bit_move {
+                        cuda_binary(op, a, b, plan.dtype, true)
+                    } else if dbl {
+                        Ok(Spelling::Spelled(binary_f64(op, a, b)))
                     } else {
-                        binary_f32(op, a, b)
-                    }))
+                        Ok(Spelling::Spelled(binary_f32(op, a, b)))
+                    }
                 },
                 &|c, a, b| {
-                    Ok(Spelling::Spelled(if dbl {
-                        select_f64(c, a, b)
+                    // `cuda_select` is already the §6.16-0009-correct form (cond
+                    // promoted, arms moved as raw bits), so it is only valid where the
+                    // arms ARE storage words.
+                    if bit_move {
+                        cuda_select(c, a, b, plan.dtype)
+                    } else if dbl {
+                        Ok(Spelling::Spelled(select_f64(c, a, b)))
                     } else {
-                        select_f32(c, a, b)
-                    }))
+                        Ok(Spelling::Spelled(select_f32(c, a, b)))
+                    }
                 },
             ),
         )?
@@ -2770,25 +2784,41 @@ fn emit_reduction(
                         }))
                     },
                     &|op, x| {
-                        Ok(Spelling::Spelled(if dbl {
-                            unary_f64(op, x)
+                        // ⚠️ On the bit-move path `x` is a RAW STORAGE WORD, and the native
+                        // narrow operators DESTROY a NaN payload — MEASURED on sm_89:
+                        // `-bf16(0x7F81)` = 0x7FFF and `__habs` the same, both dtypes. So a
+                        // sign edit inside a moved element or epilogue has to take the
+                        // raw-bit speller, exactly as the elementwise surface does.
+                        // Off the bit-move path `x` is already promoted, so the float
+                        // spellers stay and the emission is byte-identical.
+                        if bit_move {
+                            cuda_unary(op, x, plan.dtype, true)
+                        } else if dbl {
+                            Ok(Spelling::Spelled(unary_f64(op, x)))
                         } else {
-                            unary_f32(op, x)
-                        }))
+                            Ok(Spelling::Spelled(unary_f32(op, x)))
+                        }
                     },
                     &|op, a, b| {
-                        Ok(Spelling::Spelled(if dbl {
-                            binary_f64(op, a, b)
+                        if bit_move {
+                            cuda_binary(op, a, b, plan.dtype, true)
+                        } else if dbl {
+                            Ok(Spelling::Spelled(binary_f64(op, a, b)))
                         } else {
-                            binary_f32(op, a, b)
-                        }))
+                            Ok(Spelling::Spelled(binary_f32(op, a, b)))
+                        }
                     },
                     &|c, a, b| {
-                        Ok(Spelling::Spelled(if dbl {
-                            select_f64(c, a, b)
+                        // `cuda_select` is already the §6.16-0009-correct form (cond
+                        // promoted, arms moved as raw bits), so it is only valid where the
+                        // arms ARE storage words.
+                        if bit_move {
+                            cuda_select(c, a, b, plan.dtype)
+                        } else if dbl {
+                            Ok(Spelling::Spelled(select_f64(c, a, b)))
                         } else {
-                            select_f32(c, a, b)
-                        }))
+                            Ok(Spelling::Spelled(select_f32(c, a, b)))
+                        }
                     },
                 ),
             )?
@@ -4883,9 +4913,8 @@ fn emit_scan_impl(
     // and the epilogue in `post` (identity `Reduced(0)`). Verified against the
     // variant's own field docs, not assumed from `Access::Reduction`, whose
     // element expression lives in `plan.body` instead.
-    let bit_move = narrow_bit_casts(plan.dtype).is_some()
-        && matches!(post, ScalarExpr::Reduced(0))
-        && is_bit_move_reduce(sop, pre);
+    let bit_move =
+        narrow_bit_casts(plan.dtype).is_some() && is_bit_move_fold_output(sop, pre, post);
     // Base: float/double for FP, the native ctype (wrapping) for integers. Variant:
     // FP-only (asserted), so float/double. A bit-move scan keeps the STORAGE type
     // end to end, exactly as the integer path already does.
@@ -4979,25 +5008,41 @@ fn emit_scan_impl(
                 }))
             },
             &|op, x| {
-                Ok(Spelling::Spelled(if dbl {
-                    unary_f64(op, x)
+                // ⚠️ On the bit-move path `x` is a RAW STORAGE WORD, and the native
+                // narrow operators DESTROY a NaN payload — MEASURED on sm_89:
+                // `-bf16(0x7F81)` = 0x7FFF and `__habs` the same, both dtypes. So a
+                // sign edit inside a moved element or epilogue has to take the
+                // raw-bit speller, exactly as the elementwise surface does.
+                // Off the bit-move path `x` is already promoted, so the float
+                // spellers stay and the emission is byte-identical.
+                if bit_move {
+                    cuda_unary(op, x, plan.dtype, true)
+                } else if dbl {
+                    Ok(Spelling::Spelled(unary_f64(op, x)))
                 } else {
-                    unary_f32(op, x)
-                }))
+                    Ok(Spelling::Spelled(unary_f32(op, x)))
+                }
             },
             &|op, a, b| {
-                Ok(Spelling::Spelled(if dbl {
-                    binary_f64(op, a, b)
+                if bit_move {
+                    cuda_binary(op, a, b, plan.dtype, true)
+                } else if dbl {
+                    Ok(Spelling::Spelled(binary_f64(op, a, b)))
                 } else {
-                    binary_f32(op, a, b)
-                }))
+                    Ok(Spelling::Spelled(binary_f32(op, a, b)))
+                }
             },
             &|c, a, b| {
-                Ok(Spelling::Spelled(if dbl {
-                    select_f64(c, a, b)
+                // `cuda_select` is already the §6.16-0009-correct form (cond
+                // promoted, arms moved as raw bits), so it is only valid where the
+                // arms ARE storage words.
+                if bit_move {
+                    cuda_select(c, a, b, plan.dtype)
+                } else if dbl {
+                    Ok(Spelling::Spelled(select_f64(c, a, b)))
                 } else {
-                    select_f32(c, a, b)
-                }))
+                    Ok(Spelling::Spelled(select_f32(c, a, b)))
+                }
             },
         ),
     )?
@@ -5033,25 +5078,41 @@ fn emit_scan_impl(
                 }))
             },
             &|op, x| {
-                Ok(Spelling::Spelled(if dbl {
-                    unary_f64(op, x)
+                // ⚠️ On the bit-move path `x` is a RAW STORAGE WORD, and the native
+                // narrow operators DESTROY a NaN payload — MEASURED on sm_89:
+                // `-bf16(0x7F81)` = 0x7FFF and `__habs` the same, both dtypes. So a
+                // sign edit inside a moved element or epilogue has to take the
+                // raw-bit speller, exactly as the elementwise surface does.
+                // Off the bit-move path `x` is already promoted, so the float
+                // spellers stay and the emission is byte-identical.
+                if bit_move {
+                    cuda_unary(op, x, plan.dtype, true)
+                } else if dbl {
+                    Ok(Spelling::Spelled(unary_f64(op, x)))
                 } else {
-                    unary_f32(op, x)
-                }))
+                    Ok(Spelling::Spelled(unary_f32(op, x)))
+                }
             },
             &|op, a, b| {
-                Ok(Spelling::Spelled(if dbl {
-                    binary_f64(op, a, b)
+                if bit_move {
+                    cuda_binary(op, a, b, plan.dtype, true)
+                } else if dbl {
+                    Ok(Spelling::Spelled(binary_f64(op, a, b)))
                 } else {
-                    binary_f32(op, a, b)
-                }))
+                    Ok(Spelling::Spelled(binary_f32(op, a, b)))
+                }
             },
             &|c, a, b| {
-                Ok(Spelling::Spelled(if dbl {
-                    select_f64(c, a, b)
+                // `cuda_select` is already the §6.16-0009-correct form (cond
+                // promoted, arms moved as raw bits), so it is only valid where the
+                // arms ARE storage words.
+                if bit_move {
+                    cuda_select(c, a, b, plan.dtype)
+                } else if dbl {
+                    Ok(Spelling::Spelled(select_f64(c, a, b)))
                 } else {
-                    select_f32(c, a, b)
-                }))
+                    Ok(Spelling::Spelled(select_f32(c, a, b)))
+                }
             },
         ),
     )?
@@ -5520,9 +5581,8 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
     // Gate is the same three clauses as `emit_reduction` / `emit_scan_impl`, for
     // the same reasons — the OP must be Max/Min, the per-element `pre` must be a
     // move, and the `post` epilogue must be the identity.
-    let bit_move = narrow_bit_casts(plan.dtype).is_some()
-        && matches!(post, ScalarExpr::Reduced(0))
-        && is_bit_move_reduce(wop, pre);
+    let bit_move =
+        narrow_bit_casts(plan.dtype).is_some() && is_bit_move_fold_output(wop, pre, post);
     // Accumulator: double for f64/f32-strict, native ctype for integers (wrapping
     // sum-pool / exact max-pool), the STORAGE type for a narrow bit-move pool,
     // float otherwise (incl. f16/bf16 up-convert).
@@ -5604,25 +5664,41 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
                 }))
             },
             &|op, x| {
-                Ok(Spelling::Spelled(if dbl {
-                    unary_f64(op, x)
+                // ⚠️ On the bit-move path `x` is a RAW STORAGE WORD, and the native
+                // narrow operators DESTROY a NaN payload — MEASURED on sm_89:
+                // `-bf16(0x7F81)` = 0x7FFF and `__habs` the same, both dtypes. So a
+                // sign edit inside a moved element or epilogue has to take the
+                // raw-bit speller, exactly as the elementwise surface does.
+                // Off the bit-move path `x` is already promoted, so the float
+                // spellers stay and the emission is byte-identical.
+                if bit_move {
+                    cuda_unary(op, x, plan.dtype, true)
+                } else if dbl {
+                    Ok(Spelling::Spelled(unary_f64(op, x)))
                 } else {
-                    unary_f32(op, x)
-                }))
+                    Ok(Spelling::Spelled(unary_f32(op, x)))
+                }
             },
             &|op, a, b| {
-                Ok(Spelling::Spelled(if dbl {
-                    binary_f64(op, a, b)
+                if bit_move {
+                    cuda_binary(op, a, b, plan.dtype, true)
+                } else if dbl {
+                    Ok(Spelling::Spelled(binary_f64(op, a, b)))
                 } else {
-                    binary_f32(op, a, b)
-                }))
+                    Ok(Spelling::Spelled(binary_f32(op, a, b)))
+                }
             },
             &|c, a, b| {
-                Ok(Spelling::Spelled(if dbl {
-                    select_f64(c, a, b)
+                // `cuda_select` is already the §6.16-0009-correct form (cond
+                // promoted, arms moved as raw bits), so it is only valid where the
+                // arms ARE storage words.
+                if bit_move {
+                    cuda_select(c, a, b, plan.dtype)
+                } else if dbl {
+                    Ok(Spelling::Spelled(select_f64(c, a, b)))
                 } else {
-                    select_f32(c, a, b)
-                }))
+                    Ok(Spelling::Spelled(select_f32(c, a, b)))
+                }
             },
         ),
     )?
@@ -5657,25 +5733,41 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKernel, Lo
                 }))
             },
             &|op, x| {
-                Ok(Spelling::Spelled(if dbl {
-                    unary_f64(op, x)
+                // ⚠️ On the bit-move path `x` is a RAW STORAGE WORD, and the native
+                // narrow operators DESTROY a NaN payload — MEASURED on sm_89:
+                // `-bf16(0x7F81)` = 0x7FFF and `__habs` the same, both dtypes. So a
+                // sign edit inside a moved element or epilogue has to take the
+                // raw-bit speller, exactly as the elementwise surface does.
+                // Off the bit-move path `x` is already promoted, so the float
+                // spellers stay and the emission is byte-identical.
+                if bit_move {
+                    cuda_unary(op, x, plan.dtype, true)
+                } else if dbl {
+                    Ok(Spelling::Spelled(unary_f64(op, x)))
                 } else {
-                    unary_f32(op, x)
-                }))
+                    Ok(Spelling::Spelled(unary_f32(op, x)))
+                }
             },
             &|op, a, b| {
-                Ok(Spelling::Spelled(if dbl {
-                    binary_f64(op, a, b)
+                if bit_move {
+                    cuda_binary(op, a, b, plan.dtype, true)
+                } else if dbl {
+                    Ok(Spelling::Spelled(binary_f64(op, a, b)))
                 } else {
-                    binary_f32(op, a, b)
-                }))
+                    Ok(Spelling::Spelled(binary_f32(op, a, b)))
+                }
             },
             &|c, a, b| {
-                Ok(Spelling::Spelled(if dbl {
-                    select_f64(c, a, b)
+                // `cuda_select` is already the §6.16-0009-correct form (cond
+                // promoted, arms moved as raw bits), so it is only valid where the
+                // arms ARE storage words.
+                if bit_move {
+                    cuda_select(c, a, b, plan.dtype)
+                } else if dbl {
+                    Ok(Spelling::Spelled(select_f64(c, a, b)))
                 } else {
-                    select_f32(c, a, b)
-                }))
+                    Ok(Spelling::Spelled(select_f32(c, a, b)))
+                }
             },
         ),
     )?
@@ -8610,6 +8702,145 @@ mod tests {
         for v in generate_variants(&sc, &key, &Cuda) {
             let path = std::path::Path::new(&dir).join(format!("cummax_bf16_{}.cu", v.tag));
             std::fs::write(path, &v.kernels[0].source).unwrap();
+        }
+    }
+
+    /// Dumps the two "move is not the bare fold" kernels for the on-device
+    /// differential: a sign edit INSIDE the element, and an epilogue that is
+    /// itself a move.
+    #[test]
+    #[ignore = "writes the nested-move emissions for the on-device validator"]
+    fn dump_bf16_nested_moves() {
+        use unpopped::ir::{ReduceOp, UnaryOp, input, reduced};
+        let dir = std::env::var("BARACUDA_DUMP_DIR").expect("BARACUDA_DUMP_DIR");
+        let dt = ElementKind::Bf16;
+        let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], dt, 256);
+        let o = OperandDesc::new(1, &[128], &[1], dt, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let abs_elem = OpDef::reduction(
+            "maxabs",
+            1,
+            &[dt],
+            input(0).unary(UnaryOp::Abs),
+            ReduceOp::Max,
+        );
+        let neg_post = OpDef::reduction_post(
+            "negmax",
+            1,
+            &[dt],
+            input(0),
+            ReduceOp::Max,
+            reduced(0).unary(UnaryOp::Neg),
+        );
+        for (name, op) in [("maxabs", &abs_elem), ("negmax", &neg_post)] {
+            let src = generate(op, &key, &Cuda).source;
+            std::fs::write(
+                std::path::Path::new(&dir).join(format!("{name}_bf16.cu")),
+                src,
+            )
+            .unwrap();
+        }
+    }
+
+    /// §6.16-0009 where the MOVE IS NOT THE BARE FOLD — a sign edit inside the
+    /// moved element, or an epilogue that is itself a move.
+    ///
+    /// ⚠️ Routing the accumulator narrow is NOT sufficient on its own. The gate
+    /// decides that -0009 applies; it does not choose the SPELLING, and the
+    /// NATIVE narrow operators destroy the payload the gate exists to preserve.
+    /// MEASURED on sm_89:
+    ///
+    ///     -bf16(0x7F81)      = 0x7FFF     (want 0xFF81)
+    ///     __habs(bf16 0x7F81) = 0x7FFF    (want 0x7F81)
+    ///     -f16(0x7C01)       = 0x7FFF     (want 0xFC01)
+    ///
+    /// So `max(neg(x))` routed narrow but spelled `(-in0[idx])` is a kernel that
+    /// passes every accumulator-shaped assertion and still canonicalizes. These
+    /// assertions are on the SPELLING for that reason.
+    #[test]
+    fn narrow_moves_inside_element_and_epilogue_use_raw_bit_spellings() {
+        use unpopped::ir::{ReduceOp, UnaryOp, input, reduced};
+        for (dt, to_bits, from_bits, promote) in [
+            (
+                ElementKind::Bf16,
+                "__bfloat16_as_ushort",
+                "__ushort_as_bfloat16",
+                "__bfloat162float",
+            ),
+            (
+                ElementKind::F16,
+                "__half_as_ushort",
+                "__ushort_as_half",
+                "__half2float",
+            ),
+        ] {
+            let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], dt, 256);
+            let o = OperandDesc::new(1, &[128], &[1], dt, 256);
+            let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+
+            // ELEMENT-side: a sign edit under the fold. `reduce_max(abs(x))` is a
+            // real op — it is how a quantization scale is computed.
+            for (uop, sym, mask) in [
+                (UnaryOp::Neg, "^", "0x8000u"),
+                (UnaryOp::Abs, "&", "0x7fffu"),
+            ] {
+                let op = OpDef::reduction("r", 1, &[dt], input(0).unary(uop), ReduceOp::Max);
+                let s = generate(&op, &key, &Cuda).source;
+                let want =
+                    format!("{from_bits}((unsigned short)({to_bits}(in0[idx]) {sym} {mask}))");
+                assert!(
+                    s.contains(&want),
+                    "§6.16-0009: {dt:?} max over {uop:?}(x) must spell the sign edit                      as a RAW-BIT op — the native narrow operator canonicalizes                      (measured). want:
+  {want}
+got:
+{s}"
+                );
+                assert!(
+                    !s.contains("fabsf(") && !s.contains("(-in0["),
+                    "§6.16-0009: {dt:?} {uop:?} element must not use a float                      operator on a storage word:
+{s}"
+                );
+            }
+
+            // EPILOGUE-side: a post that is ITSELF a move. Reachable only via
+            // `is_bit_move_fold_output`, whose whole purpose is this case.
+            let op = OpDef::reduction_post(
+                "r",
+                1,
+                &[dt],
+                input(0),
+                ReduceOp::Max,
+                reduced(0).unary(UnaryOp::Neg),
+            );
+            let s = generate(&op, &key, &Cuda).source;
+            assert!(
+                s.contains(&format!("{from_bits}((unsigned short)({to_bits}(red0) ^ 0x8000u))")),
+                "§6.16-0009: {dt:?} max under a MOVE epilogue must route AND spell                  the epilogue's sign edit raw-bit:
+{s}"
+            );
+            assert!(
+                !s.contains(&format!("{promote}(in0[")),
+                "§6.16-0009: {dt:?} max under a move epilogue must still load raw:
+{s}"
+            );
+
+            // PAIRED NEGATIVES — the two ways the output stops being a move. Both
+            // must keep the widened accumulator and the round trip (§6.16-0010).
+            let arith_elem = OpDef::reduction("r", 1, &[dt], input(0).sqrt(), ReduceOp::Max);
+            assert!(
+                generate(&arith_elem, &key, &Cuda)
+                    .source
+                    .contains("float acc ="),
+                "§6.16-0010: {dt:?} max over an ARITHMETIC element must keep the                  widened accumulator"
+            );
+            let arith_post =
+                OpDef::reduction_post("r", 1, &[dt], input(0), ReduceOp::Max, reduced(0).sqrt());
+            assert!(
+                generate(&arith_post, &key, &Cuda)
+                    .source
+                    .contains("float acc ="),
+                "§6.16-0010: {dt:?} max under an ARITHMETIC epilogue must keep the                  widened accumulator"
+            );
         }
     }
 
