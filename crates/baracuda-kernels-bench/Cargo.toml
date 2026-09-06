@@ -11,6 +11,18 @@ keywords = ["cuda", "gpu", "ml", "benchmark", "tflops"]
 categories = ["api-bindings", "science"]
 publish = false
 
+# The lib carries NO `#[bench]` fns (0 in src/), only `#[test]`s. Cargo still
+# builds and RUNS it as a bench target by default, under libtest — which rejects
+# criterion's flags, so the documented `cargo bench … -- --quick` invocation died
+# on `error: Unrecognized option: 'quick'` before a single benchmark executed.
+# `--benches` does not help: it selects every target with `bench = true`, and the
+# lib's default is true.
+#
+# `bench = false` opts the lib out of the bench harness only. `test = true` is
+# untouched, so the 11 lib tests still run under `cargo test`.
+[lib]
+bench = false
+
 [features]
 # Arch features forwarded to baracuda-kernels. `sm89` enables the FP8
 # GEMM benches; without it the FP8 bench-group is skipped at runtime.

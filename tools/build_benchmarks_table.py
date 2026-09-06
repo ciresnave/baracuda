@@ -9,6 +9,33 @@ Usage:
     cargo bench -p baracuda-kernels-bench --features sm89,cudnn -- --quick
     python tools/build_benchmarks_table.py [--in DIR] [--out FILE]
 
+⚠️ The `cargo bench` line above is the WHOLE-SUITE form and it needs two things
+that are easy to miss; both were hit regenerating this file on 2026-09-05:
+
+  * cuDNN's DLLs must be on PATH or every cuDNN-linked bench dies at startup with
+    `exit code: 0xc0000135, STATUS_DLL_NOT_FOUND` — a loader failure, so there is
+    no Rust panic and no hint which library is missing. On this box:
+    `C:/Program Files/NVIDIA/CUDNN/v9.23/bin/13.3/x64` (pick the subdir matching
+    the CUDA toolkit, not the other one sitting beside it).
+
+  * `--bench flash_attention` panics on main (`CutlassInternal(1001)` at its
+    warmup, flash_attention.rs:124) and `cargo bench` ABORTS THE WHOLE RUN on the
+    first failing target — so the suite stops partway and the rollup silently
+    describes whatever ran before the abort. It emits no CSV rows, so skipping it
+    costs the table nothing.
+
+⚠️ A PARTIAL RUN IS THE REAL HAZARD HERE, because this script rewrites the whole
+marked section from whatever CSVs it finds: ops whose benches did not run are
+DROPPED from the table rather than left stale, and nothing in the output says so.
+That is how `mmvq`, `mmvq_multim`, `flash_decoding` and `flash_decoding_gqa` went
+missing from a previous regen. `append_csv_row` also APPENDS, so a re-run over a
+non-empty phase29 dir DUPLICATES rows.
+
+So: clear `target/criterion/phase29/*.csv` first, run the 19 CSV-emitting benches
+(the ones calling `append_csv_row`; the other 5 contribute nothing), and check the
+count is 19 before rolling up. Declaring that number first is what makes a short
+count a finding instead of a table you trust.
+
 The script does NOT run benches. It only reads CSVs that previous
 `cargo bench` runs produced. Default input dir:
 `crates/baracuda-kernels-bench/target/criterion/phase29/`.
