@@ -9206,6 +9206,83 @@ got:
         );
     }
 
+    /// ⚠️ A KNOWN NON-CONFORMANCE, PINNED SO IT CANNOT BE FORGOTTEN. This test
+    /// asserts the emitter's CURRENT behaviour, and that behaviour is WRONG.
+    ///
+    /// §6.16-0011 says to trace the whole path "the fold itself included: if
+    /// every transformation on the path is a move ... §6.16-0009 governs the
+    /// whole op and the output's bits are preserved exactly". A `RowReduce`
+    /// whose stages AND epilogue are all moves is such an op.
+    ///
+    /// `emit_row_reduce_impl` chooses `let acc = if dbl { "double" } else
+    /// { "float" }` UNCONDITIONALLY — there is no bit-move path in the
+    /// RowReduce emitter at all. So it promotes, and an sNaN payload the
+    /// clause says must survive is quieted.
+    ///
+    /// ⚠️ LIVE BY CONSTRUCTION, NOT LATENT. Unpopped measured that the IR
+    /// expresses this shape and `build_plan` ACCEPTS it (their `1875434d`,
+    /// with an arithmetic-epilogue control in the same test so "it planned"
+    /// carries information). The honest boundary they drew, which I keep: they
+    /// measured EXPRESSIBILITY, not that any recipe emits one today. Every
+    /// RowReduce baracuda builds is softmax/rmsnorm, whose epilogues are
+    /// arithmetic — so nothing currently REQUESTS it.
+    ///
+    /// The fix needs `is_bit_move_row_reduce_output(stages, epilogue)`, which
+    /// Unpopped shipped on their `main` and which is NOT in the 0.8.7 this
+    /// crate is pinned to. Gating on a predicate I cannot call is the reason
+    /// this is a pin and not a fix.
+    ///
+    /// WHEN THAT PREDICATE IS PUBLISHED AND THE GATE IS WIRED, THIS TEST GOES
+    /// RED. That is intended: invert it to assert the storage-typed
+    /// accumulator, and delete this note.
+    #[test]
+    fn rowreduce_all_move_is_promoted_today_which_violates_6_16_0009() {
+        use unpopped::ir::{ReduceOp, ReduceStage, UnaryOp, reduced};
+        for dt in [ElementKind::Bf16, ElementKind::F16] {
+            // Max fold, pure-move (sign-edit) epilogue: every transformation on
+            // the path from input to output is a move.
+            let all_move = OpDef::row_reduce(
+                "all_move",
+                1,
+                &[dt],
+                vec![ReduceStage {
+                    pre: input(0).0,
+                    op: ReduceOp::Max,
+                }],
+                reduced(0).unary(UnaryOp::Neg),
+            );
+            let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], dt, 256);
+            let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
+            let src = generate(&all_move, &key, &Cuda).source;
+
+            // HARNESS CONTROL first, derived independently of the accumulator:
+            // if the plan did not lower to a row-reduce at all, the assertion
+            // below would be reporting on the wrong kernel.
+            assert!(
+                src.contains("for (") && !src.is_empty(),
+                "harness: {dt:?} all-move row-reduce produced no kernel body:
+{src}"
+            );
+
+            // ⚠️ ANCHOR ON THE MECHANISM, NOT A VARIABLE NAME. The first
+            // spelling of this assertion looked for `float acc =` and FAILED —
+            // the row-reduce accumulator is per-stage and named `acc0`, so the
+            // string never appears. It failed loudly here, but the identical
+            // mistake in the negative direction would have PASSED VACUOUSLY.
+            // The promoting LOAD is the defect and it cannot be renamed away.
+            let promote = if matches!(dt, ElementKind::Bf16) {
+                "__bfloat162float(in0["
+            } else {
+                "__half2float(in0["
+            };
+            assert!(
+                src.contains(promote),
+                "PIN: {dt:?} all-move RowReduce is expected to PROMOTE its load                  today, destroying the payload §6.16-0009 preserves. If this                  failed, the bit-move path has been wired — invert this test to                  require a raw load and delete its note.
+{src}"
+            );
+        }
+    }
+
     #[test]
     fn precision_first_rowreduce_declines_f16_and_max_only() {
         use unpopped::generate_variants;
