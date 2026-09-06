@@ -1418,18 +1418,26 @@ not here. Full plan + the remaining work:
 
 **Scope (remaining):**
 
-- Extend the criterion + CUDA-event harness from ~58 ops to the full
-  op matrix (`OP-MATRIX.md` — 167 Plan rows across 21 categories),
-  ordered by value (Loss, Linalg, Quantization, Sort, Segment, Image,
-  FFT, Indexing, then backward passes). Needs a PyTorch env on the
-  target GPU box to regenerate refs.
+- Extend the criterion + CUDA-event harness to the full op matrix
+  (`OP-MATRIX.md`, 21 categories), ordered by value (Loss, Linalg,
+  Quantization, Sort, Segment, Image, FFT, Indexing, then backward
+  passes). Needs a PyTorch env on the target GPU box to regenerate
+  refs. **Loss done** (2026-09-05: 4 ops × f32/f16/bf16). Next tranche
+  is **Linalg**. Re-derive the covered/total counts before citing them
+  — `grep -c '^### `' crates/baracuda-kernels-bench/BENCHMARKS.md` for
+  the numerator; this line no longer carries them because the ones it
+  used to carry ("~58 ops", "167 Plan rows") went stale silently.
 - Harden the frozen-ref contract: per-baseline provenance (device +
   git SHA) and a stated regeneration trigger with scheduled drift
   detection (`pytorch-baseline-liveness.yml`). **Done** — see the plan.
 - Add a per-cell liveness assertion (finite / shape / dtype) — a
-  liveness check, not a numerical reference.
+  liveness check, not a numerical reference. **Done** — `assert_cell_live`
+  in `baracuda-kernels-bench`, live in 11 benches (#56, rolled out #58).
 - Auto-generate the `BENCHMARKS.md` rollup from the per-bench CSVs via
-  `tools/build_benchmarks_table.py` (today a hand-maintained step).
+  `tools/build_benchmarks_table.py`. **Done** — the script is tracked and
+  generates the whole marked section; it also refuses a regen that would
+  drop op families (#79), a guard whose own limit is recorded in its
+  comment (#84).
 
 **Why pre-1.0:** 1.0 needs a credible perf story. "Faster than X /
 within Y of Z" claims belong in the release announcement, and the
