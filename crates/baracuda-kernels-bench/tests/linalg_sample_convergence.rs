@@ -37,13 +37,52 @@
 //!  4   666 us      1.21        2.34          1.213   <- criterion ABOVE
 //! ```
 //!
-//! **Measured environment,** since the dispersion is a property of the box and
-//! not of cuSOLVER: no other compute process on the GPU, and `nvidia-smi`
-//! reporting `SW Thermal Slowdown: Active`, `SW Power Cap: Active`, SM clock
-//! **1605 MHz against a 3105 MHz maximum**. ⚠️ **The clock range is 1.93x and
-//! the timing spread is 2.87-5.55x, so throttling is a CONTRIBUTOR and not a
-//! full explanation. The remainder is unidentified and I am not guessing at
-//! it.**
+//! ## ⚠️ EVERY FIGURE HERE WAS MEASURED ON A LOADED MACHINE
+//!
+//! **This box runs ~17 other agent processes at 77-100% CPU. An unloaded
+//! baseline is NOT OBTAINABLE on it**, so "measured on the 4070" names a
+//! machine, not a machine at rest, and every number below carries that.
+//!
+//! **What was checked, and what each check actually licensed:**
+//!
+//! ```text
+//! nvidia-smi --query-compute-apps   answers "what else is ON THE GPU"
+//!                                   NOT "nothing else is competing"
+//! no cargo/rustc processes          answers "are MY builds running"
+//!                                   NOT "the machine is quiet"
+//! ```
+//!
+//! ⚠️ Both were read as the broader claim. The GPU check is why the note below
+//! once said the remainder was unidentified with no candidate named; the
+//! process check is why "idle" looked reachable when it was not.
+//!
+//! **Persistent GPU state, measured at 0% utilization and 57 C:** `SW Thermal
+//! Slowdown: Active`, `SW Power Cap: Active`, SM clock **1605 MHz against a
+//! 3105 MHz maximum**. That throttle is present while idle and cool — it is
+//! not a response to this workload.
+//!
+//! **The host-contention candidate was tested and ELIMINATED.** Same test,
+//! three runs, with this session's own cargo builds fully drained:
+//!
+//! ```text
+//! bg CPU   median      p90/median   max/min
+//!  77.2%    930.7 us      1.359       2.73
+//!  93.8%   1029.1 us      2.071      14.57   <- worst observed
+//! 100.0%    821.2 us      1.301       3.08
+//! ```
+//!
+//! ⚠️ **The dispersion is NOT lower without this session's builds — run 2 is
+//! the worst ever measured here, an eight-fold tail (p99 8886 us against a
+//! median of 1029 us).** So the concurrent builds were not the driver.
+//!
+//! ⚠️ **AND THE PUBLISHED SPREAD IS ITSELF A SAMPLE OF A WIDER ONE.** The
+//! `max/min 2.34-5.55` recorded below reached **14.57** on re-measurement.
+//! **The error bar has an error bar**, and a reader taking 5.55 as the worst
+//! case understates it nearly threefold.
+//!
+//! **What remains: a persistent 1.93x clock throttle, uncontrollable 77-100%
+//! background load, and an unidentified remainder now known to reach 14.6x.
+//! Two mechanisms named, one measured away, and no third proposed.**
 //!
 //! So this test's job is no longer "explain the gap" — there is no gap. It
 //! **measures the dispersion and refuses to report a trend inside it**, which
