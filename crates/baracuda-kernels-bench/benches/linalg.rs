@@ -193,6 +193,40 @@ fn record(
     );
 }
 
+/// The three buffers every op in this bench needs, allocated together so the
+/// two `bench_*` functions do not each carry a copy of the same fallible
+/// preamble. `None` means the device refused an allocation and the caller
+/// should skip the cell.
+///
+/// `work` comes back behind a `RefCell` because `restore` needs `&work` (it is
+/// the copy destination) while `launch` needs `&mut work`, and `record` holds
+/// both closures at once. They never run concurrently, so the runtime check
+/// never trips; the compiler simply cannot see the alternation.
+type Buffers = (
+    DeviceBuffer<f32>,
+    std::cell::RefCell<DeviceBuffer<f32>>,
+    DeviceBuffer<i32>,
+);
+
+fn alloc_buffers(ctx: &baracuda_driver::Context, host: &[f32]) -> Option<Buffers> {
+    let (Ok(pristine), Ok(work), Ok(info)) = (
+        DeviceBuffer::from_slice(ctx, host),
+        DeviceBuffer::from_slice(ctx, host),
+        DeviceBuffer::<i32>::zeros(ctx, 1),
+    ) else {
+        return None;
+    };
+    Some((pristine, std::cell::RefCell::new(work), info))
+}
+
+/// cuSOLVER scratch. ⚠️ `Workspace::None` is an ERROR and not an
+/// auto-allocate: `unpack_workspace` returns `WorkspaceTooSmall { got: 0 }`
+/// whenever `needed > 0`, and the size is only known after the query. So ask,
+/// then allocate.
+fn alloc_workspace(ctx: &baracuda_driver::Context, needed: usize) -> Option<DeviceBuffer<u8>> {
+    DeviceBuffer::<u8>::zeros(ctx, needed.max(1)).ok()
+}
+
 /// The `work` buffer lives behind a `RefCell` in both ops below, because
 /// `restore` needs `&work` (it is the copy destination) while `launch` needs
 /// `&mut work`, and `record` holds both closures at once. They never run
@@ -204,16 +238,10 @@ fn record(
 /// `WorkspaceTooSmall { got: 0 }` whenever `needed > 0`. The size is only known
 /// after the query, so both ops ask and then allocate.
 fn bench_cholesky_f32(c: &mut Criterion, cell: &Cell<'_>, n: i32, host: &[f32]) {
-    let ctx = cell.ctx;
-    let stream = cell.stream;
-    let (Ok(pristine), Ok(work_buf), Ok(mut info)) = (
-        DeviceBuffer::from_slice(ctx, host),
-        DeviceBuffer::from_slice(ctx, host),
-        DeviceBuffer::<i32>::zeros(ctx, 1),
-    ) else {
+    let (ctx, stream) = (cell.ctx, cell.stream);
+    let Some((pristine, work, mut info)) = alloc_buffers(ctx, host) else {
         return;
     };
-    let work = std::cell::RefCell::new(work_buf);
     let desc = CholeskyDescriptor {
         matrix_size: n,
         batch_size: 1,
@@ -223,8 +251,7 @@ fn bench_cholesky_f32(c: &mut Criterion, cell: &Cell<'_>, n: i32, host: &[f32]) 
     let Ok(plan) = CholeskyPlan::<f32>::select(stream, &desc, PlanPreference::default()) else {
         return;
     };
-    let ws_bytes = plan.query_workspace_size(stream).unwrap_or(0).max(1);
-    let Ok(mut ws) = DeviceBuffer::<u8>::zeros(ctx, ws_bytes) else {
+    let Some(mut ws) = alloc_workspace(ctx, plan.query_workspace_size(stream).unwrap_or(0)) else {
         return;
     };
     let sh = [1, n, n];
@@ -262,17 +289,13 @@ fn bench_cholesky_f32(c: &mut Criterion, cell: &Cell<'_>, n: i32, host: &[f32]) 
 /// See [`bench_cholesky_f32`] for the `RefCell` and workspace notes; `lu` adds
 /// a `pivot` output.
 fn bench_lu_f32(c: &mut Criterion, cell: &Cell<'_>, n: i32, host: &[f32]) {
-    let ctx = cell.ctx;
-    let stream = cell.stream;
-    let (Ok(pristine), Ok(work_buf), Ok(mut pivot), Ok(mut info)) = (
-        DeviceBuffer::from_slice(ctx, host),
-        DeviceBuffer::from_slice(ctx, host),
+    let (ctx, stream) = (cell.ctx, cell.stream);
+    let (Some((pristine, work, mut info)), Ok(mut pivot)) = (
+        alloc_buffers(ctx, host),
         DeviceBuffer::<i32>::zeros(ctx, n as usize),
-        DeviceBuffer::<i32>::zeros(ctx, 1),
     ) else {
         return;
     };
-    let work = std::cell::RefCell::new(work_buf);
     let desc = LuDescriptor {
         m: n,
         n,
@@ -282,8 +305,7 @@ fn bench_lu_f32(c: &mut Criterion, cell: &Cell<'_>, n: i32, host: &[f32]) {
     let Ok(plan) = LuPlan::<f32>::select(stream, &desc, PlanPreference::default()) else {
         return;
     };
-    let ws_bytes = plan.query_workspace_size(stream).unwrap_or(0).max(1);
-    let Ok(mut ws) = DeviceBuffer::<u8>::zeros(ctx, ws_bytes) else {
+    let Some(mut ws) = alloc_workspace(ctx, plan.query_workspace_size(stream).unwrap_or(0)) else {
         return;
     };
     let sh = [1, n, n];
