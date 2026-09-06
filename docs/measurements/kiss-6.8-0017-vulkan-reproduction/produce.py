@@ -137,15 +137,31 @@ def _coop_key(t: dict):
 def _coopvec_tuple(t: dict) -> str:
     # "five component types plus a transpose flag" (field_spec) — but the pinned
     # tokens spell FIVE parts and no flag.
-    # GUESS-7: transpose is NOT spelled. All 12 vectors have transpose=false.
-    # field_spec explicitly SAYS the tuple carries a transpose flag, and no
-    # pinned token contains one, so the manifest contradicts itself here and the
-    # vectors win. A device reporting transpose=true is unrepresentable.
-    guess("GUESS-7", "`transpose` is not spelled — field_spec says the tuple is "
-                     "'five component types plus a transpose flag' but every "
-                     "pinned token spells five parts and no flag, and all 12 "
-                     "vectors have transpose=false. The prose and the vectors "
-                     "DISAGREE and I followed the vectors")
+    # GUESS-7: transpose is NOT spelled into the tuple.
+    #
+    # ⚠️ CORRECTED. This originally read "field_spec contradicts the vectors and
+    # transpose:true is unrepresentable". WRONG — vulkane refuted it from
+    # src/lib.rs:946-985, code this reproduction could not see: `spell()` appends
+    # `-t` when set and `parse()` reads a sixth part back. Five components plus
+    # an OPTIONAL `-t`, and the prose is accurate.
+    #
+    # It remains a guess, and the corrected version is sharper: across all
+    # vectors there are 56 coopvec combos, transpose=true in ZERO of them, and
+    # `-t` in ZERO tokens. The flag exists only in the documentation half, so a
+    # reader confined to this manifest cannot learn it exists — which is exactly
+    # why this producer scores 12/12 while being unable to emit one.
+    # The pass and the blindness have the same cause.
+    #
+    # ⚠️ The correction above briefly DELETED this call along with the old
+    # comment, and the guess list silently went from 8 to 7. Fixing a wrong
+    # description of a guess must not remove the guess: the array records what
+    # the DOCUMENT failed to determine, and that is unchanged by my having
+    # mis-diagnosed why.
+    guess("GUESS-7", "`transpose` is not spelled — 56 coopvec combos across the "
+                     "vectors, transpose=true in ZERO, `-t` in ZERO tokens. The "
+                     "flag IS real (vulkane: spell() appends `-t`) but appears "
+                     "only in field_spec prose, so a manifest-only reader cannot "
+                     "learn it exists")
     return "-".join([t["input"], t["input_interpretation"],
                      t["matrix_interpretation"], t["bias_interpretation"],
                      t["result"]])

@@ -52,20 +52,45 @@ reads as a success**.
 | 4 | how a **width-agnostic** input maps to `sgdyn` | all 12 vectors pass an integer subgroup |
 | 5 | `saturating` is **not spelled** into the coop tuple | all 12 have `saturating: false`; a producer that appended it passes every vector |
 | 6 | tiebreak **field order** when two coop shapes share m,n,k | no vector has two such shapes |
-| 7 | `transpose` is **not spelled** | ⚠️ **a contradiction inside the manifest — see below** |
+| 7 | `transpose` is **not spelled** | ⚠️ **corrected — see below. The flag is real; it is absent from every vector.** |
 | 8 | the unnamed escape `x<n>` sorts **numerically** | `x0,x1,x2` and `x1000..x1023` are equal-width runs, so numeric and lexicographic agree on every pinned case |
 
-### ⚠️ (7) is a defect in the manifest, not a gap in the reproduction
+### ⚠️ (7) — this reproduction's first diagnosis was WRONG, and the correction is the better finding
 
-`field_spec` says the coopvec tuple is *"five component types plus a transpose
-flag"*. **Every pinned token spells five parts and no flag**, and all 12 vectors
-carry `transpose: false`.
+**What this file said first:** that `field_spec` and the vectors *contradicted*
+each other, and that `transpose: true` was **unrepresentable** in anything the
+manifest pins.
 
-The prose and the vectors disagree about whether the field exists, and
-`transpose: true` is **unrepresentable** in anything the manifest pins. The
-vectors were followed.
+**That was wrong.** vulkane refuted it from `kiss-vulkan-vocab/src/lib.rs:946-985`
+— code this reproduction deliberately could not see. `spell()` appends `-t` when
+transpose is set and `parse()` reads a sixth part back. **Five components plus an
+optional `-t`. The `field_spec` prose is accurate and it round-trips.**
 
--0017 could not have caught this by inspection; running the demonstration did.
+**The corrected finding, measured against the manifest in this directory:**
+
+```
+coopvec combos across all vectors : 56
+  with transpose = true           :  0
+tokens containing `-t`            :  0
+```
+
+**The flag is described only in the documentation half and appears in ZERO of the
+normative half.** A reader following -0017 correctly **cannot learn that `-t`
+exists** — which is exactly why this reproduction scored 12/12 without ever
+emitting one.
+
+⚠️ **The pass and the blindness have the same cause: no vector demanded it.
+Neither is visible from the score.**
+
+**The wrong diagnosis was the *alarming* one.** "Unrepresentable" sends a
+maintainer looking for a missing feature; the truth is a missing vector.
+
+> **A finding from a foreign reader is evidence about the DOCUMENT, not about the
+> code they could not see** — which is the condition that makes the demonstration
+> valuable, and also its limit. *(vulkane)*
+
+This section replaces the original claim rather than annotating it: a correction
+posted beside a falsehood leaves the falsehood where readers start.
 
 ## ⚠️ One error of the reproducer's own, and what caught it
 
