@@ -8,17 +8,37 @@
 //! ⚠️ EVERY OP IN THIS FAMILY CONSUMES ITS INPUT IN PLACE. All eight Linalg
 //! `*Args` structs take `a: TensorMut`, and `solve` additionally overwrites `b`.
 //! A plain timing loop therefore measures the first iteration against the real
-//! input and every later one against whatever the previous call left behind.
+//! input and every later one against whatever the previous call left behind —
+//! so it is not timing a fixed problem, which is what a benchmark is for.
 //!
-//! Cholesky is the sharpest case and the reason this bench uses
-//! `*_restored`: after call 1 the buffer holds `L`, which is not symmetric
-//! positive-definite, so cuSOLVER halts at the failing minor and returns early.
-//! Iterations 2..N measure a FAILURE PATH, the median lands far below the true
-//! cost, and nothing raises — `info[i] != 0` records it and a timing loop never
-//! reads `info`. The published number would simply be wrong.
+//! That is the whole reason, and it is enough. Each iteration restores the
+//! pristine input by device-to-device copy, fenced out of the measurement by
+//! its own event pair.
 //!
-//! So each iteration restores the pristine input by device-to-device copy and
-//! the restore is fenced out of the measurement by its own event pair.
+//! ⚠️ AND A STRONGER REASON I ASSERTED HERE WAS FALSE — MEASURED, NOT ARGUED.
+//! This doc used to claim: "after call 1 the buffer holds `L`, which is not
+//! SPD, so cuSOLVER halts at the failing minor; iterations 2..N measure a
+//! FAILURE PATH and the median lands far below the true cost." I never
+//! measured it. `tests/repeat_destroys.rs` does, on the 4070:
+//!
+//! ```text
+//! unrestored  info = [0, 0, 0, 0]      steady state  603.4 / 495.9 / 553.0 us
+//! restored    info = [0, 0, 0, 0]      steady state  445.0 / 509.7 / 590.0 us
+//! ```
+//!
+//! No failure path in either arm, and the two steady states INTERLEAVE — the
+//! restore does not move the number at N=256. The premise was wrong because
+//! `cusolverDnSpotrf(lower)` reads only the LOWER TRIANGLE, and `L`'s lower
+//! triangle read as a symmetric matrix is still diagonally dominant with a
+//! positive diagonal, hence still SPD. "The buffer holds L" and "the buffer
+//! holds a matrix that fails to factor" are different claims and only the
+//! first is true.
+//!
+//! ⚠️ Note the direction: that is a fixture-dependent result, so it does NOT
+//! license the converse ("repeats are always safe"). It licenses exactly one
+//! thing — deleting a reason I made up. The restore stays because iterations
+//! 2..N factor a DIFFERENT MATRIX, which is a methodological defect whether or
+//! not the clock happens to notice.
 //!
 //! **Sample counts are deliberately lower than the elementwise benches.** A
 //! factorization is milliseconds where an elementwise kernel is microseconds;
