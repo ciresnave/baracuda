@@ -52,7 +52,13 @@ the markers is replaced on every run.
 
 CSV columns expected:
 
-    op,shape,dtype,baracuda_ns,reference_ns,reference,delta,pytorch_ns,pytorch_delta
+    op,shape,dtype,baracuda_ns,reference_ns,reference,delta,pytorch_ns,pytorch_delta,
+    samples,min_ns,p90_ns,max_ns
+
+  The four trailing spread columns are written by every bench (empty when the
+  bench does not measure a spread) so the header is one shape everywhere. They
+  are read via `.get`, so an older narrow CSV still parses -- it simply has no
+  dispersion to report.
 
 The script groups rows by (op, shape, dtype) and merges:
   - `baracuda_ns` from the row where it's non-zero (typically the

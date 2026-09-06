@@ -509,14 +509,102 @@ pub fn measure_median_ns_restored<S: FnMut(), F: FnMut()>(
     mut restore: S,
     mut launch: F,
 ) -> f64 {
-    let mut measurements: Vec<f64> = Vec::with_capacity(samples);
+    measure_spread_restored(ctx, stream, samples, inner, &mut restore, &mut launch).median_ns
+}
+
+/// The spread of a timing measurement, in nanoseconds.
+///
+/// ⚠️ **A median alone is not a publishable figure on a box whose dispersion
+/// you have not measured.** On the RTX 4070 Laptop this crate benches on, two
+/// runs of *identical* Linalg code came out 14% apart, and repeated sampling of
+/// one cell gave `p90/median` between 1.21 and 1.41 with `max/min` between 2.34
+/// and 5.55. A point estimate with no spread beside it invites a reader to
+/// treat a 14% difference as a change when it is noise.
+///
+/// So the measurement carries its own dispersion into the CSV, and
+/// `BENCHMARKS.md` can state a figure with an error bar instead of a number
+/// that looks exact.
+///
+/// ⚠️ **WHAT THIS IS THE DISPERSION *OF*, because the two differ by a lot.**
+/// Each element summarised here is one SAMPLE — the mean over `inner`
+/// launches — not one launch. Averaging smooths the per-launch tail, so this
+/// spread is narrower than the raw single-shot spread and must not be quoted
+/// as the latter. Measured on the same box, same cell, within minutes:
+///
+/// ```text
+/// per-SAMPLE (inner = 5, what this struct reports)   p90/median 1.01 - 1.08
+/// per-LAUNCH (inner = 1, tests/linalg_sample_...)    p90/median 1.21 - 1.41
+/// ```
+///
+/// The per-sample figure is the right error bar for the published median,
+/// because the published median IS a median of such samples. The per-launch
+/// figure is the right one for "how much does one call vary". **They are
+/// different questions and this reports the first.**
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Spread {
+    /// How many per-sample measurements this summarises.
+    pub samples: usize,
+    /// Fastest per-iteration time seen.
+    pub min_ns: f64,
+    /// The published figure.
+    pub median_ns: f64,
+    /// 90th percentile — the shoulder of the right tail.
+    pub p90_ns: f64,
+    /// Slowest per-iteration time seen.
+    pub max_ns: f64,
+}
+
+impl Spread {
+    /// `p90 / median` — the dispersion the verdicts in this crate compare
+    /// against. `1.0` is a perfectly tight distribution.
+    #[must_use]
+    pub fn p90_over_median(&self) -> f64 {
+        if self.median_ns > 0.0 {
+            self.p90_ns / self.median_ns
+        } else {
+            f64::NAN
+        }
+    }
+
+    /// `max / min` — the full observed range, including outliers.
+    #[must_use]
+    pub fn max_over_min(&self) -> f64 {
+        if self.min_ns > 0.0 {
+            self.max_ns / self.min_ns
+        } else {
+            f64::NAN
+        }
+    }
+}
+
+/// Like [`measure_median_ns_restored`] but keeps the whole distribution.
+///
+/// ⚠️ The percentiles are only as meaningful as `samples` makes them: a p90
+/// over five samples is essentially the maximum. Callers wanting a usable
+/// spread should pass enough samples for the percentile to mean something —
+/// see the note on `SAMPLES` in `benches/linalg.rs`.
+pub fn measure_spread_restored<S: FnMut(), F: FnMut()>(
+    ctx: &Context,
+    stream: &Stream,
+    samples: usize,
+    inner: u64,
+    mut restore: S,
+    mut launch: F,
+) -> Spread {
+    let mut m: Vec<f64> = Vec::with_capacity(samples);
     for _ in 0..samples {
         let dur = time_with_events_restored(ctx, stream, inner, &mut restore, &mut launch);
-        let ns = dur.as_secs_f64() * 1e9 / inner as f64;
-        measurements.push(ns);
+        m.push(dur.as_secs_f64() * 1e9 / inner as f64);
     }
-    measurements.sort_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
-    measurements[measurements.len() / 2]
+    m.sort_by(f64::total_cmp);
+    let n = m.len();
+    Spread {
+        samples: n,
+        min_ns: m[0],
+        median_ns: m[n / 2],
+        p90_ns: m[(n * 90) / 100],
+        max_ns: m[n - 1],
+    }
 }
 
 /// Append a `PhaseTwentyNineRow` to `target/criterion/phase29/<bench>.csv`,
@@ -530,16 +618,92 @@ pub fn measure_median_ns_restored<S: FnMut(), F: FnMut()>(
 /// depend on the CSV write succeeding. The criterion HTML report is the
 /// primary record; the CSV is a convenience for `BENCHMARKS.md` updates.
 pub fn append_csv_row(bench: &str, row: &PhaseTwentyNineRow) {
-    use std::io::Write;
+    append_csv_row_with_spread(bench, row, None);
+}
 
+/// The CSV header this crate writes. Kept as a constant because
+/// [`append_csv_row_with_spread`] both writes it and CHECKS it — see the
+/// stale-header note there.
+pub const PHASE29_CSV_HEADER: &str = "op,shape,dtype,baracuda_ns,reference_ns,reference,delta,\
+     pytorch_ns,pytorch_delta,samples,min_ns,p90_ns,max_ns";
+
+/// Resolve (and create) the phase-29 CSV path for `bench`. `None` if the
+/// directory cannot be made — the caller skips the row rather than failing the
+/// bench.
+fn phase29_csv_path(bench: &str) -> Option<std::path::PathBuf> {
     let dir = std::path::PathBuf::from("target")
         .join("criterion")
         .join("phase29");
     if let Err(e) = std::fs::create_dir_all(&dir) {
         eprintln!("phase29 csv: mkdir {} failed: {e}", dir.display());
-        return;
+        return None;
     }
-    let path = dir.join(format!("{bench}.csv"));
+    Some(dir.join(format!("{bench}.csv")))
+}
+
+/// ⚠️ STALE-HEADER HAZARD. The header used to be written only when the file was
+/// ABSENT, so widening the row format would have appended 13-field rows under a
+/// 9-field header — every later column silently shifted by four, mapping
+/// `samples` onto `pytorch_delta`, with no error anywhere. These files live
+/// under `target/` and survive across runs, so "it is a fresh build" is not a
+/// safe assumption.
+///
+/// So: read the existing header and, if it is not the one we write, start the
+/// file over. A truncate loses rows from a PREVIOUS run only — the same thing
+/// `cargo clean` does, and strictly better than emitting misaligned ones.
+fn drop_csv_if_header_is_stale(path: &std::path::Path) {
+    let Ok(existing) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let stale = existing
+        .lines()
+        .next()
+        .is_some_and(|first| first != PHASE29_CSV_HEADER);
+    if stale {
+        eprintln!(
+            "phase29 csv: {} has an older header; rewriting it rather than \
+             appending misaligned rows",
+            path.display()
+        );
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// The four spread columns, empty when the bench measured no spread.
+fn spread_fields(spread: Option<&Spread>) -> (String, String, String, String) {
+    match spread {
+        Some(s) => (
+            s.samples.to_string(),
+            format!("{:.3}", s.min_ns),
+            format!("{:.3}", s.p90_ns),
+            format!("{:.3}", s.max_ns),
+        ),
+        None => (String::new(), String::new(), String::new(), String::new()),
+    }
+}
+
+/// Format an `Option<f64>` column: three decimals, or empty.
+fn opt_ns(v: Option<f64>) -> String {
+    v.map(|x| format!("{x:.3}")).unwrap_or_default()
+}
+
+/// Format an `Option<f64>` ratio column: four decimals, or empty.
+fn opt_ratio(v: Option<f64>) -> String {
+    v.map(|x| format!("{x:.4}")).unwrap_or_default()
+}
+
+/// [`append_csv_row`] plus the measurement's dispersion.
+///
+/// The four spread columns are always present and empty when `spread` is
+/// `None`, so every bench writes the same header whether or not it measures a
+/// spread — a reader never has to discover which shape a given file is.
+pub fn append_csv_row_with_spread(bench: &str, row: &PhaseTwentyNineRow, spread: Option<&Spread>) {
+    use std::io::Write;
+
+    let Some(path) = phase29_csv_path(bench) else {
+        return;
+    };
+    drop_csv_if_header_is_stale(&path);
     let exists = path.exists();
     let mut f = match std::fs::OpenOptions::new()
         .create(true)
@@ -553,39 +717,21 @@ pub fn append_csv_row(bench: &str, row: &PhaseTwentyNineRow) {
         }
     };
     if !exists {
-        let _ = writeln!(
-            f,
-            "op,shape,dtype,baracuda_ns,reference_ns,reference,delta,pytorch_ns,pytorch_delta"
-        );
+        let _ = writeln!(f, "{PHASE29_CSV_HEADER}");
     }
-    let ref_ns = row
-        .reference_ns
-        .map(|x| format!("{x:.3}"))
-        .unwrap_or_else(|| "".into());
-    let delta = row
-        .delta()
-        .map(|x| format!("{x:.4}"))
-        .unwrap_or_else(|| "".into());
-    let pytorch_ns = row
-        .pytorch_ns
-        .map(|x| format!("{x:.3}"))
-        .unwrap_or_else(|| "".into());
-    let pytorch_delta = row
-        .pytorch_delta()
-        .map(|x| format!("{x:.4}"))
-        .unwrap_or_else(|| "".into());
+    let (sn, mn, p9, mx) = spread_fields(spread);
     let _ = writeln!(
         f,
-        "{op},{shape},{dtype},{ba:.3},{rf},{rl},{dl},{pn},{pd}",
+        "{op},{shape},{dtype},{ba:.3},{rf},{rl},{dl},{pn},{pd},{sn},{mn},{p9},{mx}",
         op = row.op,
         shape = row.shape,
         dtype = row.dtype,
         ba = row.baracuda_ns,
-        rf = ref_ns,
+        rf = opt_ns(row.reference_ns),
         rl = row.reference,
-        dl = delta,
-        pn = pytorch_ns,
-        pd = pytorch_delta,
+        dl = opt_ratio(row.delta()),
+        pn = opt_ns(row.pytorch_ns),
+        pd = opt_ratio(row.pytorch_delta()),
     );
 }
 
