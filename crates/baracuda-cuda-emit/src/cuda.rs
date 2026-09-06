@@ -18,6 +18,7 @@ use unpopped::cfamily::{
 use unpopped::ir::{
     Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
     is_admissible_int_reduction_operand, is_bit_move_fold_output, is_bit_or_sign_move,
+    narrow_sign_masks,
 };
 use unpopped::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use unpopped_vocab::structure_key::LayoutOrder;
@@ -7476,9 +7477,30 @@ fn cuda_unary(
     if let Some((to_bits, from_bits)) = bit_casts {
         // Neg flips the sign bit; Abs clears it. Everything else — exponent,
         // mantissa, NaN payload — is carried through untouched.
+        //
+        // Masks come from `unpopped::ir::narrow_sign_masks`, the SINGLE home for
+        // this normative fact, rather than being written here. ⚠️ They were
+        // hand-derived at two sites in this file (here and Copysign below) and
+        // AGREED — which is the state a second copy is in right up until it is
+        // not. Both also collapsed f16 and bf16 onto one 16-bit pair, correct BY
+        // COINCIDENCE OF WIDTH and silently wrong for any narrow type that is not
+        // 16 bits. The shared table is keyed per dtype and already carries fp8.
+        let (sign, magnitude) = narrow_sign_masks(dtype).ok_or_else(|| {
+            // Unreachable: `narrow_bit_casts` admitted this dtype above, and both
+            // predicates are defined over the same narrow set. Typed rather than
+            // `unwrap` so a future divergence between them declines instead of
+            // panicking in an emitter.
+            LowerError::UnsupportedDtype {
+                dtype,
+                detail: "cuda backend: a dtype with narrow bit-casts but no sign \
+                         masks — `narrow_bit_casts` and \
+                         `unpopped::ir::narrow_sign_masks` have diverged"
+                    .to_string(),
+            }
+        })?;
         let (sym, mask) = match op {
-            UnaryOp::Neg => ("^", "0x8000u"),
-            _ => ("&", "0x7fffu"),
+            UnaryOp::Neg => ("^", format!("{sign:#x}u")),
+            _ => ("&", format!("{magnitude:#x}u")),
         };
         return Ok(Spelling::Spelled(format!(
             "{from_bits}((unsigned short)({to_bits}({x}) {sym} {mask}))"
@@ -7580,10 +7602,20 @@ fn cuda_binary(
                 )));
             }
             // Magnitude bits from `a`, sign bit from `b` — one bit changes.
+            // Masks from the shared `narrow_sign_masks`; see `cuda_unary` for why
+            // this file no longer derives them.
             BinaryOp::Copysign => {
+                let (sign, magnitude) =
+                    narrow_sign_masks(dtype).ok_or_else(|| LowerError::UnsupportedDtype {
+                        dtype,
+                        detail: "cuda backend: a dtype with narrow bit-casts but \
+                                 no sign masks — `narrow_bit_casts` and \
+                                 `unpopped::ir::narrow_sign_masks` have diverged"
+                            .to_string(),
+                    })?;
                 return Ok(Spelling::Spelled(format!(
-                    "{from_bits}((unsigned short)(({to_bits}({a}) & 0x7fffu) | \
-                     ({to_bits}({b}) & 0x8000u)))"
+                    "{from_bits}((unsigned short)(({to_bits}({a}) & {magnitude:#x}u) | \
+                     ({to_bits}({b}) & {sign:#x}u)))"
                 )));
             }
             _ => {}
@@ -8842,6 +8874,58 @@ got:
                 "§6.16-0010: {dt:?} max under an ARITHMETIC epilogue must keep the                  widened accumulator"
             );
         }
+    }
+
+    /// The narrow sign/magnitude masks are SOURCED from
+    /// `unpopped::ir::narrow_sign_masks`, not written here.
+    ///
+    /// ⚠️ This refactor is byte-identical in emitted output — 294 tests pass with
+    /// zero golden movement — which means no golden can tell "reads the shared
+    /// table" from "still hard-coded". That is what this test is for.
+    ///
+    /// It also pins WHY single-sourcing matters: the two hand-derived copies this
+    /// replaced both collapsed f16 and bf16 onto one 16-bit pair, correct BY
+    /// COINCIDENCE OF WIDTH. The shared table is keyed per dtype and gives fp8 an
+    /// EIGHT-bit pair — so the collapse was already wrong for a dtype the emitter
+    /// does not yet reach, and would have shipped silently the day it did.
+    #[test]
+    fn narrow_masks_come_from_the_shared_table_not_a_local_literal() {
+        use unpopped::ir::{UnaryOp, narrow_sign_masks};
+
+        // The emitted spelling must carry the table's values, formatted.
+        for dt in [ElementKind::Bf16, ElementKind::F16] {
+            let (sign, magnitude) = narrow_sign_masks(dt).expect("narrow dtype");
+            // align = 2 forces the SCALAR path. At 256 the cell vectorizes
+            // (`co_v8`, `__nv_bfloat162`) and takes a different speller — which
+            // is what this test hit first, and is worth knowing: the raw-bit
+            // masks live on the scalar path.
+            let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 2);
+            let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+            for (uop, want) in [
+                (UnaryOp::Neg, format!("{sign:#x}u")),
+                (UnaryOp::Abs, format!("{magnitude:#x}u")),
+            ] {
+                let op = OpDef::elementwise("v", 1, &[dt], input(0).unary(uop));
+                let src = generate(&op, &key, &Cuda).source;
+                assert!(
+                    src.contains(&want),
+                    "{dt:?} {uop:?} must spell the mask from narrow_sign_masks                      ({want}); if this reds, the emitter and the shared table have                      diverged:
+{src}"
+                );
+            }
+        }
+
+        // ⚠️ The table is PER-DTYPE and fp8's pair is 8-bit, not 16. This is the
+        // fact the two local copies could not represent — both would have handed
+        // an fp8 path `0x8000`/`0x7fff`.
+        assert_eq!(narrow_sign_masks(ElementKind::Bf16), Some((0x8000, 0x7FFF)));
+        assert_eq!(narrow_sign_masks(ElementKind::F16), Some((0x8000, 0x7FFF)));
+        assert_eq!(
+            narrow_sign_masks(ElementKind::Fp8E4M3FN),
+            Some((0x80, 0x7F))
+        );
+        assert_eq!(narrow_sign_masks(ElementKind::Fp8E5M2), Some((0x80, 0x7F)));
+        assert_eq!(narrow_sign_masks(ElementKind::F32), None);
     }
 
     /// KISS-OPS §6.16-0009 on the REDUCTION surface (KISS #416): a narrow
