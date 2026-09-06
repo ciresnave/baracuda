@@ -339,50 +339,82 @@ def token(inp: dict) -> str:
 # --------------------------------------------------------------------------
 # Check against every pinned vector.
 # --------------------------------------------------------------------------
-def main() -> int:
+def _check_token(i: int, v: dict) -> bool:
+    """One token vector. Prints its line; returns True if it reproduced."""
+    got = token(v["input"])
+    if got == v["token"]:
+        print(f"  [PASS] vector[{i:2}] pins={v['pins']:<13} field={v['field']}")
+        return True
+    print(f"  [FAIL] vector[{i:2}] pins={v['pins']:<13} field={v['field']}")
+    print(f"         want {v['token'][:110]}")
+    print(f"         got  {got[:110]}")
+    return False
+
+
+def _check_digest(i: int, v: dict) -> bool:
+    """One digest vector. The declared input LENGTH is checked too: it is what
+    pins the threshold comparison as strictly-greater rather than >=."""
+    got = fnv1a64(v["digest_input"])
+    n = len(v["digest_input"].encode())
+    if got == v["digest"] and n == v["digest_input_bytes"]:
+        print(f"  [PASS] vector[{i:2}] pins={v['pins']:<13} field={v['field']} "
+              f"(digest + {v['digest_input_bytes']}B length)")
+        return True
+    print(f"  [FAIL] vector[{i:2}] digest want {v['digest']} got {got} "
+          f"({n}B vs declared {v['digest_input_bytes']}B)")
+    return False
+
+
+def check_vectors() -> int:
+    """Run every pinned vector. Returns the FAILURE count."""
     ok = bad = skipped = 0
     for i, v in enumerate(M["vectors"]):
         if "token" in v and "input" in v:
-            got = token(v["input"])
-            if got == v["token"]:
-                ok += 1
-                print(f"  [PASS] vector[{i:2}] pins={v['pins']:<13} field={v['field']}")
-            else:
-                bad += 1
-                print(f"  [FAIL] vector[{i:2}] pins={v['pins']:<13} field={v['field']}")
-                print(f"         want {v['token'][:110]}")
-                print(f"         got  {got[:110]}")
+            passed = _check_token(i, v)
         elif "digest_input" in v:
-            got = fnv1a64(v["digest_input"])
-            if got == v["digest"] and len(v["digest_input"].encode()) == v["digest_input_bytes"]:
-                ok += 1
-                print(f"  [PASS] vector[{i:2}] pins={v['pins']:<13} field={v['field']} "
-                      f"(digest + {v['digest_input_bytes']}B length)")
-            else:
-                bad += 1
-                print(f"  [FAIL] vector[{i:2}] digest want {v['digest']} got {got}")
+            passed = _check_digest(i, v)
         else:
             skipped += 1
-    print(f"\n{ok} passed, {bad} failed, {skipped} skipped, of {len(M['vectors'])} vectors")
-    for kind, heading in (
-        ("guess", "GUESSED — the manifest did not supply these"),
-        ("derived", "DERIVED — stated by the manifest; each cites WHERE"),
-    ):
-        rows = [(t, e[1]) for t, e in LEDGER.items() if e[0] == kind]
-        cold = [t for t, _ in rows if t not in EXERCISED]
-        print(f"\n=== {len(rows)} {heading} ===")
-        for tag, text in rows:
-            flag = "" if tag in EXERCISED else "[NOT EXERCISED] "
-            print(f"  {flag}{tag}: {text}")
-        if cold:
-            print(f"  ({len(cold)} of {len(rows)} reached by no vector: "
-                  f"{', '.join(cold)}. Declared, so they are reported; an "
-                  f"accumulating ledger would have printed "
-                  f"{len(rows) - len(cold)} and looked complete.)")
+            continue
+        ok, bad = (ok + 1, bad) if passed else (ok, bad + 1)
+    print(f"\n{ok} passed, {bad} failed, {skipped} skipped, "
+          f"of {len(M['vectors'])} vectors")
+    return bad
+
+
+def _report_kind(kind: str, heading: str) -> None:
+    """Print every DECLARED row of one kind, exercised or not.
+
+    The unreached rows are the point: see the module note on why this must not
+    be driven by what the run happened to execute.
+    """
+    rows = [(t, e[1]) for t, e in LEDGER.items() if e[0] == kind]
+    cold = [t for t, _ in rows if t not in EXERCISED]
+    print(f"\n=== {len(rows)} {heading} ===")
+    for tag, text in rows:
+        flag = "" if tag in EXERCISED else "[NOT EXERCISED] "
+        print(f"  {flag}{tag}: {text}")
+    if cold:
+        print(f"  ({len(cold)} of {len(rows)} reached by no vector: "
+              f"{', '.join(cold)}. Declared, so they are reported; an "
+              f"accumulating ledger would have printed "
+              f"{len(rows) - len(cold)} and looked complete.)")
+
+
+def report_residue() -> None:
+    """Print the full declared residue, both kinds."""
+    _report_kind("guess", "GUESSED \u2014 the manifest did not supply these")
+    _report_kind("derived",
+                 "DERIVED \u2014 stated by the manifest; each cites WHERE")
     print(
         "\nAn item in NEITHER list asserts that the manifest determined it "
         "(KISS-CLASSIFY-6.8-0017)."
     )
+
+
+def main() -> int:
+    bad = check_vectors()
+    report_residue()
     return 1 if bad else 0
 
 
