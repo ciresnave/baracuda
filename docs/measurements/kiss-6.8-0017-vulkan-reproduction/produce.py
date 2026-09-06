@@ -81,9 +81,19 @@ LEDGER: dict[str, tuple[str, str]] = {
     ),
     "GUESS-5": (
         "guess",
-        "`saturating` is not spelled into the coop tuple — all 12 "
-        "vectors have saturating=false, so a producer that appended it "
-        "would still match every one",
+        "⚠️ CONCLUSION CORRECTED, FINDING STANDS. I wrote '`saturating` "
+        "is not spelled into the coop tuple'. It IS — vulkane measured a "
+        "trailing `-sat`, with the saturating and non-saturating shapes "
+        "kept as SEPARATE tuples. My PREMISE was right and is the whole "
+        "finding: all 12 vectors have saturating=false, so a producer "
+        "that appended a suffix and one that did not BOTH match every "
+        "vector — which is true whether or not the suffix exists, and is "
+        "exactly why the vectors could not answer it. And it is WORSE "
+        "than the transpose case: transpose at least appears in "
+        "`field_spec` prose, whereas saturating appears in NEITHER half "
+        "— the prose says 'M-N-K plus four component types' and stops. "
+        "So my producer emits WRONG BYTES for any saturating=true shape "
+        "and scored 12/12 against a corpus that cannot contain one.",
     ),
     "GUESS-6": (
         "guess",
@@ -218,9 +228,16 @@ def field_arith(vals) -> str:
 
 def _coop_tuple(t: dict) -> str:
     # "M-N-K plus four component types, joined by `-`" (field_spec).
-    # GUESS-5: `saturating` is NOT spelled. Every vector has saturating=false,
-    # so a producer that appended it would pass all 12 — the input carries a
-    # field the token has no place for, and nothing pins that.
+    #
+    # ⚠️ THIS SPELLING IS KNOWN WRONG AND IS LEFT AS THE REPRODUCTION'S RECORD.
+    # vulkane measured that `saturating` IS spelled, as a trailing `-sat`, with
+    # the two shapes kept as separate tuples. So the line below emits wrong
+    # bytes for any saturating=true shape. It still scores 12/12, because all
+    # 12 vectors are saturating=false — which is the finding, not a defence.
+    #
+    # It is not corrected here on purpose: this file is the artifact of what a
+    # manifest-only reader produced, and silently fixing it with knowledge from
+    # the maintainer would destroy the only thing it measures. See GUESS-5.
     guess("GUESS-5")
     return "-".join([str(t["m"]), str(t["n"]), str(t["k"]),
                      t["a"], t["b"], t["c"], t["result"]])
