@@ -2,7 +2,20 @@
 
 **Goal:** Add S8 (int8) / U8 (uint8) support to the Baracuda kernelgen reduction ops — `sum`, `max`, `min`, `prod`, and the predicate/count folds `any`/`all`/`count` — with wrapping two's-complement semantics that are byte-exact to KISS-Ops and differentially verified against kiss-ref.
 
-**Status:** Design for review. Decisions below were made by Eric on 2026-07-29 (four forks) against a scoping report. No code written yet.
+**Status:** **IMPLEMENTED.** Decisions below were made by Eric on 2026-07-29 (four forks)
+against a scoping report. The design shipped: `reduce_sum_int.cu` instantiates
+`reduce_sum_u8` / `reduce_sum_i8` (`uint8_t` / `int8_t`) alongside the wider widths, with
+`reduce_max_int.cu`, `reduce_min_int.cu`, `reduce_prod_int.cu`, `arg_reduce_int.cu` and the
+`reduce_{all,any,count_nonzero}_fp_int_bool.cu` predicate folds covering the rest of the op
+set named in the Goal — and `baracuda-cuda-emit/src/cuda.rs` recording that "U8 and S8 are
+now COMPUTE dtypes". This document is the design record, not open work.
+
+> ⚠ **DISCHARGED 2026-09-06.** This field read *"Design for review … **No code written
+> yet**"* until today. That is the same sentence, in the same position, that cost `fuel`
+> sixteen days on GAP-283 — three specs reading *"Design pass — no code yet"* against
+> 30,180 lines of live implementation, which later misscoped a ratified cross-project gate.
+> Replaced rather than annotated. Nothing below is edited: the four forks and their
+> rationale are the record of why the implementation looks the way it does.
 
 ---
 
