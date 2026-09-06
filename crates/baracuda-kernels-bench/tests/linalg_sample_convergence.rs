@@ -23,16 +23,18 @@
 //! ⚠️ **THAT WAS A COINCIDENCE AND THIS TEST IS WHAT DISPROVED IT.** Four
 //! same-direction draws is p = 1/16 — it *reads* as a systematic bias and is
 //! not rare enough to be one. Repeated sampling puts `criterion/median`
-//! anywhere in **0.82 to 0.99**: criterion's figure sits inside the spread, and
-//! there is no bias to explain.
+//! anywhere in **0.82 to 1.21** — measured at 0.817, 0.933, 0.951, 0.990 and
+//! 1.213 across five runs, so it lands on BOTH SIDES of 1.0. Criterion's
+//! figure sits inside the spread and there is no bias to explain.
 //!
-//! **What is real is the DISPERSION.** Three consecutive runs on this box:
+//! **What is real is the DISPERSION.** Consecutive runs on this box:
 //!
 //! ```text
 //! run  median    p90/median   max/min   criterion/median
 //!  1   865 us      1.39        3.26          0.933
 //!  2   988 us      1.21        2.87          0.817
 //!  3   849 us      1.41        5.55          0.951
+//!  4   666 us      1.21        2.34          1.213   <- criterion ABOVE
 //! ```
 //!
 //! **Measured environment,** since the dispersion is a property of the box and
@@ -65,6 +67,9 @@ const N: i32 = 512;
 /// `(samples, inner)` ladder. The first row is exactly what `benches/linalg.rs`
 /// uses, so the first line of output must reproduce the CSV figure.
 const LADDER: &[(usize, u64)] = &[(5, 3), (5, 10), (11, 10), (11, 50), (25, 50)];
+
+/// criterion's figure for this cell, from the run that produced the CSV.
+const CRITERION_NS: f64 = 807_700.0;
 
 #[test]
 #[ignore = "requires a CUDA device; run explicitly with --ignored"]
@@ -123,9 +128,6 @@ fn linalg_timing_dispersion_swamps_any_sample_size_trend() {
         launch();
     });
 
-    // criterion's figure for this cell, from the run that produced the CSV.
-    const CRITERION_NS: f64 = 807_700.0;
-
     println!(
         "cholesky/f32/N{N}  — criterion reported {:.2} us",
         CRITERION_NS / 1000.0
@@ -147,48 +149,104 @@ fn linalg_timing_dispersion_swamps_any_sample_size_trend() {
         estimates.push(ns);
     }
 
-    // ---- Is the gap MEDIAN vs MEAN over a right-skewed distribution? ----
-    // criterion's point estimate is a mean-like statistic over ~100 samples;
-    // `measure_median_ns_restored` is a MEDIAN. If the per-iteration
-    // distribution has a heavy right tail, those two diverge by construction
-    // and neither is wrong — they answer different questions.
-    //
-    // Measure the whole distribution once and report both, from the same data,
-    // so the comparison has no second instrument in it.
-    let mut per_iter_ns = Vec::new();
-    for _ in 0..200 {
-        let d = baracuda_kernels_bench::time_with_events_restored(
-            &ctx,
-            &stream,
-            1,
-            &mut restore,
-            &mut launch,
-        );
-        per_iter_ns.push(d.as_secs_f64() * 1e9);
-    }
-    let mut sorted = per_iter_ns.clone();
-    sorted.sort_by(f64::total_cmp);
-    let n = sorted.len();
-    let mean = per_iter_ns.iter().sum::<f64>() / n as f64;
-    let median = sorted[n / 2];
-    let p90 = sorted[(n * 90) / 100];
-    let p99 = sorted[(n * 99) / 100];
-    println!("\n--- distribution over {n} single-iteration timings (us) ---");
-    println!(
-        "min {:.2}  median {:.2}  mean {:.2}  p90 {:.2}  p99 {:.2}  max {:.2}",
-        sorted[0] / 1000.0,
-        median / 1000.0,
-        mean / 1000.0,
-        p90 / 1000.0,
-        p99 / 1000.0,
-        sorted[n - 1] / 1000.0
-    );
-    println!(
-        "mean/median = {:.3}   criterion/median = {:.3}",
-        mean / median,
-        CRITERION_NS / median
-    );
+    let st = Stats::collect(&ctx, &stream, &mut restore, &mut launch);
+    st.report();
+    report_verdict(&estimates, &st);
+}
 
+/// The single-iteration timing distribution, in nanoseconds.
+///
+/// criterion's point estimate is a mean-like statistic; `measure_median_ns_restored`
+/// is a MEDIAN. If the distribution has a heavy right tail those diverge by
+/// construction and neither is wrong, so both are computed from THE SAME data —
+/// the comparison has no second instrument in it.
+struct Stats {
+    n: usize,
+    min: f64,
+    median: f64,
+    mean: f64,
+    p90: f64,
+    p99: f64,
+    max: f64,
+}
+
+impl Stats {
+    fn collect(
+        ctx: &baracuda_driver::Context,
+        stream: &baracuda_driver::Stream,
+        restore: &mut impl FnMut(),
+        launch: &mut impl FnMut(),
+    ) -> Self {
+        let mut v = Vec::new();
+        for _ in 0..200 {
+            // Reborrow: `time_with_events_restored` takes its closures BY VALUE,
+            // so passing `restore`/`launch` directly moves them on iteration 1.
+            let d = baracuda_kernels_bench::time_with_events_restored(
+                ctx,
+                stream,
+                1,
+                &mut *restore,
+                &mut *launch,
+            );
+            v.push(d.as_secs_f64() * 1e9);
+        }
+        let mean = v.iter().sum::<f64>() / v.len() as f64;
+        v.sort_by(f64::total_cmp);
+        let n = v.len();
+        Self {
+            n,
+            min: v[0],
+            median: v[n / 2],
+            mean,
+            p90: v[(n * 90) / 100],
+            p99: v[(n * 99) / 100],
+            max: v[n - 1],
+        }
+    }
+
+    /// Dispersion as a percentage, used as the verdict's noise floor.
+    fn noise_pct(&self) -> f64 {
+        ((self.p90 / self.median) - 1.0) * 100.0
+    }
+
+    fn report(&self) {
+        println!(
+            "\n--- distribution over {} single-iteration timings (us) ---",
+            self.n
+        );
+        println!(
+            "min {:.2}  median {:.2}  mean {:.2}  p90 {:.2}  p99 {:.2}  max {:.2}",
+            self.min / 1000.0,
+            self.median / 1000.0,
+            self.mean / 1000.0,
+            self.p90 / 1000.0,
+            self.p99 / 1000.0,
+            self.max / 1000.0
+        );
+        println!(
+            "mean/median = {:.3}   criterion/median = {:.3}",
+            self.mean / self.median,
+            CRITERION_NS / self.median
+        );
+    }
+}
+
+/// ⚠️ THE VERDICT IS COMPARED AGAINST THE NOISE, NOT AGAINST ZERO.
+///
+/// The first version compared the ladder ends to a fixed +-5% and printed a
+/// direction. Run twice, back to back, it said:
+///
+/// ```text
+/// run 1   711.65 -> 657.30 us  (-7.6%)   "MOVES DOWN ... investigate"
+/// run 2   862.55 -> 947.64 us  (+9.9%)   "CONVERGES UPWARD"
+/// ```
+///
+/// Opposite verdicts, same code, same machine, minutes apart — it was reporting
+/// run-to-run variance as a trend and would have produced a confident story
+/// either way. That is the instrument-measures-itself failure, committed by a
+/// test written to diagnose one. The threshold now comes from THIS run's own
+/// spread.
+fn report_verdict(estimates: &[f64], st: &Stats) {
     println!("\n--- verdict ---");
     let first = estimates[0];
     let last = *estimates.last().expect("ladder is non-empty");
@@ -198,53 +256,33 @@ fn linalg_timing_dispersion_swamps_any_sample_size_trend() {
         first / 1000.0,
         last / 1000.0,
     );
-
-    // ⚠️ THE VERDICT MUST BE COMPARED AGAINST THE NOISE, NOT AGAINST ZERO.
-    //
-    // The first version of this test compared the ladder ends to a fixed +-5%
-    // and printed a directional conclusion. Run twice, back to back, it said:
-    //
-    //     run 1   711.65 -> 657.30 us  (-7.6%)   "MOVES DOWN ... investigate"
-    //     run 2   862.55 -> 947.64 us  (+9.9%)   "CONVERGES UPWARD"
-    //
-    // Opposite verdicts, same code, same machine, minutes apart. The ladder was
-    // reporting run-to-run variance as a trend, and it would have produced a
-    // confident story either way — which is the instrument-measures-itself
-    // failure, committed by a test written to diagnose one.
-    //
-    // The dispersion measured above is why: p99/median ~ 1.8 and max/min ~ 3.
-    // So the threshold is derived from THIS run's spread, and when the drift
-    // does not clear it the test says so instead of picking a direction.
-    let noise_pct = ((p90 / median) - 1.0) * 100.0;
+    let noise_pct = st.noise_pct();
     println!(
-        "single-iteration dispersion this run: p90/median = {:.3} ({noise_pct:.1}%), \
-         max/min = {:.2}",
-        p90 / median,
-        sorted[n - 1] / sorted[0]
+        "single-iteration dispersion this run: p90/median = {:.3} ({noise_pct:.1}%), max/min = {:.2}",
+        st.p90 / st.median,
+        st.max / st.min
     );
-    // ⚠️ `<` here, not `<=`, was the first spelling and it produced a
-    // DIRECTIONAL claim from an exact tie: run 2 drifted -20.6% against a
-    // 20.6% dispersion and fell through to the else branch. A threshold
-    // compared for equality against a float derived from the same run will
-    // sooner or later land exactly on itself. Ties are noise, so ties go to
-    // "no claim".
+    let span = (LADDER.last().expect("ladder is non-empty").0 as u64
+        * LADDER.last().expect("ladder is non-empty").1)
+        / (LADDER[0].0 as u64 * LADDER[0].1);
+    // `<=`, not `<`: the first spelling produced a DIRECTIONAL claim from an
+    // exact tie (-20.6% drift against 20.6% dispersion). A threshold compared
+    // against a float derived from the same run will land on itself sooner or
+    // later. Ties are noise, so ties go to "no claim".
     if drift.abs() <= noise_pct + f64::EPSILON.max(noise_pct * 1e-9) {
         println!(
-            "INDISTINGUISHABLE FROM NOISE: the ladder drifted {drift:+.1}% across an \
-             {}x launch range, inside this run's own {noise_pct:.1}% dispersion. \
-             No trend is claimable, in EITHER direction.",
-            (LADDER.last().unwrap().0 as u64 * LADDER.last().unwrap().1)
-                / (LADDER[0].0 as u64 * LADDER[0].1)
+            "INDISTINGUISHABLE FROM NOISE: the ladder drifted {drift:+.1}% across a \
+             {span}x launch range, inside this run's own {noise_pct:.1}% dispersion. \
+             No trend is claimable, in EITHER direction."
         );
-    } else if drift > 0.0 {
-        println!("Drift {drift:+.1}% EXCEEDS this run's {noise_pct:.1}% dispersion (upward).");
     } else {
-        println!("Drift {drift:+.1}% EXCEEDS this run's {noise_pct:.1}% dispersion (downward).");
+        let dir = if drift > 0.0 { "upward" } else { "downward" };
+        println!("Drift {drift:+.1}% EXCEEDS this run's {noise_pct:.1}% dispersion ({dir}).");
     }
     println!(
         "criterion/median = {:.3} — criterion's figure sits INSIDE this spread, so the \
          earlier 'CSV is systematically below criterion on 4 of 4 cells' reading was a \
          4-sample coincidence, not a bias.",
-        CRITERION_NS / median
+        CRITERION_NS / st.median
     );
 }

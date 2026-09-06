@@ -65,9 +65,10 @@
 //!
 //! **The same coincidence nearly shipped as a finding.** The first CSV lined up
 //! below criterion on 4 of 4 cells, which reads as a systematic bias; repeated
-//! sampling shows `criterion/median` landing anywhere in 0.82-0.99, i.e.
-//! criterion's figure sits INSIDE the spread and there is no bias. **Four
-//! same-direction draws is p = 1/16 — not rare enough to mean anything.**
+//! sampling shows `criterion/median` landing anywhere in 0.82-1.21 (measured at
+//! 0.817, 0.933, 0.951, 0.990, 1.213), i.e. on BOTH SIDES of 1.0 — criterion's
+//! figure sits INSIDE the spread and there is no bias. **Four same-direction
+//! draws is p = 1/16 — not rare enough to mean anything.**
 //!
 //! **Measured environment,** because the dispersion is a property of this box
 //! and not of cuSOLVER: no other compute process was on the GPU, and
@@ -133,20 +134,33 @@ fn spd_host<T: From<f32> + Copy>(n: usize) -> Vec<T> {
     a
 }
 
+/// Everything that identifies a cell and is the same for every op in a run.
+/// Bundled because `record` otherwise takes nine arguments, and the four that
+/// vary per call (`op`, `n`, and the two closures) are the ones a reader is
+/// actually checking at the call site.
+struct Cell<'a> {
+    ctx: &'a baracuda_driver::Context,
+    stream: &'a baracuda_driver::Stream,
+    dtype_label: &'static str,
+    baseline: Option<&'a PytorchBaseline>,
+}
+
 /// One `(op, dtype, n)` cell: time it, print, and append the CSV row that
 /// reaches `BENCHMARKS.md`.
-#[allow(clippy::too_many_arguments)]
 fn record(
     c: &mut Criterion,
-    ctx: &baracuda_driver::Context,
-    stream: &baracuda_driver::Stream,
+    cell: &Cell<'_>,
     op: &str,
-    dtype_label: &str,
     n: i32,
-    baseline: Option<&PytorchBaseline>,
     mut restore: impl FnMut(),
     mut launch: impl FnMut(),
 ) {
+    let Cell {
+        ctx,
+        stream,
+        dtype_label,
+        baseline,
+    } = *cell;
     let shape = format!("N{n}");
     warmup(stream, || {
         restore();
@@ -179,162 +193,148 @@ fn record(
     );
 }
 
+/// The `work` buffer lives behind a `RefCell` in both ops below, because
+/// `restore` needs `&work` (it is the copy destination) while `launch` needs
+/// `&mut work`, and `record` holds both closures at once. They never run
+/// concurrently, so the runtime check never trips; the compiler simply cannot
+/// see the alternation.
+///
+/// `Workspace::None` is likewise an ERROR and not an auto-allocate: cuSOLVER's
+/// scratch is caller-supplied and `unpack_workspace` returns
+/// `WorkspaceTooSmall { got: 0 }` whenever `needed > 0`. The size is only known
+/// after the query, so both ops ask and then allocate.
+fn bench_cholesky_f32(c: &mut Criterion, cell: &Cell<'_>, n: i32, host: &[f32]) {
+    let ctx = cell.ctx;
+    let stream = cell.stream;
+    let (Ok(pristine), Ok(work_buf), Ok(mut info)) = (
+        DeviceBuffer::from_slice(ctx, host),
+        DeviceBuffer::from_slice(ctx, host),
+        DeviceBuffer::<i32>::zeros(ctx, 1),
+    ) else {
+        return;
+    };
+    let work = std::cell::RefCell::new(work_buf);
+    let desc = CholeskyDescriptor {
+        matrix_size: n,
+        batch_size: 1,
+        lower: true,
+        element: ElementKind::F32,
+    };
+    let Ok(plan) = CholeskyPlan::<f32>::select(stream, &desc, PlanPreference::default()) else {
+        return;
+    };
+    let ws_bytes = plan.query_workspace_size(stream).unwrap_or(0).max(1);
+    let Ok(mut ws) = DeviceBuffer::<u8>::zeros(ctx, ws_bytes) else {
+        return;
+    };
+    let sh = [1, n, n];
+    let st = contiguous_stride(sh);
+    record(
+        c,
+        cell,
+        "cholesky",
+        n,
+        || {
+            pristine
+                .copy_to_device_async(&work.borrow(), stream)
+                .expect("restore cholesky input");
+        },
+        || {
+            let mut w = work.borrow_mut();
+            let args = CholeskyArgs::<f32> {
+                a: TensorMut {
+                    data: w.as_slice_mut(),
+                    shape: sh,
+                    stride: st,
+                },
+                info: TensorMut {
+                    data: info.as_slice_mut(),
+                    shape: [1],
+                    stride: [1],
+                },
+            };
+            plan.run(stream, Workspace::Borrowed(ws.as_slice_mut()), args)
+                .expect("cholesky");
+        },
+    );
+}
+
+/// See [`bench_cholesky_f32`] for the `RefCell` and workspace notes; `lu` adds
+/// a `pivot` output.
+fn bench_lu_f32(c: &mut Criterion, cell: &Cell<'_>, n: i32, host: &[f32]) {
+    let ctx = cell.ctx;
+    let stream = cell.stream;
+    let (Ok(pristine), Ok(work_buf), Ok(mut pivot), Ok(mut info)) = (
+        DeviceBuffer::from_slice(ctx, host),
+        DeviceBuffer::from_slice(ctx, host),
+        DeviceBuffer::<i32>::zeros(ctx, n as usize),
+        DeviceBuffer::<i32>::zeros(ctx, 1),
+    ) else {
+        return;
+    };
+    let work = std::cell::RefCell::new(work_buf);
+    let desc = LuDescriptor {
+        m: n,
+        n,
+        batch_size: 1,
+        element: ElementKind::F32,
+    };
+    let Ok(plan) = LuPlan::<f32>::select(stream, &desc, PlanPreference::default()) else {
+        return;
+    };
+    let ws_bytes = plan.query_workspace_size(stream).unwrap_or(0).max(1);
+    let Ok(mut ws) = DeviceBuffer::<u8>::zeros(ctx, ws_bytes) else {
+        return;
+    };
+    let sh = [1, n, n];
+    let st = contiguous_stride(sh);
+    record(
+        c,
+        cell,
+        "lu",
+        n,
+        || {
+            pristine
+                .copy_to_device_async(&work.borrow(), stream)
+                .expect("restore lu input");
+        },
+        || {
+            let mut w = work.borrow_mut();
+            let args = LuArgs::<f32> {
+                a: TensorMut {
+                    data: w.as_slice_mut(),
+                    shape: sh,
+                    stride: st,
+                },
+                pivot: TensorMut {
+                    data: pivot.as_slice_mut(),
+                    shape: [1, n],
+                    stride: contiguous_stride([1, n]),
+                },
+                info: TensorMut {
+                    data: info.as_slice_mut(),
+                    shape: [1],
+                    stride: [1],
+                },
+            };
+            plan.run(stream, Workspace::Borrowed(ws.as_slice_mut()), args)
+                .expect("lu");
+        },
+    );
+}
+
 fn bench_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
     let (ctx, stream) = setup_device();
-
+    let cell = Cell {
+        ctx: &ctx,
+        stream: &stream,
+        dtype_label: "f32",
+        baseline,
+    };
     for &n in N_SWEEP {
-        let nu = n as usize;
-        let host = spd_host::<f32>(nu);
-
-        // ---- cholesky ----
-        {
-            let pristine = match DeviceBuffer::from_slice(&ctx, &host) {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
-            let work = match DeviceBuffer::from_slice(&ctx, &host) {
-                // RefCell because `restore` needs `&work` (copy destination) and
-                // `launch` needs `&mut work`, and `record` holds both closures at
-                // once. They never run concurrently, so the runtime check never
-                // trips; the compiler simply cannot see the alternation.
-                Ok(b) => std::cell::RefCell::new(b),
-                Err(_) => continue,
-            };
-            let mut info: DeviceBuffer<i32> = match DeviceBuffer::zeros(&ctx, 1) {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
-            let desc = CholeskyDescriptor {
-                matrix_size: n,
-                batch_size: 1,
-                lower: true,
-                element: ElementKind::F32,
-            };
-            if let Ok(plan) = CholeskyPlan::<f32>::select(&stream, &desc, PlanPreference::default())
-            {
-                // `Workspace::None` is an ERROR, not an auto-allocate: cuSOLVER's
-                // scratch is caller-supplied and `unpack_workspace` returns
-                // `WorkspaceTooSmall { got: 0 }` whenever `needed > 0`. The size
-                // is only known after the query, so ask, then allocate.
-                let ws_bytes = plan.query_workspace_size(&stream).unwrap_or(0).max(1);
-                let mut ws: DeviceBuffer<u8> = match DeviceBuffer::zeros(&ctx, ws_bytes) {
-                    Ok(b) => b,
-                    Err(_) => continue,
-                };
-                let sh = [1, n, n];
-                let st = contiguous_stride(sh);
-                record(
-                    c,
-                    &ctx,
-                    &stream,
-                    "cholesky",
-                    "f32",
-                    n,
-                    baseline,
-                    || {
-                        pristine
-                            .copy_to_device_async(&work.borrow(), &stream)
-                            .expect("restore cholesky input");
-                    },
-                    || {
-                        let mut w = work.borrow_mut();
-                        let args = CholeskyArgs::<f32> {
-                            a: TensorMut {
-                                data: w.as_slice_mut(),
-                                shape: sh,
-                                stride: st,
-                            },
-                            info: TensorMut {
-                                data: info.as_slice_mut(),
-                                shape: [1],
-                                stride: [1],
-                            },
-                        };
-                        plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
-                            .expect("cholesky");
-                    },
-                );
-            }
-        }
-
-        // ---- lu ----
-        {
-            let pristine = match DeviceBuffer::from_slice(&ctx, &host) {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
-            let work = match DeviceBuffer::from_slice(&ctx, &host) {
-                // RefCell because `restore` needs `&work` (copy destination) and
-                // `launch` needs `&mut work`, and `record` holds both closures at
-                // once. They never run concurrently, so the runtime check never
-                // trips; the compiler simply cannot see the alternation.
-                Ok(b) => std::cell::RefCell::new(b),
-                Err(_) => continue,
-            };
-            let mut pivot: DeviceBuffer<i32> = match DeviceBuffer::zeros(&ctx, nu) {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
-            let mut info: DeviceBuffer<i32> = match DeviceBuffer::zeros(&ctx, 1) {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
-            let desc = LuDescriptor {
-                m: n,
-                n,
-                batch_size: 1,
-                element: ElementKind::F32,
-            };
-            if let Ok(plan) = LuPlan::<f32>::select(&stream, &desc, PlanPreference::default()) {
-                // `Workspace::None` is an ERROR, not an auto-allocate: cuSOLVER's
-                // scratch is caller-supplied and `unpack_workspace` returns
-                // `WorkspaceTooSmall { got: 0 }` whenever `needed > 0`. The size
-                // is only known after the query, so ask, then allocate.
-                let ws_bytes = plan.query_workspace_size(&stream).unwrap_or(0).max(1);
-                let mut ws: DeviceBuffer<u8> = match DeviceBuffer::zeros(&ctx, ws_bytes) {
-                    Ok(b) => b,
-                    Err(_) => continue,
-                };
-                let sh = [1, n, n];
-                let st = contiguous_stride(sh);
-                record(
-                    c,
-                    &ctx,
-                    &stream,
-                    "lu",
-                    "f32",
-                    n,
-                    baseline,
-                    || {
-                        pristine
-                            .copy_to_device_async(&work.borrow(), &stream)
-                            .expect("restore lu input");
-                    },
-                    || {
-                        let mut w = work.borrow_mut();
-                        let args = LuArgs::<f32> {
-                            a: TensorMut {
-                                data: w.as_slice_mut(),
-                                shape: sh,
-                                stride: st,
-                            },
-                            pivot: TensorMut {
-                                data: pivot.as_slice_mut(),
-                                shape: [1, n],
-                                stride: contiguous_stride([1, n]),
-                            },
-                            info: TensorMut {
-                                data: info.as_slice_mut(),
-                                shape: [1],
-                                stride: [1],
-                            },
-                        };
-                        plan.run(&stream, Workspace::Borrowed(ws.as_slice_mut()), args)
-                            .expect("lu");
-                    },
-                );
-            }
-        }
+        let host = spd_host::<f32>(n as usize);
+        bench_cholesky_f32(c, &cell, n, &host);
+        bench_lu_f32(c, &cell, n, &host);
     }
 }
 
