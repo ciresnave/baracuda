@@ -83,6 +83,7 @@ import csv
 import json
 import pathlib
 import re
+import statistics
 import sys
 from collections import defaultdict
 
@@ -109,25 +110,63 @@ def load_phase29(csv_dir: pathlib.Path) -> dict[tuple[str, str, str], dict[str, 
 
     Each value dict can carry keys `baracuda_ns`, `cuBLAS_ns`,
     `cuDNN_ns`, `PyTorch_ns`, and arbitrary other `<reference>_ns`
-    columns from custom benches.
+    columns from custom benches. Cells measured more than once also carry
+    `<key>_runs`, `<key>_lo` and `<key>_hi`.
+
+    WARNING: THIS USED TO BE LAST-ROW-WINS, AND THAT WAS A SILENT SELECTION.
+    The bench CSVs live under `target/` and are APPENDED to, never truncated,
+    so a file accumulates one row per cell per run. `cell[k] = v` in a loop
+    therefore published whichever run happened to be written last, with
+    nothing anywhere recording that a choice had been made.
+
+    Measured on `linalg.csv` after five runs of four cells:
+
+        cell            runs  across-run max/min  within-run p90/med  published
+        cholesky/N256      5             1.430        1.05-1.77       5/5 ranked
+        lu/N256            5             1.481        1.02-1.05       2/5 ranked
+        cholesky/N512      5             1.269        1.08-1.33       5/5 ranked
+        lu/N512            5             1.032        1.01-1.03       3/5 ranked
+
+    The published figure was the SLOWEST of five for two of the four cells,
+    and a 43-48% across-run range was being collapsed to an arbitrary point.
+
+    So: collect every observation and publish the MEDIAN of them, keeping the
+    observed range alongside. A median is stable against one bad run in a way
+    "the last one" is not, and the range makes the reproducibility visible.
+
+    ⚠️ AND THE ACROSS-RUN RANGE IS NOT THE WITHIN-RUN SPREAD. `lu/N256` above
+    reports a within-run `p90/median` of 1.02-1.05 -- which reads as +-5%,
+    very tight -- while varying 1.48x BETWEEN runs. A single run's error bar
+    says nothing about reproducibility, and quoting it as if it did is the
+    mistake this docstring exists to prevent.
     """
-    cells: dict[tuple[str, str, str], dict[str, float]] = defaultdict(dict)
+    obs: dict[tuple[str, str, str], dict[str, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     for csv_path in sorted(csv_dir.glob("*.csv")):
         with csv_path.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 key = (row["op"], row["shape"], row["dtype"])
-                cell = cells[key]
                 bn = _try_float(row.get("baracuda_ns", ""))
                 if bn is not None:
-                    cell["baracuda_ns"] = bn
+                    obs[key]["baracuda_ns"].append(bn)
                 rn = _try_float(row.get("reference_ns", ""))
                 ref_label = row.get("reference", "").strip()
                 if rn is not None and ref_label and ref_label != "baracuda":
-                    cell[f"{ref_label}_ns"] = rn
+                    obs[key][f"{ref_label}_ns"].append(rn)
                 pn = _try_float(row.get("pytorch_ns", ""))
                 if pn is not None:
-                    cell["PyTorch_ns"] = pn
+                    obs[key]["PyTorch_ns"].append(pn)
+
+    cells: dict[tuple[str, str, str], dict[str, float]] = defaultdict(dict)
+    for key, series in obs.items():
+        for name, values in series.items():
+            cells[key][name] = statistics.median(values)
+            if len(values) > 1:
+                cells[key][f"{name}_runs"] = float(len(values))
+                cells[key][f"{name}_lo"] = min(values)
+                cells[key][f"{name}_hi"] = max(values)
     return cells
 
 
