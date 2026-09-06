@@ -8,10 +8,19 @@ Experimental conditions, self-enforced:
     src/lib.rs, README.md and the four test files were unreachable
   * no docs.rs, no vulkane source, no asking them
 
-Every inference not stated by the manifest is tagged GUESS-n in a comment and
-collected in GUESSES at the bottom. Per the architect's condition, a guess that
-happens to be RIGHT is still a finding: it is a thing the manifest failed to
-supply, and it is invisible in a byte-match that succeeds.
+Two lists, per KISS-CLASSIFY-6.8-0017:
+
+  GUESSED  — supplied from OUTSIDE the manifest. A guess that happened to be
+             RIGHT is still listed: the array records what the DOCUMENT failed
+             to determine, not what the reproduction got wrong, and the next
+             reader may guess differently.
+  DERIVED  — stated by the manifest, or entailed by its own conventions. Each
+             entry MUST cite WHERE, because "it was entailed" is not a claim a
+             reader can check and "it appears in these three places" is.
+
+⚠️ An item in NEITHER list is an assertion that the manifest determined it.
+Moving an item from GUESSED to DERIVED flatters the manifest and this
+reproduction at once, which is why every DERIVED entry carries its location.
 """
 
 import json
@@ -28,6 +37,18 @@ M = json.loads(MANIFEST.read_text(encoding="utf-8"))
 D = M["declarative"]
 
 GUESSES: list[str] = []
+DERIVED: list[str] = []
+
+
+def derived(tag: str, what: str) -> None:
+    """An item the manifest STATES, or that its own conventions entail.
+
+    Per KISS-CLASSIFY-6.8-0017: not `guessed`, but it MUST still be named, and
+    every entry must say WHERE in the manifest the derivation is available.
+    "It was entailed" is not checkable; "it appears in these three places" is.
+    """
+    if tag not in [d.split(":", 1)[0] for d in DERIVED]:
+        DERIVED.append(f"{tag}: {what}")
 
 
 def guess(tag: str, what: str) -> None:
@@ -178,6 +199,12 @@ def _coopvec_key(t: dict):
     # never says in prose that its order is the sort order — but ops_alphabet and
     # arith_names are used exactly that way, so the convention is derivable and
     # the vector pins it. Recorded as DERIVED, not as a guess.
+    derived("DERIVED-2", "the canonical sort order for component types is the "
+                         "`component_types` ARRAY INDEX — the manifest gives it "
+                         "as an ordered array, and `ops_alphabet` and "
+                         "`arith_names` are used the same way for `<ops>` and "
+                         "`<arith>`, so the convention appears in THREE places; "
+                         "vector[9] (u8 before u32) pins it")
     order = {c: i for i, c in enumerate(D["component_types"])}
 
     def rank(c: str):
@@ -218,9 +245,17 @@ def token(inp: dict) -> str:
     # namespace prefix is "<namespace>:" — the manifest gives the grammar string
     # and `namespace`, but never states that the token begins "vulkan:" as
     # opposed to some other rendering of the namespace.
-    guess("GUESS-9", "the token begins '<namespace>:' and fields appear in "
-                     "`grammar` order — both read off the grammar string, which "
-                     "is prose rather than a declared assembly rule")
+    # ⚠️ RECLASSIFIED from GUESS-9 to DERIVED. `grammar` literally reads
+    # "vulkan:<subgroup>.<ops>.<arith>.<coop>.<coopvec>" — it STATES the prefix
+    # and the field order. It was first filed as a guess because the grammar is
+    # a STRING rather than a structured assembly rule, but -0017 asks whether
+    # the manifest STATES the item, not whether it states it machine-readably.
+    #
+    # This move makes both the manifest and this reproduction look better, which
+    # is the exact incentive -0017 warns about — so it carries its citation.
+    derived("DERIVED-1", "the `<namespace>:` prefix and the field ORDER — stated "
+                         "verbatim by the top-level `grammar` field, "
+                         "\"vulkan:<subgroup>.<ops>.<arith>.<coop>.<coopvec>\"")
     fields = [
         field_subgroup(inp.get("subgroup")),
         field_ops(inp.get("ops") or []),
@@ -259,9 +294,16 @@ def main() -> int:
         else:
             skipped += 1
     print(f"\n{ok} passed, {bad} failed, {skipped} skipped, of {len(M['vectors'])} vectors")
-    print(f"\n=== {len(GUESSES)} THINGS THE MANIFEST DID NOT SUPPLY ===")
+    print(f"\n=== {len(GUESSES)} GUESSED — the manifest did not supply these ===")
     for g in GUESSES:
         print(f"  {g}")
+    print(f"\n=== {len(DERIVED)} DERIVED — stated by the manifest; each cites WHERE ===")
+    for d in DERIVED:
+        print(f"  {d}")
+    print(
+        "\nAn item in NEITHER list asserts that the manifest determined it "
+        "(KISS-CLASSIFY-6.8-0017)."
+    )
     return 1 if bad else 0
 
 

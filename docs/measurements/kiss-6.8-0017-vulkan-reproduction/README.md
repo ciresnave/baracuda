@@ -37,12 +37,29 @@ No docs.rs, no source, no asking them.
 party, which is exactly the thing -0017 exists to be suspicious of, so it is
 recorded as an assertion rather than left to read as protocol.
 
-## The eight things the manifest did not supply
+## Seven guessed, two derived
 
 A guess that turned out **right** is still listed: the array records what the
 document failed to determine, not what the reproduction got wrong. A successful
 byte-match that needed eight external inputs is a **failure of the manifest that
 reads as a success**.
+
+⚠️ **Reclassified after reading -0017's final text:** what was originally
+"GUESS-9 — the `<namespace>:` prefix and field order" is **DERIVED**, because
+`grammar` states it verbatim (`vulkan:<subgroup>.<ops>.<arith>.<coop>.<coopvec>`).
+It was first filed as a guess because the grammar is a *string* rather than a
+structured assembly rule, but the clause asks whether the manifest **states** the
+item, not whether it states it machine-readably. **That move flatters both the
+manifest and this reproduction, which is why it carries its citation.**
+
+### DERIVED — stated by the manifest, each citing where
+
+| # | item | where |
+|---|---|---|
+| 1 | the `<namespace>:` prefix and the field ORDER | top-level `grammar` |
+| 2 | component sort order is the `component_types` **array index** | `component_types` is an ordered array; `ops_alphabet` and `arith_names` are used the same way — three places. Pinned by vector[9]. |
+
+### GUESSED — supplied from outside the manifest
 
 | # | what had to be supplied | why no vector closes it |
 |---|---|---|
