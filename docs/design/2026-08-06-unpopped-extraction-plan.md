@@ -1,6 +1,19 @@
 # Unpopped extraction plan — carve the kernel generator out of Baracuda
 
-**Status:** ready to execute, gated on Baracuda `main` @ `419e4f22` (post-PR#12). Coordinated with the Unpopped peer (repo `C:\Projects\Unpopped`).
+**Status:** **EXECUTED.** The carve-out happened and Baracuda consumes the result from
+crates.io: `crates/baracuda-kernelgen/` and `crates/baracuda-kernel-vocab/` no longer exist
+in this repository, and the workspace pins `unpopped` / `unpopped-vocab` as external
+dependencies (see `Cargo.toml`; a newer `unpopped` adoption is queued separately). This
+document is the record of how the carve was done and why, not open work. Coordinated at the
+time with the Unpopped peer.
+
+> ⚠ **DISCHARGED 2026-09-06.** This field read *"ready to execute, gated on Baracuda `main`
+> @ `419e4f22` (post-PR#12)"* until today — an instruction to perform work that had already
+> been performed, sitting in the position a reader checks first. The plan's own
+> dependency-direction decision (*"Baracuda consumes published `unpopped`/`unpopped-vocab`
+> from day one"*) is the thing that is now true, which is what makes the old status field
+> self-contradicting rather than merely old. Replaced rather than annotated; the decisions
+> and the history-preservation notes below are untouched.
 
 ## Decisions (Eric)
 

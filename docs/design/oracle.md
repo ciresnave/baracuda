@@ -1,10 +1,20 @@
 # CPU oracle + precision-first policy — design (2026-07-10)
 
-**Status: shipped (alpha).** The CPU oracle (`crates/baracuda-kernelgen/src/oracle.rs`,
-commit `e57c8b3`) is the workspace's universal numeric correctness reference; the
-precision-first `MorePrecise` variant policy (`crates/baracuda-kernelgen/src/cuda.rs`
-+ `crates/baracuda-kernelgen/src/backend.rs`, commits `85305948` / `541ecb6c`) is
-device-proven (`3604b3db`). This is a `0.0.1-alpha` codebase — the scope caveats
+**Status: shipped — and CARVED OUT of this repository.** The CPU oracle and the
+precision-first `MorePrecise` variant policy both live in the external **`unpopped`**
+crate now, not here. They were `crates/baracuda-kernelgen/src/{oracle,cuda,backend}.rs`
+(commits `e57c8b3`, `85305948` / `541ecb6c`; device-proven at `3604b3db`) until the
+extraction recorded in `2026-08-06-unpopped-extraction-plan.md`. The oracle is still the
+numeric correctness reference; Baracuda consumes it as a dependency.
+
+> ⚠ **DISCHARGED 2026-09-06.** The status word *shipped* was, and remains, correct — the
+> four `crates/baracuda-kernelgen/…` paths under it were not. **That directory holds zero
+> files in this repository** (control: `crates/baracuda-cuda-emit/` holds 22), so every
+> citation beneath the authoritative Status line was dangling and a reader following one
+> found nothing. **A true header over dead citations is in one way worse than a false one:
+> it survives verification, and sends the reader somewhere that does not exist.** Now named
+> by CRATE rather than by path — a path into another repository would recreate this defect
+> the next time that repository moved a file. This is a `0.0.1-alpha` codebase — the scope caveats
 below (v2 deferrals, the round-once residual) are real and load-bearing, not
 polish.
 
