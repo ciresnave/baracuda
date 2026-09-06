@@ -55,10 +55,24 @@ fn variant_gate_loop_end_to_end() {
     let o = OperandDesc::new(1, &[COLS], &[1], ElementKind::F32, 256);
     let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
     let variants = generate_variants(&op, &key, &Cuda);
-    assert_eq!(variants.len(), 2, "base + splitk");
-    assert_eq!(
-        variants[1].fidelity,
-        VariantFidelity::ReassociatedDeterministic
+    // ⚠️ BY TAG, NOT BY INDEX. This asserted `len() == 2` and
+    // `variants[1].fidelity`, and both went stale when the precision-first
+    // `prec` variant was added: the set is now [base, splitk, prec] here and
+    // [base, prec, smemrow] in the softmax test below — where `prec` landed at
+    // index 1 and DISPLACED the variant the index assertion was aimed at.
+    //
+    // A count assertion fails LOUDLY when a variant is added. A POSITIONAL
+    // assertion beside it fails only if the ORDER happens to change, and
+    // silently checks a different variant if the count holds. Neither is a
+    // statement about the variant the test is named for.
+    let splitk = variants
+        .iter()
+        .find(|v| v.tag == "splitk")
+        .expect("the splitk variant must be offered for this outer-axis cell");
+    assert_eq!(splitk.fidelity, VariantFidelity::ReassociatedDeterministic);
+    assert!(
+        variants.iter().any(|v| v.tag == "base"),
+        "the base variant must always be offered"
     );
 
     // ---- 2. nvrtc-compile every kernel of every variant; load via the driver. ----
@@ -262,8 +276,24 @@ fn smemrow_variant_is_bit_identical_and_gated() {
     let x = OperandDesc::new(2, &[RR_ROWS, K], &[K, 1], ElementKind::F32, 256);
     let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
     let variants = generate_variants(&softmax, &key, &Cuda);
-    assert_eq!(variants.len(), 2, "base + smemrow");
-    assert_eq!(variants[1].fidelity, VariantFidelity::BitIdentical);
+    // BY TAG — see the note in `variant_gate_loop_end_to_end`. `prec` sits at
+    // index 1 and `smemrow` at index 2, so the old `variants[1]` assertion was
+    // checking the PRECISION variant while claiming to check smemrow.
+    //
+    // ⚠️ AND THE STALE COUNT WAS STANDING IN FRONT OF A REAL FAILURE. With it
+    // fixed, this test reaches its bit-identity check and that check FAILS:
+    // smemrow declares BitIdentical and differs from base on 12,283,172 of
+    // 16,777,216 elements, worst 11 ULP, reproducible. Filed as issue #99.
+    // A stale assertion was hiding a live one.
+    let smemrow = variants
+        .iter()
+        .find(|v| v.tag == "smemrow")
+        .expect("the smemrow variant must be offered for this row-reduce cell");
+    assert_eq!(smemrow.fidelity, VariantFidelity::BitIdentical);
+    assert!(
+        variants.iter().any(|v| v.tag == "base"),
+        "the base variant must always be offered"
+    );
 
     let compiler = NvrtcCompiler::new(ArchSku::Sm89);
     let mut modules = Vec::new();
