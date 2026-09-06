@@ -66,6 +66,40 @@ use baracuda_kernels_types::{
 // Device init
 // ---------------------------------------------------------------------
 
+/// Process-wide serializer for ON-DEVICE TIMING tests.
+///
+/// ⚠️ **Two device tests running concurrently on one GPU produce a WRONG
+/// ROUTING DECISION, not merely a slow one.** Measured on an RTX 4070 with both
+/// `variant_gate` tests in one `cargo test` invocation:
+///
+/// ```text
+/// parallel (libtest default)   2 of 3 runs FLIPPED the gate winner to base
+///                              splitk measured 542617 / 537292 ns
+/// --test-threads=1             3 of 3 elected splitk, margin 1.30-1.32
+///                              splitk measured 301744 / 302489 / 303923 ns
+/// ```
+///
+/// The contamination inflates both candidates and does **not** inflate them
+/// equally, so the margin inverts. `MIN_FLIP_MARGIN` cannot help — it gates a
+/// flip against an incumbent, not a first decision, and the inflated margin
+/// clears it anyway.
+///
+/// ⚠️ **A lock inside `gate_cell` DOES NOT WORK, and I shipped that first and
+/// measured it failing 2 of 4.** The interference is not measurement-vs-
+/// measurement: it is one test's *unmeasured* work — 16.7M-element launches and
+/// device-to-host copies — running against another test's timing section. **The
+/// guard has to cover the whole test body, so it cannot live inside the thing
+/// being timed.**
+///
+/// Hold it for the entire body of any test that times device work:
+///
+/// ```ignore
+/// let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK.lock().unwrap();
+/// ```
+///
+/// Poisoning is recoverable: a panicking test leaves no state the next one reads.
+pub static DEVICE_TIMING_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Initialize the CUDA driver and return a `(Context, Stream)` pair on
 /// device 0. Panics on any failure — the bench can't continue without a
 /// live GPU context anyway.

@@ -4131,12 +4131,36 @@ fn row_reduce_materialize_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     Some(Variant::new(
         "smemrow",
         vec![k],
-        VariantFidelity::BitIdentical,
+        // ⚠️ NOT `BitIdentical`, and it used to say it was (#99). MEASURED on an
+        // RTX 4070 against the softmax row-reduce cell:
+        //
+        //     12,283,172 of 16,777,216 elements differ   (73%)
+        //     worst |ULP delta| = 11, reproducible across runs
+        //
+        // The lowering is legitimate; only the CLAIM was wrong. The sole body
+        // difference is cache-vs-recompute of one deterministic expression — the
+        // base recomputes `expf(in0[idx] - r0)` in the epilogue, this variant
+        // reuses the value it cached in smem during the fold. Same accumulation,
+        // same reduction tree, same launch geometry (both `<<<n_out, 256>>>` in
+        // the differential), and the divergence is PER-ELEMENT rather than a
+        // per-row scale — so it is the numerator, not the divisor. Equal at
+        // source level, unequal in the emitted binary.
+        //
+        // `ReassociatedDeterministic` is imprecise about the MECHANISM (the
+        // association is unchanged; the evaluation is not) and exact about the
+        // SELECTION POLICY, which is the part that binds: anything that is not
+        // `BitIdentical` may never be chosen silently. Unpopped is renaming it
+        // `DeterministicallyDivergent` for exactly this reason; this moves to
+        // that name when 0.11.0 is adopted.
+        VariantFidelity::ReassociatedDeterministic,
         format!(
             "same launch shape as the base rowreduce ({kname}<<<n_out, B>>> with B a \
              multiple of 32, <= 1024) PLUS dynamic shared memory = k * {asz} bytes \
              (`{acc}` per element); requires k within the device per-block shared-memory \
-             ceiling. Bit-identical to the base kernel; the tradeoff is occupancy."
+             ceiling. Deterministic for a fixed launch configuration but NOT \
+             bit-identical to the base: the epilogue reuses the cached fold value \
+             where the base recomputes it, measured at up to 11 ULP on softmax. \
+             The tradeoff is occupancy."
         ),
     ))
 }
@@ -9796,7 +9820,14 @@ got:
             .find(|v| v.tag == "smemrow")
             .expect("smemrow variant offered");
         assert_eq!(sm.tag, "smemrow");
-        assert_eq!(sm.fidelity, VariantFidelity::BitIdentical);
+        // ⚠️ THIS ASSERTED `BitIdentical` THREE LINES ABOVE ITS OWN REFUTATION
+        // (#99). The assertions below establish that the epilogue READS THE
+        // CACHE instead of recomputing — "exactly ONE expf remains, vs two in
+        // the base kernel" — and that is precisely why the outputs are not
+        // bit-identical: measured, 12,283,172 of 16,777,216 elements differ by
+        // up to 11 ULP. The test proved the mechanism and asserted the
+        // conclusion it rules out.
+        assert_eq!(sm.fidelity, VariantFidelity::ReassociatedDeterministic);
         let src = &sm.kernels[0].source;
         assert!(sm.kernels[0].name.ends_with("_rowreduce_smemrow"));
         assert!(src.contains("extern __shared__ float baracuda_row_smem[];"));
