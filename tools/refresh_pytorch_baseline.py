@@ -187,12 +187,30 @@ LOSS_DTYPES: tuple[tuple[str, torch.dtype], ...] = (
 WARMUP_LAUNCHES: int = 10
 
 
-def time_median_ns(
+def time_spread_ns(
     launch: Callable[[], None],
     samples: int,
     inner: int,
-) -> float:
-    """Median per-launch wall-clock ns across `samples` batches of `inner`."""
+) -> dict[str, float]:
+    """Per-launch wall-clock ns across `samples` batches of `inner`.
+
+    Returns `{median_ns, min_ns, p90_ns, max_ns, samples}`.
+
+    WHY THE SPREAD AND NOT JUST THE MEDIAN. The baracuda column of the
+    comparison table carries `p90/median` and `max/min` per cell; this column
+    carried a bare median. A cross-implementation table where only ONE side has
+    error bars will be quoted as if both did — and on this box a Linalg cell was
+    measured varying 1.48x between runs while looking like +-5% within one.
+
+    The samples were already being collected and all but the median discarded,
+    so this costs nothing but the JSON bytes.
+
+    NOTE ON WHAT IT IS THE SPREAD *OF*: each element is the mean over `inner`
+    launches, not one launch, so averaging smooths the tail. It is the right
+    error bar for a median OF THOSE SAMPLES — which is what `median_ns` is —
+    and it is NOT the per-launch variation. Same caveat as `Spread` in
+    `baracuda-kernels-bench/src/lib.rs`, and for the same reason.
+    """
     # Warmup — let GPU clock + caches settle. Match `warmup()` in
     # `baracuda-kernels-bench/src/lib.rs`.
     for _ in range(WARMUP_LAUNCHES):
@@ -209,7 +227,24 @@ def time_median_ns(
         end = time.perf_counter_ns()
         per_launch_ns.append((end - start) / inner)
 
-    return statistics.median(per_launch_ns)
+    ordered = sorted(per_launch_ns)
+    n = len(ordered)
+    return {
+        "median_ns": statistics.median(ordered),
+        "min_ns": ordered[0],
+        "p90_ns": ordered[(n * 90) // 100],
+        "max_ns": ordered[-1],
+        "samples": float(n),
+    }
+
+
+def time_median_ns(
+    launch: Callable[[], None],
+    samples: int,
+    inner: int,
+) -> float:
+    """Median per-launch wall-clock ns. Thin wrapper over `time_spread_ns`."""
+    return time_spread_ns(launch, samples, inner)["median_ns"]
 
 
 # ---------------------------------------------------------------------
@@ -1040,17 +1075,31 @@ def main() -> int:
             cell_index += 1
             print(f"[{cell_index}/{total_cells}] {op_label}/{dtype_name}/{shape} ...", end=" ", flush=True)
             try:
-                median_ns = time_median_ns(launch, args.samples, args.inner)
+                sp = time_spread_ns(launch, args.samples, args.inner)
             except RuntimeError as e:
                 print(f"FAILED: {e}", flush=True)
                 continue
-            print(f"{median_ns:.1f} ns", flush=True)
+            median_ns = sp["median_ns"]
+            p90_over_median = sp["p90_ns"] / median_ns if median_ns else float("nan")
+            max_over_min = sp["max_ns"] / sp["min_ns"] if sp["min_ns"] else float("nan")
+            print(
+                f"{median_ns:.1f} ns  (p90/median {p90_over_median:.2f}, "
+                f"max/min {max_over_min:.2f}, n={int(sp['samples'])})",
+                flush=True,
+            )
             results.append(
                 {
                     "op": op_label,
                     "shape": shape,
                     "dtype": dtype_name,
                     "median_ns": round(median_ns, 3),
+                    # Additive and optional: an older reader ignores these, and a
+                    # row written before this change simply has none. No
+                    # schema_version bump — nothing existing changed meaning.
+                    "min_ns": round(sp["min_ns"], 3),
+                    "p90_ns": round(sp["p90_ns"], 3),
+                    "max_ns": round(sp["max_ns"], 3),
+                    "samples": int(sp["samples"]),
                     "run": run_id,
                 }
             )
