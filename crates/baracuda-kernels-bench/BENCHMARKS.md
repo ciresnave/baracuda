@@ -13,7 +13,20 @@ hand-maintained roll-up.
 - `delta ≈ 1.0` ⇒ same kernel (expected for cuDNN-backed ops where
   baracuda's plan just wraps the cuDNN call).
 
-**Hardware**: RTX 4070 (sm_89), CUDA 13.0, cuDNN 9.x.
+**Hardware**: RTX 4070 **Laptop GPU** (sm_89). The generated rollup below carries its
+own `Hardware:` line and that is the copy a regeneration keeps current; this one is
+hand-maintained and must be made to agree with it.
+
+> ⚠ **DISCHARGED 2026-09-06.** This line read *“RTX 4070 (sm_89), CUDA 13.0, cuDNN 9.x”*
+> until today — carried unchanged from the file's creation on 2026-05-28 through every
+> regeneration since, including the full-suite regen in #74 that corrected the generated
+> preamble's copy on the same night. **RTX 4070 and RTX 4070 Laptop are different parts**
+> (different SM count and memory bandwidth), so a reader comparing these numbers against
+> published desktop figures was comparing against the wrong GPU. The toolchain versions
+> are dropped rather than restated: the rollup is regenerated across runs, and a version
+> pinned here is one the generator structurally cannot reach — which is how the old pair
+> survived four months. `scripts/check-benchmark-provenance.sh` now fails if the two
+> hardware claims name different parts.
 **Build**: `cargo bench -p baracuda-kernels-bench --features sm89,cudnn`.
 
 ## Bench inventory
