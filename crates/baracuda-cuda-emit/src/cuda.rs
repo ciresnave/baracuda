@@ -9228,13 +9228,32 @@ got:
     /// arithmetic — so nothing currently REQUESTS it.
     ///
     /// The fix needs `is_bit_move_row_reduce_output(stages, epilogue)`, which
-    /// Unpopped shipped on their `main` and which is NOT in the 0.8.7 this
-    /// crate is pinned to. Gating on a predicate I cannot call is the reason
-    /// this is a pin and not a fix.
+    /// Unpopped has on their `main`. Gating on a predicate I cannot call is
+    /// the reason this is a pin and not a fix.
     ///
-    /// WHEN THAT PREDICATE IS PUBLISHED AND THE GATE IS WIRED, THIS TEST GOES
-    /// RED. That is intended: invert it to assert the storage-typed
-    /// accumulator, and delete this note.
+    /// ⚠️ AND IT IS NOT IN ANY PUBLISHED VERSION — I SAID OTHERWISE AND WAS
+    /// WRONG. This note first read "it waits on a 0.9 adoption", which assumed
+    /// 0.9.0 carried it. Measured in the vendored crates, with controls:
+    ///
+    /// ```text
+    ///                                  0.8.7   0.9.0
+    /// is_bit_move_row_reduce_output      0       0     <- the one needed
+    /// is_bit_move_fold_output            1       1     } controls: the file
+    /// is_bit_move_reduce                 1       1     } is complete and the
+    /// is_bit_or_sign_move                -       1     } absence is real
+    /// narrow_sign_masks                  -       1     }
+    /// ```
+    ///
+    /// So adopting 0.9.0 would NOT deliver it, and the two pieces of work are
+    /// independent: a 0.9 adoption stands on its own merits, and this pin waits
+    /// on a FUTURE publish plus an adoption of that — two events, not one.
+    /// Unpopped is deliberately not cutting a release for it (their argument,
+    /// which I agree with: an API whose first consumer is a scratch experiment
+    /// is how an unreachable seam happens).
+    ///
+    /// WHEN THAT PREDICATE IS PUBLISHED, ADOPTED, AND THE GATE IS WIRED, THIS
+    /// TEST GOES RED. That is intended: invert it to assert a raw load, and
+    /// delete this note.
     #[test]
     fn rowreduce_all_move_is_promoted_today_which_violates_6_16_0009() {
         use unpopped::ir::{ReduceOp, ReduceStage, UnaryOp, reduced};
