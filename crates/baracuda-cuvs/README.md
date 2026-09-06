@@ -78,7 +78,7 @@ pip install cuvs-cu12
 Run the hardware tests once installed:
 
 ```bash
-cargo test -p baracuda-cuvs --features cuvs -- --ignored
+cargo gpu-test -p baracuda-cuvs --features cuvs
 ```
 
 ## License

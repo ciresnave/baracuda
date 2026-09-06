@@ -83,6 +83,16 @@ jobs:
       - name: benchmark-provenance guard
         shell: bash
         run: bash scripts/check-benchmark-provenance.sh
+      # Device-run-invocation guard: CONTRIBUTING step 3 requires on-device tests to
+      # go through `cargo gpu-test`, which holds the machine-wide `gpu-run` mutex —
+      # the box is SHARED with other projects and concurrent device runs collide
+      # (2026-07-31 host-aperture postmortem). Four docs instructed raw
+      # `cargo test -- --ignored` anyway, and a reader asking "how do I run these"
+      # opens the crate README, not CONTRIBUTING. .cargo/config.toml already names
+      # the class: "a convention in a docs file is not a control". This makes it one.
+      - name: device-run-invocation guard
+        shell: bash
+        run: bash scripts/check-device-run-invocations.sh
       # ---- The workspace steps below are scoped to the DRIVER-FREE surface.
       # This is a CUDA library: its `-sys` kernel crates compile `.cu` via nvcc
       # in their build scripts, so a full `--workspace` build genuinely cannot

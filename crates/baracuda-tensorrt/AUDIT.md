@@ -144,7 +144,8 @@ machine. To finish validation:
     `/usr/local/cuda`.
 - Build: `cargo build -p baracuda-tensorrt --features shim`.
 - Make a test engine: `trtexec --onnx=model.onnx --saveEngine=model.engine`.
-- Run: `cargo test -p baracuda-tensorrt --features shim -- --ignored`.
+- Run: `cargo gpu-test -p baracuda-tensorrt --features shim` (holds the machine-wide
+  `gpu-run` mutex; see CONTRIBUTING step 3).
 
 ## Deferred (future phases)
 - Optimization-profile *selection* (`setOptimizationProfileAsync`) for dynamic

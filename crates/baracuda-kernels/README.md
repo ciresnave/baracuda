@@ -235,8 +235,9 @@ cargo check -p baracuda-kernels --features sm89,cudnn
 ```
 
 The GPU integration tests are gated behind `#[ignore]`; run them with
-`cargo test -p baracuda-kernels --release -- --ignored` on a host with
-a working NVIDIA driver. The full regression covers ~1630 tests on an
+`cargo gpu-test -p baracuda-kernels --release` on a host with a working
+NVIDIA driver. That alias holds the machine-wide `gpu-run` mutex for the
+device run, which raw invocations bypass (CONTRIBUTING step 3). The full regression covers ~1630 tests on an
 RTX 4070.
 
 ## See also
