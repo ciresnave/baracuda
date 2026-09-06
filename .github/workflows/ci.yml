@@ -71,6 +71,18 @@ jobs:
       - name: feature-coverage guard
         shell: bash
         run: bash scripts/check-feature-coverage.sh
+      # Benchmark-provenance guard: BENCHMARKS.md states its hardware TWICE, and
+      # `tools/build_benchmarks_table.py` rewrites only what lies BETWEEN its
+      # markers — so the top-level `**Hardware**:` header is structurally
+      # unreachable to the tool that maintains the file and drifts on every regen.
+      # It said "RTX 4070, CUDA 13.0" from 2026-05-28 until 2026-09-06 while the
+      # generated preamble said "RTX 4070 Laptop GPU"; #74 corrected the inner
+      # copy and could not reach the outer one. Different parts, different SM
+      # count and bandwidth. Asserts the two name the same PART (not that they are
+      # byte-identical — they serve different readers and word it differently).
+      - name: benchmark-provenance guard
+        shell: bash
+        run: bash scripts/check-benchmark-provenance.sh
       # ---- The workspace steps below are scoped to the DRIVER-FREE surface.
       # This is a CUDA library: its `-sys` kernel crates compile `.cu` via nvcc
       # in their build scripts, so a full `--workspace` build genuinely cannot
