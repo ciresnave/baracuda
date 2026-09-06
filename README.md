@@ -543,7 +543,8 @@ without an NVIDIA driver. To run them you need a working GPU plus the
 cargo test -p baracuda-kernels --lib
 
 # Full GPU integration sweep — RTX 30xx / 40xx / 50xx required:
-cargo test -p baracuda-kernels --release -- --ignored
+# Goes through the machine-wide `gpu-run` mutex (CONTRIBUTING step 3).
+cargo gpu-test -p baracuda-kernels --release
 
 # Verify the workspace-level API surface compiles (no GPU needed):
 cargo check -p baracuda-kernels --features sm89,cudnn
