@@ -79,9 +79,22 @@
 //! am not guessing at it.**
 //!
 //! **Consequence: a single median from this bench is not a publishable figure
-//! on its own.** `PhaseTwentyNineRow` has no dispersion field today, so the CSV
-//! carries a point estimate with no spread beside it — that gap is named here
-//! rather than left for a reader to discover, and closing it is the next piece.
+//! on its own — so it no longer ships as one.** The CSV now carries
+//! `samples,min_ns,p90_ns,max_ns` beside every median, and the run prints
+//! `p90/median` and `max/min` per cell.
+//!
+//! ⚠️ **Note WHICH dispersion that is.** Each sample is the mean over `INNER`
+//! launches, so the CSV's spread is the spread of a 5-launch mean, not of a
+//! single launch. Measured on the same box, same cell, minutes apart:
+//!
+//! ```text
+//! per-SAMPLE (inner = 5, the CSV columns)   p90/median 1.01 - 1.08
+//! per-LAUNCH (inner = 1, the convergence test) p90/median 1.21 - 1.41
+//! ```
+//!
+//! The per-sample figure is the right error bar for the published median —
+//! which is itself a median of those samples. Quoting it as the per-launch
+//! variation would understate the noise by roughly a factor of four.
 //!
 //! Tranche 1 covers `cholesky` and `lu`. Deliberately excluded, so
 //! the absence is a decision rather than an oversight:
@@ -103,8 +116,8 @@ use baracuda_kernels::{
     PlanPreference, TensorMut, Workspace, contiguous_stride,
 };
 use baracuda_kernels_bench::{
-    PhaseTwentyNineRow, PytorchBaseline, append_csv_row, measure_median_ns_restored, setup_device,
-    time_with_events_restored, warmup,
+    PhaseTwentyNineRow, PytorchBaseline, append_csv_row_with_spread, measure_spread_restored,
+    setup_device, time_with_events_restored, warmup,
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
@@ -114,10 +127,21 @@ const BENCH_NAME: &str = "linalg";
 /// factorization is already milliseconds.
 const N_SWEEP: &[i32] = &[256, 512];
 
-/// Median over `SAMPLES` samples of `INNER` launches each — 15 launches per
-/// cell, against 550 for the elementwise benches. See the module note.
-const SAMPLES: usize = 5;
-const INNER: u64 = 3;
+/// Median and spread over `SAMPLES` samples of `INNER` launches each.
+///
+/// ⚠️ **These were 5 and 3, and the justification was wrong in the same way
+/// the failure-path claim was.** The module note said *"a factorization is
+/// milliseconds where an elementwise kernel is microseconds"*, so 15 launches
+/// per cell looked generous. Measured, these cells are **306 us to 1.19 ms** —
+/// sub-millisecond at three of four sizes. I over-corrected against a cost I
+/// had estimated rather than timed.
+///
+/// It matters now because the CSV carries a p90: **a p90 over five samples is
+/// essentially the maximum**, so the spread column would have been a second
+/// name for `max_ns`. At ~700 us a cell, 21x5 is 105 launches ~ 75 ms — still
+/// nothing, and enough for the percentile to mean something.
+const SAMPLES: usize = 21;
+const INNER: u64 = 5;
 
 fn leak_str(s: &str) -> &'static str {
     Box::leak(s.to_owned().into_boxed_str())
@@ -167,8 +191,18 @@ fn record(
         launch();
     });
 
-    let baracuda_ns =
-        measure_median_ns_restored(ctx, stream, SAMPLES, INNER, &mut restore, &mut launch);
+    let spread = measure_spread_restored(ctx, stream, SAMPLES, INNER, &mut restore, &mut launch);
+    let baracuda_ns = spread.median_ns;
+    // The dispersion goes to stdout as well as the CSV, so a reader watching
+    // the run sees the error bar next to the figure rather than having to open
+    // the file to find out whether the number is tight.
+    println!(
+        "  {op}/{dtype_label}/{shape}: median {:.2} us  p90/median {:.2}  max/min {:.2}  (n={})",
+        baracuda_ns / 1000.0,
+        spread.p90_over_median(),
+        spread.max_over_min(),
+        spread.samples,
+    );
 
     let pytorch_ns = baseline.and_then(|b| b.lookup(op, &shape, dtype_label));
     let mut group = c.benchmark_group(format!("{op}/{dtype_label}"));
@@ -179,7 +213,7 @@ fn record(
     });
     group.finish();
 
-    append_csv_row(
+    append_csv_row_with_spread(
         BENCH_NAME,
         &PhaseTwentyNineRow {
             op: leak_str(op),
@@ -190,6 +224,7 @@ fn record(
             reference: "",
             pytorch_ns,
         },
+        Some(&spread),
     );
 }
 
