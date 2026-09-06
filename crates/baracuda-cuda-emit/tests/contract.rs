@@ -11,7 +11,7 @@
 use baracuda_cuda_emit::Cuda;
 use unpopped::backend::*;
 use unpopped::contract::{
-    bundle, bundle_kisc, cell_suffix, contract, contract_admissible, front_matter,
+    AccuracyKey, bundle, bundle_kisc, cell_suffix, contract, contract_admissible, front_matter,
     fuel_primitive_op_kind, precision_of, root_op_name,
 };
 use unpopped::generate;
@@ -1525,8 +1525,17 @@ fn int_ops_rate_zero_ulp_and_carry_recipe_contracts() {
     // int semantics — no rounding step exists), pinned per op so a future
     // arm shuffle can't silently re-rate one.
     for op in INT_OPS {
+        // ⚠️ `precision_of` gained an `&AccuracyKey` in unpopped 0.10.0, and the
+        // key is NOT a formality here. `ulp_bound` returns INFINITY for any
+        // non-`cuda` namespace BEFORE it walks the expression, and
+        // `precision_of` maps infinity to ("approximate", None) — so a
+        // wrong-target key would flip all eight of these to an unknown bound
+        // and this test would be asserting the opposite of what it is named
+        // for. sm_89 is the target baracuda emits against, so the CUDA table
+        // is the correct one to consult rather than a convenient one.
+        let acc = AccuracyKey::for_target(ArchSku::Sm89.into());
         assert_eq!(
-            precision_of(&input(0).binary(op, input(1)).0),
+            precision_of(&input(0).binary(op, input(1)).0, &acc),
             ("correctly_rounded", Some(0)),
             "{op:?}"
         );
