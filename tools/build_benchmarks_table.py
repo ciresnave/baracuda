@@ -315,6 +315,29 @@ END_MARKER = "<!-- END auto-generated phase29 rollup -->"
 # The table has no EDGE: it renders as finished at every size. This makes the
 # tool answer "did this regen lose a family?" itself, and REFUSE rather than
 # warn -- a warning on a 450-row rollup is one line of scrollback.
+#
+# ---------------------------------------------------------------------
+# WHAT THIS GUARD DOES NOT DO, stated here because its limit is invisible
+# exactly when things are healthy.
+#
+# It RATCHETS FROM THE COMMITTED FILE. Its floor is whatever BENCHMARKS.md
+# already says, NOT the set of ops the bench suite can produce. So it prevents
+# FURTHER drops and cannot detect EXISTING ones.
+#
+# Concretely: had this existed before #74, it would have ratcheted happily from
+# a table that was already missing mmvq, mmvq_multim, flash_decoding and
+# flash_decoding_gqa, and pronounced every later regen clean. The four ops it
+# now protects are ops it would not have recovered.
+#
+# All 66 families are present as of #74, which is precisely the state in which
+# nobody discovers that limit -- a green guard over a degraded file looks
+# identical to a green guard over a correct one.
+#
+# Closing it needs a different instrument: a comparison against what the SUITE
+# emits (the benches calling `append_csv_row`) rather than against what the file
+# holds. That is not built. Recorded rather than implied, because a reader
+# finding this guard green in a degraded future needs the sentence more than a
+# second mechanism.  (Raised by the Claim Auditor, 2026-09-06.)
 # ---------------------------------------------------------------------
 
 FAMILY_HEADING = re.compile(r"^### `([^`]+)`", re.M)
