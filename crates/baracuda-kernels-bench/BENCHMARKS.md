@@ -350,6 +350,24 @@ Speedup column convention: `library_ns / baracuda_ns`.
 `> 1` (bolded) means baracuda is faster than that library at this cell.
 `≈` means within ±5%.
 
+⚠️ **READ THE ±5% BAND WITH THIS.** These figures come from a machine
+running ~17 other agent processes at 77–100% CPU; an unloaded baseline
+is not obtainable on it, and the GPU sits at 1605 of 3105 MHz SM clock
+even at 0% utilization and 57 °C (`SW Thermal Slowdown: Active`).
+
+**Measured, not estimated.** Of the cells that have been run more than
+once and carry both sides, **12 of 12 vary by more than ±5% between
+runs of identical code** — median ratio spread **2.57×**, worst
+**5.34×**. ⚠️ **Three of the twelve FLIP DIRECTION**: e.g.
+`mmvq_multim / M1_N11008_C4096 / f32` ranged from *baracuda 3.18×
+faster* to *baracuda 1.68× slower* across ten runs, so its headline
+verdict is not reproducible.
+
+⚠️ **And only 12 of ~457 cells have been run more than once.** The
+rest carry a single observation, so their reproducibility is
+**unmeasured** — not good, not bad, unmeasured. A `≈` or a bolded
+`> 1` on a single-run cell states a comparison, not a repeatable one.
+
 ### `gemm`
 
 | dtype | shape | baracuda | cuBLAS | cuBLAS/baracuda | PyTorch | PyTorch/baracuda |
