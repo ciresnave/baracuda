@@ -139,10 +139,23 @@ fn emit(cell: &Cell) -> GeneratedKernel {
     let x = OperandDesc::new(2, &[ROWS, K], &[K, 1], cell.dt, 256);
     let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
     let kernel = generate(&op, &key, &Cuda);
-    let ctype = if cell.dt == ElementKind::Bf16 {
-        "__nv_bfloat16"
-    } else {
-        "__half"
+    // ⚠️ EXHAUSTIVE, NOT A FALL-THROUGH. This was `if Bf16 { .. } else { __half }`,
+    // so ANY dtype that is neither would have been silently checked against
+    // `__half` — in a matrix test whose entire purpose is distinguishing dtypes.
+    // The failure would have read "emitter did NOT take the bit-move route",
+    // blaming the emitter for the test's own mapping.
+    //
+    // The epilogue match below already panics on an unmodelled variant. Same
+    // file, same author, two different standards; Sourcery caught the weaker
+    // one. A dtype outside the narrow set has no bit-move route at all, so it
+    // is not a cell this table can hold.
+    let ctype = match cell.dt {
+        ElementKind::Bf16 => "__nv_bfloat16",
+        ElementKind::F16 => "__half",
+        other => panic!(
+            "{}: dtype {other:?} has no narrow bit-move route — `narrow_bit_casts`              returns None for it, so this table cannot hold a cell for it",
+            cell.name
+        ),
     };
     assert!(
         kernel.source.contains(&format!("{ctype} e = in0[")),
@@ -159,13 +172,27 @@ fn emit(cell: &Cell) -> GeneratedKernel {
     kernel
 }
 
-/// Row 0 carries the NaN; every row carries both finite values.
+/// The row the NaN goes in, and the column within it. Named because the flat
+/// index alone (`host[60]`) states neither, and the assertions read `out[0]`
+/// for "the NaN row" and `out[K]` for "a finite row" — a relationship the
+/// constant has to preserve and could not express.
+const NAN_ROW: usize = 0;
+const NAN_COL: usize = 60;
+/// The column carrying the second finite value in every row.
+const ALT_COL: usize = 7;
+
+/// Row `NAN_ROW` carries the NaN; every row carries both finite values.
 fn rows(cell: &Cell) -> Vec<u16> {
+    let k = K as usize;
+    assert!(
+        NAN_COL < k && ALT_COL < k,
+        "fixture columns must lie inside a row"
+    );
     let mut host = vec![cell.finite.0; (ROWS * K) as usize];
     for r in 0..ROWS as usize {
-        host[r * K as usize + 7] = cell.finite.1;
+        host[r * k + ALT_COL] = cell.finite.1;
     }
-    host[60] = cell.nan_in;
+    host[NAN_ROW * k + NAN_COL] = cell.nan_in;
     host
 }
 
