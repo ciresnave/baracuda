@@ -299,6 +299,9 @@ fn gap001_relu_add_n7_fuel_geometry_sweep() {
         let d_in0 = DeviceBuffer::from_slice(&ctx, &a).expect("in0");
         let d_in1 = DeviceBuffer::from_slice(&ctx, &b).expect("in1");
         let d_out = DeviceBuffer::from_slice(&ctx, &vec![f32::NAN; n as usize]).expect("out");
+        // SAFETY: matches the GAP-001 kernel's signature (in0, in1, out, n);
+        // all three buffers are declared in this loop iteration and outlive the
+        // launch, which is synchronized before they drop.
         unsafe {
             f.launch()
                 .grid(grid)
