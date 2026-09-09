@@ -251,7 +251,7 @@ fn variant_gate_loop_end_to_end() {
 /// **memcmp-identical**, not merely close.
 #[test]
 #[ignore = "requires a CUDA device + nvrtc"]
-fn smemrow_variant_is_deterministic_and_close_and_gated() {
+fn smemrow_variant_is_bit_identical_and_gated() {
     // ⚠️ Held for the WHOLE body, not just the timing call. Two device tests
     // sharing one GPU flip this gate's winner 2 runs in 3 — and a lock inside
     // `gate_cell` does NOT fix it, because the interference is the other test's
@@ -294,16 +294,11 @@ fn smemrow_variant_is_deterministic_and_close_and_gated() {
     // index 1 and `smemrow` at index 2, so the old `variants[1]` assertion was
     // checking the PRECISION variant while claiming to check smemrow.
     //
-    // ⚠️ AND THE STALE COUNT WAS STANDING IN FRONT OF A REAL FAILURE. With it
-    // fixed, this test reaches its bit-identity check and that check FAILS:
-    // smemrow declares BitIdentical and differs from base on 12,283,172 of
-    // 16,777,216 elements, worst 11 ULP, reproducible. Filed as issue #99.
-    // A stale assertion was hiding a live one.
     let smemrow = variants
         .iter()
         .find(|v| v.tag == "smemrow")
         .expect("the smemrow variant must be offered for this row-reduce cell");
-    assert_eq!(smemrow.fidelity, VariantFidelity::ReassociatedDeterministic);
+    assert_eq!(smemrow.fidelity, VariantFidelity::BitIdentical);
     assert!(
         variants.iter().any(|v| v.tag == "base"),
         "the base variant must always be offered"
@@ -324,8 +319,22 @@ fn smemrow_variant_is_deterministic_and_close_and_gated() {
         let (_, m) = modules.iter().find(|(n, _)| n == name).expect("module");
         m.get_function(name).expect("get_function")
     };
+    // ⚠️ BY TAG — and this line is the reason the note above exists. The
+    // assertion was re-anchored on `tag` while THIS line, which chooses the
+    // kernel that gets launched and compared, was left as `variants[1]`. That
+    // is `prec`. So the test named for smemrow compiled, launched, and
+    // measured the PRECISION variant, and the 11-ULP divergence reported as
+    // #99 was `prec` vs `base` — which is what `prec` is FOR.
+    //
+    // Fixing the assertion and not the selection is the whole failure: the
+    // assertion says which variant the test is ABOUT, the selection says which
+    // variant the test TOUCHES, and only the second one can be wrong silently.
     let base_name = variants[0].kernels[0].name.clone();
-    let smem_name = variants[1].kernels[0].name.clone();
+    let smem_name = smemrow.kernels[0].name.clone();
+    assert!(
+        smem_name.ends_with("_smemrow"),
+        "the compared kernel must be smemrow's, got {smem_name}"
+    );
     let f_base = func(&base_name);
     let f_smem = func(&smem_name);
 
@@ -373,10 +382,13 @@ fn smemrow_variant_is_deterministic_and_close_and_gated() {
         }
     };
 
-    // ⚠️ THIS ASSERTED BIT-IDENTITY AND THE VARIANT IS NOT BIT-IDENTICAL (#99):
-    // 12,283,172 of 16,777,216 elements differ, worst 11 ULP. The claim was
-    // wrong, not the kernel. So assert what `ReassociatedDeterministic`
-    // actually promises, which is two things and neither is bit-identity.
+    // ⚠️ THIS BRIEFLY ASSERTED `ReassociatedDeterministic` AND A 64-ULP BOUND,
+    // on the strength of "12,283,172 of 16,777,216 elements differ, worst 11
+    // ULP" (#99). That measurement was real and was taken against the WRONG
+    // KERNEL: the selection above said `variants[1]`, which is `prec`, a
+    // variant declared `MorePrecise` whose whole purpose is to differ from the
+    // base. With smemrow's own kernel the same comparator reports 0 of
+    // 16,777,216. `BitIdentical` was right the entire time.
     launch_base();
     launch_smem();
     stream.synchronize().expect("sync");
@@ -385,41 +397,20 @@ fn smemrow_variant_is_deterministic_and_close_and_gated() {
     d_base.copy_to_host(&mut a).expect("copy a");
     d_smem.copy_to_host(&mut b).expect("copy b");
 
-    // PROMISE 1 — DETERMINISTIC for a fixed launch configuration. This is the
-    // load-bearing half of the label and the only way to check it is to run it
-    // again and compare, so that is what this does.
+    // PROMISE 1 — DETERMINISTIC for a fixed launch configuration. The only way
+    // to check it is to run it again and compare, so that is what this does.
     launch_smem();
     stream.synchronize().expect("sync");
     let mut b2 = vec![0.0f32; n];
     d_smem.copy_to_host(&mut b2).expect("copy b2");
-    let unstable = (0..n)
-        .filter(|&i| b[i].to_bits() != b2[i].to_bits())
-        .count();
-    assert_eq!(
-        unstable, 0,
-        "ReassociatedDeterministic promises run-to-run stability for a fixed          launch; {unstable} of {n} elements moved between two identical launches"
-    );
+    assert_bitwise_stable(&b, &b2);
 
-    // PROMISE 2 — still the same computation, so it must stay CLOSE. Bounded
-    // at 64 ULP against a measured worst of 11, wide enough not to be a
-    // tripwire on a noisy box and far tighter than a different algorithm.
-    const MAX_ULP: i64 = 64;
-    let mut worst = 0i64;
-    let mut worst_at = 0usize;
-    for i in 0..n {
-        let d = (i64::from(a[i].to_bits()) - i64::from(b[i].to_bits())).abs();
-        if d > worst {
-            worst = d;
-            worst_at = i;
-        }
-    }
-    assert!(
-        worst <= MAX_ULP,
-        "smemrow drifted {worst} ULP from base at element {worst_at} (base {:08x}          smemrow {:08x}); the variant may diverge but not by this much",
-        a[worst_at].to_bits(),
-        b[worst_at].to_bits()
-    );
-    eprintln!("smemrow vs base: worst {worst} ULP over {n} elements (bound {MAX_ULP})");
+    // PROMISE 2 — BIT-IDENTICAL to the base. A 0-ULP bound IS memcmp equality,
+    // and routing it through the ULP comparator rather than a bare `==` buys
+    // the failure message: "drifted N ULP at element i" localises a regression,
+    // where "the vectors differ" does not.
+    let worst = assert_within_ulp(&a, &b, 0);
+    eprintln!("smemrow vs base: worst {worst} ULP over {n} elements (bound 0)");
 
     // Gate the pair; report the measured margin (regime-dependent — occupancy
     // vs saved traffic — so no winner is asserted; the table records it).
@@ -449,4 +440,45 @@ fn smemrow_variant_is_deterministic_and_close_and_gated() {
         "softmax gate: winner {:?} margin {:.3} ({:.0} vs {:.0} ns)",
         entry.winner_entry, entry.margin, entry.ranked[0].median_ns, entry.ranked[1].median_ns
     );
+}
+
+/// `ReassociatedDeterministic` promises run-to-run stability for a fixed launch
+/// configuration. Compare BITS, not values: `0.0 == -0.0` and any pair that
+/// merely rounds alike would pass a value comparison while having moved.
+fn assert_bitwise_stable(first: &[f32], second: &[f32]) {
+    let n = first.len();
+    let moved = (0..n)
+        .filter(|&i| first[i].to_bits() != second[i].to_bits())
+        .count();
+    assert_eq!(
+        moved, 0,
+        "ReassociatedDeterministic promises run-to-run stability for a fixed \
+         launch; {moved} of {n} elements moved between two identical launches"
+    );
+}
+
+/// Assert every element is within `max_ulp` of the base, and return the worst
+/// |ULP| seen so the caller can print it. `max_ulp = 0` is exactly memcmp
+/// equality; a wider bound suits a variant whose label permits divergence.
+///
+/// Reporting the worst is the point: a bound that passes silently says nothing
+/// about how much headroom is left, and headroom is what shows drift coming.
+fn assert_within_ulp(base: &[f32], other: &[f32], max_ulp: i64) -> i64 {
+    let mut worst = 0i64;
+    let mut worst_at = 0usize;
+    for i in 0..base.len() {
+        let d = (i64::from(base[i].to_bits()) - i64::from(other[i].to_bits())).abs();
+        if d > worst {
+            worst = d;
+            worst_at = i;
+        }
+    }
+    assert!(
+        worst <= max_ulp,
+        "drifted {worst} ULP from base at element {worst_at} (base {:08x} other \
+         {:08x}); the variant may diverge but not by this much",
+        base[worst_at].to_bits(),
+        other[worst_at].to_bits()
+    );
+    worst
 }

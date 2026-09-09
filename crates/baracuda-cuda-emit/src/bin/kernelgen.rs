@@ -443,8 +443,7 @@ fn main() {
     ] {
         let key = structure_key(cat, &ops, ArchSku::Sm89);
         // Ship-top-K: the base kernel plus every schedule variant (Softmax gets
-        // the smemrow materialization; the others have none). NOT bit-identical
-        // to the base — see #99 and the fidelity note at its `Variant::new`.
+        // the bit-identical smemrow materialization; the others have none).
         for v in generate_variants(&op, &key, &Cuda) {
             for k in &v.kernels {
                 fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
