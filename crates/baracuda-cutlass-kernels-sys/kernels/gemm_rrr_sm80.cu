@@ -26,6 +26,8 @@
 #include <cutlass/layout/matrix.h>
 #include <cutlass/epilogue/thread/linear_combination.h>
 
+#include "baracuda_smem_cap.h"
+
 namespace baracuda_cutlass {
 namespace rrr {
 
@@ -71,6 +73,7 @@ static int run_impl(
     cudaStream_t stream)
 {
     using Gemm = GemmRrrSm80<Element>;
+    BARACUDA_ASSERT_SMEM_FITS(Gemm);
     using ElementC = Element;
 
     auto const* c_eff   = c ? static_cast<const ElementC*>(c)

@@ -32,6 +32,8 @@
 #include <cutlass/layout/matrix.h>
 #include <cutlass/epilogue/thread/linear_combination.h>
 
+#include "baracuda_smem_cap.h"
+
 namespace baracuda_cutlass {
 
 using ColumnMajor = cutlass::layout::ColumnMajor;
@@ -83,6 +85,7 @@ static int run_impl(
     cudaStream_t stream)
 {
     using Gemm = GemmRcrSm80<Element>;
+    BARACUDA_ASSERT_SMEM_FITS(Gemm);
     using ElementC = Element;
 
     // CUTLASS's host adapter wants a valid pointer for C even when the
