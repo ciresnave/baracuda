@@ -951,9 +951,15 @@ mod tests {
     /// that never returns one would be a claim dressed as a measurement.
     #[test]
     fn a_scalar_value_changes_the_region_id() {
+        // Struct-update rather than `default()` + field assignment: clippy's
+        // `field_reassign_with_default` is denied in CI. `OpAttrs` is not
+        // `#[non_exhaustive]` (measured at fuel-kernel-seam-types 0.10.3), so
+        // `..Default::default()` is legal from a downstream crate.
         let with = |v: f64| {
-            let mut a = OpAttrs::default();
-            a.scalars = vec![v];
+            let a = OpAttrs {
+                scalars: vec![v],
+                ..Default::default()
+            };
             op_attrs(OpTag::AddScalar, vec![SeamNode::Bind { index: 0 }], a)
         };
         let (r1, r2) = (with(1.0), with(2.0));
