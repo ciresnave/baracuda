@@ -23,10 +23,11 @@
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
-use baracuda_driver::{Device, Module, require_optional};
+use baracuda_driver::{Context, Device, Module, Stream, require_optional};
 use baracuda_kernels_bench::{current_hwstamp, setup_device};
 use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 use unpopped::Compiler;
+use unpopped::GeneratedKernel;
 use unpopped::ir::{ReduceOp, ReduceStage, UnaryOp, reduced};
 use unpopped::{OpDef, generate, input};
 
@@ -40,6 +41,84 @@ const NAN_PAYLOAD: u16 = 0x7FC1;
 const FINITE_HI: u16 = 0x4040;
 /// A small finite bf16 (~1.0).
 const FINITE_LO: u16 = 0x3F80;
+
+/// Emit the all-move cell, and assert the emitter took the bit-move route.
+///
+/// The harness control lives HERE, beside the emission, because it is a claim
+/// about the EMITTER rather than about the device — and because without it
+/// every device assertion below would be measuring the promoted path under a
+/// bit-move name.
+fn emit_all_move_bf16() -> GeneratedKernel {
+    // A Max fold with a pure sign-edit epilogue: every transformation from
+    // input to output is a move, so §6.16-0009 governs the whole op.
+    let all_move = OpDef::row_reduce(
+        "bm",
+        1,
+        &[ElementKind::Bf16],
+        vec![ReduceStage {
+            pre: input(0).0,
+            op: ReduceOp::Max,
+        }],
+        reduced(0).unary(UnaryOp::Neg),
+    );
+    let x = OperandDesc::new(2, &[ROWS, K], &[K, 1], ElementKind::Bf16, 256);
+    let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
+    let kernel = generate(&all_move, &key, &Cuda);
+    assert!(
+        kernel.source.contains("__nv_bfloat16 e = in0["),
+        "harness: the emitter did NOT take the bit-move route, so this test \
+         would be measuring the promoted path under a bit-move name\n{}",
+        kernel.source
+    );
+    kernel
+}
+
+/// Compile, launch, read back. Split from the assertions so a change to the
+/// launch cannot quietly change what a conclusion rests on.
+fn run(ctx: &Context, stream: &Stream, kernel: &GeneratedKernel, host: &[u16]) -> Vec<u16> {
+    // ⚠️ THE UNMEASURED INTRINSIC. If `__shfl_down_sync` has no
+    // `__nv_bfloat16` overload, this is where it fails — loudly, at compile,
+    // naming the line.
+    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let ptx = compiler
+        .compile(&kernel.source, &kernel.name, 30_000)
+        .unwrap_or_else(|e| panic!("nvrtc REJECTED the bit-move kernel: {e}\n{}", kernel.source));
+    let ptx = String::from_utf8(ptx).expect("ptx is text");
+    let module = Module::load_ptx(ctx, &ptx).expect("module load");
+    let f = module.get_function(&kernel.name).expect("get_function");
+
+    let d_in = DeviceBuffer::from_slice(ctx, host).expect("d_in");
+    let d_out = DeviceBuffer::<u16>::new(ctx, host.len()).expect("d_out");
+    // SAFETY: the generated rowreduce signature is (in0, out, n_out, k); both
+    // buffers outlive the launch, and u16 matches the bf16 storage width.
+    unsafe {
+        f.launch()
+            .grid(ROWS as u32)
+            .block(256u32)
+            .stream(stream)
+            .arg(&d_in)
+            .arg(&d_out)
+            .arg(&ROWS)
+            .arg(&K)
+            .launch()
+            .expect("launch");
+    }
+    stream.synchronize().expect("sync");
+    let mut out = vec![0u16; host.len()];
+    d_out.copy_to_host(&mut out).expect("copy out");
+    out
+}
+
+/// Row 0 carries the payload NaN plus finite values; every other row is finite
+/// only, which is what makes row 1 a control rather than a repeat.
+fn input_rows() -> Vec<u16> {
+    let mut host = vec![FINITE_LO; (ROWS * K) as usize];
+    for r in 0..ROWS as usize {
+        host[r * K as usize + 7] = FINITE_HI;
+    }
+    host[100] = NAN_PAYLOAD;
+    host
+}
 
 #[test]
 #[ignore = "requires a CUDA device + nvrtc"]
@@ -55,101 +134,37 @@ fn bitmove_rowreduce_preserves_the_nan_payload_end_to_end() {
         "an sm89 device"
     );
 
-    // The all-move shape: a Max fold with a pure sign-edit epilogue. Every
-    // transformation from input to output is a move, so §6.16-0009 governs.
-    let all_move = OpDef::row_reduce(
-        "bm",
-        1,
-        &[ElementKind::Bf16],
-        vec![ReduceStage {
-            pre: input(0).0,
-            op: ReduceOp::Max,
-        }],
-        reduced(0).unary(UnaryOp::Neg),
-    );
-    let x = OperandDesc::new(2, &[ROWS, K], &[K, 1], ElementKind::Bf16, 256);
-    let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
-    let kernel = generate(&all_move, &key, &Cuda);
-
-    // HARNESS CONTROL: this test is meaningless unless the emitter actually took
-    // the bit-move route. Assert the mechanism before launching anything.
-    assert!(
-        kernel.source.contains("__nv_bfloat16 e = in0["),
-        "harness: the emitter did NOT take the bit-move route, so this test would \
-         be measuring the promoted path under a bit-move name\n{}",
-        kernel.source
-    );
-
-    // ⚠️ THE UNMEASURED INTRINSIC. If `__shfl_down_sync` has no `__nv_bfloat16`
-    // overload, this is where it fails — loudly, at compile, naming the line.
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
-    let ptx = compiler
-        .compile(&kernel.source, &kernel.name, 30_000)
-        .unwrap_or_else(|e| panic!("nvrtc REJECTED the bit-move kernel: {e}\n{}", kernel.source));
-    let ptx = String::from_utf8(ptx).expect("ptx is text");
-    let module = Module::load_ptx(&ctx, &ptx).expect("module load");
-    let f = module.get_function(&kernel.name).expect("get_function");
-
-    // Row 0 carries the payload NaN plus finite values; every other row is
-    // finite only. NaN-propagating Max must elect the NaN in row 0.
-    let n = (ROWS * K) as usize;
-    let mut host = vec![FINITE_LO; n];
-    for r in 0..ROWS as usize {
-        host[r * K as usize + 7] = FINITE_HI;
-    }
-    host[0 * K as usize + 100] = NAN_PAYLOAD;
-
-    let d_in = DeviceBuffer::from_slice(&ctx, &host).expect("d_in");
-    let d_out = DeviceBuffer::<u16>::new(&ctx, n).expect("d_out");
-    // SAFETY: the generated rowreduce signature is (in0, out, n_out, k); both
-    // buffers outlive the launch, and u16 matches the bf16 storage width.
-    unsafe {
-        f.launch()
-            .grid(ROWS as u32)
-            .block(256u32)
-            .stream(&stream)
-            .arg(&d_in)
-            .arg(&d_out)
-            .arg(&ROWS)
-            .arg(&K)
-            .launch()
-            .expect("launch");
-    }
-    stream.synchronize().expect("sync");
-    let mut out = vec![0u16; n];
-    d_out.copy_to_host(&mut out).expect("copy out");
+    let out = run(&ctx, &stream, &emit_all_move_bf16(), &input_rows());
 
     // Row 0: Max elects the NaN, the Neg epilogue flips its sign bit, and the
-    // payload rides through untouched. Expected = NaN_PAYLOAD ^ 0x8000.
+    // payload rides through untouched.
     let want_row0 = NAN_PAYLOAD ^ 0x8000;
-    let got = out[0];
+    let canonicalized = 0x7FFFu16 ^ 0x8000;
     eprintln!(
-        "  row 0 (NaN payload):  want 0x{want_row0:04X}  got 0x{got:04X}  \
-         (input 0x{NAN_PAYLOAD:04X}; the promoted path would give 0x{:04X})",
-        0x7FFFu16 ^ 0x8000
+        "  row 0 (NaN payload):  want 0x{want_row0:04X}  got 0x{:04X}  \
+         (input 0x{NAN_PAYLOAD:04X}; promoted path gives 0x{canonicalized:04X})",
+        out[0]
     );
     assert_eq!(
-        got,
-        want_row0,
-        "the NaN payload did not survive the fold. 0x{:04X} is the CANONICALIZED \
-         value the promoted path produces — if that is what came back, the \
-         bit-move route is not actually being taken on device",
-        0x7FFFu16 ^ 0x8000
+        out[0], want_row0,
+        "the NaN payload did not survive the fold. 0x{canonicalized:04X} is the \
+         CANONICALIZED value the promoted path produces — if that is what came \
+         back, the bit-move route is not being taken on device"
     );
 
-    // POSITIVE CONTROL on a row with no NaN: Max elects FINITE_HI and the sign
-    // flips. Without this, a kernel that wrote `input ^ 0x8000` unconditionally
-    // would pass the assertion above while doing no reduction at all.
+    // CONTROL: a finite row. Without it, a kernel writing `input ^ 0x8000`
+    // unconditionally would pass the assertion above while reducing nothing.
     let want_row1 = FINITE_HI ^ 0x8000;
-    let got1 = out[K as usize];
-    eprintln!("  row 1 (finite only):  want 0x{want_row1:04X}  got 0x{got1:04X}");
+    eprintln!(
+        "  row 1 (finite only):  want 0x{want_row1:04X}  got 0x{:04X}",
+        out[K as usize]
+    );
     assert_eq!(
-        got1, want_row1,
+        out[K as usize], want_row1,
         "a finite row did not reduce to its maximum — the fold is not running"
     );
 
-    // And every element of row 0 carries the row's reduced value (full-width
-    // output), so a kernel writing only element 0 cannot pass.
+    // CONTROL: full-width output, so a kernel writing only element 0 fails.
     let stragglers = (0..K as usize).filter(|&j| out[j] != want_row0).count();
     assert_eq!(
         stragglers, 0,
