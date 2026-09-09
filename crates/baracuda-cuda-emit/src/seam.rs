@@ -729,4 +729,166 @@ mod tests {
         assert_eq!(art.link.symbol, entry_point); // extern "C": symbol == entry_point
         assert!(synth.take_kernel(&entry_point).is_none());
     }
+
+    // ---- `region_op_id` INJECTIVITY (issue #104) ----
+    //
+    // A collision silently overwrites a not-yet-taken kernel — `region_op_id`'s
+    // own doc says so, and chose a full u64 over a truncated prefix for that
+    // reason. ⚠️ BUT THE PROPERTY RESTS ON SOMETHING THAT DOES NOT PROMISE IT:
+    // the id hashes `format!("{region:?}|{operands:?}")`, the **`Debug`**
+    // rendering of types owned by `fuel-kernel-seam-types`. `Debug` carries no
+    // injectivity guarantee — a hand-written impl, or one eliding a field,
+    // makes two distinct regions render identically and collide.
+    //
+    // Measured at `fuel-kernel-seam-types 0.10.3`: ZERO manual `Debug` impls,
+    // so every field prints and injectivity holds — by accident, with nothing
+    // asserting it. These assert it.
+    //
+    // ⚠️ AND NOTE WHAT THIS DELIBERATELY DOES NOT DO. It does not pin an id to
+    // a golden constant. That was the first fix proposed for #104 and it is
+    // wrong twice over: `std`'s `DefaultHasher` is documented as unspecified
+    // across releases, so a golden reddens on a toolchain bump — a false alarm
+    // for a non-issue — and it still would not test injectivity, which is the
+    // property that actually matters. Comparing ids to EACH OTHER is
+    // insensitive to both the hash algorithm and to `Debug`'s formatting, and
+    // fails exactly when the real property fails.
+
+    fn op_attrs(tag: OpTag, operands: Vec<SeamNode>, attrs: OpAttrs) -> SeamNode {
+        SeamNode::Op {
+            op: tag,
+            operands,
+            attrs,
+        }
+    }
+
+    /// The control. Without it every "these differ" assertion below would also
+    /// pass on a function returning a fresh random string per call — perfectly
+    /// injective and completely useless.
+    #[test]
+    fn identical_regions_get_identical_ids() {
+        let r = || op(OpTag::Relu, vec![SeamNode::Bind { index: 0 }]);
+        assert_eq!(
+            region_op_id(&r(), &operands(ElementKind::F32, 1)),
+            region_op_id(&r(), &operands(ElementKind::F32, 1)),
+            "the id must be a function of its inputs, or nothing below means anything"
+        );
+    }
+
+    /// ⚠️ THE LOAD-BEARING ONE. `OpAttrs` is the field-bearing struct most
+    /// likely to gain members over time — Fuel's GAP-303 adds `n_carries` to a
+    /// sibling type for exactly this reason (KISS-OPS-6.19: an encoding reading
+    /// too few attrs made `Gather` on axis 2 and axis 0 emit identical bytes).
+    ///
+    /// One assertion PER FIELD. A single combined case would pass while three
+    /// of five fields were invisible to the id.
+    #[test]
+    fn regions_differing_only_in_one_attr_get_different_ids() {
+        let ops = operands(ElementKind::F32, 1);
+        let base = OpAttrs::default();
+
+        let mut axis = base.clone();
+        axis.axis = Some(2);
+        let mut scalars = base.clone();
+        scalars.scalars = vec![0.5];
+        let mut perm = base.clone();
+        perm.perm = vec![1, 0];
+        let mut target_shape = base.clone();
+        target_shape.target_shape = vec![256, 128];
+        let mut dims = base.clone();
+        dims.dims = vec![1];
+
+        let id_of = |a: &OpAttrs| {
+            region_op_id(
+                &op_attrs(OpTag::Relu, vec![SeamNode::Bind { index: 0 }], a.clone()),
+                &ops,
+            )
+        };
+        let baseline = id_of(&base);
+
+        for (field, attrs) in [
+            ("axis", &axis),
+            ("scalars", &scalars),
+            ("perm", &perm),
+            ("target_shape", &target_shape),
+            ("dims", &dims),
+        ] {
+            assert_ne!(
+                baseline,
+                id_of(attrs),
+                "two regions differing only in OpAttrs::{field} produced the SAME \
+                 id; a collision here silently overwrites a not-yet-taken kernel"
+            );
+        }
+    }
+
+    /// The id's doc promises it covers "the region structure **and** the operand
+    /// projection", so the same region at a different dtype or layout is a
+    /// different cell and must not share a key.
+    #[test]
+    fn same_region_at_different_operands_gets_different_ids() {
+        let r = op(OpTag::Relu, vec![SeamNode::Bind { index: 0 }]);
+        let f32_id = region_op_id(&r, &operands(ElementKind::F32, 1));
+        assert_ne!(
+            f32_id,
+            region_op_id(&r, &operands(ElementKind::F16, 1)),
+            "same region, different dtype — different cell, must not share a key"
+        );
+        assert_ne!(
+            f32_id,
+            region_op_id(&r, &operands(ElementKind::F32, 2)),
+            "same region, different operand count — must not share a key"
+        );
+        let transposed = OperandDesc::new(2, &[128, 256], &[1, 128], ElementKind::F32, 256);
+        assert_ne!(
+            f32_id,
+            region_op_id(&r, &[transposed]),
+            "same region, transposed layout — must not share a key"
+        );
+    }
+
+    /// Structure, not just leaves: two trees over the same tags and the same
+    /// binds, differing only in shape, must not collide.
+    #[test]
+    fn regions_differing_only_in_structure_get_different_ids() {
+        let ops = operands(ElementKind::F32, 2);
+        let a = op(
+            OpTag::Add,
+            vec![
+                op(OpTag::Relu, vec![SeamNode::Bind { index: 0 }]),
+                SeamNode::Bind { index: 1 },
+            ],
+        );
+        let b = op(
+            OpTag::Add,
+            vec![
+                SeamNode::Bind { index: 0 },
+                op(OpTag::Relu, vec![SeamNode::Bind { index: 1 }]),
+            ],
+        );
+        assert_ne!(
+            region_op_id(&a, &ops),
+            region_op_id(&b, &ops),
+            "relu(a)+b and a+relu(b) are different kernels and must not share a key"
+        );
+    }
+
+    /// The readable prefix comes from `format!("{op:?}")` on an upstream enum.
+    /// Asserted so a variant rename upstream is a red test rather than a
+    /// silently renamed artifact.
+    #[test]
+    fn id_carries_a_readable_root_op_prefix() {
+        let id = region_op_id(
+            &op(OpTag::Relu, vec![SeamNode::Bind { index: 0 }]),
+            &operands(ElementKind::F32, 1),
+        );
+        assert!(
+            id.starts_with("jit_relu_"),
+            "id should name its root op for diagnostics; got {id}"
+        );
+        let fused = region_op_id(&SeamNode::Bind { index: 0 }, &operands(ElementKind::F32, 1));
+        assert!(
+            fused.starts_with("jit_fused_"),
+            "a non-Op root is spelled `fused`; got {fused}"
+        );
+    }
 }
