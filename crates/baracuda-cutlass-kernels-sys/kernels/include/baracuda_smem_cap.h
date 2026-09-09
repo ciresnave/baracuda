@@ -31,9 +31,20 @@
 
 namespace baracuda_cutlass {
 
-/// The smallest opt-in shared-memory capacity among the architectures that
+/// The SMALLEST opt-in shared-memory capacity among the architectures that
 /// `pick_arch` can route an sm_80 kernel to. sm_86 and sm_89 (Ampere
 /// consumer / Ada) sit BELOW sm_80; they are the binding constraint.
+///
+/// ⚠️ THIS IS NOT "sm_89's CAP". It is a MINIMUM OVER THE SUPPORTED SET,
+/// and sm_86 shares the value. If this crate ever selects kernels for an
+/// architecture with a SMALLER opt-in capacity than 101376 -- i.e. if
+/// `pick_arch` / `pick_int_arch` in `baracuda-cutlass/src/plan.rs` widen
+/// below sm_86 -- THIS CONSTANT MUST COME DOWN WITH IT.
+///
+/// That is the one way this guard becomes wrong while still compiling:
+/// it would keep passing, on a bound that no longer describes the set of
+/// devices the kernels are selected for. Nothing detects that but this
+/// comment, so change the two together.
 constexpr int kMinSupportedSmemOptinBytes = 101376;
 
 /// True when `GemmT`'s shared storage fits the smallest supported capacity.
