@@ -32,6 +32,8 @@
 #include <cutlass/epilogue/thread/activation.h>
 #include <cutlass/functional.h>
 
+#include "baracuda_smem_cap.h"
+
 namespace baracuda_cutlass {
 namespace bias_tf32_rrr {
 
@@ -87,6 +89,7 @@ static int run_impl(
     cudaStream_t stream)
 {
     using Gemm = GemmTf32BiasRrrSm80<ActivationOp>;
+    BARACUDA_ASSERT_SMEM_FITS(Gemm);
 
     auto const* c_eff   = c    ? c    : d;
     int64_t      ldc_eff = c   ? ldc  : ldd;

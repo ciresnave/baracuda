@@ -34,6 +34,8 @@
 #include <cutlass/epilogue/thread/activation.h>
 #include <cutlass/functional.h>
 
+#include "baracuda_smem_cap.h"
+
 namespace baracuda_cutlass {
 namespace bias_rcr {
 
@@ -96,6 +98,7 @@ static int run_impl(
     cudaStream_t stream)
 {
     using Gemm = GemmBiasActRcrSm80<Element, ActivationOp>;
+    BARACUDA_ASSERT_SMEM_FITS(Gemm);
 
     // Null-C handling: caller guarantees beta == 0 when c is null.
     // Pointing C at D is numerically inert (beta * D is multiplied by 0).

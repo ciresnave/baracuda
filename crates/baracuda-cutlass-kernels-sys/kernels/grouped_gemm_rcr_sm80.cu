@@ -38,6 +38,8 @@
 #include <cutlass/gemm/kernel/default_gemm_grouped.h>
 #include <cutlass/epilogue/thread/linear_combination.h>
 
+#include "baracuda_smem_cap.h"
+
 namespace baracuda_cutlass {
 
 using ColumnMajor = cutlass::layout::ColumnMajor;
@@ -106,6 +108,7 @@ static std::size_t scratch_bytes_impl(
     int group_count, int threadblock_count)
 {
     using Gemm = GroupedGemm<Element>;
+    BARACUDA_ASSERT_SMEM_FITS(Gemm);
 
     // Build a minimal Arguments struct with only the fields
     // get_workspace_size touches (problem_sizes_host + count).

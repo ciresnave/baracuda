@@ -26,6 +26,8 @@
 #include <cutlass/layout/matrix.h>
 #include <cutlass/epilogue/thread/linear_combination.h>
 
+#include "baracuda_smem_cap.h"
+
 namespace baracuda_cutlass {
 namespace batched_rcr {
 
@@ -69,6 +71,7 @@ static int run_impl(
     cudaStream_t stream)
 {
     using Gemm = GemmBatchedRcrSm80<Element>;
+    BARACUDA_ASSERT_SMEM_FITS(Gemm);
     using ElementC = Element;
 
     // Null-C substitution mirrors the single-GEMM case: caller
