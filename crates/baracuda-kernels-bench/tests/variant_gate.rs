@@ -77,10 +77,10 @@ fn variant_gate_loop_end_to_end() {
         .find(|v| v.tag == "splitk")
         .expect("the splitk variant must be offered for this outer-axis cell");
     assert_eq!(splitk.fidelity, VariantFidelity::ReassociatedDeterministic);
-    assert!(
-        variants.iter().any(|v| v.tag == "base"),
-        "the base variant must always be offered"
-    );
+    let base = variants
+        .iter()
+        .find(|v| v.tag == "base")
+        .expect("the base variant must always be offered");
 
     // ---- 2. nvrtc-compile every kernel of every variant; load via the driver. ----
     // `modules` must outlive every `Function` borrowed out of it, so it is bound
@@ -93,9 +93,24 @@ fn variant_gate_loop_end_to_end() {
             .unwrap_or_else(|| panic!("module for {name}"));
         m.get_function(name).expect("get_function")
     };
-    let base_name = variants[0].kernels[0].name.clone();
-    let partial_name = variants[1].kernels[0].name.clone();
-    let combine_name = variants[1].kernels[1].name.clone();
+    // ⚠️ BY TAG, and this is the line the note above was actually about. #102
+    // retracted a whole issue because the SOFTMAX test asserted on `tag` and
+    // then selected its kernel with `variants[1]` — which was `prec`, not the
+    // variant under test. These three lines are the same construct, in the same
+    // file, twelve lines under the same warning. Correct today by luck of
+    // ordering; nothing asserted it.
+    //
+    // The split-K protocol is two kernels IN ORDER (partial, then combine), so
+    // indexing `kernels` is a statement about the protocol rather than about
+    // which variant this is. Named anyway, because a suffix assertion costs one
+    // line and turns "correct by accident" into "correct, and it says so".
+    let base_name = base.kernels[0].name.clone();
+    let partial_name = splitk.kernels[0].name.clone();
+    let combine_name = splitk.kernels[1].name.clone();
+    assert!(
+        partial_name.ends_with("_partial") && combine_name.ends_with("_combine"),
+        "split-K emits (partial, combine) in that order; got ({partial_name}, {combine_name})"
+    );
     let f_base = func(&base_name);
     let f_partial = func(&partial_name);
     let f_combine = func(&combine_name);
@@ -290,10 +305,10 @@ fn smemrow_variant_is_bit_identical_and_gated() {
         .find(|v| v.tag == "smemrow")
         .expect("the smemrow variant must be offered for this row-reduce cell");
     assert_eq!(smemrow.fidelity, VariantFidelity::BitIdentical);
-    assert!(
-        variants.iter().any(|v| v.tag == "base"),
-        "the base variant must always be offered"
-    );
+    let base = variants
+        .iter()
+        .find(|v| v.tag == "base")
+        .expect("the base variant must always be offered");
 
     // `modules` must outlive every `Function` borrowed out of it, so it is bound
     // here rather than inside the helper.
@@ -315,7 +330,7 @@ fn smemrow_variant_is_bit_identical_and_gated() {
     // Fixing the assertion and not the selection is the whole failure: the
     // assertion says which variant the test is ABOUT, the selection says which
     // variant the test TOUCHES, and only the second one can be wrong silently.
-    let base_name = variants[0].kernels[0].name.clone();
+    let base_name = base.kernels[0].name.clone();
     let smem_name = smemrow.kernels[0].name.clone();
     assert!(
         smem_name.ends_with("_smemrow"),
