@@ -11,9 +11,9 @@ so the wrap point is wherever the author's line ran out:
     /// §3a.4; Baracuda reconcile §2). For scalar-param ops the value is **not
     /// baked** — it identifies the slot the emitted `extract:` path points at
 
-The literal text between "not" and "baked" is `\\n/// `. A line-oriented
-`grep 'not baked'` cannot match it, and — this is the part that bites — it
-returns **0**, which is indistinguishable from the phrase being absent.
+The literal text between "not" and "baked" is a newline plus `/// `. A
+line-oriented `grep 'not baked'` cannot match it, and — this is the part that
+bites — it returns 0, which is indistinguishable from the phrase being absent.
 
 ⚠️ MEASURED 2026-09-09, TWO PROJECTS, SAME PHRASE, SAME NIGHT. Both the fuel
 architect and I ran `grep 'not baked'` against `fuel-kernel-seam-types`, both
@@ -29,7 +29,8 @@ THE GENERAL SHAPE
 ⚠️ A TEXT SEARCH THAT CANNOT SPAN A LINE BREAK REPORTS ABSENCE FOR ANY PHRASE
 THE AUTHOR HAPPENED TO WRAP. The failure is silent, returns a plausible number,
 and correlates with nothing the searcher controls — the wrap point depends on
-how long the *preceding* words were.
+how long the *preceding* words were, so an unrelated doc edit can flip the
+answer.
 
 So this joins `///`, `//!` and `//` continuations before matching, and ships a
 `--self-test` that builds a deliberately wrapped fixture and requires the naive
@@ -77,41 +78,51 @@ def search(phrase: str, roots: list[str]) -> list[tuple[pathlib.Path, str]]:
     return out
 
 
+def _probe(tmpdir: str, name: str, text: str, phrase: str) -> tuple[int, int]:
+    """Write `text` to a file; return (line-oriented hits, this tool's hits).
+
+    Split out so `self_test` holds the EXPECTATION and this holds the
+    MEASUREMENT. That is the same separation the tool exists to defend, and it
+    lets a reader check the expected numbers without reading any file I/O.
+    """
+    f = pathlib.Path(tmpdir) / name
+    f.write_text(text, encoding="utf-8")
+    naive = sum(1 for line in f.read_text(encoding="utf-8").splitlines() if phrase in line)
+    return naive, len(search(phrase, [str(f)]))
+
+
+# (line-oriented, this tool). The `wrapped` row IS the blindness this tool
+# exists to remove; the `flat` row is the control that stops "ours found it"
+# from meaning "ours matches everything".
+EXPECTED = {"wrapped": (0, 1), "flat": (1, 1)}
+
+WRAPPED_FIXTURE = (
+    "/// some preamble text that runs on and on until the value is **not\n"
+    "/// baked** and the sentence continues here.\n"
+    "pub struct X;\n"
+)
+FLAT_FIXTURE = "/// the value is not baked at all\npub struct Y;\n"
+
+
 def self_test() -> int:
     """The tool must demonstrate the failure it prevents, on a fixture."""
-    wrapped = (
-        "/// some preamble text that runs on and on until the value is **not\n"
-        "/// baked** and the sentence continues here.\n"
-        "pub struct X;\n"
-    )
+    phrase = "not baked"
     with tempfile.TemporaryDirectory() as d:
-        f = pathlib.Path(d) / "fixture.rs"
-        f.write_text(wrapped, encoding="utf-8")
-        raw = f.read_text(encoding="utf-8")
-
-        naive = sum(1 for line in raw.splitlines() if "not baked" in line)
-        ours = len(search("not baked", [str(f)]))
-
-        # And a control the OTHER way: an UNwrapped phrase both forms must find,
-        # so "ours found it" is not just "ours matches everything".
-        f2 = pathlib.Path(d) / "flat.rs"
-        f2.write_text("/// the value is not baked at all\npub struct Y;\n", encoding="utf-8")
-        naive2 = sum(1 for line in f2.read_text(encoding="utf-8").splitlines() if "not baked" in line)
-        ours2 = len(search("not baked", [str(f2)]))
-
-        print("  fixture: phrase WRAPPED across a `///` continuation")
-        print(f"    line-oriented search : {naive}   (expect 0 — this is the blindness)")
-        print(f"    this tool            : {ours}   (expect 1)")
-        print("  control: phrase on ONE line")
-        print(f"    line-oriented search : {naive2}   (expect 1)")
-        print(f"    this tool            : {ours2}   (expect 1)")
-
-        ok = naive == 0 and ours == 1 and naive2 == 1 and ours2 == 1
-        print("\n" + ("OK: the tool finds what a line search misses, and both "
-                      "agree when nothing is wrapped."
-                      if ok else
-                      "FAIL: the self-test did not reproduce the expected pattern."))
-        return 0 if ok else 1
+        got = {
+            "wrapped": _probe(d, "wrapped.rs", WRAPPED_FIXTURE, phrase),
+            "flat": _probe(d, "flat.rs", FLAT_FIXTURE, phrase),
+        }
+    for key, pair in got.items():
+        print(f"  {key:8} line-oriented={pair[0]}  this tool={pair[1]}   (expect {EXPECTED[key]})")
+    ok = got == EXPECTED
+    print()
+    print(
+        "OK: the tool finds what a line search misses, and both agree when "
+        "nothing is wrapped."
+        if ok
+        else f"FAIL: expected {EXPECTED}, measured {got}."
+    )
+    return 0 if ok else 1
 
 
 def main(argv: list[str]) -> int:
