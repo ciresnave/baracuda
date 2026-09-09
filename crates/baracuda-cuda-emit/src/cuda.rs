@@ -4131,6 +4131,18 @@ fn row_reduce_materialize_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     Some(Variant::new(
         "smemrow",
         vec![k],
+        // MEASURED bit-identical on an RTX 4070 against the softmax row-reduce
+        // cell: 0 of 16,777,216 elements differ. The variant caches the fold's
+        // `expf(in0[idx] - r0)` in shared memory and the epilogue reads it back
+        // instead of recomputing; `expf` is a deterministic function of its
+        // argument, so cache-vs-recompute cannot move a bit.
+        //
+        // ⚠️ This briefly carried `ReassociatedDeterministic` plus a measurement
+        // of "12,283,172 of 16,777,216 differ, worst 11 ULP" (#99). That
+        // measurement was real but was taken against the `prec` variant — the
+        // device test selected its kernel with `variants[1]`, and `prec` sits at
+        // index 1. `prec` is declared `MorePrecise`, so an 11-ULP divergence
+        // from the base is exactly what it is for. Nothing here was ever wrong.
         VariantFidelity::BitIdentical,
         format!(
             "same launch shape as the base rowreduce ({kname}<<<n_out, B>>> with B a \
@@ -9796,6 +9808,11 @@ got:
             .find(|v| v.tag == "smemrow")
             .expect("smemrow variant offered");
         assert_eq!(sm.tag, "smemrow");
+        // The assertions below establish that the epilogue READS THE CACHE
+        // instead of recomputing — "exactly ONE expf remains, vs two in the
+        // base kernel". That is a substitution of a cached deterministic value
+        // for its recomputation, which is bit-preserving, and the on-device
+        // differential in `variant_gate.rs` confirms it at 0 of 16,777,216.
         assert_eq!(sm.fidelity, VariantFidelity::BitIdentical);
         let src = &sm.kernels[0].source;
         assert!(sm.kernels[0].name.ends_with("_rowreduce_smemrow"));

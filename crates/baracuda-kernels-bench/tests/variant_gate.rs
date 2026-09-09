@@ -16,14 +16,14 @@
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
-use baracuda_driver::{Device, Module, require_optional};
+use baracuda_driver::{Context, Device, Module, require_optional};
 use baracuda_kernels_bench::{current_hwstamp, gate_cell, setup_device};
 use baracuda_kernels_types::{
     ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, Implementor, OpCategory,
     OperandDesc, Provenance, merge, structure_key,
 };
 use unpopped::emit_dispatch_table;
-use unpopped::{Compiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input};
+use unpopped::{Compiler, OpDef, ReduceOp, Variant, VariantFidelity, generate_variants, input};
 
 const ROWS: i64 = 16_384;
 const COLS: i64 = 1_024;
@@ -33,6 +33,13 @@ const BLOCK: u32 = 256;
 #[test]
 #[ignore = "requires a CUDA device + nvrtc"]
 fn variant_gate_loop_end_to_end() {
+    // ⚠️ Held for the WHOLE body, not just the timing call. Two device tests
+    // sharing one GPU flip this gate's winner 2 runs in 3 — and a lock inside
+    // `gate_cell` does NOT fix it, because the interference is the other test's
+    // UNMEASURED launches and copies. See `DEVICE_TIMING_LOCK`.
+    let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let (ctx, stream) = setup_device();
     let device = Device::get(0).expect("device");
     let stamp = current_hwstamp(&device).expect("hwstamp");
@@ -76,18 +83,9 @@ fn variant_gate_loop_end_to_end() {
     );
 
     // ---- 2. nvrtc-compile every kernel of every variant; load via the driver. ----
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
-    let mut modules = Vec::new(); // keep alive for the Functions' lifetime
-    for v in &variants {
-        for k in &v.kernels {
-            let ptx = compiler
-                .compile(&k.source, &k.name, 30_000)
-                .unwrap_or_else(|e| panic!("nvrtc({}) failed: {e}", k.name));
-            let ptx = String::from_utf8(ptx).expect("ptx is text");
-            let module = Module::load_ptx(&ctx, &ptx).expect("module load");
-            modules.push((k.name.clone(), module));
-        }
-    }
+    // `modules` must outlive every `Function` borrowed out of it, so it is bound
+    // here rather than inside the helper.
+    let modules = compile_all(&ctx, &variants);
     let func = |name: &str| {
         let (_, m) = modules
             .iter()
@@ -245,6 +243,13 @@ fn variant_gate_loop_end_to_end() {
 #[test]
 #[ignore = "requires a CUDA device + nvrtc"]
 fn smemrow_variant_is_bit_identical_and_gated() {
+    // ⚠️ Held for the WHOLE body, not just the timing call. Two device tests
+    // sharing one GPU flip this gate's winner 2 runs in 3 — and a lock inside
+    // `gate_cell` does NOT fix it, because the interference is the other test's
+    // UNMEASURED launches and copies. See `DEVICE_TIMING_LOCK`.
+    let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     use unpopped::{ReduceStage, reduced};
 
     let (ctx, stream) = setup_device();
@@ -280,11 +285,6 @@ fn smemrow_variant_is_bit_identical_and_gated() {
     // index 1 and `smemrow` at index 2, so the old `variants[1]` assertion was
     // checking the PRECISION variant while claiming to check smemrow.
     //
-    // ⚠️ AND THE STALE COUNT WAS STANDING IN FRONT OF A REAL FAILURE. With it
-    // fixed, this test reaches its bit-identity check and that check FAILS:
-    // smemrow declares BitIdentical and differs from base on 12,283,172 of
-    // 16,777,216 elements, worst 11 ULP, reproducible. Filed as issue #99.
-    // A stale assertion was hiding a live one.
     let smemrow = variants
         .iter()
         .find(|v| v.tag == "smemrow")
@@ -295,23 +295,32 @@ fn smemrow_variant_is_bit_identical_and_gated() {
         "the base variant must always be offered"
     );
 
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
-    let mut modules = Vec::new();
-    for v in &variants {
-        for k in &v.kernels {
-            let ptx = compiler
-                .compile(&k.source, &k.name, 30_000)
-                .unwrap_or_else(|e| panic!("nvrtc({}) failed: {e}", k.name));
-            let ptx = String::from_utf8(ptx).expect("ptx is text");
-            modules.push((k.name.clone(), Module::load_ptx(&ctx, &ptx).expect("load")));
-        }
-    }
+    // `modules` must outlive every `Function` borrowed out of it, so it is bound
+    // here rather than inside the helper.
+    let modules = compile_all(&ctx, &variants);
     let func = |name: &str| {
-        let (_, m) = modules.iter().find(|(n, _)| n == name).expect("module");
+        let (_, m) = modules
+            .iter()
+            .find(|(n, _)| n == name)
+            .unwrap_or_else(|| panic!("module for {name}"));
         m.get_function(name).expect("get_function")
     };
+    // ⚠️ BY TAG — and this line is the reason the note above exists. The
+    // assertion was re-anchored on `tag` while THIS line, which chooses the
+    // kernel that gets launched and compared, was left as `variants[1]`. That
+    // is `prec`. So the test named for smemrow compiled, launched, and
+    // measured the PRECISION variant, and the 11-ULP divergence reported as
+    // #99 was `prec` vs `base` — which is what `prec` is FOR.
+    //
+    // Fixing the assertion and not the selection is the whole failure: the
+    // assertion says which variant the test is ABOUT, the selection says which
+    // variant the test TOUCHES, and only the second one can be wrong silently.
     let base_name = variants[0].kernels[0].name.clone();
-    let smem_name = variants[1].kernels[0].name.clone();
+    let smem_name = smemrow.kernels[0].name.clone();
+    assert!(
+        smem_name.ends_with("_smemrow"),
+        "the compared kernel must be smemrow's, got {smem_name}"
+    );
     let f_base = func(&base_name);
     let f_smem = func(&smem_name);
 
@@ -359,7 +368,13 @@ fn smemrow_variant_is_bit_identical_and_gated() {
         }
     };
 
-    // The BitIdentical oracle: raw u32 output buffers must match exactly.
+    // ⚠️ THIS BRIEFLY ASSERTED `ReassociatedDeterministic` AND A 64-ULP BOUND,
+    // on the strength of "12,283,172 of 16,777,216 elements differ, worst 11
+    // ULP" (#99). That measurement was real and was taken against the WRONG
+    // KERNEL: the selection above said `variants[1]`, which is `prec`, a
+    // variant declared `MorePrecise` whose whole purpose is to differ from the
+    // base. With smemrow's own kernel the same comparator reports 0 of
+    // 16,777,216. `BitIdentical` was right the entire time.
     launch_base();
     launch_smem();
     stream.synchronize().expect("sync");
@@ -367,15 +382,21 @@ fn smemrow_variant_is_bit_identical_and_gated() {
     let mut b = vec![0.0f32; n];
     d_base.copy_to_host(&mut a).expect("copy a");
     d_smem.copy_to_host(&mut b).expect("copy b");
-    for i in 0..n {
-        assert_eq!(
-            a[i].to_bits(),
-            b[i].to_bits(),
-            "bit mismatch at {i}: base {:08x} smemrow {:08x}",
-            a[i].to_bits(),
-            b[i].to_bits()
-        );
-    }
+
+    // PROMISE 1 — DETERMINISTIC for a fixed launch configuration. The only way
+    // to check it is to run it again and compare, so that is what this does.
+    launch_smem();
+    stream.synchronize().expect("sync");
+    let mut b2 = vec![0.0f32; n];
+    d_smem.copy_to_host(&mut b2).expect("copy b2");
+    assert_bitwise_stable(&b, &b2);
+
+    // PROMISE 2 — BIT-IDENTICAL to the base. A 0-ULP bound IS memcmp equality,
+    // and routing it through the ULP comparator rather than a bare `==` buys
+    // the failure message: "drifted N ULP at element i" localises a regression,
+    // where "the vectors differ" does not.
+    let worst = assert_within_ulp(&a, &b, 0);
+    eprintln!("smemrow vs base: worst {worst} ULP over {n} elements (bound 0)");
 
     // Gate the pair; report the measured margin (regime-dependent — occupancy
     // vs saved traffic — so no winner is asserted; the table records it).
@@ -405,4 +426,69 @@ fn smemrow_variant_is_bit_identical_and_gated() {
         "softmax gate: winner {:?} margin {:.3} ({:.0} vs {:.0} ns)",
         entry.winner_entry, entry.margin, entry.ranked[0].median_ns, entry.ranked[1].median_ns
     );
+}
+
+/// `ReassociatedDeterministic` promises run-to-run stability for a fixed launch
+/// configuration. Compare BITS, not values: `0.0 == -0.0` and any pair that
+/// merely rounds alike would pass a value comparison while having moved.
+fn assert_bitwise_stable(first: &[f32], second: &[f32]) {
+    let n = first.len();
+    let moved = (0..n)
+        .filter(|&i| first[i].to_bits() != second[i].to_bits())
+        .count();
+    assert_eq!(
+        moved, 0,
+        "ReassociatedDeterministic promises run-to-run stability for a fixed \
+         launch; {moved} of {n} elements moved between two identical launches"
+    );
+}
+
+/// Assert every element is within `max_ulp` of the base, and return the worst
+/// |ULP| seen so the caller can print it. `max_ulp = 0` is exactly memcmp
+/// equality; a wider bound suits a variant whose label permits divergence.
+///
+/// Reporting the worst is the point: a bound that passes silently says nothing
+/// about how much headroom is left, and headroom is what shows drift coming.
+fn assert_within_ulp(base: &[f32], other: &[f32], max_ulp: i64) -> i64 {
+    let mut worst = 0i64;
+    let mut worst_at = 0usize;
+    for i in 0..base.len() {
+        let d = (i64::from(base[i].to_bits()) - i64::from(other[i].to_bits())).abs();
+        if d > worst {
+            worst = d;
+            worst_at = i;
+        }
+    }
+    assert!(
+        worst <= max_ulp,
+        "drifted {worst} ULP from base at element {worst_at} (base {:08x} other \
+         {:08x}); the variant may diverge but not by this much",
+        base[worst_at].to_bits(),
+        other[worst_at].to_bits()
+    );
+    worst
+}
+
+/// nvrtc-compile every kernel of every variant and load each as a module,
+/// returned paired with its entry-point name.
+///
+/// Both device tests did this identically bar their `expect` strings. Shared
+/// because it IS shared, not to move a line count: the two copies had already
+/// drifted in their panic messages, which is how a duplicated block starts
+/// telling two different stories about the same failure.
+fn compile_all(ctx: &Context, variants: &[Variant]) -> Vec<(String, Module)> {
+    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let mut modules = Vec::new();
+    for v in variants {
+        for k in &v.kernels {
+            let ptx = compiler
+                .compile(&k.source, &k.name, 30_000)
+                .unwrap_or_else(|e| panic!("nvrtc({}) failed: {e}", k.name));
+            let ptx = String::from_utf8(ptx).expect("ptx is text");
+            let module = Module::load_ptx(ctx, &ptx)
+                .unwrap_or_else(|e| panic!("module load for {}: {e}", k.name));
+            modules.push((k.name.clone(), module));
+        }
+    }
+    modules
 }
