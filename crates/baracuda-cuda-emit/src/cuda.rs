@@ -17,8 +17,8 @@ use unpopped::cfamily::{
 };
 use unpopped::ir::{
     Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
-    is_admissible_int_reduction_operand, is_bit_move_fold_output, is_bit_or_sign_move,
-    narrow_sign_masks,
+    is_admissible_int_reduction_operand, is_bit_move_fold_output, is_bit_move_row_reduce_output,
+    is_bit_or_sign_move, narrow_sign_masks,
 };
 use unpopped::plan::{KernelPlan, ReduceAxisClass, RrRole, Schedule, rr_role};
 use unpopped_vocab::structure_key::LayoutOrder;
@@ -4256,8 +4256,45 @@ fn emit_row_reduce_impl(
     // Precision forces the wider `double` accumulator (fixing the length-growing
     // float error of the sum/mean/variance stages); F64/F32Strict already do.
     let dbl = precision || matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
-    let acc = if dbl { "double" } else { "float" };
-    let zero = if dbl { "0.0" } else { "0.0f" };
+
+    // §6.16-0009 BIT-MOVE ROUTE. Routed on `is_bit_move_row_reduce_output`,
+    // unpopped's SHARED predicate for this shape — never a local re-derivation.
+    // §6.16-0011 traces the whole path from inputs to output, every fold
+    // included, and MUST NOT classify by the fold alone or the epilogue alone;
+    // that predicate's signature cannot be satisfied without naming both.
+    //
+    // MEASURED cost of NOT taking it (tests/narrow_minmax_semantics.rs, RTX
+    // 4070): the promoted path's `__bfloat162float` load + `__float2bfloat16`
+    // store maps a bf16 NaN payload 0x7FC1 -> 0x7FFF, and f16 0x7E01 -> 0x7FFF.
+    // An all-move Max fold therefore canonicalizes exactly the payload this
+    // clause exists to preserve. The narrow bit copy preserves it.
+    //
+    // ⚠️ SELECT IS EXCLUDED, DELIBERATELY AND NARROWLY. `moves` admits
+    // `Select(c, a, b)` because the moved bytes come from `a`/`b` — but it
+    // places NO constraint on `c`, which may be an arbitrary COMPUTED
+    // predicate needing the float spellers. Mixing a narrow payload path with
+    // a promoted condition path is a bigger change than this one, so a Select
+    // anywhere in the traced expression declines to the promoted path: correct
+    // today, just not yet optimal. Stated rather than silently unhandled.
+    let bit_move = narrow_bit_casts(plan.dtype).is_some()
+        && is_bit_move_row_reduce_output(stages, epilogue)
+        && !stages.iter().any(|st| expr_has_select(&st.pre))
+        && !expr_has_select(epilogue);
+
+    let acc = if bit_move {
+        ctype
+    } else if dbl {
+        "double"
+    } else {
+        "float"
+    };
+    let zero = if bit_move {
+        zero_store_literal(ctype)
+    } else if dbl {
+        "0.0"
+    } else {
+        "0.0f"
+    };
     // Prod's multiplicative identity — passed through to `emit_block_reducers`
     // for its signature; a RowReduce Prod stage is rejected at the plan gate, so
     // `ops` never contains Prod here and no block_prod is emitted.
@@ -4314,6 +4351,12 @@ fn emit_row_reduce_impl(
             RrRole::RowScalar => unreachable!("row-scalar handled above"),
         };
         match plan.dtype {
+            // A narrow bit-move fold accumulates in the STORAGE type, so the
+            // element IS the raw stored value. Promoting here would re-introduce
+            // the round trip §6.16-0009 forbids — the widen is harmless alone,
+            // but it forces a narrowing at the store, and THAT canonicalizes the
+            // payload (measured: 0x7FC1 -> 0x7FFF).
+            _ if bit_move => format!("in{i}[{pos}]"),
             ElementKind::F16 => format!("__half2float(in{i}[{pos}])"),
             ElementKind::Bf16 => format!("__bfloat162float(in{i}[{pos}])"),
             ElementKind::F32Strict => format!("(double)in{i}[{pos}]"),
@@ -4349,7 +4392,16 @@ fn emit_row_reduce_impl(
                         ),
                     }))
                 },
+                // A bit-move body routes through the SHARED scalar spellers with
+                // `bit_move: true` — the same ones `Access::Reduction` uses —
+                // because with a narrow accumulator `Neg`/`Abs` are sign-bit
+                // edits on stored bytes, not float ops. `moves` bounds this
+                // surface to Neg/Abs and Copysign/Max/Min, exactly what those
+                // spellers cover on their bit-move arm.
                 &|op, x| {
+                    if bit_move {
+                        return cuda_unary(op, x, plan.dtype, true);
+                    }
                     Ok(Spelling::Spelled(if dbl {
                         unary_f64(op, x)
                     } else {
@@ -4357,6 +4409,9 @@ fn emit_row_reduce_impl(
                     }))
                 },
                 &|op, a, b| {
+                    if bit_move {
+                        return cuda_binary(op, a, b, plan.dtype, true);
+                    }
                     Ok(Spelling::Spelled(if dbl {
                         binary_f64(op, a, b)
                     } else {
@@ -4555,6 +4610,9 @@ fn emit_row_reduce_impl(
     };
     let epi = lower(epi_src)?;
     let stored = match plan.dtype {
+        // The accumulator never widened, so there is nothing to narrow — and the
+        // narrowing is precisely the step that canonicalizes the moved payload.
+        _ if bit_move => epi,
         ElementKind::F16 => format!("__float2half({epi})"),
         ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
         _ => epi,
@@ -7390,6 +7448,23 @@ fn gathered_offset_expr(
 /// The properly-typed zero literal for the output ctype — the [`OobPolicy::ZeroFill`]
 /// fill (increment 4). f16/bf16 need the intrinsic constructor (no portable
 /// `T(0)`); everything else takes a plain literal.
+/// Whether `e` contains a [`ScalarExpr::Select`] anywhere.
+///
+/// The §6.16-0009 bit-move route needs this because `moves` admits `Select(c,
+/// a, b)` on the strength of `a`/`b` alone — the moved bytes do come from one
+/// arm — while placing NO constraint on the CONDITION `c`, which may be an
+/// arbitrary computed predicate. A narrow payload path with a promoted
+/// condition beside it is a larger change than the route itself, so a Select
+/// declines to the promoted path. Correct, not yet optimal.
+fn expr_has_select(e: &ScalarExpr) -> bool {
+    match e {
+        ScalarExpr::Select(..) => true,
+        ScalarExpr::Unary(_, a) => expr_has_select(a),
+        ScalarExpr::Binary(_, a, b) => expr_has_select(a) || expr_has_select(b),
+        _ => false,
+    }
+}
+
 fn zero_store_literal(octype: &str) -> &'static str {
     match octype {
         "__half" => "__float2half(0.0f)",
@@ -9263,11 +9338,22 @@ got:
     /// which I agree with: an API whose first consumer is a scratch experiment
     /// is how an unreachable seam happens).
     ///
-    /// WHEN THAT PREDICATE IS PUBLISHED, ADOPTED, AND THE GATE IS WIRED, THIS
-    /// TEST GOES RED. That is intended: invert it to assert a raw load, and
-    /// delete this note.
+    /// ⚠️ DISCHARGED. `is_bit_move_row_reduce_output` shipped in unpopped
+    /// 0.10.0 (adopted in #101), the gate is wired in `emit_row_reduce_impl`,
+    /// and this test WENT RED exactly as promised — then was inverted. It now
+    /// asserts the bit-move route rather than the promotion, and the history
+    /// above is kept because the unblock CONDITION was the part I got wrong
+    /// once: I claimed 0.9.0 carried the predicate and it did not. A pin is
+    /// only as good as its stated condition, and that is the one line nobody
+    /// re-derives before acting on it.
+    ///
+    /// The cost of the promoted path it replaced is MEASURED, not cited:
+    /// `tests/narrow_minmax_semantics.rs` on an RTX 4070 shows the
+    /// `__bfloat162float` load + `__float2bfloat16` store mapping a bf16 NaN
+    /// payload 0x7FC1 -> 0x7FFF (f16 0x7E01 -> 0x7FFF), which is exactly the
+    /// canonicalization §6.16-0009 forbids.
     #[test]
-    fn rowreduce_all_move_is_promoted_today_which_violates_6_16_0009() {
+    fn rowreduce_all_move_takes_the_bit_move_route_per_6_16_0009() {
         use unpopped::ir::{ReduceOp, ReduceStage, UnaryOp, reduced};
         for dt in [ElementKind::Bf16, ElementKind::F16] {
             // Max fold, pure-move (sign-edit) epilogue: every transformation on
@@ -9298,17 +9384,62 @@ got:
             // ⚠️ ANCHOR ON THE MECHANISM, NOT A VARIABLE NAME. The first
             // spelling of this assertion looked for `float acc =` and FAILED —
             // the row-reduce accumulator is per-stage and named `acc0`, so the
-            // string never appears. It failed loudly here, but the identical
+            // string never appears. It failed loudly then, but the identical
             // mistake in the negative direction would have PASSED VACUOUSLY.
-            // The promoting LOAD is the defect and it cannot be renamed away.
-            let promote = if matches!(dt, ElementKind::Bf16) {
-                "__bfloat162float(in0["
+            //
+            // ⚠️ AND THAT DIRECTION IS THE ONE THIS TEST NOW ASSERTS IN, so the
+            // absence check below is never alone: every negative is paired with
+            // a POSITIVE naming the mechanism that replaced it. An emitter that
+            // stopped generating a row-reduce entirely would satisfy every
+            // "does not contain" on this list.
+            let (to_bits, from_bits, promote, ctype) = if matches!(dt, ElementKind::Bf16) {
+                (
+                    "__bfloat16_as_ushort",
+                    "__ushort_as_bfloat16",
+                    "__bfloat162float(in0[",
+                    "__nv_bfloat16",
+                )
             } else {
-                "__half2float(in0["
+                (
+                    "__half_as_ushort",
+                    "__ushort_as_half",
+                    "__half2float(in0[",
+                    "__half",
+                )
             };
+
+            // POSITIVE 1 — the accumulator is the STORAGE type, per stage.
             assert!(
-                src.contains(promote),
-                "PIN: {dt:?} all-move RowReduce is expected to PROMOTE its load                  today, destroying the payload §6.16-0009 preserves. If this                  failed, the bit-move path has been wired — invert this test to                  require a raw load and delete its note.
+                src.contains(&format!("{ctype} acc0 =")),
+                "{dt:?}: expected a narrow per-stage accumulator `{ctype} acc0 =`
+{src}"
+            );
+            // POSITIVE 2 — the load is RAW. This is the §6.16-0009 obligation:
+            // the widen is harmless alone, but it forces a narrowing at the
+            // store, and THAT canonicalizes the payload.
+            assert!(
+                src.contains(&format!("{ctype} e = in0[")),
+                "{dt:?}: expected a raw narrow load `{ctype} e = in0[`
+{src}"
+            );
+            // POSITIVE 3 — the `Neg` epilogue is a SIGN-BIT EDIT on stored bits,
+            // not a float negate. This is what makes the whole path a move.
+            assert!(
+                src.contains(to_bits) && src.contains(from_bits) && src.contains("^ 0x8000u"),
+                "{dt:?}: expected the epilogue Neg as a sign-bit XOR through                  {to_bits}/{from_bits}
+{src}"
+            );
+            // POSITIVE 4 — the block reducer itself is narrow, so the fold never
+            // round-trips through float either.
+            assert!(
+                src.contains(&format!("{ctype} block_max_")),
+                "{dt:?}: expected a narrow block reducer
+{src}"
+            );
+            // NEGATIVE — and only now, with the mechanism pinned above.
+            assert!(
+                !src.contains(promote),
+                "{dt:?}: the promoting load `{promote}` is back — §6.16-0009                  forbids the round trip it forces at the store (MEASURED: bf16                  0x7FC1 -> 0x7FFF, f16 0x7E01 -> 0x7FFF; see                  baracuda-kernels-bench/tests/narrow_minmax_semantics.rs)
 {src}"
             );
         }
