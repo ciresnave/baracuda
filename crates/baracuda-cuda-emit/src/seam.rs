@@ -917,6 +917,63 @@ mod tests {
         );
     }
 
+    /// ⚠️ A SCALAR VALUE CHANGES THE ID. IT CANNOT CHANGE THE KERNEL.
+    ///
+    /// `unpopped 0.10.0` `jit.rs:558-570` converts a scalar-param op's value to
+    /// a RUNTIME parameter, not a baked literal:
+    ///
+    /// ```text
+    /// // Scalar-param ops: one tensor operand; the scalar becomes a runtime
+    /// // Param (the AOT emitter's `extract:` pulls it back out — round-trip
+    /// // stable).
+    /// if op == "AddScalar" || op == "MulScalar" {
+    ///     let t = unary_operand(op, operands, np)?;
+    ///     let p = ScalarExpr::Param(*np);
+    /// ```
+    ///
+    /// The value in `OpAttrs.scalars` is never read on the way to the source.
+    /// So two `AddScalar` regions differing only in that value are the SAME
+    /// KERNEL — and this test measures that they nonetheless get DIFFERENT ids,
+    /// because `region_op_id` hashes `format!("{region:?}")` and `Debug`
+    /// renders `scalars`.
+    ///
+    /// Consequence: the registry keys two entries for one kernel — a wasted
+    /// compile per distinct scalar, and a `take_kernel` on the wrong key
+    /// returns `None` instead of the identical artifact already built. Not a
+    /// correctness bug; both entries hold the same kernel.
+    ///
+    /// ⚠️ SCOPE, STATED: this asserts the ID half only. The kernel-identity
+    /// half is derived from the source above, NOT run here — `synthesize`
+    /// declines an `AddScalar` region before returning a kernel, at
+    /// `jit.rs:377` where a missing FKC contract surfaces as
+    /// `JitError::UnsupportedDtype` (a misleading name: the dtype is fine, the
+    /// CONTRACT could not be produced). Asserting "same kernel" from a call
+    /// that never returns one would be a claim dressed as a measurement.
+    #[test]
+    fn a_scalar_value_changes_the_region_id() {
+        let with = |v: f64| {
+            let mut a = OpAttrs::default();
+            a.scalars = vec![v];
+            op_attrs(OpTag::AddScalar, vec![SeamNode::Bind { index: 0 }], a)
+        };
+        let (r1, r2) = (with(1.0), with(2.0));
+        let ops = operands(ElementKind::F32, 2);
+
+        // CONTROL: the regions must actually differ in what the id hashes, or
+        // an id difference below would prove nothing about scalars.
+        assert_ne!(
+            format!("{r1:?}"),
+            format!("{r2:?}"),
+            "control: the two regions must differ in their Debug rendering"
+        );
+
+        assert_ne!(
+            region_op_id(&r1, &ops),
+            region_op_id(&r2, &ops),
+            "documents CURRENT behaviour: the id depends on a scalar that cannot              reach the kernel. If this fails, `scalars` has been excluded from              the identity and the over-discrimination is fixed — invert it."
+        );
+    }
+
     /// The readable prefix comes from `format!("{op:?}")` on an upstream enum.
     /// Asserted so a variant rename upstream is a red test rather than a
     /// silently renamed artifact.
