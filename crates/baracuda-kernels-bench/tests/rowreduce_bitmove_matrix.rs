@@ -269,6 +269,14 @@ fn check(cell: &Cell, out: &[u16]) {
 #[test]
 fn controls_discriminate_a_no_fold_kernel() {
     for c in CELLS {
+        // ⚠️ IF A `Select` CELL IS EVER ADDED (see issue #113 — the bit-move
+        // route declines Select today), THIS CHEAT MODEL MUST GROW A CASE FOR
+        // IT. The `other =>` arm below makes that a panic rather than a silent
+        // gap, which is the point — but the REASON lives here rather than only
+        // in #113, because the PR that implements Select will CLOSE #113 and
+        // take anything written there with it. An issue is not a durable home
+        // for a warning about the fix that closes it: the artifact is destroyed
+        // at the moment its content becomes relevant.
         let cheat = match c.epi {
             UnaryOp::Neg => c.finite.0 ^ 0x8000,
             UnaryOp::Abs => c.finite.0 & 0x7FFF,
