@@ -786,6 +786,24 @@ mod tests {
         let ops = operands(ElementKind::F32, 1);
         let base = OpAttrs::default();
 
+        // ⚠️ EXHAUSTIVENESS, ENFORCED BY THE COMPILER RATHER THAN BY ME
+        // REMEMBERING. The loop below is a hand-written list of fields, which is
+        // the per-instance form of the very defect this file is about: add a
+        // sixth field upstream and every assertion still passes while the new
+        // field is invisible to the id AND to this test.
+        //
+        // `OpAttrs` is NOT `#[non_exhaustive]` (measured at 0.10.3), so this
+        // destructuring is legal and FAILS TO COMPILE the day a field is added
+        // — which is exactly when someone must decide whether it belongs in the
+        // id. Fuel's GAP-303 adds one. Costs nothing and cannot be forgotten.
+        let OpAttrs {
+            scalars: _,
+            axis: _,
+            perm: _,
+            target_shape: _,
+            dims: _,
+        } = base.clone();
+
         let mut axis = base.clone();
         axis.axis = Some(2);
         let mut scalars = base.clone();
