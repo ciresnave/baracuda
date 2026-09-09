@@ -269,14 +269,17 @@ fn check(cell: &Cell, out: &[u16]) {
 #[test]
 fn controls_discriminate_a_no_fold_kernel() {
     for c in CELLS {
-        // ⚠️ IF A `Select` CELL IS EVER ADDED (see issue #113 — the bit-move
-        // route declines Select today), THIS CHEAT MODEL MUST GROW A CASE FOR
-        // IT. The `other =>` arm below makes that a panic rather than a silent
-        // gap, which is the point — but the REASON lives here rather than only
-        // in #113, because the PR that implements Select will CLOSE #113 and
-        // take anything written there with it. An issue is not a durable home
-        // for a warning about the fix that closes it: the artifact is destroyed
-        // at the moment its content becomes relevant.
+        // ⚠️ THIS CHEAT MODEL COVERS UNARY EPILOGUES ONLY. The bit-move route
+        // now also admits `Select` (see `rowreduce_select_bitmove.rs`), which
+        // this table cannot express — `Cell::epi` is a `UnaryOp`. The `other =>`
+        // arm makes that a panic rather than a silent gap, which is the point:
+        // adding a Select cell must FAIL here until someone models the cheat
+        // for it, rather than quietly leaving the new cell uncontrolled.
+        //
+        // The reason lives in the code rather than in a tracking issue because
+        // the issue that carried it was destroyed the moment the work landed —
+        // and destroyed early, by a sentence merely PREDICTING its own closure.
+        // A closing keyword has no tense.
         let cheat = match c.epi {
             UnaryOp::Neg => c.finite.0 ^ 0x8000,
             UnaryOp::Abs => c.finite.0 & 0x7FFF,

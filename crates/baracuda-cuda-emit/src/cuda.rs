@@ -4269,17 +4269,23 @@ fn emit_row_reduce_impl(
     // An all-move Max fold therefore canonicalizes exactly the payload this
     // clause exists to preserve. The narrow bit copy preserves it.
     //
-    // ⚠️ SELECT IS EXCLUDED, DELIBERATELY AND NARROWLY. `moves` admits
-    // `Select(c, a, b)` because the moved bytes come from `a`/`b` — but it
-    // places NO constraint on `c`, which may be an arbitrary COMPUTED
-    // predicate needing the float spellers. Mixing a narrow payload path with
-    // a promoted condition path is a bigger change than this one, so a Select
-    // anywhere in the traced expression declines to the promoted path: correct
-    // today, just not yet optimal. Stated rather than silently unhandled.
-    let bit_move = narrow_bit_casts(plan.dtype).is_some()
-        && is_bit_move_row_reduce_output(stages, epilogue)
-        && !stages.iter().any(|st| expr_has_select(&st.pre))
-        && !expr_has_select(epilogue);
+    // ⚠️ SELECT IS INCLUDED, AND THE REASON IT WAS ONCE EXCLUDED WAS WRONG.
+    // `moves` admits `Select(c, a, b)` on the strength of its arms while
+    // constraining `c` not at all, so this gate used to reject any Select and
+    // the note here said "mixing a narrow payload path with a promoted
+    // condition is a bigger change than this one".
+    //
+    // Measured with the rejection removed: the condition was never the problem.
+    // The RowReduce lowering used `select_f32`, which casts BOTH ARMS to
+    // `float` — and assigning that to a narrow `out[idx]` re-introduces exactly
+    // the round trip §6.16-0009 forbids. Routing a bit-move Select through
+    // `cuda_select` (the dtype-aware speller the seven ELEMENTWISE sites
+    // already use, whose narrow arms are an identity no-op) fixes it, and the
+    // condition's own float round trip is exact for the 1.0/0.0 a predicate
+    // holds — it costs instructions, not bits. Device-verified: a NaN payload
+    // 0x7FC1 survives as 0xFFC1 through both arms.
+    let bit_move =
+        narrow_bit_casts(plan.dtype).is_some() && is_bit_move_row_reduce_output(stages, epilogue);
 
     let acc = if bit_move {
         ctype
@@ -4418,7 +4424,17 @@ fn emit_row_reduce_impl(
                         binary_f32(op, a, b)
                     }))
                 },
+                // A bit-move Select routes through `cuda_select`, the SAME
+                // dtype-aware speller the seven elementwise sites use. Its
+                // narrow arms are `(__nv_bfloat16)(x)` / `(__half)(x)` — an
+                // identity no-op on an already-narrow operand, no float bridge,
+                // bits untouched (its own doc says so). `select_f32` instead
+                // casts both arms to `float`, and assigning that to a narrow
+                // `out[idx]` re-introduces the round trip §6.16-0009 forbids.
                 &|c, a, b| {
+                    if bit_move {
+                        return cuda_select(c, a, b, plan.dtype);
+                    }
                     Ok(Spelling::Spelled(if dbl {
                         select_f64(c, a, b)
                     } else {
@@ -7448,23 +7464,6 @@ fn gathered_offset_expr(
 /// The properly-typed zero literal for the output ctype — the [`OobPolicy::ZeroFill`]
 /// fill (increment 4). f16/bf16 need the intrinsic constructor (no portable
 /// `T(0)`); everything else takes a plain literal.
-/// Whether `e` contains a [`ScalarExpr::Select`] anywhere.
-///
-/// The §6.16-0009 bit-move route needs this because `moves` admits `Select(c,
-/// a, b)` on the strength of `a`/`b` alone — the moved bytes do come from one
-/// arm — while placing NO constraint on the CONDITION `c`, which may be an
-/// arbitrary computed predicate. A narrow payload path with a promoted
-/// condition beside it is a larger change than the route itself, so a Select
-/// declines to the promoted path. Correct, not yet optimal.
-fn expr_has_select(e: &ScalarExpr) -> bool {
-    match e {
-        ScalarExpr::Select(..) => true,
-        ScalarExpr::Unary(_, a) => expr_has_select(a),
-        ScalarExpr::Binary(_, a, b) => expr_has_select(a) || expr_has_select(b),
-        _ => false,
-    }
-}
-
 fn zero_store_literal(octype: &str) -> &'static str {
     match octype {
         "__half" => "__float2half(0.0f)",
@@ -9338,6 +9337,96 @@ got:
     /// which I agree with: an API whose first consumer is a scratch experiment
     /// is how an unreachable seam happens).
     ///
+    /// A `Select`-bearing all-move RowReduce takes the bit-move route, with the
+    /// ARMS as raw picks and no float bridge on the payload.
+    ///
+    /// ⚠️ THIS WAS DECLINED UNTIL NOW, AND THE DECLINE WAS RIGHT FOR A REASON I
+    /// HAD NOT MEASURED. `moves` admits `Select(c, a, b)` on the strength of its
+    /// arms while constraining `c` not at all, so I gated it off and wrote "a
+    /// narrow payload path with a promoted condition beside it is a bigger
+    /// change than this one". Measured with the gate removed, the actual defect
+    /// was narrower and elsewhere: the RowReduce lowering used `select_f32`,
+    /// which casts BOTH ARMS to `float` —
+    ///
+    /// ```text
+    /// out[idx] = (... ? (float)(r0) : (float)(__ushort_as_bfloat16(...)));
+    /// ```
+    ///
+    /// — and assigning that to a narrow `out[idx]` re-introduces exactly the
+    /// round trip §6.16-0009 forbids. The condition was never the problem.
+    ///
+    /// ⚠️ AND THE FIX WAS ALREADY IN THE FILE: `cuda_select` is the dtype-aware
+    /// speller SEVEN elementwise sites use, whose narrow arms are
+    /// `(__nv_bfloat16)(x)` — an identity no-op on an already-narrow operand,
+    /// bits untouched, as its own doc says. RowReduce was the one path not
+    /// using it. Two treatments of one class in one file, and the weaker one was
+    /// the one nobody looked at again.
+    ///
+    /// The condition still round-trips (`__bfloat162float(__float2bfloat16(..))`)
+    /// and that is left alone deliberately: it is exact for the only two values
+    /// a predicate can hold, 1.0 and 0.0, so it costs instructions and not bits.
+    #[test]
+    fn select_bitmove_arms_are_raw_picks() {
+        use unpopped::ir::{BinaryOp, ReduceOp, ReduceStage, UnaryOp, reduced};
+        for (dt, ctype, to_bits, from_bits) in [
+            (
+                ElementKind::Bf16,
+                "__nv_bfloat16",
+                "__bfloat16_as_ushort",
+                "__ushort_as_bfloat16",
+            ),
+            (
+                ElementKind::F16,
+                "__half",
+                "__half_as_ushort",
+                "__ushort_as_half",
+            ),
+        ] {
+            let op = OpDef::row_reduce(
+                "sel",
+                1,
+                &[dt],
+                vec![ReduceStage {
+                    pre: input(0).0,
+                    op: ReduceOp::Max,
+                }],
+                input(0)
+                    .binary(BinaryOp::CmpLt, reduced(0))
+                    .select(reduced(0), input(0).unary(UnaryOp::Neg)),
+            );
+            let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], dt, 256);
+            let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
+            let src = generate(&op, &key, &Cuda).source;
+
+            // POSITIVE: the route was taken at all — narrow accumulator + raw load.
+            assert!(
+                src.contains(&format!("{ctype} acc0 ="))
+                    && src.contains(&format!("{ctype} e = in0[")),
+                "{dt:?}: Select body did not take the bit-move route
+{src}"
+            );
+            // POSITIVE: both arms are raw picks in the STORAGE type.
+            assert!(
+                src.contains(&format!("? ({ctype})(")) && src.contains(&format!(": ({ctype})(")),
+                "{dt:?}: Select arms are not raw {ctype} picks
+{src}"
+            );
+            // POSITIVE: the Neg arm is still a sign-bit edit on raw bits.
+            assert!(
+                src.contains(to_bits) && src.contains(from_bits) && src.contains("^ 0x8000u"),
+                "{dt:?}: the Neg arm lost its sign-bit spelling
+{src}"
+            );
+            // NEGATIVE, and only with the mechanism pinned above: no float cast
+            // on either arm. `(float)(` would be `select_f32` back again.
+            assert!(
+                !src.contains("? (float)(") && !src.contains(": (float)("),
+                "{dt:?}: a float-cast arm is back — that is select_f32, and it                  canonicalizes the payload at the store
+{src}"
+            );
+        }
+    }
+
     /// ⚠️ DISCHARGED. `is_bit_move_row_reduce_output` shipped in unpopped
     /// 0.10.0 (adopted in #101), the gate is wired in `emit_row_reduce_impl`,
     /// and this test WENT RED exactly as promised — then was inverted. It now
