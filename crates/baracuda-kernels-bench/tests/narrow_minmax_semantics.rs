@@ -40,7 +40,7 @@
 
 use baracuda_cuda_emit::{Cuda as _Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
-use baracuda_driver::{Device, Module, require_optional};
+use baracuda_driver::{Context, Device, Module, Stream, require_optional};
 use baracuda_kernels_bench::{current_hwstamp, setup_device};
 use baracuda_kernels_types::ArchSku;
 use unpopped::Compiler;
@@ -101,36 +101,28 @@ extern "C" __global__ void probe(int* out, unsigned short* bits) {
 }
 "#;
 
-#[test]
-#[ignore = "requires a CUDA device + nvrtc"]
-fn narrow_nan_test_and_payload_survival() {
-    let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let (ctx, stream) = setup_device();
-    let device = Device::get(0).expect("device");
-    let stamp = current_hwstamp(&device).expect("hwstamp");
-    require_optional!(
-        (stamp.target == ArchSku::Sm89.into()).then_some(()),
-        "an sm89 device"
-    );
-
+/// Compile and run the probe; return `(flags, bits)`.
+///
+/// Split out so the test body is only ASSERTIONS. Getting a measurement and
+/// deciding what it means are different jobs, and interleaving them is how a
+/// setup edit silently changes a conclusion.
+fn probe_device(ctx: &Context, stream: &Stream) -> (Vec<i32>, Vec<u16>) {
     let compiler = NvrtcCompiler::new(ArchSku::Sm89);
     let ptx = compiler
         .compile(SRC, "probe", 30_000)
         .unwrap_or_else(|e| panic!("nvrtc failed: {e}"));
     let ptx = String::from_utf8(ptx).expect("ptx is text");
-    let module = Module::load_ptx(&ctx, &ptx).expect("module load");
+    let module = Module::load_ptx(ctx, &ptx).expect("module load");
     let f = module.get_function("probe").expect("get_function");
 
-    let d_out = DeviceBuffer::<i32>::new(&ctx, 6).expect("d_out");
-    let d_bits = DeviceBuffer::<u16>::new(&ctx, 4).expect("d_bits");
+    let d_out = DeviceBuffer::<i32>::new(ctx, 6).expect("d_out");
+    let d_bits = DeviceBuffer::<u16>::new(ctx, 4).expect("d_bits");
     // SAFETY: signature is (int*, unsigned short*); both buffers outlive the launch.
     unsafe {
         f.launch()
             .grid(1u32)
             .block(1u32)
-            .stream(&stream)
+            .stream(stream)
             .arg(&d_out)
             .arg(&d_bits)
             .launch()
@@ -141,27 +133,30 @@ fn narrow_nan_test_and_payload_survival() {
     let mut bits = vec![0u16; 4];
     d_out.copy_to_host(&mut out).expect("copy out");
     d_bits.copy_to_host(&mut bits).expect("copy bits");
+    (out, bits)
+}
 
-    eprintln!(
-        "  [0] float  `ov != ov`   = {}   (reference: IEEE unordered)",
-        out[0]
+#[test]
+#[ignore = "requires a CUDA device + nvrtc"]
+fn narrow_nan_test_and_payload_survival() {
+    let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let (ctx, stream) = setup_device();
+    let device = Device::get(0).expect("device");
+    let stamp = current_hwstamp(&device).expect("hwstamp");
+    // ⚠️ THE GATE LIVES HERE, NOT IN THE PROBE. `require_optional!` logs the
+    // decline and returns, which needs a `-> ()` body. A first draft moved it
+    // into `probe_device` and returned neutral data instead — and the control
+    // assertion REJECTS that data, so an honest skip on legitimate sm80
+    // hardware would have become a FAILURE. A silent skip and a false failure
+    // are both instrument defects; this file is about not shipping either.
+    require_optional!(
+        (stamp.target == ArchSku::Sm89.into()).then_some(()),
+        "an sm89 device (this probe compiles sm89 PTX)"
     );
-    eprintln!("  [1] bf16   `ov != ov`   = {}", out[1]);
-    eprintln!("  [2] f16    `ov != ov`   = {}", out[2]);
-    eprintln!("  [3] bf16   `__hisnan`   = {}", out[3]);
-    eprintln!("  [4] f16    `__hisnan`   = {}", out[4]);
-    eprintln!(
-        "  [5] bf16   NaN > 1.0    = {}   (ordered compare, expect 0)",
-        out[5]
-    );
-    eprintln!(
-        "  bf16 payload: bit-copy 0x{:04X}  float-round-trip 0x{:04X}  (source 0x7FC1)",
-        bits[0], bits[2]
-    );
-    eprintln!(
-        "  f16  payload: bit-copy 0x{:04X}  float-round-trip 0x{:04X}  (source 0x7E01)",
-        bits[1], bits[3]
-    );
+    let (out, bits) = probe_device(&ctx, &stream);
+    report(&out, &bits);
 
     // THE CONTROL. If float `!=` does not detect NaN, the probe itself is broken
     // and nothing else here means anything.
@@ -215,5 +210,31 @@ fn narrow_nan_test_and_payload_survival() {
     assert_ne!(
         bits[0], bits[2],
         "bit copy and float round trip agree — the payload loss §6.16-0009 forbids is not reproducible here, so the bit-move path would buy nothing"
+    );
+}
+
+/// Print the measurement before interpreting it. Separate from the
+/// assertions on purpose: these lines are the RECORD, and a reader who
+/// distrusts a conclusion needs the numbers it was drawn from.
+fn report(out: &[i32], bits: &[u16]) {
+    eprintln!(
+        "  [0] float  `ov != ov`   = {}   (reference: IEEE unordered)",
+        out[0]
+    );
+    eprintln!("  [1] bf16   `ov != ov`   = {}", out[1]);
+    eprintln!("  [2] f16    `ov != ov`   = {}", out[2]);
+    eprintln!("  [3] bf16   `__hisnan`   = {}", out[3]);
+    eprintln!("  [4] f16    `__hisnan`   = {}", out[4]);
+    eprintln!(
+        "  [5] bf16   NaN > 1.0    = {}   (ordered compare, expect 0)",
+        out[5]
+    );
+    eprintln!(
+        "  bf16 payload: bit-copy 0x{:04X}  float-round-trip 0x{:04X}  (source 0x7FC1)",
+        bits[0], bits[2]
+    );
+    eprintln!(
+        "  f16  payload: bit-copy 0x{:04X}  float-round-trip 0x{:04X}  (source 0x7E01)",
+        bits[1], bits[3]
     );
 }
