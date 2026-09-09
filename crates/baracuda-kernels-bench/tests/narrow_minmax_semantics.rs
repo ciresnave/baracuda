@@ -35,6 +35,19 @@
 //! forbids exactly that round trip, and this is the evidence for why the
 //! bit-move wiring is worth doing rather than a citation of a clause.
 //!
+//! # Sibling test, different question
+//!
+//! `max_nan_propagation.rs` asks whether the f32 NaN-propagating ternary
+//! SURVIVES the compile chain — whether ptxas or the driver JIT contracts it
+//! back into a NaN-suppressing hardware `max.f32`. That is a question about a
+//! layer BELOW the emitted source.
+//!
+//! This asks a different one: whether the same source spelling still MEANS
+//! NaN-propagation once `{acc}` is a narrow type, and what the promoted path
+//! costs. Neither subsumes the other — a reader arriving at either should know
+//! the other exists, because "NaN handling is already covered on device" is
+//! true of both and answers neither.
+//!
 //! `#[ignore]`d — needs a CUDA device + nvrtc. Run with:
 //! `cargo test -p baracuda-kernels-bench --test narrow_minmax_semantics -- --ignored`
 
