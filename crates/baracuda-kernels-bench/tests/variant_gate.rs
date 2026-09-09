@@ -16,14 +16,14 @@
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
-use baracuda_driver::{Device, Module, require_optional};
+use baracuda_driver::{Context, Device, Module, require_optional};
 use baracuda_kernels_bench::{current_hwstamp, gate_cell, setup_device};
 use baracuda_kernels_types::{
     ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind, Implementor, OpCategory,
     OperandDesc, Provenance, merge, structure_key,
 };
 use unpopped::emit_dispatch_table;
-use unpopped::{Compiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input};
+use unpopped::{Compiler, OpDef, ReduceOp, Variant, VariantFidelity, generate_variants, input};
 
 const ROWS: i64 = 16_384;
 const COLS: i64 = 1_024;
@@ -83,18 +83,9 @@ fn variant_gate_loop_end_to_end() {
     );
 
     // ---- 2. nvrtc-compile every kernel of every variant; load via the driver. ----
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
-    let mut modules = Vec::new(); // keep alive for the Functions' lifetime
-    for v in &variants {
-        for k in &v.kernels {
-            let ptx = compiler
-                .compile(&k.source, &k.name, 30_000)
-                .unwrap_or_else(|e| panic!("nvrtc({}) failed: {e}", k.name));
-            let ptx = String::from_utf8(ptx).expect("ptx is text");
-            let module = Module::load_ptx(&ctx, &ptx).expect("module load");
-            modules.push((k.name.clone(), module));
-        }
-    }
+    // `modules` must outlive every `Function` borrowed out of it, so it is bound
+    // here rather than inside the helper.
+    let modules = compile_all(&ctx, &variants);
     let func = |name: &str| {
         let (_, m) = modules
             .iter()
@@ -304,19 +295,14 @@ fn smemrow_variant_is_bit_identical_and_gated() {
         "the base variant must always be offered"
     );
 
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
-    let mut modules = Vec::new();
-    for v in &variants {
-        for k in &v.kernels {
-            let ptx = compiler
-                .compile(&k.source, &k.name, 30_000)
-                .unwrap_or_else(|e| panic!("nvrtc({}) failed: {e}", k.name));
-            let ptx = String::from_utf8(ptx).expect("ptx is text");
-            modules.push((k.name.clone(), Module::load_ptx(&ctx, &ptx).expect("load")));
-        }
-    }
+    // `modules` must outlive every `Function` borrowed out of it, so it is bound
+    // here rather than inside the helper.
+    let modules = compile_all(&ctx, &variants);
     let func = |name: &str| {
-        let (_, m) = modules.iter().find(|(n, _)| n == name).expect("module");
+        let (_, m) = modules
+            .iter()
+            .find(|(n, _)| n == name)
+            .unwrap_or_else(|| panic!("module for {name}"));
         m.get_function(name).expect("get_function")
     };
     // ⚠️ BY TAG — and this line is the reason the note above exists. The
@@ -481,4 +467,28 @@ fn assert_within_ulp(base: &[f32], other: &[f32], max_ulp: i64) -> i64 {
         other[worst_at].to_bits()
     );
     worst
+}
+
+/// nvrtc-compile every kernel of every variant and load each as a module,
+/// returned paired with its entry-point name.
+///
+/// Both device tests did this identically bar their `expect` strings. Shared
+/// because it IS shared, not to move a line count: the two copies had already
+/// drifted in their panic messages, which is how a duplicated block starts
+/// telling two different stories about the same failure.
+fn compile_all(ctx: &Context, variants: &[Variant]) -> Vec<(String, Module)> {
+    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let mut modules = Vec::new();
+    for v in variants {
+        for k in &v.kernels {
+            let ptx = compiler
+                .compile(&k.source, &k.name, 30_000)
+                .unwrap_or_else(|e| panic!("nvrtc({}) failed: {e}", k.name));
+            let ptx = String::from_utf8(ptx).expect("ptx is text");
+            let module = Module::load_ptx(ctx, &ptx)
+                .unwrap_or_else(|e| panic!("module load for {}: {e}", k.name));
+            modules.push((k.name.clone(), module));
+        }
+    }
+    modules
 }
