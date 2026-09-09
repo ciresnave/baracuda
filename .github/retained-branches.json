@@ -12,8 +12,8 @@
   "retained": [
     {
       "branch": "release/v0.0.1-alpha.79",
-      "reason": "The ONLY ref in this repository that reproduces the PUBLISHED alpha.79 crate. Measured 2026-09-09: crates/baracuda-cuda-emit/src/cuda.rs is 16523 lines on this branch and byte-identical to the served crates.io tarball after CRLF normalisation; origin/main is 18498 lines and differs. See issue #107 - 'alpha.79' currently names two different artifacts, and this branch is the in-repo record of which one was served. Deleting it makes the collision diagnosable only by re-downloading from the registry.",
-      "verify": "git show release/v0.0.1-alpha.79:crates/baracuda-cuda-emit/src/cuda.rs | wc -l  ->  16523, matching the served tarball; origin/main gives 18498",
+      "reason": "The ONLY ref in this repository that reproduces the PUBLISHED alpha.79 crate. Measured 2026-09-09: crates/baracuda-cuda-emit/src/cuda.rs is 16523 lines on this branch and byte-identical to the served crates.io tarball after CRLF normalisation. THAT NUMBER IS STABLE: the branch is frozen, so 16523 is checkable forever and is the whole claim. main's count is NOT an expectation - it MOVES (18498 lines at 122f659f, 18587 about an hour later); assert only that main DIFFERS, never a figure for it. See issue #107 - 'alpha.79' currently names two different artifacts, and this branch is the in-repo record of which one was served. Deleting it makes the collision diagnosable only by re-downloading from the registry.",
+      "verify": "git show release/v0.0.1-alpha.79:crates/baracuda-cuda-emit/src/cuda.rs | wc -l  ->  16523, matching the served tarball. This is the checkable half and it does not age. Do NOT compare against a recorded number for main: run the same command at origin/main and require only that it DIFFER.",
       "review_when": "When #107 is resolved by adopting post-publish version bumping, this branch stops being the sole record - the next published version will not collide with the tree. Re-evaluate then, not before."
     }
   ]
