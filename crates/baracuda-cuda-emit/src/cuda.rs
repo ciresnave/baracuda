@@ -9808,6 +9808,14 @@ got:
             .find(|v| v.tag == "smemrow")
             .expect("smemrow variant offered");
         assert_eq!(sm.tag, "smemrow");
+        // ⚠️ BASE BY TAG TOO. `vs[0]` was used three times below as "the base
+        // kernel" with its identity never asserted — the same construct that
+        // made #99 a measurement of `prec`, on the other side of the compare.
+        // Correct today because base is emitted first; nothing said so.
+        let bs = vs
+            .iter()
+            .find(|v| v.tag == "base")
+            .expect("base variant offered");
         // The assertions below establish that the epilogue READS THE CACHE
         // instead of recomputing — "exactly ONE expf remains, vs two in the
         // base kernel". That is a substitution of a cached deterministic value
@@ -9824,15 +9832,15 @@ got:
         assert!(src.contains("out[idx] = (baracuda_row_smem[j] / r1);"));
         assert_eq!(src.matches("expf").count(), 1, "epilogue exp eliminated");
         assert_eq!(
-            vs[0].kernels[0].source.matches("expf").count(),
+            bs.kernels[0].source.matches("expf").count(),
             2,
             "base has both"
         );
         // Helper symbols must not collide when base + variant share a TU.
         assert!(src.contains("block_sum_softmax_f32_sm"));
-        assert!(vs[0].kernels[0].source.contains("block_sum_softmax_f32("));
+        assert!(bs.kernels[0].source.contains("block_sum_softmax_f32("));
         // Sanity: the base kernel is untouched by the variant machinery.
-        assert!(!vs[0].kernels[0].source.contains("baracuda_row_smem"));
+        assert!(!bs.kernels[0].source.contains("baracuda_row_smem"));
     }
 
     #[test]
