@@ -4,6 +4,33 @@
 //! wires the CUDA backend ([`crate::Cuda`]) + the NVRTC compiler into the neutral
 //! generator's backend-agnostic seam front-end
 //! (`unpopped::jit::seam::synthesize`). Behind `--features seam`.
+//!
+//! # ⚠️ WHAT THE `seam` CI LEG DOES AND DOES NOT COVER
+//!
+//! CI builds and tests this module (`cargo test -p baracuda-cuda-emit --features
+//! seam`), so it is exercised on every push despite the feature being off by
+//! default. **"Off by default" is not "unexercised".**
+//!
+//! **But it compiles against the PUBLISHED `fuel-kernel-seam-types`, and Fuel
+//! builds it against a different one.** `fuel-kernel-seam-types` is a
+//! `[patch.crates-io]` path member of Fuel's root manifest, and a root-level
+//! patch applies to the WHOLE dependency graph — including to this crate as
+//! Fuel's dependency. Measured 2026-09-08 at version `0.10.3`: **`OpTag` has 72
+//! variants on crates.io and 80 in Fuel's tree**, one version string naming two
+//! enums.
+//!
+//! So this CI leg verifies a DIFFERENT TYPE than the one this code runs against
+//! in production, and **that is invisible from here**: our lockfile pins
+//! `fuel-kernel-seam-types` by `checksum`, which is a true statement about OUR
+//! build and reads as a guarantee about the composed one. **Neither side's CI
+//! tests the composed system, and both report green.**
+//!
+//! The exposure is nonetheless zero, and by construction rather than by luck:
+//! `OpTag` is `#[non_exhaustive]`, so a downstream cannot match it exhaustively
+//! — the compiler forces a wildcard — and ours is a typed decline
+//! (`unpopped::jit` `_ => return None`), which the `Synthesizer` trait's
+//! never-panics contract requires. Unknown variants are declined, not
+//! mishandled.
 
 #[cfg(feature = "nvrtc")]
 use crate::nvrtc::NvrtcCompiler;

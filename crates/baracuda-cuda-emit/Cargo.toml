@@ -16,6 +16,11 @@ nvrtc = ["dep:baracuda-nvrtc"]
 # The live Fuel kernel-seam Synthesizer endpoint (`BaracudaSynthesizer`) — wires the
 # fuel-kernel-seam `Synthesizer` trait + envelope. Pulls the neutral generator's own
 # `seam` feature for the PatternNode region grammar the request carries.
+# CI builds and tests this leg on every push, so OFF BY DEFAULT IS NOT UNEXERCISED
+# -- but it compiles the PUBLISHED fuel-kernel-seam-types, and Fuel patches that
+# crate with a path member, so their build compiles us against a different type.
+# See the module doc in src/seam.rs for the measurement and why the exposure is
+# nonetheless zero.
 seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam", "unpopped/seam"]
 # Enable the neutral generator's `convert` feature (tree-sitter CUDA/Slang lifters)
 # so the relocated lifter round-trip tests (`tests/convert.rs`) can reach
