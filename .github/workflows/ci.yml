@@ -290,3 +290,27 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo check baracuda-kernels --features ${{ matrix.arch }}
         run: cargo check -p baracuda-kernels --features ${{ matrix.arch }}
+      # `baracuda-kernels-bench`'s tests/ are 12 files / 3,103 lines that NO job
+      # compiled until this step: the variant gate, the RowReduce bit-move matrix
+      # and the precision-first numerics all live there. They are device tests, so
+      # they cannot RUN here — but they are ordinary Rust, and an upstream rename
+      # breaks them exactly like anything else. Measured twice in two days: the
+      # `unpopped` 0.11.0 `VariantFidelity` rename touched `variant_gate.rs`, and
+      # the only thing that caught it was a mutation run BY HAND on a maintainer's
+      # box. A guard whose sole instance is "someone remembered" is a habit, not a
+      # guard.
+      #
+      # ⚠️ THIS STEP TYPE-CHECKS; IT DOES NOT RUN. `--tests` builds the test
+      # targets and stops. A green here means "these tests still compile against
+      # their dependencies", NEVER "these tests pass" — the on-device legs need a
+      # GPU and stay correctly outside the gated surface (see
+      # docs/design/2026-08-20-ci-coverage-matrix.md).
+      #
+      # ⚠️ WHAT WOULD MAKE THIS COMMENT WRONG: if the bench crate ever gains a
+      # test whose value is in EXECUTING on a driver-free runner, this step's
+      # silence about pass/fail stops being honest, and that test needs either a
+      # device runner or an explicit uncovered row — not this check. The claim
+      # here is deliberately the smaller one, because it is the one that was
+      # failing.
+      - name: cargo check baracuda-kernels-bench --tests --features ${{ matrix.arch }}
+        run: cargo check -p baracuda-kernels-bench --tests --features ${{ matrix.arch }}
