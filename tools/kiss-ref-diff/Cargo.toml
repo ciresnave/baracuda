@@ -6,7 +6,16 @@ publish = false
 
 # DELIBERATELY NOT a workspace member (the root members list is crates/*,
 # xtask, examples): this tool carries the ON-DEVICE differential legs (NVRTC JIT
-# + GPU launch), so it needs a CUDA toolkit + a GPU and cannot ride default CI.
+# + GPU launch), so RUNNING it needs a CUDA toolkit + a GPU.
+#
+# ⚠️ TYPE-CHECKING IT NEEDS NEITHER, and conflating the two is what let this
+# file rot. `cargo check` here compiles in ~18s on a driver-free machine
+# (baracuda-driver / baracuda-nvrtc are lazy-libloading, cuda-emit is pure
+# Rust), so CI now type-checks it -- see the step in .github/workflows/ci.yml.
+# These pins went NINE MINOR VERSIONS stale and the tool stopped compiling at
+# all, with no signal, because three exclusions intersected: the root
+# Cargo.lock cannot see it (its own [workspace] is a second resolution root),
+# no CI job built it, and no `cargo update` reaches a 0.1.x pin. See #122.
 # kiss-ref is now PUBLIC + on crates.io, so its deps are normal version pins (the
 # in-tree CPU converter in baracuda-kernelgen shares the same 0.1.0 pin); this
 # tool adds the device legs on top. Build + run it explicitly on a CUDA box — see
@@ -25,11 +34,11 @@ path = "main.rs"
 kiss-ref-core = "0.2.3"
 kiss-ops-vocab = "0.2.3"
 kiss-classify-vocab = "0.2.3"
-unpopped = "0.1.0"
+unpopped = "0.11.0"
 # `Cuda` (the emitter the differential lowers through) moved to the CUDA backend
 # crate in the Unpopped carve; the neutral generator stays for `generate`/IR.
 baracuda-cuda-emit = { path = "../../crates/baracuda-cuda-emit" }
-unpopped-vocab = "0.1.0"
+unpopped-vocab = "0.11.0"
 # Step-3a device leg: JIT the generated kernel via NVRTC, launch on the GPU.
 baracuda-driver = { path = "../../crates/baracuda-driver" }
 baracuda-nvrtc = { path = "../../crates/baracuda-nvrtc" }

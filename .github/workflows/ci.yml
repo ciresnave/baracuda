@@ -184,6 +184,21 @@ jobs:
         run: cargo clippy -p baracuda-cuda-emit --features convert --tests -- -D warnings
       - name: test cuda-emit convert (feature-gated)
         run: cargo test -p baracuda-cuda-emit --features convert
+      # `tools/kiss-ref-diff` is not a workspace member and declares its OWN
+      # [workspace], so it is a SECOND RESOLUTION ROOT: the root Cargo.lock
+      # structurally cannot see its graph, and no job here had ever compiled it.
+      # Its `unpopped` pins went nine minors stale and it stopped building --
+      # `Cuda: Backend` unsatisfied, because two versions of one crate are two
+      # distinct traits. Nothing reported it (#122).
+      #
+      # ⚠️ RUNNING it needs a CUDA toolkit + a GPU; TYPE-CHECKING it needs
+      # neither, and that conflation is why it rotted. ~18s cold.
+      #
+      # ⚠️ WHAT WOULD MAKE THIS WRONG: this step does NOT run the differential.
+      # If the tool's value ever depends on CI executing it, this silence stops
+      # being honest and it needs a device runner or an explicit uncovered row.
+      - name: cargo check tools/kiss-ref-diff (second resolution root)
+        run: cargo check --manifest-path tools/kiss-ref-diff/Cargo.toml
       # ---- FEATURE-COVERAGE: clippy the CUDA-FREE feature-gated surface under
       # `--all-features`. Only 7 crates invoke nvcc; the rest of the CUDA wrapper
       # stack is lazy-libloading and builds without the toolkit, so its
