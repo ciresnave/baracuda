@@ -76,7 +76,7 @@ fn variant_gate_loop_end_to_end() {
         .iter()
         .find(|v| v.tag == "splitk")
         .expect("the splitk variant must be offered for this outer-axis cell");
-    assert_eq!(splitk.fidelity, VariantFidelity::ReassociatedDeterministic);
+    assert_eq!(splitk.fidelity, VariantFidelity::DeterministicallyDivergent);
     let base = variants
         .iter()
         .find(|v| v.tag == "base")
@@ -443,7 +443,7 @@ fn smemrow_variant_is_bit_identical_and_gated() {
     );
 }
 
-/// `ReassociatedDeterministic` promises run-to-run stability for a fixed launch
+/// `DeterministicallyDivergent` promises run-to-run stability for a fixed launch
 /// configuration. Compare BITS, not values: `0.0 == -0.0` and any pair that
 /// merely rounds alike would pass a value comparison while having moved.
 fn assert_bitwise_stable(first: &[f32], second: &[f32]) {
@@ -453,7 +453,7 @@ fn assert_bitwise_stable(first: &[f32], second: &[f32]) {
         .count();
     assert_eq!(
         moved, 0,
-        "ReassociatedDeterministic promises run-to-run stability for a fixed \
+        "DeterministicallyDivergent promises run-to-run stability for a fixed \
          launch; {moved} of {n} elements moved between two identical launches"
     );
 }
