@@ -3343,7 +3343,7 @@ fn precision_first_rowreduce(plan: &KernelPlan<'_>) -> Option<Variant> {
 ///
 /// **Determinism/bits:** deterministic for a fixed `chunk_rows` (a fixed
 /// two-level association), but a *different* association than the baseline's
-/// sequential fold — [`VariantFidelity::ReassociatedDeterministic`]. Selectable
+/// sequential fold — [`VariantFidelity::DeterministicallyDivergent`]. Selectable
 /// only through an honest contract (the caller's precision policy), never
 /// silently; the baseline stays the default route.
 ///
@@ -3548,7 +3548,7 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
             GeneratedKernel::new(pname.clone(), p),
             GeneratedKernel::new(cname.clone(), k),
         ],
-        VariantFidelity::ReassociatedDeterministic,
+        VariantFidelity::DeterministicallyDivergent,
         format!(
             "two-launch protocol: (1) {pname}<<<dim3(ceil(cols/B), n_chunks), B>>>(in0, ws, \
              rows, cols, chunk_rows) with chunk_rows = ceil(rows/n_chunks) and workspace ws \
@@ -3850,7 +3850,7 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKerne
 /// degenerate `n_chunks = 1` launch is **bit-identical** to the base kernel —
 /// and applies the epilogue + store narrowing. Coalesced throughout; no
 /// atomics; deterministic for a fixed `chunk_k` —
-/// [`VariantFidelity::ReassociatedDeterministic`] vs the base's sequential K.
+/// [`VariantFidelity::DeterministicallyDivergent`] vs the base's sequential K.
 fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     if !matches!(plan.schedule, Schedule::Contraction) {
         return None;
@@ -4040,7 +4040,7 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
             GeneratedKernel::new(pname.clone(), p),
             GeneratedKernel::new(cname.clone(), kk),
         ],
-        VariantFidelity::ReassociatedDeterministic,
+        VariantFidelity::DeterministicallyDivergent,
         format!(
             "two-launch protocol: (1) {pname}<<<dim3(ceil(n/B), n_chunks), B>>>(in0, in1, ws, \
              m, n, k, chunk_k) with chunk_k = ceil(k/n_chunks) and workspace ws of \
@@ -5461,7 +5461,7 @@ fn emit_scan_impl(
 /// [`unpopped::plan::is_int_dtype`] (which admits S8/U8).
 ///
 /// **Bits (per op):** FP `Sum`/`Prod` reassociate (a two-level warp/cross-warp tree
-/// vs the base's sequential fold), so [`VariantFidelity::ReassociatedDeterministic`]
+/// vs the base's sequential fold), so [`VariantFidelity::DeterministicallyDivergent`]
 /// — no bit-identical degenerate config (even a single blockDim-wide chunk
 /// reassociates), within-ULP of the base. FP `Max`/`Min` (the combiner selects the
 /// same element bit-for-bit, incl. signed-zero sign + NaN payload) and ALL integer
@@ -5543,7 +5543,7 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     // +/* is exactly associative — device memcmp==0, §7 probes).
     let (fidelity, bits_note) = if matches!(sop, ReduceOp::Sum | ReduceOp::Prod) && is_fp {
         (
-            VariantFidelity::ReassociatedDeterministic,
+            VariantFidelity::DeterministicallyDivergent,
             "FP Sum/Prod reassociate (warp tree rounds differently than the \
              sequential base) — within-ULP, no bit-identical degenerate config",
         )
@@ -9596,7 +9596,7 @@ got:
         assert_eq!(vs[2].tag, "prec");
         let sk = &vs[1];
         assert_eq!(sk.tag, "splitk");
-        assert_eq!(sk.fidelity, VariantFidelity::ReassociatedDeterministic);
+        assert_eq!(sk.fidelity, VariantFidelity::DeterministicallyDivergent);
         assert_eq!(sk.kernels.len(), 2, "partial + combine, in launch order");
         // Partial: coalesced (adjacent threads, adjacent columns), chunked rows,
         // one workspace row per chunk. No atomics anywhere.
@@ -9972,7 +9972,7 @@ got:
         assert_eq!(vs.len(), 2, "base + splitk");
         let sk = &vs[1];
         assert_eq!(sk.tag, "splitk");
-        assert_eq!(sk.fidelity, VariantFidelity::ReassociatedDeterministic);
+        assert_eq!(sk.fidelity, VariantFidelity::DeterministicallyDivergent);
         assert_eq!(sk.kernels.len(), 2);
         let p = &sk.kernels[0];
         assert!(p.name.ends_with("_contract_tll_splitk_partial"));
@@ -15100,7 +15100,7 @@ mod scan_tests {
                 .expect("blockscan variant");
             assert_eq!(
                 bs.fidelity,
-                unpopped::VariantFidelity::ReassociatedDeterministic,
+                unpopped::VariantFidelity::DeterministicallyDivergent,
                 "FP Sum/Prod block-scan reassociates -> same_hardware_bitwise"
             );
             let src = &bs.kernels[0].source;
@@ -15115,7 +15115,7 @@ mod scan_tests {
     fn reverse_scan_offers_the_blockscan_variant() {
         // BLOCKSCAN-VARIANTS: reverse now OFFERS the block-scan (j = k-1-p remaps the
         // reverse j-scan to a forward p-space scan; device-validated). FP Sum/Prod
-        // reverse reassociates (same as forward) -> ReassociatedDeterministic.
+        // reverse reassociates (same as forward) -> DeterministicallyDivergent.
         for op in [ReduceOp::Sum, ReduceOp::Prod] {
             let sc = OpDef::scan_simple("cumr", &[ElementKind::F32], op, 1, true, false);
             let vs = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda);
@@ -15125,7 +15125,7 @@ mod scan_tests {
                 .expect("reverse FP Sum/Prod now offers a blockscan variant");
             assert_eq!(
                 bs.fidelity,
-                unpopped::VariantFidelity::ReassociatedDeterministic,
+                unpopped::VariantFidelity::DeterministicallyDivergent,
                 "reverse FP Sum/Prod block-scan reassociates like forward"
             );
             assert!(bs.kernels[0].source.contains("long long j = k - 1 - p;"));
@@ -15197,15 +15197,15 @@ mod scan_tests {
                 .find(|v| v.tag == "blockscan")
                 .map(|v| v.fidelity)
         };
-        use unpopped::VariantFidelity::{BitIdentical, ReassociatedDeterministic};
+        use unpopped::VariantFidelity::{BitIdentical, DeterministicallyDivergent};
         // FP Sum/Prod -> reassociated (the ONLY reassociating case).
         assert_eq!(
             blockscan_fidelity(ReduceOp::Sum, ElementKind::F32),
-            Some(ReassociatedDeterministic)
+            Some(DeterministicallyDivergent)
         );
         assert_eq!(
             blockscan_fidelity(ReduceOp::Prod, ElementKind::F64),
-            Some(ReassociatedDeterministic)
+            Some(DeterministicallyDivergent)
         );
         // FP Max/Min -> BitIdentical.
         assert_eq!(
