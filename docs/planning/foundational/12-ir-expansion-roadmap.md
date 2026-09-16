@@ -79,6 +79,28 @@ All are vocabulary, dtype wiring, or constructor work on the existing four Acces
 - **#7 WINDOW_STENCIL**: operand view `Window{axis, size, stride, dilation, pad_lo, zero_fill}` + Reduction-over-window. Covers im2col, pools, causal_conv1d, interpolate (bilinear = 2×2 window with computed weights — needs Coord). Overlap-backward stays on #5 atomics or gather-sum reformulation. Risk L.
 - **#8 SORT_PERM**: `Access::RowSort{order, stable}` emitting bitonic ≤1024 + a CUB-style fallback; needs #1 for (values, indices). Risk L; deterministic; audit: bespoke sort/topk.
 
+### 3a. Status of the §3 rows — MEASURED, not recalled
+
+**Taken 2026-09-16 at baracuda `origin/main` `ee590646`, against `unpopped 0.11.0`'s published source.** The table above is the plan of record and carries no status; this is a reading of the code, and it goes stale the next time either tree moves — re-take it rather than trusting it.
+
+⚠️ **§2's "four Access arms" is stale: `unpopped 0.11.0` has EIGHT** — `Elementwise`, `Reduction`, `RowReduce`, `Contraction`, `Scan`, `Window`, `RowSort`, `Im2Col`. Gather and scatter are not arms; they are per-operand **index descriptors** (`ReadIndex::Indexed`, `WriteIndex::ScatterIndexed`).
+
+| # | Row | Status | Evidence |
+|---|---|---|---|
+| 0 | Vocabulary batch | **not assessed** | vocabulary, not a capability — needs a per-op census, not a construct check |
+| 1 | MULTI_OUTPUT | **partial** | `extra_out_bodies` lowered (2 production sites). The emitter states *"multi-output v1 is elementwise-map only"* — `Reduced` and `Coord` bodies are rejected (`cuda.rs:1927`, `:1937`); **viewed, gathered and runtime-offset** multi-output are each *"a deferred composition"* (`:1868`, `:1390`, `:1561`) |
+| 2 | RowReduce generalization | **partial** | `Access::RowReduce { stages: Vec<ReduceStage>, epilogue }` — multi-stage folds exist. **Per-row-scalar OUTPUTS are blocked on row 1** (a `Reduced` leaf in a multi-output op is rejected, `cuda.rs:1927`). A second row-streamed input was **not measured** in this pass |
+| 3 | Layout/shape nodes | **shipped (sub-spec A); B/C/D open** | a viewed op may be `Access::Elementwise` **or** `Access::Contraction` (`cuda.rs:1861`: *"sub-spec A additionally admits a Contraction operand view"*). Output views, rank-change reshape and arbitrary/negative strides remain deferred |
+| 4 | GATHER | **shipped** | `ReadIndex::Indexed` (`unpopped` `ir.rs:2116`); the emitter: *"the gather/scatter emitters handle the index dtype themselves"* (`cuda.rs:160`). Gather × multi-output is deferred (row 1) |
+| 5 | SCATTER + ATOMIC_HISTOGRAM | **scatter shipped; float histogram partial** | `WriteIndex::ScatterIndexed` (`unpopped` `ir.rs:2271`); `WriteCombine::{Assign, AtomicAdd, AtomicMax, AtomicMin}` all lowered (`cuda.rs:1325–1346`); integer `bincount` builder shipped. Float `histogram`: *"the computed-bin scatter is a follow-up"* (`unpopped`, bincount docstring) |
+| 6 | SCAN | **shipped** | `Access::Scan`, 8 production sites |
+| 7 | WINDOW_STENCIL | **shipped** | `Access::Window` (4) and `Access::Im2Col` (2) production sites |
+| 8 | SORT_PERM | **shipped** | `Access::RowSort` (3 production sites); `SortOut::{Values, Indices, Both}` |
+
+**What this does NOT establish.** A production reference means the construct is **matched by the CUDA lowering**. It does not mean every op a row lists is ported, and it does not re-verify device correctness. "Shipped" is a claim about the capability, not about the op census in the "Unlocks" column.
+
+**Method, so it can be re-taken:** each construct was located in `unpopped 0.11.0`'s `src/`, then counted in `crates/baracuda-cuda-emit/src/cuda.rs` **split at the first `#[cfg(test)]`** (line 7924 at this ref) — a construct referenced only by tests is not a lowering. Deferrals are quoted from the emitter's own assertion messages. Line numbers are as of `ee590646`.
+
 ## 4. Honest out-of-scope
 
 - **TILED_TC (16)**: flash attention, FA2, flashinfer, int8/fp8 tensor-core GEMM. These are vendored/bespoke competitive kernels where the memory-wall lesson cuts the other way — the win is arithmetic-intensity scheduling, not coverage. The generator's role is the *decomposed* path (batched Contraction + softmax RowReduce) as the no-cliff fallback once #3 lands; absorbing tile/MMA scheduling is a separate bench-gated program (`AccumSpec` reservation already exists).
