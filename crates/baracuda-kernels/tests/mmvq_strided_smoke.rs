@@ -80,6 +80,12 @@ fn pack_q4_0_row(d_f32: f32, vals: &[i8; 32]) -> Vec<u8> {
     bytes.to_vec()
 }
 
+/// The smallest `ncols` every format accepts: its block size, but at least 64,
+/// because the type-0/1 formats decline widths that are not multiples of 64 (#127).
+fn min_valid_ncols(fmt: GgufBlockFormat) -> i32 {
+    (fmt.block_size() as i32).max(64)
+}
+
 fn check_close(got: &[f32], expected: &[f32], rel_tol: f32, label: &str) {
     for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
         let abs_err = (g - e).abs();
@@ -107,15 +113,18 @@ fn mmvq_q8_0_stride1_matches_contig() {
         qs0[i] = i as i8;
         qs1[i] = (i + 1) as i8;
     }
+    // ncols = 64: two Q8_0 blocks per row, the second a copy of the first (#127).
     let mut packed = pack_q8_0_row(d0, &qs0);
+    packed.extend(pack_q8_0_row(d0, &qs0));
+    packed.extend(pack_q8_0_row(d1, &qs1));
     packed.extend(pack_q8_0_row(d1, &qs1));
     let host_weight: Vec<U8> = packed.into_iter().map(U8).collect();
-    let host_act: Vec<f32> = (0..32).map(|i| i as f32).collect();
+    let host_act: Vec<f32> = (0..64).map(|i| i as f32).collect();
 
     let mut expected = [0.0f32; 2];
-    for c in 0..32 {
-        expected[0] += d0 * qs0[c] as f32 * host_act[c];
-        expected[1] += d1 * qs1[c] as f32 * host_act[c];
+    for c in 0..64 {
+        expected[0] += d0 * qs0[c % 32] as f32 * host_act[c];
+        expected[1] += d1 * qs1[c % 32] as f32 * host_act[c];
     }
 
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_weight).expect("up w");
@@ -135,7 +144,7 @@ fn mmvq_q8_0_stride1_matches_contig() {
     // so we just exercise the contig path as the canonical sanity arm.
     let desc = GgufMmvqDescriptor {
         nrows: 2,
-        ncols: 32,
+        ncols: 64,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
@@ -149,7 +158,7 @@ fn mmvq_q8_0_stride1_matches_contig() {
         },
         activation: TensorRef {
             data: dev_y.as_slice(),
-            shape: [32],
+            shape: [64],
             stride: [1],
         },
         output: TensorMut {
@@ -176,20 +185,22 @@ fn mmvq_q8_0_stride2() {
     for i in 0..32 {
         qs[i] = ((i as i32) % 16 - 7) as i8;
     }
-    let packed = pack_q8_0_row(d, &qs);
+    // ncols = 64: two Q8_0 blocks, the second a copy of the first (#127).
+    let mut packed = pack_q8_0_row(d, &qs);
+    packed.extend(pack_q8_0_row(d, &qs));
     let host_weight: Vec<U8> = packed.into_iter().map(U8).collect();
 
-    // Source activation of length 64; we want effective_y[c] = (c+1)*0.1.
+    // Source activation of length 128; we want effective_y[c] = (c+1)*0.1.
     // With stride=2, the kernel reads source[c * 2] = effective_y[c].
     // So fill source[2*c] = (c+1)*0.1, source[2*c+1] = anything (skipped).
-    let mut host_y = vec![-999.0f32; 64];
-    for c in 0..32 {
+    let mut host_y = vec![-999.0f32; 128];
+    for c in 0..64 {
         host_y[c * 2] = (c as f32 + 1.0) * 0.1;
     }
 
     let mut expected = [0.0f32];
-    for c in 0..32 {
-        expected[0] += d * qs[c] as f32 * host_y[c * 2];
+    for c in 0..64 {
+        expected[0] += d * qs[c % 32] as f32 * host_y[c * 2];
     }
 
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_weight).expect("up w");
@@ -198,7 +209,7 @@ fn mmvq_q8_0_stride2() {
 
     let desc = GgufMmvqDescriptor {
         nrows: 1,
-        ncols: 32,
+        ncols: 64,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
@@ -212,8 +223,8 @@ fn mmvq_q8_0_stride2() {
         },
         activation: TensorRef {
             data: dev_y.as_slice(),
-            // logical extent is `ncols = 32` even though storage is 64.
-            shape: [32],
+            // logical extent is `ncols = 64`; storage is 128 at stride 2.
+            shape: [64],
             stride: [2],
         },
         output: TensorMut {
@@ -240,7 +251,9 @@ fn mmvq_q8_0_stride0_broadcast() {
     for i in 0..32 {
         qs[i] = (i as i32 - 16) as i8;
     }
-    let packed = pack_q8_0_row(d, &qs);
+    // ncols = 64: two Q8_0 blocks, the second a copy of the first (#127).
+    let mut packed = pack_q8_0_row(d, &qs);
+    packed.extend(pack_q8_0_row(d, &qs));
     let host_weight: Vec<U8> = packed.into_iter().map(U8).collect();
 
     let scalar = 1.5_f32;
@@ -248,8 +261,8 @@ fn mmvq_q8_0_stride0_broadcast() {
     let host_y = vec![scalar];
 
     let mut expected = [0.0f32];
-    for c in 0..32 {
-        expected[0] += d * qs[c] as f32 * scalar;
+    for c in 0..64 {
+        expected[0] += d * qs[c % 32] as f32 * scalar;
     }
 
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_weight).expect("up w");
@@ -258,7 +271,7 @@ fn mmvq_q8_0_stride0_broadcast() {
 
     let desc = GgufMmvqDescriptor {
         nrows: 1,
-        ncols: 32,
+        ncols: 64,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
@@ -272,7 +285,7 @@ fn mmvq_q8_0_stride0_broadcast() {
         },
         activation: TensorRef {
             data: dev_y.as_slice(),
-            shape: [32],
+            shape: [64],
             stride: [0],
         },
         output: TensorMut {
@@ -304,18 +317,21 @@ fn mmvq_q8_0_w_start_byte_offset() {
         qs_b[i] = (i + 1) as i8;
     }
     // Combined buffer: [A bytes][B bytes].
+    // ncols = 64: each matrix is two Q8_0 blocks, the second a copy of the first (#127).
     let mut combined = pack_q8_0_row(d_a, &qs_a);
+    combined.extend(pack_q8_0_row(d_a, &qs_a));
+    combined.extend(pack_q8_0_row(d_b, &qs_b));
     combined.extend(pack_q8_0_row(d_b, &qs_b));
     let combined_bytes = combined.len() as i32;
     let host_weight: Vec<U8> = combined.into_iter().map(U8).collect();
 
-    let host_y: Vec<f32> = (0..32).map(|i| i as f32).collect();
+    let host_y: Vec<f32> = (0..64).map(|i| i as f32).collect();
 
     let mut expected_a = [0.0f32];
     let mut expected_b = [0.0f32];
-    for c in 0..32 {
-        expected_a[0] += d_a * qs_a[c] as f32 * host_y[c];
-        expected_b[0] += d_b * qs_b[c] as f32 * host_y[c];
+    for c in 0..64 {
+        expected_a[0] += d_a * qs_a[c % 32] as f32 * host_y[c];
+        expected_b[0] += d_b * qs_b[c % 32] as f32 * host_y[c];
     }
 
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_weight).expect("up w");
@@ -325,15 +341,15 @@ fn mmvq_q8_0_w_start_byte_offset() {
 
     // Dispatch A at offset = 0 (also exercises offset=0 + strided arm
     // when stride is forced via a separate path — here it goes contig).
-    // Then dispatch B at offset = 34 (the size of one Q8_0 block).
-    let matrix_bytes_each = 34i32;
+    // Then dispatch B at offset = 68 (two Q8_0 blocks).
+    let matrix_bytes_each = 68i32;
     assert_eq!(combined_bytes, 2 * matrix_bytes_each);
 
     // First call: matrix A. With offset=0 and stride=1, this hits the
     // contig fast path.
     let desc_a = GgufMmvqDescriptor {
         nrows: 1,
-        ncols: 32,
+        ncols: 64,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
@@ -346,7 +362,7 @@ fn mmvq_q8_0_w_start_byte_offset() {
         },
         activation: TensorRef {
             data: dev_y.as_slice(),
-            shape: [32],
+            shape: [64],
             stride: [1],
         },
         output: TensorMut {
@@ -361,7 +377,7 @@ fn mmvq_q8_0_w_start_byte_offset() {
     // the actstrided FFI sibling (since `w_start_byte_offset != 0`).
     let desc_b = GgufMmvqDescriptor {
         nrows: 1,
-        ncols: 32,
+        ncols: 64,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: matrix_bytes_each as i64,
     };
@@ -374,7 +390,7 @@ fn mmvq_q8_0_w_start_byte_offset() {
         },
         activation: TensorRef {
             data: dev_y.as_slice(),
-            shape: [32],
+            shape: [64],
             stride: [1],
         },
         output: TensorMut {
@@ -401,7 +417,8 @@ fn mmvq_q8_0_w_start_byte_offset() {
 fn mmvq_q4_0_stride_and_offset() {
     let (ctx, stream) = setup();
 
-    // Two matrices, each 1×32 Q4_0, packed back-to-back.
+    // Two matrices, each 1×64 Q4_0 (two blocks, the second a copy of the
+    // first), packed back-to-back (#127).
     let d_a = 0.125_f32;
     let d_b = 0.0625_f32;
     let mut vals_a = [0i8; 32];
@@ -411,21 +428,23 @@ fn mmvq_q4_0_stride_and_offset() {
         vals_b[i] = ((i as i32 * 3 + 1) % 16 - 8) as i8;
     }
     let mut combined = pack_q4_0_row(d_a, &vals_a);
+    combined.extend(pack_q4_0_row(d_a, &vals_a));
+    combined.extend(pack_q4_0_row(d_b, &vals_b));
     combined.extend(pack_q4_0_row(d_b, &vals_b));
     let combined_bytes = combined.len() as i32;
     let host_weight: Vec<U8> = combined.into_iter().map(U8).collect();
-    let matrix_bytes = 18i32;
+    let matrix_bytes = 36i32;
     assert_eq!(combined_bytes, 2 * matrix_bytes);
 
-    // Stride-2 activation of length 64.
-    let mut host_y = vec![-12345.0f32; 64];
-    for c in 0..32 {
+    // Stride-2 activation of length 128.
+    let mut host_y = vec![-12345.0f32; 128];
+    for c in 0..64 {
         host_y[c * 2] = (c as f32) * 0.05 - 0.7;
     }
 
     let mut expected_b = [0.0f32];
-    for c in 0..32 {
-        expected_b[0] += d_b * vals_b[c] as f32 * host_y[c * 2];
+    for c in 0..64 {
+        expected_b[0] += d_b * vals_b[c % 32] as f32 * host_y[c * 2];
     }
 
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_weight).expect("up w");
@@ -435,7 +454,7 @@ fn mmvq_q4_0_stride_and_offset() {
     // Dispatch matrix B with offset + stride-2.
     let desc = GgufMmvqDescriptor {
         nrows: 1,
-        ncols: 32,
+        ncols: 64,
         block_format: GgufBlockFormat::Q4_0,
         w_start_byte_offset: matrix_bytes as i64,
     };
@@ -448,7 +467,7 @@ fn mmvq_q4_0_stride_and_offset() {
         },
         activation: TensorRef {
             data: dev_y.as_slice(),
-            shape: [32],
+            shape: [64],
             stride: [2],
         },
         output: TensorMut {
@@ -615,7 +634,7 @@ fn mmvq_w_offset_alignment_aligned_ok() {
     for &(fmt, off) in cases {
         let desc = GgufMmvqDescriptor {
             nrows: 1,
-            ncols: fmt.block_size() as i32,
+            ncols: min_valid_ncols(fmt),
             block_format: fmt,
             w_start_byte_offset: off,
         };
@@ -670,13 +689,15 @@ fn mmvq_w_offset_alignment_misaligned_rejected_debug() {
     for &(fmt, off) in cases {
         let desc = GgufMmvqDescriptor {
             nrows: 1,
-            ncols: fmt.block_size() as i32,
+            ncols: min_valid_ncols(fmt),
             block_format: fmt,
             w_start_byte_offset: off,
         };
         let r = GgufMmvqPlan::<f32>::select(&stream, &desc, PlanPreference::default());
         match r {
-            Err(Error::InvalidProblem(_)) => {} // expected
+            // Require the ALIGNMENT message: since #127 a width decline is also an
+            // InvalidProblem, and a bare match would pass for the wrong reason.
+            Err(Error::InvalidProblem(m)) if m.contains("aligned") => {}
             Err(e) => panic!("expected InvalidProblem for {fmt:?} @ offset {off}; got Err({e:?})"),
             Ok(_) => panic!("expected InvalidProblem for {fmt:?} @ offset {off}; got Ok(_)"),
         }
@@ -699,7 +720,7 @@ fn mmvq_w_offset_alignment_two_byte_ok_on_2aligned() {
     for &fmt in cases {
         let desc = GgufMmvqDescriptor {
             nrows: 1,
-            ncols: fmt.block_size() as i32,
+            ncols: min_valid_ncols(fmt),
             block_format: fmt,
             w_start_byte_offset: 2,
         };
