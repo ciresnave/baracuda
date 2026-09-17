@@ -8,6 +8,147 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+**Versioning exception (from alpha.80):** `baracuda-cuda-emit` does not share
+the workspace version. Its MAJOR.MINOR follow the `unpopped` release it builds
+against, and its PATCH is baracuda's own counter, so `baracuda-cuda-emit 0.11.0`
+ships with `0.0.1-alpha.80` and goes with `unpopped 0.11`.
+
+## 0.0.1-alpha.80 — 2026-09-17 (MMVQ width decline, narrow-float bit moves, unpopped 0.11)
+
+The 107 commits after the published alpha.79 tree (`16621ddb`). 70 crates are
+published: 69 at `0.0.1-alpha.80`, plus `baracuda-cuda-emit 0.11.0`.
+`baracuda-cuda-vocab` is published for the first time.
+
+### Fixed
+
+- **GGUF MMVQ over-read (#127).** The type-0/1 MMVQ kernel (Q4_0, Q4_1, Q5_0,
+  Q5_1, Q8_0) reads whole 64-column strides. `GgufMmvqPlan` and
+  `GgufMmvqBatchedPlan` only required a multiple of 32, so at
+  `ncols % 64 == 32` they read 32 columns past `ncols`. Under compute-sanitizer
+  memcheck on an RTX 4070, Q8_0 2×32 gave 41 errors; 2×64 gives 0. Both plans
+  now return `InvalidProblem` for those widths, in release builds too.
+  `GgufMmvqMultiMPlan` is unaffected. Direct `baracuda-kernels-sys` callers are
+  still exposed; see #128.
+- **Narrow-float min/max moves the operand's bits** (KISS #355/#416,
+  §6.16-0009). This covers reductions, cumulative min/max, pooling, and
+  min/max/neg/abs/copysign inside the element or the epilogue. A moved f16/bf16
+  NaN is no longer quieted (#67, #70, #72, #73, #75).
+- **Flash SDPA and flash sm_89** decline an over-cap shared-memory request with
+  a typed error instead of an opaque status 1001, and one bad shape no longer
+  hides the rest (#76, #78, #82).
+- **sm_89 `int4_gemm`** compile break (#55). The `BiasElementKind` import is
+  now gated to sm89 (#59).
+- **cuda-emit** owns the `Rsqrt` intrinsic spelling (#46).
+- **Tools:** `kiss-ref-diff` compiles again, and CI now type-checks it (#125).
+  The benchmark rollup aggregates runs instead of publishing an arbitrary one
+  (#92), and it refuses a regen that would drop op families (#79).
+
+### Added
+
+- **`baracuda-cuda-vocab`:** the owner source for the `cuda:` KISS §6.8
+  namespace. It includes the §6.8-0008 manifest generator, a freshness gate,
+  and a semantic-agreement gate against KISS's pinned seed (#39–#43).
+- **cuda-emit:** the §6.16-0009 bit-move route for `RowReduce` (#110) and
+  `Select` (#118).
+- **cutlass:** the build fails if a tile exceeds sm_89's shared-memory cap
+  (#87, #121).
+- **§6.8-0004 reachability guard**, plus a fix for the seam-reachable panic it
+  found (#34).
+- **Benchmarks:** loss ops against PyTorch in f32/f16/bf16 (#63, #69); Linalg
+  tranche 1, cholesky and lu (#89); dispersion reported beside every median,
+  including the PyTorch column (#91, #94); frozen PyTorch baseline provenance
+  (#54, #61, #62); liveness checks on every self-bench (#56, #58).
+
+### Changed
+
+- **Dependencies:** adopted `unpopped` / `unpopped-vocab` / `unpopped-cpu-c` /
+  `unpopped-slang` 0.11.0 (from `unpopped` 0.1.0 at alpha.79). This includes the
+  `VariantFidelity` rename and the `Result<Spelling>` lowering seams (#18, #24,
+  #33, #65, #85, #101, #123). Also newest compatible versions and `thiserror 2`
+  (#47).
+- **Build:** forge nvcc parallelism is capped at 4 by default through the
+  workspace `[env]` (#53).
+- **CI:** Rust toolchain pinned to 1.98.0, with the MSRV (1.85) scoped to the
+  crates a job actually builds (#29). Also: intra-doc links denied (#28),
+  test-crate locality (#27), the CUDA-free feature-gated surface (#31),
+  `DOCS_RS` type-checks of the arch-gated library and bench tests (#55, #124),
+  and LF line endings enforced (#30).
+
+## 0.0.1-alpha.79 — 2026-08-15 (the Unpopped carve; contraction layouts)
+
+*Backfilled on 2026-09-17 from commit history (`449583e6..16621ddb`, 53
+commits). The published crate was built from `16621ddb`, which the retained
+`release/v0.0.1-alpha.79` branch preserves.*
+
+### Changed
+
+- **The kernel generator moved out into the standalone, vendor-neutral
+  [`unpopped`](https://crates.io/crates/unpopped) / `unpopped-vocab` crates.**
+  Baracuda now consumes them from crates.io. `baracuda-kernelgen` was retired,
+  and the CUDA emitter, NVRTC JIT and seam `Synthesizer` now live in the new
+  `baracuda-cuda-emit`.
+- `DeviceRepr` is owned by the kernel vocab and re-exported by
+  `baracuda-types`.
+
+### Added
+
+- **Contraction layouts:** `LayoutOrder` plus lhs/rhs order on
+  `ContractionKey`. `classify_mat_layout` derives packed transposes and admits
+  broadcast (stride-0) axes for GQA KV. Permute views are allowed on
+  contraction operands. Stride binding uses extent products, and the oracle
+  reads operand layout by physical strides.
+- **`require!`:** a declare-and-report primitive for on-device tests.
+
+### Fixed
+
+- **aarch64 Linux:** `cuDeviceGetLuid` takes a `c_char` buffer (#15).
+- **forge:** honours `NUM_JOBS` as a cap and surfaces fatal `ptxas` errors.
+- **vocab:** declines batch-inner packed contraction layouts.
+
+## 0.0.1-alpha.78 — 2026-07-31 (IR-hub frontends, shape oracle, sk3, attention weights)
+
+*Backfilled on 2026-09-17 from commit history (`38f156c5..449583e6`, 173
+commits).*
+
+### Added
+
+- **Flash decoding:** optional per-key attention weights `a[B,H,Sk]` for
+  H2O/R-KV eviction, and an optional head-mean output `a_mean[B,Sk]`.
+- **FA2:** backward compilation is split behind the opt-in `fa2_backward`
+  feature, so the default `fa2` build is forward-only.
+- **Reductions:** S8/U8 support (wrapping store, integer predicates, and exact
+  counts past 2^24).
+- **Shapes:** the KISS-Ops §6.20 shape-expression vocabulary, evaluator and
+  canonical byte codec, plus an output-shape oracle for every access pattern.
+- **Contraction:** fused matmul with a per-column bias/activation epilogue, a
+  batched `[B,M,K]·[B,K,N]` form, and a CPU numeric reference.
+- **Contracts:** recipe-carrying contracts for non-elementwise ops (gather,
+  scatter, RowReduce, reduction, scan), a KISC-framed bundle emitter, and the
+  seam Announce read side.
+- **kernelgen** (now `unpopped`): an IR→Slang backend, a portable-C backend,
+  tree-sitter CUDA/Slang converter frontends with `lift`, a CPU oracle,
+  precision-first (`MorePrecise`) variants, a human-readable IR text form, and
+  generated freestanding helpers.
+- **Decode:** capture-safe dense m=1 GEMV and `gather_rows`.
+- **driver:** cross-framework `from_raw` / `borrow_raw` on `Context`,
+  `Stream`, `Event` and `Device`.
+
+### Changed (breaking)
+
+- **`structure_key` sk2 → sk3:** the GEM precision coordinates (KISS sk3 RFC).
+- **`SEAM_MAGIC`** is now `0x4D414553` (LE bytes `"SEAM"`), changed in lockstep
+  with Fuel.
+- **Recipes:** `Rem` → `rem_floor`, `Round` → `round_even`, and
+  `reduce_extent` → `reduced_count`.
+
+### Fixed
+
+- NaN-propagating elementwise Max/Min emit `max_prop` / `min_prop`, which keep
+  A on numeric ties.
+- Zero-stride window/im2col geometry and `i64::MIN / -1` are now declined
+  instead of dividing or panicking.
+- The structure-key work class is the frame maximum across operands.
+
 ## 0.0.1-alpha.77 — 2026-07-09 (post-ramp codegen breadth + the CapturedRun `_doff` unblock)
 
 Ten adversarially-reviewed increments on top of alpha.76: a device-resident

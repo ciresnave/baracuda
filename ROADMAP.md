@@ -7,10 +7,9 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current release is **v0.0.1-alpha.79** (2026-08-15). The per-phase
+The current release is **v0.0.1-alpha.80** (2026-09-17). The per-phase
 write-ups below are a historical log (see the note at the end of this
-paragraph); `CHANGELOG.md` currently stops at alpha.77 and needs alpha.78/79
-entries. The 6 critical
+paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
 GPU test crates (baracuda-kernels, baracuda-optim, baracuda-megatron,
 baracuda-nccl, baracuda-transformer-engine, baracuda-ozimmu) ran **2280+
 tests, zero failures** on RTX 4070 (sm_89) as of the last full-suite

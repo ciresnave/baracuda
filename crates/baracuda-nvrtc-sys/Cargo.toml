@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvrtc-sys"
-version = "0.0.1-alpha.79"
+version = "0.0.1-alpha.80"
 description = "Raw FFI bindings and dynamic loader for NVIDIA NVRTC (runtime CUDA-C++ to PTX compiler)."
 edition.workspace = true
 license.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-npp"
-version = "0.0.1-alpha.79"
+version = "0.0.1-alpha.80"
 description = "Safe Rust wrappers for NVIDIA NPP (Performance Primitives). Core + signal subset at v0.1."
 edition.workspace = true
 license.workspace = true

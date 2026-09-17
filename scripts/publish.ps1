@@ -42,12 +42,32 @@ $excluded = @($meta.packages | Where-Object {
 
 if ($pub.Count -eq 0) { throw "no publishable crates found in workspace metadata" }
 $order = @($pub | ForEach-Object { $_.name })
-$version = $pub[0].version
 
-# Sanity: every publishable crate should share the one lockstep version.
-$distinct = @($pub | ForEach-Object { $_.version } | Sort-Object -Unique)
+# `baracuda-cuda-emit` is the one crate off the lockstep version: its
+# MAJOR.MINOR follow the `unpopped` it builds against, and its PATCH is ours
+# (the reason is next to its line in the root Cargo.toml).
+$emitName = 'baracuda-cuda-emit'
+$lockstep = @($pub | Where-Object { $_.name -ne $emitName })
+$version = $lockstep[0].version
+
+# Sanity: every other publishable crate shares the one lockstep version.
+$distinct = @($lockstep | ForEach-Object { $_.version } | Sort-Object -Unique)
 if ($distinct.Count -ne 1) {
-    Write-Warning "publishable crates are NOT on one version: $($distinct -join ', ')"
+    Write-Warning "lockstep crates are NOT on one version: $($distinct -join ', ')"
+}
+
+# Sanity: the emitter's MAJOR.MINOR must match its `unpopped` requirement. This
+# one stops the run, because a published version can never be taken back.
+$emit = @($pub | Where-Object { $_.name -eq $emitName })
+if ($emit.Count -eq 1) {
+    $unp = @($emit[0].dependencies | Where-Object { $_.name -eq 'unpopped' -and $null -eq $_.kind })
+    if ($unp.Count -ne 1) { throw "$emitName has $($unp.Count) normal 'unpopped' dependencies; expected 1" }
+    $unpMM = (($unp[0].req -replace '^[^0-9]*', '') -split '\.')[0..1] -join '.'
+    $emitMM = ($emit[0].version -split '\.')[0..1] -join '.'
+    if ($emitMM -ne $unpMM) {
+        throw "$emitName is $($emit[0].version) but requires unpopped $($unp[0].req): MAJOR.MINOR must match ($emitMM vs $unpMM)"
+    }
+    Write-Host "Emitter:  $emitName $($emit[0].version) (unpopped $($unp[0].req))"
 }
 
 Write-Host "Version:  $version"
