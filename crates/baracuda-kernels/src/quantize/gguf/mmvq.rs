@@ -156,13 +156,27 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
                 "GgufMmvqPlan: ncols must be a multiple of the block size",
             ));
         }
-        // Note: type-0/1 MMVQ has an implicit `ncols >= 64` minimum
-        // because threads `tid=16..31` always read columns `32..62`.
-        // For single-matrix callers (this plan) the OOB reads land in
-        // unallocated zero memory and produce the right answer.
-        // GgufMmvqBatchedPlan adds a debug-build assertion against this
-        // because contiguous-batched activations make the OOB reads
-        // hit adjacent tokens' rows — see Phase 22 / Phase 20.1.
+        // #127: the type-0/1 MMVQ kernel walks columns in strides of
+        // `DMMV_ITER_STRIDE_COLS` (64), and every stride's threads read all 64
+        // columns. When `ncols % 64 == 32` the last stride reads 32 columns
+        // past `ncols`: out of bounds on the activation, out of bounds on the
+        // weight for the last row, and into the NEXT row's first block for
+        // every other row. Those extra terms are multiplied by the over-read
+        // activation values, so the result is right only if that memory
+        // happens to read as zero, which nothing guarantees. Measured on an
+        // RTX 4070 under compute-sanitizer memcheck: Q8_0 `nrows=2, ncols=32`
+        // gives 32 invalid reads.
+        //
+        // Declining is the interim fix. It also rejects callers that pad their
+        // buffers correctly; a padding contract or a kernel guard would admit
+        // them. Direct `baracuda-kernels-sys` callers bypass this check.
+        if uses_dmmv_stride(desc.block_format) && desc.ncols % DMMV_ITER_STRIDE_COLS != 0 {
+            return Err(Error::InvalidProblem(
+                "GgufMmvqPlan: type-0/1 block formats (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0) \
+                 require ncols to be a multiple of 64; the MMVQ kernel reads whole \
+                 64-column strides, so any other width reads past ncols (#127)",
+            ));
+        }
         // Phase 15.1 — debug-build alignment guard for the W-offset.
         // GGUF block structs have natural alignment ≥ 2 (`half`) or
         // ≥ 4 (`half2` / `float`). A misaligned `w_start_byte_offset`
@@ -732,6 +746,25 @@ unsafe fn dispatch_bf16_strided(
             _ => 3,
         }
     }
+}
+
+/// Column stride of the shared type-0/1 MMVQ kernel: `2 * GGML_CUDA_DMMV_X`
+/// (`iter_stride` in `baracuda_gguf.cuh`). The kernel's last stride reads all
+/// of its columns, so `ncols` must be a multiple of this (#127).
+pub(crate) const DMMV_ITER_STRIDE_COLS: i32 = 64;
+
+/// True for the block formats lowered through the shared type-0/1 MMVQ kernel
+/// (`dequantize_mul_mat_vec` in `baracuda_gguf.cuh`). The k-quants use bespoke
+/// per-format kernels, and their 256-element blocks are multiples of 64 anyway.
+pub(crate) fn uses_dmmv_stride(format: GgufBlockFormat) -> bool {
+    matches!(
+        format,
+        GgufBlockFormat::Q4_0
+            | GgufBlockFormat::Q4_1
+            | GgufBlockFormat::Q5_0
+            | GgufBlockFormat::Q5_1
+            | GgufBlockFormat::Q8_0
+    )
 }
 
 /// Natural byte alignment of a packed GGUF block struct, derived from

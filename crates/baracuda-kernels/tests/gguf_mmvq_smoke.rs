@@ -1,7 +1,8 @@
 //! Real-GPU smoke test for `GgufMmvqPlan` — Phase 8 Milestone 8.4.
 //!
-//! Builds a `[nrows=2, ncols=32]` Q8_0-packed weight matrix on the host
-//! and a length-32 f32 activation vector. Verifies the GPU MMVQ output
+//! Builds a `[nrows=2, ncols=64]` Q8_0-packed weight matrix on the host
+//! and a length-64 f32 activation vector. (64, not 32: type-0/1 MMVQ declines
+//! widths that are not multiples of 64, #127.) Verifies the GPU MMVQ output
 //! against a hand-computed full-precision dequant-then-matmul reference.
 //! Q8_0 is chosen for the smoke test because its dequant rule
 //! (`w[i] = qs[i] * d`) is the simplest of all block formats — any
@@ -29,7 +30,7 @@ fn setup() -> (Context, Stream) {
 
 #[test]
 #[ignore]
-fn gguf_mmvq_q8_0_2x32() {
+fn gguf_mmvq_q8_0_2x64() {
     let (ctx, stream) = setup();
 
     // Build two Q8_0 weight rows on the host.
@@ -53,8 +54,9 @@ fn gguf_mmvq_q8_0_2x32() {
         qs: qs1,
     };
 
-    let mut packed_bytes: Vec<u8> = Vec::with_capacity(2 * 34);
-    let blocks = [row0, row1];
+    // ncols = 64: two Q8_0 blocks per row, the second a copy of the first (#127).
+    let mut packed_bytes: Vec<u8> = Vec::with_capacity(4 * 34);
+    let blocks = [row0, row0, row1, row1];
     for blk in blocks.iter() {
         let bytes: &[u8] = unsafe {
             core::slice::from_raw_parts(
@@ -64,21 +66,21 @@ fn gguf_mmvq_q8_0_2x32() {
         };
         packed_bytes.extend_from_slice(bytes);
     }
-    assert_eq!(packed_bytes.len(), 68);
+    assert_eq!(packed_bytes.len(), 136);
     let host_weight: Vec<U8> = packed_bytes.into_iter().map(U8).collect();
 
-    // Activation: y[i] = i (i ∈ [0, 32)).
-    let host_activation: Vec<f32> = (0..32).map(|i| i as f32).collect();
+    // Activation: y[i] = i (i ∈ [0, 64)).
+    let host_activation: Vec<f32> = (0..64).map(|i| i as f32).collect();
 
     // Reference: out[r] = Σ_c w[r, c] * y[c].
     let mut expected = [0.0_f32; 2];
-    for c in 0..32 {
-        expected[0] += d0 * (qs0[c] as f32) * host_activation[c];
-        expected[1] += d1 * (qs1[c] as f32) * host_activation[c];
+    for c in 0..64 {
+        expected[0] += d0 * (qs0[c % 32] as f32) * host_activation[c];
+        expected[1] += d1 * (qs1[c % 32] as f32) * host_activation[c];
     }
 
     let nrows: i32 = 2;
-    let ncols: i32 = 32;
+    let ncols: i32 = 64;
     let weight_bytes_len = host_weight.len() as i32;
 
     let dev_weight = DeviceBuffer::from_slice(&ctx, &host_weight).expect("up weight");
@@ -117,7 +119,7 @@ fn gguf_mmvq_q8_0_2x32() {
     for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
         let abs_err = (g - e).abs();
         // Q8_0 dequant goes through fp16 scale → tolerate fp16 round
-        // (relative ≈ 1e-3 worst case for the scale, additive over 32
+        // (relative ≈ 1e-3 worst case for the scale, additive over 64
         // products → a few ULPs of fp32).
         let tol = 1e-2_f32 * e.abs().max(1.0);
         assert!(

@@ -150,18 +150,20 @@ fn mmvq_q8_0_f16_smoke() {
     for i in 0..32 {
         qs[i] = (i as i32 - 16) as i8;
     }
-    let packed = pack_q8_0_row(d, &qs);
+    // ncols = 64: two Q8_0 blocks, the second a copy of the first (#127).
+    let mut packed = pack_q8_0_row(d, &qs);
+    packed.extend(pack_q8_0_row(d, &qs));
     let host_w: Vec<U8> = packed.into_iter().map(U8).collect();
 
     // f16 activation
-    let host_y_f32: Vec<f32> = (0..32).map(|i| (i as f32) * 0.05 - 0.5).collect();
+    let host_y_f32: Vec<f32> = (0..64).map(|i| (i as f32) * 0.05 - 0.5).collect();
     let host_y_f16: Vec<f16> = host_y_f32.iter().map(|&x| f16::from_f32(x)).collect();
 
     // Reference: dequant + multiply, with the activation f16 round-trip
     // baked into the expected value.
     let mut expected = [0.0f32];
-    for c in 0..32 {
-        expected[0] += d * (qs[c] as f32) * host_y_f16[c].to_f32();
+    for c in 0..64 {
+        expected[0] += d * (qs[c % 32] as f32) * host_y_f16[c].to_f32();
     }
     // And then the output is cast back to f16 — model that round-trip
     // by comparing as f32 with a tolerance that covers the cast.
@@ -172,7 +174,7 @@ fn mmvq_q8_0_f16_smoke() {
 
     let desc = GgufMmvqDescriptor {
         nrows: 1,
-        ncols: 32,
+        ncols: 64,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
@@ -185,7 +187,7 @@ fn mmvq_q8_0_f16_smoke() {
         },
         activation: TensorRef {
             data: dev_y.as_slice(),
-            shape: [32],
+            shape: [64],
             stride: [1],
         },
         output: TensorMut {
@@ -217,15 +219,17 @@ fn mmvq_q8_0_bf16_smoke() {
     for i in 0..32 {
         qs[i] = (i as i32 - 16) as i8;
     }
-    let packed = pack_q8_0_row(d, &qs);
+    // ncols = 64: two Q8_0 blocks, the second a copy of the first (#127).
+    let mut packed = pack_q8_0_row(d, &qs);
+    packed.extend(pack_q8_0_row(d, &qs));
     let host_w: Vec<U8> = packed.into_iter().map(U8).collect();
 
-    let host_y_f32: Vec<f32> = (0..32).map(|i| (i as f32) * 0.05 - 0.5).collect();
+    let host_y_f32: Vec<f32> = (0..64).map(|i| (i as f32) * 0.05 - 0.5).collect();
     let host_y_bf16: Vec<bf16> = host_y_f32.iter().map(|&x| bf16::from_f32(x)).collect();
 
     let mut expected = [0.0f32];
-    for c in 0..32 {
-        expected[0] += d * (qs[c] as f32) * host_y_bf16[c].to_f32();
+    for c in 0..64 {
+        expected[0] += d * (qs[c % 32] as f32) * host_y_bf16[c].to_f32();
     }
 
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up w");
@@ -234,7 +238,7 @@ fn mmvq_q8_0_bf16_smoke() {
 
     let desc = GgufMmvqDescriptor {
         nrows: 1,
-        ncols: 32,
+        ncols: 64,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
@@ -248,7 +252,7 @@ fn mmvq_q8_0_bf16_smoke() {
         },
         activation: TensorRef {
             data: dev_y.as_slice(),
-            shape: [32],
+            shape: [64],
             stride: [1],
         },
         output: TensorMut {
@@ -458,18 +462,20 @@ fn mmvq_q8_0_f16_stride2_smoke() {
     for i in 0..32 {
         qs[i] = ((i as i32) % 16 - 7) as i8;
     }
-    let packed = pack_q8_0_row(d, &qs);
+    // ncols = 64: two Q8_0 blocks, the second a copy of the first (#127).
+    let mut packed = pack_q8_0_row(d, &qs);
+    packed.extend(pack_q8_0_row(d, &qs));
     let host_w: Vec<U8> = packed.into_iter().map(U8).collect();
 
-    let mut host_y_f32 = vec![-999.0f32; 64];
-    for c in 0..32 {
+    let mut host_y_f32 = vec![-999.0f32; 128];
+    for c in 0..64 {
         host_y_f32[c * 2] = (c as f32 + 1.0) * 0.05;
     }
     let host_y_f16: Vec<f16> = host_y_f32.iter().map(|&x| f16::from_f32(x)).collect();
 
     let mut expected = [0.0f32];
-    for c in 0..32 {
-        expected[0] += d * (qs[c] as f32) * host_y_f16[c * 2].to_f32();
+    for c in 0..64 {
+        expected[0] += d * (qs[c % 32] as f32) * host_y_f16[c * 2].to_f32();
     }
 
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up w");
@@ -478,7 +484,7 @@ fn mmvq_q8_0_f16_stride2_smoke() {
 
     let desc = GgufMmvqDescriptor {
         nrows: 1,
-        ncols: 32,
+        ncols: 64,
         block_format: GgufBlockFormat::Q8_0,
         w_start_byte_offset: 0,
     };
@@ -491,7 +497,7 @@ fn mmvq_q8_0_f16_stride2_smoke() {
         },
         activation: TensorRef {
             data: dev_y.as_slice(),
-            shape: [32],
+            shape: [64],
             stride: [2],
         },
         output: TensorMut {
