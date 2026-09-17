@@ -37,45 +37,29 @@ def run(*args: str) -> str:
     return subprocess.run(args, check=True, capture_output=True, text=True).stdout
 
 
-def main() -> int:
-    rev = sys.argv[1] if len(sys.argv) > 1 else "HEAD"
+def same_path(a: str, b: str) -> bool:
+    return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
 
-    meta = json.loads(run("cargo", "metadata", "--no-deps", "--format-version", "1"))
-    root = meta["workspace_root"]
-    toplevel = run("git", "-C", root, "rev-parse", "--show-toplevel").strip()
-    if os.path.normcase(os.path.normpath(root)) != os.path.normcase(os.path.normpath(toplevel)):
-        print(f"cannot run: workspace root {root!r} is not the git toplevel {toplevel!r}")
-        return 2
 
-    publishable = sorted(
-        (p for p in meta["packages"] if p["publish"] is None or len(p["publish"]) > 0),
-        key=lambda p: p["name"],
-    )
-    if not publishable:
-        print("cannot run: cargo metadata lists no publishable crates")
-        return 2
+def publishable_crates(meta: dict) -> list:
+    """The crates `scripts/publish.ps1` uploads: `publish` absent, or a non-empty allowlist."""
+    crates = [p for p in meta["packages"] if p["publish"] is None or len(p["publish"]) > 0]
+    return sorted(crates, key=lambda p: p["name"])
 
+
+def tree_blobs(root: str, rev: str) -> dict:
+    """Map every path in the git tree at REV to its blob id."""
     blobs = {}
-    listing = run("git", "-C", root, "ls-tree", "-r", "-z", rev)
-    for entry in listing.split("\0"):
-        if not entry:
-            continue
-        info, path = entry.split("\t", 1)
-        blobs[path] = info.split()[2]
+    for entry in run("git", "-C", root, "ls-tree", "-r", "-z", rev).split("\0"):
+        if entry:
+            info, path = entry.split("\t", 1)
+            blobs[path] = info.split()[2]
+    return blobs
 
-    root_blobs = {name: blobs.get(name) for name in LICENCES}
-    for name, blob in root_blobs.items():
-        if blob is None:
-            print(f"cannot run: the root {name} is not in the tree at {rev}")
-            return 2
 
-    print(
-        f"enumeration: cargo metadata publishable set ({len(publishable)} crates); "
-        f"files read from the git tree at {rev}"
-    )
-
+def licence_problems(crates: list, root: str, blobs: dict, root_blobs: dict) -> list:
     problems = []
-    for pkg in publishable:
+    for pkg in crates:
         crate_dir = os.path.relpath(os.path.dirname(pkg["manifest_path"]), root)
         crate_dir = crate_dir.replace(os.sep, "/")
         for name in LICENCES:
@@ -83,10 +67,38 @@ def main() -> int:
             if blob is None:
                 problems.append(f"{pkg['name']}: {crate_dir}/{name} is missing")
             elif blob != root_blobs[name]:
-                problems.append(
-                    f"{pkg['name']}: {crate_dir}/{name} differs from the root {name}"
-                )
+                problems.append(f"{pkg['name']}: {crate_dir}/{name} differs from the root {name}")
+    return problems
 
+
+def main() -> int:
+    rev = sys.argv[1] if len(sys.argv) > 1 else "HEAD"
+
+    meta = json.loads(run("cargo", "metadata", "--no-deps", "--format-version", "1"))
+    root = meta["workspace_root"]
+    toplevel = run("git", "-C", root, "rev-parse", "--show-toplevel").strip()
+    if not same_path(root, toplevel):
+        print(f"cannot run: workspace root {root!r} is not the git toplevel {toplevel!r}")
+        return 2
+
+    crates = publishable_crates(meta)
+    if not crates:
+        print("cannot run: cargo metadata lists no publishable crates")
+        return 2
+
+    blobs = tree_blobs(root, rev)
+    root_blobs = {name: blobs.get(name) for name in LICENCES}
+    absent = [name for name, blob in root_blobs.items() if blob is None]
+    if absent:
+        print(f"cannot run: missing from the root of the tree at {rev}: {', '.join(absent)}")
+        return 2
+
+    print(
+        f"enumeration: cargo metadata publishable set ({len(crates)} crates); "
+        f"files read from the git tree at {rev}"
+    )
+
+    problems = licence_problems(crates, root, blobs, root_blobs)
     if problems:
         print(f"FAIL: {len(problems)} problem(s):")
         for problem in problems:
@@ -94,7 +106,7 @@ def main() -> int:
         print(f"Fix: copy the root {' and '.join(LICENCES)} into each crate directory named above.")
         return 1
 
-    print(f"ok: all {len(publishable)} publishable crates carry both licence files")
+    print(f"ok: all {len(crates)} publishable crates carry both licence files")
     return 0
 
 
