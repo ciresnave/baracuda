@@ -172,7 +172,9 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
         // them. Direct `baracuda-kernels-sys` callers bypass this check.
         if uses_dmmv_stride(desc.block_format) && desc.ncols % DMMV_ITER_STRIDE_COLS != 0 {
             return Err(Error::InvalidProblem(
-                "GgufMmvqPlan: type-0/1 block formats (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0)                  require ncols to be a multiple of 64; the MMVQ kernel reads whole                  64-column strides, so any other width reads past ncols (#127)",
+                "GgufMmvqPlan: type-0/1 block formats (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0) \
+                 require ncols to be a multiple of 64; the MMVQ kernel reads whole \
+                 64-column strides, so any other width reads past ncols (#127)",
             ));
         }
         // Phase 15.1 — debug-build alignment guard for the W-offset.

@@ -70,7 +70,15 @@ fn batched(stream: &Stream, fmt: GgufBlockFormat, n_cols: i32) -> Result<(), Err
 
 fn assert_declined_for_127(r: Result<(), Error>, what: &str) {
     match r {
-        Err(Error::InvalidProblem(m)) if m.contains("#127") => {}
+        Err(Error::InvalidProblem(m)) if m.contains("#127") => {
+            // The first version of this fix lost the `\` continuations in the
+            // message literal, so users would have seen runs of spaces. Only
+            // the `#127` substring was checked, so nothing caught it.
+            assert!(
+                !m.contains("  "),
+                "{what}: the #127 message contains a run of spaces: {m:?}"
+            );
+        }
         Err(e) => panic!("{what}: expected the #127 width decline, got a different error: {e:?}"),
         Ok(()) => panic!("{what}: expected the #127 width decline, got Ok"),
     }

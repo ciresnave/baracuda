@@ -254,7 +254,10 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
                 && desc.n_cols % super::mmvq::DMMV_ITER_STRIDE_COLS != 0
             {
                 return Err(Error::InvalidProblem(
-                    "GgufMmvqBatchedPlan: type-0/1 block formats                      (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0) require n_cols to be a multiple of                      64; the MMVQ kernel reads whole 64-column strides, so any other                      width reads past n_cols (#127)",
+                    "GgufMmvqBatchedPlan: type-0/1 block formats \
+                     (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0) require n_cols to be a multiple of \
+                     64; the MMVQ kernel reads whole 64-column strides, so any other \
+                     width reads past n_cols (#127)",
                 ));
             }
         }
