@@ -43,6 +43,15 @@ $excluded = @($meta.packages | Where-Object {
 if ($pub.Count -eq 0) { throw "no publishable crates found in workspace metadata" }
 $order = @($pub | ForEach-Object { $_.name })
 
+# Licence guard: every publishable crate must carry LICENSE-MIT and
+# LICENSE-APACHE identical to the root copies, because a published crate
+# contains only its own directory. The same script runs in CI; running it here
+# too means a version that ships without licence text is never uploaded.
+$py = Get-Command python3 -ErrorAction SilentlyContinue
+if ($null -eq $py) { $py = Get-Command python -ErrorAction Stop }
+& $py.Source (Join-Path $PSScriptRoot 'check-crate-licences.py')
+if ($LASTEXITCODE -ne 0) { throw "crate licence guard failed (exit $LASTEXITCODE); nothing was published" }
+
 # `baracuda-cuda-emit` is the one crate off the lockstep version: its
 # MAJOR.MINOR follow the `unpopped` it builds against, and its PATCH is ours
 # (the reason is next to its line in the root Cargo.toml).

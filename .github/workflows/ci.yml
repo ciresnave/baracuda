@@ -93,6 +93,18 @@ jobs:
       - name: device-run-invocation guard
         shell: bash
         run: bash scripts/check-device-run-invocations.sh
+      # Crate-licence guard: `MIT OR Apache-2.0` requires the licence text to
+      # travel with every copy, and a published crate contains only files from its
+      # own directory. alpha.79 shipped 69 crates with no licence text (the
+      # per-crate copies came after it, #18), and `baracuda-cuda-vocab` was created
+      # after that sweep and missed it, which held the alpha.80 publish.
+      # `scripts/publish.ps1` runs the same script and refuses to publish on failure.
+      - name: crate-licence guard
+        shell: bash
+        run: |
+          PY="$(command -v python3 || command -v python)"
+          "$PY" --version
+          "$PY" scripts/check-crate-licences.py
       # ---- The workspace steps below are scoped to the DRIVER-FREE surface.
       # This is a CUDA library: its `-sys` kernel crates compile `.cu` via nvcc
       # in their build scripts, so a full `--workspace` build genuinely cannot

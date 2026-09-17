@@ -8,19 +8,31 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
-**Versioning exception (from alpha.80):** `baracuda-cuda-emit` does not share
+**Versioning exception (from alpha.81):** `baracuda-cuda-emit` does not share
 the workspace version. Its MAJOR.MINOR follow the `unpopped` release it builds
 against, and its PATCH is baracuda's own counter, so `baracuda-cuda-emit 0.11.0`
-ships with `0.0.1-alpha.80` and goes with `unpopped 0.11`.
+ships with `0.0.1-alpha.81` and goes with `unpopped 0.11`.
 
-## 0.0.1-alpha.80 — 2026-09-17 (MMVQ width decline, narrow-float bit moves, unpopped 0.11)
+## 0.0.1-alpha.81 — 2026-09-17 (MMVQ width decline, narrow-float bit moves, unpopped 0.11, licence text)
 
 The 107 commits after the published alpha.79 tree (`16621ddb`). 70 crates are
-published: 69 at `0.0.1-alpha.80`, plus `baracuda-cuda-emit 0.11.0`.
+published: 69 at `0.0.1-alpha.81`, plus `baracuda-cuda-emit 0.11.0`.
 `baracuda-cuda-vocab` is published for the first time.
+
+`0.0.1-alpha.80` was tagged (`264882e1`) but never published: its
+`baracuda-cuda-vocab` lacked the licence files every other crate carries.
+alpha.81 is the same release with those files added and a guard against a
+repeat.
 
 ### Fixed
 
+- **Licence text ships in every published crate.** The workspace licence is
+  `MIT OR Apache-2.0`, but alpha.79's published crates carried no licence
+  files: the per-crate `LICENSE-MIT` / `LICENSE-APACHE` copies were added
+  after it (#18). `baracuda-cuda-vocab` now has them too.
+  `scripts/check-crate-licences.py` fails when a publishable crate lacks
+  either file or holds a copy that differs from the root. It runs in CI, and
+  `scripts/publish.ps1` refuses to publish when it fails.
 - **GGUF MMVQ over-read (#127).** The type-0/1 MMVQ kernel (Q4_0, Q4_1, Q5_0,
   Q5_1, Q8_0) reads whole 64-column strides. `GgufMmvqPlan` and
   `GgufMmvqBatchedPlan` only required a multiple of 32, so at
