@@ -2,9 +2,9 @@
 
 Baseline generated for **baracuda-kernels** on **RTX 4070 (sm_89)**; the body
 has since been re-annotated with the **baracuda-kernelgen op-matrix audit**
-(rounds through **2026-07-03**). The workspace is now at **v0.0.1-alpha.79**
-(2026-08-15); this audit body reflects the alpha.77 line — re-audit for
-alpha.78/79 deltas.
+(rounds through **2026-07-03**). The workspace is now at **v0.0.1-alpha.80**
+(2026-09-17); this audit body reflects the alpha.77 line — re-audit for
+alpha.78–80 deltas.
 See the per-op "Kernelgen audit" notes below for the generated-vs-bespoke
 dispatch calls.
 
