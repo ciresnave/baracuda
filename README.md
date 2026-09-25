@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.81-orange)
+![Status](https://img.shields.io/badge/status-alpha.82-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x%2F13.x-76b900)
 ![Tests](https://img.shields.io/badge/GPU%20regression-green-success)
 
@@ -81,7 +81,7 @@ optimizer are fluid across `alpha.N` bumps.
 
 ## Status
 
-**In active development — alpha.81** (70 publishable crates). The GPU
+**In active development — alpha.82** (70 publishable crates). The GPU
 regression sweep runs green on an RTX 4070 (sm_89); the current frontier
 is the **kernel-specialization era** — the [`baracuda-kernelgen`] IR +
 multi-backend emitter, its CPU oracle and precision-first variants, and
@@ -256,8 +256,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.81", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.81"
+baracuda-kernels = { version = "0.0.1-alpha.82", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.82"
 ```
 
 > **The `baracuda-*` crates publish in lockstep** — every publishable crate
