@@ -50,6 +50,9 @@ baracuda-kernels-bench = { version = "0.0.1-alpha.81", path = "crates/baracuda-k
 # still needs a new number. Moving to unpopped 0.12 means moving this to 0.12.0
 # in the same change.
 baracuda-cuda-emit = { version = "0.11.0", path = "crates/baracuda-cuda-emit" }
+# UNPUBLISHED (`publish = false` on the crate itself) -- landed as crate+tests
+# for review; the version and the publish decision are CireSnave's, not set here.
+baracuda-cuda-parse = { version = "0.0.0", path = "crates/baracuda-cuda-parse" }
 baracuda-cuda-vocab = { version = "0.0.1-alpha.81", path = "crates/baracuda-cuda-vocab" }
 # The neutral kernel generator + its classifier vocab were carved out and PUBLISHED
 # as the standalone vendor-neutral `unpopped` / `unpopped-vocab` (crates.io). Baracuda
