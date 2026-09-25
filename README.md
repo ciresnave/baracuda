@@ -269,11 +269,15 @@ baracuda-driver  = "0.0.1-alpha.82"
 > versions). If a `baracuda-*` upgrade does not compile, first check that every
 > `baracuda-*` dependency moved to the same version.
 >
-> **One exception: `baracuda-cuda-emit`.** Its version says which
-> [`unpopped`](https://crates.io/crates/unpopped) it works with: MAJOR.MINOR
-> follow the `unpopped` release it builds against, and PATCH is baracuda's own.
-> So `baracuda-cuda-emit 0.11.x` goes with `unpopped 0.11.x`, and it is
-> released alongside `0.0.1-alpha.81` onward.
+> **Two exceptions: `baracuda-cuda-emit` and `baracuda-cuda-parse`.** Each
+> crate's version says which [`unpopped`](https://crates.io/crates/unpopped)
+> it works with: MAJOR.MINOR follow the `unpopped` release it builds against,
+> and PATCH is baracuda's own. So `baracuda-cuda-emit 0.11.x` and
+> `baracuda-cuda-parse 0.11.x` go with `unpopped 0.11.x`.
+> `baracuda-cuda-emit` has been released alongside `0.0.1-alpha.81` onward;
+> `baracuda-cuda-parse` joined the exception line at `0.0.1-alpha.82`, and is
+> **UNPUBLISHED** (`publish = false`) — it is not yet on crates.io, which is
+> why the dependency examples above don't list it.
 
 A representative example — single-axis numerically stable softmax over a
 device-resident tensor:

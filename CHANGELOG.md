@@ -8,10 +8,13 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
-**Versioning exception (from alpha.81):** `baracuda-cuda-emit` does not share
-the workspace version. Its MAJOR.MINOR follow the `unpopped` release it builds
-against, and its PATCH is baracuda's own counter, so `baracuda-cuda-emit 0.11.0`
-ships with `0.0.1-alpha.81` and goes with `unpopped 0.11`.
+**Versioning exception (from alpha.81):** a crate whose version answers "which
+version of the other project does this work with?" does not share the
+workspace version — its MAJOR.MINOR follow the `unpopped` release it builds
+against, and its PATCH is baracuda's own counter. `baracuda-cuda-emit` has been
+on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
+`0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
+at alpha.82.
 
 ## 0.0.1-alpha.82 — 2026-09-25 (baracuda-cuda-parse, CUDA parse-side donation)
 
