@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.81-orange)
+![Status](https://img.shields.io/badge/status-alpha.82-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x%2F13.x-76b900)
 ![Tests](https://img.shields.io/badge/GPU%20regression-green-success)
 
@@ -81,7 +81,7 @@ optimizer are fluid across `alpha.N` bumps.
 
 ## Status
 
-**In active development — alpha.81** (70 publishable crates). The GPU
+**In active development — alpha.82** (70 publishable crates). The GPU
 regression sweep runs green on an RTX 4070 (sm_89); the current frontier
 is the **kernel-specialization era** — the [`baracuda-kernelgen`] IR +
 multi-backend emitter, its CPU oracle and precision-first variants, and
@@ -256,8 +256,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.81", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.81"
+baracuda-kernels = { version = "0.0.1-alpha.82", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.82"
 ```
 
 > **The `baracuda-*` crates publish in lockstep** — every publishable crate
@@ -269,11 +269,15 @@ baracuda-driver  = "0.0.1-alpha.81"
 > versions). If a `baracuda-*` upgrade does not compile, first check that every
 > `baracuda-*` dependency moved to the same version.
 >
-> **One exception: `baracuda-cuda-emit`.** Its version says which
-> [`unpopped`](https://crates.io/crates/unpopped) it works with: MAJOR.MINOR
-> follow the `unpopped` release it builds against, and PATCH is baracuda's own.
-> So `baracuda-cuda-emit 0.11.x` goes with `unpopped 0.11.x`, and it is
-> released alongside `0.0.1-alpha.81` onward.
+> **Two exceptions: `baracuda-cuda-emit` and `baracuda-cuda-parse`.** Each
+> crate's version says which [`unpopped`](https://crates.io/crates/unpopped)
+> it works with: MAJOR.MINOR follow the `unpopped` release it builds against,
+> and PATCH is baracuda's own. So `baracuda-cuda-emit 0.11.x` and
+> `baracuda-cuda-parse 0.11.x` go with `unpopped 0.11.x`.
+> `baracuda-cuda-emit` has been released alongside `0.0.1-alpha.81` onward;
+> `baracuda-cuda-parse` joined the exception line at `0.0.1-alpha.82`, and is
+> **UNPUBLISHED** (`publish = false`) — it is not yet on crates.io, which is
+> why the dependency examples above don't list it.
 
 A representative example — single-axis numerically stable softmax over a
 device-resident tensor:

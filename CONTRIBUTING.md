@@ -33,11 +33,15 @@ Thanks for your interest! baracuda is early-stage; the best contributions right 
   before the crate that depends on it (`-sys` before its safe crate); prove the
   order with a per-crate `cargo publish --dry-run` rather than discovering it
   mid-sequence.
-- The one exception to lockstep is `baracuda-cuda-emit`: its MAJOR.MINOR follow
-  the `unpopped` it builds against (0.11.x goes with `unpopped` 0.11), and its
-  PATCH is baracuda's own counter. When the workspace moves to a new `unpopped`
-  minor, move this crate to `<that minor>.0` in the same change. The reason is
-  written next to its line in the root `Cargo.toml`.
+- The exception to lockstep: a crate is on the exception line when its version
+  answers "which version of the other project does this work with?" (CireSnave's
+  own wording for it) — never a hardcoded count, so a future crate joining this
+  line doesn't require another doc fix. Today that's `baracuda-cuda-emit` and
+  `baracuda-cuda-parse`: their MAJOR.MINOR follow the `unpopped` they build
+  against (0.11.x goes with `unpopped` 0.11), and their PATCH is baracuda's own
+  counter. When the workspace moves to a new `unpopped` minor, move both crates
+  to `<that minor>.0` in the same change. The reason is written next to each
+  line in the root `Cargo.toml`.
 
 See `docs/design/` for more detail.
 
