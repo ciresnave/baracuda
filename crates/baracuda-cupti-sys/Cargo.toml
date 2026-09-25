@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cupti-sys"
-version = "0.0.1-alpha.81"
+version = "0.0.1-alpha.82"
 description = "Raw FFI bindings and dynamic loader for CUPTI (CUDA Profiling Tools Interface)."
 edition.workspace = true
 license.workspace = true

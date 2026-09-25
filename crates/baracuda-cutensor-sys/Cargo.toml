@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cutensor-sys"
-version = "0.0.1-alpha.81"
+version = "0.0.1-alpha.82"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuTENSOR (tensor contraction)."
 edition.workspace = true
 license.workspace = true
