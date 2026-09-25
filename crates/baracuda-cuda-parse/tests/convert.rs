@@ -18,7 +18,7 @@
 
 use unpopped::convert::{lift_elementwise, lift_reduction, lift_scan};
 use unpopped::ir::{Access, BinaryOp, ReduceOp, ScalarExpr, UnaryOp};
-use unpopped::lift::{Lifted, LiftError};
+use unpopped::lift::{LiftError, Lifted};
 use unpopped_vocab::ElementKind;
 
 use baracuda_cuda_parse::{CUDA, parse_cuda};
@@ -80,7 +80,8 @@ fn cuda_lifts_fused_multiply_add() {
 
 #[test]
 fn cuda_lifts_unary_intrinsic() {
-    let src = "__global__ void k(const float* in0, float* out, long long n){ out[i] = __expf(in0[i]); }";
+    let src =
+        "__global__ void k(const float* in0, float* out, long long n){ out[i] = __expf(in0[i]); }";
     assert_eq!(
         cuda_body(src),
         ScalarExpr::Unary(UnaryOp::Exp, Box::new(ScalarExpr::Input(0)))

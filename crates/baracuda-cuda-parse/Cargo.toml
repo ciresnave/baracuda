@@ -3,7 +3,13 @@ name = "baracuda-cuda-parse"
 version = "0.0.0"
 description = "CUDA -> IR frontend for the neutral `unpopped` kernel generator: the tree-sitter grammar binding (`parse_cuda`), the CUDA residue list, and the `CUDA` `Frontend` descriptor. Depends on the neutral generator `unpopped` (feature `convert`) and supplies the CUDA-specific parse-side surface from OUTSIDE the neutral core, mirroring `baracuda-cuda-emit`'s emit-side placement. UNPUBLISHED (`publish = false`): landed as a reviewable crate+tests PR; the publish decision, and the version this ships at, are CireSnave's."
 edition.workspace = true
-rust-version.workspace = true
+# NOT `rust-version.workspace = true` (1.85): unlike baracuda-cuda-emit, whose
+# 1.85 MSRV job builds only its DEFAULT features (tree-sitter-cuda is behind
+# its optional, off-by-default `convert` feature), this crate's tree-sitter /
+# tree-sitter-cuda deps are unconditional — the MSRV job would actually have to
+# compile them under exactly 1.85.0, and that floor is unmeasured. An unstated
+# floor here is honest, matching the workspace note's rule for the CUDA-toolkit
+# crates; a false 1.85 claim broke the MSRV drift guard when first tried.
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
