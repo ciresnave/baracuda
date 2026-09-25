@@ -109,6 +109,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-cuda-parse"
+version = "0.11.0"
+dependencies = [
+ "tree-sitter",
+ "tree-sitter-cuda",
+ "unpopped",
+ "unpopped-vocab",
+]
+
+[[package]]
 name = "baracuda-cuda-sys"
 version = "0.0.1-alpha.81"
 dependencies = [

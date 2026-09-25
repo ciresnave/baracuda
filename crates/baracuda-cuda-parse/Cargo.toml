@@ -1,0 +1,46 @@
+[package]
+name = "baracuda-cuda-parse"
+# Allocated by the PM (2026-09-25), verifying the repo's own documented rule
+# (workspace Cargo.toml, baracuda-cuda-emit's entry): MAJOR.MINOR follows the
+# `unpopped` line this crate builds against (0.11), PATCH is baracuda's own
+# counter. Stays 0.11.0 even as Unpopped moves to 0.11.2 -- `^0.11.0` already
+# covers it; PATCH tracking Unpopped's own patch number is not the rule.
+version = "0.11.0"
+description = "CUDA -> IR frontend for the neutral `unpopped` kernel generator: the tree-sitter grammar binding (`parse_cuda`), the CUDA residue list, and the `CUDA` `Frontend` descriptor. Depends on the neutral generator `unpopped` (feature `convert`) and supplies the CUDA-specific parse-side surface from OUTSIDE the neutral core, mirroring `baracuda-cuda-emit`'s emit-side placement. UNPUBLISHED (`publish = false`): landed as a reviewable crate+tests PR; the publish decision, and the version this ships at, are CireSnave's."
+edition.workspace = true
+# NOT `rust-version.workspace = true` (1.85): unlike baracuda-cuda-emit, whose
+# 1.85 MSRV job builds only its DEFAULT features (tree-sitter-cuda is behind
+# its optional, off-by-default `convert` feature), this crate's tree-sitter /
+# tree-sitter-cuda deps are unconditional — the MSRV job would actually have to
+# compile them under exactly 1.85.0, and that floor is unmeasured. An unstated
+# floor here is honest, matching the workspace note's rule for the CUDA-toolkit
+# crates; a false 1.85 claim broke the MSRV drift guard when first tried.
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# Not on crates.io yet -- see the description. Flip to `true` (or drop the
+# line) only alongside the version CireSnave allocates for a real publish.
+publish = false
+
+[dependencies]
+# The neutral generator's shared CST walkers (`lift_elementwise`/`lift_reduction`/
+# `lift_scan`/`lift`) and the `Frontend` descriptor this crate implements one of.
+# `convert` pulls unpopped's own tree-sitter deps too, but this crate calls
+# tree-sitter directly to build `parse_cuda`, so it also depends on the two
+# grammar crates below rather than relying on unpopped's transitive copies.
+unpopped = { workspace = true, features = ["convert"] }
+# Pinned to the SAME versions `unpopped`'s own `convert` feature depends on
+# (crates/unpopped/Cargo.toml), so the `Tree`/`Parser` types this crate's
+# `parse_cuda` returns are the same types `unpopped::convert::Frontend::parse`
+# expects -- a version skew here would be a type mismatch, not a runtime bug.
+tree-sitter = "0.26"
+tree-sitter-cuda = "0.21"
+
+[dev-dependencies]
+# `ElementKind` for the golden-vector tests' dtype lists. Test-only: no lib
+# code depends on it.
+unpopped-vocab = { workspace = true }
+
+[lints]
+workspace = true

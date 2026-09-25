@@ -124,9 +124,9 @@ jobs:
       # nvcc is absent, so an accidental CUDA-crate build here warns instead of
       # panicking — but it is still not built by this job.)
       - name: cargo build (driver-free surface)
-        run: cargo build -p baracuda-cuda-emit -p baracuda-cuda-vocab
+        run: cargo build -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse
       - name: cargo clippy (driver-free surface)
-        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -- -D warnings
+        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -- -D warnings
       # Also lint in TEST mode. The step above compiles the lib with cfg(test)
       # FALSE, so a lint in an inline `#[cfg(test)]` module or in an integration
       # test file (tests/*.rs) is never compiled and never seen — the same "CI
@@ -134,9 +134,9 @@ jobs:
       # in a lib inline test rode in unnoticed until a `--tests` run found it).
       # `--tests` compiles the lib-test target plus every tests/*.rs.
       - name: cargo clippy (driver-free surface, tests)
-        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab --tests -- -D warnings
+        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse --tests -- -D warnings
       - name: cargo test (driver-free surface, no GPU)
-        run: cargo test -p baracuda-cuda-emit -p baracuda-cuda-vocab
+        run: cargo test -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse
       # `cargo doc` is also the ENFORCEMENT point for `[workspace.lints.rustdoc]`
       # (broken_intra_doc_links + private_intra_doc_links = deny). A broken
       # `[`Type`]` link is invisible to build/clippy/test — it renders as a live
@@ -155,6 +155,7 @@ jobs:
           cargo doc --no-deps
           -p baracuda-cuda-emit
           -p baracuda-cuda-vocab
+          -p baracuda-cuda-parse
           -p baracuda-types
           -p baracuda-types-derive
           -p baracuda-build
