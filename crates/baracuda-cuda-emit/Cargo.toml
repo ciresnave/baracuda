@@ -1,6 +1,9 @@
 [package]
 name = "baracuda-cuda-emit"
-version = "0.11.0"
+# 0.11.0 is already published and immutable, so this republish needs a new
+# number. PATCH is baracuda's own counter on the exception line; MAJOR.MINOR
+# keep tracking `unpopped 0.11` (unchanged). Allocated by the PM 2026-09-26.
+version = "0.11.1"
 description = "CUDA backend for the neutral `unpopped` kernel generator: the `Cuda` `Backend` (IR -> .cu emitter), the NVRTC on-demand JIT compiler (`NvrtcCompiler`), and `BaracudaSynthesizer` (the Fuel kernel-seam `Synthesizer` impl). Depends on the neutral generator `unpopped` and supplies the CUDA-specific final emit + compile stage from OUTSIDE the neutral core (the swappable backend model)."
 edition.workspace = true
 rust-version.workspace = true
@@ -34,8 +37,10 @@ unpopped-vocab = { workspace = true }
 baracuda-nvrtc = { workspace = true, optional = true }
 # The §5 shared wire grammar + live-call envelope Fuel calls — pinned to the
 # fuel-kernel-seam release train Fuel publishes; BaracudaSynthesizer implements the Synthesizer trait.
-fuel-kernel-seam-types = { version = "0.10.3", optional = true }
-fuel-kernel-seam = { version = "0.10.3", optional = true }
+# BLOCKED pending fuel-kernel-seam-types/fuel-kernel-seam 0.11.2 landing on
+# crates.io (only 0.10.3 is published as of this PR) -- see the PR description.
+fuel-kernel-seam-types = { version = "0.11", optional = true }
+fuel-kernel-seam = { version = "0.11", optional = true }
 
 [dev-dependencies]
 # The sibling backends published from the Unpopped extraction, used ONLY by the
