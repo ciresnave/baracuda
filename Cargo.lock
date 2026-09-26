@@ -1143,9 +1143,9 @@ dependencies = [
 
 [[package]]
 name = "fuel-kernel-seam"
-version = "0.10.3"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25bbf98010d20364004ec1430ecb7dc6d091ecea938d1ce063300f3a4749926f"
+checksum = "eb82ef1858012a996ad1dbbd9c80b588bf258365852b7f5d4c4e4067f5dfa6bd"
 dependencies = [
  "baracuda-kernels-types",
  "fuel-kernel-seam-types",
@@ -1153,9 +1153,9 @@ dependencies = [
 
 [[package]]
 name = "fuel-kernel-seam-types"
-version = "0.10.3"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0bab428122bc1b3077e3df9b1412c26d37a5abbc3485fa777365ce3dfc6c562"
+checksum = "899d59dadf58afe45c5cd5bc47413884ea9ff4be2784805ce4a4df905729d9eb"
 
 [[package]]
 name = "futures-core"
@@ -1652,7 +1652,6 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d27e35dcc754285b753876b6e2db1ec4aacebb97ce73da55e9efc273d2199b2"
 dependencies = [
- "fuel-kernel-seam-types",
  "libm",
  "serde",
  "serde_json",
