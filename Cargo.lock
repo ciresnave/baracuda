@@ -97,7 +97,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-emit"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "baracuda-nvrtc",
  "fuel-kernel-seam",
