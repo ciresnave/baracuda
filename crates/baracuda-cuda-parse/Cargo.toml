@@ -6,7 +6,7 @@ name = "baracuda-cuda-parse"
 # counter. Stays 0.11.0 even as Unpopped moves to 0.11.2 -- `^0.11.0` already
 # covers it; PATCH tracking Unpopped's own patch number is not the rule.
 version = "0.11.0"
-description = "CUDA -> IR frontend for the neutral `unpopped` kernel generator: the tree-sitter grammar binding (`parse_cuda`), the CUDA residue list, and the `CUDA` `Frontend` descriptor. Depends on the neutral generator `unpopped` (feature `convert`) and supplies the CUDA-specific parse-side surface from OUTSIDE the neutral core, mirroring `baracuda-cuda-emit`'s emit-side placement. UNPUBLISHED (`publish = false`): landed as a reviewable crate+tests PR; the publish decision, and the version this ships at, are CireSnave's."
+description = "CUDA -> IR frontend for the neutral `unpopped` kernel generator: the tree-sitter grammar binding (`parse_cuda`), the CUDA residue list, and the `CUDA` `Frontend` descriptor. Depends on the neutral generator `unpopped` (feature `convert`) and supplies the CUDA-specific parse-side surface from OUTSIDE the neutral core, mirroring `baracuda-cuda-emit`'s emit-side placement."
 edition.workspace = true
 # NOT `rust-version.workspace = true` (1.85): unlike baracuda-cuda-emit, whose
 # 1.85 MSRV job builds only its DEFAULT features (tree-sitter-cuda is behind
@@ -19,9 +19,6 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-# Not on crates.io yet -- see the description. Flip to `true` (or drop the
-# line) only alongside the version CireSnave allocates for a real publish.
-publish = false
 
 [dependencies]
 # The neutral generator's shared CST walkers (`lift_elementwise`/`lift_reduction`/
