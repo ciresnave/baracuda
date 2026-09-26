@@ -50,7 +50,7 @@ baracuda-kernels-bench = { version = "0.0.1-alpha.82", path = "crates/baracuda-k
 # see `unpopped` below), and PATCH is baracuda's own counter, because crates.io
 # versions are immutable and a baracuda-only fix still needs a new number.
 # Moving to unpopped 0.12 means moving both to 0.12.0 in the same change.
-baracuda-cuda-emit = { version = "0.11.0", path = "crates/baracuda-cuda-emit" }
+baracuda-cuda-emit = { version = "0.11.1", path = "crates/baracuda-cuda-emit" }
 # Version 0.11.0 allocated by the PM 2026-09-25, verifying the rule above
 # (not overriding it). Cleared for crates.io publication per CireSnave's
 # ruling on board item 63(c) (2026-09-26).
