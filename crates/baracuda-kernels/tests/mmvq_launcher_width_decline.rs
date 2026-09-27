@@ -99,7 +99,8 @@ fn call_raw_q8_0(
     let host_weight: Vec<U8> = weight_bytes.iter().copied().map(U8).collect();
     let dev_weight = DeviceBuffer::from_slice(ctx, &host_weight).expect("up weight");
     let dev_activation = DeviceBuffer::from_slice(ctx, activation).expect("up act");
-    let mut dev_out: DeviceBuffer<f32> = DeviceBuffer::zeros(ctx, nrows as usize).expect("alloc out");
+    let mut dev_out: DeviceBuffer<f32> =
+        DeviceBuffer::zeros(ctx, nrows as usize).expect("alloc out");
 
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_run(
@@ -144,7 +145,10 @@ fn q8_0_ncols32_via_raw_ffi_declines() {
 
     let (status, got) = call_raw_q8_0(&ctx, &stream, ncols, nrows, &weight, &activation);
 
-    assert_ne!(status, 0, "ncols=32 (not a multiple of 64) must decline, got status 0");
+    assert_ne!(
+        status, 0,
+        "ncols=32 (not a multiple of 64) must decline, got status 0"
+    );
     assert_eq!(
         got,
         vec![0.0, 0.0],
@@ -176,7 +180,10 @@ fn q8_0_ncols64_via_raw_ffi_computes_correctly() {
 
     let (status, got) = call_raw_q8_0(&ctx, &stream, ncols, nrows, &weight, &activation);
 
-    assert_eq!(status, 0, "ncols=64 is a valid width and must be accepted, got status {status}");
+    assert_eq!(
+        status, 0,
+        "ncols=64 is a valid width and must be accepted, got status {status}"
+    );
     let expected = [64.0f32, 128.0f32]; // 64 cols * 1.0 * {1, 2}
     for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
         assert!(
