@@ -16,6 +16,31 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.83 — 2026-09-27 (MMVQ launcher-side width decline)
+
+Closes the direct-`-sys`-caller half of #128 (#139): the type-0/1 GGUF MMVQ
+launchers (`launch_type01_mmvq`/`launch_type01_mmvq_strided` in
+`baracuda-kernels-sys/kernels/gguf/mmvq.cu`) now decline `ncols % 64 != 0`
+themselves, mirroring the Rust plan layer's existing `#127` decline
+(`GgufMmvqPlan`), so a caller using this crate's raw `extern "C"` launchers
+directly can no longer trigger the cross-row over-read that decline exists to
+prevent. Verified with a numeric measurement, not just compute-sanitizer
+memcheck: the pre-fix contamination (invisible to memcheck since it stays
+inside the allocation for every row but the last) was reproduced and measured
+bit-exact against a hand-derived prediction before being confirmed fixed.
+
+Two related findings filed as follow-up issues, not fixed here: #140 (a
+`row > nrows` off-by-one in the K-quant templates, latent only because
+`GGML_CUDA_MMV_Y = 1` masks it) and #141 (the batched MMVQ path has the same
+raw-caller exposure).
+
+70 crates move to `0.0.1-alpha.83`. `baracuda-cuda-emit` and
+`baracuda-cuda-parse` stay on the `unpopped`-tracking exception line.
+
+**Not yet published to crates.io as of this entry** — the version is
+allocated on `main` at gate time; `0.0.1-alpha.82` remains the last version
+actually live on the registry until the publish runs.
+
 ## 0.0.1-alpha.82 — 2026-09-25 (baracuda-cuda-parse, CUDA parse-side donation)
 
 Adds `baracuda-cuda-parse` (#133): the parse-side (`.cu` -> IR) half of the

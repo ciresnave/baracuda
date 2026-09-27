@@ -7,7 +7,9 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current release is **v0.0.1-alpha.82** (2026-09-25). The per-phase
+`main` is at **v0.0.1-alpha.83** (2026-09-27); the last version actually
+published to crates.io is **v0.0.1-alpha.82** (2026-09-25) — see
+`CHANGELOG.md`'s versioning note. The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
 GPU test crates (baracuda-kernels, baracuda-optim, baracuda-megatron,
