@@ -168,6 +168,14 @@ fn source_path_from_key<'a>(key: &'a str, object_path: &str) -> Option<&'a str> 
     key.strip_suffix(&suffix)
 }
 
+/// Lowercase-hex encode a digest. `sha2` 0.11's `finalize()` returns
+/// `hybrid-array`'s `Array<u8, N>`, which (unlike the old `generic-array`
+/// `GenericArray`) has no `LowerHex` impl — same bytes, same hex string per
+/// input, just spelled out a byte at a time instead of via `{:x}`.
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// Compute SHA-256 hash of a file's contents.
 pub(crate) fn hash_file(path: &Path) -> Result<String> {
     let mut file = fs::File::open(path)?;
@@ -182,7 +190,7 @@ pub(crate) fn hash_file(path: &Path) -> Result<String> {
         hasher.update(&buffer[..bytes_read]);
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(to_hex(&hasher.finalize()))
 }
 
 /// Hash a list of arguments for cache comparison.
@@ -192,7 +200,7 @@ pub(crate) fn hash_args(args: &[String]) -> String {
         hasher.update(arg.as_bytes());
         hasher.update(b"\0");
     }
-    format!("{:x}", hasher.finalize())
+    to_hex(&hasher.finalize())
 }
 
 /// Compute a combined hash of multiple paths (files or directories).
@@ -237,7 +245,7 @@ pub(crate) fn hash_paths(paths: &[PathBuf]) -> String {
         }
     }
 
-    format!("{:x}", hasher.finalize())
+    to_hex(&hasher.finalize())
 }
 
 /// Check if output file is newer than all input files.
@@ -266,6 +274,21 @@ pub(crate) fn output_is_current(output: &Path, inputs: &[PathBuf]) -> bool {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn to_hex_matches_known_sha256_vector() {
+        // Pins the cache-key hex format against a fixed NIST test vector, not
+        // just internal consistency (see test_hash_args below) -- catches a
+        // digest-encoding change (e.g. sha2's 0.10->0.11 generic-array->
+        // hybrid-array switch, which dropped LowerHex) that would otherwise
+        // silently invalidate every existing on-disk cache entry.
+        let mut hasher = Sha256::new();
+        hasher.update(b"abc");
+        assert_eq!(
+            to_hex(&hasher.finalize()),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
 
     #[test]
     fn test_hash_args() {
