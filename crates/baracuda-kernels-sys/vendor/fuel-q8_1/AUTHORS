@@ -1,0 +1,21 @@
+Georgi Gerganov and the ggml/llama.cpp contributors — original authors of
+the `ggml-cuda.cu` GGUF block-format quantization, dequantization, MMVQ
+(dequantize_mul_mat_vec) and MMQ (mul_mat_q tile-based matmul) kernels
+this file's lines 1-4319 are adapted from. See `LICENSE-llama.cpp`.
+
+  https://github.com/ggml-org/llama.cpp (formerly ggerganov/llama.cpp)
+
+Guoqing Bao — original author of the `indexed_moe_forward` fused
+indexed-MoE matvec kernel (lines 4334-4538: the templated
+`indexed_moe_forward<>` device function plus its per-qtype
+`indexed_moe_forward_<qtype>_q8_1` `extern "C"` entry points), per the
+function's own `@author` doc comment. See `LICENSE-xinfer`.
+
+  https://github.com/guoqingbao/xinfer (formerly guoqingbao/vllm.rs —
+  the project was renamed after this file was vendored; GitHub redirects
+  the old URL)
+
+Note: this is a different Guoqing Bao project from
+`guoqingbao/attention.rs`, the separate upstream for baracuda's actually
+built MoE kernels documented in
+`crates/baracuda-kernels-sys/LICENSE-thirdparty.md`. Both are MIT.
