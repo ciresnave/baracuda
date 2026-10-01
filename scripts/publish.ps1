@@ -52,11 +52,16 @@ if ($null -eq $py) { $py = Get-Command python -ErrorAction Stop }
 & $py.Source (Join-Path $PSScriptRoot 'check-crate-licences.py')
 if ($LASTEXITCODE -ne 0) { throw "crate licence guard failed (exit $LASTEXITCODE); nothing was published" }
 
-# `baracuda-cuda-emit` is the one crate off the lockstep version: its
-# MAJOR.MINOR follow the `unpopped` it builds against, and its PATCH is ours
-# (the reason is next to its line in the root Cargo.toml).
-$emitName = 'baracuda-cuda-emit'
-$lockstep = @($pub | Where-Object { $_.name -ne $emitName })
+# The crates off the lockstep version: each one's MAJOR.MINOR follows the
+# `unpopped` it builds against, and its PATCH is ours (the reason is next to
+# each one's line in the root Cargo.toml). A NAMED LIST, not a count or a
+# single name -- `baracuda-cuda-emit` was the only one until `baracuda-cuda-parse`
+# joined it (#133/#135), and `$lockstep[0].version` silently picking whichever
+# crate sorts first is exactly how that second crate went undetected: it read
+# as the lockstep version by luck, not by exclusion. Add a new exception-line
+# crate here, not by inventing a second variable.
+$exceptionCrates = @('baracuda-cuda-emit', 'baracuda-cuda-parse')
+$lockstep = @($pub | Where-Object { $_.name -notin $exceptionCrates })
 $version = $lockstep[0].version
 
 # Sanity: every other publishable crate shares the one lockstep version.
@@ -65,18 +70,21 @@ if ($distinct.Count -ne 1) {
     Write-Warning "lockstep crates are NOT on one version: $($distinct -join ', ')"
 }
 
-# Sanity: the emitter's MAJOR.MINOR must match its `unpopped` requirement. This
-# one stops the run, because a published version can never be taken back.
-$emit = @($pub | Where-Object { $_.name -eq $emitName })
-if ($emit.Count -eq 1) {
-    $unp = @($emit[0].dependencies | Where-Object { $_.name -eq 'unpopped' -and $null -eq $_.kind })
-    if ($unp.Count -ne 1) { throw "$emitName has $($unp.Count) normal 'unpopped' dependencies; expected 1" }
-    $unpMM = (($unp[0].req -replace '^[^0-9]*', '') -split '\.')[0..1] -join '.'
-    $emitMM = ($emit[0].version -split '\.')[0..1] -join '.'
-    if ($emitMM -ne $unpMM) {
-        throw "$emitName is $($emit[0].version) but requires unpopped $($unp[0].req): MAJOR.MINOR must match ($emitMM vs $unpMM)"
+# Sanity: each exception-line crate's MAJOR.MINOR must match its `unpopped`
+# requirement. This one stops the run, because a published version can never
+# be taken back.
+foreach ($emitName in $exceptionCrates) {
+    $emit = @($pub | Where-Object { $_.name -eq $emitName })
+    if ($emit.Count -eq 1) {
+        $unp = @($emit[0].dependencies | Where-Object { $_.name -eq 'unpopped' -and $null -eq $_.kind })
+        if ($unp.Count -ne 1) { throw "$emitName has $($unp.Count) normal 'unpopped' dependencies; expected 1" }
+        $unpMM = (($unp[0].req -replace '^[^0-9]*', '') -split '\.')[0..1] -join '.'
+        $emitMM = ($emit[0].version -split '\.')[0..1] -join '.'
+        if ($emitMM -ne $unpMM) {
+            throw "$emitName is $($emit[0].version) but requires unpopped $($unp[0].req): MAJOR.MINOR must match ($emitMM vs $unpMM)"
+        }
+        Write-Host "Exception line: $emitName $($emit[0].version) (unpopped $($unp[0].req))"
     }
-    Write-Host "Emitter:  $emitName $($emit[0].version) (unpopped $($unp[0].req))"
 }
 
 Write-Host "Version:  $version"
