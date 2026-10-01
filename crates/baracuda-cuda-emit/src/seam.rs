@@ -1,42 +1,190 @@
 //! Baracuda's live JIT synthesizer for the Fuel kernel seam — the
 //! `fuel_kernel_seam::Synthesizer` implementation (`BaracudaSynthesizer`) Fuel
 //! calls (§5). Carved out of `baracuda-kernelgen`'s `jit.rs` (carve step 2): it
-//! wires the CUDA backend ([`crate::Cuda`]) + the NVRTC compiler into the neutral
-//! generator's backend-agnostic seam front-end
-//! (`unpopped::jit::seam::synthesize`). Behind `--features seam`.
+//! wires the CUDA backend ([`crate::Cuda`]) + the NVRTC compiler into the
+//! neutral generator's native [`unpopped::synthesize`]. Behind `--features seam`.
 //!
-//! # ⚠️ WHAT THE `seam` CI LEG DOES AND DOES NOT COVER
+//! # The conversion lives HERE now, not in `unpopped`
 //!
-//! CI builds and tests this module (`cargo test -p baracuda-cuda-emit --features
-//! seam`), so it is exercised on every push despite the feature being off by
-//! default. **"Off by default" is not "unexercised".**
+//! Unpopped's own `jit::seam` module (Fuel `PatternNode`/`OpTag` →
+//! `unpopped::PatternNode`, then a call into the shared synthesis core) was
+//! deleted (Unpopped#18, "dissolve the fuel-kernel-seam-types diamond, don't
+//! just realign it") — the PM's ruling on the two-repo E0308 this module's own
+//! doc used to describe (see the old §-header below, kept as history in git
+//! blame, not restated here): a semver-incompatible `fuel-kernel-seam-types`
+//! bump could produce two incompatible `PatternNode` types in ONE consumer's
+//! graph, because `unpopped` was a SECOND place that type appeared. Moving the
+//! conversion here — this crate already depends on `fuel-kernel-seam-types`
+//! directly, so nothing new is added — makes `baracuda-cuda-emit` the ONLY
+//! consumer of that crate in the graph: one version, nothing left to disagree
+//! with. `to_internal`/`to_internal_at`/`optag_name` below are relocated
+//! near-verbatim from the deleted `unpopped::jit::seam` (see that module's git
+//! history for the original, including the enumeration-order/`OpTag` coverage
+//! rationale each `optag_name` arm still carries).
 //!
-//! **But it compiles against the PUBLISHED `fuel-kernel-seam-types`, and Fuel
-//! builds it against a different one.** `fuel-kernel-seam-types` is a
-//! `[patch.crates-io]` path member of Fuel's root manifest, and a root-level
-//! patch applies to the WHOLE dependency graph — including to this crate as
-//! Fuel's dependency. Measured 2026-09-08 at version `0.10.3`: **`OpTag` has 72
-//! variants on crates.io and 80 in Fuel's tree**, one version string naming two
-//! enums.
-//!
-//! So this CI leg verifies a DIFFERENT TYPE than the one this code runs against
-//! in production, and **that is invisible from here**: our lockfile pins
-//! `fuel-kernel-seam-types` by `checksum`, which is a true statement about OUR
-//! build and reads as a guarantee about the composed one. **Neither side's CI
-//! tests the composed system, and both report green.**
-//!
-//! The exposure is nonetheless zero, and by construction rather than by luck:
-//! `OpTag` is `#[non_exhaustive]`, so a downstream cannot match it exhaustively
-//! — the compiler forces a wildcard — and ours is a typed decline
-//! (`unpopped::jit` `_ => return None`), which the `Synthesizer` trait's
-//! never-panics contract requires. Unknown variants are declined, not
-//! mishandled.
+//! [`synthesize`] (this module's own, below) rebuilds the old seam front-end's
+//! call shape so every existing call site here is unchanged: convert the
+//! region, build an [`unpopped::JitRequest`], call [`unpopped::synthesize`]
+//! directly — that's the ONLY entry point `unpopped` exposes for this now.
+//! `unpopped::synthesize` itself already validates arity/budget/mixed-dtype
+//! (moved there when the seam front-end was deleted), so this wrapper does not
+//! re-check them.
 
 #[cfg(feature = "nvrtc")]
 use crate::nvrtc::NvrtcCompiler;
-use fuel_kernel_seam_types::PatternNode as SeamNode;
-use unpopped::ArtifactKind;
-use unpopped_vocab::{OpCategory, OperandDesc};
+use fuel_kernel_seam_types::{OpTag, PatternNode as SeamNode};
+use unpopped::{ArtifactKind, JitBudget, JitError, JitRequest, PatternNode};
+use unpopped_vocab::{OpCategory, OperandDesc, TargetId};
+
+/// Max region nesting this converts — a trust-boundary guard so a
+/// pathologically deep region from Fuel can't overflow the stack (an
+/// uncatchable abort, not a catchable panic) during the recursive conversion.
+/// Elementwise fusion regions are shallow; 64 is far above any real subgraph.
+/// Relocated verbatim from the deleted `unpopped::jit::seam`.
+const MAX_REGION_DEPTH: u32 = 64;
+
+/// Convert a Fuel `PatternNode` (region direction) to Baracuda's internal node
+/// (op vocabulary mapped by name). An `OpTag` the synthesizer doesn't cover and
+/// the matcher-only `SeeThrough`/`Any` are honest `UnsupportedOp` misses; a
+/// region nested past [`MAX_REGION_DEPTH`] is declined before it can overflow.
+/// Relocated verbatim from the deleted `unpopped::jit::seam`.
+fn to_internal(n: &SeamNode) -> Result<PatternNode, JitError> {
+    to_internal_at(n, 0)
+}
+
+fn to_internal_at(n: &SeamNode, depth: u32) -> Result<PatternNode, JitError> {
+    if depth > MAX_REGION_DEPTH {
+        return Err(JitError::UnsupportedOp(
+            "region nested past MAX_REGION_DEPTH".to_string(),
+        ));
+    }
+    match n {
+        SeamNode::Bind { index } => Ok(PatternNode::Bind(*index)),
+        SeamNode::Op { op, operands, .. } => {
+            let name = optag_name(*op).ok_or_else(|| JitError::UnsupportedOp(format!("{op:?}")))?;
+            let ops = operands
+                .iter()
+                .map(|o| to_internal_at(o, depth + 1))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(PatternNode::Op {
+                op: name.to_string(),
+                operands: ops,
+                consumers: None,
+                extract: Vec::new(),
+            })
+        }
+        SeamNode::SeeThrough { .. } => Err(JitError::UnsupportedOp("SeeThrough".to_string())),
+        SeamNode::Any => Err(JitError::UnsupportedOp("Any".to_string())),
+    }
+}
+
+/// `OpTag` → Baracuda's emitter op-name (what `region_to_op` parses). `None`
+/// for any tag outside the increment-1 synthesizer coverage. Relocated
+/// verbatim from the deleted `unpopped::jit::seam`.
+fn optag_name(op: OpTag) -> Option<&'static str> {
+    Some(match op {
+        OpTag::Add => "Add",
+        OpTag::Sub => "Sub",
+        OpTag::Mul => "Mul",
+        OpTag::Div => "Div",
+        OpTag::Maximum => "Maximum",
+        OpTag::Minimum => "Minimum",
+        OpTag::Pow => "Pow",
+        OpTag::Rem => "Rem",
+        OpTag::Neg => "Neg",
+        OpTag::Abs => "Abs",
+        OpTag::Sqr => "Sqr",
+        OpTag::Sqrt => "Sqrt",
+        OpTag::Rsqrt => "Rsqrt",
+        OpTag::Recip => "Recip",
+        OpTag::Exp => "Exp",
+        OpTag::Log => "Log",
+        OpTag::Sin => "Sin",
+        OpTag::Cos => "Cos",
+        OpTag::Tanh => "Tanh",
+        OpTag::Sigmoid => "Sigmoid",
+        OpTag::Silu => "Silu",
+        OpTag::GeluErf => "GeluErf",
+        OpTag::Relu => "Relu",
+        OpTag::Erf => "Erf",
+        OpTag::Step => "Step",
+        OpTag::Floor => "Floor",
+        OpTag::Ceil => "Ceil",
+        OpTag::Round => "Round",
+        OpTag::Sign => "Sign",
+        OpTag::AddScalar => "AddScalar",
+        OpTag::MulScalar => "MulScalar",
+        // Comparisons (→ U8 mask): mapped so a comparison NESTED in a float
+        // region synthesizes (inline 0.0/1.0 mask — the relu-backward
+        // `Mul(dy, Gt(x, z))` shape); a region ROOTED at one is declined
+        // typed by `region_to_op` (hetero U8 output — see its docs).
+        OpTag::Equal => "Equal",
+        OpTag::Ne => "Ne",
+        OpTag::Lt => "Lt",
+        OpTag::Le => "Le",
+        OpTag::Gt => "Gt",
+        OpTag::Ge => "Ge",
+        // Where (select/mask; dispatch spelling is bare "Where", NOT
+        // Elementwise-suffixed): maps to the ternary Select — operand
+        // order (cond, a, b) matches Fuel's. A cmp-cond region ([Gt,
+        // Where]) passes the interior-cmp carve-out and reaches
+        // `derive_pattern`, whose v1 SelectUnsupported typed miss is the
+        // decline (the Where advert is withheld — see pattern.rs); a
+        // bound-cond region declines typed in `synth_op` under BOTH
+        // projections (U8 cond → MixedDtype upstream; uniform all-T →
+        // the bound-cond gate).
+        OpTag::Where => "Where",
+        // Op::Gelu (tanh), PowI/Clamp, MaskedFill, reductions,
+        // MatMul, shape/layout, indexing, LogSoftmaxLastDim — not
+        // synthesized. OpTag::Iota (0.10.2 "value source") is ALSO
+        // declined here even though the IR now has `ScalarExpr::Coord`
+        // (increment 0d): a Fuel Iota is a graph node whose axis rides
+        // `OpAttrs.axis`, and this converter drops attrs — mapping it
+        // axis-less would synthesize the wrong coordinate. Typed decline
+        // (UnsupportedOp("Iota")), never a panic — pinned by
+        // `iota_region_declines_typed`; the attrs-aware Coord bridge is
+        // the follow-up.
+        _ => return None,
+    })
+}
+
+/// Synthesize for a region in Fuel's frozen grammar (`fuel_kernel_seam_types`).
+/// Fuel owns the region grammar (`PatternNode`/`OpTag`); Baracuda owns the
+/// classifier input (`OperandDesc`). Converts Fuel's node to
+/// [`unpopped::PatternNode`] ([`to_internal`]) and calls
+/// [`unpopped::synthesize`] directly — the same core the old
+/// `unpopped::jit::seam::synthesize` called internally, now called from this
+/// side of the boundary instead. Preserves the pre-dissolution call shape so
+/// every call site in this crate (production and tests) is unchanged.
+///
+/// # Errors
+/// See [`JitError`] — a malformed request, an op/dtype outside the
+/// synthesizer's coverage (honest miss), or a compile failure.
+/// `unpopped::synthesize` itself validates arity/budget/mixed-dtype; this
+/// wrapper does not duplicate those checks.
+#[allow(clippy::too_many_arguments)]
+fn synthesize(
+    region: &SeamNode,
+    operands: &[OperandDesc],
+    op_category: OpCategory,
+    target: impl Into<TargetId>,
+    fused_op_id: &str,
+    max_compile_ms: u32,
+    backend: &dyn unpopped::Backend,
+    compiler: &dyn unpopped::Compiler,
+) -> Result<unpopped::JitResponse, JitError> {
+    let n_inputs = operands.len().saturating_sub(1) as u8;
+    let req = JitRequest {
+        region: to_internal(region)?,
+        n_inputs,
+        op_category,
+        operands: operands.to_vec(),
+        target: target.into(),
+        fused_op_id: fused_op_id.to_string(),
+        budget: JitBudget { max_compile_ms },
+    };
+    unpopped::synthesize(&req, backend, compiler)
+}
 
 // ===== The live §5 call — the `fuel_kernel_seam::Synthesizer` Fuel invokes =====
 
@@ -112,7 +260,7 @@ impl Synthesizer for BaracudaSynthesizer {
         // synthesizer's own ceiling caps it.
         let budget = req.budget.max_compile_ms.min(self.max_compile_ms);
 
-        match unpopped::jit::seam::synthesize(
+        match synthesize(
             &req.region,
             &req.operands,
             op_category,
@@ -211,7 +359,6 @@ mod tests {
     use fuel_kernel_seam::JitBudget;
     use fuel_kernel_seam_types::OpAttrs;
     use fuel_kernel_seam_types::OpTag;
-    use unpopped::jit::seam::synthesize;
     use unpopped::{JitError, StubCompiler};
     use unpopped_vocab::{ArchSku, ElementKind};
 
@@ -823,12 +970,46 @@ mod tests {
         // destructuring is legal and FAILS TO COMPILE the day a field is added
         // — which is exactly when someone must decide whether it belongs in the
         // id. Fuel's GAP-303 adds one. Costs nothing and cannot be forgotten.
+        //
+        // fuel-kernel-seam-types 0.10.3 -> 0.11.2 (the seam-dissolution bump)
+        // added 27 fields in one jump (Convergence Increment A/C, the shape-rel
+        // fields, matmul role vectors, the KISS four-leaf carriers, and the
+        // scan/view/rank0/fused-selector carriers). This tripwire fired exactly
+        // as designed; the 22 new entries below are the same decision made 22
+        // more times, not a different one.
         let OpAttrs {
             scalars: _,
             axis: _,
             perm: _,
             target_shape: _,
             dims: _,
+            cast_dtype: _,
+            slice_start: _,
+            slice_len: _,
+            roll_shift: _,
+            pad_amounts: _,
+            pad_mode: _,
+            pad_value: _,
+            keepdim: _,
+            target_shape_rel: _,
+            slice_start_rel: _,
+            slice_len_rel: _,
+            axis_last: _,
+            scalar_rel: _,
+            lhs_roles: _,
+            rhs_roles: _,
+            const_bits: _,
+            slot_index: _,
+            scan_role: _,
+            scan_index: _,
+            scan_n_carries: _,
+            scan_n_xs: _,
+            scan_bound: _,
+            scan_emit: _,
+            scan_early_exit: _,
+            view_slot: _,
+            rank0_target: _,
+            fused_op: _,
         } = base.clone();
 
         let mut axis = base.clone();
@@ -841,6 +1022,61 @@ mod tests {
         target_shape.target_shape = vec![256, 128];
         let mut dims = base.clone();
         dims.dims = vec![1];
+        let mut cast_dtype = base.clone();
+        cast_dtype.cast_dtype = Some("f32".to_string());
+        let mut slice_start = base.clone();
+        slice_start.slice_start = Some(4);
+        let mut slice_len = base.clone();
+        slice_len.slice_len = Some(8);
+        let mut roll_shift = base.clone();
+        roll_shift.roll_shift = Some(-3);
+        let mut pad_amounts = base.clone();
+        pad_amounts.pad_amounts = vec![(1, 2)];
+        let mut pad_mode = base.clone();
+        pad_mode.pad_mode = Some(1);
+        let mut pad_value = base.clone();
+        pad_value.pad_value = Some(9.0);
+        let mut keepdim = base.clone();
+        keepdim.keepdim = Some(true);
+        let mut target_shape_rel = base.clone();
+        target_shape_rel.target_shape_rel =
+            Some(fuel_kernel_seam_types::shape_expr::ShapeExpr::SameAs { operand: 0 });
+        let mut slice_start_rel = base.clone();
+        slice_start_rel.slice_start_rel = Some(fuel_kernel_seam_types::shape_expr::Dim::Const(3));
+        let mut slice_len_rel = base.clone();
+        slice_len_rel.slice_len_rel = Some(fuel_kernel_seam_types::shape_expr::Dim::Const(5));
+        let mut axis_last = base.clone();
+        axis_last.axis_last = true;
+        let mut scalar_rel = base.clone();
+        scalar_rel.scalar_rel = Some(fuel_kernel_seam_types::shape_expr::Dim::Const(7));
+        let mut lhs_roles = base.clone();
+        lhs_roles.lhs_roles = vec![0, 1];
+        let mut rhs_roles = base.clone();
+        rhs_roles.rhs_roles = vec![0, 2];
+        let mut const_bits = base.clone();
+        const_bits.const_bits = Some(0x3f80_0000);
+        let mut slot_index = base.clone();
+        slot_index.slot_index = Some(2);
+        let mut scan_role = base.clone();
+        scan_role.scan_role = Some(1);
+        let mut scan_index = base.clone();
+        scan_index.scan_index = Some(3);
+        let mut scan_n_carries = base.clone();
+        scan_n_carries.scan_n_carries = Some(2);
+        let mut scan_n_xs = base.clone();
+        scan_n_xs.scan_n_xs = Some(1);
+        let mut scan_bound = base.clone();
+        scan_bound.scan_bound = Some(16);
+        let mut scan_emit = base.clone();
+        scan_emit.scan_emit = Some(1);
+        let mut scan_early_exit = base.clone();
+        scan_early_exit.scan_early_exit = Some(true);
+        let mut view_slot = base.clone();
+        view_slot.view_slot = Some(1);
+        let mut rank0_target = base.clone();
+        rank0_target.rank0_target = true;
+        let mut fused_op = base.clone();
+        fused_op.fused_op = Some("SoftmaxLastDim".to_string());
 
         let id_of = |a: &OpAttrs| {
             region_op_id(
@@ -856,6 +1092,33 @@ mod tests {
             ("perm", &perm),
             ("target_shape", &target_shape),
             ("dims", &dims),
+            ("cast_dtype", &cast_dtype),
+            ("slice_start", &slice_start),
+            ("slice_len", &slice_len),
+            ("roll_shift", &roll_shift),
+            ("pad_amounts", &pad_amounts),
+            ("pad_mode", &pad_mode),
+            ("pad_value", &pad_value),
+            ("keepdim", &keepdim),
+            ("target_shape_rel", &target_shape_rel),
+            ("slice_start_rel", &slice_start_rel),
+            ("slice_len_rel", &slice_len_rel),
+            ("axis_last", &axis_last),
+            ("scalar_rel", &scalar_rel),
+            ("lhs_roles", &lhs_roles),
+            ("rhs_roles", &rhs_roles),
+            ("const_bits", &const_bits),
+            ("slot_index", &slot_index),
+            ("scan_role", &scan_role),
+            ("scan_index", &scan_index),
+            ("scan_n_carries", &scan_n_carries),
+            ("scan_n_xs", &scan_n_xs),
+            ("scan_bound", &scan_bound),
+            ("scan_emit", &scan_emit),
+            ("scan_early_exit", &scan_early_exit),
+            ("view_slot", &view_slot),
+            ("rank0_target", &rank0_target),
+            ("fused_op", &fused_op),
         ] {
             assert_ne!(
                 baseline,

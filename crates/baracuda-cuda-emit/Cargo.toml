@@ -1,6 +1,11 @@
 [package]
 name = "baracuda-cuda-emit"
-version = "0.11.0"
+# TEST BUMP, per the PM's hypothesis (2026-09-26): 0.11.0 is already published
+# and immutable, so republishing needs a new number regardless of which
+# MAJOR.MINOR ends up correct. Testing whether unpopped can stay ^0.11.0 (this
+# PR's independence finding) rather than needing 0.12.0 (the pre-#138 version
+# cascade). Not a final allocation either way -- that's the PM's/CireSnave's.
+version = "0.11.1"
 description = "CUDA backend for the neutral `unpopped` kernel generator: the `Cuda` `Backend` (IR -> .cu emitter), the NVRTC on-demand JIT compiler (`NvrtcCompiler`), and `BaracudaSynthesizer` (the Fuel kernel-seam `Synthesizer` impl). Depends on the neutral generator `unpopped` and supplies the CUDA-specific final emit + compile stage from OUTSIDE the neutral core (the swappable backend model)."
 edition.workspace = true
 rust-version.workspace = true
@@ -14,14 +19,15 @@ homepage.workspace = true
 # builds/tests without a CUDA toolchain; the Fuel synthesizer falls back to StubCompiler.
 nvrtc = ["dep:baracuda-nvrtc"]
 # The live Fuel kernel-seam Synthesizer endpoint (`BaracudaSynthesizer`) — wires the
-# fuel-kernel-seam `Synthesizer` trait + envelope. Pulls the neutral generator's own
-# `seam` feature for the PatternNode region grammar the request carries.
-# CI builds and tests this leg on every push, so OFF BY DEFAULT IS NOT UNEXERCISED
-# -- but it compiles the PUBLISHED fuel-kernel-seam-types, and Fuel patches that
-# crate with a path member, so their build compiles us against a different type.
-# See the module doc in src/seam.rs for the measurement and why the exposure is
-# nonetheless zero.
-seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam", "unpopped/seam"]
+# fuel-kernel-seam `Synthesizer` trait + envelope. Converts Fuel's PatternNode/OpTag
+# to unpopped's own PatternNode ITSELF (src/seam.rs's to_internal/optag_name) and
+# calls unpopped::synthesize directly -- no longer pulls a `seam` feature from
+# `unpopped` (that module was deleted there; see src/seam.rs's module doc). This
+# crate is now the ONLY place `fuel-kernel-seam-types` is depended on in the
+# graph, which is what dissolves the two-version-diamond this feature's comment
+# used to describe -- not just realigns it.
+# CI builds and tests this leg on every push, so OFF BY DEFAULT IS NOT UNEXERCISED.
+seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam"]
 # Enable the neutral generator's `convert` feature (tree-sitter CUDA/Slang lifters)
 # so the relocated lifter round-trip tests (`tests/convert.rs`) can reach
 # `unpopped::convert::*`. Test-only passthrough; no cuda-emit lib code
@@ -34,8 +40,11 @@ unpopped-vocab = { workspace = true }
 baracuda-nvrtc = { workspace = true, optional = true }
 # The §5 shared wire grammar + live-call envelope Fuel calls — pinned to the
 # fuel-kernel-seam release train Fuel publishes; BaracudaSynthesizer implements the Synthesizer trait.
-fuel-kernel-seam-types = { version = "0.10.3", optional = true }
-fuel-kernel-seam = { version = "0.10.3", optional = true }
+# 0.11 (not 0.10.3): Fuel published fuel-kernel-seam-types/fuel-kernel-seam 0.11.2
+# to unblock this exact dissolution (this crate is now the sole consumer of
+# these two crates in the graph, so there is nothing left to diamond against).
+fuel-kernel-seam-types = { version = "0.11", optional = true }
+fuel-kernel-seam = { version = "0.11", optional = true }
 
 [dev-dependencies]
 # The sibling backends published from the Unpopped extraction, used ONLY by the
