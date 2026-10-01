@@ -170,13 +170,23 @@ libloading = "0.8"
 thiserror = "2"
 
 # Build-time crates
-bindgen = "0.69"
+# `default-features = false` drops bindgen's default "prettyplease" feature
+# (its own alternative to shelling out to rustfmt for output formatting; we
+# never select it via `Builder::formatter`, so it's dead weight here). Needed
+# because bindgen 0.73.2 itself declares `syn = ">=2, <4"` while its
+# prettyplease dependency is still syn-2-only -- with this workspace's own
+# syn pinned to 3.x, cargo splits bindgen's direct syn edge onto 3.x while
+# prettyplease's stays on 2.x, and bindgen's own code mixes both types
+# (`prettyplease::unparse(&syn::parse_quote!(...))`), which doesn't compile.
+# Dropping prettyplease removes that edge entirely; the default formatter
+# (rustfmt) is unaffected either way.
+bindgen = { version = "0.73", default-features = false, features = ["logging", "runtime"] }
 cc = "1"
 
 # Proc-macro toolbox
 proc-macro2 = "1"
 quote = "1"
-syn = { version = "2", features = ["full"] }
+syn = { version = "3", features = ["full"] }
 
 # Optional adapter crates
 half = { version = "2", default-features = false }
@@ -195,7 +205,7 @@ proptest = "1"
 # default html_reports feature so the harness has no transitive
 # dep on plotters / serde — the bench surface only needs the timing
 # / iteration primitives.
-criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 
 [workspace.lints.rust]
 # Promoted from warn → deny in Round 8 after the workspace-wide
