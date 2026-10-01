@@ -1,5 +1,10 @@
-// Kernels adapted from llama.cpp ggml-cuda.cu
-// https://github.com/ggerganov/llama.cpp/blob/master/ggml-cuda.cu
+// Kernels adapted from llama.cpp ggml-cuda.cu (lines 1-4319 of this file;
+// the indexed_moe_forward section starting near the end has a separate
+// origin — see its own header comment below).
+// https://github.com/ggml-org/llama.cpp (formerly ggerganov/llama.cpp)
+// License: MIT. See LICENSE-llama.cpp next to this file for the
+// verbatim text + copyright notice, and README.md's "Provenance"
+// section for dating / diff-match caveats.
 #include "cuda_fp16.h"
 #include "cuda_bf16.h"
 #include<stdint.h>
@@ -4346,6 +4351,10 @@ extern "C" __global__ void
  * @author
  *   Guoqing Bao
  *   Part of the project: https://github.com/guoqingbao/vllm.rs/
+ *   (that project has since been renamed to
+ *   https://github.com/guoqingbao/xinfer — GitHub redirects the old
+ *   URL. Unrelated to vllm-project/vllm despite the name. License:
+ *   MIT — see LICENSE-xinfer next to this file.)
  * @param all_weights Pointer to the beginning of the weight tensor [num_experts, n, k].
  * @param all_inputs Pointer to the beginning of the input tensor [batch * topk, k].
  * @param indices Pointer to the expert indices for each task [batch * topk].

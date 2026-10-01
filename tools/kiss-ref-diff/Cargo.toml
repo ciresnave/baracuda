@@ -16,10 +16,9 @@ publish = false
 # all, with no signal, because three exclusions intersected: the root
 # Cargo.lock cannot see it (its own [workspace] is a second resolution root),
 # no CI job built it, and no `cargo update` reaches a 0.1.x pin. See #122.
-# kiss-ref is now PUBLIC + on crates.io, so its deps are normal version pins (the
-# in-tree CPU converter in baracuda-kernelgen shares the same 0.1.0 pin); this
-# tool adds the device legs on top. Build + run it explicitly on a CUDA box — see
-# README.md.
+# kiss-ref is now PUBLIC + on crates.io, so its deps are normal version pins;
+# this tool adds the device legs on top of the CPU-only oracle Unpopped already
+# tests against. Build + run it explicitly on a CUDA box — see README.md.
 [workspace]
 
 [[bin]]
@@ -27,13 +26,14 @@ name = "kiss-ref-diff"
 path = "main.rs"
 
 [dependencies]
-# Published crates.io pin (was git rev 417cc2e, pre-publish). Matches the in-tree
-# converter's dev-dep so the CPU legs are byte-identical across both. Caret range
-# stays inside 0.1.x (0.2.0 is the deliberate breaking upgrade — see the
-# consolidation design doc).
-kiss-ref-core = "0.2.3"
-kiss-ops-vocab = "0.2.3"
-kiss-classify-vocab = "0.2.3"
+# Published crates.io pin (was git rev 417cc2e, pre-publish). Matches Unpopped's
+# own pin (bumped to 0.3.4 in Unpopped#24, Dtype::S8->I8 rename + a new
+# complex.rs module -- neither touches a dtype variant this tool constructs)
+# so the CPU legs stay byte-identical across both. Coordinated directly with
+# the Unpopped lane before bumping past 0.2.3 (#130).
+kiss-ref-core = "0.3.4"
+kiss-ops-vocab = "0.3.4"
+kiss-classify-vocab = "0.3.4"
 unpopped = "0.11.0"
 # `Cuda` (the emitter the differential lowers through) moved to the CUDA backend
 # crate in the Unpopped carve; the neutral generator stays for `generate`/IR.
