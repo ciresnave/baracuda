@@ -768,6 +768,18 @@ inline int32_t status_from_launch(cudaError_t err) {
 
 constexpr int GGML_CUDA_MMV_Y = 1;
 
+// Column stride of the shared type-0/1 MMVQ kernel (`dequantize_mul_mat_vec`
+// in `baracuda_gguf.cuh`): `2 * GGML_CUDA_DMMV_X`. Its last stride reads all
+// of its columns, so an `ncols` that doesn't divide evenly reads past the
+// weight buffer (and, worse, into the NEXT row's weight, which stays inside
+// the allocation and so is invisible to compute-sanitizer memcheck). Mirrors
+// `DMMV_ITER_STRIDE_COLS` in `baracuda-kernels/src/quantize/gguf/mmvq.rs` —
+// keep the two in sync; that Rust constant is the plan layer's copy of the
+// SAME rule, and this one exists because #128 measured that a caller who uses
+// this crate's raw `extern "C"` launchers never reaches the plan layer at
+// all. See issue #128.
+constexpr int DMMV_ITER_STRIDE_COLS = 64;
+
 template <typename Kernel, typename ActT, typename DstT>
 inline int32_t launch_type01_mmvq(
     Kernel kernel,
@@ -780,6 +792,7 @@ inline int32_t launch_type01_mmvq(
     cudaStream_t stream)
 {
     if (ncols <= 0 || nrows <= 0 || (ncols % qk) != 0) return 2;
+    if ((ncols % DMMV_ITER_STRIDE_COLS) != 0) return 2;
     const int block_num_y = ceil_div_host(nrows, GGML_CUDA_MMV_Y);
     dim3 grid(block_num_y, 1, 1);
     dim3 block(WARP_SIZE, GGML_CUDA_MMV_Y, 1);
@@ -1938,6 +1951,7 @@ inline int32_t launch_type01_mmvq_strided(
     cudaStream_t stream)
 {
     if (ncols <= 0 || nrows <= 0 || (ncols % qk) != 0) return 2;
+    if ((ncols % DMMV_ITER_STRIDE_COLS) != 0) return 2;
     const int block_num_y = ceil_div_host(nrows, GGML_CUDA_MMV_Y);
     dim3 grid(block_num_y, 1, 1);
     dim3 block(WARP_SIZE, GGML_CUDA_MMV_Y, 1);
