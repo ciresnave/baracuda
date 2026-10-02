@@ -120,8 +120,14 @@ fn q8_0_batched_ncols32_via_raw_ffi_declines() {
     let mut activation = vec![1.0f32; 32];
     activation.extend(std::iter::repeat_n(10.0f32, 32)); // deliberately allocated
 
-    let (status, got) =
-        call_raw_q8_0_batched(&ctx, &stream, ncols, n_rows_per_expert, &weight, &activation);
+    let (status, got) = call_raw_q8_0_batched(
+        &ctx,
+        &stream,
+        ncols,
+        n_rows_per_expert,
+        &weight,
+        &activation,
+    );
 
     assert_ne!(
         status, 0,
@@ -152,8 +158,14 @@ fn q8_0_batched_ncols64_via_raw_ffi_computes_correctly() {
 
     let activation = vec![1.0f32; 64];
 
-    let (status, got) =
-        call_raw_q8_0_batched(&ctx, &stream, ncols, n_rows_per_expert, &weight, &activation);
+    let (status, got) = call_raw_q8_0_batched(
+        &ctx,
+        &stream,
+        ncols,
+        n_rows_per_expert,
+        &weight,
+        &activation,
+    );
 
     assert_eq!(
         status, 0,
@@ -161,10 +173,7 @@ fn q8_0_batched_ncols64_via_raw_ffi_computes_correctly() {
     );
     let expected = [64.0f32, 128.0f32];
     for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (g - e).abs() < 1e-3,
-            "row {i}: got {g}, expected {e}"
-        );
+        assert!((g - e).abs() < 1e-3, "row {i}: got {g}, expected {e}");
     }
 }
 
