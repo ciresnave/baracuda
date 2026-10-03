@@ -18,6 +18,26 @@ single file after the "reorganize source code" commit `f3f65429c4`
 each with its own independent commit history, which is why the pins
 below differ file to file.
 
+## ✅ RESOLVED 2026-10-02 — read this before the finding below
+
+CireSnave ruled directly on the question this section raised (verbatim,
+relayed via the PM): *"Baracuda needs to get the Unpopped parser and emitter
+for CUDA to a point where it supports each architecture from sm_61 through
+the latest. ... Baracuda will be supporting everything from sm_61 forward."*
+**sm_61 is in scope.** The path is extending `baracuda-cuda-parse`/
+`baracuda-cuda-emit` + Unpopped's conversion pipeline — explicitly **not** a
+parallel hand-written non-tensor-core kernel family (ruled out).
+
+The finding below is still factually accurate about the **hand-written**
+kernel crates (`baracuda-kernels-sys` genuinely can't run its tensor-core
+kernels on sm_61 without a different kernel body) — keep reading it for
+that. But its framing of this as "blocked on an architecture decision" is
+superseded: the decision is made, and it turns out the decision doesn't even
+require the from-scratch kernel body this section assumed, because the
+IR-emit path was never tensor-core-dependent to begin with. See
+[`docs/sm61-parse-emit-gap-analysis.md`](sm61-parse-emit-gap-analysis.md)
+for the actual gap list under the ruled-on path.
+
 ## ⚠️ Blocking finding: baracuda does not target sm_61 today
 
 **This contradicts the task's stated Phase B priority ("sm_61 (the
