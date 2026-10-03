@@ -1,11 +1,14 @@
 [package]
 name = "baracuda-cuda-parse"
-# Allocated by the PM (2026-09-25), verifying the repo's own documented rule
-# (workspace Cargo.toml, baracuda-cuda-emit's entry): MAJOR.MINOR follows the
-# `unpopped` line this crate builds against (0.11), PATCH is baracuda's own
-# counter. Stays 0.11.0 even as Unpopped moves to 0.11.2 -- `^0.11.0` already
-# covers it; PATCH tracking Unpopped's own patch number is not the rule.
-version = "0.11.0"
+# Bumped 2026-10-03 alongside baracuda-cuda-emit's #149 version jump: this is
+# the OTHER crate on the exception line, with the same `unpopped`/
+# `unpopped-vocab` dependency, so the same MAJOR.MINOR-follows-unpopped rule
+# applies -- the workspace moved the whole unpopped family to 0.14.3 (#149),
+# so this crate's version follows to 0.14.3 too. PATCH stays baracuda's own
+# counter (0.14.3 chosen to match baracuda-cuda-emit exactly since both
+# crates work with the identical Unpopped release, not because PATCH tracks
+# Unpopped's own patch number as a rule).
+version = "0.14.3"
 description = "CUDA -> IR frontend for the neutral `unpopped` kernel generator: the tree-sitter grammar binding (`parse_cuda`), the CUDA residue list, and the `CUDA` `Frontend` descriptor. Depends on the neutral generator `unpopped` (feature `convert`) and supplies the CUDA-specific parse-side surface from OUTSIDE the neutral core, mirroring `baracuda-cuda-emit`'s emit-side placement."
 edition.workspace = true
 # NOT `rust-version.workspace = true` (1.85): unlike baracuda-cuda-emit, whose
