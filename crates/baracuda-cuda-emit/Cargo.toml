@@ -1,10 +1,14 @@
 [package]
 name = "baracuda-cuda-emit"
-# TEST BUMP, per the PM's hypothesis (2026-09-26): 0.11.0 is already published
-# and immutable, so republishing needs a new number regardless of which
-# MAJOR.MINOR ends up correct. Testing whether unpopped can stay ^0.11.0 (this
-# PR's independence finding) rather than needing 0.12.0 (the pre-#138 version
-# cascade). Not a final allocation either way -- that's the PM's/CireSnave's.
+# RESOLVED 2026-10-03: `unpopped` could NOT stay ^0.11.0. Bumping only
+# `unpopped-vocab` (0.11.0 -> 0.14.3) put two semver-incompatible copies of it
+# in this crate's own dependency graph (one direct, one transitive through
+# `unpopped 0.11.0` itself, which still required `unpopped-vocab ^0.11.0`) --
+# 307 "two different unpopped_vocab in the graph" type-identity errors, not API
+# breakage. The whole family (`unpopped`/`unpopped-vocab`/`unpopped-cpu-c`/
+# `unpopped-slang`) now moves together at 0.14.3. Per the MAJOR.MINOR-follows-
+# unpopped exception rule this crate is already on, its own version needs to
+# become 0.14.x -- not yet done here, the PM allocates the real number.
 version = "0.11.1"
 description = "CUDA backend for the neutral `unpopped` kernel generator: the `Cuda` `Backend` (IR -> .cu emitter), the NVRTC on-demand JIT compiler (`NvrtcCompiler`), and `BaracudaSynthesizer` (the Fuel kernel-seam `Synthesizer` impl). Depends on the neutral generator `unpopped` and supplies the CUDA-specific final emit + compile stage from OUTSIDE the neutral core (the swappable backend model)."
 edition.workspace = true
@@ -54,8 +58,8 @@ fuel-kernel-seam = { version = "0.11", optional = true }
 # a number here becomes a citation with no invalidation the next time either bumps.)
 # Test-only: no lib code depends on them. Kept as registry deps (not path) so
 # `cargo package` ships a tree that resolves for downloaders.
-unpopped-cpu-c = "0.11.0"
-unpopped-slang = "0.11.0"
+unpopped-cpu-c = "0.14.3"
+unpopped-slang = "0.14.3"
 
 [lints]
 workspace = true
