@@ -62,12 +62,28 @@ Unpopped's own plan-validation gate correctly started rejecting it under
 
 70 crates move to `0.0.1-alpha.84`. `baracuda-cuda-emit` moves independently
 to `0.14.3` on the `unpopped`-tracking exception line; `baracuda-cuda-parse`
-stays at `0.11.0` for now (not touched by this PR — flagged separately,
-pending the same question `baracuda-cuda-emit` just answered).
+stayed at `0.11.0` in #149 (flagged, not fixed there — the same question
+`baracuda-cuda-emit` just answered).
 
-**Not yet published to crates.io as of this entry** — the version is
-allocated on `main` at gate time; `0.0.1-alpha.82` remains the last version
-actually live on the registry until the publish runs.
+**Follow-up, same day**: `baracuda-cuda-parse` — the other crate on the
+exception line, same `unpopped`/`unpopped-vocab` dependency — moves to
+`0.14.3` too, for the identical reason. Also corrected a stale README claim
+that this crate was unpublished (`publish = false`); it has carried no such
+field since it was published to crates.io on 2026-09-26, and the README
+paragraph describing the exception line hadn't been updated since. The
+"70 publishable crates" status line is corrected to the real, grepped count:
+72 crates total, 71 publishable, 1 non-publishable (`baracuda-kernels-bench`).
+
+**Publishing to crates.io in two phases (2026-10-03).** Phase 1 publishes 8
+crates at `alpha.84`: `baracuda-types-derive`, `baracuda-core`,
+`baracuda-cuda-sys`, `baracuda-types`, `baracuda-driver`,
+`baracuda-kernels-types`, `baracuda-cuda-vocab`, `baracuda-cuda-emit`, plus
+`baracuda-cuda-parse` (joins once this PR merges). Phase 2, during a
+scheduled quiet window, publishes the remaining ~63 crates (including the 7
+CUTLASS-forging ones). Until Phase 2 completes, those crates stay at their
+previous published version on crates.io even though the source tree here is
+uniformly at `alpha.84` — `0.0.1-alpha.82` remains the last version actually
+live on the registry for most of the family until that run happens.
 
 ## 0.0.1-alpha.83 — 2026-09-27 (MMVQ launcher-side width decline)
 
