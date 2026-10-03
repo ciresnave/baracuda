@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.83-orange)
+![Status](https://img.shields.io/badge/status-alpha.84-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x%2F13.x-76b900)
 ![Tests](https://img.shields.io/badge/GPU%20regression-green-success)
 
@@ -81,7 +81,7 @@ optimizer are fluid across `alpha.N` bumps.
 
 ## Status
 
-**In active development — alpha.83** (70 publishable crates). The GPU
+**In active development — alpha.84** (70 publishable crates). The GPU
 regression sweep runs green on an RTX 4070 (sm_89); the current frontier
 is the **kernel-specialization era** — the [`baracuda-kernelgen`] IR +
 multi-backend emitter, its CPU oracle and precision-first variants, and
@@ -260,7 +260,7 @@ baracuda-kernels = { version = "0.0.1-alpha.82", features = ["sm89", "cudnn"] }
 baracuda-driver  = "0.0.1-alpha.82"
 ```
 
-> `main` is at `0.0.1-alpha.83`; the example above stays at the last version
+> `main` is at `0.0.1-alpha.84`; the example above stays at the last version
 > actually published to crates.io until that publish happens (main version and
 > published version are allowed to differ briefly — see `CHANGELOG.md`).
 

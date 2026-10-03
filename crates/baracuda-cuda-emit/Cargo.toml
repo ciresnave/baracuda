@@ -9,7 +9,7 @@ name = "baracuda-cuda-emit"
 # `unpopped-slang`) now moves together at 0.14.3. Per the MAJOR.MINOR-follows-
 # unpopped exception rule this crate is already on, its own version needs to
 # become 0.14.x -- not yet done here, the PM allocates the real number.
-version = "0.11.1"
+version = "0.14.3"
 description = "CUDA backend for the neutral `unpopped` kernel generator: the `Cuda` `Backend` (IR -> .cu emitter), the NVRTC on-demand JIT compiler (`NvrtcCompiler`), and `BaracudaSynthesizer` (the Fuel kernel-seam `Synthesizer` impl). Depends on the neutral generator `unpopped` and supplies the CUDA-specific final emit + compile stage from OUTSIDE the neutral core (the swappable backend model)."
 edition.workspace = true
 rust-version.workspace = true

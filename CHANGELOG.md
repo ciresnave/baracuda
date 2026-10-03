@@ -16,6 +16,59 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.84 — 2026-10-03 (unpopped-vocab family unification; sm_61-through-latest groundwork)
+
+Per CireSnave's ruling that baracuda will support sm_61 through the latest
+architecture via Unpopped's CUDA parse/emit pipeline (board #106), the
+workspace moves off a stale `unpopped-vocab 0.11.0` pin and onto the current
+`unpopped`/`unpopped-vocab`/`unpopped-cpu-c`/`unpopped-slang 0.14.3` line
+(#149). Bumping `unpopped-vocab` alone would have put two semver-incompatible
+copies of it in `baracuda-cuda-emit`'s dependency graph (one direct, one
+transitive through `unpopped 0.11.0`); the whole family moves together.
+
+**`baracuda-cuda-emit` 0.11.1 → 0.14.3** (the `unpopped`-tracking exception
+line: its MAJOR.MINOR now matches the `unpopped` it builds against).
+
+**`baracuda-kernels-types` carries a visible dependency change even though its
+own public surface is purely additive.** It re-exports `unpopped_vocab::*`
+wholesale; diffed byte-for-byte against the 0.11.0 and 0.14.3 published
+tarballs: 5 new names (`DeriveDecline`, `dtype_numeric_kind`,
+`dtype_storage_bits`, `try_structure_key`, `try_structure_key_token`), nothing
+removed or renamed. Fuel, which consumes this re-export, sees only additions.
+
+**Fixed four of baracuda's own `cuda.rs` gates that were reading
+unpopped-vocab 0.14.0's structure-key semantics change incorrectly** (that
+change itself landed cleanly in #148/the Unpopped#36 review — this is
+baracuda's own code catching up, not a defect in Unpopped). unpopped-vocab
+0.14.0 made the broadcast mask frame-coordinate and right-aligned
+(KISS-Classify §6.5-0014 as amended by KISS#519): a lower-rank operand's
+"this frame axis is absent" padding bit now shares bit positions with a real
+own-axis stride-0 broadcast bit. The reduction general-path and im2col gates
+read that mask by raw axis index, conflating the two, so a reduction/im2col
+output that legitimately collapses rank (the entire point of those ops)
+started reading as spuriously aliased. Switched both to
+`out_key.contig == Contiguity::Broadcast`, which is driven by the operand's
+own-axis-only `own_bcast` and is blind to frame padding by construction.
+
+Two test fixes alongside the gate fix, both verified against Unpopped's own
+re-derivation: a stale test pinning a now-resolved 0.11-era classification
+ambiguity (renamed, expectation reversed to the new, more precise
+classification), and one real correctness finding — a test that paired a
+`RowReduce` op (which writes one value per input element) with a collapsed
+output key, a genuine out-of-bounds-write shape that the test never caught
+because it only grepped emitted source text and never ran the kernel.
+Unpopped's own plan-validation gate correctly started rejecting it under
+0.14.0; the fix was the test's key shape, not the gate.
+
+70 crates move to `0.0.1-alpha.84`. `baracuda-cuda-emit` moves independently
+to `0.14.3` on the `unpopped`-tracking exception line; `baracuda-cuda-parse`
+stays at `0.11.0` for now (not touched by this PR — flagged separately,
+pending the same question `baracuda-cuda-emit` just answered).
+
+**Not yet published to crates.io as of this entry** — the version is
+allocated on `main` at gate time; `0.0.1-alpha.82` remains the last version
+actually live on the registry until the publish runs.
+
 ## 0.0.1-alpha.83 — 2026-09-27 (MMVQ launcher-side width decline)
 
 Closes the direct-`-sys`-caller half of #128 (#139): the type-0/1 GGUF MMVQ
