@@ -81,7 +81,8 @@ optimizer are fluid across `alpha.N` bumps.
 
 ## Status
 
-**In active development — alpha.84** (70 publishable crates). The GPU
+**In active development — alpha.84** (72 crates, 71 publishable — `baracuda-kernels-bench` carries `publish = false`).
+**Publishing to crates.io in two phases (2026-10-03):** Phase 1 — `baracuda-types-derive`, `baracuda-core`, `baracuda-cuda-sys`, `baracuda-types`, `baracuda-driver`, `baracuda-kernels-types`, `baracuda-cuda-vocab`, `baracuda-cuda-emit`, `baracuda-cuda-parse` — publishes now. Phase 2 — the remaining ~63 crates, including the 7 CUTLASS-forging ones — publishes later, during a scheduled quiet window. Until Phase 2 completes, those crates are still only available on crates.io at their previous published version even though the source tree here is uniformly at alpha.84 — check the registry, not just this repo, before `cargo add`-ing one of them. The GPU
 regression sweep runs green on an RTX 4070 (sm_89); the current frontier
 is the **kernel-specialization era** — the [`baracuda-kernelgen`] IR +
 multi-backend emitter, its CPU oracle and precision-first variants, and
@@ -276,12 +277,16 @@ baracuda-driver  = "0.0.1-alpha.82"
 > **Two exceptions: `baracuda-cuda-emit` and `baracuda-cuda-parse`.** Each
 > crate's version says which [`unpopped`](https://crates.io/crates/unpopped)
 > it works with: MAJOR.MINOR follow the `unpopped` release it builds against,
-> and PATCH is baracuda's own. So `baracuda-cuda-emit 0.11.x` and
-> `baracuda-cuda-parse 0.11.x` go with `unpopped 0.11.x`.
+> and PATCH is baracuda's own. So `baracuda-cuda-emit 0.14.x` and
+> `baracuda-cuda-parse 0.14.x` go with `unpopped 0.14.x`.
 > `baracuda-cuda-emit` has been released alongside `0.0.1-alpha.81` onward;
-> `baracuda-cuda-parse` joined the exception line at `0.0.1-alpha.82`, and is
-> **UNPUBLISHED** (`publish = false`) — it is not yet on crates.io, which is
-> why the dependency examples above don't list it.
+> `baracuda-cuda-parse` joined the exception line at `0.0.1-alpha.82` and has
+> since been published to crates.io (it carries no `publish = false`) —
+> **this README's own correction**: an earlier version of this paragraph
+> said it was unpublished; that was stale by the time it was written. The
+> `0.14.3` bump itself is not yet published as of this commit — the PM
+> publishes after merge, same pattern as every other version gate in this
+> repo — so don't `cargo add` it expecting `0.14.3` until that lands.
 
 A representative example — single-axis numerically stable softmax over a
 device-resident tensor:

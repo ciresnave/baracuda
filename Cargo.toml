@@ -54,7 +54,7 @@ baracuda-cuda-emit = { version = "0.14.3", path = "crates/baracuda-cuda-emit" }
 # Version 0.11.0 allocated by the PM 2026-09-25, verifying the rule above
 # (not overriding it). Cleared for crates.io publication per CireSnave's
 # ruling on board item 63(c) (2026-09-26).
-baracuda-cuda-parse = { version = "0.11.0", path = "crates/baracuda-cuda-parse" }
+baracuda-cuda-parse = { version = "0.14.3", path = "crates/baracuda-cuda-parse" }
 baracuda-cuda-vocab = { version = "0.0.1-alpha.84", path = "crates/baracuda-cuda-vocab" }
 # The neutral kernel generator + its classifier vocab were carved out and PUBLISHED
 # as the standalone vendor-neutral `unpopped` / `unpopped-vocab` (crates.io). Baracuda
