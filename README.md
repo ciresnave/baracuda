@@ -407,11 +407,15 @@ features — convenient when you want everything; overkill when you don't.
 
 ## Hardware support
 
-baracuda targets **Ampere and newer** by design. Pre-Ampere GPUs lack the
+**Two different things both answer "what hardware does baracuda support," and they currently give different answers — read both.**
+
+### The hand-written kernel crates (`baracuda-kernels-sys` and siblings)
+
+These target **Ampere and newer**, unchanged. Pre-Ampere GPUs lack the
 tensor-core instructions and async-copy primitives the bespoke kernels are
-written against (`mma.sync.m16n8k*`, `cp.async`, `ldmatrix`), and we have
-no desire to ship a slower SIMT fallback for hardware that's eight years
-old.
+written against (`mma.sync.m16n8k*`, `cp.async`, `ldmatrix`), and hand-writing
+a second, parallel SIMT kernel body for every op family is not planned — see
+the next section for why that's not needed.
 
 | Compute capability | NVIDIA marketing names | baracuda support |
 | --- | --- | --- |
@@ -419,11 +423,31 @@ old.
 | sm_89 | Ada Lovelace (RTX 40xx, L40, L4) | feature-gated specialized kernels (FP8, larger Flash Attention tiles) |
 | sm_90a | Hopper async (H100, H200) | stubs in place; full specialization pending Phase 11 |
 | sm_100 | Blackwell | post-Phase-11 |
-| ≤ sm_75 (Turing, Volta, Pascal, …) | — | **unsupported** |
+| ≤ sm_75 (Turing, Volta, Pascal, …) | — | **unsupported by the hand-written kernel crates** |
 
 The default `sm80` build runs forward-compatibly on Ada and Hopper through
 JIT-compiled PTX; turn on `sm89` to pick up the FP8 and Flash-Attention
 sibling plans tuned for Ada's larger register file.
+
+### The project's overall target range: sm_61 through the latest
+
+CireSnave ruled (2026-10-02, verbatim): *"Baracuda needs to get the Unpopped
+parser and emitter for CUDA to a point where it supports each architecture
+from sm_61 through the latest. Once that is done, Unpopped can use those to
+convert existing kernels to all architectures and the architecture support in
+Baracuda's other crates largely materializes on its own with a simple call to
+Unpopped. ... Baracuda will be supporting everything from sm_61 forward."*
+
+The path is **`baracuda-cuda-parse`/`baracuda-cuda-emit` (the IR parser +
+emitter) and Unpopped's conversion pipeline**, not a second hand-written
+kernel family. See
+[`docs/sm61-parse-emit-gap-analysis.md`](docs/sm61-parse-emit-gap-analysis.md)
+for the current gap list: the IR-emitted CUDA source is already portable
+scalar code with no tensor-core/async-copy intrinsics anywhere, so the
+concrete, baracuda-owned blocker is narrower than it looks — it's in the
+NVRTC compile-flag wiring, not the codegen templates. **This is in-progress
+work (Phase B), not something already shipped** — don't read this section as
+"sm_61 works today."
 
 ## Cargo features
 
