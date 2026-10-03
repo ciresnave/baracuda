@@ -163,7 +163,7 @@ static __device__ void mmvq_q2_K_tmpl(
                   "16 must be divisible by K_QUANTS_PER_ITERATION");
 
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
 
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;
@@ -258,7 +258,7 @@ static __device__ void mmvq_q3_K_tmpl(
     DstT * __restrict__ dst, const int ncols, int nrows)
 {
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
 
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;
@@ -356,7 +356,7 @@ static __device__ void mmvq_q4_K_tmpl(
     DstT * __restrict__ dst, const int ncols, int nrows)
 {
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;
 
@@ -600,7 +600,7 @@ static __device__ void mmvq_q8_K_tmpl(
                   "16 must be divisible by K_QUANTS_PER_ITERATION");
 
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
 
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;
@@ -671,7 +671,7 @@ static __device__ void mmvq_q6_K_tmpl(
                   "16 must be divisible by K_QUANTS_PER_ITERATION");
 
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
 
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;
@@ -1342,7 +1342,7 @@ static __device__ void mmvq_q2_K_actstrided_tmpl(
                   "16 must be divisible by K_QUANTS_PER_ITERATION");
 
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
 
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;
@@ -1441,7 +1441,7 @@ static __device__ void mmvq_q3_K_actstrided_tmpl(
     const int64_t stride_y)
 {
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
 
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;
@@ -1543,7 +1543,7 @@ static __device__ void mmvq_q4_K_actstrided_tmpl(
     const int64_t stride_y)
 {
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;
 
@@ -1779,7 +1779,7 @@ static __device__ void mmvq_q6_K_actstrided_tmpl(
                   "16 must be divisible by K_QUANTS_PER_ITERATION");
 
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
 
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;
@@ -1870,7 +1870,7 @@ static __device__ void mmvq_q8_K_actstrided_tmpl(
                   "16 must be divisible by K_QUANTS_PER_ITERATION");
 
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
-    if (row > nrows) return;
+    if (row >= nrows) return;
 
     const int num_blocks_per_row = ncols / QK_K;
     const int ib0 = row*num_blocks_per_row;

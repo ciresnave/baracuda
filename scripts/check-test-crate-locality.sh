@@ -28,6 +28,14 @@ exempt=(
   # exemption the moment the file stopped qualifying for it — as designed.
   "crates/baracuda-types-derive/tests/derive_device_repr.rs" # proc-macro test drives the consumer crate
   "crates/baracuda-runtime/tests/external_smoke.rs"          # external-binding smoke
+  # #140: a standalone host-side re-implementation of the K-quant MMVQ launchers'
+  # grid/block row arithmetic (kernels/gguf/mmvq.cu, compiled CUDA — not Rust, so
+  # no Rust crate name is ever the right thing for it to "name"). It has zero
+  # `use` of any crate, baracuda_kernels or baracuda_kernels_sys included; it
+  # proves the row>=nrows fix against plain integer math, not against compiled/
+  # linked code. Lives next to #139/#141's sibling MMVQ tests for discoverability,
+  # not because it exercises baracuda-kernels' compiled surface.
+  "crates/baracuda-kernels/tests/mmvq_kquant_row_guard_offbyone.rs"
 )
 is_exempt() { local f="$1" e; for e in "${exempt[@]}"; do [ "$f" = "$e" ] && return 0; done; return 1; }
 libname() { local c; c=$(basename "$(dirname "$(dirname "$1")")"); echo "${c//-/_}"; }

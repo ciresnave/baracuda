@@ -173,6 +173,24 @@ inline int32_t derive_m_total(size_t workspace_bytes) {
     return (int32_t)(workspace_bytes / sizeof(int32_t));
 }
 
+// #141: the type-0/1 batched MMVQ template (`mmvq_batched_type01_tmpl` in
+// `baracuda_mmvq_batched.cuh`) reads whole 64-column strides per iteration
+// (`iter_stride = 2 * GGML_CUDA_DMMV_X = 64`), exactly like the single-MMVQ
+// `dequantize_mul_mat_vec` template #139 fixed. An `n_cols` that isn't a
+// multiple of 64 reads past the row's own blocks and into the next row's
+// (or next expert's) weight data -- silently wrong, invisible to
+// compute-sanitizer (the read stays inside the overall allocation). This
+// is the raw-FFI-layer twin of #139/#128; the Rust plan layer
+// (`GgufMmvqBatchedPlan::select` in `mmvq_batched.rs`) already declines
+// this correctly via its own `DMMV_ITER_STRIDE_COLS` + `uses_dmmv_stride`,
+// but a caller using baracuda-kernels-sys's raw `extern "C"` batched
+// launchers directly bypasses that plan-layer check entirely. k-quant
+// formats (QK_K=256-element blocks) don't need this extra check -- their
+// per-format templates index entirely within one block's own fixed-size
+// arrays, so only the `n_cols % QK_K == 0` block-divisibility check
+// (already applied below for every quantized format) matters for them.
+constexpr int DMMV_ITER_STRIDE_COLS = 64;
+
 } // anonymous namespace
 
 // =============================================================================
@@ -187,7 +205,10 @@ inline int32_t derive_m_total(size_t workspace_bytes) {
 // =============================================================================
 
 // f32 = un-suffixed FFI symbol; pick the `<base>_f32_store|atomic_kernel`.
-#define BCDA_BATCHED_QUANT_RUN_F32(qtype) \
+// `qk` = block size (32 for type-0/1, QK_K for k-quants); `needs_dmmv` = true
+// for the 5 type-0/1 formats that go through the fixed-64-column-stride
+// template (see the `DMMV_ITER_STRIDE_COLS` comment above). #141.
+#define BCDA_BATCHED_QUANT_RUN_F32(qtype, qk, needs_dmmv) \
 extern "C" int32_t baracuda_kernels_mmvq_##qtype##_batched_run( \
     int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols, \
     const void * weights, const void * activations, \
@@ -197,6 +218,8 @@ extern "C" int32_t baracuda_kernels_mmvq_##qtype##_batched_run( \
 { \
     if (!validate_problem(n_experts, n_rows_per_expert, n_cols, \
         weights, activations, sorted_token_ids, expert_offsets, output)) return 2; \
+    if ((n_cols % (qk)) != 0) return 2; \
+    if ((needs_dmmv) && (n_cols % DMMV_ITER_STRIDE_COLS) != 0) return 2; \
     const int32_t m_total = derive_m_total(workspace_bytes); \
     cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr); \
     if (m_total <= 0) return 0; \
@@ -222,7 +245,7 @@ extern "C" int32_t baracuda_kernels_mmvq_##qtype##_batched_run( \
     return status_from_launch(cudaPeekAtLastError()); \
 }
 
-#define BCDA_BATCHED_QUANT_RUN_SUFFIX(qtype, act_t, suffix) \
+#define BCDA_BATCHED_QUANT_RUN_SUFFIX(qtype, act_t, suffix, qk, needs_dmmv) \
 extern "C" int32_t baracuda_kernels_mmvq_##qtype##_batched_##suffix##_run( \
     int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols, \
     const void * weights, const void * activations, \
@@ -232,6 +255,8 @@ extern "C" int32_t baracuda_kernels_mmvq_##qtype##_batched_##suffix##_run( \
 { \
     if (!validate_problem(n_experts, n_rows_per_expert, n_cols, \
         weights, activations, sorted_token_ids, expert_offsets, output)) return 2; \
+    if ((n_cols % (qk)) != 0) return 2; \
+    if ((needs_dmmv) && (n_cols % DMMV_ITER_STRIDE_COLS) != 0) return 2; \
     const int32_t m_total = derive_m_total(workspace_bytes); \
     cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr); \
     if (m_total <= 0) return 0; \
@@ -257,22 +282,24 @@ extern "C" int32_t baracuda_kernels_mmvq_##qtype##_batched_##suffix##_run( \
     return status_from_launch(cudaPeekAtLastError()); \
 }
 
-#define BCDA_BATCHED_QUANT_FANOUT_RUN(qtype) \
-    BCDA_BATCHED_QUANT_RUN_F32(qtype) \
-    BCDA_BATCHED_QUANT_RUN_SUFFIX(qtype, __half,        f16) \
-    BCDA_BATCHED_QUANT_RUN_SUFFIX(qtype, __nv_bfloat16, bf16)
+#define BCDA_BATCHED_QUANT_FANOUT_RUN(qtype, qk, needs_dmmv) \
+    BCDA_BATCHED_QUANT_RUN_F32(qtype, qk, needs_dmmv) \
+    BCDA_BATCHED_QUANT_RUN_SUFFIX(qtype, __half,        f16,  qk, needs_dmmv) \
+    BCDA_BATCHED_QUANT_RUN_SUFFIX(qtype, __nv_bfloat16, bf16, qk, needs_dmmv)
 
-BCDA_BATCHED_QUANT_FANOUT_RUN(q4_0)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q4_1)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q5_0)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q5_1)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q8_0)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q2_K)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q3_K)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q4_K)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q5_K)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q6_K)
-BCDA_BATCHED_QUANT_FANOUT_RUN(q8_K)
+// type-0/1 (32-element blocks, fixed-64-col-stride template, #141)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q4_0, 32, true)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q4_1, 32, true)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q5_0, 32, true)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q5_1, 32, true)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q8_0, 32, true)
+// k-quants (QK_K=256-element super-blocks, no extra stride constraint)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q2_K, QK_K, false)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q3_K, QK_K, false)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q4_K, QK_K, false)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q5_K, QK_K, false)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q6_K, QK_K, false)
+BCDA_BATCHED_QUANT_FANOUT_RUN(q8_K, QK_K, false)
 
 #undef BCDA_BATCHED_QUANT_RUN_F32
 #undef BCDA_BATCHED_QUANT_RUN_SUFFIX
@@ -432,8 +459,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q4_0_batched_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -444,8 +472,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q4_0_batched_bf16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -456,8 +485,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q4_0_batched_f16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -468,8 +498,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q4_1_batched_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -480,8 +511,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q4_1_batched_bf16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -492,8 +524,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q4_1_batched_f16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -537,8 +570,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q5_0_batched_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -549,8 +583,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q5_0_batched_bf16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -561,8 +596,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q5_0_batched_f16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -573,8 +609,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q5_1_batched_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -585,8 +622,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q5_1_batched_bf16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -597,8 +635,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q5_1_batched_f16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -675,8 +714,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q8_0_batched_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -687,8 +727,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q8_0_batched_bf16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
@@ -699,8 +740,9 @@ extern "C" int32_t baracuda_kernels_mmvq_q8_0_batched_f16_can_implement(
     const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
 {
     if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
-    if (n_cols > 0 && n_cols < 64) return 2;
-    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    // #141: must match the _run launcher's DMMV_ITER_STRIDE_COLS check
+    // (ncols % 64 == 0), not the looser >=64 && %32==0 this used to say.
+    if (n_cols > 0 && (n_cols % 64) != 0) return 2;
     return 0;
 }
 
