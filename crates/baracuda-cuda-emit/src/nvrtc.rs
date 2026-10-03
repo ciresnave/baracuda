@@ -85,3 +85,31 @@ fn arch_flag(arch: ArchSku) -> &'static str {
         ArchSku::Sm90a => "sm_90a",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ArchSku, arch_flag};
+    use unpopped_vocab::TargetId;
+
+    /// Re-verified against unpopped-vocab 0.14.3 (bumped from 0.11.0): `ArchSku`
+    /// itself is unchanged (still the same closed 4 variants -- `arch_flag`'s
+    /// match above is still exhaustive with no `_ =>` arm, so this is also
+    /// proven by the compiler, not just this test). `From<ArchSku> for
+    /// TargetId` produces the token this crate's `cuda:` namespace rule
+    /// predicts (KISS-Classify SS6.8-0004): `cuda:sm{major}{minor}[letter]`,
+    /// matching the `--gpu-architecture=` flag `arch_flag` derives, modulo the
+    /// `cuda:sm` prefix vs `sm_` + underscore spelling.
+    #[test]
+    fn target_id_from_arch_sku_matches_the_cuda_token_rule() {
+        for (sku, token, flag) in [
+            (ArchSku::Sm80, "cuda:sm80", "sm_80"),
+            (ArchSku::Sm89, "cuda:sm89", "sm_89"),
+            (ArchSku::Sm90, "cuda:sm90", "sm_90"),
+            (ArchSku::Sm90a, "cuda:sm90a", "sm_90a"),
+        ] {
+            let got: TargetId = sku.into();
+            assert_eq!(got.as_str(), token, "{sku:?} -> TargetId token");
+            assert_eq!(arch_flag(sku), flag, "{sku:?} -> --gpu-architecture= flag");
+        }
+    }
+}

@@ -2984,13 +2984,21 @@ fn emit_reduction(
     // is an AOT author-error backstop (reductions never cross the JIT boundary; a
     // real reduction output is freshly-allocated dense).
     let out_key = plan.key.operands[(plan.key.n_operands as usize).saturating_sub(1)];
-    let out_aliases = if keepdim {
-        // Output axes align with the input axes.
-        kept.iter().any(|&a| out_key.bcast.is_set(a as u8))
-    } else {
-        // Collapse: output axes are the kept axes in order (0..kept.len()).
-        (0..kept.len()).any(|j| out_key.bcast.is_set(j as u8))
-    };
+    // `out_key.bcast` is the FRAME-coordinate mask, right-aligned (KISS-Classify
+    // §6.5-0014/§6.6-0008/§6.6-0013, 0.14.0+): bit `i` is set both for a real
+    // own-axis broadcast AND for a frame axis the operand lacks entirely. Reading
+    // it by raw axis index (as the old `kept`-indexed walk did) conflated the two
+    // -- a Collapse output is *always* lower rank than the input that sets the
+    // frame, so every collapse spuriously read as aliased. `out_key.contig ==
+    // Broadcast` is driven by `own_bcast` (derive_operand_key), which only scans
+    // the operand's OWN axes (`od.shape[d] > 1 && od.strides[d] == 0`) and is
+    // therefore blind to frame padding -- the correct predicate for "does this
+    // output's own shape alias", in both branches. In the keepdim branch, a
+    // reduced axis's extent is 1, so it can never set `own_bcast` regardless of
+    // its stride (the old per-axis frame-bit read was noise there too: the
+    // frame's extent at that axis comes from the wider, un-reduced input, so the
+    // bit tracks the keepdim-squeeze stride convention, not aliasing).
+    let out_aliases = out_key.contig == Contiguity::Broadcast;
     assert!(
         !out_aliases && !out_key.flipped,
         "reduction general path: output store must be injective (no broadcast on a kept \
@@ -6078,15 +6086,25 @@ fn emit_im2col(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         plan.key.n_operands
     );
     {
+        // `contig == Contig` already excludes a real OWN-axis broadcast (own_bcast
+        // feeds classify_contiguity ahead of the stride-match check, so Broadcast
+        // and Contig are mutually exclusive) -- checking `.bcast.is_empty()` on top
+        // of it was reading the FRAME mask, whose padding bits (0.14.0+,
+        // KISS-Classify §6.5-0014/§6.6-0008/§6.6-0013) are set for a lower-rank
+        // operand that lacks a frame axis, not for a real broadcast. Im2Col's
+        // output is unconditionally lower rank than its input by design, so this
+        // read a correct, dense collapsed output as if it aliased. Drop the
+        // redundant (and now wrong) frame-mask check; `contig`/`flipped` alone
+        // already express "forward-dense, no real broadcast".
         let i0 = plan.key.operands[0];
         assert!(
-            i0.contig == Contiguity::Contig && !i0.flipped && i0.bcast.is_empty(),
+            i0.contig == Contiguity::Contig && !i0.flipped,
             "cuda backend: Im2Col input 0 must be dense forward-contiguous NCHW (the \
              (((n*C+c)*H_in+in_h)*W_in+in_w) address math assumes row-major, no flip/bcast)"
         );
         let o = plan.key.operands[1];
         assert!(
-            o.contig == Contiguity::Contig && !o.flipped && o.bcast.is_empty(),
+            o.contig == Contiguity::Contig && !o.flipped,
             "cuda backend: Im2Col output must be forward-dense contiguous (empty bcast, not flipped)"
         );
     }
@@ -11487,28 +11505,37 @@ got:
     }
 
     #[test]
-    fn rowreduce_second_empty_bcast_input_is_row_streamed_not_rejected() {
-        // Increment 2 LIFTED the former "inputs>0 must be column-broadcast" guard.
-        // A second input with an EMPTY bcast mask is now classified RowStreamed (a
-        // second reduced/streamed tensor — softmax-bw's `dy` beside `y`) and ACCEPTED;
-        // the key genuinely cannot distinguish a bare rank-1 [k] from a full [n_out,k]
-        // (both have the identical {Contig, empty-bcast} operand key), so the full
-        // extent is a caller precondition at the same trust level as input 0 (see the
-        // validate_row_reduce module note). Fed wrmsnorm_op's epilogue, input 1 now
-        // indexes in1[idx] (row-streamed), NOT in1[j] (column) — proving the
-        // reclassification the lift produces.
+    fn rowreduce_bare_rank1_second_input_is_col_broadcast() {
+        // RENAMED + reversed expectation (2026-10-03, unpopped-vocab 0.11.0 -> 0.14.3
+        // bump): this test used to pin a genuine 0.11-era limitation -- a bare rank-1
+        // `[K]` operand and a full `[n_out, K]` operand both collapsed to the
+        // identical {Contig, empty-bcast} key, so the emitter couldn't tell them
+        // apart and (deliberately) classified the ambiguous case as RowStreamed,
+        // trusting the caller's declared extent.
+        //
+        // Under 0.14.0's frame-coordinate mask (KISS-Classify SS6.5-0014 as amended
+        // by KISS#519), that ambiguity is gone: `bare_w`'s own rank (1) is narrower
+        // than the frame `x`/`out` set (2), so it picks up the frame's padding bit
+        // at the axis it lacks -- `rr_role` (unpopped::plan, not baracuda's own
+        // code) reads this and now correctly classifies a bare rank-1 operand as
+        // ColBroadcast, distinct from a genuine full-rank row-streamed tensor. This
+        // is a real behavior improvement, not a regression: the ambiguity the old
+        // comment described no longer exists, so the fix is updating this test's
+        // expectation to the new, more precise classification -- not restoring the
+        // old one. Fed wrmsnorm_op's epilogue, input 1 now indexes in1[j] (column),
+        // not in1[idx] (row-streamed).
         let x = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let bare_w = OperandDesc::new(1, &[128], &[1], ElementKind::F32, 256); // bare [K]
         let out = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Normalization, &[x, bare_w, out], ArchSku::Sm89);
         let k = generate(&wrmsnorm_op(ElementKind::F32), &key, &Cuda);
         assert!(
-            k.source.contains("in1[idx]"),
-            "second empty-bcast input is row-streamed"
+            k.source.contains("in1[j]"),
+            "a bare rank-1 second input is now correctly classified as ColBroadcast under 0.14.0's frame mask"
         );
         assert!(
-            !k.source.contains("in1[j]"),
-            "not classified as a column weight"
+            !k.source.contains("in1[idx]"),
+            "not classified as row-streamed"
         );
     }
 
@@ -18272,11 +18299,36 @@ mod select_tests {
         assert_ordered_select_f32(&k.source, "reduction-post f32");
     }
 
+    /// Full-width key for an [`unpopped::ir::OpDef::row_reduce`] cell: RowReduce
+    /// is reduce -> broadcast -> elementwise, so its epilogue writes one value
+    /// PER INPUT ELEMENT, not a collapsed per-row scalar. A `[256]`-sized output
+    /// for a `[256,128]` input would be a genuine out-of-bounds write (33 KiB of
+    /// writes into an 1 KiB buffer) -- `[256,128]` on both input and output,
+    /// matching `mi_key`/`softmax_bw_key`'s shape, is the only admissible shape.
+    /// Do NOT use the collapsed `red_key` here, or with any other `row_reduce`
+    /// cell (audited 2026-10-03: every other `row_reduce` call site in this
+    /// module already uses a full-width key; this was the one exception).
+    fn row_reduce_full_key(dt: ElementKind) -> StructureKey {
+        let full = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        structure_key(OpCategory::Reduction, &[full, full], ArchSku::Sm89)
+    }
+
     #[test]
     fn select_in_row_reduce_epilogue_emits_ordered_f32() {
+        // FIXED 2026-10-03 (unpopped-vocab 0.11.0 -> 0.14.3 bump): this test used
+        // `red_key` (a COLLAPSED `[256]` output), which is wrong for a
+        // RowReduce cell -- see `row_reduce_full_key`'s doc comment. It read as
+        // passing on 0.11.0 purely because this test only greps the emitted
+        // source text and never runs the kernel, so the shape mismatch was
+        // invisible; `check_row_reduce`'s own gate (`out.bcast.is_empty() &&
+        // contig==Contig`) was supposed to catch exactly this and didn't, because
+        // the OLD own-axis mask for a `[256]` operand in isolation happened to
+        // also read empty. Since unpopped-vocab 0.14.0 the frame-coordinate mask
+        // correctly flags the rank mismatch, the gate now does its job and
+        // rejects the cell (panicking inside `unpopped::generate`) -- this is
+        // Unpopped's gate working correctly, not a regression to work around.
+        // The real fix is this test's key, not the gate: a full-width output.
         use unpopped::ir::{ReduceOp, ReduceStage};
-        // A masked row-reduce epilogue select (emit_row_reduce_impl closure): one
-        // Sum stage, epilogue `select(in0 > 0.5, 7.5, 9.25)` (reads Input(0)).
         let op = OpDef::row_reduce(
             "mrr",
             1,
@@ -18289,7 +18341,7 @@ mod select_tests {
                 .binary(BinaryOp::CmpGt, konst(0.5))
                 .select(konst(7.5), konst(9.25)),
         );
-        let k = generate(&op, &red_key(ElementKind::F32), &Cuda);
+        let k = generate(&op, &row_reduce_full_key(ElementKind::F32), &Cuda);
         assert_ordered_select_f32(&k.source, "row-reduce epilogue f32");
     }
 
