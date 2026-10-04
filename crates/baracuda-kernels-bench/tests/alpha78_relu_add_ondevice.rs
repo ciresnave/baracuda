@@ -74,7 +74,8 @@ fn relu_add_f32_scalar_writes_the_right_answer_on_device() {
         })
         .collect();
 
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let compiler =
+        NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let ptx = compiler
         .compile(&k.source, &k.name, 30_000)
         .unwrap_or_else(|e| panic!("nvrtc({}) failed: {e}", k.name));
@@ -192,7 +193,8 @@ fn relu_add_f32_vectorized_launches_by_count_unit_on_device() {
         })
         .collect();
 
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let compiler =
+        NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let ptx = compiler
         .compile(&k.source, &k.name, 30_000)
         .unwrap_or_else(|e| panic!("nvrtc({}) failed: {e}", k.name));
@@ -281,7 +283,8 @@ fn gap001_relu_add_n7_fuel_geometry_sweep() {
     let b = vec![2.0f32, 3.0, -10.0, 0.5, -1.0, 7.0, 4.0];
     let expected = vec![3.0f32, 0.0, 0.0, 0.0, 2.0, 0.0, 4.0];
 
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let compiler =
+        NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let ptx = String::from_utf8(
         compiler
             .compile(&k.source, &k.name, 30_000)

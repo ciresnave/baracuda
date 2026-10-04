@@ -120,7 +120,8 @@ extern "C" __global__ void probe(int* out, unsigned short* bits) {
 /// deciding what it means are different jobs, and interleaving them is how a
 /// setup edit silently changes a conclusion.
 fn probe_device(ctx: &Context, stream: &Stream) -> (Vec<i32>, Vec<u16>) {
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let compiler =
+        NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let ptx = compiler
         .compile(SRC, "probe", 30_000)
         .unwrap_or_else(|e| panic!("nvrtc failed: {e}"));

@@ -492,7 +492,8 @@ fn assert_within_ulp(base: &[f32], other: &[f32], max_ulp: i64) -> i64 {
 /// drifted in their panic messages, which is how a duplicated block starts
 /// telling two different stories about the same failure.
 fn compile_all(ctx: &Context, variants: &[Variant]) -> Vec<(String, Module)> {
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let compiler =
+        NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let mut modules = Vec::new();
     for v in variants {
         for k in &v.kernels {

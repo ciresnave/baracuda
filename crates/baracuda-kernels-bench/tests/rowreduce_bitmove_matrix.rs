@@ -197,7 +197,8 @@ fn rows(cell: &Cell) -> Vec<u16> {
 }
 
 fn run(ctx: &Context, stream: &Stream, kernel: &GeneratedKernel, host: &[u16]) -> Vec<u16> {
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let compiler =
+        NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let ptx = compiler
         .compile(&kernel.source, &kernel.name, 30_000)
         .unwrap_or_else(|e| panic!("nvrtc REJECTED {}: {e}\n{}", kernel.name, kernel.source));

@@ -76,7 +76,8 @@ where
         k.name
     );
 
-    let ptx = NvrtcCompiler::new(ArchSku::Sm89)
+    let ptx = NvrtcCompiler::new(ArchSku::Sm89.into())
+        .expect("Sm89 is a well-formed cuda: target")
         .compile(&k.source, &k.name, 30_000)
         .unwrap_or_else(|e| panic!("{label}: nvrtc({}) failed: {e}", k.name));
     let ptx = String::from_utf8(ptx).unwrap();
