@@ -104,7 +104,8 @@ fn optag_name(op: OpTag) -> Option<&'static str> {
         OpTag::Tanh => "Tanh",
         OpTag::Sigmoid => "Sigmoid",
         OpTag::Silu => "Silu",
-        OpTag::GeluErf => "GeluErf",
+        OpTag::Gelu => "Gelu",
+        OpTag::GeluTanh => "GeluTanh",
         OpTag::Relu => "Relu",
         OpTag::Erf => "Erf",
         OpTag::Step => "Step",
@@ -238,9 +239,19 @@ impl Synthesizer for BaracudaSynthesizer {
     fn synthesize(&self, req: &SeamRequest) -> SeamResponse {
         // The on-demand compiler: real nvrtc when compiled in, else a stub (a
         // Stub artifact a loader must refuse — keeps the endpoint callable for
-        // wiring/tests without a CUDA toolchain).
+        // wiring/tests without a CUDA toolchain). board #106 Step B:
+        // `NvrtcCompiler::new` takes the request's open `target` (not the
+        // closed `arch` SKU) and is fallible — an invalid/foreign target is a
+        // typed Declined here too, never a panic across the trait boundary.
         #[cfg(feature = "nvrtc")]
-        let compiler = NvrtcCompiler::new(req.arch);
+        let compiler = match NvrtcCompiler::new(req.target) {
+            Ok(c) => c,
+            Err(e) => {
+                return SeamResponse::Declined {
+                    reason: format!("{e}"),
+                };
+            }
+        };
         #[cfg(not(feature = "nvrtc"))]
         let compiler = unpopped::StubCompiler;
 
@@ -450,17 +461,17 @@ mod tests {
         // And through the live Synthesizer envelope: a typed Declined,
         // never a panic across the §5 boundary.
         let synth = BaracudaSynthesizer::new(1000);
-        let req = SeamRequest {
-            region: op(
+        let req = SeamRequest::new(
+            op(
                 OpTag::Mul,
                 vec![SeamNode::Bind { index: 0 }, op(OpTag::Iota, vec![])],
             ),
-            operands: operands(ElementKind::F32, 2),
-            arch: ArchSku::Sm89,
-            budget: JitBudget {
+            operands(ElementKind::F32, 2),
+            ArchSku::Sm89,
+            JitBudget {
                 max_compile_ms: 1000,
             },
-        };
+        );
         let SeamResponse::Declined { reason } = synth.synthesize(&req) else {
             panic!("expected Declined");
         };
@@ -506,14 +517,14 @@ mod tests {
             )],
         );
         let synth = BaracudaSynthesizer::new(1000);
-        let req = SeamRequest {
+        let req = SeamRequest::new(
             region,
-            operands: operands(ElementKind::F32, 3),
-            arch: ArchSku::Sm89,
-            budget: JitBudget {
+            operands(ElementKind::F32, 3),
+            ArchSku::Sm89,
+            JitBudget {
                 max_compile_ms: 1000,
             },
-        };
+        );
         let SeamResponse::Declined { reason } = synth.synthesize(&req) else {
             panic!("expected Declined (no loadable artifact without nvrtc)");
         };
@@ -601,14 +612,14 @@ mod tests {
         assert_eq!(err, JitError::MixedDtype);
         // And the live envelope path is a typed Declined, never a panic.
         let synth = BaracudaSynthesizer::new(1000);
-        let req = SeamRequest {
+        let req = SeamRequest::new(
             region,
-            operands: ops,
-            arch: ArchSku::Sm89,
-            budget: JitBudget {
+            ops,
+            ArchSku::Sm89,
+            JitBudget {
                 max_compile_ms: 1000,
             },
-        };
+        );
         assert!(matches!(
             synth.synthesize(&req),
             SeamResponse::Declined { .. }
@@ -651,14 +662,14 @@ mod tests {
             "the decline must name the withheld Where advert"
         );
         let synth = BaracudaSynthesizer::new(1000);
-        let req = SeamRequest {
+        let req = SeamRequest::new(
             region,
-            operands: operands(ElementKind::F32, 5),
-            arch: ArchSku::Sm89,
-            budget: JitBudget {
+            operands(ElementKind::F32, 5),
+            ArchSku::Sm89,
+            JitBudget {
                 max_compile_ms: 1000,
             },
-        };
+        );
         let SeamResponse::Declined { reason } = synth.synthesize(&req) else {
             panic!("expected Declined");
         };
@@ -718,14 +729,14 @@ mod tests {
         assert_eq!(err, JitError::MixedDtype);
         // And the live envelope path is a typed Declined, never a panic.
         let synth = BaracudaSynthesizer::new(1000);
-        let req = SeamRequest {
+        let req = SeamRequest::new(
             region,
-            operands: ops,
-            arch: ArchSku::Sm89,
-            budget: JitBudget {
+            ops,
+            ArchSku::Sm89,
+            JitBudget {
                 max_compile_ms: 1000,
             },
-        };
+        );
         assert!(matches!(
             synth.synthesize(&req),
             SeamResponse::Declined { .. }
@@ -737,14 +748,14 @@ mod tests {
         // An out-of-vocabulary region (Op::Gelu tanh) is an honest Declined, never
         // an error or a panic across the trait boundary.
         let synth = BaracudaSynthesizer::new(1000);
-        let req = SeamRequest {
-            region: op(OpTag::Gelu, vec![SeamNode::Bind { index: 0 }]),
-            operands: operands(ElementKind::F32, 2),
-            arch: ArchSku::Sm89,
-            budget: JitBudget {
+        let req = SeamRequest::new(
+            op(OpTag::Gelu, vec![SeamNode::Bind { index: 0 }]),
+            operands(ElementKind::F32, 2),
+            ArchSku::Sm89,
+            JitBudget {
                 max_compile_ms: 1000,
             },
-        };
+        );
         assert!(matches!(
             synth.synthesize(&req),
             SeamResponse::Declined { .. }
@@ -767,14 +778,14 @@ mod tests {
             vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
         );
         for dt in [ElementKind::Bool, ElementKind::Complex128] {
-            let req = SeamRequest {
-                region: region.clone(),
-                operands: operands(dt, 3),
-                arch: ArchSku::Sm89,
-                budget: JitBudget {
+            let req = SeamRequest::new(
+                region.clone(),
+                operands(dt, 3),
+                ArchSku::Sm89,
+                JitBudget {
                     max_compile_ms: 1000,
                 },
-            };
+            );
             assert!(
                 matches!(synth.synthesize(&req), SeamResponse::Declined { .. }),
                 "{dt:?} must Decline, not panic",
@@ -843,17 +854,17 @@ mod tests {
         );
         // And the live envelope path stays a typed Declined, never a panic.
         let synth = BaracudaSynthesizer::new(1000);
-        let req = SeamRequest {
-            region: op(
+        let req = SeamRequest::new(
+            op(
                 OpTag::Div,
                 vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
             ),
-            operands: operands(ElementKind::U8, 3),
-            arch: ArchSku::Sm89,
-            budget: JitBudget {
+            operands(ElementKind::U8, 3),
+            ArchSku::Sm89,
+            JitBudget {
                 max_compile_ms: 1000,
             },
-        };
+        );
         assert!(matches!(
             synth.synthesize(&req),
             SeamResponse::Declined { .. }
@@ -875,14 +886,14 @@ mod tests {
             )],
         );
         let synth = BaracudaSynthesizer::new(5000);
-        let req = SeamRequest {
+        let req = SeamRequest::new(
             region,
-            operands: operands(ElementKind::F32, 3),
-            arch: ArchSku::Sm89,
-            budget: JitBudget {
+            operands(ElementKind::F32, 3),
+            ArchSku::Sm89,
+            JitBudget {
                 max_compile_ms: 5000,
             },
-        };
+        );
         // Light handle — entry_point only.
         let SeamResponse::Synthesized { entry_point } = synth.synthesize(&req) else {
             panic!("expected Synthesized");

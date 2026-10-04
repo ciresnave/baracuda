@@ -44,11 +44,31 @@ unpopped-vocab = { workspace = true }
 baracuda-nvrtc = { workspace = true, optional = true }
 # The §5 shared wire grammar + live-call envelope Fuel calls — pinned to the
 # fuel-kernel-seam release train Fuel publishes; BaracudaSynthesizer implements the Synthesizer trait.
-# 0.11 (not 0.10.3): Fuel published fuel-kernel-seam-types/fuel-kernel-seam 0.11.2
-# to unblock this exact dissolution (this crate is now the sole consumer of
-# these two crates in the graph, so there is nothing left to diamond against).
-fuel-kernel-seam-types = { version = "0.11", optional = true }
-fuel-kernel-seam = { version = "0.11", optional = true }
+#
+# board #106 Step A/B (2026-10): Fuel's Step A (JitRequest/SeamRequest gains
+# `target: TargetId`, #[non_exhaustive], `::new()` ctor) is on fuel's `main` at
+# c02da3489a01ba77889e6f5a17443f510247d694 but NOT YET published to crates.io
+# (fuel's own in-repo version at that commit is 0.12.0; the eventual crates.io
+# release is fuel's "0.13.0 wave"). crates.io itself REJECTS a crate that has a
+# git-only dependency, so this pin, and baracuda-cuda-emit/-parse as a whole,
+# MUST NOT be published while it's in effect. Switch both lines below back to
+# a plain `version = "..."` crates.io dependency (whatever version fuel's
+# 0.13.0 wave actually publishes as) the moment that wave lands, then baracuda
+# is clear to publish again.
+#
+# BOTH crates are pinned to the SAME git rev, not just fuel-kernel-seam: fuel's
+# own workspace resolves fuel-kernel-seam's dependency on fuel-kernel-seam-types
+# via a workspace-internal path (see fuel's own Cargo.toml), so a git
+# dependency on fuel-kernel-seam alone already pulls a git-sourced
+# fuel-kernel-seam-types transitively. Leaving fuel-kernel-seam-types pinned to
+# crates.io "0.11" here would then put TWO DIFFERENT SOURCES of the same crate
+# name in the graph (git+https://... vs registry+https://...) — Cargo treats
+# those as distinct, incompatible types even at a matching version number,
+# which is exactly the "two unpopped-vocab copies" defect this project already
+# hit once this session (PR #149) when a dependency family was bumped
+# partially instead of together. Pinning both to this rev avoids repeating it.
+fuel-kernel-seam-types = { git = "https://github.com/ciresnave/fuel", rev = "c02da3489a01ba77889e6f5a17443f510247d694", optional = true }
+fuel-kernel-seam = { git = "https://github.com/ciresnave/fuel", rev = "c02da3489a01ba77889e6f5a17443f510247d694", optional = true }
 
 [dev-dependencies]
 # The sibling backends published from the Unpopped extraction, used ONLY by the

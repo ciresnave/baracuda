@@ -520,7 +520,12 @@ fn nvrtc_compiles_a_synthesized_kernel() {
         )],
     );
     let r = req(region, 2, ElementKind::F32, "jit_relu_add");
-    let resp = synthesize(&r, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89)).unwrap();
+    let resp = synthesize(
+        &r,
+        &Cuda,
+        &NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target"),
+    )
+    .unwrap();
     assert_eq!(resp.kernel.kind, ArtifactKind::Ptx);
     let ptx = String::from_utf8(resp.kernel.artifact).expect("PTX is utf-8 text");
     assert!(
@@ -543,7 +548,12 @@ fn nvrtc_compiles_broadened_ops() {
         ],
     );
     let r = req(region, 2, ElementKind::F32, "jit_max_sin");
-    let resp = synthesize(&r, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89)).unwrap();
+    let resp = synthesize(
+        &r,
+        &Cuda,
+        &NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target"),
+    )
+    .unwrap();
     assert_eq!(resp.kernel.kind, ArtifactKind::Ptx);
     assert!(
         String::from_utf8(resp.kernel.artifact)
@@ -562,7 +572,7 @@ fn nvrtc_compiles_broadened_ops() {
 fn nvrtc_compiles_increment_0a_vocab() {
     use unpopped::generate;
     use unpopped::ir::{BinaryOp, UnaryOp, input};
-    let cc = NvrtcCompiler::new(ArchSku::Sm89);
+    let cc = NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let ukey = |dt: ElementKind| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
         structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
@@ -603,7 +613,7 @@ fn nvrtc_compiles_increment_0a_vocab() {
 fn nvrtc_compiles_multi_output_kernel() {
     use unpopped::generate;
     use unpopped::ir::input;
-    let cc = NvrtcCompiler::new(ArchSku::Sm89);
+    let cc = NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let key = |n: usize| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
         let ops: Vec<_> = std::iter::repeat_n(a, n).collect();
@@ -647,7 +657,7 @@ fn nvrtc_compiles_multi_output_kernel() {
 fn nvrtc_compiles_cmp_u8_kernel() {
     use unpopped::generate;
     use unpopped::ir::{input, konst};
-    let cc = NvrtcCompiler::new(ArchSku::Sm89);
+    let cc = NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let pred_key = |dt: ElementKind| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
         let o = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::U8, 256);
@@ -708,7 +718,7 @@ fn nvrtc_compiles_cmp_u8_kernel() {
 fn nvrtc_compiles_int_bitwise_and_u8_add() {
     use unpopped::generate;
     use unpopped::ir::input;
-    let cc = NvrtcCompiler::new(ArchSku::Sm89);
+    let cc = NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let bkey = |dt: ElementKind| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
         structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
@@ -746,7 +756,7 @@ fn nvrtc_compiles_int_bitwise_and_u8_add() {
 fn nvrtc_compiles_select_kernels() {
     use unpopped::generate;
     use unpopped::ir::{BinaryOp, coord, input, konst};
-    let cc = NvrtcCompiler::new(ArchSku::Sm89);
+    let cc = NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let skey = |dt: ElementKind, n: usize, align: u32| {
         let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
         let ops: Vec<_> = std::iter::repeat_n(a, n).collect();
@@ -801,7 +811,7 @@ fn nvrtc_compiles_select_kernels() {
 fn nvrtc_compiles_coord_kernels() {
     use unpopped::generate;
     use unpopped::ir::{coord, input, konst};
-    let cc = NvrtcCompiler::new(ArchSku::Sm89);
+    let cc = NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let a32 = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
     let tkey = structure_key(OpCategory::BinaryElementwise, &[a32, a32], ArchSku::Sm89);
     let triu = OpDef::elementwise(
@@ -836,7 +846,7 @@ fn nvrtc_compiles_coord_kernels() {
 fn nvrtc_compiles_reduction_kernels() {
     use unpopped::ir::UnaryOp;
     use unpopped::{ReduceOp, generate, input};
-    let cc = NvrtcCompiler::new(ArchSku::Sm89);
+    let cc = NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let red_key = |dt: ElementKind| {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
         let out = OperandDesc::new(1, &[256], &[1], dt, 256);
@@ -896,7 +906,7 @@ fn nvrtc_compiles_reduction_kernels() {
 fn nvrtc_compiles_rowreduce_kernels() {
     use unpopped::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
     use unpopped::{generate, input};
-    let cc = NvrtcCompiler::new(ArchSku::Sm89);
+    let cc = NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let key = |dt: ElementKind, cat: OpCategory| {
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
         structure_key(cat, &[a, a], ArchSku::Sm89)
