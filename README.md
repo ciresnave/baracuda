@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.84-orange)
+![Status](https://img.shields.io/badge/status-alpha.85-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x%2F13.x-76b900)
 ![Tests](https://img.shields.io/badge/GPU%20regression-green-success)
 
@@ -81,8 +81,8 @@ optimizer are fluid across `alpha.N` bumps.
 
 ## Status
 
-**In active development — alpha.84** (72 crates, 71 publishable — `baracuda-kernels-bench` carries `publish = false`).
-**Publishing to crates.io in two phases (2026-10-03):** Phase 1 — `baracuda-types-derive`, `baracuda-core`, `baracuda-cuda-sys`, `baracuda-types`, `baracuda-driver`, `baracuda-kernels-types`, `baracuda-cuda-vocab`, `baracuda-cuda-emit`, `baracuda-cuda-parse` — publishes now. Phase 2 — the remaining ~63 crates, including the 7 CUTLASS-forging ones — publishes later, during a scheduled quiet window. Until Phase 2 completes, those crates are still only available on crates.io at their previous published version even though the source tree here is uniformly at alpha.84 — check the registry, not just this repo, before `cargo add`-ing one of them. The GPU
+**In active development — alpha.85** (72 crates, 71 publishable — `baracuda-kernels-bench` carries `publish = false`).
+**Publishing to crates.io in two phases (2026-10-03):** Phase 1 — `baracuda-types-derive`, `baracuda-core`, `baracuda-cuda-sys`, `baracuda-types`, `baracuda-driver`, `baracuda-kernels-types`, `baracuda-cuda-vocab`, `baracuda-cuda-emit`, `baracuda-cuda-parse` — publishes now. Phase 2 — the remaining ~63 crates, including the 7 CUTLASS-forging ones — publishes later, during a scheduled quiet window. Until Phase 2 completes, those crates are still only available on crates.io at their previous published version even though the source tree here is uniformly at alpha.85 — check the registry, not just this repo, before `cargo add`-ing one of them. The GPU
 regression sweep runs green on an RTX 4070 (sm_89); the current frontier
 is the **kernel-specialization era** — the [`baracuda-kernelgen`] IR +
 multi-backend emitter, its CPU oracle and precision-first variants, and
@@ -261,7 +261,7 @@ baracuda-kernels = { version = "0.0.1-alpha.82", features = ["sm89", "cudnn"] }
 baracuda-driver  = "0.0.1-alpha.82"
 ```
 
-> `main` is at `0.0.1-alpha.84`; the example above stays at the last version
+> `main` is at `0.0.1-alpha.85`; the example above stays at the last version
 > actually published to crates.io until that publish happens (main version and
 > published version are allowed to differ briefly — see `CHANGELOG.md`).
 

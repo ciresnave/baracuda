@@ -16,6 +16,27 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.85 — 2026-10-03 (version-ambiguity fix: lockstep bump after #147/#151)
+
+`#149` set the lockstep family to `alpha.84`, but `#147` (the K-quant row
+off-by-one + batched MMVQ width-decline fix, `baracuda-kernels-sys` /
+`baracuda-kernels-bench`) and `#151` (board #106 Step B,
+`NvrtcCompiler::new(TargetId)`, touching `baracuda-kernels-bench`'s test
+callers) both merged to `main` AFTER that bump, with no accompanying version
+change. The already-published 46-crate `alpha.84` batch on crates.io does
+**not** carry either fix, while `main`'s source does — the same version
+string would otherwise name two different code states. Per CireSnave's
+one-version-per-project rule, the whole lockstep family (70 crates; the
+`baracuda-cuda-emit` / `baracuda-cuda-parse` exception line stays at
+`0.14.3`, unaffected) moves to `alpha.85` before any further publishing.
+
+Pure version-string bump — no kernel/code changes in this commit. Every
+`crates/*/Cargo.toml` `version` field, the root `Cargo.toml`'s matching 70
+dependency pins, and `Cargo.lock`'s matching entries move from
+`0.0.1-alpha.84` to `0.0.1-alpha.85`, hand-edited (not an unlocked `cargo
+update`) and verified self-consistent with `cargo metadata --locked` /
+`cargo check --locked` (zero resolver side effects).
+
 ## 0.0.1-alpha.84 — 2026-10-03 (unpopped-vocab family unification; sm_61-through-latest groundwork)
 
 Per CireSnave's ruling that baracuda will support sm_61 through the latest
