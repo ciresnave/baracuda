@@ -104,8 +104,12 @@ fn check_op(ctx: &Context, stream: &Stream, region_op: &str, fused_id: &str, is_
             max_compile_ms: 5000,
         },
     };
-    let resp = synthesize(&req, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89))
-        .unwrap_or_else(|e| panic!("synthesize {region_op}: {e:?}"));
+    let resp = synthesize(
+        &req,
+        &Cuda,
+        &NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target"),
+    )
+    .unwrap_or_else(|e| panic!("synthesize {region_op}: {e:?}"));
     let name = resp.kernel.entry_point.clone();
 
     // Belt-and-suspenders: prove we are testing the NaN-PROPAGATING compare-select,
@@ -124,7 +128,8 @@ fn check_op(ctx: &Context, stream: &Stream, region_op: &str, fused_id: &str, is_
     // Compile the emitted source the way production does (nvrtc -> PTX -> driver
     // JIT at default -O3 on load). This is the exact chain where the feared
     // contraction lives.
-    let ptx = NvrtcCompiler::new(ArchSku::Sm89)
+    let ptx = NvrtcCompiler::new(ArchSku::Sm89.into())
+        .expect("Sm89 is a well-formed cuda: target")
         .compile(&resp.kernel.source, &name, 30_000)
         .unwrap_or_else(|e| panic!("nvrtc({name}) failed: {e}"));
     let ptx = String::from_utf8(ptx).unwrap();

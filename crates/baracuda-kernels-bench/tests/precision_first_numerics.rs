@@ -61,7 +61,8 @@ fn prec_reduction_beats_saturating_float_serial_sum() {
     assert_eq!(prec.fidelity.determinism_str(), "bitwise");
 
     // nvrtc-compile base + prec; load each via the driver.
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let compiler =
+        NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let mut modules = Vec::new();
     for v in [base, prec] {
         let k = &v.kernels[0];

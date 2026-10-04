@@ -79,7 +79,8 @@ fn run(ctx: &Context, stream: &Stream, kernel: &GeneratedKernel, host: &[u16]) -
     // ⚠️ THE UNMEASURED INTRINSIC. If `__shfl_down_sync` has no
     // `__nv_bfloat16` overload, this is where it fails — loudly, at compile,
     // naming the line.
-    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let compiler =
+        NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
     let ptx = compiler
         .compile(&kernel.source, &kernel.name, 30_000)
         .unwrap_or_else(|e| panic!("nvrtc REJECTED the bit-move kernel: {e}\n{}", kernel.source));

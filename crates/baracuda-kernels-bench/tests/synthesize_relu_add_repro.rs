@@ -75,7 +75,11 @@ fn run_case(
     // Sanity: the structure key the synth builds for these operands.
     let _sk = structure_key(OpCategory::BinaryElementwise, &operands, ArchSku::Sm89);
 
-    let resp = match synthesize(&req, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89)) {
+    let resp = match synthesize(
+        &req,
+        &Cuda,
+        &NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target"),
+    ) {
         Ok(r) => r,
         Err(e) => {
             println!("[rows={rows} cols={cols} align={align}] synthesize DECLINED: {e:?}");
@@ -101,7 +105,8 @@ fn run_case(
     }
 
     // Fuel's launch: load PTX, n = output element count, scalar ABI.
-    let ptx = NvrtcCompiler::new(ArchSku::Sm89)
+    let ptx = NvrtcCompiler::new(ArchSku::Sm89.into())
+        .expect("Sm89 is a well-formed cuda: target")
         .compile(&resp.kernel.source, &name, 30_000)
         .unwrap_or_else(|e| panic!("nvrtc({name}) failed: {e}"));
     let ptx = String::from_utf8(ptx).unwrap();
