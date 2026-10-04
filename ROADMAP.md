@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.84** (2026-10-03); the last version actually
+`main` is at **v0.0.1-alpha.85** (2026-10-03); the last version actually
 published to crates.io is **v0.0.1-alpha.82** (2026-09-25) — see
 `CHANGELOG.md`'s versioning note. The per-phase
 write-ups below are a historical log (see the note at the end of this
