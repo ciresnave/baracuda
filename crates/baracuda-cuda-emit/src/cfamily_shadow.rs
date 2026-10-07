@@ -1,7 +1,7 @@
 //! Baracuda's own closed-set copy of the CUDA-specific scalar spellers that
 //! used to be imported directly from the neutral `unpopped::cfamily` module:
-//! [`scalar_ctype`], [`cast_scalar`], [`promote_load_f32`], [`demote_store_f32`],
-//! [`param_ctype`], [`out_ctype_of`], [`store_expr_of`] — plus the 4 leaf
+//! `scalar_ctype`, `cast_scalar`, `promote_load_f32`, `demote_store_f32`,
+//! `param_ctype`, `out_ctype_of`, `store_expr_of` — plus the 4 leaf
 //! functions those 7 are built from (see the 2026-10-07 corrections below).
 //!
 //! # Why this module exists (2026-10-07)
@@ -53,9 +53,9 @@
 //! own correction, not baracuda's miss). `cuda.rs` also imported
 //! `param_ctype`, `out_ctype_of`, and `store_expr_of` from
 //! `unpopped::cfamily` — and by CALL GRAPH, not by name, all three reach the
-//! moving leaves: `param_ctype`/`out_ctype_of` call [`scalar_ctype`]
+//! moving leaves: `param_ctype`/`out_ctype_of` call `scalar_ctype`
 //! directly (`unpopped/src/cfamily.rs:1175,153`); `store_expr_of` calls
-//! [`cast_scalar`] on its mixed-dtype branch and [`demote_store_f32`] on its
+//! `cast_scalar` on its mixed-dtype branch and `demote_store_f32` on its
 //! FP8 branch (`cfamily.rs:216,203`). Shadowed all three the same way — 7
 //! named functions + 4 leaves = 11 shadowed total, verified by call graph
 //! (every remaining `unpopped::cfamily` import cuda.rs still uses —
