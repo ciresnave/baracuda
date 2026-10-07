@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-emit"
-version = "0.14.3"
+version = "0.14.4"
 dependencies = [
  "baracuda-nvrtc",
  "fuel-kernel-seam",
@@ -119,7 +119,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-parse"
-version = "0.14.3"
+version = "0.14.4"
 dependencies = [
  "tree-sitter",
  "tree-sitter-cuda",
