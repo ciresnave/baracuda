@@ -6,14 +6,14 @@
 //! — and reused verbatim across dtypes, because CUDA overloads `+ - * /` for
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
+use crate::cfamily_shadow::{cast_scalar, demote_store_f32, promote_load_f32, scalar_ctype};
 use unpopped::backend::{
     Backend, Decline, DeclinedOp, GeneratedKernel, LowerError, Lowering, Spelling, Variant,
     VariantFidelity, lower_dag, lower_dag_all, lower_dag_multi, lower_expr,
 };
 use unpopped::cfamily::{
-    assert_no_int_div_or_const, binary_f32, binary_f64, binary_int, cast_scalar, demote_store_f32,
-    dtype_tag, out_ctype_of, param_args, param_ctype, params_used, promote_load_f32, scalar_ctype,
-    select_f32, select_f64, store_expr_of,
+    assert_no_int_div_or_const, binary_f32, binary_f64, binary_int, dtype_tag, out_ctype_of,
+    param_args, param_ctype, params_used, select_f32, select_f64, store_expr_of,
 };
 use unpopped::ir::{
     Access, AxisRole, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, SortOut, UnaryOp,
