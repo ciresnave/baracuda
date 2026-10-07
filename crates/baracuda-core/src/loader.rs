@@ -79,13 +79,73 @@ impl Library {
 
     /// Open a library at the specific path `path` (no search). Mostly used
     /// in tests to inject a known library location.
+    ///
+    /// On Windows, `path`'s parent directory is prepended to the process
+    /// `PATH` before loading. Empirically required, not optional: NVRTC
+    /// resolves its own `nvrtc-builtins64_<ver>.dll` with a runtime
+    /// `LoadLibrary` call of its own at *compile* time (not a static
+    /// import), so neither loading `nvrtc64_<ver>_0.dll` by absolute path
+    /// nor `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` (tried first; verified it does
+    /// NOT help, presumably because that flag only governs the resolution of
+    /// the *just-loaded* module's own static imports, not a dependent
+    /// module's later runtime `LoadLibrary` calls) puts that directory
+    /// anywhere `nvrtc64`'s own internal lookup will find it. Confirmed by
+    /// direct compile attempts: `nvrtc64_120_0.dll` loaded by full path alone
+    /// fails every compile with `NVRTC_ERROR_BUILTIN_OPERATION_FAILURE`
+    /// ("failed to open nvrtc-builtins64_129.dll") despite that file sitting
+    /// in the same directory, until that directory is actually on `PATH`.
     pub fn open_at(name: &'static str, path: &Path) -> Result<Self, LoaderError> {
         let lib = unsafe { libloading::Library::new(path) }?;
+        // Only once the load itself has already succeeded -- `open_at` is
+        // also called speculatively, once per candidate, by several other
+        // `-sys` crates' search loops (nvml/cudnn/cupti/nvcomp/cutensor), and
+        // prepending a directory to PATH for every failed guess would both
+        // waste the mutation and risk a later, unrelated load resolving
+        // against a wrong-but-same-named DLL left on PATH by a guess that
+        // never panned out.
+        #[cfg(windows)]
+        if let Some(parent) = path.parent() {
+            let old_path = std::env::var_os("PATH").unwrap_or_default();
+            let mut new_path = std::ffi::OsString::from(parent);
+            new_path.push(";");
+            new_path.push(&old_path);
+            // SAFETY: single-threaded at this point in practice (loader init
+            // happens before any worker threads spin up), and additive
+            // (prepend, never replace) so a concurrent reader of PATH sees
+            // either the old or new value, never a torn one.
+            unsafe {
+                std::env::set_var("PATH", &new_path);
+            }
+        }
         Ok(Self {
             name,
             lib,
             resolved_from: Some(path.to_path_buf()),
         })
+    }
+
+    /// Like [`Self::open`], but first checks `env_var`. If it is set, the
+    /// path it names is tried exclusively — no fallback to `candidates` —
+    /// and an unusable override is reported as
+    /// [`LoaderError::EnvOverrideUnusable`] rather than swallowed, so a typo
+    /// in the override fails loudly instead of silently resolving to
+    /// whatever the hardcoded candidates happen to find. If `env_var` is
+    /// unset, behaves exactly like [`Self::open`].
+    pub fn open_with_env_override(
+        name: &'static str,
+        env_var: &'static str,
+        candidates: &[&'static str],
+    ) -> Result<Self, LoaderError> {
+        if let Some(path) = std::env::var_os(env_var) {
+            let path = PathBuf::from(path);
+            return Self::open_at(name, &path).map_err(|source| LoaderError::EnvOverrideUnusable {
+                library: name,
+                env_var,
+                path,
+                source: Box::new(source),
+            });
+        }
+        Self::open(name, candidates)
     }
 
     /// The logical library name baracuda knows it by (e.g. `"cuda-driver"`,
@@ -190,6 +250,49 @@ mod tests {
             }
             Err(LoaderError::UnsupportedPlatform { .. }) => {}
             other => panic!("expected LibraryNotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn env_override_unset_falls_back_to_candidates() {
+        const VAR: &str = "BARACUDA_TEST_LOADER_OVERRIDE_UNSET";
+        unsafe {
+            std::env::remove_var(VAR);
+        }
+        let err = Library::open_with_env_override("unobtanium", VAR, &["libunobtanium.so.42"]);
+        match err {
+            Err(LoaderError::LibraryNotFound { library, .. }) => assert_eq!(library, "unobtanium"),
+            Err(LoaderError::UnsupportedPlatform { .. }) => {}
+            other => panic!("expected the plain-candidates path, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn env_override_set_but_unusable_fails_loudly_without_falling_back() {
+        const VAR: &str = "BARACUDA_TEST_LOADER_OVERRIDE_BOGUS";
+        unsafe {
+            std::env::set_var(VAR, "/definitely/does/not/exist/unobtanium.so");
+        }
+        // The candidate list below would resolve successfully on a normal
+        // dev box (any real .so on the default search path) -- proving the
+        // override truly short-circuits candidate search rather than merely
+        // trying the override first and silently falling through to it.
+        let err = Library::open_with_env_override(
+            "unobtanium",
+            VAR,
+            &["libc.so.6", "msvcrt.dll", "libSystem.dylib"],
+        );
+        unsafe {
+            std::env::remove_var(VAR);
+        }
+        match err {
+            Err(LoaderError::EnvOverrideUnusable {
+                library, env_var, ..
+            }) => {
+                assert_eq!(library, "unobtanium");
+                assert_eq!(env_var, VAR);
+            }
+            other => panic!("expected EnvOverrideUnusable, got {other:?}"),
         }
     }
 }

@@ -198,14 +198,74 @@ nvrtc_fns! {
     nvrtc_get_error_string as "nvrtcGetErrorString": PFN_nvrtcGetErrorString;
 }
 
+/// Env var that, if set, names the exact NVRTC library path to load
+/// (checked before the hardcoded candidate list). Useful when more than one CUDA
+/// toolkit is installed and the one on `PATH`/`CUDA_PATH` isn't the one
+/// whose NVRTC should be used (e.g. building for sm_61, which needs a
+/// pre-CUDA-13 toolkit's `nvrtc64_*.dll` even on a box whose default
+/// toolkit is 13.x). An override that's set but fails to load is reported
+/// as [`LoaderError::EnvOverrideUnusable`], not silently ignored.
+pub const BARACUDA_NVRTC_PATH_ENV: &str = "BARACUDA_NVRTC_PATH";
+
 /// Open (or return the cached) NVRTC dynamic library.
 pub fn nvrtc() -> Result<&'static Nvrtc, LoaderError> {
     static NVRTC: OnceLock<Nvrtc> = OnceLock::new();
     if let Some(n) = NVRTC.get() {
         return Ok(n);
     }
-    let lib = Library::open("nvrtc", nvrtc_candidates())?;
+    let lib =
+        Library::open_with_env_override("nvrtc", BARACUDA_NVRTC_PATH_ENV, nvrtc_candidates())?;
     let n = Nvrtc::empty(lib);
     let _ = NVRTC.set(n);
     Ok(NVRTC.get().expect("OnceLock set or lost race"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Both scenarios below mutate the process-global `BARACUDA_NVRTC_PATH`
+    // env var, which races against any other test doing the same in the
+    // same process -- kept as one sequential test (not two `#[test]`s) so
+    // Rust's default parallel test execution can't interleave them.
+    #[test]
+    fn env_override_wiring() {
+        // Exercises the same `Library::open_with_env_override` call
+        // `nvrtc()` makes, without going through `nvrtc()` itself --
+        // `nvrtc()` caches its result process-wide in a `OnceLock`, so a
+        // second scenario in the same test binary would just see the first
+        // call's cached outcome.
+        unsafe {
+            std::env::set_var(
+                BARACUDA_NVRTC_PATH_ENV,
+                "/definitely/does/not/exist/nvrtc.bogus",
+            );
+        }
+        let bogus =
+            Library::open_with_env_override("nvrtc", BARACUDA_NVRTC_PATH_ENV, nvrtc_candidates());
+        match bogus {
+            Err(LoaderError::EnvOverrideUnusable {
+                library, env_var, ..
+            }) => {
+                assert_eq!(library, "nvrtc");
+                assert_eq!(env_var, BARACUDA_NVRTC_PATH_ENV);
+            }
+            other => panic!(
+                "expected EnvOverrideUnusable (the override must short-circuit, never fall back to the real candidates), got {other:?}"
+            ),
+        }
+
+        unsafe {
+            std::env::remove_var(BARACUDA_NVRTC_PATH_ENV);
+        }
+        // Can't assert success here (no CUDA guaranteed on every CI
+        // runner), only that an unset override does not itself produce
+        // `EnvOverrideUnusable` -- that variant must only ever come from a
+        // *set* override.
+        let unset =
+            Library::open_with_env_override("nvrtc", BARACUDA_NVRTC_PATH_ENV, nvrtc_candidates());
+        if let Err(LoaderError::EnvOverrideUnusable { .. }) = unset {
+            panic!("an unset override must never produce EnvOverrideUnusable");
+        }
+    }
 }
