@@ -189,6 +189,16 @@ fn main() {
     println!("cargo:rerun-if-changed=kernels");
     println!("cargo:rerun-if-env-changed=DOCS_RS");
 
+    // Export our header dir to dependents (baracuda-ozimmu-sys et al.) via the
+    // `links = "baracuda_kernels"` key, as `DEP_BARACUDA_KERNELS_INCLUDE`. Must
+    // be absolute (a dependent's build.rs runs with a different cwd than ours)
+    // and must be emitted before either early return below -- a dependent
+    // still needs this path even when we skip our own nvcc build (DOCS_RS, or
+    // no arch feature selected).
+    let manifest_dir =
+        env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set by cargo");
+    println!("cargo:include={manifest_dir}/kernels/include");
+
     // Phase 11.2 — Fuel team feedback #3. Detect Git-for-Windows' fake
     // `link.exe` (actually GNU coreutils `link`) shadowing the MSVC
     // linker on PATH and warn loudly with a fix.

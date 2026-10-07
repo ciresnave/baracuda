@@ -65,21 +65,22 @@ fn main() {
         }
     }
 
-    // Need to find the baracuda-kernels-sys include path so we can
-    // pick up `baracuda_fp_bits.cuh`. The kernels-sys crate puts its
-    // headers in `kernels/include` relative to its own crate root;
-    // we resolve that via a workspace-relative path from this
-    // crate's CARGO_MANIFEST_DIR.
-    let manifest_dir = PathBuf::from(
-        env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set by cargo"),
-    );
-    let kernels_sys_include = manifest_dir
-        .parent()
-        .expect("manifest_dir must have a parent")
-        .join("baracuda-kernels-sys/kernels/include");
+    // Need to find the baracuda-kernels-sys include path so we can pick up
+    // `baracuda_fp_bits.cuh`. baracuda-kernels-sys exports this via Cargo's
+    // `links = "baracuda_kernels"` mechanism as `DEP_BARACUDA_KERNELS_INCLUDE`
+    // -- NOT a workspace-relative filesystem-sibling path. A sibling path only
+    // exists in the monorepo; from crates.io, kernels-sys is laid out under
+    // the registry cache, not as a literal sibling directory of this crate.
+    // (Was: `CARGO_MANIFEST_DIR.parent().join("baracuda-kernels-sys/kernels/include")`,
+    // which panicked on any registry-resolved build. See PR history.)
+    let kernels_sys_include = PathBuf::from(env::var("DEP_BARACUDA_KERNELS_INCLUDE").expect(
+        "baracuda-ozimmu-sys: DEP_BARACUDA_KERNELS_INCLUDE not set -- baracuda-kernels-sys's \
+             `links = \"baracuda_kernels\"` key should make cargo set this automatically; check \
+             that dependency is still declared and its build.rs still emits `cargo:include=`",
+    ));
     if !kernels_sys_include.exists() {
         panic!(
-            "baracuda-ozimmu-sys: expected `baracuda-kernels-sys/kernels/include/` not found at {}",
+            "baracuda-ozimmu-sys: DEP_BARACUDA_KERNELS_INCLUDE points at a path that doesn't exist: {}",
             kernels_sys_include.display()
         );
     }

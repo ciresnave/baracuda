@@ -16,6 +16,50 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.86 — 2026-10-06 (registry-build fix: baracuda-ozimmu-sys's hardcoded sibling path)
+
+`baracuda-ozimmu-sys/build.rs` resolved `baracuda-kernels-sys`'s CUDA header
+directory via `CARGO_MANIFEST_DIR.parent().join("baracuda-kernels-sys/kernels/include")`
+— a filesystem-sibling path that only exists in the monorepo. Published
+crates' publish-verify build (and any real consumer installing from
+crates.io) panicked, since the registry doesn't lay dependencies out as
+literal sibling directories. Blocked `baracuda-ozimmu-sys` and everything
+depending on it: `baracuda-ozimmu`, `baracuda-cutlass`, `baracuda-kernels`,
+`baracuda-flashinfer`, `baracuda-flashinfer-sys`.
+
+Fix: `baracuda-kernels-sys` now exports its header directory through Cargo's
+own `links = "baracuda_kernels"` mechanism (`cargo:include=<absolute path>`,
+emitted before either of its own early-returns so it's set even under
+`DOCS_RS=1` or with no arch feature active). `baracuda-ozimmu-sys` reads the
+resulting `DEP_BARACUDA_KERNELS_INCLUDE` env var instead. This required
+declaring `baracuda-kernels-sys` as a real `[dependencies]` edge (not
+`[build-dependencies]`) on `baracuda-ozimmu-sys` — empirically confirmed a
+`[build-dependencies]`-only edge does NOT trigger Cargo's `DEP_*`
+propagation to the dependent's own build script, `default-features = false`
+to avoid forcing kernels-sys's default `sm80` forge onto every consumer
+that only wants the header.
+
+Verified: a positive-controlled `git grep -n '\.parent()'` across every
+`crates/*/build.rs` found exactly this one hardcoded-sibling-path instance
+workspace-wide (none of the other 5 affected crates have their own
+`build.rs` at all — they only failed transitively). Reproduced the failure
+directly (not assumed) against the `[build-dependencies]`-only edge three
+times in fresh, isolated target directories; confirmed the fix with a real
+build of `baracuda-ozimmu-sys` (22m12s, the actual CUDA compile, not a
+type-check) and `baracuda-ozimmu` (13m08s). `baracuda-cutlass` /
+`baracuda-kernels` / `baracuda-flashinfer` / `baracuda-flashinfer-sys` were
+NOT separately isolated-build-verified in this round — their own `ozimmu`
+forwarding feature is opt-in (not default), and this session's build
+contention (self-inflicted: too many concurrent fresh-target-directory
+attempts while diagnosing the root cause) made further multi-crate CUTLASS
+forges impractical to run safely; they inherit the same fix mechanically
+(no build.rs of their own), but the PM's own full republish-verify pass is
+the first REAL confirmation for those four.
+
+Lockstep bump to `0.0.1-alpha.86` (every lockstep crate; `baracuda-cuda-emit`
+/ `baracuda-cuda-parse` stay on `0.14.3`, unaffected — this fix doesn't touch
+either).
+
 ## 0.0.1-alpha.85 — 2026-10-03 (version-ambiguity fix: lockstep bump after #147/#151)
 
 `#149` set the lockstep family to `alpha.84`, but `#147` (the K-quant row
