@@ -1,6 +1,8 @@
-//! Baracuda's own closed-set copy of four CUDA-specific scalar spellers that
+//! Baracuda's own closed-set copy of the CUDA-specific scalar spellers that
 //! used to be imported directly from the neutral `unpopped::cfamily` module:
-//! [`scalar_ctype`], [`cast_scalar`], [`promote_load_f32`], [`demote_store_f32`].
+//! [`scalar_ctype`], [`cast_scalar`], [`promote_load_f32`], [`demote_store_f32`],
+//! [`param_ctype`], [`out_ctype_of`], [`store_expr_of`] — plus the 4 leaf
+//! functions those 7 are built from (see the 2026-10-07 corrections below).
 //!
 //! # Why this module exists (2026-10-07)
 //!
@@ -43,7 +45,25 @@
 //! not a shadow." Caught by Unpopped's review before this PR merged.
 //! Fixed by shadowing all four leaf functions too — nothing in this module
 //! now reaches `unpopped::cfamily` for any spelling decision.
+//!
+//! # Correction 2 (2026-10-07) — three more callers reached the moving leaves
+//!
+//! Unpopped's own deferred-work table said only 4 functions needed to move
+//! and that `store_expr_of` specifically did NOT move — both wrong (their
+//! own correction, not baracuda's miss). `cuda.rs` also imported
+//! `param_ctype`, `out_ctype_of`, and `store_expr_of` from
+//! `unpopped::cfamily` — and by CALL GRAPH, not by name, all three reach the
+//! moving leaves: `param_ctype`/`out_ctype_of` call [`scalar_ctype`]
+//! directly (`unpopped/src/cfamily.rs:1175,153`); `store_expr_of` calls
+//! [`cast_scalar`] on its mixed-dtype branch and [`demote_store_f32`] on its
+//! FP8 branch (`cfamily.rs:216,203`). Shadowed all three the same way — 7
+//! named functions + 4 leaves = 11 shadowed total, verified by call graph
+//! (every remaining `unpopped::cfamily` import cuda.rs still uses —
+//! `assert_no_int_div_or_const`, `binary_f32`, `binary_f64`, `binary_int`,
+//! `dtype_tag`, `param_args`, `params_used`, `select_f32`, `select_f64` —
+//! read end-to-end and confirmed self-contained, no path to any of the 11).
 
+use unpopped::plan::KernelPlan;
 use unpopped_vocab::ElementKind;
 
 /// The f16/bf16 → f32 widening intrinsic, or `None` for a dtype loaded
@@ -200,6 +220,41 @@ pub fn cast_scalar(from: ElementKind, to: ElementKind, expr: &str) -> String {
             format!("({oct}){expr}")
         }
     }
+}
+
+/// The SCALAR COMPUTE ctype for an op's runtime launch params —
+/// `scalar_ctype(plan.dtype)`. Local, frozen copy of
+/// `unpopped::cfamily::param_ctype` (reaches [`scalar_ctype`] directly;
+/// shadowed per the 2026-10-07 correction 2).
+pub fn param_ctype(plan: &KernelPlan<'_>) -> &'static str {
+    scalar_ctype(plan.dtype).expect("param dtype checked by the Backend::lower param assert")
+}
+
+/// Output `j`'s ctype: the uniform `ctype` if `out_dtype_of(j) == plan.dtype`,
+/// else that output's own scalar ctype. Local, frozen copy of
+/// `unpopped::cfamily::out_ctype_of` (reaches [`scalar_ctype`] directly).
+pub fn out_ctype_of<'c>(plan: &KernelPlan<'_>, j: usize, ctype: &'c str) -> &'c str {
+    let d = plan.out_dtype_of(j);
+    if d == plan.dtype {
+        ctype
+    } else {
+        scalar_ctype(d).expect("validated out dtype has a scalar ctype")
+    }
+}
+
+/// The store expression for output `j`'s lowered body root. Local, frozen
+/// copy of `unpopped::cfamily::store_expr_of` (reaches [`demote_store_f32`]
+/// on the uniform FP8 branch and [`cast_scalar`] on the hetero branch —
+/// shadowed per the 2026-10-07 correction 2).
+pub fn store_expr_of(plan: &KernelPlan<'_>, j: usize, root: String) -> String {
+    let d = plan.out_dtype_of(j);
+    if d == plan.dtype {
+        return match d {
+            ElementKind::Fp8E4M3FN | ElementKind::Fp8E5M2 => demote_store_f32(d, &root),
+            _ => root,
+        };
+    }
+    cast_scalar(plan.dtype, d, &root)
 }
 
 #[cfg(test)]
@@ -377,7 +432,108 @@ mod tests {
         }
     }
 
-    /// The four local leaves must never again reach back into
+    /// Minimal `KernelPlan` for testing `param_ctype`/`out_ctype_of`/
+    /// `store_expr_of`, which only read `plan.dtype` and `plan.out_dtype`
+    /// (via `out_dtype_of(0)`) — every other field is irrelevant to those
+    /// three functions' logic, so one fixed dummy key/body is reused across
+    /// every `(dtype, out_dtype)` pair under test.
+    fn test_plan(dtype: ElementKind, out_dtype: ElementKind) -> KernelPlan<'static> {
+        use unpopped::ir::{Access, BaseOffset, ScalarExpr, WriteIndex, input};
+        use unpopped::plan::Schedule;
+        use unpopped_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
+
+        // `'static` leaks are fine in test-only code: the allocations live
+        // for the process lifetime, which is exactly the test run.
+        let a = OperandDesc::new(1, &[1 << 10], &[1], dtype, 256);
+        let key: &'static _ = Box::leak(Box::new(structure_key(
+            OpCategory::UnaryElementwise,
+            &[a, a],
+            ArchSku::Sm89,
+        )));
+        let body: &'static ScalarExpr = Box::leak(Box::new(input(0).0));
+        KernelPlan {
+            op_name: "shadow_test",
+            n_inputs: 1,
+            dtype,
+            out_dtype,
+            schedule: Schedule::Scalar,
+            key,
+            body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            extra_out_dtypes: &[],
+            access: &Access::Elementwise,
+            views: &[],
+            read_index: &[],
+            write_index: &WriteIndex::Direct,
+            base_offsets: &[],
+            out_base_offset: BaseOffset::Zero,
+        }
+    }
+
+    #[test]
+    fn param_ctype_matches_the_literal_table_for_every_kind() {
+        for &k in ALL_KINDS {
+            let plan = test_plan(k, k);
+            assert_eq!(
+                param_ctype(&plan),
+                expected_scalar_ctype(k).expect("every ALL_KINDS entry has a ctype"),
+                "{k:?}: param_ctype must match the literal expectation captured at adoption"
+            );
+        }
+    }
+
+    #[test]
+    fn out_ctype_of_matches_the_literal_table_for_every_kind_pair() {
+        const GIVEN: &str = "GIVEN_CTYPE";
+        for &dtype in ALL_KINDS {
+            for &out_dtype in ALL_KINDS {
+                let plan = test_plan(dtype, out_dtype);
+                let expected = if out_dtype == dtype {
+                    GIVEN
+                } else {
+                    expected_scalar_ctype(out_dtype).expect("every ALL_KINDS entry has a ctype")
+                };
+                assert_eq!(
+                    out_ctype_of(&plan, 0, GIVEN),
+                    expected,
+                    "{dtype:?} -> {out_dtype:?}: out_ctype_of must match the literal expectation"
+                );
+            }
+        }
+    }
+
+    /// Independent, hardcoded expectation for [`store_expr_of`], built from
+    /// the same literal tables as [`expected_cast_scalar`] (never from the
+    /// real `store_expr_of`, `cast_scalar`, or `demote_store_f32`).
+    fn expected_store_expr_of(dtype: ElementKind, out_dtype: ElementKind, root: &str) -> String {
+        if out_dtype == dtype {
+            match dtype {
+                ElementKind::Fp8E4M3FN | ElementKind::Fp8E5M2 => {
+                    expected_demote_store_f32(dtype, root)
+                }
+                _ => root.to_string(),
+            }
+        } else {
+            expected_cast_scalar(dtype, out_dtype, root)
+        }
+    }
+
+    #[test]
+    fn store_expr_of_matches_the_literal_table_for_every_kind_pair() {
+        for &dtype in ALL_KINDS {
+            for &out_dtype in ALL_KINDS {
+                let plan = test_plan(dtype, out_dtype);
+                assert_eq!(
+                    store_expr_of(&plan, 0, "r".to_string()),
+                    expected_store_expr_of(dtype, out_dtype, "r"),
+                    "{dtype:?} -> {out_dtype:?}: store_expr_of must match the literal expectation"
+                );
+            }
+        }
+    }
+
+    /// The eleven local leaves must never again reach back into
     /// `unpopped::cfamily` — a positive-controlled grep, run as a test so a
     /// future edit that reintroduces a delegating call fails CI, not just a
     /// code review. Positive control: this file's own doc comments mention
