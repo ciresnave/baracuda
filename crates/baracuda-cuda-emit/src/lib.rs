@@ -17,6 +17,12 @@
 pub mod cuda;
 pub use cuda::{Cuda, emit_cast_helper, emit_coord_unravel_helper, emit_dtype_promote_helper};
 
+/// Baracuda's own closed-set copy of 4 CUDA-specific scalar spellers
+/// (`scalar_ctype`, `cast_scalar`, `promote_load_f32`, `demote_store_f32`)
+/// that used to be imported directly from `unpopped::cfamily`. See the
+/// module doc comment for why.
+pub mod cfamily_shadow;
+
 /// The NVRTC on-demand JIT compiler (`NvrtcCompiler`) — the production
 /// source → PTX [`Compiler`](unpopped::Compiler). Behind `--features
 /// nvrtc` because it needs the nvrtc runtime.

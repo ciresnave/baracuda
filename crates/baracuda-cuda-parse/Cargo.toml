@@ -8,7 +8,7 @@ name = "baracuda-cuda-parse"
 # counter (0.14.3 chosen to match baracuda-cuda-emit exactly since both
 # crates work with the identical Unpopped release, not because PATCH tracks
 # Unpopped's own patch number as a rule).
-version = "0.14.3"
+version = "0.14.4"
 description = "CUDA -> IR frontend for the neutral `unpopped` kernel generator: the tree-sitter grammar binding (`parse_cuda`), the CUDA residue list, and the `CUDA` `Frontend` descriptor. Depends on the neutral generator `unpopped` (feature `convert`) and supplies the CUDA-specific parse-side surface from OUTSIDE the neutral core, mirroring `baracuda-cuda-emit`'s emit-side placement."
 edition.workspace = true
 # NOT `rust-version.workspace = true` (1.85): unlike baracuda-cuda-emit, whose
