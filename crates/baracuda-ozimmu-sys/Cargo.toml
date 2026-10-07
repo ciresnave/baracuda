@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-ozimmu-sys"
-version = "0.0.1-alpha.85"
+version = "0.0.1-alpha.86"
 description = "Build + raw FFI bindings to baracuda's clean-fork of Hiroyuki Ootomo's ozIMMU — the Ozaki-scheme FP64 GEMM library that synthesizes a DGEMM from S² int8 tensor-core matmuls. Phase 44b internalized the upstream sources under `cuda/` (no more `vendor/` subdir; cutf submodule eliminated). Linked statically into the baracuda CUDA stack; consumed by the safe wrapper crate `baracuda-ozimmu`. MIT-licensed (original ozIMMU MIT — see `ATTRIBUTION.md`)."
 readme = "README.md"
 edition.workspace = true
@@ -38,6 +38,15 @@ build-vendor = []
 # the static archive references at link time.
 baracuda-cuda-sys = { workspace = true }
 baracuda-cublas-sys = { workspace = true }
+# Declared as a real [dependencies] edge (not [build-dependencies]) even
+# though our own Rust code never calls it -- Cargo's `links = "baracuda_kernels"`
+# -> `DEP_BARACUDA_KERNELS_INCLUDE` propagation to a DEPENDENT's build script
+# requires this, empirically confirmed a [build-dependencies] edge alone does
+# NOT trigger it. See build.rs for why we need its header dir for
+# `baracuda_fp_bits.cuh`. Was previously found via a hardcoded filesystem-
+# sibling path with no real Cargo edge at all -- broke any registry-resolved
+# build, since there is no such sibling directory outside the monorepo.
+baracuda-kernels-sys = { version = "0.0.1-alpha.86", path = "../baracuda-kernels-sys", default-features = false }
 
 [build-dependencies]
 baracuda-build = { workspace = true }
