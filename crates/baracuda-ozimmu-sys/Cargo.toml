@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-ozimmu-sys"
-version = "0.0.1-alpha.86"
+version = "0.0.1-alpha.87"
 description = "Build + raw FFI bindings to baracuda's clean-fork of Hiroyuki Ootomo's ozIMMU — the Ozaki-scheme FP64 GEMM library that synthesizes a DGEMM from S² int8 tensor-core matmuls. Phase 44b internalized the upstream sources under `cuda/` (no more `vendor/` subdir; cutf submodule eliminated). Linked statically into the baracuda CUDA stack; consumed by the safe wrapper crate `baracuda-ozimmu`. MIT-licensed (original ozIMMU MIT — see `ATTRIBUTION.md`)."
 readme = "README.md"
 edition.workspace = true
@@ -46,7 +46,7 @@ baracuda-cublas-sys = { workspace = true }
 # `baracuda_fp_bits.cuh`. Was previously found via a hardcoded filesystem-
 # sibling path with no real Cargo edge at all -- broke any registry-resolved
 # build, since there is no such sibling directory outside the monorepo.
-baracuda-kernels-sys = { version = "0.0.1-alpha.86", path = "../baracuda-kernels-sys", default-features = false }
+baracuda-kernels-sys = { version = "0.0.1-alpha.87", path = "../baracuda-kernels-sys", default-features = false }
 
 [build-dependencies]
 baracuda-build = { workspace = true }

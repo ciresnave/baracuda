@@ -66,6 +66,23 @@ pub enum LoaderError {
         /// Name of the unsupported platform (e.g. "macOS").
         platform: &'static str,
     },
+
+    /// An env-var override (e.g. `BARACUDA_NVRTC_PATH`) was set but the
+    /// library could not be loaded from the path it names. Returned instead
+    /// of silently falling back to the hardcoded candidates, since a set
+    /// override that silently failed would hide exactly the misconfiguration
+    /// the override exists to let the caller pin down.
+    #[error("{env_var}={path} is set but {library} failed to load from it: {source}")]
+    EnvOverrideUnusable {
+        /// The library's logical name (e.g. `"nvrtc"`).
+        library: &'static str,
+        /// The env var that was set (e.g. `"BARACUDA_NVRTC_PATH"`).
+        env_var: &'static str,
+        /// The path the env var named.
+        path: PathBuf,
+        /// Why loading from that path failed.
+        source: Box<LoaderError>,
+    },
 }
 
 impl LoaderError {
