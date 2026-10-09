@@ -55,6 +55,8 @@
 
 #![deny(missing_docs)]
 
+pub mod machine_state;
+
 use std::time::Duration;
 
 use baracuda_driver::{Context, Device, Event, Stream, init, version};

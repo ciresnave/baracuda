@@ -41,6 +41,11 @@ baracuda-kernels-types = { version = "0.0.1-alpha.87", path = "crates/baracuda-k
 baracuda-kernels-sys = { version = "0.0.1-alpha.87", path = "crates/baracuda-kernels-sys" }
 baracuda-kernels = { version = "0.0.1-alpha.87", path = "crates/baracuda-kernels" }
 baracuda-kernels-bench = { version = "0.0.1-alpha.87", path = "crates/baracuda-kernels-bench" }
+# Board #162's driver-free stats/machine-state/baseline-key types
+# (docs/design/2026-10-09-kernel-perf-baseline-design.md) — no CUDA
+# dependency, so unlike baracuda-kernels-bench it is build+clippy+test'd for
+# real on the no-CUDA CI runners (see .github/workflows/ci.yml).
+baracuda-bench-stats = { version = "0.0.1-alpha.87", path = "crates/baracuda-bench-stats" }
 # `baracuda-cuda-emit` and `baracuda-cuda-parse` are the crates NOT on the
 # shared version. The project's one-version rule has a single exception: a
 # crate built to work with a specific Unpopped release carries a version that

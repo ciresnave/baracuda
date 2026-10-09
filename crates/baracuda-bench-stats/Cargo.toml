@@ -1,0 +1,23 @@
+[package]
+name = "baracuda-bench-stats"
+version = "0.0.1-alpha.87"
+description = "Driver-free statistics, machine-state record types, and baseline-key types for board #162's kernel performance baseline tooling (docs/design/2026-10-09-kernel-perf-baseline-design.md). Pure data + pure functions only — no CUDA dependency, so this is CI-executed on a GPU-less runner; the actual nvidia-smi/powercfg capture logic that PRODUCES a MachineState lives in baracuda-kernels-bench, which has the device context."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["benchmark", "statistics", "cuda", "gpu"]
+categories = ["api-bindings", "science"]
+# Internal tooling for the kernel-perf-baseline workflow, not a general-purpose
+# stats crate — same rationale as baracuda-kernels-bench's own `publish = false`.
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true
