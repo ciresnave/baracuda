@@ -233,6 +233,171 @@ pub struct BaselineKey {
     pub machine_id: String,
 }
 
+/// Schema version stamped into every [`BenchReport`]. Bump on any change to
+/// the report's serialized shape; [`BenchReport::from_json`] rejects a
+/// version it does not know rather than half-reading it.
+pub const REPORT_SCHEMA_VERSION: u32 = 1;
+
+/// One measured kernel in a [`BenchReport`]: its identity and its stats.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReportEntry {
+    /// Which kernel/dtype/shape/arch/machine this timing is for.
+    pub key: BaselineKey,
+    /// Best/worst/mean/median/p99/stddev over the samples.
+    pub stats: TimingStats,
+}
+
+/// The self-describing result file `baracuda-bench run --report` emits
+/// (design doc item 4): carries its own schema version and the
+/// [`MachineState`] it was captured under, so a human reading it cold can
+/// tell whose box it came from and when, and so a noisy run is
+/// distinguishable from a quiet one by what it recorded, not by a label.
+///
+/// **Untrusted on receipt** (design doc item 6): a report from anyone other
+/// than this lane's own capture is data to read, never auto-merged into an
+/// authoritative baseline.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BenchReport {
+    /// Always [`REPORT_SCHEMA_VERSION`] when produced by this crate.
+    pub schema_version: u32,
+    /// Machine state at capture time.
+    pub machine_state: MachineState,
+    /// Free-text note from the reporter (e.g. "browsers closed, quiet run").
+    /// Informational only — never used to classify the run.
+    pub note: Option<String>,
+    /// One entry per measured kernel.
+    pub entries: Vec<ReportEntry>,
+}
+
+/// Why a [`BenchReport`] could not be read or failed validation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReportError {
+    /// The text was not valid JSON for this schema.
+    Malformed(String),
+    /// `schema_version` was not [`REPORT_SCHEMA_VERSION`].
+    UnknownSchemaVersion(u32),
+    /// The report had zero entries — nothing was measured.
+    NoEntries,
+    /// An entry's `key.machine_id` differs from `machine_state.machine_id`.
+    MachineIdMismatch {
+        /// Index into `entries`.
+        entry: usize,
+    },
+    /// A string field looks like it carries a local path or user directory
+    /// (design doc item 5: scrubbed of anything identifying beyond what the
+    /// reporter intends).
+    LeaksLocalPath {
+        /// Name of the offending field.
+        field: &'static str,
+    },
+}
+
+impl std::fmt::Display for ReportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Malformed(e) => write!(f, "malformed bench report: {e}"),
+            Self::UnknownSchemaVersion(v) => write!(
+                f,
+                "unknown bench report schema_version {v} (this build reads {REPORT_SCHEMA_VERSION})"
+            ),
+            Self::NoEntries => write!(f, "bench report has no entries"),
+            Self::MachineIdMismatch { entry } => write!(
+                f,
+                "entry {entry}'s machine_id differs from the report's machine_state.machine_id"
+            ),
+            Self::LeaksLocalPath { field } => {
+                write!(f, "field `{field}` looks like it contains a local path")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ReportError {}
+
+/// Heuristic: does `s` look like a filesystem path (drive letter, UNC, or a
+/// home/user directory)? Deliberately conservative — a false positive makes
+/// the reporter re-check one field; a false negative leaks a username.
+fn looks_like_local_path(s: &str) -> bool {
+    const MARKERS: [&str; 3] = ["/home/", "/Users/", "\\Users\\"];
+    let drive = matches!(s.as_bytes(), [d, b':', b'\\' | b'/', ..] if d.is_ascii_alphabetic());
+    drive || s.starts_with("\\\\") || MARKERS.iter().any(|m| s.contains(m))
+}
+
+impl BenchReport {
+    /// Build a report stamped with [`REPORT_SCHEMA_VERSION`].
+    #[must_use]
+    pub fn new(
+        machine_state: MachineState,
+        note: Option<String>,
+        entries: Vec<ReportEntry>,
+    ) -> Self {
+        Self {
+            schema_version: REPORT_SCHEMA_VERSION,
+            machine_state,
+            note,
+            entries,
+        }
+    }
+
+    /// Check the report is internally consistent and carries no local paths.
+    ///
+    /// # Errors
+    ///
+    /// The first [`ReportError`] found: wrong schema version, no entries, an
+    /// entry whose machine id disagrees with the machine state, or a string
+    /// field that looks like a local path.
+    pub fn validate(&self) -> Result<(), ReportError> {
+        if self.schema_version != REPORT_SCHEMA_VERSION {
+            return Err(ReportError::UnknownSchemaVersion(self.schema_version));
+        }
+        if self.entries.is_empty() {
+            return Err(ReportError::NoEntries);
+        }
+        for (i, e) in self.entries.iter().enumerate() {
+            if e.key.machine_id != self.machine_state.machine_id {
+                return Err(ReportError::MachineIdMismatch { entry: i });
+            }
+        }
+        let ms = &self.machine_state;
+        let checks: [(&'static str, &str); 6] = [
+            ("machine_id", &ms.machine_id),
+            ("device_name", &ms.device_name),
+            ("driver_version", &ms.driver_version),
+            ("cuda_toolkit_version", &ms.cuda_toolkit_version),
+            ("power_plan", ms.power_plan.as_deref().unwrap_or("")),
+            ("note", self.note.as_deref().unwrap_or("")),
+        ];
+        for (field, value) in checks {
+            if looks_like_local_path(value) {
+                return Err(ReportError::LeaksLocalPath { field });
+            }
+        }
+        Ok(())
+    }
+
+    /// Serialize to pretty JSON after [`validate`](Self::validate).
+    ///
+    /// # Errors
+    ///
+    /// Any [`ReportError`] from validation.
+    pub fn to_json(&self) -> Result<String, ReportError> {
+        self.validate()?;
+        serde_json::to_string_pretty(self).map_err(|e| ReportError::Malformed(e.to_string()))
+    }
+
+    /// Parse and validate a report from JSON text.
+    ///
+    /// # Errors
+    ///
+    /// [`ReportError::Malformed`] on a parse failure, else any validation error.
+    pub fn from_json(text: &str) -> Result<Self, ReportError> {
+        let report: Self =
+            serde_json::from_str(text).map_err(|e| ReportError::Malformed(e.to_string()))?;
+        report.validate()?;
+        Ok(report)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,5 +553,96 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         seen.insert(a);
         assert!(seen.contains(&b));
+    }
+
+    fn sample_report() -> BenchReport {
+        let state = MachineState {
+            machine_id: "cires-laptop-4070".to_string(),
+            device_name: "NVIDIA GeForce RTX 4070 Laptop GPU".to_string(),
+            device_capability: [8, 9],
+            driver_version: "581.08".to_string(),
+            cuda_toolkit_version: "13.0".to_string(),
+            sm_clock_mhz: Some(1500),
+            mem_clock_mhz: None,
+            power_limit_w: None,
+            temperature_c: Some(55),
+            other_gpu_process_count: Some(0),
+            power_plan: Some("Balanced".to_string()),
+            captured_unix_s: 1_760_000_000,
+        };
+        let entry = ReportEntry {
+            key: BaselineKey {
+                kernel: "gemm".to_string(),
+                dtype: "f16".to_string(),
+                shape_class: "M128_N4096_K4096".to_string(),
+                target_arch: "cuda:sm89".to_string(),
+                machine_id: "cires-laptop-4070".to_string(),
+            },
+            stats: compute_stats(&[1.0, 2.0, 3.0]).unwrap(),
+        };
+        BenchReport::new(state, Some("quiet run".to_string()), vec![entry])
+    }
+
+    #[test]
+    fn report_round_trips_through_json() {
+        let r = sample_report();
+        let back = BenchReport::from_json(&r.to_json().unwrap()).unwrap();
+        assert_eq!(r, back);
+    }
+
+    #[test]
+    fn report_with_no_entries_is_rejected() {
+        let mut r = sample_report();
+        r.entries.clear();
+        assert_eq!(r.validate(), Err(ReportError::NoEntries));
+    }
+
+    #[test]
+    fn report_with_unknown_schema_version_is_rejected() {
+        let mut r = sample_report();
+        r.schema_version = 999;
+        assert_eq!(r.validate(), Err(ReportError::UnknownSchemaVersion(999)));
+    }
+
+    #[test]
+    fn entry_machine_id_must_match_machine_state() {
+        let mut r = sample_report();
+        r.entries[0].key.machine_id = "someone-else".to_string();
+        assert_eq!(
+            r.validate(),
+            Err(ReportError::MachineIdMismatch { entry: 0 })
+        );
+    }
+
+    #[test]
+    fn local_paths_in_string_fields_are_rejected() {
+        for bad in [
+            "C:\\Users\\someone\\box",
+            "/home/someone",
+            "\\\\server\\share",
+        ] {
+            let mut r = sample_report();
+            r.note = Some(bad.to_string());
+            assert_eq!(
+                r.validate(),
+                Err(ReportError::LeaksLocalPath { field: "note" }),
+                "{bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_notes_are_not_flagged_as_paths() {
+        let mut r = sample_report();
+        r.note = Some("browsers closed; power plan: High performance".to_string());
+        assert_eq!(r.validate(), Ok(()));
+    }
+
+    #[test]
+    fn garbage_json_is_malformed() {
+        assert!(matches!(
+            BenchReport::from_json("{not json"),
+            Err(ReportError::Malformed(_))
+        ));
     }
 }
