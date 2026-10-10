@@ -318,16 +318,9 @@ impl std::error::Error for ReportError {}
 /// home/user directory)? Deliberately conservative — a false positive makes
 /// the reporter re-check one field; a false negative leaks a username.
 fn looks_like_local_path(s: &str) -> bool {
-    let b = s.as_bytes();
-    let drive = b.len() >= 3
-        && b[0].is_ascii_alphabetic()
-        && b[1] == b':'
-        && (b[2] == b'\\' || b[2] == b'/');
-    drive
-        || s.starts_with("\\\\")
-        || s.contains("/home/")
-        || s.contains("/Users/")
-        || s.contains("\\Users\\")
+    const MARKERS: [&str; 3] = ["/home/", "/Users/", "\\Users\\"];
+    let drive = matches!(s.as_bytes(), [d, b':', b'\\' | b'/', ..] if d.is_ascii_alphabetic());
+    drive || s.starts_with("\\\\") || MARKERS.iter().any(|m| s.contains(m))
 }
 
 impl BenchReport {
