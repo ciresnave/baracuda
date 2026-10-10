@@ -66,6 +66,9 @@ cuda_l2 = []
 ozimmu = ["dep:baracuda-ozimmu"]
 
 [dependencies]
+# Board #162 — driver-free stats/machine-state/baseline-key types. See
+# src/machine_state.rs for the capture code that produces them.
+baracuda-bench-stats = { workspace = true }
 baracuda-kernels = { workspace = true }
 baracuda-kernels-types = { workspace = true }
 baracuda-driver = { workspace = true }

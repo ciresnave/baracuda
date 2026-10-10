@@ -66,6 +66,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-bench-stats"
+version = "0.0.1-alpha.87"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "baracuda-build"
 version = "0.0.1-alpha.87"
 dependencies = [
@@ -509,6 +517,7 @@ dependencies = [
 name = "baracuda-kernels-bench"
 version = "0.0.1-alpha.87"
 dependencies = [
+ "baracuda-bench-stats",
  "baracuda-cublas",
  "baracuda-cublas-sys",
  "baracuda-cuda-emit",

@@ -123,10 +123,18 @@ jobs:
       # (build.rs of baracuda-cutlass-kernels-sys now degrades gracefully when
       # nvcc is absent, so an accidental CUDA-crate build here warns instead of
       # panicking — but it is still not built by this job.)
+      # `baracuda-bench-stats` (board #162, docs/design/2026-10-09-kernel-perf-
+      # baseline-design.md) is the ONE part of the kernel-perf-baseline tooling
+      # with no CUDA dependency — the stats/machine-state/baseline-key types
+      # plus pure text parsers for nvidia-smi/powercfg output. Everything else
+      # that TOUCHES a device lives in baracuda-kernels-bench instead, which
+      # this job still only `cargo check`s (see arch-gated-check below) because
+      # it genuinely needs a GPU. Added here, not there, specifically so this
+      # crate's tests EXECUTE on a GPU-less runner instead of only type-checking.
       - name: cargo build (driver-free surface)
-        run: cargo build -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse
+        run: cargo build -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats
       - name: cargo clippy (driver-free surface)
-        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -- -D warnings
+        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats -- -D warnings
       # Also lint in TEST mode. The step above compiles the lib with cfg(test)
       # FALSE, so a lint in an inline `#[cfg(test)]` module or in an integration
       # test file (tests/*.rs) is never compiled and never seen — the same "CI
@@ -134,9 +142,9 @@ jobs:
       # in a lib inline test rode in unnoticed until a `--tests` run found it).
       # `--tests` compiles the lib-test target plus every tests/*.rs.
       - name: cargo clippy (driver-free surface, tests)
-        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse --tests -- -D warnings
+        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats --tests -- -D warnings
       - name: cargo test (driver-free surface, no GPU)
-        run: cargo test -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse
+        run: cargo test -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats
       # `cargo doc` is also the ENFORCEMENT point for `[workspace.lints.rustdoc]`
       # (broken_intra_doc_links + private_intra_doc_links = deny). A broken
       # `[`Type`]` link is invisible to build/clippy/test — it renders as a live
@@ -161,6 +169,7 @@ jobs:
           -p baracuda-build
           -p baracuda-core
           -p baracuda-kernels-types
+          -p baracuda-bench-stats
       # ---- feature-gated surfaces the default --workspace build never compiles.
       # These features are deliberately CI-safe: `cuvs` is a lazy dynamic loader
       # (no RAPIDS needed to build/test; GPU-touching tests are #[ignore]d),
