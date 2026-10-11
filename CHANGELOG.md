@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.89 — 2026-10-11 (lockstep bump for board #162 bench run/report guide)
+
+`#161` docs(bench): `bench-reports/` location decision (tracked directory, reports
+untrusted), `docs/guides/kernel-bench-reports.md` run/report guide and the
+noisy-vs-quiet protocol. Docs only. Lockstep bump to `0.0.1-alpha.89` (every
+lockstep crate; `baracuda-cuda-emit` / `baracuda-cuda-parse` stay `0.14.4`).
+Merging this bump is not a publish.
+
 ## 0.0.1-alpha.88 — 2026-10-11 (lockstep bump after board #162 bench slices 1/2a/2b and the docs/emit chores)
 
 `main` carried several merged changes at the `alpha.87` string with no version
