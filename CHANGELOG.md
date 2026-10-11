@@ -16,6 +16,25 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.88 — 2026-10-11 (lockstep bump after board #162 bench slices 1/2a/2b and the docs/emit chores)
+
+`main` carried several merged changes at the `alpha.87` string with no version
+change of their own. Per CireSnave's rule that a pushed change changes the
+version, the lockstep family moves to `alpha.88`, which retroactively covers:
+
+- `#145` docs(vendor): corrected `fuel-q8_1` provenance (llama.cpp + xinfer, both MIT).
+- `#146` docs: llama.cpp/ggml CUDA technique catalogue (Phase A).
+- `#148` docs: sm_61-through-latest is in scope (CireSnave ruling) + parse/emit gap list.
+- `#154` chore(cuda-emit): shadow 4 CUDA scalar spellers out of `unpopped::cfamily`.
+- `#156` docs(design): board #162 kernel perf baseline + cross-machine report design.
+- `#157` feat(bench): board #162 slice 1 — timing stats, machine-state, baseline key.
+- `#158` feat(bench): board #162 slice 2a — `BenchReport` schema + validation.
+- `#159` feat(bench): board #162 slice 2b — `baracuda-bench run --report`.
+
+Lockstep bump to `0.0.1-alpha.88` (every lockstep crate; `baracuda-cuda-emit`
+/ `baracuda-cuda-parse` stay on their `unpopped`-matched line, unaffected).
+Merging this bump is not a publish.
+
 ## 0.0.1-alpha.86 — 2026-10-06 (registry-build fix: baracuda-ozimmu-sys's hardcoded sibling path)
 
 `baracuda-ozimmu-sys/build.rs` resolved `baracuda-kernels-sys`'s CUDA header
