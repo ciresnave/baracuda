@@ -209,14 +209,8 @@ fn run_sweep(
     (entries, skipped)
 }
 
-fn run(o: &Options) -> Result<(), String> {
-    // Two concurrent device-timing runs on one GPU give a wrong result, not a
-    // slow one (see the lock's doc comment).
-    let _guard = DEVICE_TIMING_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-
-    let (ctx, stream) = setup_device();
+/// Device 0's name, compute capability and the CUDA version string.
+fn device_info() -> Result<(String, u32, u32, String), String> {
     let device = Device::get(0).map_err(|e| format!("Device::get(0): {e}"))?;
     let (major, minor) = device
         .compute_capability()
@@ -225,12 +219,23 @@ fn run(o: &Options) -> Result<(), String> {
     let toolkit = baracuda_driver::version()
         .map(|v| v.to_string())
         .map_err(|e| format!("cuda version: {e}"))?;
+    Ok((name, major, minor, toolkit))
+}
+
+fn run(o: &Options) -> Result<(), String> {
+    // Two concurrent device-timing runs on one GPU give a wrong result, not a
+    // slow one (see the lock's doc comment).
+    let _guard = DEVICE_TIMING_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+    let (ctx, stream) = setup_device();
+    let (name, major, minor, toolkit) = device_info()?;
     let arch = format!("cuda:sm{major}{minor}");
 
     // Captured BEFORE the sweep so it describes the box as the run found it;
     // the sweep itself heats the GPU and would otherwise mask a noisy start.
-    let machine =
-        capture_machine_state(&o.machine_id, &name, [major as u32, minor as u32], &toolkit);
+    let machine = capture_machine_state(&o.machine_id, &name, [major, minor], &toolkit);
 
     let (entries, skipped) = run_sweep(&ctx, &stream, &arch, o);
     for s in &skipped {
