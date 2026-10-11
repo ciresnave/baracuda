@@ -81,11 +81,30 @@ fn cuda_lifts_fused_multiply_add() {
 #[test]
 fn cuda_lifts_unary_intrinsic() {
     let src =
-        "__global__ void k(const float* in0, float* out, long long n){ out[i] = __expf(in0[i]); }";
+        "__global__ void k(const float* in0, float* out, long long n){ out[i] = expf(in0[i]); }";
     assert_eq!(
         cuda_body(src),
         ScalarExpr::Unary(UnaryOp::Exp, Box::new(ScalarExpr::Input(0)))
     );
+}
+
+/// `__expf` / `__logf` are fast-math approximations; lifting them to the exact
+/// `Exp` / `Log` would silently turn an approximation into the accurate function
+/// on re-emit (Unpopped 0.15.0, idiom-lifting rule 2). They refuse instead.
+#[test]
+fn cuda_fast_math_intrinsics_refuse_not_lift() {
+    for f in ["__expf", "__logf"] {
+        let src = format!(
+            "__global__ void k(const float* in0, float* out, long long n){{ out[i] = {f}(in0[i]); }}"
+        );
+        assert!(
+            matches!(
+                lift_elementwise(&CUDA, &src, "x", F32),
+                Err(LiftError::Unrecognized(_))
+            ),
+            "{f} must be Unrecognized"
+        );
+    }
 }
 
 #[test]
