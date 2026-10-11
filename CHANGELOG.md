@@ -16,6 +16,23 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.90 — 2026-10-11 (unpopped 0.15.0 / kiss-ref 0.4.0 follower bump)
+
+PM-tasked KISS follower. Lockstep bump to `0.0.1-alpha.90`; merging is not a
+publish (alpha.89 publish is deferred until this lands).
+
+- **`unpopped` family `0.14.3 -> 0.15.0`** (`unpopped`, `unpopped-vocab`,
+  `unpopped-cpu-c`, `unpopped-slang`). Breaking upstream: `__expf` / `__logf` no
+  longer lift to the exact `Exp` / `Log`; they are `LiftError::Unrecognized`
+  (`expf` / `logf` unchanged). `baracuda-cuda-parse/tests/convert.rs` pinned the old
+  mapping: `cuda_lifts_unary_intrinsic` now uses `expf`, and a new
+  `cuda_fast_math_intrinsics_refuse_not_lift` asserts both fast-math spellers refuse.
+- **`baracuda-cuda-emit` / `baracuda-cuda-parse` `0.14.4 -> 0.15.0`** — MAJOR.MINOR
+  follow the `unpopped` release they build against (versioning exception above).
+- **`tools/kiss-ref-diff`: `kiss-ref-core` / `kiss-ops-vocab` / `kiss-classify-vocab`
+  `0.3.4 -> 0.4.0`**, `unpopped` / `unpopped-vocab` `0.15.0`. The tool (its own
+  `[workspace]`, not a member) type-checks against them.
+
 ## 0.0.1-alpha.89 — 2026-10-11 (lockstep bump for board #162 bench run/report guide)
 
 `#161` docs(bench): `bench-reports/` location decision (tracked directory, reports
