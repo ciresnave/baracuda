@@ -35,7 +35,7 @@ type vocabulary without pulling in the loader infrastructure.
 | `derive` | `baracuda-types-derive` | `#[derive(DeviceRepr)]` |
 | `half-crate` | `half` | `DeviceRepr` for `half::f16` and `half::bf16` |
 | `num-complex-crate` | `num-complex` | `DeviceRepr` for `Complex<f32>` / `Complex<f64>` |
-| `bytemuck` | `bytemuck` | `Pod` / `Zeroable` for the scalar types |
+| `bytemuck` | `bytemuck` | `Pod` / `Zeroable` for `Half`, `BFloat16`, `Complex32`, `Complex64` |
 | `f8-crate` | `float8` | `DeviceRepr` for `F8E4M3` / `F8E5M2` |
 
 ## Example
