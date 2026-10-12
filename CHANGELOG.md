@@ -16,6 +16,35 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.94 — 2026-10-12 (Fuel seam moves out of baracuda-cuda-emit — **Breaking** for `cuda-emit/seam`)
+
+PM-tasked (alpha.94 and cuda-emit 0.16.1 allocated by the PM). Merging is not a
+publish.
+
+- **BREAKING — `baracuda-cuda-emit 0.16.1`: the `seam` feature and
+  `baracuda_cuda_emit::seam` / `baracuda_cuda_emit::BaracudaSynthesizer` are
+  removed.** They moved, unchanged, to the new `baracuda-cuda-seam` crate
+  (`baracuda_cuda_seam::BaracudaSynthesizer`; its `nvrtc` feature forwards to
+  cuda-emit's). Why: `cargo publish` of cuda-emit 0.16.0 failed with
+  "dependency `fuel-kernel-seam` does not specify a version" — crates.io rejects
+  any git dependency, optional or not, and board #106 Step A
+  (`JitRequest::target: TargetId`, used by `BaracudaSynthesizer`) exists only on
+  fuel `main` (c02da348); the registry's latest `fuel-kernel-seam` is 0.11.2 with
+  `arch: ArchSku` only. With the two git lines out of its manifest cuda-emit
+  publishes again; crates.io has it only at 0.14.3.
+- **Consumer: `fuel-dispatch`** (fuel `origin/main`,
+  `fuel-dispatch/Cargo.toml:70`, feature `jit-synth`, plus
+  `tests/jit_synth_kernel_live.rs`) depends on `baracuda-cuda-emit` with
+  `features = ["seam", "nvrtc"]`. It pins cuda-emit `0.11.0`, so nothing breaks
+  until fuel follows to `>= 0.16.1`; then it must depend on `baracuda-cuda-seam`
+  instead. `baracuda-cuda-seam` is `publish = false` until fuel publishes its
+  Step-A seam crates (no date), so fuel can only reach it by path/git until then.
+- **New crate `baracuda-cuda-seam`** (`publish = false`, lockstep `alpha.94`):
+  `seam.rs` and both `fuel-kernel-seam{,-types}` git pins (rev `c02da348`). CI's
+  three seam legs retarget from `-p baracuda-cuda-emit --features seam` to
+  `-p baracuda-cuda-seam`; it is also in the driver-free `cargo doc` list.
+- cuda-emit: dropped the `seam` feature; `convert` and `nvrtc` unchanged.
+
 ## 0.0.1-alpha.93 — 2026-10-12 (baracuda-types `bytemuck` feature now does something)
 
 PM-tasked (alpha.93 allocated by the PM). Merging is not a publish.

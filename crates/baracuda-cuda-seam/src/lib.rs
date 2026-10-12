@@ -1,8 +1,17 @@
+//! # baracuda-cuda-seam
+//!
 //! Baracuda's live JIT synthesizer for the Fuel kernel seam — the
 //! `fuel_kernel_seam::Synthesizer` implementation (`BaracudaSynthesizer`) Fuel
-//! calls (§5). Carved out of `baracuda-kernelgen`'s `jit.rs` (carve step 2): it
-//! wires the CUDA backend ([`crate::Cuda`]) + the NVRTC compiler into the
-//! neutral generator's native [`unpopped::synthesize`]. Behind `--features seam`.
+//! calls (§5). Carved out of `baracuda-kernelgen`'s `jit.rs` (carve step 2) and
+//! then out of `baracuda-cuda-emit`'s former `seam` feature: it wires the CUDA
+//! backend ([`baracuda_cuda_emit::Cuda`]) + the NVRTC compiler into the neutral
+//! generator's native [`unpopped::synthesize`].
+//!
+//! **Not published.** This crate depends on `fuel-kernel-seam{,-types}` by git
+//! rev (fuel's board-#106 Step A `JitRequest::target` is not on crates.io), and
+//! crates.io rejects a git dependency even when it is optional — that is why
+//! it is split from `baracuda-cuda-emit`, which stays publishable. It becomes
+//! publishable the moment those two lines are plain registry versions.
 //!
 //! # The conversion lives HERE now, not in `unpopped`
 //!
@@ -22,7 +31,7 @@
 //! history for the original, including the enumeration-order/`OpTag` coverage
 //! rationale each `optag_name` arm still carries).
 //!
-//! [`synthesize`] (this module's own, below) rebuilds the old seam front-end's
+//! `synthesize` (this module's own, below) rebuilds the old seam front-end's
 //! call shape so every existing call site here is unchanged: convert the
 //! region, build an [`unpopped::JitRequest`], call [`unpopped::synthesize`]
 //! directly — that's the ONLY entry point `unpopped` exposes for this now.
@@ -31,7 +40,7 @@
 //! re-check them.
 
 #[cfg(feature = "nvrtc")]
-use crate::nvrtc::NvrtcCompiler;
+use baracuda_cuda_emit::NvrtcCompiler;
 use fuel_kernel_seam_types::{OpTag, PatternNode as SeamNode};
 use unpopped::{ArtifactKind, JitBudget, JitError, JitRequest, PatternNode};
 use unpopped_vocab::{OpCategory, OperandDesc, TargetId};
@@ -189,7 +198,7 @@ fn synthesize(
 
 // ===== The live §5 call — the `fuel_kernel_seam::Synthesizer` Fuel invokes =====
 
-use crate::Cuda;
+use baracuda_cuda_emit::Cuda;
 // Alias the envelope types: their bare `JitRequest`/`JitResponse` names would
 // shadow our own internal `jit::{JitRequest, JitResponse}` (glob-imported via
 // `super::*`) across this whole module and silently retype the native core.
@@ -209,13 +218,13 @@ use std::sync::Mutex;
 // reconstructable, confirmed frozen 2026-07-04).
 
 /// Baracuda's live JIT synthesizer — the [`Synthesizer`] Fuel calls (§5). Each
-/// [`Synthesizer::synthesize`] adapts the envelope [`JitRequest`] to the native
-/// [`synthesize`] core, returns a [`JitResponse`], and retains the compiled
+/// [`Synthesizer::synthesize`] adapts the envelope [`SeamRequest`] to the native
+/// `synthesize` core, returns a [`SeamResponse`], and retains the compiled
 /// artifact under its `entry_point` for the seam-call site to fetch
 /// ([`Self::take_kernel`]) and bind (load PTX → `KernelRef` → Fuel's
 /// `adopt_runtime_fused`). **Never panics** (the trait's contract): an
 /// unbuildable / out-of-vocabulary / over-budget region is a typed
-/// [`JitResponse::Declined`], not an error or a crash across the boundary.
+/// [`SeamResponse::Declined`], not an error or a crash across the boundary.
 #[derive(Debug)]
 pub struct BaracudaSynthesizer {
     /// A hard ceiling on the per-request compile budget (ms). Each request also

@@ -416,9 +416,10 @@ retargeted to another backend without a rewrite.
 The crate began life as a `publish = false` dev tool whose emitted artifacts
 are committed into `baracuda-kernels-sys`; it is now **published (as of
 alpha.76)** so the sibling Fuel project can build the live JIT synthesizer
-straight from crates.io. Its one **supported** surface is the `seam` feature
-(the `fuel_kernel_seam::Synthesizer` impl, frozen with Fuel on 2026-07-04);
-everything else — the IR, plan, emitters, contracts, dispatch artifacts — is
+straight from crates.io. Its former `seam` feature (the
+`fuel_kernel_seam::Synthesizer` impl, frozen with Fuel on 2026-07-04) moved to
+the unpublished `baracuda-cuda-seam` crate at alpha.94 (crates.io rejects its git
+dependency on fuel); everything else — the IR, plan, emitters, contracts, dispatch artifacts — is
 alpha-fluid generator internals with no cross-version stability, so pin exact
 `0.0.1-alpha.N` versions.
 

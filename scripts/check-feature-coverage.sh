@@ -26,7 +26,7 @@ set -euo pipefail
 ALL_FEATURES=(
   baracuda baracuda-build baracuda-types baracuda-cudnn baracuda-nccl
   baracuda-megatron baracuda-runtime baracuda-driver baracuda-cuvs
-  baracuda-cuvs-sys baracuda-cuda-emit
+  baracuda-cuvs-sys baracuda-cuda-emit baracuda-cuda-seam
 )
 # MIXED crates: some features need the toolkit, so `--all-features` can't be used;
 # the CUDA-FREE feature(s) are enumerated in CI and pinned here. Any OTHER feature
