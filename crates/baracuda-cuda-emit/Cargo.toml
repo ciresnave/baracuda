@@ -9,8 +9,8 @@ name = "baracuda-cuda-emit"
 # `unpopped-slang`) now moves together at 0.14.3. Per the MAJOR.MINOR-follows-
 # unpopped exception rule this crate is already on, its own version needs to
 # become 0.14.x -- not yet done here, the PM allocates the real number.
-version = "0.16.0"
-description = "CUDA backend for the neutral `unpopped` kernel generator: the `Cuda` `Backend` (IR -> .cu emitter), the NVRTC on-demand JIT compiler (`NvrtcCompiler`), and `BaracudaSynthesizer` (the Fuel kernel-seam `Synthesizer` impl). Depends on the neutral generator `unpopped` and supplies the CUDA-specific final emit + compile stage from OUTSIDE the neutral core (the swappable backend model)."
+version = "0.16.1"
+description = "CUDA backend for the neutral `unpopped` kernel generator: the `Cuda` `Backend` (IR -> .cu emitter), the NVRTC on-demand JIT compiler (`NvrtcCompiler`). The Fuel kernel-seam `Synthesizer` impl (`BaracudaSynthesizer`) lives in the unpublished `baracuda-cuda-seam`. Depends on the neutral generator `unpopped` and supplies the CUDA-specific final emit + compile stage from OUTSIDE the neutral core (the swappable backend model)."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -22,16 +22,6 @@ homepage.workspace = true
 # The real on-demand nvrtc compiler (`NvrtcCompiler`). Off by default so the crate
 # builds/tests without a CUDA toolchain; the Fuel synthesizer falls back to StubCompiler.
 nvrtc = ["dep:baracuda-nvrtc"]
-# The live Fuel kernel-seam Synthesizer endpoint (`BaracudaSynthesizer`) — wires the
-# fuel-kernel-seam `Synthesizer` trait + envelope. Converts Fuel's PatternNode/OpTag
-# to unpopped's own PatternNode ITSELF (src/seam.rs's to_internal/optag_name) and
-# calls unpopped::synthesize directly -- no longer pulls a `seam` feature from
-# `unpopped` (that module was deleted there; see src/seam.rs's module doc). This
-# crate is now the ONLY place `fuel-kernel-seam-types` is depended on in the
-# graph, which is what dissolves the two-version-diamond this feature's comment
-# used to describe -- not just realigns it.
-# CI builds and tests this leg on every push, so OFF BY DEFAULT IS NOT UNEXERCISED.
-seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam"]
 # Enable the neutral generator's `convert` feature (tree-sitter CUDA/Slang lifters)
 # so the relocated lifter round-trip tests (`tests/convert.rs`) can reach
 # `unpopped::convert::*`. Test-only passthrough; no cuda-emit lib code
@@ -42,34 +32,6 @@ convert = ["unpopped/convert"]
 unpopped = { workspace = true }
 unpopped-vocab = { workspace = true }
 baracuda-nvrtc = { workspace = true, optional = true }
-# The §5 shared wire grammar + live-call envelope Fuel calls — pinned to the
-# fuel-kernel-seam release train Fuel publishes; BaracudaSynthesizer implements the Synthesizer trait.
-#
-# board #106 Step A/B (2026-10): Fuel's Step A (JitRequest/SeamRequest gains
-# `target: TargetId`, #[non_exhaustive], `::new()` ctor) is on fuel's `main` at
-# c02da3489a01ba77889e6f5a17443f510247d694 but NOT YET published to crates.io
-# (fuel's own in-repo version at that commit is 0.12.0; the eventual crates.io
-# release is fuel's "0.13.0 wave"). crates.io itself REJECTS a crate that has a
-# git-only dependency, so this pin, and baracuda-cuda-emit/-parse as a whole,
-# MUST NOT be published while it's in effect. Switch both lines below back to
-# a plain `version = "..."` crates.io dependency (whatever version fuel's
-# 0.13.0 wave actually publishes as) the moment that wave lands, then baracuda
-# is clear to publish again.
-#
-# BOTH crates are pinned to the SAME git rev, not just fuel-kernel-seam: fuel's
-# own workspace resolves fuel-kernel-seam's dependency on fuel-kernel-seam-types
-# via a workspace-internal path (see fuel's own Cargo.toml), so a git
-# dependency on fuel-kernel-seam alone already pulls a git-sourced
-# fuel-kernel-seam-types transitively. Leaving fuel-kernel-seam-types pinned to
-# crates.io "0.11" here would then put TWO DIFFERENT SOURCES of the same crate
-# name in the graph (git+https://... vs registry+https://...) — Cargo treats
-# those as distinct, incompatible types even at a matching version number,
-# which is exactly the "two unpopped-vocab copies" defect this project already
-# hit once this session (PR #149) when a dependency family was bumped
-# partially instead of together. Pinning both to this rev avoids repeating it.
-fuel-kernel-seam-types = { git = "https://github.com/ciresnave/fuel", rev = "c02da3489a01ba77889e6f5a17443f510247d694", optional = true }
-fuel-kernel-seam = { git = "https://github.com/ciresnave/fuel", rev = "c02da3489a01ba77889e6f5a17443f510247d694", optional = true }
-
 [dev-dependencies]
 # The sibling backends published from the Unpopped extraction, used ONLY by the
 # cross-backend agreement tests (lift/fuzz/convert). They track the SAME `unpopped`

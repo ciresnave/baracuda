@@ -1,0 +1,43 @@
+[package]
+name = "baracuda-cuda-seam"
+version = "0.0.1-alpha.94"
+description = "The Fuel kernel-seam `Synthesizer` implementation (`BaracudaSynthesizer`) over the CUDA backend in `baracuda-cuda-emit`. NOT PUBLISHED: it depends on `fuel-kernel-seam{,-types}` by git rev (fuel's board #106 Step A `JitRequest::target` is unreleased), which crates.io rejects."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# crates.io rejects any crate with a git dependency, optional or not (verified
+# 2026-10-12: publishing baracuda-cuda-emit 0.16.0 failed with "dependency
+# `fuel-kernel-seam` does not specify a version"). This is why the Fuel seam
+# lives here and not behind a `seam` feature of baracuda-cuda-emit. Drop this
+# line when the two fuel deps below are registry versions.
+publish = false
+
+[features]
+# Real on-demand NVRTC compile (needs the CUDA toolkit at run time). Off by
+# default: the synthesizer then falls back to `unpopped::StubCompiler`.
+nvrtc = ["baracuda-cuda-emit/nvrtc"]
+
+[dependencies]
+baracuda-cuda-emit = { workspace = true }
+unpopped = { workspace = true }
+unpopped-vocab = { workspace = true }
+# The §5 shared wire grammar + live-call envelope Fuel calls. Pinned by git rev
+# to fuel `main` at c02da348 because board #106 Step A (`JitRequest::target:
+# TargetId`, `#[non_exhaustive]`, `::new()`) is not on crates.io: the latest
+# registry release is 0.11.2, which has `arch: ArchSku` only. Switch both lines
+# to a plain `version = "..."` once fuel publishes it (its "0.13.0 wave"), then
+# remove `publish = false` above.
+#
+# BOTH crates carry the SAME rev: fuel's own workspace resolves
+# fuel-kernel-seam's dependency on fuel-kernel-seam-types through a path, so a
+# git dependency on fuel-kernel-seam alone already pulls a git-sourced
+# fuel-kernel-seam-types. A registry `fuel-kernel-seam-types` here would be a
+# second, type-incompatible copy of the same crate name in the graph.
+fuel-kernel-seam-types = { git = "https://github.com/ciresnave/fuel", rev = "c02da3489a01ba77889e6f5a17443f510247d694" }
+fuel-kernel-seam = { git = "https://github.com/ciresnave/fuel", rev = "c02da3489a01ba77889e6f5a17443f510247d694" }
+
+[lints]
+workspace = true
