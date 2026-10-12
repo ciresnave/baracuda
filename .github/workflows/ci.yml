@@ -246,6 +246,7 @@ jobs:
           -p baracuda-cuvs
           -p baracuda-cuvs-sys
           -p baracuda-cuda-emit
+          -p baracuda-cuda-seam
           -- -D warnings
       # baracuda-optim is MIXED: `distributed_optim` is CUDA-free but `sm80/89/90a`
       # invoke nvcc, so `--all-features` can't be used — enumerate the CUDA-free one.
