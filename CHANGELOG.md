@@ -30,6 +30,10 @@ PM-tasked; alpha.92 allocated by the PM. Merging is not a publish.
   cast a `Vec<u8>` pointer to `*mut f32` (a misaligned `&mut [f32]`); it now
   downloads into a `Vec<f32>` and takes `to_bits()`. All 7 on-device tests pass
   on the RTX 4070 (`--ignored`, under `gpu-run`).
+- **`scripts/check-device-run-invocations.sh`:** reads each markdown file directly
+  (`done < "$f"`) instead of through `body=$(cat "$f")` / `<<< "$body"`. The
+  here-string hangs on MSYS/Git bash once a file passes ~64 KB (this entry pushed
+  `CHANGELOG.md` over it and hung the Windows job); the rules are unchanged.
 
 ## 0.0.1-alpha.91 — 2026-10-12 (unpopped 0.16.0 follower bump)
 

@@ -59,12 +59,12 @@ while IFS= read -r f; do
   [ -f "$f" ] || continue
   scanned=$((scanned + 1))
 
-  # Read the file once into a variable rather than piping into an early-exiting
-  # consumer: under `set -o pipefail` a `grep -q` that closes the pipe gives the
-  # producer SIGPIPE (141) and pipefail promotes it. That exact failure was measured
-  # on ubuntu-latest in PR #27 — see scripts/check-test-crate-locality.sh.
-  body=$(cat "$f")
-
+  # Read the file directly (`done < "$f"` below), not through a pipe into an
+  # early-exiting consumer: under `set -o pipefail` a `grep -q` that closes the pipe
+  # gives the producer SIGPIPE (141) and pipefail promotes it (measured on
+  # ubuntu-latest in PR #27 — see scripts/check-test-crate-locality.sh). Nor through
+  # a here-string (`<<< "$(cat "$f")"`): on MSYS/Git bash that hangs once a file
+  # passes ~64 KB (CHANGELOG.md tripped it in PR #164).
   while IFS= read -r line; do
     # Only lines that actually invoke a device run.
     case "$line" in
@@ -85,7 +85,7 @@ while IFS= read -r f; do
       *"must not"*|*"bypasses"*|*"do not use"*|*"never use"*) continue ;;
     esac
     violations+=("$f: $line")
-  done <<< "$body"
+  done < "$f"
 done < <(git ls-files -- '*.md')
 
 # Honesty 1: an empty walk is a broken guard, not a clean tree.
