@@ -45,16 +45,19 @@ jobs:
           SEED=crates/baracuda-cuda-vocab/kiss-cuda-seed.tsv
 
           # The pin SHA (for the report) + the pinned token set, from the vendored file.
-          # Data rows begin with the `ArchSku` variant (Sm…); `#` comments and the
-          # `sku` header do not, so `^Sm` selects exactly the rows.
+          # The seed has two blocks: token-set rows begin with a `cuda:` token (token in
+          # field 1) and dispatch-set rows with the `ArchSku` variant (Sm…, token in
+          # field 2); `#` comments and the two header rows match neither. The dispatch
+          # set is a subset of the token set, so the union is the token set.
           PIN=$(grep -oE 'Pinned:[[:space:]]*[0-9a-f]{7,40}' "$SEED" | grep -oE '[0-9a-f]{7,40}' | head -1)
-          pinned=$(grep '^Sm' "$SEED" | awk '{print $2}' | sort -u)
+          tokens_of() { awk '/^cuda:/ {print $1} /^Sm/ {print $2}' | sort -u; }
+          pinned=$(tokens_of < "$SEED")
 
           # KISS main's seed token set (the same slice of its cuda.md appendix).
           main_md=$(gh api "repos/ThinkersJournal/KISS/contents/spec/namespaces/cuda.md?ref=main" --jq .content | base64 -d)
           main_tokens=$(printf '%s\n' "$main_md" \
-            | sed -n '/machine-readable capability set/,/^```$/p' \
-            | grep '^Sm' | awk '{print $2}' | sort -u)
+            | sed -n '/machine-readable capability set/,$p' \
+            | tokens_of)
 
           if [ "$pinned" = "$main_tokens" ]; then
             echo "Pin $PIN is CURRENT — the vendored seed matches KISS main."

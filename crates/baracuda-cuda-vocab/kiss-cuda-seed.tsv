@@ -2,7 +2,9 @@
 #
 # Source:  ThinkersJournal/KISS  spec/namespaces/cuda.md
 #          ("Appendix: machine-readable capability set (SSOT seed)").
-# Pinned:  becf90fc  — the #336 merge ("the SSOT seed gains the Sm90 row"), 2026-08-26.
+# Pinned:  5b28bf51  — KISS main head when re-vendored (the #536 merge), 2026-10-11. The seed gained
+#          a second block (the TOKEN SET, 13 rows) beside the dispatch set; the previous pin
+#          (becf90fc, 2026-08-26) carried only the dispatch set.
 #
 # The SEMANTIC-agreement gate (`semantic_agreement_with_the_pinned_kiss_seed` in
 # src/manifest.rs) compares this crate's manifest members to the rows below BY KEY
@@ -18,16 +20,36 @@
 # upstream, on demand:
 #
 #   gh api "repos/ThinkersJournal/KISS/contents/spec/namespaces/cuda.md?ref=main" \
-#     --jq .content | base64 -d | sed -n '/machine-readable capability set/,/^```$/p'
+#     --jq .content | base64 -d | sed -n '/machine-readable capability set/,$p'
 #
 # If the seed changed: re-vendor the rows here, update the `Pinned:` line to the new
 # KISS commit + date, and re-run the semantic gate (it will agree or point at the
 # real disagreement). A choice, deliberately taken — not an event that breaks CI.
 #
-# Format: tab-separated `sku` (the Rust `ArchSku` variant), `token`, `arch`, `notes`.
-# The gate parses the `token` column only (whitespace-tolerant) and derives the rest.
-sku	token	arch	notes
-Sm80	cuda:sm80	ampere	forward-compatible fallback on Ada/Hopper
-Sm89	cuda:sm89	ada	FP8 tensor cores; requires the sm89 feature
-Sm90	cuda:sm90	hopper	base Hopper; no arch-specific feature required (`cuda:sm90a` is a different cell, §2)
-Sm90a	cuda:sm90a	hopper	accelerated features; requires the sm90a feature
+# Two tab-separated blocks, vendored verbatim from the appendix's two ```tsv fences.
+# Rows are told apart by their first column: a `cuda:` token (token set) or an
+# `ArchSku` variant `Sm…` (dispatch set); `#` lines and the two header rows
+# (`token…`, `sku…`) are skipped. The gate parses whitespace-tolerantly.
+#
+# TOKEN SET — every `cuda:` token the maintainer supports, whichever component serves it.
+token	arch	notes
+cuda:sm61	pascal	NVRTC path only; no baracuda-cutlass dispatch
+cuda:sm70	volta	NVRTC path only; no baracuda-cutlass dispatch
+cuda:sm75	turing	NVRTC path only; no baracuda-cutlass dispatch
+cuda:sm80	ampere	forward-compatible fallback on Ada/Hopper
+cuda:sm86	ampere	NVRTC path only; no baracuda-cutlass dispatch
+cuda:sm89	ada	FP8 tensor cores; requires the sm89 feature
+cuda:sm90	hopper	base Hopper; no arch-specific feature required (`cuda:sm90a` is a different cell, §2)
+cuda:sm90a	hopper	accelerated features; requires the sm90a feature; explicit opt-in, never derived from a capability number
+cuda:sm100	blackwell	NVRTC path only; no baracuda-cutlass dispatch
+cuda:sm100a	blackwell	NVRTC path only; arch-specific target; explicit opt-in, never derived from a capability number
+cuda:sm120	blackwell	NVRTC path only; no baracuda-cutlass dispatch
+cuda:sm120a	blackwell	NVRTC path only; arch-specific target; explicit opt-in, never derived from a capability number
+cuda:sm121	blackwell	NVRTC path only; compute capability 12.1
+# DISPATCH SET — the subset `baracuda-cutlass` dispatches per-arch kernels for; the only
+# place the Rust `ArchSku` variant appears. This is what the manifest's members mirror.
+sku	token
+Sm80	cuda:sm80
+Sm89	cuda:sm89
+Sm90	cuda:sm90
+Sm90a	cuda:sm90a
