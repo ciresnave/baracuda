@@ -16,6 +16,18 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.93 — 2026-10-12 (baracuda-types `bytemuck` feature now does something)
+
+PM-tasked (alpha.93 allocated by the PM). Merging is not a publish.
+
+- **`baracuda-types` `bytemuck` feature:** the feature (and its README row,
+  "`Pod` / `Zeroable` for the scalar types") existed but nothing in the crate used
+  the dependency. It now provides `bytemuck::Zeroable` + `bytemuck::Pod` for
+  `Half`, `BFloat16`, `Complex32` and `Complex64` (hand-written, so no
+  `bytemuck/derive`; layouts are `repr(transparent)` over `u16` / `repr(C)` over
+  two equal-width floats, no padding). Enables `bytemuck::cast_slice` between
+  these types and `u8` / `f32` / `f64`. Additive; default features unchanged.
+
 ## 0.0.1-alpha.92 — 2026-10-12 (transmute_copy size guard + misaligned test cast)
 
 PM-tasked; alpha.92 allocated by the PM. Merging is not a publish.

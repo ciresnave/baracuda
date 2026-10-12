@@ -473,6 +473,75 @@ mod num_complex_adapters {
     }
 }
 
+#[cfg(feature = "bytemuck")]
+mod bytemuck_adapters {
+    //! `bytemuck::Zeroable` / `Pod` for the scalar wrapper types, so they can be
+    //! cast to and from byte slices (`bytemuck::cast_slice`) without a per-type
+    //! copy loop. The impls are hand-written rather than derived so this
+    //! feature needs no `bytemuck/derive`.
+    use super::{BFloat16, Complex32, Complex64, Half};
+
+    // SAFETY (all four): each type is `Copy`, has no padding, no pointers or
+    // niches, and every bit pattern is a valid value — `Half` / `BFloat16` are
+    // `repr(transparent)` over `u16`; `Complex32` / `Complex64` are `repr(C)` over
+    // two `f32` / `f64` (no padding between or after equal-width fields).
+    unsafe impl bytemuck::Zeroable for Half {}
+    unsafe impl bytemuck::Pod for Half {}
+    unsafe impl bytemuck::Zeroable for BFloat16 {}
+    unsafe impl bytemuck::Pod for BFloat16 {}
+    unsafe impl bytemuck::Zeroable for Complex32 {}
+    unsafe impl bytemuck::Pod for Complex32 {}
+    unsafe impl bytemuck::Zeroable for Complex64 {}
+    unsafe impl bytemuck::Pod for Complex64 {}
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn zeroed_is_the_zero_value() {
+            assert_eq!(<Half as bytemuck::Zeroable>::zeroed(), Half::ZERO);
+            assert_eq!(<BFloat16 as bytemuck::Zeroable>::zeroed(), BFloat16::ZERO);
+            assert_eq!(
+                <Complex32 as bytemuck::Zeroable>::zeroed(),
+                Complex32::default()
+            );
+            assert_eq!(
+                <Complex64 as bytemuck::Zeroable>::zeroed(),
+                Complex64::default()
+            );
+        }
+
+        #[test]
+        fn cast_slice_round_trips_through_bytes() {
+            let halves = [Half::ONE, Half::NEG_ONE, Half::from_f32(0.5)];
+            let bytes: &[u8] = bytemuck::cast_slice(&halves);
+            assert_eq!(bytes.len(), 6);
+            assert_eq!(&bytes[..2], &Half::ONE.0.to_ne_bytes());
+            let back: &[Half] = bytemuck::cast_slice(bytes);
+            assert_eq!(back, &halves);
+
+            let bf = [BFloat16::ONE, BFloat16::from_f32(-2.0)];
+            let back: &[BFloat16] = bytemuck::cast_slice(bytemuck::cast_slice::<_, u8>(&bf));
+            assert_eq!(back, &bf);
+        }
+
+        #[test]
+        fn complex_is_two_adjacent_scalars() {
+            let c = [
+                Complex32 { re: 1.0, im: 2.0 },
+                Complex32 { re: 3.0, im: 4.0 },
+            ];
+            let floats: &[f32] = bytemuck::cast_slice(&c);
+            assert_eq!(floats, &[1.0, 2.0, 3.0, 4.0]);
+
+            let z = [Complex64 { re: -1.0, im: 0.5 }];
+            let doubles: &[f64] = bytemuck::cast_slice(&z);
+            assert_eq!(doubles, &[-1.0, 0.5]);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
