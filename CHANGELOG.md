@@ -16,6 +16,37 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.91 — 2026-10-12 (unpopped 0.16.0 follower bump)
+
+PM-tasked follower (alpha.91 allocated by the PM). Merging is not a publish;
+alpha.89 / alpha.90 stay unpublished.
+
+- **`unpopped` family `0.15.0 -> 0.16.0`** (`unpopped`, `unpopped-vocab`,
+  `unpopped-cpu-c`, `unpopped-slang`). `baracuda-cuda-emit` / `baracuda-cuda-parse`
+  `0.15.0 -> 0.16.0` (MAJOR.MINOR follow unpopped; versioning exception above).
+- **CpuC now lowers `f16` / `bf16`** (through an `unsigned short` carrier and
+  integer helpers). `backend_declines.rs` asserted the old typed
+  `UnsupportedDtype` decline; it is now
+  `cpuc_emits_halves_and_f32_and_declines_vectorized_schedule`: the halves emit a
+  host loop at a scalar-schedule key, a vector-aligned key is a typed
+  `UnsupportedSchedule` decline (v1 serves only the scalar contiguous path), and
+  f32 is the positive control.
+- **KISS `cuda:` seed re-vendored at `5b28bf51`** (was `becf90fc`). The seed now
+  carries two blocks: the 13-row token set (every `cuda:` token the maintainer
+  supports, NVRTC-only ones included) and the 4-row dispatch set.
+  `kiss-cuda-seed.tsv` holds both; `semantic_agreement_with_the_pinned_kiss_seed`
+  compares manifest members to the dispatch set as before and additionally
+  asserts every dispatch token is in the token set (KISS's own rule). The
+  `cuda-vocab-pin-liveness` workflow now extracts tokens from both blocks (its
+  old `,/^```$/p` slice stopped at the first fence and would have read an empty
+  main set). **Open, not decided here:** the manifest still lists the 4 dispatch
+  members, not the 13-token set; widening it is a `vocabulary_version` decision.
+- Absorbed with no source change: `half_load_intrinsic` / `half_store_intrinsic`
+  removal (`cfamily_shadow.rs` carries frozen local copies),
+  `scalar_ctype(F16|Bf16) = "unsigned short"` (the shadow's own table),
+  FP8 `Cmp*` U8 masks, kiss-ref 0.4.0 `non_exhaustive`, and the `__expf` refusal
+  pin in `baracuda-cuda-parse/tests/convert.rs` (still green).
+
 ## 0.0.1-alpha.90 — 2026-10-11 (unpopped 0.15.0 / kiss-ref 0.4.0 follower bump)
 
 PM-tasked KISS follower. Lockstep bump to `0.0.1-alpha.90`; merging is not a

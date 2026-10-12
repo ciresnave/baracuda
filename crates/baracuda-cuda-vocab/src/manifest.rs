@@ -327,7 +327,7 @@ mod tests {
     /// position, so seed row order stays non-semantic.
     ///
     /// The seed is VENDORED at a PINNED KISS commit (see kiss-cuda-seed.tsv's
-    /// header: becf90fc, the #336 merge) — pinned, not live, so KISS's unrelated
+    /// header: 5b28bf51, the #536 merge) — pinned, not live, so KISS's unrelated
     /// edits can't red this and it needs no network. A STALE pin is invisible to
     /// this gate by construction (it measures AGAINST the pin), so the vendored file
     /// carries a currency-check command and a "bumping is a deliberate act" note
@@ -341,15 +341,25 @@ mod tests {
     /// A red here NEVER means the generator drifted — that is the freshness gate.
     #[test]
     fn semantic_agreement_with_the_pinned_kiss_seed() {
-        // Parse the vendored seed's token column (field 1), skipping the `#` header
-        // comments and the `sku token …` header row. Whitespace-tolerant, so
-        // tabs-vs-spaces and a Windows CRLF checkout don't matter (a token parse,
-        // not a byte compare).
+        // Parse the vendored seed's two blocks, skipping the `#` header comments and
+        // the two header rows (`token …`, `sku …`). Rows are told apart by their first
+        // column: a `cuda:` token (the TOKEN SET) or an `ArchSku` variant `Sm…` (the
+        // DISPATCH SET, token in field 1). Whitespace-tolerant, so tabs-vs-spaces and
+        // a Windows CRLF checkout don't matter (a token parse, not a byte compare).
         let seed = include_str!("../kiss-cuda-seed.tsv");
-        let mut seed_keys: Vec<(String, &str, u32)> = seed
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty() && !l.starts_with('#') && !l.starts_with("sku"))
+        let rows = || {
+            seed.lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .filter(|l| !l.starts_with("token") && !l.starts_with("sku"))
+        };
+        let mut token_set: Vec<&str> = rows()
+            .filter(|r| r.starts_with("cuda:"))
+            .map(|r| r.split_whitespace().next().expect("non-empty row"))
+            .collect();
+        token_set.sort_unstable();
+        let mut seed_keys: Vec<(String, &str, u32)> = rows()
+            .filter(|r| !r.starts_with("cuda:"))
             .map(|row| {
                 let token = row.split_whitespace().nth(1).unwrap_or_else(|| {
                     panic!("vendored seed unparseable: row {row:?} has no token column")
@@ -358,6 +368,16 @@ mod tests {
             })
             .collect();
         seed_keys.sort();
+
+        // KISS's own rule for the seed: every dispatch-set token MUST appear in the
+        // token set ("the maintainer's generators SHOULD fail when it does not").
+        // Checked here so a hand-edited or half-vendored seed cannot pass the gate.
+        for (tok, _, _) in &seed_keys {
+            assert!(
+                token_set.contains(&tok.as_str()),
+                "vendored seed inconsistent: dispatch token {tok:?} is not in the token set"
+            );
+        }
 
         // Member side: DERIVE from each member's token via the SAME helper — not
         // from the stored `m.class`/`m.sm_number`. So an unrecognized class fails the
@@ -373,7 +393,7 @@ mod tests {
         assert_eq!(
             member_keys, seed_keys,
             "SEMANTIC AGREEMENT: this crate's manifest members disagree with KISS's PINNED seed \
-             (becf90fc). Bump the pin (re-vendor kiss-cuda-seed.tsv at a newer KISS commit) if \
+             (5b28bf51). Bump the pin (re-vendor kiss-cuda-seed.tsv at a newer KISS commit) if \
              KISS changed the vocabulary, or reconcile the vocabulary. This is NOT generator \
              drift — that is the freshness gate."
         );
@@ -401,20 +421,21 @@ mod tests {
         assert_eq!(v["vocabulary_version"], 1);
     }
 
-    /// PRE-DECLARED DRIFT (not a bug): this manifest lists FOUR members, while
-    /// KISS's registered SSOT seed in `spec/namespaces/cuda.md` currently lists
-    /// THREE — it omits `cuda:sm90` although `ArchSku::Sm90` is wired, so KISS's
-    /// own §2 table (four) and its appendix seed (three) disagree. The agreement
-    /// gate (a follow-on, binding KISS's registered annex) will therefore red by
-    /// exactly one member on its FIRST run: that is the gate catching live drift on
-    /// day one, and it clears when the seed row lands (KISS #334). This test pins
-    /// the count so that expected red is predicted, never diagnosed as our bug.
+    /// The manifest lists the FOUR dispatch-set members (the `ArchSku` cells), not
+    /// KISS's THIRTEEN-row token set. Since KISS `5b28bf51` the seed carries both:
+    /// the token set is "every `cuda:` token the maintainer supports, whichever
+    /// component serves it" (the NVRTC-only sm61/70/75/86/100/100a/120/120a/121 have
+    /// no `ArchSku` variant), and the dispatch set is the four this crate models.
+    /// The agreement gate compares members to the dispatch set, so it is green; this
+    /// test pins the count so that widening the manifest to the token set — a
+    /// `vocabulary_version`/schema decision for the maintainer, not a drive-by — is
+    /// a deliberate edit that fails here first.
     #[test]
-    fn manifest_lists_four_members_seed_lists_three_expect_agreement_red_by_one() {
+    fn manifest_lists_the_four_dispatch_members_not_the_token_set() {
         assert_eq!(
             Manifest::generate().members.len(),
             4,
-            "cuda-vocab v1 has four members; the KISS seed's three is the stale side"
+            "cuda-vocab v1 lists the four dispatch-set members; the 13-row token set is wider"
         );
     }
 }

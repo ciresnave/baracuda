@@ -17,43 +17,65 @@ use unpopped_cpu_c::CpuC;
 use unpopped_slang::Slang;
 use unpopped_vocab::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
 
-/// CpuC declines the half dtypes it has no CPU codec for — as a TYPED
-/// `LowerError::UnsupportedDtype`, never a panic (`generate` unwraps and would panic;
-/// `try_generate` is the Result form) — and emits a real host loop for the dtypes it
-/// does compute. The positive control (f32) is what stops the declines being
-/// satisfied by a CpuC that refuses everything.
+/// CpuC lowers `f16` / `bf16` (a CPU codec since unpopped-cpu-c 0.15.0: the halves
+/// are carried in `unsigned short` and converted through integer helpers, where
+/// they used to be a typed `UnsupportedDtype` decline). The v1 backend still
+/// serves only the scalar contiguous schedule, so a vector-aligned half key is a
+/// TYPED `UnsupportedSchedule` decline, never a panic (`generate` unwraps and would
+/// panic; `try_generate` is the Result form). Three legs, so that no one of them is
+/// satisfied by a backend that refuses everything:
+///
+/// 1. the halves EMIT a real host loop over an `unsigned short` carrier at a
+///    scalar-schedule key (alignment 1);
+/// 2. the same dtype at a vector-aligned key is a typed schedule decline;
+/// 3. f32 still emits (the positive control for leg 2).
 #[test]
-fn cpuc_declines_half_dtypes_and_emits_f32() {
-    // A single-input elementwise body, reused at each dtype. CpuC's dtype gate fires
-    // in `lower` BEFORE the body is examined, so the same body serves both legs.
+fn cpuc_emits_halves_and_f32_and_declines_vectorized_schedule() {
+    // A single-input elementwise body, reused at each dtype.
     let op_at =
         |dt: ElementKind| OpDef::elementwise("relu", 1, &[dt], input(0).unary(UnaryOp::Relu));
-    let key_at = |dt: ElementKind| {
-        let a = OperandDesc::new(1, &[1 << 16], &[1], dt, 4);
+    let key_at = |dt: ElementKind, align: u32| {
+        let a = OperandDesc::new(1, &[1 << 16], &[1], dt, align);
         structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
     };
 
-    // DECLINE (typed): f16 / bf16 — no CPU half codec in v1.
     for dt in [ElementKind::F16, ElementKind::Bf16] {
         let op = op_at(dt);
-        match try_generate(&op, &key_at(dt), &CpuC) {
-            Err(LowerError::UnsupportedDtype { dtype, .. }) => assert_eq!(
-                dtype, dt,
-                "CpuC declined the wrong dtype: expected {dt:?}, error names {dtype:?}"
-            ),
-            other => panic!("CpuC should typed-decline {dt:?}, got {other:?}"),
+
+        // 1. EMITS at a scalar-schedule key, through the integer carrier.
+        let k = try_generate(&op, &key_at(dt, 1), &CpuC)
+            .unwrap_or_else(|e| panic!("CpuC should EMIT for {dt:?}, but declined: {e:?}"));
+        assert!(
+            k.source.contains("for (long long i"),
+            "CpuC emitted no host loop for {dt:?}:
+{}",
+            k.source
+        );
+        assert!(
+            k.source.contains("unsigned short"),
+            "CpuC {dt:?} kernel does not carry the half in `unsigned short`:
+{}",
+            k.source
+        );
+
+        // 2. A vector-aligned key picks Vectorized, which v1 does not serve.
+        match try_generate(&op, &key_at(dt, 4), &CpuC) {
+            Err(LowerError::UnsupportedSchedule { .. }) => {}
+            other => {
+                panic!("CpuC should typed-decline the {dt:?} Vectorized schedule, got {other:?}")
+            }
         }
     }
 
-    // POSITIVE CONTROL: f32 is inside CpuC's compute allowlist — it MUST emit a real
-    // host-loop store. Without this, the declines above hold for a CpuC that refuses
-    // every dtype (a broken backend), which is the failure mode this pairing catches.
+    // 3. POSITIVE CONTROL: f32 emits at the scalar key, so legs 1-2 are not
+    // satisfied by a CpuC that refuses everything.
     let f32 = op_at(ElementKind::F32);
-    let k = try_generate(&f32, &key_at(ElementKind::F32), &CpuC)
+    let k = try_generate(&f32, &key_at(ElementKind::F32, 1), &CpuC)
         .unwrap_or_else(|e| panic!("CpuC should EMIT for f32, but declined: {e:?}"));
     assert!(
         k.source.contains("for (long long i"),
-        "CpuC emitted no host loop for f32:\n{}",
+        "CpuC emitted no host loop for f32:
+{}",
         k.source
     );
 }
