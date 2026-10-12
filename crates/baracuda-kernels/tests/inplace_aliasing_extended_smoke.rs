@@ -92,22 +92,15 @@ fn cast_f32_to_i32_aliasing_same_byte_width_safe() {
     assert_eq!(status, 0, "aliased cast f32→i32");
     stream.synchronize().expect("sync");
 
-    // Buffer is now i32 in-place. Read back as bytes, reinterpret as i32.
-    let mut got_bytes = vec![0_u8; numel * 4];
-    let dev_inplace_bytes: &baracuda_driver::DeviceBuffer<f32> = &dev_inplace;
-    unsafe {
-        let dst_slice = core::slice::from_raw_parts_mut(got_bytes.as_mut_ptr() as *mut f32, numel);
-        dev_inplace_bytes
-            .copy_to_host(dst_slice)
-            .expect("download bytes");
-    }
-    let aliased_out: Vec<i32> = (0..numel)
-        .map(|i| {
-            let mut b = [0_u8; 4];
-            b.copy_from_slice(&got_bytes[i * 4..(i + 1) * 4]);
-            i32::from_le_bytes(b)
-        })
-        .collect();
+    // Buffer is now i32 in-place. Download into a `Vec<f32>` (a plain memcpy,
+    // so the i32 bit patterns survive untouched) and take each lane's bits.
+    // The previous form cast a `Vec<u8>`'s pointer to `*mut f32`, a misaligned
+    // `&mut [f32]` that debug builds reject.
+    let mut got_bits = vec![0.0_f32; numel];
+    dev_inplace
+        .copy_to_host(&mut got_bits)
+        .expect("download bytes");
+    let aliased_out: Vec<i32> = got_bits.iter().map(|v| v.to_bits() as i32).collect();
 
     assert_eq!(
         aliased_out, ref_out,
