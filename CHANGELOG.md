@@ -16,6 +16,25 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.92 — 2026-10-12 (transmute_copy size guard + misaligned test cast)
+
+PM-tasked; alpha.92 allocated by the PM. Merging is not a publish.
+
+- **`baracuda-kernels` `AffinePlan::select` / `FillPlan::select`** refuse a `T`
+  whose `size_of::<T>()` disagrees with the width of `T::KIND`
+  (`Error::Unsupported`). `run` reads `desc.a` / `desc.b` / `desc.value` with
+  `transmute_copy::<T, f32|f64|i32|i64|f16|bf16>` on the strength of the `KIND`
+  match alone; a width mismatch would read past (or short of) the scalar. Unit
+  tests pin the width table (`kind_size_matches`).
+- **`tests/inplace_aliasing_extended_smoke.rs`:** the f32→i32 in-place readback
+  cast a `Vec<u8>` pointer to `*mut f32` (a misaligned `&mut [f32]`); it now
+  downloads into a `Vec<f32>` and takes `to_bits()`. All 7 on-device tests pass
+  on the RTX 4070 (`--ignored`, under `gpu-run`).
+- **`scripts/check-device-run-invocations.sh`:** reads each markdown file directly
+  (`done < "$f"`) instead of through `body=$(cat "$f")` / `<<< "$body"`. The
+  here-string hangs on MSYS/Git bash once a file passes ~64 KB (this entry pushed
+  `CHANGELOG.md` over it and hung the Windows job); the rules are unchanged.
+
 ## 0.0.1-alpha.91 — 2026-10-12 (unpopped 0.16.0 follower bump)
 
 PM-tasked follower (alpha.91 allocated by the PM). Merging is not a publish;

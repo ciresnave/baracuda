@@ -94,6 +94,16 @@ impl<T: Element> FillPlan<T> {
                  {f32, f64, f16, bf16, i32, i64}",
             ));
         }
+        // `run` reinterprets `desc.value` as the `T::KIND` scalar via
+        // `transmute_copy`, which reads `size_of::<U>()` bytes from a `T`. An
+        // `Element` whose `KIND` disagrees with its own width would read past
+        // (or short of) the value; refuse it here, where `run`'s SAFETY comment
+        // relies on it.
+        if !kind_size_matches(T::KIND, core::mem::size_of::<T>()) {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::FillPlan: size_of::<T>() does not match the width of T::KIND",
+            ));
+        }
 
         // Pure copy — no arithmetic.
         let precision_guarantee = PrecisionGuarantee {
@@ -271,6 +281,18 @@ fn dtype_in_scope(k: ElementKind) -> bool {
     )
 }
 
+/// `true` when a `T` of `size` bytes has the width of the scalar `k` names.
+/// Backs the `transmute_copy` calls in `run`; `false` for any kind outside
+/// [`dtype_in_scope`].
+fn kind_size_matches(k: ElementKind, size: usize) -> bool {
+    match k {
+        ElementKind::F32 | ElementKind::I32 => size == 4,
+        ElementKind::F64 | ElementKind::I64 => size == 8,
+        ElementKind::F16 | ElementKind::Bf16 => size == 2,
+        _ => false,
+    }
+}
+
 fn map_status(code: i32) -> Result<()> {
     match code {
         0 => Ok(()),
@@ -283,5 +305,50 @@ fn map_status(code: i32) -> Result<()> {
         )),
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
         n => Err(Error::CutlassInternal(n)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn real_element_types_pass_the_size_guard() {
+        assert!(kind_size_matches(
+            ElementKind::F32,
+            core::mem::size_of::<f32>()
+        ));
+        assert!(kind_size_matches(
+            ElementKind::F64,
+            core::mem::size_of::<f64>()
+        ));
+        assert!(kind_size_matches(
+            ElementKind::F16,
+            core::mem::size_of::<f16>()
+        ));
+        assert!(kind_size_matches(
+            ElementKind::Bf16,
+            core::mem::size_of::<bf16>()
+        ));
+        assert!(kind_size_matches(
+            ElementKind::I32,
+            core::mem::size_of::<i32>()
+        ));
+        assert!(kind_size_matches(
+            ElementKind::I64,
+            core::mem::size_of::<i64>()
+        ));
+    }
+
+    #[test]
+    fn a_width_that_disagrees_with_the_kind_is_refused() {
+        // An `Element` claiming `KIND == F32` with some other width would make
+        // `transmute_copy::<T, f32>` misread the descriptor's value.
+        assert!(!kind_size_matches(ElementKind::F32, 8));
+        assert!(!kind_size_matches(ElementKind::F32, 2));
+        assert!(!kind_size_matches(ElementKind::F64, 4));
+        assert!(!kind_size_matches(ElementKind::F16, 4));
+        assert!(!kind_size_matches(ElementKind::I64, 4));
+        assert!(!kind_size_matches(ElementKind::U8, 1));
     }
 }
