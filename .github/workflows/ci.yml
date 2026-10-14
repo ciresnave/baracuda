@@ -34,11 +34,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # rustfmt directly (chunked) instead of `cargo fmt --all`: on Windows the
       # latter spawns rustfmt with EVERY workspace file on one command line and
       # overflows the arg-length limit (`os error 206`). `git ls-files | xargs`
@@ -265,9 +265,9 @@ jobs:
     # dtolnay/rust-toolchain@1.85.0 installs the toolchain that `+1.85.0` selects.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@69084b241933c14c2fa24234c4596f11a2655339 # 1.85.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: MSRV — build exactly the crates that declare rust-version=1.85, under 1.85.0
         shell: bash
         # Derive the set to build from `cargo metadata` (the per-crate Cargo.toml
@@ -324,9 +324,9 @@ jobs:
       # kernels-sys + cutlass-kernels-sys skip nvcc under DOCS_RS → driver-free.
       DOCS_RS: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: cargo check baracuda-kernels --features ${{ matrix.arch }}
         run: cargo check -p baracuda-kernels --features ${{ matrix.arch }}
       # `baracuda-kernels-bench`'s tests/ are 12 files / 3,103 lines that NO job
