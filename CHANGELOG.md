@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.99 — 2026-10-14 (docs: API-freeze slice 2 — family denominators + R2 worklist)
+
+PM-tasked (alpha.99 provisional, PM allocates at gate). Merging is not a publish. No code change.
+
+- `docs/planning/api-freeze/`: `kernels-families.tsv` (R6 denominator), `r2-worklist.tsv` (792 pub-field
+  structs lacking `#[non_exhaustive]`, split Descriptor / Args / other), README section 8, `tool/slice2.py.txt`.
+
 ## 0.0.1-alpha.98 — 2026-10-14 (docs: `Element` vs `DeviceRepr + Copy` layering note)
 
 PM-tasked (R1 of the API-freeze review; alpha.98 provisional, PM allocates at gate). Merging is not a publish.

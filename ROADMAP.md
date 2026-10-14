@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.98** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
+`main` is at **v0.0.1-alpha.99** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1454,9 +1454,9 @@ C-ABI policy (needs CireSnave via PM), per-family review of the ~9.9k `stable` i
 `#[non_exhaustive]` pass, the `unpopped_vocab::*` glob re-export. `0.1.0-beta.0` not cut.
 
 **Next unblocked slices (mechanical, from `docs/planning/api-freeze/items.tsv`; no decision needed):**
-(a) per-family table for `baracuda-kernels` (items / pub fields / `#[non_exhaustive]` per `Plan` family) as the
-R6 review denominator; (b) list every pub struct with pub fields that is *not* `#[non_exhaustive]` — the R2
-worklist; (c) re-run the census at each release so the freeze delta is visible. **R1 done (alpha.98).**
+(a) and (b) **done (alpha.99)**: `kernels-families.tsv` and `r2-worklist.tsv` (257 `*Descriptor` structs
+are the R2 target; 307 `*Args` stay literal). Open: (c) re-run the census at each release; (d) measure whether Fuel
+struct-literals any `*Descriptor` (gates the R2 breaking pass); (e) per-family owner review (R6). **R1 done (alpha.98).**
 
 **Scope:**
 
