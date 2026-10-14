@@ -16,6 +16,18 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.103 — 2026-10-14 (docs: provenance — header-comment corrections)
+
+PM-tasked (alpha.103 allocated by the PM). Merging is not a publish. **Comment-only edits to 32 code files:
+after stripping comments and whitespace every one is identical to its previous blob
+(`docs/provenance/header-comment-changes-verified.tsv`).**
+
+- cast/fill/affine: the unsupported "Eric Holscher" holder replaced by the true origin (candle contributors via
+  Fuel; upstream names no holder). attention.rs licence label corrected to MIT. Apex rewrites: invented NVIDIA
+  copyright line replaced by an origin note. SPDX/origin added to sort, cutf-derived headers, CUDA-L2 probes.
+- `baracuda-forge`: `NOTICE` restated with measured per-file differences (four "verbatim" claims did not hold);
+  `// Origin:` line on each module.
+
 ## 0.0.1-alpha.102 — 2026-10-14 (docs: provenance — licence texts carried verbatim)
 
 PM-tasked (alpha.102 allocated by the PM). Merging is not a publish. **Licence/attribution files only: no

@@ -1,3 +1,5 @@
+// Origin: guoqingbao/cudaforge@aa77db3 src/builder.rs (MIT OR Apache-2.0 per its Cargo.toml; no LICENSE file upstream);
+// vs upstream after comment/whitespace stripping: 378 lines differ. See ../NOTICE.
 //! Main kernel builder implementation.
 
 use crate::compute_cap::{ComputeCapability, GpuArch};

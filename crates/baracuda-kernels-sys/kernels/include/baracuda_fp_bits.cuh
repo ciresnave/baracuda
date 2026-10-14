@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2018 mutsuki (Hiroyuki Ootomo), enp1s0/cutf (MIT; LICENSES/cutf-LICENSE)
+// SPDX-FileCopyrightText: 2026 Eric Evans (MIT OR Apache-2.0)
+// SPDX-License-Identifier: MIT OR Apache-2.0
+//
 // baracuda_fp_bits.cuh
 //
 // Phase 44b — FP bit-twiddling helpers consolidated for baracuda's

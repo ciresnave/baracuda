@@ -1,3 +1,5 @@
+// Origin: guoqingbao/cudaforge@aa77db3 src/parallel.rs (MIT OR Apache-2.0 per its Cargo.toml; no LICENSE file upstream);
+// vs upstream after comment/whitespace stripping: 43 lines differ. See ../NOTICE.
 //! Parallel build configuration.
 
 use glob::Pattern;

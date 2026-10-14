@@ -1,3 +1,5 @@
+// Origin: guoqingbao/cudaforge@aa77db3 src/lib.rs (MIT OR Apache-2.0 per its Cargo.toml; no LICENSE file upstream);
+// vs upstream after comment/whitespace stripping: modified. See ../NOTICE.
 //! # baracuda-forge
 //!
 //! Build-time CUDA kernel compiler for the [baracuda] ecosystem. Drop it into

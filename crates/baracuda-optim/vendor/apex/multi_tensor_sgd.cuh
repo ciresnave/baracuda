@@ -1,5 +1,6 @@
-// Copyright (c) 2017-2025 NVIDIA Corporation
-// All rights reserved.
+// Origin: NVIDIA/apex csrc/multi_tensor_*.cu (BSD-3-Clause; text in ../LICENSE, whose upstream copy
+// carries no copyright line). This file is a PyTorch-free re-implementation by baracuda, not a
+// verbatim copy; the licence conditions below are NVIDIA/apex's.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions

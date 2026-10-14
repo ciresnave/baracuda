@@ -1,3 +1,6 @@
+// Derived from deepreinforce-ai/CUDA-L2 (MIT, "Copyright (c) 2025 deepreinforce.ai"), commit dbe0177;
+// licence text: LICENSE-CUDA-L2.txt next to this file. Modified by baracuda (torch bindings stripped).
+//
 // CUDA-L2 2048_4096_4096 wrapper. See wrapper_m128.cu for the
 // rationale. This file is the BM=128, BN=64, BK=32, Stages=4 variant
 // with __launch_bounds__(128, 2) per upstream tuning.

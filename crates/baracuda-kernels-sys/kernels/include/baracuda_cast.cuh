@@ -1,4 +1,5 @@
-// SPDX-FileCopyrightText: 2024 Eric Holscher and the candle / fuel-cuda-kernels contributors
+// SPDX-FileCopyrightText: The candle contributors (huggingface/candle, candle-kernels/src/cast.cu) via the Fuel project
+//   (upstream LICENSE-MIT / LICENSE-APACHE carry no copyright line; texts: LICENSES/candle-LICENSE-*)
 // SPDX-FileCopyrightText: 2026 Eric Evans
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
