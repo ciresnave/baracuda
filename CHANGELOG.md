@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.105 — 2026-10-14 (docs: provenance audit method note)
+
+PM-tasked (alpha.105 allocated by the PM). Merging is not a publish. Documentation only.
+
+- `docs/provenance/METHOD.md`: one-page reusable method (index enumeration, origin tracing, blob-id verification,
+  pins, verbatim-licence rule, what to record, three-bucket PR shipping with proofs) for the fuel / lightbulb /
+  mlmf lanes. `PROVENANCE.md` links it.
+
 ## 0.0.1-alpha.104 — 2026-10-14 (docs: provenance — upstream reference commits recorded)
 
 PM-tasked (alpha.104 allocated by the PM). Merging is not a publish. Documentation only.

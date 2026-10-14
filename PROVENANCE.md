@@ -7,7 +7,7 @@ licence. Measured at `origin/main` `6b39f550` (alpha.100), 2026-10-14. PM-tasked
 licence file or source header was changed by this PR** (those are listed in §4 for a PM decision).
 Only baracuda-authored documentation (`VENDOR.md` files, `LICENSE-thirdparty.md`) was corrected.
 
-**Method.** Files enumerated with `git ls-files`. For each, our blob (`git show HEAD:<path>`, LF) was
+**Method** (reusable by other lanes: [`docs/provenance/METHOD.md`](docs/provenance/METHOD.md)). Files enumerated with `git ls-files`. For each, our blob (`git show HEAD:<path>`, LF) was
 compared with the upstream blob at the pinned commit in a `--filter=blob:none` clone: byte-identical /
 modified (hunks, +/- lines) / hand-port (line-overlap test; positive control: a known-verbatim file
 scored 104/104 shared lines, the hand-ports 0) / no upstream. Licence files were compared by sha256.
