@@ -22,6 +22,17 @@
 //! See [`unpopped_vocab`] for the `#[non_exhaustive]` / exhaustive tag
 //! policy — those enums live there now and are re-exported here.
 //!
+//! # `T: Element` vs `T: DeviceRepr + Copy`
+//!
+//! Two bounds coexist **on purpose** (both traits are sealed in `unpopped-vocab`):
+//! `Element: KernelDtype + sealed` adds the α/β `Scalar` projection that arithmetic
+//! plans need, while `KernelDtype` is `DeviceRepr + Copy + 'static` plus `KIND`. Carriers
+//! ([`TensorRef`] / [`TensorMut`] / [`MatrixRef`] / [`MatrixMut`] / [`VectorRef`]) and
+//! layout/pack plans bound on `DeviceRepr + Copy + 'static` so sub-byte and packed
+//! types can ride them; compute plans bound on `T: Element`. Unifying them would be an
+//! `unpopped-vocab` change, so `Element` / `KernelDtype` are an Unpopped-owned
+//! stability dependency of every `Plan<T>`. See `ARCHITECTURE.md`, "Trait layering".
+//!
 //! The trait `Element` was previously named `CutlassElement`;
 //! `baracuda-cutlass` keeps the old name available as a re-export for
 //! back-compat. The semantics are unchanged.
