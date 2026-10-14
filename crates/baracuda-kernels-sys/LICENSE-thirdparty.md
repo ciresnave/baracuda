@@ -12,6 +12,21 @@ and `int32_t` status-code ABI (`0` success, `2` invalid problem,
 `5` internal launch failure). The adaptations are non-trivial; the
 original kernel body is the load-bearing prior art.
 
+## Licence texts carried in this repository (verbatim upstream bytes)
+
+Verified blob-for-blob against upstream by `docs/provenance/licence-files-verified.tsv`.
+
+| origin | file | upstream commit |
+|---|---|---|
+| huggingface/candle (MIT OR Apache-2.0; the licence files carry no copyright line) | `LICENSES/candle-LICENSE-{MIT,APACHE}`, also `vendor/flash-attention/LICENSE-candle-*`, `vendor/fuel-q8_1/LICENSE-candle-*` | `fd8448d2` |
+| ggerganov/llama.cpp / ggml (MIT, "Copyright (c) 2023 Georgi Gerganov") | `LICENSES/llama.cpp-LICENSE`, `vendor/fuel-q8_1/LICENSE-llama.cpp` | `0a5eebb45d` |
+| enp1s0/cutf (MIT, Mutsuki Ootomo) | `LICENSES/cutf-LICENSE` | `bd2a372` |
+| deepreinforce-ai/CUDA-L2 (MIT) | `crates/baracuda-kernels-bench/external/cuda-l2-probes/LICENSE-CUDA-L2.txt` | `dbe0177` |
+| Maratyszcza/FP16 (MIT; origin library of `fp16.h`'s Dukhan-copyrighted routines) | `vendor/flashinfer/LICENSE-FP16` | `782eea12` |
+
+**Not available verbatim:** `guoqingbao/attention.rs` declares `license = "MIT"` in its `Cargo.toml`
+but ships no LICENSE file at any commit (G-K-1 in `PROVENANCE.md`); `guoqingbao/cudaforge` likewise.
+
 ## Vendored sources
 
 ### fuel-cuda-kernels (cast / fill / affine)

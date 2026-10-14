@@ -14,8 +14,9 @@ parameter tensors instead of one launch per tensor.
 
 ## License attribution
 
-`LICENSE` here is the BSD-3-Clause text reformatted (**not** byte-identical to NVIDIA/apex's;
-see `PROVENANCE.md` G-APEX-1); `AUTHORS` is baracuda-written (Apex ships none). The four `.cuh`
+`LICENSE` here is byte-identical to NVIDIA/apex's (`becbb77c`, the last upstream commit on or
+before the 2026-05-28 vendor date; replaced 2026-10-14, `PROVENANCE.md` G-LIC-1); `AUTHORS` is
+baracuda-written (Apex ships none). The four `.cuh`
 files are **PyTorch-free rewrites** of the Apex `csrc/` functors (<= 9 shared lines each at
 NVIDIA/apex `575968bc`), not verbatim copies, and their "Copyright (c) 2017-2025 NVIDIA"
 headers are baracuda's, not an upstream notice (G-APEX-2). No upstream commit was recorded at

@@ -1,3 +1,5 @@
+[baracuda-written attribution note; the upstream project ships no AUTHORS file. See LICENSE for the upstream licence.]
+
 Elias Frantar (elias.frantar@ist.ac.at) — original author of the Marlin
   W4A16 GEMM kernel (IST-DASLab, Institute of Science and Technology
   Austria).

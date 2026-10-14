@@ -97,6 +97,24 @@ licence text or a source header, so it needs a PM decision (§4).
 | G-CUTLASS-1 | `baracuda-cutlass{,-kernels}-sys/NOTICE` and `baracuda-cutlass/NOTICE` SKU descriptions are stale (not a licence defect) | open (docs; separate) |
 | G-FI-3 | `vendor/flashinfer/VENDOR.md` places `fp16.h` under `attention/`; the file is `include/flashinfer/fp16.h`. `fastdiv.cuh` has dead code (`numer`, `q` computed twice) — correctness not assessed | open |
 
+## 3a. Licence-file bucket applied (PR alpha.102, 2026-10-14)
+
+PM-approved (`TASK` 13:06Z). New files and replaced files are **upstream bytes**; `docs/provenance/licence-files-verified.tsv` compares each staged blob id with the upstream blob id (18/18 identical). No `.cu/.cuh/.h/.rs` file is in the diff. Pin policy for the previously unpinned origins: the last upstream commit **on or before the 2026-05-28 vendor date** (for each, the licence blob is also unchanged at upstream HEAD); it is a date-bounded pin, not a recovered vendor-time commit.
+
+| gap | now |
+|---|---|
+| G-FA-1, G-Q8-1 | candle MIT + Apache texts added in `vendor/flash-attention/`, `vendor/fuel-q8_1/`, `LICENSES/` |
+| G-K-1 | candle + llama.cpp texts in `LICENSES/`; attention.rs has **no** upstream licence file (open, [FINDING]) |
+| G-LIC-1 | LICENSE replaced verbatim: bitsandbytes `5500cffe`, causal-conv1d `4f6ae4e2`, mamba `a14b1dff`, xformers `c04f47b6`, apex `becbb77c` |
+| G-LIC-2 | causal-conv1d, mamba `AUTHORS` replaced verbatim; upstream-less AUTHORS (awq, bitsandbytes, marlin, mhc, xformers, apex) now say so on the first line |
+| G-TE-1 | `ATTRIBUTION.md` embedded text replaced with TE `LICENSE` (`9e5a847c`, bea1b426) |
+| G-BNB-1 | bitsandbytes `NOTICE.md` carried |
+| G-FI-1 | `LICENSE-FP16` (Maratyszcza/FP16) added; AMD's 2025 line has no separate upstream text (SPDX line only) |
+| G-CUTF-1 | `LICENSES/cutf-LICENSE` added (headers: next PR) |
+| G-L2-1 | `LICENSE-CUDA-L2.txt` tracked next to the probes (headers: next PR) |
+
+Still open from §3: G-H-1/2, G-APEX-2, G-SORT-1, G-CUTF-1 headers, G-PIN-1, G-FQ-1, G-FORGE-1/2 (next PRs), and attention.rs / cudaforge licence files that do not exist upstream.
+
 ## 4. Proposed fixes needing PM (no vendoring changes made)
 
 1. **Add licence texts** (new files only, no edits to vendored sources): candle `LICENSE-MIT` +
