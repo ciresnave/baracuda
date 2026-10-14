@@ -1358,7 +1358,7 @@ fn primitive_add_uses_op_kind_and_carries_required_blocks() {
     // required §4.3 blocks.
     for block in [
         "accept:",
-        "structure_key: \"sk4|",
+        "structure_key: \"sk5|",
         "return:",
         "caps:",
         "cost:",

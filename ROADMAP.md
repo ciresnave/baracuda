@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.106** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
+`main` is at **v0.0.1-alpha.107** (2026-10-14; `baracuda-cuda-emit` 0.17.1); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1398,7 +1398,7 @@ priority within the section.
 
 ### CodeRipper hygiene leftovers (from the 2026-10-14 portfolio triage; not done in #178)
 
-- **`version-consistency`** (4 High): `baracuda-cuda-emit` 0.16.1 and `baracuda-cuda-parse` 0.16.0 follow the `unpopped`
+- **`version-consistency`** (4 High): `baracuda-cuda-emit` and `baracuda-cuda-parse` (0.17.1 at alpha.107) follow the `unpopped`
   line by the documented versioning exception; `baracuda-examples` and `xtask` are `0.0.0` non-publishable members.
   Needs a CodeRipper waiver or a per-crate allowance, not a version change here.
 - **SUP-001** (Medium): `ci.yml` runs `cargo` without strict mode at 20 sites. Behaviour-changing, so deliberately left.
