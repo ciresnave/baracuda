@@ -25,8 +25,10 @@ behind the opt-in `flashinfer` cargo feature.
 ## Provenance
 
 - **Upstream**: <https://github.com/flashinfer-ai/flashinfer>
-- **Tag**: `v0.6.12`
-- **Commit**: `eee0d75f91f64c520bfaed07e39a850ea4ddde23`
+- **Commit**: `eee0d75f91f64c520bfaed07e39a850ea4ddde23` — a `main` commit of 2026-05-28
+  (`nightly-v0.6.12-20260528-3`), **not** the `v0.6.12` tag (`d768c14e`, 2026-05-29). Corrected
+  2026-10-14 by the provenance audit (`PROVENANCE.md`); the unmodified files are also byte-identical
+  to the tag, so no content changes.
 - **License**: Apache-2.0 (see `LICENSE` next to this file; `NOTICE`
   carries the NVIDIA + FlashInfer-community copyright assertions and
   references the third-party `licenses/` directory in the upstream

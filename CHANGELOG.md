@@ -16,6 +16,17 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.101 — 2026-10-14 (docs: third-party provenance audit — `PROVENANCE.md`)
+
+PM-tasked (alpha.101 allocated by the PM). Merging is not a publish. No code change; no vendored file,
+licence file or source header touched.
+
+- New `PROVENANCE.md` + `docs/provenance/*.tsv`: every vendored/derived file traced to origin and
+  compared against upstream; gap register G-* and the proposed fixes that need a PM decision.
+- Corrected baracuda-authored docs only: FlashInfer tag/commit, FA2 modified-file list + candle pin,
+  AWQ launcher path, mHC and Apex header claims, `LICENSE-thirdparty.md` (q8_1 family now ships;
+  unresolvable llama.cpp commit id).
+
 ## 0.0.1-alpha.100 — 2026-10-14 (docs: API-freeze — Fuel `*Descriptor` exposure measured; census-per-release process)
 
 PM-tasked (alpha.100 allocated by the PM; docs are not exempt). Merging is not a publish. No code change.

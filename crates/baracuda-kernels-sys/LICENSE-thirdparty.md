@@ -85,18 +85,21 @@ original kernel body is the load-bearing prior art.
     every modern GGUF file (llama.cpp >= 2024) uses the 256-element
     super-block layout.
   - Dropped the q8_1-staging tile-based MMQ matmul family
-    (`mul_mat_q*`, `mul_mat_vec_q*_q8_1_cuda`, the `load_tiles_q*` /
-    `allocate_tiles_q*` template machinery, and the `quantize_q8_1`
-    intermediate kernel). baracuda's GGUF surface today ships the
-    FP-activation MMVQ path only; the q8_1-staging MMQ path is
-    deferred to a follow-up milestone if benchmarks justify the
-    additional 2k+ LOC.
+    (`mul_mat_q*`, `load_tiles_q*` / `allocate_tiles_q*` template
+    machinery). **Correction (2026-10-14 provenance audit):** the
+    earlier text said the `quantize_q8_1` kernel and the q8_1-staging
+    MMVQ path were also dropped; they now ship, in
+    `kernels/gguf/{mmvq_batched,mmvq_multim,quantize_q8_1}.cu` and
+    `kernels/include/baracuda_mmvq_{batched,multim}.cuh`, which are
+    llama.cpp-derived (via Fuel/candle; see
+    `vendor/fuel-q8_1/` and `PROVENANCE.md`).
   - Dropped Fuel's `indexed_moe_forward_*` (Fuel-specific fused MoE
     op; not on baracuda's roadmap).
   - Q4_0 + Phi-2 dequant fixup: searched Fuel's git log
     (`git log --grep="phi-2|phi2|gguf|quantized"`) and upstream
-    llama.cpp PR `25805fff` ("Fix some NaNs with GGML quantized"
-    `#3428`). Neither carries a Q4_0-specific bit-pattern fix that
+    llama.cpp PR `#3428` ("Fix some NaNs with GGML quantized"; the
+    commit id `25805fff` previously cited here does not resolve in a
+    full-history llama.cpp clone, 2026-10-14). Neither carries a Q4_0-specific bit-pattern fix that
     differs from the verbatim llama.cpp dequant. The Phi-2 inference
     path uses the same `dequantize_q4_0` routine as every other
     model; no special-case patch was applied during vendor.

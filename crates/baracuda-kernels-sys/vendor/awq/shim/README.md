@@ -5,7 +5,7 @@ The upstream AWQ kernel TU (`src/gemm_cuda_gen.cu`) `#include`s
 entry point's wrapper logic. baracuda strips both includes and the
 entire host-side `gemm_forward_cuda(...)` wrapper from the vendored
 copy — we use our own baracuda launcher at
-`kernels/quantization/awq_launcher.cu` instead.
+`kernels/quantize/awq_launcher.cu` instead.
 
 These shim headers exist as **belt-and-suspenders insurance** in case
 a future re-vendor reintroduces the includes before the strip-patch is

@@ -14,9 +14,12 @@ parameter tensors instead of one launch per tensor.
 
 ## License attribution
 
-The verbatim upstream `LICENSE` and `AUTHORS` files are checked in
-alongside this README. **Do not modify them.** Per-file copyright
-headers in every kept `.cuh` / `.cu` file are also preserved verbatim.
+`LICENSE` here is the BSD-3-Clause text reformatted (**not** byte-identical to NVIDIA/apex's;
+see `PROVENANCE.md` G-APEX-1); `AUTHORS` is baracuda-written (Apex ships none). The four `.cuh`
+files are **PyTorch-free rewrites** of the Apex `csrc/` functors (<= 9 shared lines each at
+NVIDIA/apex `575968bc`), not verbatim copies, and their "Copyright (c) 2017-2025 NVIDIA"
+headers are baracuda's, not an upstream notice (G-APEX-2). No upstream commit was recorded at
+vendor time.
 baracuda's own license (dual MIT / Apache-2.0) sits alongside; the
 vendored Apex sources retain BSD-3-Clause independently.
 
@@ -32,9 +35,9 @@ through a flat-C-ABI surface:
 | File | LOC | Purpose |
 |---|---|---|
 | `multi_tensor_apply.cuh` | ~200 | Core launch template + `TensorListMetadata` pack |
-| `multi_tensor_adam.cu` | ~150 | Adam fused functor (m + v update + adamw decay) |
-| `multi_tensor_lamb.cu` | ~250 | LAMB (Adam + layer-wise adaptive learning rate) |
-| `multi_tensor_sgd.cu` | ~100 | SGD with momentum + Nesterov + weight decay |
+| `multi_tensor_adam.cuh` | ~150 | Adam fused functor (m + v update + adamw decay) |
+| `multi_tensor_lamb.cuh` | ~250 | LAMB (Adam + layer-wise adaptive learning rate) |
+| `multi_tensor_sgd.cuh` | ~100 | SGD with momentum + Nesterov + weight decay |
 
 ## Scope: what we removed
 
@@ -68,7 +71,7 @@ directly — instead, the shim:
 
 This keeps the vendored `.cuh` file readable as documentation but
 moves the launch logic into baracuda's own TU. The functor structs
-themselves are vendored unchanged.
+themselves are re-implemented, not vendored unchanged (provenance audit 2026-10-14).
 
 ## Future scope
 

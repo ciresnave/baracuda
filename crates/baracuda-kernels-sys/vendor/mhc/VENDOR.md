@@ -27,8 +27,9 @@ README. **Do not modify it.** The original `AUTHORS` file did not
 exist in the upstream tree — `AUTHORS` here captures the author
 attribution that the upstream README + LICENSE conveys.
 
-Per-file copyright headers in every `src/*.cuh` / `include/*.{h,cuh}`
-file are preserved verbatim from upstream. baracuda's own license
+Upstream's `src/*.cuh` / `include/*.{h,cuh}` carry no per-file header; baracuda **prepended** an
+SPDX/vendoring header (`Copyright (c) 2026 Andre Slavescu`, matching upstream `LICENSE`) to eight
+files and left the bodies byte-identical (provenance audit 2026-10-14). baracuda's own license
 (dual MIT / Apache-2.0) sits alongside; the vendored mHC sources
 retain MIT independently.
 
