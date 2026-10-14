@@ -67,7 +67,8 @@ state drives whatever MMA-aware GEMM kernel the caller wires up.
 ## License
 
 The TransformerEngine reference implementation is Apache-2.0,
-**including the §3 patent grant**. The full text follows:
+**including the §3 patent grant**. The full text follows (verbatim `LICENSE` of NVIDIA/TransformerEngine@9e5a847c, the last upstream
+commit on or before the 2026-05-28 vendor date; unchanged at upstream HEAD):
 
 ```
                                  Apache License
@@ -209,8 +210,8 @@ The TransformerEngine reference implementation is Apache-2.0,
 
    6. Trademarks. This License does not grant permission to use the trade
       names, trademarks, service marks, or product names of the Licensor,
-      except as required for describing the origin of the Work and
-      reproducing the content of the NOTICE file.
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
 
    7. Disclaimer of Warranty. Unless required by applicable law or
       agreed to in writing, Licensor provides the Work (and each
@@ -235,31 +236,15 @@ The TransformerEngine reference implementation is Apache-2.0,
       has been advised of the possibility of such damages.
 
    9. Accepting Warranty or Additional Liability. While redistributing
-      the Work or Derivative Works thereof, You may accept and charge a
-      fee for, or grant additional warranty, support, indemnity, or
-      liability obligations and/or rights consistent with this License.
-      However, in accepting such obligations, You may act only on Your
-      own behalf and on Your sole responsibility, not on behalf of any
-      other Contributor, and only if You agree to indemnify, defend,
-      and hold each Contributor harmless for any liability incurred by,
-      or claims asserted against, such Contributor by reason of your
-      accepting any such warranty or additional liability.
-
-   END OF TERMS AND CONDITIONS
-
-   Copyright (c) NVIDIA Corporation and affiliates.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
 ```
 
 baracuda's own contributions on top — the C-ABI shim, the recipe

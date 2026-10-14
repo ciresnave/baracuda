@@ -13,7 +13,7 @@ HGEMM kernels as a third `GemmPlan` backend (alongside `Bespoke` /
 CUDA-L2 upstream pinned at commit `dbe017722194bb33bafadfbcbb4a65ab6df95dc3`
 (2026-03-30 "Release H100 HGEMM (16 bit) kernels with 32-bit accumulator").
 Full upstream lives at `crates/baracuda-kernels-bench/external/cuda-l2/`
-(MIT license, copy of LICENSE.txt preserved alongside).
+(MIT license; verbatim `LICENSE.txt` at that commit is tracked here as `LICENSE-CUDA-L2.txt`).
 
 The probes here are stripped versions of `external/cuda-l2/kernels/3090_F32F16F16F32/{128,2048}_4096_4096.cu`
 with the torch::Tensor pybind shim removed (it pulls in libtorch headers

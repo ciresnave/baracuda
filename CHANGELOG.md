@@ -16,6 +16,17 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.102 — 2026-10-14 (docs: provenance — licence texts carried verbatim)
+
+PM-tasked (alpha.102 allocated by the PM). Merging is not a publish. **Licence/attribution files only: no
+.cu/.cuh/.h/.rs byte changed.**
+
+- Added verbatim upstream licence texts: candle (MIT + Apache-2.0), llama.cpp, Ootomo cutf, CUDA-L2,
+  Maratyszcza/FP16, bitsandbytes `NOTICE.md`; `docs/provenance/licence-files-verified.tsv` proves blob equality.
+- Replaced non-verbatim `LICENSE` (bitsandbytes, causal-conv1d, mamba, xformers, apex), `AUTHORS`
+  (causal-conv1d, mamba) and TE `ATTRIBUTION.md`'s embedded Apache text with upstream bytes.
+- Baracuda-written AUTHORS files now say so on their first line.
+
 ## 0.0.1-alpha.101 — 2026-10-14 (docs: third-party provenance audit — `PROVENANCE.md`)
 
 PM-tasked (alpha.101 allocated by the PM). Merging is not a publish. No code change; no vendored file,
