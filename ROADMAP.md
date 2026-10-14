@@ -7,9 +7,8 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.85** (2026-10-03); the last version actually
-published to crates.io is **v0.0.1-alpha.82** (2026-09-25) — see
-`CHANGELOG.md`'s versioning note. The per-phase
+`main` is at **v0.0.1-alpha.94** (2026-10-12; `baracuda-cuda-emit` 0.16.1); see
+`CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
 GPU test crates (baracuda-kernels, baracuda-optim, baracuda-megatron,
@@ -1423,8 +1422,10 @@ not here. Full plan + the remaining work:
   (`OP-MATRIX.md`, 21 categories), ordered by value (Loss, Linalg,
   Quantization, Sort, Segment, Image, FFT, Indexing, then backward
   passes). Needs a PyTorch env on the target GPU box to regenerate
-  refs. **Loss done** (2026-09-05: 4 ops × f32/f16/bf16). Next tranche
-  is **Linalg**. Re-derive the covered/total counts before citing them
+  refs. **Loss done** (2026-09-05: 4 ops × f32/f16/bf16). **Linalg bench
+  source exists** (`benches/linalg.rs`, wave 2, f32 + f64 — cuSOLVER has no half
+  axis) but no Linalg row is in the `BENCHMARKS.md` rollup at this ref; rolling it
+  up needs a quiet-box run (`docs/guides/kernel-bench-reports.md`). Re-derive the covered/total counts before citing them
   — `grep -c '^### `' crates/baracuda-kernels-bench/BENCHMARKS.md` for
   the numerator; this line no longer carries them because the ones it
   used to carry ("~58 ops", "167 Plan rows") went stale silently.
