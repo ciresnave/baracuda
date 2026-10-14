@@ -16,8 +16,9 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
-## Unreleased — sk5 adoption (`unpopped` family 0.16.0 -> 0.17.1; version allocated by the PM at gate)
+## 0.0.1-alpha.107 — 2026-10-14 (sk5 adoption: `unpopped` family 0.16.0 -> 0.17.1)
 
+PM-allocated: workspace alpha.107; `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.17.1 (they follow the `unpopped` 0.17.1 they work with).
 Merging is not a publish. `STRUCTURE_KEY_VERSION` 4 -> 5 (Unpopped#58, wire-visible).
 
 - Dependencies: `unpopped`, `unpopped-vocab`, `unpopped-cpu-c`, `unpopped-slang` and `tools/kiss-ref-diff` move to 0.17.1.
