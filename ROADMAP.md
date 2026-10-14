@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.94** (2026-10-12; `baracuda-cuda-emit` 0.16.1); see
+`main` is at **v0.0.1-alpha.95** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1506,6 +1506,16 @@ plumbing pattern as the cuDNN work above.
 **Why pre-1.0:** small marginal cost once the cuDNN pattern is
 established, and rounds out the "no `Contiguize` copies on library-
 backed paths" 1.0 story.
+
+### `baracuda-cuda-seam` publishability — WAITING on fuel (since 2026-10-14)
+
+The crate is `publish = false`: it git-pins `fuel-kernel-seam{,-types}` at `c02da348`,
+because the registry latest (0.11.2) has `arch: ArchSku` only, with no `JitRequest::target` /
+`::new()`. **Blocked on fuel publishing its board #106 Step A seam crates** (no date from fuel;
+fuel lane notified 2026-10-14). Then: swap both git pins for versions, drop `publish = false`,
+PM allocates the bump and publishes. Fuel's consumer side
+(`fuel-dispatch/Cargo.toml:70`, cuda-emit `features=["seam","nvrtc"]`) must move to
+`baracuda-cuda-seam` — the `seam` feature is gone since cuda-emit 0.16.1.
 
 ## Pre-1.0 nice-to-haves
 

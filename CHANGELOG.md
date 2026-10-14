@@ -16,6 +16,18 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.95 — 2026-10-14 (docs: ROADMAP refresh + API-freeze pub-surface inventory)
+
+PM-tasked (alpha.95 allocated by the PM; docs are not exempt from the version rule).
+Merging is not a publish. No code change.
+
+- `ROADMAP.md`: header corrected (`main` was stated as alpha.85); the Linalg bench is
+  no longer called the "next tranche" (`benches/linalg.rs` exists; the open part is the
+  `BENCHMARKS.md` rollup, which needs a quiet-box run); a dated wait for
+  `baracuda-cuda-seam` publishability, blocked on fuel's board #106 Step A.
+- NEW `docs/planning/api-freeze-pub-surface-audit.md`: public-surface inventory and the
+  `Element` vs `DeviceRepr + Copy` split resolved by reading (Unpopped-owned sealed subtrait).
+
 ## 0.0.1-alpha.94 — 2026-10-12 (Fuel seam moves out of baracuda-cuda-emit — **Breaking** for `cuda-emit/seam`)
 
 PM-tasked (alpha.94 and cuda-emit 0.16.1 allocated by the PM). Merging is not a
