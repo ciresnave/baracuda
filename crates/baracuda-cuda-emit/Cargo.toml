@@ -40,8 +40,8 @@ baracuda-nvrtc = { workspace = true, optional = true }
 # a number here becomes a citation with no invalidation the next time either bumps.)
 # Test-only: no lib code depends on them. Kept as registry deps (not path) so
 # `cargo package` ships a tree that resolves for downloaders.
-unpopped-cpu-c = "0.16.0"
-unpopped-slang = "0.16.0"
+unpopped-cpu-c = "0.17.1"
+unpopped-slang = "0.17.1"
 
 [lints]
 workspace = true

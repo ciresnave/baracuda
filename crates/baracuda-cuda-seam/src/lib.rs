@@ -850,7 +850,7 @@ mod tests {
             &StubCompiler,
         )
         .unwrap_err();
-        // sk4: unpopped's jit declines U8 Div via PlanRejected(InadmissibleOpAtDtype)
+        // sk4 onward (unchanged at sk5): unpopped's jit declines U8 Div via PlanRejected(InadmissibleOpAtDtype)
         // (was UnsupportedDtype) — assert a typed decline, not the specific variant.
         assert!(
             matches!(

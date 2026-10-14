@@ -16,6 +16,17 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## Unreleased — sk5 adoption (`unpopped` family 0.16.0 -> 0.17.1; version allocated by the PM at gate)
+
+Merging is not a publish. `STRUCTURE_KEY_VERSION` 4 -> 5 (Unpopped#58, wire-visible).
+
+- Dependencies: `unpopped`, `unpopped-vocab`, `unpopped-cpu-c`, `unpopped-slang` and `tools/kiss-ref-diff` move to 0.17.1.
+  No source change was needed: baracuda only calls `structure_key`, which keeps its `op` argument.
+- `baracuda-cuda-emit` goldens `contract_canonical{,_batched}_f32.cu`: line 2 only, `sk4|gem|` -> `sk5|ctr|`; the kernel
+  bodies are byte-identical. Test prefixes: `contract.rs` `sk5|`, `jit.rs` `sk5|`, `link.rs` `sk5|ew2|f32|cuda:sm89|` (an add
+  cell is now keyed by its derived class `ew2`, not the op family `bin`).
+- Not covered: a declared contraction (`<wdt>` reads operand 1 until Unpopped's weight role lands, Unpopped#31).
+
 ## 0.0.1-alpha.106 — 2026-10-14 (ci/docs hygiene: CODEOWNERS, least-privilege permissions, glossary)
 
 PM-tasked from the CodeRipper portfolio triage (alpha.106 allocated by the PM). Merging is not a publish. No behaviour change.
