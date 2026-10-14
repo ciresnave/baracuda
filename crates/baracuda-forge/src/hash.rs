@@ -1,3 +1,5 @@
+// Origin: guoqingbao/cudaforge@aa77db3 src/hash.rs (MIT OR Apache-2.0 per its Cargo.toml; no LICENSE file upstream);
+// vs upstream after comment/whitespace stripping: 41 lines differ. See ../NOTICE.
 //! Build cache for incremental compilation.
 
 use crate::error::{Error, Result};

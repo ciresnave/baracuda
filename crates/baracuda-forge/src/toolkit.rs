@@ -1,3 +1,5 @@
+// Origin: guoqingbao/cudaforge@aa77db3 src/toolkit.rs (MIT OR Apache-2.0 per its Cargo.toml; no LICENSE file upstream);
+// vs upstream after comment/whitespace stripping: modified. See ../NOTICE.
 //! CUDA toolkit auto-detection.
 //!
 //! Thin wrapper around [`baracuda_build::detect_cuda`] that adds nvcc-specific

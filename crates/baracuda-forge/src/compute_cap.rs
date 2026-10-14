@@ -1,3 +1,5 @@
+// Origin: guoqingbao/cudaforge@aa77db3 src/compute_cap.rs (MIT OR Apache-2.0 per its Cargo.toml; no LICENSE file upstream);
+// vs upstream after comment/whitespace stripping: 33 lines differ. See ../NOTICE.
 //! Compute capability detection and management.
 
 use crate::error::{Error, Result};

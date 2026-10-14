@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2018 mutsuki (Hiroyuki Ootomo), enp1s0/cutf (MIT; LICENSES/cutf-LICENSE)
+// SPDX-FileCopyrightText: 2026 Eric Evans (MIT OR Apache-2.0)
+// SPDX-License-Identifier: MIT OR Apache-2.0
+//
 // baracuda_cp_async.cuh
 //
 // Phase 44b — templated `cp.async` (Ampere+) helpers, with an automatic

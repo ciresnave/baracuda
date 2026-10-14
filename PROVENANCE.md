@@ -115,6 +115,24 @@ PM-approved (`TASK` 13:06Z). New files and replaced files are **upstream bytes**
 
 Still open from §3: G-H-1/2, G-APEX-2, G-SORT-1, G-CUTF-1 headers, G-PIN-1, G-FQ-1, G-FORGE-1/2 (next PRs), and attention.rs / cudaforge licence files that do not exist upstream.
 
+## 3b. Header-comment bucket applied (PR alpha.103, 2026-10-14)
+
+Comment-only edits; `docs/provenance/header-comment-changes-verified.tsv` shows, per code file, that the content is identical after stripping `//` and `/* */` comments and whitespace (only `//` lines were added/removed).
+
+| gap | now |
+|---|---|
+| G-H-1 | "Eric Holscher" replaced by "The candle contributors (huggingface/candle ...) via the Fuel project": **upstream candle's LICENSE-MIT/APACHE carry no copyright line and its files no holder**, so no named holder exists to restore ([ASK] raised) |
+| G-H-2 | attention.rs label corrected to MIT (its `Cargo.toml`; no LICENSE file upstream) |
+| G-APEX-2 | invented NVIDIA copyright line replaced by an origin note; **Apex's LICENSE has no copyright line either** ([ASK] raised) |
+| G-SORT-1 | SPDX + origin line added to `sort.cu`, `baracuda_sort.cuh` (llama.cpp, "Copyright (c) 2023 Georgi Gerganov" per `LICENSES/llama.cpp-LICENSE`) |
+| G-CUTF-1 | SPDX + origin added to the two cutf-derived headers ("Copyright (c) 2018 mutsuki") |
+| G-L2-1 | origin + licence pointer added to the five CUDA-L2 probes |
+| G-FORGE-1/2 | forge NOTICE restated with measured per-file differences; `// Origin:` line on each module; upstream has no LICENSE file and no copyright year, so the earlier "Copyright (c) 2025 Guoqing Bao" is no longer asserted (only `authors = ["Guoqing Bao"]`) |
+
+**PM ruling (2026-10-14, 13:15Z):** where upstream states no holder, the header says so ("The candle contributors", "Apex" origin note) and never carries a fabricated named holder.
+
+**Open, upstream-only:** `guoqingbao/attention.rs` and `guoqingbao/cudaforge` ship no LICENSE file (only a `Cargo.toml` `license` field), so no verbatim licence text can be carried. Asking each upstream to add one would resolve it; **no upstream issue has been filed** (needs PM approval).
+
 ## 4. Proposed fixes needing PM (no vendoring changes made)
 
 1. **Add licence texts** (new files only, no edits to vendored sources): candle `LICENSE-MIT` +

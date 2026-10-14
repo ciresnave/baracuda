@@ -1,3 +1,5 @@
+// Origin: guoqingbao/cudaforge@aa77db3 src/dependency.rs (MIT OR Apache-2.0 per its Cargo.toml; no LICENSE file upstream);
+// vs upstream after comment/whitespace stripping: 104 lines differ. See ../NOTICE.
 //! External dependency management (CUTLASS, custom git repos).
 //!
 //! Handles fetching header-only C++ dependencies via git, with sparse

@@ -1,3 +1,5 @@
+// Origin: guoqingbao/cudaforge@aa77db3 src/source.rs (MIT OR Apache-2.0 per its Cargo.toml; no LICENSE file upstream);
+// vs upstream after comment/whitespace stripping: code-identical. See ../NOTICE.
 //! Source file selection and filtering.
 
 use crate::error::{Error, Result};

@@ -1,3 +1,5 @@
+// Origin: guoqingbao/cudaforge@aa77db3 src/error.rs (MIT OR Apache-2.0 per its Cargo.toml; no LICENSE file upstream);
+// vs upstream after comment/whitespace stripping: modified. See ../NOTICE.
 //! Error types for baracuda-forge.
 
 use std::path::PathBuf;

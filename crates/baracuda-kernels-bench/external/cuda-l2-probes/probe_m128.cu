@@ -1,3 +1,6 @@
+// Derived from deepreinforce-ai/CUDA-L2 (MIT, "Copyright (c) 2025 deepreinforce.ai"), commit dbe0177;
+// licence text: LICENSE-CUDA-L2.txt next to this file. Modified by baracuda (torch bindings stripped).
+//
 // Minimal standalone probe to verify CUDA-L2's 3090 HGEMM kernel
 // builds + runs on sm_89 (RTX 4070). Strips the torch::Tensor binding
 // and calls the launch_hgemm_mma_stages_block_swizzle_tn_cute template

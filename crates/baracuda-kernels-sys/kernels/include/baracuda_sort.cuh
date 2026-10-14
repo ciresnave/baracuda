@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2023 Georgi Gerganov and the ggml authors (llama.cpp ggml-cuda/argsort.cu, MIT; LICENSES/llama.cpp-LICENSE)
+// SPDX-FileCopyrightText: 2026 Eric Evans (MIT OR Apache-2.0)
+// SPDX-License-Identifier: MIT OR Apache-2.0
+//
 // baracuda_sort.cuh
 //
 // Bitonic-sort + argsort + msort + sort-backward kernels for the

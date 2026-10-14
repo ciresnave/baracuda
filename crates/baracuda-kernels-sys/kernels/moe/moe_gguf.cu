@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2023-2024 The llama.cpp / ggml authors    (MIT)
-// SPDX-FileCopyrightText: 2024-2026 attention.rs (guoqingbao)       (MIT OR Apache-2.0)
+// SPDX-FileCopyrightText: 2024-2026 attention.rs (guoqingbao)       (MIT; upstream Cargo.toml `license = "MIT"`, no LICENSE file)
 // SPDX-FileCopyrightText: 2024-2026 Fuel project contributors       (MIT OR Apache-2.0)
 // SPDX-FileCopyrightText: 2026 Eric Evans        (MIT OR Apache-2.0)
 // SPDX-License-Identifier: MIT OR Apache-2.0
