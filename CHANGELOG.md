@@ -16,6 +16,18 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.97 — 2026-10-14 (docs: API-freeze inventory, classification, breaking-change policy — slice 1)
+
+PM-tasked. Merging is not a publish. No code change.
+
+- New `docs/planning/api-freeze/`: a `syn`-based census of every `pub` surface from `git ls-files`
+  (20 076 items / 74 library crates; supersedes the line-grep first pass), a mechanical
+  stable / C-ABI / vendor-mirror / `doc(hidden)` / candidate-for-removal classification, the
+  *proposed* (not adopted) breaking-change policy including the C ABI, and the `Element` vs
+  `DeviceRepr + Copy` recommendation (keep the split, document it; unifying is Unpopped's).
+- Enumerator + classifier source shipped as `tool/*.txt` for reproduction.
+- No `0.1.0-beta.0` cut; nothing hidden, narrowed or removed.
+
 ## 0.0.1-alpha.96 — 2026-10-14 (CI: third-party Actions pinned to full commit SHAs)
 
 PM-tasked (alpha.96 allocated by the PM). Merging is not a publish. No code change.

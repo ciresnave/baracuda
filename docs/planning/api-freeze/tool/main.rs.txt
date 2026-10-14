@@ -1,0 +1,221 @@
+//! pub-surface inventory: walks `git ls-files` .rs files per crate, resolves `mod` chains from the
+//! lib root, and records every `pub` item with syn (no line-grep).
+//! Usage: pubinv <repo-root> <out-dir>   (writes items.tsv, crates.tsv; aggregate on stdout)
+use quote::ToTokens;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use syn::{spanned::Spanned, Attribute, Item, ItemMod, Visibility};
+
+struct Row {
+    krate: String,
+    file: String,
+    line: usize,
+    kind: &'static str,
+    name: String,
+    // "public" = every enclosing module is `pub` up to the lib root; "private-mod" otherwise
+    reach: &'static str,
+    hidden: bool,
+    deprecated: bool,
+    nonexh: bool,
+    ffi: bool,
+}
+
+fn flags(a: &[Attribute]) -> (bool, bool, bool, bool) {
+    let (mut h, mut d, mut n, mut t) = (false, false, false, false);
+    for at in a {
+        let p = at.path();
+        let s = at.meta.to_token_stream().to_string().replace(' ', "");
+        if p.is_ident("deprecated") { d = true; }
+        if p.is_ident("non_exhaustive") { n = true; }
+        if p.is_ident("doc") && s.contains("hidden") { h = true; }
+        if p.is_ident("cfg") && s == "cfg(test)" { t = true; }
+    }
+    (h, d, n, t)
+}
+
+fn is_pub(v: &Visibility) -> bool { matches!(v, Visibility::Public(_)) }
+
+struct Ctx<'a> {
+    krate: &'a str,
+    root: &'a Path,
+    files: &'a BTreeSet<String>,
+    rows: Vec<Row>,
+    visited: BTreeSet<String>,
+    missing: Vec<String>,
+}
+
+fn rel(root: &Path, p: &Path) -> String {
+    p.strip_prefix(root).unwrap_or(p).to_string_lossy().replace('\\', "/")
+}
+
+impl<'a> Ctx<'a> {
+    #[allow(clippy::too_many_arguments)]
+    fn push(&mut self, file: &str, sp: proc_macro2::Span, kind: &'static str, name: String, reach: &'static str, attrs: &[Attribute], ffi: bool) {
+        let (h, d, n, _) = flags(attrs);
+        self.rows.push(Row { krate: self.krate.into(), file: file.into(), line: sp.start().line, kind, name, reach, hidden: h, deprecated: d, nonexh: n, ffi });
+    }
+
+    fn file(&mut self, path: &Path, public: bool) {
+        let r = rel(self.root, path);
+        if !self.files.contains(&r) { self.missing.push(format!("NOT-TRACKED {r}")); return; }
+        if !self.visited.insert(r.clone()) { return; }
+        let src = std::fs::read_to_string(path).unwrap_or_default();
+        let ast = match syn::parse_file(&src) { Ok(a) => a, Err(e) => { self.missing.push(format!("PARSE-ERR {r}: {e}")); return; } };
+        let name = path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+        let modrs = name == "mod.rs" || name == "lib.rs" || name == "main.rs";
+        let dir = if modrs { path.parent().unwrap().to_path_buf() } else { path.with_extension("") };
+        self.items(&ast.items, &r, &dir, public);
+    }
+
+    fn items(&mut self, items: &[Item], file: &str, dir: &Path, public: bool) {
+        let reach: &'static str = if public { "public" } else { "private-mod" };
+        for it in items {
+            match it {
+                Item::Fn(f) if is_pub(&f.vis) => {
+                    let ffi = f.sig.abi.is_some() || f.attrs.iter().any(|a| a.path().is_ident("no_mangle"));
+                    self.push(file, f.sig.ident.span(), if ffi { "fn-extern" } else { "fn" }, f.sig.ident.to_string(), reach, &f.attrs, ffi)
+                }
+                Item::Struct(s) if is_pub(&s.vis) => {
+                    self.push(file, s.ident.span(), "struct", s.ident.to_string(), reach, &s.attrs, false);
+                    for (i, fl) in s.fields.iter().enumerate().filter(|(_, f)| is_pub(&f.vis)) {
+                        let nm = fl.ident.as_ref().map(|i| i.to_string()).unwrap_or_else(|| i.to_string());
+                        self.push(file, fl.span(), "field", format!("{}.{}", s.ident, nm), reach, &fl.attrs, false);
+                    }
+                }
+                Item::Enum(e) if is_pub(&e.vis) => {
+                    self.push(file, e.ident.span(), "enum", e.ident.to_string(), reach, &e.attrs, false);
+                    for v in &e.variants { self.push(file, v.ident.span(), "variant", format!("{}::{}", e.ident, v.ident), reach, &v.attrs, false); }
+                }
+                Item::Union(u) if is_pub(&u.vis) => self.push(file, u.ident.span(), "union", u.ident.to_string(), reach, &u.attrs, false),
+                Item::Trait(t) if is_pub(&t.vis) => {
+                    self.push(file, t.ident.span(), "trait", t.ident.to_string(), reach, &t.attrs, false);
+                    for ti in &t.items {
+                        let (nm, sp, at): (String, _, &[Attribute]) = match ti {
+                            syn::TraitItem::Fn(f) => (f.sig.ident.to_string(), f.sig.ident.span(), &f.attrs),
+                            syn::TraitItem::Const(c) => (c.ident.to_string(), c.ident.span(), &c.attrs),
+                            syn::TraitItem::Type(c) => (c.ident.to_string(), c.ident.span(), &c.attrs),
+                            _ => continue,
+                        };
+                        self.push(file, sp, "trait-member", format!("{}::{}", t.ident, nm), reach, at, false);
+                    }
+                }
+                Item::Type(t) if is_pub(&t.vis) => self.push(file, t.ident.span(), "type", t.ident.to_string(), reach, &t.attrs, false),
+                Item::Const(c) if is_pub(&c.vis) => self.push(file, c.ident.span(), "const", c.ident.to_string(), reach, &c.attrs, false),
+                Item::Static(c) if is_pub(&c.vis) => self.push(file, c.ident.span(), "static", c.ident.to_string(), reach, &c.attrs, false),
+                Item::Use(u) if is_pub(&u.vis) => {
+                    let n = u.tree.to_token_stream().to_string().replace(' ', "");
+                    self.push(file, u.use_token.span, "reexport", n, reach, &u.attrs, false)
+                }
+                Item::ForeignMod(fm) => {
+                    for fi in &fm.items {
+                        match fi {
+                            syn::ForeignItem::Fn(f) if is_pub(&f.vis) => self.push(file, f.sig.ident.span(), "ffi-import-fn", f.sig.ident.to_string(), reach, &f.attrs, true),
+                            syn::ForeignItem::Static(f) if is_pub(&f.vis) => self.push(file, f.ident.span(), "ffi-import-static", f.ident.to_string(), reach, &f.attrs, true),
+                            syn::ForeignItem::Type(f) if is_pub(&f.vis) => self.push(file, f.ident.span(), "ffi-import-type", f.ident.to_string(), reach, &f.attrs, true),
+                            _ => {}
+                        }
+                    }
+                }
+                Item::Impl(im) if im.trait_.is_none() => {
+                    let ty = im.self_ty.to_token_stream().to_string().replace(' ', "");
+                    for ii in &im.items {
+                        match ii {
+                            syn::ImplItem::Fn(f) if is_pub(&f.vis) => self.push(file, f.sig.ident.span(), "method", format!("{}::{}", ty, f.sig.ident), reach, &f.attrs, false),
+                            syn::ImplItem::Const(c) if is_pub(&c.vis) => self.push(file, c.ident.span(), "assoc-const", format!("{}::{}", ty, c.ident), reach, &c.attrs, false),
+                            syn::ImplItem::Type(c) if is_pub(&c.vis) => self.push(file, c.ident.span(), "assoc-type", format!("{}::{}", ty, c.ident), reach, &c.attrs, false),
+                            _ => {}
+                        }
+                    }
+                }
+                Item::Macro(m) if m.mac.path.is_ident("macro_rules") && m.attrs.iter().any(|a| a.path().is_ident("macro_export")) => {
+                    let nm = m.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
+                    self.push(file, m.mac.path.span(), "macro_export", nm, "public", &m.attrs, false);
+                }
+                Item::Mod(m) => self.module(m, file, dir, public),
+                _ => {}
+            }
+        }
+    }
+
+    fn module(&mut self, m: &ItemMod, file: &str, dir: &Path, parent_public: bool) {
+        let (hidden, _d, _n, test) = flags(&m.attrs);
+        if test || m.ident == "tests" { return; }
+        let public = parent_public && is_pub(&m.vis);
+        if is_pub(&m.vis) {
+            self.rows.push(Row { krate: self.krate.into(), file: file.into(), line: m.ident.span().start().line, kind: "mod", name: m.ident.to_string(), reach: if parent_public { "public" } else { "private-mod" }, hidden, deprecated: false, nonexh: false, ffi: false });
+        }
+        // a `#[doc(hidden)] pub mod` is off the public surface: treat its contents as hidden-reach
+        let public = public && !hidden;
+        let nd = dir.join(m.ident.to_string());
+        if let Some((_, items)) = &m.content {
+            self.items(items, file, &nd, public);
+        } else {
+            let pa = m.attrs.iter().find(|a| a.path().is_ident("path")).and_then(|a| {
+                if let syn::Meta::NameValue(nv) = &a.meta {
+                    if let syn::Expr::Lit(l) = &nv.value { if let syn::Lit::Str(s) = &l.lit { return Some(s.value()); } }
+                }
+                None
+            });
+            let cand: Vec<PathBuf> = match pa {
+                Some(p) => vec![self.root.join(file).parent().unwrap().join(p)],
+                None => vec![dir.join(format!("{}.rs", m.ident)), nd.join("mod.rs")],
+            };
+            let mut found = false;
+            for c in cand {
+                if self.files.contains(&rel(self.root, &c)) { self.file(&c, public); found = true; break; }
+            }
+            if !found { self.missing.push(format!("UNRESOLVED mod {} in {}", m.ident, file)); }
+        }
+    }
+}
+
+fn main() {
+    let root = PathBuf::from(std::env::args().nth(1).expect("repo root"));
+    let outdir = PathBuf::from(std::env::args().nth(2).unwrap_or_else(|| ".".into()));
+    let out = Command::new("git").current_dir(&root).args(["ls-files", "-z"]).output().unwrap();
+    assert!(out.status.success(), "git ls-files failed: {}", String::from_utf8_lossy(&out.stderr));
+    let all: Vec<String> = out.stdout.split(|b| *b == 0).filter(|s| !s.is_empty()).map(|s| String::from_utf8_lossy(s).into_owned()).collect();
+    let files: BTreeSet<String> = all.iter().filter(|f| f.ends_with(".rs")).cloned().collect();
+    eprintln!("git ls-files: {} total, {} .rs", all.len(), files.len());
+    let mut rows_all: Vec<Row> = vec![];
+    let mut summary = vec!["crate\tmanifest\tstatus\tpublish_false\tsrc_files_not_reached".to_string()];
+    let mut reached_files = BTreeSet::new();
+    for m in all.iter().filter(|f| f.ends_with("Cargo.toml")) {
+        let txt = std::fs::read_to_string(root.join(m)).unwrap_or_default();
+        let v: toml::Value = match txt.parse() { Ok(v) => v, Err(e) => { eprintln!("TOML-ERR {m}: {e}"); continue } };
+        let Some(pkg) = v.get("package") else { continue };
+        let name = pkg.get("name").and_then(|x| x.as_str()).unwrap_or("?").to_string();
+        let publish_false = pkg.get("publish").map(|p| p.as_bool() == Some(false)).unwrap_or(false);
+        let dir = Path::new(m).parent().unwrap().to_path_buf();
+        let lib = v.get("lib").and_then(|l| l.get("path")).and_then(|p| p.as_str()).map(|p| dir.join(p)).unwrap_or_else(|| dir.join("src/lib.rs"));
+        let lib_rel = lib.to_string_lossy().replace('\\', "/");
+        if !files.contains(&lib_rel) { summary.push(format!("{name}\t{m}\tNO-LIB\t{publish_false}\t-")); continue; }
+        let mut cx = Ctx { krate: &name, root: &root, files: &files, rows: vec![], visited: BTreeSet::new(), missing: vec![] };
+        cx.file(&root.join(&lib_rel), true);
+        for f in &cx.visited { reached_files.insert(f.clone()); }
+        for x in &cx.missing { eprintln!("[{name}] {x}"); }
+        let src_prefix = format!("{}/src/", dir.to_string_lossy().replace('\\', "/"));
+        let unreached = files.iter().filter(|f| f.starts_with(&src_prefix) && !cx.visited.contains(*f)).count();
+        summary.push(format!("{name}\t{m}\tLIB\t{publish_false}\t{unreached}"));
+        rows_all.extend(cx.rows);
+    }
+    let mut tsv = String::from("crate\tfile\tline\tkind\tname\treach\thidden\tdeprecated\tnon_exhaustive\tffi\n");
+    for r in &rows_all {
+        tsv.push_str(&format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n", r.krate, r.file, r.line, r.kind, r.name, r.reach, r.hidden as u8, r.deprecated as u8, r.nonexh as u8, r.ffi as u8));
+    }
+    std::fs::write(outdir.join("items.tsv"), tsv).unwrap();
+    std::fs::write(outdir.join("crates.tsv"), summary.join("\n") + "\n").unwrap();
+    let mut agg: BTreeMap<&str, [usize; 6]> = BTreeMap::new();
+    for r in &rows_all {
+        let e = agg.entry(&r.krate).or_insert([0; 6]);
+        e[0] += 1;
+        if r.reach == "public" { e[1] += 1 } else { e[2] += 1 }
+        if r.hidden { e[3] += 1 }
+        if r.deprecated { e[4] += 1 }
+        if r.ffi { e[5] += 1 }
+    }
+    println!("crate\titems\tpublic\tprivmod\thidden\tdeprecated\tffi");
+    for (k, m) in &agg { println!("{k}\t{}\t{}\t{}\t{}\t{}\t{}", m[0], m[1], m[2], m[3], m[4], m[5]); }
+    eprintln!("rows={} crates_with_items={} reached_rs_files={}/{}", rows_all.len(), agg.len(), reached_files.len(), files.len());
+}

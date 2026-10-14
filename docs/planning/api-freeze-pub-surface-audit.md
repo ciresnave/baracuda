@@ -1,5 +1,8 @@
 # API freeze — public-surface inventory (first pass)
 
+> **Superseded 2026-10-14** by [`api-freeze/`](api-freeze/README.md) (`syn` census at `8786bf0f`,
+> classification, proposed policy). The line-grep numbers below are kept only as history.
+
 Backs the ROADMAP item "API freeze + 1.0 stability review". Measured at
 `origin/main` `fc1a97de` (alpha.94). This is an **inventory**, not the
 categorisation the roadmap item asks for: nothing here decides stable /

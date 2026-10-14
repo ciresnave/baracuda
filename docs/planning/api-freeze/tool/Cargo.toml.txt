@@ -1,0 +1,12 @@
+[package]
+name = "pubinv"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+syn = { version = "2", features = ["full", "visit", "parsing"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+toml = "0.8"
