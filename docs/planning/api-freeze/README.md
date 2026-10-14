@@ -87,7 +87,7 @@ Removing any of them is a breaking change under §4; do it in the beta.0 window,
    baracuda's public surface without a baracuda diff. See R3.
 3. **Our C ABI is 5 809 items with no ABI version symbol** (`git grep -i abi_version` over
    `baracuda-kernels-sys` finds none) and 5 `#[repr(C)]` types. Compatibility is entirely
-   carried by the lockstep crate version. See §4.2 and R4.
+   carried by the lockstep crate version. **Policy ruled 2026-10-14 (board 198): see §4.2 and R4.**
 
 ## 3. Classification rules (applied by `tool/classify.py`, in this order)
 
@@ -144,7 +144,36 @@ turns an *accepted* configuration into a *declined* one.
 **Not breaking:** adding a symbol; a `*_can_implement` that turns a declined configuration into an
 accepted one; making an op faster; tightening a documented tolerance.
 
-**Mechanism (recommendation R4):** a signature change is a *new symbol* (`…_v2` or a descriptive
+**Policy (ruled by CireSnave 2026-10-14, board 198; verbatim):** *"The C ABI should be stable across a
+single major version after a 1.x release."* Read as: **from 1.0 onward the C ABI does not break within
+a major version; breaking it requires the next major.** Before 1.0 the usual pre-1.0 rule applies
+(§4.6: the second number is the major), so a C-ABI break pre-1.0 is a second-number bump, as today.
+The wording says "after a 1.x release"; I read it as binding from `1.0.0` itself, because a floor of
+`1.1` would leave the whole `1.0.x` line unprotected. If that is not meant, it is a one-line change.
+
+**What this implies for the 5 809 `stable-c-abi` items** (count as measured in §1; vendor mirrors
+are unaffected, §4.4):
+
+1. **The breaking list above becomes a freeze list from 1.0.** Every item under *Breaking* is
+   forbidden inside a major, including a `*_can_implement` that turns an accepted configuration into
+   a declined one and any documented-contract change (aliasing, stride/lda, workspace formula,
+   null-pointer behaviour). Within a major the set is **additive-only**.
+2. **A signature change is a new symbol, never an edit** (the mechanism below). The old symbol stays
+   exported, with its behaviour, for the whole major.
+3. **Symbol versioning is by name.** The existing `_v2` / descriptive-suffix scheme is the symbol
+   version; the lockstep crate version is not an ABI promise, because crates move on every pushed
+   change (CLAUDE.md §9) and the C ABI must not.
+4. **Deprecation path.** A symbol is marked deprecated (doc comment on the `extern` declaration and a
+   `CHANGELOG.md` entry; Rust-side wrappers get `#[deprecated(since, note)]`), kept through the rest of
+   that major, and removed only in the next major. §4.5's "one breaking version" is the *minimum*;
+   from 1.0 it is *the remainder of the major*.
+5. **`baracuda_kernels_abi_version()` becomes the loader's check.** It returns the C-ABI major, not
+   the workspace epoch, so a loader refuses a `.dll`/`.so` from another major instead of crashing.
+   Adding it is additive; it does not exist today (`git grep -i abi_version` finds none).
+6. **Before 1.0, the 5 809 items are not frozen**, but anything that will be public at 1.0 should
+   already follow items 2–4 so that 1.0 does not need a flag day.
+
+**Mechanism (recommendation R4, now adopted):** a signature change is a *new symbol* (`…_v2` or a descriptive
 suffix) plus deprecation of the old one — never an in-place edit. History shows in-place edits
 (Phase 31 changed 8 ELU signatures; Phase 21 changed f32/f64 interpolate signatures) were absorbed
 as "alpha breaking"; that is acceptable pre-beta and should stop at beta.0. A `baracuda_kernels_abi_version()`
@@ -204,8 +233,9 @@ kerneldtype_sealed::Sealed + Copy + 'static { const KIND: ElementKind; }` (L131)
 - **R3** Replace `pub use unpopped_vocab::*;` with an explicit re-export list (or stop
   re-exporting and have consumers depend on `unpopped-vocab` directly), so Unpopped additions stop
   moving baracuda's surface. **Cross-lane:** consumers (Fuel) may rely on the glob — ask before.
-- **R4** Adopt §4.2 for the C ABI and add `baracuda_kernels_abi_version()` — needs CireSnave via PM
-  (the C-ABI breaking-change policy was already an open question in ROADMAP).
+- **R4** **RULED 2026-10-14 (board 198):** adopt §4.2 for the C ABI; from 1.0 it does not break within a
+  major (verbatim ruling and implications in §4.2). Still to build, both additive: `baracuda_kernels_abi_version()`
+  and the C-ABI deprecation note convention.
 - **R5** Remove the 8 deprecated items in the first breaking bump after adoption.
 - **R6** Per-family review of the 9 905 `stable` items by plan family before beta.0; this inventory
   is the denominator, not the verdict.
@@ -256,10 +286,11 @@ crates.io dependents.
 Re-run `tool/` at each release PR gate and diff `per-crate-summary.tsv` against the previous run: a
 new `pub` item, a new un-`non_exhaustive` descriptor, or a changed `doc(hidden)` count is then a
 visible freeze delta instead of an accident. The tool is read-only and takes ~1 s over 1 218 files;
-it is deliberately not a CI job until the policy (R4) is adopted, because a gate with no adopted
-rule only produces noise.
+it was deliberately not a CI job until the policy (R4) was adopted, because a gate with no adopted
+rule only produces noise. R4 is adopted (§4.2), so a C-ABI diff gate is now a candidate follow-up; it is
+not built here.
 
 ## 8. What this slice does not decide
 
-Per-item stable/hidden/removal verdicts for the 9 905 `stable` items; the C-ABI policy adoption;
-whether beta.0 happens at all. Those need CireSnave via the PM.
+Per-item stable/hidden/removal verdicts for the 9 905 `stable` items; whether beta.0 happens at all.
+(The C-ABI policy was decided 2026-10-14, §4.2.) Those need CireSnave via the PM.
