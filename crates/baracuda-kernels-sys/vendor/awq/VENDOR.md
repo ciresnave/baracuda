@@ -62,7 +62,7 @@ README + LICENSE convey.
   (`gemm_forward_4bit_cuda_m128n64k32`, single templated kernel
   parameterised on `G ∈ {64, 128}`). ~298 LOC upstream; we ship the
   device-side kernel as-is and replace the PyTorch wrapper with a
-  baracuda C-ABI launcher at `kernels/quantization/awq_launcher.cu`.
+  baracuda C-ABI launcher at `kernels/quantize/awq_launcher.cu`.
 - `dequantize.cuh` — the AWQ int4 → fp16 dequant routine. ~79 LOC.
 
 ## Scope: what we removed
@@ -93,7 +93,7 @@ to remove both PyTorch includes and the entire host-side wrapper
 `gemm_forward_cuda(...)`; we keep only the `__global__` kernel
 `gemm_forward_4bit_cuda_m128n64k32<G>` and the `__pack_half2` /
 `make_divisible` helpers it needs. The baracuda launcher at
-`kernels/quantization/awq_launcher.cu` provides its own host-side
+`kernels/quantize/awq_launcher.cu` provides its own host-side
 wrapper that:
 
 1. Allocates the split-k staging buffer from the caller's workspace.
@@ -144,7 +144,7 @@ The vendored kernel is compiled when the `awq` cargo feature on
 `baracuda-kernels-sys` is enabled. The build script
 (`crates/baracuda-kernels-sys/build.rs`) adds the include paths and
 compiles both `vendor/awq/src/gemm_cuda_gen.cu` and the baracuda
-launcher `kernels/quantization/awq_launcher.cu`.
+launcher `kernels/quantize/awq_launcher.cu`.
 
 ## Future scope
 

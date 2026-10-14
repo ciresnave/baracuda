@@ -1,0 +1,43 @@
+path	claimed_origin	verified_origin_commit	status	spdx_header_ok	listed_in_thirdparty_md	notes
+crates/baracuda-kernels-sys/kernels/elementwise/cast.cu	fuel-cuda-kernels/src/cast.cu <- candle	fuel 4b2e09e67^ (blob 1b38f58e) == candle af5a69ee (2025-08-04); fuel chain root fe7a5f53 = candle initial commit	ADAPTED	PARTIAL	yes	SPDX lists origin as MIT OR Apache-2.0 (candle is MIT OR Apache-2.0: OK) but copyright holder 'Eric Holscher' is unsupported: candle LICENSE-MIT has no named holder; name appears only in these 6 files; 0% distinct-line overlap (macro rewrite)
+crates/baracuda-kernels-sys/kernels/include/baracuda_cast.cuh	same	same	ADAPTED	PARTIAL	yes	same Holscher issue; 1% line overlap
+crates/baracuda-kernels-sys/kernels/elementwise/affine.cu	fuel-cuda-kernels/src/affine.cu <- candle	fuel blob 5f5cc158 == candle af5a69ee == candle HEAD 12bb5d1f	ADAPTED	PARTIAL	yes	Holscher issue; 0% line overlap
+crates/baracuda-kernels-sys/kernels/include/baracuda_affine.cuh	same	same	ADAPTED	PARTIAL	yes	Holscher issue; 0% line overlap (rewritten from scratch w/ same op semantic)
+crates/baracuda-kernels-sys/kernels/elementwise/fill.cu	fuel-cuda-kernels/src/fill.cu <- candle	fuel c8e36ec39^ blob 5e2d7ffc == candle af5a69ee	ADAPTED	PARTIAL	yes	Holscher issue; 0% overlap
+crates/baracuda-kernels-sys/kernels/include/baracuda_fill.cuh	same	same	ADAPTED	PARTIAL	yes	Holscher issue; 2% overlap
+crates/baracuda-kernels-sys/kernels/include/baracuda_gguf.cuh	llama.cpp ggml-cuda via fuel quantized.cu	fuel a9c983ae5^ blob 84e50f5d == candle fd8448d2 (2026-01-06); candle header: 'adapted from llama.cpp ggml-cuda.cu'	ADAPTED	YES (labelled MIT for ggml)	yes	65% of distinct lines also in fuel quantized.cu; licence text for llama.cpp not in crate root, only vendor/fuel-q8_1/LICENSE-llama.cpp
+crates/baracuda-kernels-sys/kernels/gguf/dequantize.cu	same	same	ADAPTED	YES	yes	1% overlap (launchers)
+crates/baracuda-kernels-sys/kernels/gguf/mmvq.cu	same	same	ADAPTED	YES	yes	15% overlap
+crates/baracuda-kernels-sys/kernels/gguf/mmvq_batched.cu	llama.cpp/Fuel (header)	n/a	ADAPTED	YES	NO	GAP unlisted; 1% overlap
+crates/baracuda-kernels-sys/kernels/gguf/mmvq_multim.cu	llama.cpp mul_mat_vec_q via Fuel (header: 'ported line-for-line')	fuel quantized.cu a9c983ae5^	ADAPTED	YES	NO	GAP unlisted
+crates/baracuda-kernels-sys/kernels/gguf/quantize_q8_1.cu	llama.cpp quantize_q8_1	fuel quantized.cu	ADAPTED	YES	NO	GAP unlisted; contradicts md 'q8_1 staging dropped'
+crates/baracuda-kernels-sys/kernels/include/baracuda_mmvq_batched.cuh	llama.cpp/Fuel	fuel quantized.cu	ADAPTED	YES	NO	GAP unlisted; 30% overlap
+crates/baracuda-kernels-sys/kernels/include/baracuda_mmvq_multim.cuh	llama.cpp/Fuel	fuel quantized.cu	ADAPTED	YES	NO	GAP unlisted; 35% overlap; vec_dot ported line-for-line per header
+crates/baracuda-kernels-sys/kernels/include/baracuda_moe.cuh	attention.rs moe_*.cu + llama.cpp via fuel moe/	fuel 2f7f10a6e^ (added e1070acf9); == candle f2d5aabb (2025-12-23) / a0dbd8b8 (moe_wmma)	ADAPTED	PARTIAL	yes	attention.rs line labelled '(MIT OR Apache-2.0)' but upstream Cargo.toml says license = "MIT" only; 34% overlap
+crates/baracuda-kernels-sys/kernels/moe/moe_gguf.cu	attention.rs moe_gemm_gguf.cu	candle f2d5aabb header 'Adapted from guoqingbao/attention.rs'	ADAPTED	PARTIAL	yes	same attention.rs label issue
+crates/baracuda-kernels-sys/kernels/moe/moe_wmma.cu	attention.rs moe_gemm_wmma.cu	candle a0dbd8b8	ADAPTED	PARTIAL	yes	same
+crates/baracuda-kernels-sys/kernels/moe/moe_wmma_gguf.cu	attention.rs moe_wmma_gguf.cu	candle f2d5aabb	ADAPTED	PARTIAL	yes	same
+crates/baracuda-kernels-sys/kernels/attention/fa2_launcher.cu	FA2 launcher (baracuda glue)	n/a (vendor/ audited elsewhere)	NOT-THIRD-PARTY	n/a	yes	own launcher
+crates/baracuda-kernels-sys/kernels/sort/sort.cu	llama.cpp ggml-cuda/argsort.cu via fuel sort.cu	fuel c8e36ec39^ sort.cu == candle HEAD; llama.cpp ggml/src/ggml-cuda/argsort.cu exists	ADAPTED	NO (no SPDX)	NO	GAP unlisted, no header
+crates/baracuda-kernels-sys/kernels/include/baracuda_sort.cuh	same ('Lineage: adapted from llama.cpp / Fuel argsort.cu')	same	ADAPTED	NO (no SPDX)	NO	GAP unlisted, 3% overlap
+crates/baracuda-kernels-sys/kernels/include/baracuda_cp_async.cuh	Ootomo cutf/cp_async.hpp (MIT, (c) 2018 mutsuki)	enp1s0/cutf bd2a372 exists on GitHub (header claims gitlab offline)	ADAPTED	NO (no SPDX, no (c) notice)	NO	GAP; 41% overlap; no copyright/permission text anywhere in repo
+crates/baracuda-kernels-sys/kernels/include/baracuda_fp_bits.cuh	Ootomo cutf experimental/{fp,exponent,mantissa,tf32}.hpp	enp1s0/cutf bd2a372	ADAPTED	NO	NO	GAP; 14% overlap; MIT notice absent
+crates/baracuda-kernels-sys/kernels/include/baracuda_flce.cuh	Liger-Kernel (algorithm only)	n/a	NO-UPSTREAM	n/a	NO	header: clean-room, no source vendored (credit only)
+crates/baracuda-kernels-sys/kernels/loss/flce_fp.cu	Liger-Kernel (algorithm only)	n/a	NO-UPSTREAM	n/a	NO	clean-room per header
+crates/baracuda-kernels-bench/external/cuda-l2-probes/probe_m128.cu	deepreinforce-ai/CUDA-L2 kernels/3090_F32F16F16F32/128_4096_4096.cu (MIT)	CUDA-L2 dbe0177 (exists; 2025 (c) deepreinforce.ai)	MODIFIED	NO	NO	GAP: no SPDX/MIT notice; 177/228 distinct lines also upstream
+crates/baracuda-kernels-bench/external/cuda-l2-probes/probe_m128_vs_cublas.cu	same	same	MODIFIED	NO	NO	GAP: no notice; 121/208 lines
+crates/baracuda-kernels-bench/external/cuda-l2-probes/probe_m2048.cu	2048_4096_4096.cu	dbe0177	MODIFIED	NO	NO	GAP: no notice; 170/239 lines
+crates/baracuda-kernels-bench/external/cuda-l2-probes/wrapper_m128.cu	same	dbe0177	MODIFIED	PARTIAL (comment mentions MIT)	NO	117/159 lines; no SPDX
+crates/baracuda-kernels-bench/external/cuda-l2-probes/wrapper_m2048.cu	same	dbe0177	MODIFIED	PARTIAL (comment 'MIT preserved, (c) 2025 deepreinforce.ai')	NO	118/160 lines; README says LICENSE.txt kept at external/cuda-l2/ but that dir is gitignored/untracked: no licence text in repo
+crates/baracuda-forge/src/source.rs	cudaforge (G. Bao) NOTICE: verbatim	cudaforge aa77db3 (2026-04-17 exists)	IDENTICAL	NO	n/a (NOTICE)	code lines 184/184 identical; comments differ
+crates/baracuda-forge/src/compute_cap.rs	NOTICE: verbatim	aa77db3	MODIFIED	NO	n/a	CLAIM FALSE: 33 changed code lines (strip_suffix, sm_120f)
+crates/baracuda-forge/src/parallel.rs	NOTICE: verbatim	aa77db3	MODIFIED	NO	n/a	CLAIM FALSE: 43 changed code lines
+crates/baracuda-forge/src/hash.rs	NOTICE: verbatim (rebranded)	aa77db3	MODIFIED	NO	n/a	41 changed lines (rebrand explains some)
+crates/baracuda-forge/src/dependency.rs	NOTICE: verbatim (rebranded)	aa77db3	MODIFIED	NO	n/a	CLAIM FALSE: 104 changed lines
+crates/baracuda-forge/src/builder.rs	NOTICE: modified	aa77db3	MODIFIED	NO	n/a	378 changed code lines
+crates/baracuda-forge/src/{error,toolkit,lib}.rs	not named in NOTICE	aa77db3 has same-named files	MODIFIED	NO	n/a	NOTICE omits error.rs toolkit.rs lib.rs which exist upstream (15/41+/60 diff lines)
+crates/baracuda-forge/NOTICE	licences 'reproduced verbatim from root LICENSE-MIT/APACHE'	n/a	n/a	n/a	n/a	CLAIM FALSE: root LICENSE-MIT is '(c) 2026 Eric Evans' only; no Guoqing Bao notice in any LICENSE; upstream aa77db3 has no LICENSE file, license only in Cargo.toml
+crates/baracuda-cutlass-sys/build.rs	cudaforge fetch logic (NOTICE: vendored from aa77db3)	aa77db3 (commit exists)	ADAPTED	NO SPDX	n/a (NOTICE ok)	NOTICE content matches (CUTLASS fetched not redistributed); not re-diffed vs dependency.rs
+crates/baracuda-cutlass-kernels-sys/kernels/*.cu (21)	CUTLASS template instantiations (BSD-3), NOTICE	n/a	NO-UPSTREAM	n/a	NO (NOTICE only)	instantiations of fetched headers; NOTICE stale: describes {f16,bf16} x RCR x {sm80,sm90a} Identity-only, but crate has 0 sm90 .cu, f32/f64/tf32/s8/u8, RRR and *_bias.cu
+crates/baracuda-cutlass/NOTICE	Fuel design spec; CUTLASS	n/a	NOT-THIRD-PARTY	n/a	n/a	NOTICE says only Identity epilogue ships; bias kernels exist in sibling crate (stale, not a licence matter)
+crates/baracuda-cuda-parse/src/lib.rs	moved from unpopped::convert (same author, MIT (c) 2026 Eric Evans)	unpopped 80ee330 (2026-07-10) 'tree-sitter CUDA converter frontend'; baracuda log e2605862..	NOT-THIRD-PARTY	n/a (no SPDX)	n/a	no README/NOTICE exists in crate despite task note; first-party donation

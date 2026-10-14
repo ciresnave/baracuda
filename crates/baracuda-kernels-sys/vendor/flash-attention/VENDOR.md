@@ -17,7 +17,17 @@ bespoke `FlashSdpaPlan` and FA2's long-context-optimized kernels.
 
 The verbatim upstream `LICENSE` and `AUTHORS` files are checked in
 alongside this README. **Do not modify them.** Per-file copyright
-headers in every `src/*.{h,cuh,cu}` file are also preserved verbatim.
+headers in every `src/*.{h,cuh,cu}` file are preserved as upstream has them.
+
+**Modified files (recorded by the 2026-10-14 provenance audit; every other `src/` file is
+byte-identical to FA `v2.8.3`@`060c9188`):** the 12 candle-sourced `flash_fwd_hdim{160,224,512}_*.cu`
+(+5 lines each: `#include "namespace_config.h"` and a `FLASH_NAMESPACE` wrap), `static_switch.h`
+(+9: `HEADDIM<=160/224/512` branches), `flash_fwd_launch_template.h` (+65/-1: `kBlockN` formula and
+`run_mha_fwd_hdim160/224/512`; the hd160/224 launchers use FA's `get_compute_capability` instead of
+candle's `cuda_is_sm8x`), `flash_bwd_launch_template.h` (+20: comment-only Phase 60 notes).
+The hd160/224 sources are `EricLBuehler/candle` `main` as resolved at `132643dc` (2025-07-09); the
+candle commits cited below are origin history. Candle is `MIT OR Apache-2.0`; its licence text is
+**not yet carried here** (tracked as gap G-FA-1 in `PROVENANCE.md`).
 baracuda's own license (dual MIT / Apache-2.0) sits alongside; the
 vendored FA2 sources retain BSD-3-Clause independently.
 
@@ -60,8 +70,8 @@ Attribution / Phase 60 sources section below).
   `huggingface/candle@5430d32c97c687973c53a4e65fac318d9be2a834/candle-flash-attn/kernels/`,
   added by Eric Buehler in PR #3417 (merged 2026-03-28). PR #3417 also
   added the `cudaDeviceGetAttribute(cudaDevAttrMaxSharedMemoryPerBlockOptin)`
-  SMEM opt-in pattern in `run_mha_fwd_hdim512()` (lines 363-385 of the
-  post-patch `flash_fwd_launch_template.h`) and updated the splitkv
+  SMEM opt-in pattern in `run_mha_fwd_hdim512()` (starting at line 348 of the
+  post-patch `flash_fwd_launch_template.h`, re-measured 2026-10-14) and updated the splitkv
   block-size formula to `kBlockN = Headdim <= 64 ? 256 : (Headdim <= 128
   ? 128 : (Headdim <= 256 ? 64 : 32))`. Both adopted verbatim by
   baracuda Phase 60.)
