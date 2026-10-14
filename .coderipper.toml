@@ -1,0 +1,32 @@
+# CodeRipper waivers for this repository. Each entry names one finding and must say why.
+# Scope: `version-consistency` only. Every crate in the workspace shares one version
+# (`[workspace.package]`) except the four packages below.
+
+# The documented exception to "one version per project" (CHANGELOG.md, "Versioning
+# exception"): a crate whose version answers "which version of the other project does
+# this work with?" carries that project's MAJOR.MINOR. Both work with `unpopped`.
+[[allow]]
+check = "version-consistency"
+file = "crates/baracuda-cuda-emit/Cargo.toml"
+symbol = "baracuda-cuda-emit"
+reason = "emitter for Unpopped; MAJOR.MINOR follows the unpopped release it builds against (CHANGELOG 'Versioning exception')"
+
+[[allow]]
+check = "version-consistency"
+file = "crates/baracuda-cuda-parse/Cargo.toml"
+symbol = "baracuda-cuda-parse"
+reason = "parser built on unpopped-vocab; MAJOR.MINOR follows the unpopped release it builds against (CHANGELOG 'Versioning exception')"
+
+# Not consumed by anyone, never published (`publish = false`): there is no downstream
+# who could mistake which crates go together, which is the rule's purpose.
+[[allow]]
+check = "version-consistency"
+file = "examples/Cargo.toml"
+symbol = "baracuda-examples"
+reason = "publish = false; example binaries, versioned 0.0.0 so no consumer reads it as a family member"
+
+[[allow]]
+check = "version-consistency"
+file = "xtask/Cargo.toml"
+symbol = "xtask"
+reason = "publish = false; workspace task runner, versioned 0.0.0 so no consumer reads it as a family member"
