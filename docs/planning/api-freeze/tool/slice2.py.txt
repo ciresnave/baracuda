@@ -1,0 +1,49 @@
+import csv, collections, re, sys
+items, D = sys.argv[1], sys.argv[2]
+rows=list(csv.DictReader(open(items,newline=''),delimiter='\t'))
+fam=collections.defaultdict(collections.Counter)
+for r in rows:
+    if r['crate']!='baracuda-kernels' or r['reach']!='public': continue
+    p=r['file'].split('/src/',1)[1]
+    f=p.split('/')[0].removesuffix('.rs')
+    c=fam[f]; c['items']+=1; c[r['kind']]+=1
+    if r['hidden']=='1': c['hidden']+=1
+    if r['deprecated']=='1': c['deprecated']+=1
+    if r['kind']=='struct' and r['non_exhaustive']=='1': c['struct_nonexh']+=1
+cols=['items','struct','field','enum','variant','method','fn','trait','trait-member','const','type','reexport','mod','hidden','deprecated','struct_nonexh']
+with open(D+'kernels-families.tsv','w',newline='\n') as f:
+    f.write('family\t'+'\t'.join(cols)+'\n')
+    for k,c in sorted(fam.items(), key=lambda kv:-kv[1]['items']):
+        f.write(k+'\t'+'\t'.join(str(c[x]) for x in cols)+'\n')
+print('families',len(fam),'items',sum(c['items'] for c in fam.values()))
+fields=collections.Counter()
+for r in rows:
+    if r['kind']=='field' and r['reach']=='public':
+        fields[(r['crate'],r['file'],r['name'].split('.')[0])]+=1
+src={}
+def attrs(file,line):
+    if file not in src: src[file]=open(file,encoding='utf-8',errors='replace').read().split('\n')
+    L=src[file]; i=line-2; out=[]
+    while i>=0 and (L[i].strip().startswith(('#[','///','//','(','note','since',')]')) or L[i].strip()==''):
+        out.append(L[i].strip()); i-=1
+        if len(out)>60: break
+    return ' '.join(out)
+out=[]
+for r in rows:
+    if r['kind']!='struct' or r['reach']!='public': continue
+    n=fields.get((r['crate'],r['file'],r['name']),0)
+    if n==0 or r['non_exhaustive']=='1': continue
+    a=attrs(r['file'],int(r['line']))
+    rp='repr(C)' if re.search(r'repr\(\s*(C|transparent|packed)',a) else '-'
+    out.append((r['crate'],r['file'],r['line'],r['name'],n,rp))
+out.sort(key=lambda x:(-x[4],x[0],x[1]))
+with open(D+'r2-worklist.tsv','w',newline='\n') as f:
+    f.write('crate\tfile\tline\tstruct\tpub_fields\trepr\n')
+    for o in out: f.write('\t'.join(map(str,o))+'\n')
+tot=collections.Counter()
+for o in out: tot[o[0]]+=1
+print('worklist',len(out),'repr-flagged',sum(1 for o in out if o[5]!='-'),'pub fields in them',sum(o[4] for o in out))
+print(tot.most_common(8))
+pubstructs=[r for r in rows if r['kind']=='struct' and r['reach']=='public']
+print('pub structs',len(pubstructs),'with pub fields',sum(1 for r in pubstructs if fields.get((r['crate'],r['file'],r['name']),0)>0),'nonexh structs',sum(1 for r in pubstructs if r['non_exhaustive']=='1'))
+print('control Conv2dDescriptor: in worklist',any(o[3]=='Conv2dDescriptor' for o in out),'| non_exhaustive',any(r['name']=='Conv2dDescriptor' and r['non_exhaustive']=='1' for r in pubstructs))
