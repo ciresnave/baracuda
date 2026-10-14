@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.98 — 2026-10-14 (docs: `Element` vs `DeviceRepr + Copy` layering note)
+
+PM-tasked (R1 of the API-freeze review; alpha.98 provisional, PM allocates at gate). Merging is not a publish.
+No behavioural change.
+
+- `ARCHITECTURE.md`: new "Trait layering" section; corrected the sub-trait list (`IntElement` / `FpElement` /
+  `BinElement` are `KernelDtype` markers, not `Element` sub-traits).
+- `baracuda-kernels-types` crate docs: why the two bounds coexist and that unifying is Unpopped's.
+
 ## 0.0.1-alpha.97 — 2026-10-14 (docs: API-freeze inventory, classification, breaking-change policy — slice 1)
 
 PM-tasked. Merging is not a publish. No code change.

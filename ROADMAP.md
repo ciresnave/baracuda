@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.97** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
+`main` is at **v0.0.1-alpha.98** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1452,6 +1452,11 @@ breaking-change policy are in [`docs/planning/api-freeze/`](docs/planning/api-fr
 the `Element` split is resolved as "keep and document" (Unpopped-owned). **Open:** adoption of the
 C-ABI policy (needs CireSnave via PM), per-family review of the ~9.9k `stable` items, descriptor
 `#[non_exhaustive]` pass, the `unpopped_vocab::*` glob re-export. `0.1.0-beta.0` not cut.
+
+**Next unblocked slices (mechanical, from `docs/planning/api-freeze/items.tsv`; no decision needed):**
+(a) per-family table for `baracuda-kernels` (items / pub fields / `#[non_exhaustive]` per `Plan` family) as the
+R6 review denominator; (b) list every pub struct with pub fields that is *not* `#[non_exhaustive]` — the R2
+worklist; (c) re-run the census at each release so the freeze delta is visible. **R1 done (alpha.98).**
 
 **Scope:**
 

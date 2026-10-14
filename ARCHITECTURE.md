@@ -323,11 +323,10 @@ exposes two const-generic rank parameters — one per operand.
 
 Per-type identity is two-pronged:
 
-- **Compile-time:** `T: Element` provides the trait-level vocabulary
-  (associated constants, `KIND: ElementKind`, scalar projection
-  helpers, bit-pattern conversions for FFI). Sub-traits — `IntElement`,
-  `FpElement`, `BiasElement`, `BinElement` — narrow the set of valid
-  scalar types per kernel family.
+- **Compile-time:** the trait layering below provides the vocabulary
+  (`KIND: ElementKind`, the α/β `Scalar` projection). Marker traits —
+  `IntElement`, `FpElement`, `BinElement` — narrow the set of valid
+  scalar types per kernel family; `BiasElement` is the bias-operand set.
 - **Runtime:** `ElementKind` is a flat enum (one variant per supported
   scalar type) used inside the descriptor, the SKU, and any cross-
   category code that needs to switch on dtype without monomorphizing.
@@ -338,6 +337,33 @@ how a generic `Plan<T>::select` cross-checks "did the caller's `T` and
 the descriptor's dtype agree?" — a mismatch returns
 `Error::Unsupported` at planning time, not a kernel-launch failure
 later.
+
+### Trait layering: why `T: Element` and `T: DeviceRepr + Copy` coexist
+
+The split is **intentional** (API-freeze review, `docs/planning/api-freeze/README.md` §5). All of
+these traits are defined and sealed in `unpopped-vocab` (0.16.0, `src/element.rs`), not in
+baracuda, and are re-exported by `baracuda-kernels-types`:
+
+```text
+DeviceRepr                      memory-layout marker (any plain-old-data device type)
+  └─ KernelDtype                + Copy + 'static + sealed;  const KIND: ElementKind
+       ├─ Element               + sealed;  type Scalar: ScalarType   (α/β epilogue type)
+       ├─ IntElement / FpElement / BinElement   marker sets, sealed
+BiasElement                     DeviceRepr + Copy + 'static, sealed (bias operands)
+```
+
+- **Compute plans** (GEMM, conv, norms, attention, …) bound on `T: Element`, because they need
+  the α/β `Scalar` projection.
+- **Carriers and layout/pack plans** (`TensorRef` / `TensorMut` / `MatrixRef`, `ContiguizePlan`,
+  `WriteSlicePlan`, `CastSubBytePlan`, the GGUF/MMVQ plans) bound on `DeviceRepr + Copy + 'static`,
+  so packed and sub-byte element types — which have no arithmetic `Scalar` — ride them
+  unchanged.
+- **Do not unify.** An umbrella would force every sub-byte type to invent an α/β type it has no
+  use for. Unification, if ever wanted, is an `unpopped-vocab` change (both traits and their
+  sealing live there); `Element` / `KernelDtype` / `ElementKind` are therefore an
+  Unpopped-owned stability dependency of every `Plan<T>` signature.
+- Choosing a bound for a new plan: arithmetic with α/β → `Element`; moves or reinterprets
+  bytes → `DeviceRepr + Copy + 'static`.
 
 ## Error handling
 
