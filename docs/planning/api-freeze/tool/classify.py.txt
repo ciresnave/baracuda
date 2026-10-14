@@ -1,0 +1,56 @@
+import csv, re, sys, collections
+src, outdir = sys.argv[1], sys.argv[2]
+OURS_CABI = {"baracuda-kernels-sys", "baracuda-cutlass-kernels-sys"}
+rows = list(csv.DictReader(open(src, newline=""), delimiter="\t"))
+# crate -> reexport text (to decide whether a pub item in a private module is in fact re-exported)
+rex = collections.defaultdict(list)
+for r in rows:
+    if r["kind"] == "reexport":
+        rex[r["crate"]].append(r["name"])
+def reexported(r):
+    leaf = re.split(r"::", r["name"])[0].split(".")[0].split("<")[0]
+    for t in rex[r["crate"]]:
+        if t.endswith("::*") or "::*" in t or re.search(r"\b" + re.escape(leaf) + r"\b", t):
+            return True
+    return False
+PLUMB = re.compile(r"(^|::)_|_raw$|_ffi$")
+def classify(r):
+    if r["deprecated"] == "1":
+        return "candidate-for-removal"
+    if r["hidden"] == "1":
+        return "doc-hidden"
+    if r["kind"] == "trait" and r["name"].startswith("Sealed") and r["reach"] == "private-mod":
+        return "sealed-trait-pattern"
+    if r["reach"] == "private-mod" and r["kind"] not in ("reexport",):
+        return "narrow-visibility-candidate" if not reexported(r) else "stable"
+    if r["kind"] == "trait-member" and PLUMB.search(r["name"]):
+        return "candidate-doc-hidden"
+    if r["crate"] in OURS_CABI and r["ffi"] == "1":
+        return "stable-c-abi"
+    if r["crate"].endswith("-sys") and r["crate"] not in OURS_CABI:
+        return "vendor-mirror"
+    return "stable"
+ctl = sum(1 for r in rows if r["kind"] == "trait-member" and PLUMB.search(r["name"]) and r["hidden"] == "1")
+print("control: plumbing-named trait members already doc(hidden):", ctl)
+for r in rows:
+    r["class"] = classify(r)
+cnt = collections.defaultdict(collections.Counter)
+for r in rows:
+    cnt[r["crate"]][r["class"]] += 1
+classes = ["stable", "stable-c-abi", "vendor-mirror", "doc-hidden", "sealed-trait-pattern", "candidate-doc-hidden", "narrow-visibility-candidate", "candidate-for-removal"]
+with open(outdir + "/summary.tsv", "w") as f:
+    f.write("crate\ttotal\t" + "\t".join(classes) + "\n")
+    for k in sorted(cnt, key=lambda k: -sum(cnt[k].values())):
+        f.write(k + "\t" + str(sum(cnt[k].values())) + "\t" + "\t".join(str(cnt[k][c]) for c in classes) + "\n")
+    tot = collections.Counter()
+    for k in cnt: tot.update(cnt[k])
+    f.write("TOTAL\t" + str(sum(tot.values())) + "\t" + "\t".join(str(tot[c]) for c in classes) + "\n")
+keep = [r for r in rows if r["class"] not in ("vendor-mirror", "stable-c-abi")]
+cols = ["crate", "file", "line", "kind", "name", "reach", "class", "non_exhaustive"]
+with open(outdir + "/items-classified.tsv", "w") as f:
+    f.write("\t".join(cols) + "\n")
+    for r in keep:
+        r["crate"] = r["crate"]
+        r["reach"] = r["reach"]
+        f.write("\t".join(r[c] for c in cols) + "\n")
+print(len(rows), "rows;", len(keep), "individually listed")
