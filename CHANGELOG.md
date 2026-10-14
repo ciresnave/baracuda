@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.100 — 2026-10-14 (docs: API-freeze — Fuel `*Descriptor` exposure measured; census-per-release process)
+
+PM-tasked (alpha.100 allocated by the PM; docs are not exempt). Merging is not a publish. No code change.
+
+- `docs/planning/api-freeze/README.md` §7.1: Fuel `e6cbf782` references 0 of the 257 kernels `*Descriptor`
+  structs (positive control included); §7.2: census re-run per release. Section order fixed (7, 8).
+- ROADMAP: slices (c)/(d) recorded.
+
 ## 0.0.1-alpha.99 — 2026-10-14 (docs: API-freeze slice 2 — family denominators + R2 worklist)
 
 PM-tasked (alpha.99 provisional, PM allocates at gate). Merging is not a publish. No code change.

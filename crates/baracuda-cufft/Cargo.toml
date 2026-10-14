@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cufft"
-version = "0.0.1-alpha.99"
+version = "0.0.1-alpha.100"
 description = "Safe Rust wrappers for NVIDIA cuFFT."
 edition.workspace = true
 license.workspace = true

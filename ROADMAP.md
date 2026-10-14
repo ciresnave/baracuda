@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.99** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
+`main` is at **v0.0.1-alpha.100** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1455,8 +1455,10 @@ C-ABI policy (needs CireSnave via PM), per-family review of the ~9.9k `stable` i
 
 **Next unblocked slices (mechanical, from `docs/planning/api-freeze/items.tsv`; no decision needed):**
 (a) and (b) **done (alpha.99)**: `kernels-families.tsv` and `r2-worklist.tsv` (257 `*Descriptor` structs
-are the R2 target; 307 `*Args` stay literal). Open: (c) re-run the census at each release; (d) measure whether Fuel
-struct-literals any `*Descriptor` (gates the R2 breaking pass); (e) per-family owner review (R6). **R1 done (alpha.98).**
+are the R2 target; 307 `*Args` stay literal). (c) **recorded as process (alpha.100)**: re-run the census at each release gate
+(`docs/planning/api-freeze/README.md` §7.2); (d) **measured**: Fuel `e6cbf782` uses 0 of 257 `*Descriptor`s, so R2
+has no Fuel exposure (lightbulb / crates.io dependents unmeasured). Open: (e) per-family owner review (R6),
+R2 itself (a breaking pass; needs the C-ABI/policy adoption on board 198 first). **R1 done (alpha.98).**
 
 **Scope:**
 
