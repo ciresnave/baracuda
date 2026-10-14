@@ -25,7 +25,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 # Serialize runs so a manual dispatch overlapping the weekly run cannot race the
 # `gh issue list` -> `gh issue create` dedupe into creating two issues.
@@ -37,6 +36,10 @@ jobs:
   baseline-liveness:
     name: Are the PyTorch baseline runs' majors current?
     runs-on: ubuntu-latest
+    # Raised per job: this is the only job, and it files the dedupe'd tracking issue.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Compare each provenance run's torch major against the latest release

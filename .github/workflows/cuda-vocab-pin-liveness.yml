@@ -19,7 +19,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 # Serialize runs. A manual `workflow_dispatch` can overlap the weekly scheduled run
 # (or another dispatch), and two runs executing the `gh issue list` → `gh issue
@@ -34,6 +33,10 @@ jobs:
   pin-liveness:
     name: Is the KISS seed pin current?
     runs-on: ubuntu-latest
+    # Raised per job: this is the only job, and it files the dedupe'd tracking issue.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Diff the pinned seed against KISS main
