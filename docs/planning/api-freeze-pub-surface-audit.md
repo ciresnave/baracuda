@@ -26,7 +26,7 @@ numbers as a ranking, not a census. 74 crates matched.
 | baracuda-cudnn-sys | 210 | 0 | 0 |
 | baracuda-cutlass-kernels-sys | 174 | 0 | 0 |
 | baracuda-cudnn | 159 | 0 | 0 |
-| 66 other crates | 17 – 154 each | 51 across 8 crates | 2 |
+| 66 other crates | 1 – 154 each | 50 across 7 crates | 2 |
 
 Workspace total by this method: **17 276 items, 53 `doc(hidden)`, 9
 `deprecated`, 119 `pub(crate)`**. Three crates (`-kernels-sys`, `-kernels`,
