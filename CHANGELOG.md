@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.109 — 2026-10-14 (ci: `cargo --locked`, SUP-001)
+
+PM-allocated (alpha.109). CI only; no source or dependency change. Merging is not a publish.
+
+- `ci.yml`: `--locked` on 20 `cargo build|check|clippy|test|doc|metadata` invocations, so CI resolves strictly from the
+  committed `Cargo.lock`. Left unlocked on purpose (PM-ruled waiver): `cargo check --manifest-path
+  tools/kiss-ref-diff/Cargo.toml` — its own resolution root with no committed lock, path-depending on
+  `baracuda-cuda-emit`, whose version moves on every bump.
+
 ## 0.0.1-alpha.108 — 2026-10-14 (docs: C-ABI stability policy adopted, board 198)
 
 PM-allocated (alpha.108). Documentation only. Merging is not a publish.

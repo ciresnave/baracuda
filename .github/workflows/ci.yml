@@ -136,9 +136,9 @@ jobs:
       # it genuinely needs a GPU. Added here, not there, specifically so this
       # crate's tests EXECUTE on a GPU-less runner instead of only type-checking.
       - name: cargo build (driver-free surface)
-        run: cargo build -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats
+        run: cargo build --locked -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats
       - name: cargo clippy (driver-free surface)
-        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats -- -D warnings
+        run: cargo clippy --locked -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats -- -D warnings
       # Also lint in TEST mode. The step above compiles the lib with cfg(test)
       # FALSE, so a lint in an inline `#[cfg(test)]` module or in an integration
       # test file (tests/*.rs) is never compiled and never seen — the same "CI
@@ -146,9 +146,9 @@ jobs:
       # in a lib inline test rode in unnoticed until a `--tests` run found it).
       # `--tests` compiles the lib-test target plus every tests/*.rs.
       - name: cargo clippy (driver-free surface, tests)
-        run: cargo clippy -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats --tests -- -D warnings
+        run: cargo clippy --locked -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats --tests -- -D warnings
       - name: cargo test (driver-free surface, no GPU)
-        run: cargo test -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats
+        run: cargo test --locked -p baracuda-cuda-emit -p baracuda-cuda-vocab -p baracuda-cuda-parse -p baracuda-bench-stats
       # `cargo doc` is also the ENFORCEMENT point for `[workspace.lints.rustdoc]`
       # (broken_intra_doc_links + private_intra_doc_links = deny). A broken
       # `[`Type`]` link is invisible to build/clippy/test — it renders as a live
@@ -164,7 +164,7 @@ jobs:
       # silently un-gated). CUDA-only crates' rustdoc is checked on-device.
       - name: cargo doc (driver-free surface — enforces rustdoc deny)
         run: >
-          cargo doc --no-deps
+          cargo doc --locked --no-deps
           -p baracuda-cuda-emit
           -p baracuda-cuda-seam
           -p baracuda-cuda-vocab
@@ -194,23 +194,23 @@ jobs:
       # not on this job.
       # If you add a feature, add its build here or it joins the uncovered set.
       - name: clippy cuvs surfaces (feature-gated)
-        run: cargo clippy -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs -- -D warnings
+        run: cargo clippy --locked -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs -- -D warnings
       - name: test cuvs surfaces (feature-gated)
-        run: cargo test -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs
+        run: cargo test --locked -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs
       - name: cargo doc cuvs surfaces (feature-gated — enforces rustdoc deny)
-        run: cargo doc --no-deps -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs
+        run: cargo doc --locked --no-deps -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs
       - name: clippy cuda-seam
-        run: cargo clippy -p baracuda-cuda-seam -- -D warnings
+        run: cargo clippy --locked -p baracuda-cuda-seam -- -D warnings
       - name: clippy cuda-seam (tests)
-        run: cargo clippy -p baracuda-cuda-seam --tests -- -D warnings
+        run: cargo clippy --locked -p baracuda-cuda-seam --tests -- -D warnings
       - name: test cuda-seam
-        run: cargo test -p baracuda-cuda-seam
+        run: cargo test --locked -p baracuda-cuda-seam
       - name: clippy cuda-emit convert (feature-gated)
-        run: cargo clippy -p baracuda-cuda-emit --features convert -- -D warnings
+        run: cargo clippy --locked -p baracuda-cuda-emit --features convert -- -D warnings
       - name: clippy cuda-emit convert (feature-gated, tests)
-        run: cargo clippy -p baracuda-cuda-emit --features convert --tests -- -D warnings
+        run: cargo clippy --locked -p baracuda-cuda-emit --features convert --tests -- -D warnings
       - name: test cuda-emit convert (feature-gated)
-        run: cargo test -p baracuda-cuda-emit --features convert
+        run: cargo test --locked -p baracuda-cuda-emit --features convert
       # `tools/kiss-ref-diff` is not a workspace member and declares its OWN
       # [workspace], so it is a SECOND RESOLUTION ROOT: the root Cargo.lock
       # structurally cannot see its graph, and no job here had ever compiled it.
@@ -225,6 +225,11 @@ jobs:
       # If the tool's value ever depends on CI executing it, this silence stops
       # being honest and it needs a device runner or an explicit uncovered row.
       - name: cargo check tools/kiss-ref-diff (second resolution root)
+        # NOT `--locked`, deliberately (SUP-001 waiver candidate): this tool is its own resolution root
+        # and has no committed Cargo.lock; it path-depends on `baracuda-cuda-emit`, whose version moves on
+        # every lockstep bump, so a lock here would need regenerating by hand on every bump and the step
+        # would go red for a reason unrelated to the tool. Resolving fresh is also what catches its pins
+        # drifting (#122).
         run: cargo check --manifest-path tools/kiss-ref-diff/Cargo.toml
       # ---- FEATURE-COVERAGE: clippy the CUDA-FREE feature-gated surface under
       # `--all-features`. Only 7 crates invoke nvcc; the rest of the CUDA wrapper
@@ -238,7 +243,7 @@ jobs:
       # runner. The feature-coverage guard enforces both properties.
       - name: clippy feature-gated surface (--all-features, CUDA-free)
         run: >
-          cargo clippy --all-features
+          cargo clippy --locked --all-features
           -p baracuda
           -p baracuda-build
           -p baracuda-types
@@ -255,7 +260,7 @@ jobs:
       # baracuda-optim is MIXED: `distributed_optim` is CUDA-free but `sm80/89/90a`
       # invoke nvcc, so `--all-features` can't be used — enumerate the CUDA-free one.
       - name: clippy baracuda-optim distributed_optim (feature-gated, CUDA-free)
-        run: cargo clippy -p baracuda-optim --features distributed_optim -- -D warnings
+        run: cargo clippy --locked -p baracuda-optim --features distributed_optim -- -D warnings
 
   msrv-driver-free:
     name: MSRV 1.85 (driver-free surface)
@@ -285,13 +290,13 @@ jobs:
         run: |
           expected="baracuda-build baracuda-core baracuda-cuda-emit baracuda-cuda-vocab baracuda-types baracuda-types-derive"
           exp=$(printf '%s\n' $expected | sort | tr '\n' ' '); exp="${exp% }"
-          names=$(cargo +1.85.0 metadata --no-deps --format-version 1 \
+          names=$(cargo +1.85.0 metadata --locked --no-deps --format-version 1 \
             | python3 -c "import json,sys; print(' '.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if p.get('rust_version')=='1.85')))")
           echo "crates declaring rust-version=1.85: [$names]"
           [ -n "$names" ] || { echo "GUARD BROKEN: no crate declares rust-version=1.85 — this job would build nothing."; exit 2; }
           [ "$names" = "$exp" ] || { echo "MSRV DRIFT: {declares 1.85}=[$names] != {expected}=[$exp]. A crate gained or lost its 1.85 floor, or the 'expected' list was edited — reconcile the Cargo.toml declarations with the list in this step."; exit 1; }
           args=(); for n in $names; do args+=(-p "$n"); done
-          cargo +1.85.0 build "${args[@]}"
+          cargo +1.85.0 build --locked "${args[@]}"
 
   arch-gated-check:
     name: Arch-gated Rust surface (DOCS_RS check, no CUDA)
@@ -332,7 +337,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: cargo check baracuda-kernels --features ${{ matrix.arch }}
-        run: cargo check -p baracuda-kernels --features ${{ matrix.arch }}
+        run: cargo check --locked -p baracuda-kernels --features ${{ matrix.arch }}
       # `baracuda-kernels-bench`'s tests/ are 12 files / 3,103 lines that NO job
       # compiled until this step: the variant gate, the RowReduce bit-move matrix
       # and the precision-first numerics all live there. They are device tests, so
@@ -356,4 +361,4 @@ jobs:
       # here is deliberately the smaller one, because it is the one that was
       # failing.
       - name: cargo check baracuda-kernels-bench --tests --features ${{ matrix.arch }}
-        run: cargo check -p baracuda-kernels-bench --tests --features ${{ matrix.arch }}
+        run: cargo check --locked -p baracuda-kernels-bench --tests --features ${{ matrix.arch }}
