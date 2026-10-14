@@ -21,6 +21,10 @@ on:
   # than close a gap. Shape adopted from vulkane#31 — same blind spot, same fix.
   pull_request:
 
+# Least privilege: every job only checks out and builds. Raise per job if one ever needs more.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
