@@ -10,6 +10,9 @@ algorithm families, and what was deliberately dropped.
 ## Provenance
 
 - **Upstream**: <https://github.com/facebookresearch/xformers>
+- **Reference commit** *(recorded 2026-10-14)*: `c04f47b69b53d60a53916fd61ddd32bdb4a6b927` (2026-05-21) — the last upstream commit on or before the
+  2026-05-28 vendor date. The vendor-time commit was **not recorded and is not recoverable**; this pin is
+  date-bounded. `LICENSE` here is verbatim at it. Attribution only; no upstream source is vendored.
 - **License**: BSD 3-Clause (see `LICENSE` next to this file).
 - **Algorithmic-reference date**: 2026-05-28.
 

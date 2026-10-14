@@ -9,6 +9,9 @@ natively support QLoRA-trained models on the Hugging Face Hub
 ## Provenance
 
 - **Upstream**: <https://github.com/bitsandbytes-foundation/bitsandbytes>
+- **Reference commit** *(recorded 2026-10-14)*: `5500cffe91d0a2a8adfbb34cc0c195abb9cde6ab` (2026-05-27) — the last upstream commit on or before the
+  2026-05-28 vendor date. The vendor-time commit was **not recorded and is not recoverable**; this pin is
+  date-bounded. `LICENSE` and `NOTICE.md` here are verbatim at it (unchanged at upstream HEAD). `nf4_*.cuh` are hand-ports; only the QLoRA NF4 codebook constants match upstream.
 - **License**: MIT (Tim Dettmers et al., see `LICENSE` next to this
   file). MIT — **no explicit patent grant**, same as the sibling AWQ
   vendor (`vendor/awq/`, also MIT).

@@ -8,6 +8,9 @@ projection and the SSM block.
 ## Provenance
 
 - **Upstream**: <https://github.com/Dao-AILab/causal-conv1d>
+- **Reference commit** *(recorded 2026-10-14)*: `4f6ae4e26ae5fe8af9372f8d312ab25cc4595223` (2026-05-09) — the last upstream commit on or before the
+  2026-05-28 vendor date. The vendor-time commit was **not recorded and is not recoverable**; this pin is
+  date-bounded. `LICENSE` and `AUTHORS` here are verbatim at it. The kernels under `kernels/conv/` are hand-ports (0 shared lines).
 - **License**: BSD 3-Clause (see `LICENSE` next to this file).
 - **Vendored**: 2026-05-28.
 

@@ -25,7 +25,7 @@ byte-identical to FA `v2.8.3`@`060c9188`):** the 12 candle-sourced `flash_fwd_hd
 (+9: `HEADDIM<=160/224/512` branches), `flash_fwd_launch_template.h` (+65/-1: `kBlockN` formula and
 `run_mha_fwd_hdim160/224/512`; the hd160/224 launchers use FA's `get_compute_capability` instead of
 candle's `cuda_is_sm8x`), `flash_bwd_launch_template.h` (+20: comment-only Phase 60 notes).
-The hd160/224 sources are `EricLBuehler/candle` `main` as resolved at `132643dc` (2025-07-09); the
+The hd160/224 sources are `EricLBuehler/candle` `main` as resolved at `132643dc466cffefa133630565c0fbc2b62889b0` (2025-07-09); the
 candle commits cited below are origin history. Candle is `MIT OR Apache-2.0`; its licence text is
 **not yet carried here** (tracked as gap G-FA-1 in `PROVENANCE.md`).
 baracuda's own license (dual MIT / Apache-2.0) sits alongside; the

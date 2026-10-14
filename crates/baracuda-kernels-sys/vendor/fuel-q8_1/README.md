@@ -50,7 +50,18 @@ release.
 - **Source**: `fuel-cuda-kernels/src/quantized.cu` from the Fuel
   repository.
 - **Vendored**: 2026-05-25 as part of Phase 19.
-- **Vendored commit**: see git log of this directory.
+- **Vendored commit**: not recorded at vendor time; recovered 2026-10-14 by blob equality (`git hash-object`):
+  - Fuel `fuel-cuda-kernels/src/quantized.cu` at `e1070acf94651ec0970682e5003f2a40081afe35` (the parent of Fuel's
+    deleting commit `a9c983ae5b3aeed584e862d42d97ef60b2d5c125`); this directory's `quantized.cu` differs from it
+    only in header comments.
+  - Fuel's blob is byte-identical to huggingface/candle `candle-kernels/src/quantized.cu` at
+    `fd8448d2c7fe2098c60bb88f48d5878845bb08c0` (2026-01-06). Fuel is a candle fork (root commit `fe7a5f53` is
+    candle's "Initial commit"). Candle's licences are carried here as `LICENSE-candle-MIT` / `LICENSE-candle-APACHE`.
+  - candle's `indexed_moe_forward` tail (line 4334 on) entered with huggingface/candle#3196 (`95ea4538`, 2025-11-25,
+    "Co-authored-by Guoqing Bao"); its `@author` comment names guoqingbao/vllm.rs, now `xinfer` (`LICENSE-xinfer`
+    here is identical to xinfer `b88c15334fb607ff52cdc3fd875c3da796dcc020`'s `LICENSE.txt`).
+  - The remainder descends from llama.cpp `ggml-cuda.cu` via candle (Laurent Mazare); `LICENSE-llama.cpp` is
+    identical to llama.cpp `0a5eebb45d5697127b84418576dc479c400c4b3d`'s `LICENSE`.
 
 This file has two distinct upstream lineages, **both MIT**, corrected
 2026-09-29 (the original "License: MIT (lineage: llama.cpp and vLLM)"
