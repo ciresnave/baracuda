@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.106 — 2026-10-14 (ci/docs hygiene: CODEOWNERS, least-privilege permissions, glossary)
+
+PM-tasked from the CodeRipper portfolio triage (alpha.106 allocated by the PM). Merging is not a publish. No behaviour change.
+
+- `.github/CODEOWNERS`: `* @ciresnave` (WSP-001).
+- Workflows (SUP-008): `ci.yml` gets top-level `permissions: contents: read`; the two liveness workflows move
+  `issues: write` from workflow level to their single job. Every action was already pinned to a full SHA.
+- `GLOSSARY.md`: the project's domain terms, defined once (DOC-009).
+
 ## 0.0.1-alpha.105 — 2026-10-14 (docs: provenance audit method note)
 
 PM-tasked (alpha.105 allocated by the PM). Merging is not a publish. Documentation only.
