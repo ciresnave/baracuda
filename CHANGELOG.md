@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.96 — 2026-10-14 (CI: third-party Actions pinned to full commit SHAs)
+
+PM-tasked (alpha.96 allocated by the PM). Merging is not a publish. No code change.
+
+- `.github/workflows/{ci,cuda-vocab-pin-liveness,pytorch-baseline-liveness}.yml`: 11 `uses:`
+  lines moved from mutable refs (`@v4`, `@v2`, `@stable`, `@1.85.0`) to 40-hex commit SHAs
+  with the tag in a trailing comment (checkout v7.0.1, rust-cache v2.9.2, rust-toolchain).
+
 ## 0.0.1-alpha.95 — 2026-10-14 (docs: ROADMAP refresh + API-freeze pub-surface inventory)
 
 PM-tasked (alpha.95 allocated by the PM; docs are not exempt from the version rule).
