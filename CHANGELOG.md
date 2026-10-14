@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.108 — 2026-10-14 (docs: C-ABI stability policy adopted, board 198)
+
+PM-allocated (alpha.108). Documentation only. Merging is not a publish.
+
+- `docs/planning/api-freeze/README.md`: R4 reconciled to CireSnave's 2026-10-14 ruling (quoted verbatim): from 1.0
+  the C ABI does not break within a major version. §4.2 now states what that implies for the 5 809 `stable-c-abi`
+  items (freeze list, additive-only, new-symbol-never-edit, deprecation through the major, `abi_version`).
+
 ## 0.0.1-alpha.107 — 2026-10-14 (sk5 adoption: `unpopped` family 0.16.0 -> 0.17.1)
 
 PM-allocated: workspace alpha.107; `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.17.1 (they follow the `unpopped` 0.17.1 they work with).
