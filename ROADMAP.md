@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.109** (2026-10-14; `baracuda-cuda-emit` 0.17.1); see
+`main` is at **v0.0.1-alpha.110** (2026-10-14; `baracuda-cuda-emit` 0.17.1); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1400,7 +1400,7 @@ priority within the section.
 
 - **`version-consistency`** (4 High): `baracuda-cuda-emit` and `baracuda-cuda-parse` (0.17.1 at alpha.107) follow the `unpopped`
   line by the documented versioning exception; `baracuda-examples` and `xtask` are `0.0.0` non-publishable members.
-  Needs a CodeRipper waiver or a per-crate allowance, not a version change here.
+  DONE at alpha.110 — waived via 4 `[[allow]]` entries in the repo-local `.coderipper.toml` (not a version change).
 - **SUP-001** (Medium): DONE at alpha.109 — `--locked` on 20 `ci.yml` sites; one site (`tools/kiss-ref-diff`, its own
   resolution root, no committed lock) is a PM-ruled waiver, commented in the workflow.
 

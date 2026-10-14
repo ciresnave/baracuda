@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.110 — 2026-10-14 (ci: CodeRipper `version-consistency` allowances)
+
+PM-allocated (alpha.110). Config only; no source or dependency change. Merging is not a publish.
+
+- New repo-local `.coderipper.toml` with 4 `[[allow]]` entries for `version-consistency`: `baracuda-cuda-emit` and
+  `baracuda-cuda-parse` (follow the `unpopped` MAJOR.MINOR by the documented versioning exception) and
+  `baracuda-examples` / `xtask` (`publish = false`, `0.0.0`). Chose `[[allow]]` over `[[tracks]]` because `tracks`
+  needs a laptop-relative manifest path. CodeRipper 0.6.24: 4 un-waived High -> 4 `[waived]`.
+
 ## 0.0.1-alpha.109 — 2026-10-14 (ci: `cargo --locked`, SUP-001)
 
 PM-allocated (alpha.109). CI only; no source or dependency change. Merging is not a publish.
