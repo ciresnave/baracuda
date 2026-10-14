@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.103** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
+`main` is at **v0.0.1-alpha.104** (2026-10-14; `baracuda-cuda-emit` 0.16.1); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1533,6 +1533,14 @@ PM allocates the bump and publishes. Fuel's consumer side
 ## Pre-1.0 nice-to-haves
 
 These would tighten the 1.0 surface but aren't blockers.
+
+### `baracuda-forge` `builder.rs` split (candidate, not scheduled)
+
+`crates/baracuda-forge/src/builder.rs` has 778 non-comment lines (Codacy file-size metric; waived by the PM
+2026-10-14 as pre-existing). It is also the file that differs most from its cudaforge origin (378 lines;
+`crates/baracuda-forge/NOTICE`), so a split along the builder's concerns (source selection, nvcc flag
+assembly, cache/hash, link step) would be the place to also make the cudaforge-derived parts explicit.
+Not provenance-driven; no consumer asked.
 
 ### FlashInfer direct-FFI smoke tests
 

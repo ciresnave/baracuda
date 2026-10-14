@@ -133,6 +133,23 @@ Comment-only edits; `docs/provenance/header-comment-changes-verified.tsv` shows,
 
 **Open, upstream-only:** `guoqingbao/attention.rs` and `guoqingbao/cudaforge` ship no LICENSE file (only a `Cargo.toml` `license` field), so no verbatim licence text can be carried. Asking each upstream to add one would resolve it; **no upstream issue has been filed** (needs PM approval).
 
+## 3c. Pins bucket applied (PR alpha.104, 2026-10-14)
+
+Recorded in each directory's `VENDOR.md` / `README.md`. **Date-bounded, not vendor-time:** for the origins that recorded no commit, the reference is the last upstream commit on or before the 2026-05-28 vendor date; the true vendor-time commit is not recoverable, and each entry says so.
+
+| origin | reference commit | date |
+|---|---|---|
+| bitsandbytes | `5500cffe91d0a2a8adfbb34cc0c195abb9cde6ab` | 2026-05-27 |
+| causal-conv1d | `4f6ae4e26ae5fe8af9372f8d312ab25cc4595223` | 2026-05-09 |
+| mamba | `a14b1dff0454a3bc27d9eb31355dc01e4b2490ec` | 2026-05-09 |
+| xformers | `c04f47b69b53d60a53916fd61ddd32bdb4a6b927` | 2026-05-21 |
+| NVIDIA/apex | `becbb77cea4cb54f2929f7c938a0a6f7dd1fdc39` | 2026-05-28 |
+| NVIDIA/TransformerEngine | `9e5a847c90c436c9c9c5f3e756977cf568967ccc` | 2026-05-28 |
+| fuel-q8_1 chain | Fuel `e1070acf9...` = candle `fd8448d2c7fe...`; xinfer `b88c1533...`; llama.cpp `0a5eebb45d...` | blob-equality, exact |
+| FA2 hd160/224 | `EricLBuehler/candle` `132643dc466c...` | 2025-07-09 (exact blob match) |
+
+G-PIN-1 and G-FQ-1 are closed by this. Remaining open: attention.rs / cudaforge ship no LICENSE (upstream-only).
+
 ## 4. Proposed fixes needing PM (no vendoring changes made)
 
 1. **Add licence texts** (new files only, no edits to vendored sources): candle `LICENSE-MIT` +

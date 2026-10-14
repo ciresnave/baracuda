@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.104 — 2026-10-14 (docs: provenance — upstream reference commits recorded)
+
+PM-tasked (alpha.104 allocated by the PM). Merging is not a publish. Documentation only.
+
+- `VENDOR.md` / README of bitsandbytes, causal-conv1d, mamba, xformers, apex, transformer-engine, fuel-q8_1
+  and flash-attention now record an upstream reference commit (date-bounded where the vendor-time commit was
+  never recorded; stated as such), and the fuel-q8_1 Fuel -> candle -> llama.cpp / xinfer chain by blob equality.
+
 ## 0.0.1-alpha.103 — 2026-10-14 (docs: provenance — header-comment corrections)
 
 PM-tasked (alpha.103 allocated by the PM). Merging is not a publish. **Comment-only edits to 32 code files:

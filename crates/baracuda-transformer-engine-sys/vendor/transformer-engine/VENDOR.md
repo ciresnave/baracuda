@@ -1,6 +1,11 @@
 # Vendor: NVIDIA TransformerEngine — FP8 cast/recipe subset
 
 **Upstream**: https://github.com/NVIDIA/TransformerEngine
+
+**Reference commit** *(recorded 2026-10-14)*: `9e5a847c90c436c9c9c5f3e756977cf568967ccc` (2026-05-28) — the last upstream commit on or before the
+  2026-05-28 vendor date. The vendor-time commit was **not recorded and is not recoverable**; this pin is
+  date-bounded. `ATTRIBUTION.md`'s licence text is verbatim `LICENSE` at it. No TE source is copied; upstream has no NOTICE.
+
 **License**: Apache-2.0 (with §3 patent grant — see `../../ATTRIBUTION.md`)
 **baracuda phase**: 55
 

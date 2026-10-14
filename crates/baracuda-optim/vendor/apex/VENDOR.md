@@ -9,6 +9,9 @@ parameter tensors instead of one launch per tensor.
 ## Provenance
 
 - **Upstream**: <https://github.com/NVIDIA/apex>
+- **Reference commit** *(recorded 2026-10-14)*: `becbb77cea4cb54f2929f7c938a0a6f7dd1fdc39` (2026-05-28) — the last upstream commit on or before the
+  2026-05-28 vendor date. The vendor-time commit was **not recorded and is not recoverable**; this pin is
+  date-bounded. `LICENSE` here is verbatim at it. The `.cuh` files are PyTorch-free rewrites.
 - **License**: BSD-3-Clause (see `LICENSE` next to this file).
 - **Vendored**: 2026-05-28.
 

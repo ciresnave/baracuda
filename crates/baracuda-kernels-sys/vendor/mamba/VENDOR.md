@@ -15,6 +15,9 @@ Albert Gu. Two distinct CUDA op families are covered:
 ## Provenance
 
 - **Upstream**: <https://github.com/state-spaces/mamba>
+- **Reference commit** *(recorded 2026-10-14)*: `a14b1dff0454a3bc27d9eb31355dc01e4b2490ec` (2026-05-09) — the last upstream commit on or before the
+  2026-05-28 vendor date. The vendor-time commit was **not recorded and is not recoverable**; this pin is
+  date-bounded. `LICENSE` and `AUTHORS` here are verbatim at it; upstream has no NOTICE. The kernels under `kernels/ssd/` are hand-ports (0 shared lines).
 - **License**: Apache-2.0 (see `LICENSE` next to this file).
 - **Papers**:
   - Mamba-1 — "Mamba: Linear-Time Sequence Modeling with Selective
