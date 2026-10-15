@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.111 — 2026-10-15 (unpopped family 0.17.1 -> 0.17.3)
+
+Workspace alpha.111 (proposed; PM allocates at gate); `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.17.3 (they follow the `unpopped` 0.17.3 they work with).
+
+- Dependencies: `unpopped`, `unpopped-vocab`, `unpopped-cpu-c`, `unpopped-slang` and `tools/kiss-ref-diff` move to 0.17.3.
+- No source or golden change: emit/parse/seam tests pass unchanged (emit 305 unit + contract 50 + jit 22 + link 2; parse 13; seam 17).
+
 ## 0.0.1-alpha.110 â€” 2026-10-14 (ci: CodeRipper `version-consistency` allowances)
 
 PM-allocated (alpha.110). Config only; no source or dependency change. Merging is not a publish.
