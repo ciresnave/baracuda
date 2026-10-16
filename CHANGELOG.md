@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.118 - 2026-10-16 (baracuda-kernels: #[ignore] retired, slice 2/5)
+
+Workspace alpha.118 (proposed; PM allocates at gate).
+
+- 104 more GPU test files (affine_inplace_ffi_smoke .. ) lose every `#[ignore]`, gated by the `device-tests` feature (2 files keep host-only tests with their helpers gated).
+- Verified on RTX 4070 at the 5-slice head (which contains this slice's exact gating): `cargo gpu-test -p baracuda-kernels --features device-tests` 2055 passed, 0 failed, 0 skips. Files behind other cargo features are not run by that command: UNVERIFIED.
+
 ## 0.0.1-alpha.117 - 2026-10-16 (baracuda-kernels: device-tests feature; #[ignore] retired, slice 1/5)
 
 Workspace alpha.117 (proposed; PM allocates at gate).
