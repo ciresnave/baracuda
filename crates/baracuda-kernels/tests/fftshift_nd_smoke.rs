@@ -6,7 +6,8 @@
 //! equality (no tolerance — the operation is purely a copy with rotated
 //! indices).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -93,7 +94,6 @@ fn build_desc<const N: usize>(
 // -------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn fftshift_nd_2d_even_f32_both_axes() {
     // 4 x 4. Shift both axes (the canonical "center the DC peak" usage).
     let (ctx, stream) = setup();
@@ -130,7 +130,6 @@ fn fftshift_nd_2d_even_f32_both_axes() {
 }
 
 #[test]
-#[ignore]
 fn fftshift_nd_2d_odd_f32_both_axes_fft_vs_ifft() {
     // 3 x 5 — odd on both axes. fftshift and ifftshift must differ;
     // their composition must be the identity.
@@ -200,7 +199,6 @@ fn fftshift_nd_2d_odd_f32_both_axes_fft_vs_ifft() {
 }
 
 #[test]
-#[ignore]
 fn fftshift_nd_2d_one_axis_only_complex32() {
     // 4 x 6 — Complex64. Shift only axis 1 (last axis); axis 0 is
     // pass-through. Equivalent to the 1-D plan with batch == shape[0],
@@ -245,7 +243,6 @@ fn fftshift_nd_2d_one_axis_only_complex32() {
 // -------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn fftshift_nd_3d_mixed_parity_f32() {
     // 2 x 3 x 4 — mix of even and odd axes. Shift all three.
     let (ctx, stream) = setup();
@@ -282,7 +279,6 @@ fn fftshift_nd_3d_mixed_parity_f32() {
 }
 
 #[test]
-#[ignore]
 fn fftshift_nd_3d_batched_inner_two_axes_f64() {
     // 3 x 4 x 5 — treat axis 0 as a batch axis (pass-through), shift
     // axes 1 and 2 only. Mixed parity (even / odd) on the shifted axes;
@@ -352,7 +348,6 @@ fn fftshift_nd_3d_batched_inner_two_axes_f64() {
 }
 
 #[test]
-#[ignore]
 fn fftshift_nd_3d_complex32_all_axes_odd() {
     // 3 x 5 x 7 — odd-odd-odd Complex64. Stresses the per-axis (n+1)/2
     // vs n/2 asymmetry on every shifted axis.

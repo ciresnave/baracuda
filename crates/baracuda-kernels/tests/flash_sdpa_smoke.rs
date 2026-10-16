@@ -5,7 +5,8 @@
 //! compute the same math, just in a different float order.
 //!
 //! Covers FW × 4 FP dtypes × 2 mask modes (none + causal).
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -209,13 +210,11 @@ fn run_f32(is_causal: bool) {
 }
 
 #[test]
-#[ignore]
 fn flash_sdpa_f32_no_mask() {
     run_f32(false);
 }
 
 #[test]
-#[ignore]
 fn flash_sdpa_f32_causal() {
     run_f32(true);
 }
@@ -225,7 +224,6 @@ fn flash_sdpa_f32_causal() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_f64_basic() {
     let (ctx, stream) = setup();
     let q_h = gen_q_f64();
@@ -361,7 +359,6 @@ fn flash_sdpa_f64_basic() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_f16_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -507,7 +504,6 @@ fn flash_sdpa_f16_basic() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_bf16_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -850,7 +846,6 @@ fn run_broadcast_route_case(b: i32, h: i32, q: i32, k: i32, d: i32, tol_mul: f32
 
 #[cfg(feature = "sm89")]
 #[test]
-#[ignore]
 fn flash_sdpa_f16_full_mqa_broadcast_route_small_sm89() {
     // seq_q × seq_k = 64 × 128 = 8192 < 1M → bespoke → sm89 (D=32 ≤ 64).
     run_broadcast_route_case(2, 4, 64, 128, 32, 32.0, "broadcast/small-sm89 D32");
@@ -858,7 +853,6 @@ fn flash_sdpa_f16_full_mqa_broadcast_route_small_sm89() {
 
 #[cfg(all(feature = "sm89", feature = "fa2"))]
 #[test]
-#[ignore]
 fn flash_sdpa_f16_full_mqa_broadcast_route_large_fa2() {
     // seq_q × seq_k = 2048 × 2048 = 4M ≥ 1M → FA2 → physical [B,1,K,D]
     // reinterpretation + FA2 MQA at head_dim 128 (the case the sm89

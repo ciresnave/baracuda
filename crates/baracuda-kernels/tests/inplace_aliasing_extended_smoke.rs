@@ -25,11 +25,12 @@
 //! variant, exercise the aliased call pattern, and compare to a
 //! non-aliased reference run. Equivalence proves the contract holds.
 //!
-//! Marked `#[ignore]` per project convention; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --features sm89 \
 //!    --test inplace_aliasing_extended_smoke -- --include-ignored`.
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -51,7 +52,6 @@ fn setup() -> (Context, Stream) {
 /// Cast `f32 -> i32` (same byte width) with `x_ptr == y_ptr` must
 /// produce the same result as the non-aliased run.
 #[test]
-#[ignore]
 fn cast_f32_to_i32_aliasing_same_byte_width_safe() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -113,7 +113,6 @@ fn cast_f32_to_i32_aliasing_same_byte_width_safe() {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn where_f32_aliasing_a_eq_y_safe() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -181,7 +180,6 @@ fn where_f32_aliasing_a_eq_y_safe() {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn triu_f32_aliasing_input_eq_output_safe() {
     let (ctx, stream) = setup();
     // 8x8 matrix, diagonal=0 (keep upper including main diag).
@@ -235,7 +233,6 @@ fn triu_f32_aliasing_input_eq_output_safe() {
 }
 
 #[test]
-#[ignore]
 fn tril_f32_aliasing_input_eq_output_safe() {
     let (ctx, stream) = setup();
     let n = 8;
@@ -293,7 +290,6 @@ fn tril_f32_aliasing_input_eq_output_safe() {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn unary_relu_backward_f32_aliasing_dx_eq_saved_safe() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -354,7 +350,6 @@ fn unary_relu_backward_f32_aliasing_dx_eq_saved_safe() {
 }
 
 #[test]
-#[ignore]
 fn unary_relu_backward_f32_aliasing_dx_eq_dy_safe() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -418,7 +413,6 @@ fn unary_relu_backward_f32_aliasing_dx_eq_dy_safe() {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn fill_f32_writes_constant() {
     let (ctx, stream) = setup();
     let numel = 1024;

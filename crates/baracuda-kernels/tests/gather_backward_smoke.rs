@@ -4,7 +4,8 @@
 //! lands at the right `(src-coord-along-gather-dim)` cells with the
 //! right summed values. Uses `8 * eps`-relative tolerance.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn gather_backward_f32_2d_dim1() {
     let (ctx, stream) = setup();
     let dsrc_shape = [4i32, 5];
@@ -84,7 +84,6 @@ fn gather_backward_f32_2d_dim1() {
 }
 
 #[test]
-#[ignore]
 fn gather_backward_f64_2d_dim0() {
     let (ctx, stream) = setup();
     let dsrc_shape = [5i32, 3];

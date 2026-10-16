@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `HingeEmbeddingLossPlan`. FW × 4 dtypes × Mean.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -30,7 +31,6 @@ fn host_he_mean_f64(input: &[f64], t: &[i64], margin: f64) -> f64 {
 }
 
 #[test]
-#[ignore]
 fn loss_hinge_embedding_f32_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -89,7 +89,6 @@ fn loss_hinge_embedding_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_hinge_embedding_f64_mean() {
     let (ctx, stream) = setup();
     let shape = [2i32, 5];
@@ -142,7 +141,6 @@ fn loss_hinge_embedding_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_hinge_embedding_f16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -203,7 +201,6 @@ fn loss_hinge_embedding_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_hinge_embedding_bf16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];

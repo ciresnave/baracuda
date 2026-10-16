@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `KlDivLossBackwardPlan`. BW × 4 dtypes × Mean.
 //! `dinput[i] = -target[i] · dy / N`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{DeviceBuffer, init};
 use baracuda_kernels::{
@@ -17,7 +18,6 @@ fn setup() -> (baracuda_driver::Context, baracuda_driver::Stream) {
 }
 
 #[test]
-#[ignore]
 fn loss_kl_div_backward_f32_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -70,7 +70,6 @@ fn loss_kl_div_backward_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_kl_div_backward_f64_mean() {
     let (ctx, stream) = setup();
     let shape = [4i32, 3];
@@ -123,7 +122,6 @@ fn loss_kl_div_backward_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_kl_div_backward_f16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -178,7 +176,6 @@ fn loss_kl_div_backward_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_kl_div_backward_bf16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];

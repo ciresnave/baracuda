@@ -11,10 +11,11 @@
 //! build an explicit physically-expanded contig K/V mirror and compare
 //! against the baseline on the expanded tensors.
 //!
-//! Gated on the `sm89` cargo feature. `#[ignore]` by default — requires
+//! Gated on the `sm89` cargo feature. gated behind the `device-tests` feature — requires
 //! a real Ada-class CUDA device.
 
 #![cfg(feature = "sm89")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -73,7 +74,6 @@ fn gen_v_f64() -> Vec<f64> {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -221,7 +221,6 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_sm89_strided_f16_transposed_q() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -392,7 +391,6 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -576,7 +574,6 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -735,7 +732,6 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_sm89_strided_rejects_non_unit_head_dim_stride() {
     let (ctx, stream) = setup();
     let scale = default_scale();

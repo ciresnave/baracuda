@@ -2,7 +2,8 @@
 //!
 //! Covers all four FP dtypes (f32 / f16 / bf16 / f64).
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -80,7 +81,6 @@ fn host_group_norm_f32(
 }
 
 #[test]
-#[ignore]
 fn group_norm_f32_with_affine() {
     let (ctx, stream) = setup();
     let n = 2i32;
@@ -183,7 +183,6 @@ fn group_norm_f32_with_affine() {
 }
 
 #[test]
-#[ignore]
 fn group_norm_f64_with_affine() {
     let (ctx, stream) = setup();
     let n = 2i32;
@@ -289,7 +288,6 @@ fn group_norm_f64_with_affine() {
 }
 
 #[test]
-#[ignore]
 fn group_norm_f16_with_affine() {
     let (ctx, stream) = setup();
     let n = 2i32;
@@ -395,7 +393,6 @@ fn group_norm_f16_with_affine() {
 }
 
 #[test]
-#[ignore]
 fn group_norm_bf16_with_affine() {
     let (ctx, stream) = setup();
     let n = 2i32;

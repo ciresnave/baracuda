@@ -4,7 +4,8 @@
 //! Verifies `A · A^{-1} ≈ I` for a small well-conditioned `A`. Storage
 //! convention is column-major end-to-end (cuSOLVER native).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -49,7 +50,6 @@ fn matmul_cm_f64(a: &[f64], b: &[f64], m: usize) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn inverse_f32_basic() {
     let (ctx, stream) = setup();
     let m: i32 = 2;
@@ -132,7 +132,6 @@ fn inverse_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn inverse_f64_basic() {
     let (ctx, stream) = setup();
     let m: i32 = 3;

@@ -4,6 +4,7 @@
 //! FW kernel computes a single fused round-trip that matches the
 //! composition of [`QuantizePerTensorPlan`] followed by
 //! [`DequantizePerTensorPlan`].
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -20,7 +21,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn fake_quantize_f32_matches_quant_dequant_roundtrip() {
     let (ctx, stream) = setup();
     let scale: f32 = 0.1;

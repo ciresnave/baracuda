@@ -4,7 +4,8 @@
 //! (atomicAdd). Verifies the scatter-add accumulation pattern with
 //! 8·eps relative tolerance.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn index_select_backward_f32_2d_dim0() {
     let (ctx, stream) = setup();
     let dsrc_shape = [5i32, 4];
@@ -83,7 +83,6 @@ fn index_select_backward_f32_2d_dim0() {
 }
 
 #[test]
-#[ignore]
 fn index_select_backward_f64_2d_dim1() {
     let (ctx, stream) = setup();
     let dsrc_shape = [3i32, 6];

@@ -1,9 +1,10 @@
 //! Real-GPU smoke test for the Phase 3 fill kernel family
 //! (`FillPlan<T>`).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test fill_smoke -- --ignored`.
+//!   --test fill_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -54,13 +55,11 @@ where
 }
 
 #[test]
-#[ignore]
 fn fill_f32() {
     run_case::<f32>(3.14159f32, ElementKind::F32, 0.0);
 }
 
 #[test]
-#[ignore]
 fn fill_f32_huge() {
     let (ctx, stream) = setup();
     let numel = 1 << 20;
@@ -90,31 +89,26 @@ fn fill_f32_huge() {
 }
 
 #[test]
-#[ignore]
 fn fill_f64() {
     run_case::<f64>(-1.7e-9f64, ElementKind::F64, 0.0);
 }
 
 #[test]
-#[ignore]
 fn fill_i32() {
     run_case::<i32>(-42i32, ElementKind::I32, 0);
 }
 
 #[test]
-#[ignore]
 fn fill_i64() {
     run_case::<i64>(1_234_567_890_123i64, ElementKind::I64, 0);
 }
 
 #[test]
-#[ignore]
 fn fill_f16() {
     run_case::<f16>(f16::from_f32(0.5f32), ElementKind::F16, f16::from_f32(0.0));
 }
 
 #[test]
-#[ignore]
 fn fill_bf16() {
     run_case::<bf16>(
         bf16::from_f32(-7.0f32),

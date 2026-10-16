@@ -10,7 +10,8 @@
 //! and the WY iteration exercises the multi-block path (the per-block
 //! iteration direction differs between op = N and op = T).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -402,7 +403,6 @@ const N: i32 = 32;
 const K: i32 = 64;
 
 #[test]
-#[ignore]
 fn ormqr_batched_wy_f32_left_n() {
     let (ctx, stream) = setup();
     let a_host = build_matrix_f32(B as usize, M as usize, K as usize, 0xA1A2_A3A4);
@@ -423,7 +423,6 @@ fn ormqr_batched_wy_f32_left_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_wy_f32_left_t() {
     let (ctx, stream) = setup();
     let a_host = build_matrix_f32(B as usize, M as usize, K as usize, 0xC1C2_C3C4);
@@ -443,7 +442,6 @@ fn ormqr_batched_wy_f32_left_t() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_wy_f64_left_n() {
     let (ctx, stream) = setup();
     let a_host = build_matrix_f64(B as usize, M as usize, K as usize, 0xE1E2_E3E4);
@@ -463,7 +461,6 @@ fn ormqr_batched_wy_f64_left_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_wy_f64_left_t() {
     let (ctx, stream) = setup();
     let a_host = build_matrix_f64(B as usize, M as usize, K as usize, 0x1234_5678);
@@ -842,7 +839,6 @@ fn check_complex64(got: &[Complex128], expected: &[Complex128], tol: f64, label:
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_wy_complex32_left_n() {
     let (ctx, stream) = setup();
     let a_host = build_matrix_complex32(B as usize, M as usize, K as usize, 0x1357_2468);
@@ -864,7 +860,6 @@ fn ormqr_batched_wy_complex32_left_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_wy_complex32_left_c() {
     let (ctx, stream) = setup();
     let a_host = build_matrix_complex32(B as usize, M as usize, K as usize, 0x2468_1357);
@@ -884,7 +879,6 @@ fn ormqr_batched_wy_complex32_left_c() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_wy_complex64_left_n() {
     let (ctx, stream) = setup();
     let a_host = build_matrix_complex64(B as usize, M as usize, K as usize, 0xCAFE_F00D);
@@ -904,7 +898,6 @@ fn ormqr_batched_wy_complex64_left_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_wy_complex64_left_c() {
     let (ctx, stream) = setup();
     let a_host = build_matrix_complex64(B as usize, M as usize, K as usize, 0xBEEF_C0DE);

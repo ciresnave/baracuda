@@ -6,7 +6,8 @@
 //!   - A two-split case (K_len = 300 > CHUNK_K = 256).
 //!   - The LLM-decode-shaped case (B=1, H=32, K=2048, D=128).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -327,40 +328,34 @@ fn run_case_bf16(b: i32, h: i32, k_len: i32, d: i32, tol: f32, label: &str) {
     assert_close_bf16(&y_host, &expected, tol, label);
 }
 
-#[ignore]
 #[test]
 fn flash_decoding_f16_single_split() {
     // One split (K_len ≤ 256).
     run_case_f16(1, 1, 64, 32, 5e-2, "f16/1×1×64×32");
 }
 
-#[ignore]
 #[test]
 fn flash_decoding_f16_multi_split() {
     // Two splits (K_len = 300 > 256). Tail handling matters.
     run_case_f16(1, 2, 300, 64, 5e-2, "f16/1×2×300×64");
 }
 
-#[ignore]
 #[test]
 fn flash_decoding_f16_llm_decode() {
     // The bench-typical shape.
     run_case_f16(1, 32, 2048, 128, 7e-2, "f16/1×32×2048×128");
 }
 
-#[ignore]
 #[test]
 fn flash_decoding_bf16_single_split() {
     run_case_bf16(1, 1, 64, 32, 1e-1, "bf16/1×1×64×32");
 }
 
-#[ignore]
 #[test]
 fn flash_decoding_bf16_multi_split() {
     run_case_bf16(1, 2, 300, 64, 1e-1, "bf16/1×2×300×64");
 }
 
-#[ignore]
 #[test]
 fn flash_decoding_bf16_llm_decode() {
     run_case_bf16(1, 32, 2048, 128, 1.5e-1, "bf16/1×32×2048×128");
@@ -476,7 +471,6 @@ fn run_gqa_case_f16(b: i32, h_q: i32, h_kv: i32, k_len: i32, d: i32, tol: f32, l
 // across the bench-shape sweep.
 const GQA_TC_TOL: f32 = 1.5e-1;
 
-#[ignore]
 #[test]
 fn flash_decoding_gqa_llama3_8b() {
     // Llama 3 8B class — H_q=32, H_kv=8, group=4.
@@ -491,7 +485,6 @@ fn flash_decoding_gqa_llama3_8b() {
     );
 }
 
-#[ignore]
 #[test]
 fn flash_decoding_gqa_llama3_70b() {
     // Llama 3 70B class — H_q=64, H_kv=8, group=8.
@@ -506,14 +499,12 @@ fn flash_decoding_gqa_llama3_70b() {
     );
 }
 
-#[ignore]
 #[test]
 fn flash_decoding_gqa_mqa_full() {
     // MQA — H_q=16, H_kv=1, group=16 (caps at WMMA M-tile).
     run_gqa_case_f16(1, 16, 1, 2048, 128, GQA_TC_TOL, "f16/mqa-group16");
 }
 
-#[ignore]
 #[test]
 fn flash_decoding_gqa_small_shapes() {
     // Sanity: small shapes through the GQA TC path.
@@ -523,8 +514,7 @@ fn flash_decoding_gqa_small_shapes() {
 /// Cost of the OPTIONAL per-key attention-weight output: `a=None` (standard
 /// decode) vs `a=Some` (H2O/R-KV), amortized end-to-end wall-clock over the
 /// decode K sweep. This is the real per-step cost the consumer pays (launch +
-/// GPU). `#[ignore]` — run with `--ignored --nocapture`.
-#[ignore]
+/// GPU). gated behind the `device-tests` feature — run with `--features device-tests -- --nocapture`.
 #[test]
 fn flash_decoding_a_cost_sweep_f16() {
     use std::time::Instant;
@@ -676,8 +666,7 @@ fn head_mean_ref(a: &[f32], b: usize, h: usize, k_len: usize) -> Vec<f32> {
 
 /// Head-mean `[B,Sk]` output: correctness vs the CPU reference (incl. multi-split)
 /// + the config-2 (a only) vs config-3 (a + head-mean) cost delta on the 4070.
-/// `#[ignore]` — run with `--ignored --nocapture`.
-#[ignore]
+/// Gated behind the `device-tests` feature — run with `--features device-tests -- --nocapture`.
 #[test]
 fn flash_decoding_head_mean_f16() {
     use std::time::Instant;
@@ -913,8 +902,8 @@ fn flash_decoding_head_mean_f16() {
 ///
 /// Sweeps `H_kv ∈ {32, 8, 4, 1}` at `H_q=32, D=128`, at two `Sk`, reporting
 /// both absolute ns and % so the mechanism is legible either way. Any
-/// unsupported `(H_q, H_kv)` point is skipped, not fatal. `#[ignore]` — run
-/// with `--ignored --nocapture`.
+/// unsupported `(H_q, H_kv)` point is skipped, not fatal. gated behind the `device-tests` feature — run
+/// with `--features device-tests -- --nocapture`.
 ///
 /// RESULT (RTX 4070, sm_89 — prediction FALSIFIED): the overhead does NOT
 /// grow toward MQA. It stays in a tight ~3.5–5.5% band across the whole
@@ -930,7 +919,6 @@ fn flash_decoding_head_mean_f16() {
 /// MQA is not the pathological case. (The single H_kv=32/Sk=2048 point
 /// jitters run-to-run — it sits at the DRAM-saturation knee — so read it as
 /// a band, not a point.)
-#[ignore]
 #[test]
 fn flash_decoding_a_cost_gqa_sweep_f16() {
     use std::time::Instant;
@@ -1132,8 +1120,7 @@ fn flash_decoding_a_cost_gqa_sweep_f16() {
 ///   - non-contiguous `a`,
 ///   - non-contiguous `a_mean`,
 /// plus a positive control that a well-formed `a` + `a_mean` passes.
-/// `#[ignore]` — needs a device for `select` / buffer allocation.
-#[ignore]
+/// Gated behind the `device-tests` feature — needs a device for `select` / buffer allocation.
 #[test]
 fn flash_decoding_a_mean_validation_rejects() {
     let (ctx, stream) = setup();

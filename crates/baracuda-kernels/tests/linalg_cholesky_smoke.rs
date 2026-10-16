@@ -5,7 +5,8 @@
 //! symmetric so row-major and column-major views coincide bit-for-bit,
 //! which keeps the test grounded.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -55,7 +56,6 @@ fn spd_matrix_f64(n: usize, seed: u32) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn cholesky_f32_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 6;
@@ -154,7 +154,6 @@ fn cholesky_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn cholesky_f64_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 6;

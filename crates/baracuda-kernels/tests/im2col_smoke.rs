@@ -4,8 +4,9 @@
 //! Covers basic stride/pad/dilation configurations against host
 //! references plus the col2im round-trip identity.
 //!
-//! All tests are `#[ignore]` by default (require real CUDA device).
+//! All tests are gated behind the `device-tests` feature (require real CUDA device).
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -152,7 +153,6 @@ fn host_col2im_1d(
 // =============================================================================
 
 #[test]
-#[ignore]
 fn im2col_2d_f32_3x3_stride1() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 2i32, 4i32, 5i32);
@@ -231,7 +231,6 @@ fn im2col_2d_f32_3x3_stride1() {
 }
 
 #[test]
-#[ignore]
 fn im2col_2d_f32_3x3_stride2_pad1() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (2i32, 3i32, 7i32, 7i32);
@@ -308,7 +307,6 @@ fn im2col_2d_f32_3x3_stride2_pad1() {
 }
 
 #[test]
-#[ignore]
 fn im2col_2d_f32_with_dilation() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 7i32, 7i32);
@@ -389,7 +387,6 @@ fn im2col_2d_f32_with_dilation() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn im2col_1d_f32_basic() {
     let (ctx, stream) = setup();
     let (n, c, l_in) = (1i32, 2i32, 8i32);
@@ -459,7 +456,6 @@ fn im2col_1d_f32_basic() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn col2im_1d_f32_roundtrip() {
     let (ctx, stream) = setup();
     // Use stride == kernel and no padding so col2im(im2col(x)) == x
@@ -608,7 +604,6 @@ fn col2im_1d_f32_roundtrip() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn im2col_2d_f16_basic() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 4i32, 4i32);
@@ -685,7 +680,6 @@ fn im2col_2d_f16_basic() {
 }
 
 #[test]
-#[ignore]
 fn im2col_2d_bf16_basic() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 4i32, 4i32);

@@ -8,7 +8,8 @@
 //! resulting packed (A_packed, tau) feeds both the bespoke kernel and
 //! the per-slot cuSOLVER reference.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -518,7 +519,6 @@ fn check_f64(got: &[f64], expected: &[f64], tol: f64, label: &str) {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_f32_left_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -547,7 +547,6 @@ fn ormqr_batched_f32_left_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_f32_left_t() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -576,7 +575,6 @@ fn ormqr_batched_f32_left_t() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_f64_left_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -605,7 +603,6 @@ fn ormqr_batched_f64_left_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_f64_left_t() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1159,7 +1156,6 @@ fn check_complex64(got: &[Complex128], expected: &[Complex128], tol: f64, label:
 // shape [B, M, N] independent of the packed input.
 
 #[test]
-#[ignore]
 fn ormqr_batched_f32_right_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1189,7 +1185,6 @@ fn ormqr_batched_f32_right_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_f32_right_t() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1218,7 +1213,6 @@ fn ormqr_batched_f32_right_t() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_f64_right_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1247,7 +1241,6 @@ fn ormqr_batched_f64_right_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_f64_right_t() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1280,7 +1273,6 @@ fn ormqr_batched_f64_right_t() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn ormqr_batched_complex32_left_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1309,7 +1301,6 @@ fn ormqr_batched_complex32_left_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_complex32_left_c() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1338,7 +1329,6 @@ fn ormqr_batched_complex32_left_c() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_complex64_left_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1367,7 +1357,6 @@ fn ormqr_batched_complex64_left_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_complex64_left_c() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1400,7 +1389,6 @@ fn ormqr_batched_complex64_left_c() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn ormqr_batched_complex32_right_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1429,7 +1417,6 @@ fn ormqr_batched_complex32_right_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_complex32_right_c() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1458,7 +1445,6 @@ fn ormqr_batched_complex32_right_c() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_complex64_right_n() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -1487,7 +1473,6 @@ fn ormqr_batched_complex64_right_n() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_batched_complex64_right_c() {
     let (ctx, stream) = setup();
     let b: i32 = 2;

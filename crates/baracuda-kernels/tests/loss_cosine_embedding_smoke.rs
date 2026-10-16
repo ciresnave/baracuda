@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `CosineEmbeddingLossPlan`. FW × 4 dtypes.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -40,7 +41,6 @@ fn host_cos_mean_f64(x1: &[f64], x2: &[f64], t: &[f64], n: usize, d: usize, marg
 }
 
 #[test]
-#[ignore]
 fn loss_cosine_embedding_f32_mean() {
     let (ctx, stream) = setup();
     let n = 3usize;
@@ -110,7 +110,6 @@ fn loss_cosine_embedding_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_cosine_embedding_f64_mean() {
     let (ctx, stream) = setup();
     let n = 2usize;
@@ -170,7 +169,6 @@ fn loss_cosine_embedding_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_cosine_embedding_f16_mean() {
     let (ctx, stream) = setup();
     let n = 3usize;
@@ -245,7 +243,6 @@ fn loss_cosine_embedding_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_cosine_embedding_bf16_mean() {
     let (ctx, stream) = setup();
     let n = 3usize;

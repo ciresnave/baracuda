@@ -3,6 +3,7 @@
 //! Verified against a hand-computed reference plus a CPU re-implementation
 //! of the standard forward DP recurrence. Reference: PyTorch's
 //! `torch.nn.CTCLoss` semantics with `reduction='none'`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -189,7 +190,6 @@ where
 }
 
 #[test]
-#[ignore]
 fn ctc_fw_f32_uniform_t2_c2() {
     // Hand-checked case: T=2, N=1, C=2 (blank=0, class 1), target=[1].
     // Uniform log_probs = -log(2). Expected loss = log(4/3) ≈ 0.28768.
@@ -322,21 +322,18 @@ fn run_general_case<T>(
 }
 
 #[test]
-#[ignore]
 fn ctc_fw_f32_general() {
     let (ctx, stream) = setup();
     run_general_case::<f32>(&ctx, &stream, ElementKind::F32, |v| v, 1e-4);
 }
 
 #[test]
-#[ignore]
 fn ctc_fw_f64_general() {
     let (ctx, stream) = setup();
     run_general_case::<f64>(&ctx, &stream, ElementKind::F64, |v| v as f64, 1e-5);
 }
 
 #[test]
-#[ignore]
 fn ctc_fw_f16_general() {
     let (ctx, stream) = setup();
     run_general_case::<f16>(
@@ -352,7 +349,6 @@ fn ctc_fw_f16_general() {
 }
 
 #[test]
-#[ignore]
 fn ctc_fw_bf16_general() {
     let (ctx, stream) = setup();
     run_general_case::<bf16>(

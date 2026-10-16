@@ -7,13 +7,14 @@
 //! buffered K/V loads + 256-thread block on sm_89). Therefore the
 //! outputs should match to a few ULPs of float-order noise.
 //!
-//! Gated on the `sm89` cargo feature. `#[ignore]` by default — requires
+//! Gated on the `sm89` cargo feature. gated behind the `device-tests` feature — requires
 //! a real Ada-class CUDA device. Builds (but skips at runtime) on Ampere
 //! since the kernel uses `cp.async` which IS available on sm_80, but
 //! we still mark this as sm_89-targeted because the wider-block heuristic
 //! is tuned for Ada.
 
 #![cfg(feature = "sm89")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -73,7 +74,6 @@ fn gen_v_f64() -> Vec<f64> {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_sm89_f16_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -219,7 +219,6 @@ fn flash_sdpa_sm89_f16_basic() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_sm89_bf16_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -360,7 +359,6 @@ fn flash_sdpa_sm89_bf16_basic() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_sm89_f16_causal() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();

@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `CrossEntropyLossBackwardPlan`. BW × 4 dtypes × Mean.
 //! `dinput[i, c] = (softmax(input)[i, c] - 1{c == t[i]}) · dy / N`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -49,7 +50,6 @@ fn host_ce_bw_f64(
 }
 
 #[test]
-#[ignore]
 fn loss_cross_entropy_backward_f32_mean() {
     let (ctx, stream) = setup();
     let n_rows = 4i32;
@@ -129,7 +129,6 @@ fn loss_cross_entropy_backward_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_cross_entropy_backward_f64_mean() {
     let (ctx, stream) = setup();
     let n_rows = 3i32;
@@ -201,7 +200,6 @@ fn loss_cross_entropy_backward_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_cross_entropy_backward_f16_mean() {
     let (ctx, stream) = setup();
     let n_rows = 4i32;
@@ -283,7 +281,6 @@ fn loss_cross_entropy_backward_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_cross_entropy_backward_bf16_mean() {
     let (ctx, stream) = setup();
     let n_rows = 3i32;

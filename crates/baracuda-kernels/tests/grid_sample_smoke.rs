@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for `GridSamplePlan<T>` + `AffineGridPlan<T>`
 //! (Phase 9 Category T). PyTorch defaults: bilinear, zeros pad,
-//! `align_corners=false`. `#[ignore]` by default.
+//! `align_corners=false`. gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -23,7 +24,6 @@ fn grid_to_src(nx: f32, src: i32) -> f32 {
 }
 
 #[test]
-#[ignore]
 fn grid_sample_identity_f32() {
     // 1×1×2×2 input; grid covers the 4 pixel centers → output should equal input.
     let (ctx, stream) = setup();
@@ -90,7 +90,6 @@ fn grid_sample_identity_f32() {
 }
 
 #[test]
-#[ignore]
 fn grid_sample_zero_pad_oob_f32() {
     // Sample at (-2, -2) normalized → way OOB → 0.
     let (ctx, stream) = setup();
@@ -141,7 +140,6 @@ fn grid_sample_zero_pad_oob_f32() {
 }
 
 #[test]
-#[ignore]
 fn grid_sample_backward_smoke_f32() {
     // Identity grid; constant dout=1 → dinput sum should equal dout sum.
     let (ctx, stream) = setup();
@@ -212,7 +210,6 @@ fn grid_sample_backward_smoke_f32() {
 }
 
 #[test]
-#[ignore]
 fn affine_grid_identity_f32() {
     let (ctx, stream) = setup();
     let n = 1;

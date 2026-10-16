@@ -5,7 +5,8 @@
 //! `group_norm_backward_smoke`), so this is a shape / dispatch test
 //! across all four FP dtypes — values are only checked finite.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -46,7 +47,6 @@ fn compute_saves_f32(n: usize, c: usize, s: usize, x: &[f32], eps: f32) -> (Vec<
 }
 
 #[test]
-#[ignore]
 fn instance_norm_bw_f32_with_affine() {
     let (ctx, stream) = setup();
     let n = 2i32;
@@ -139,7 +139,6 @@ fn instance_norm_bw_f32_with_affine() {
 }
 
 #[test]
-#[ignore]
 fn instance_norm_bw_f64_with_affine() {
     let (ctx, stream) = setup();
     let n = 2i32;
@@ -239,7 +238,6 @@ fn instance_norm_bw_f64_with_affine() {
 }
 
 #[test]
-#[ignore]
 fn instance_norm_bw_f16_with_affine() {
     let (ctx, stream) = setup();
     let n = 2i32;
@@ -343,7 +341,6 @@ fn instance_norm_bw_f16_with_affine() {
 }
 
 #[test]
-#[ignore]
 fn instance_norm_bw_bf16_with_affine() {
     let (ctx, stream) = setup();
     let n = 2i32;

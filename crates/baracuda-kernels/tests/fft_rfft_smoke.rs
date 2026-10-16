@@ -5,7 +5,8 @@
 //! `IrfftPlan` consumes the same and applies `1/n` normalization to
 //! match PyTorch's `norm="backward"`.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn rfft_irfft_roundtrip_f32() {
     let (ctx, stream) = setup();
 
@@ -115,7 +115,6 @@ fn rfft_irfft_roundtrip_f32() {
 }
 
 #[test]
-#[ignore]
 fn rfft_irfft_roundtrip_f64() {
     let (ctx, stream) = setup();
 
@@ -203,7 +202,6 @@ fn rfft_irfft_roundtrip_f64() {
 }
 
 #[test]
-#[ignore]
 fn rfft_dc_bin_equals_sum() {
     // For real input the DC bin (k=0) of RFFT equals the sum of the
     // signal (no normalization on forward). Sanity-check that the

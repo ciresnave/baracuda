@@ -3,7 +3,8 @@
 //! Verifies `P · A ≈ L · U` for a general (non-singular) matrix `A`.
 //! Storage convention is column-major end-to-end (cuSOLVER native).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -126,7 +127,6 @@ fn apply_pivots_f64(a: &[f64], pivot: &[i32], n: usize) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn lu_f32_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 5;
@@ -203,7 +203,6 @@ fn lu_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn lu_f64_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 5;

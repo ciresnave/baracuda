@@ -4,6 +4,7 @@
 //! `dy = 1.0`. Verifies via finite-difference around a small problem
 //! that the gradients are within the analytical expectation for the
 //! combined Linear + CrossEntropy operation.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -63,7 +64,6 @@ fn host_loss_mean(
 }
 
 #[test]
-#[ignore]
 fn flce_bw_f32_grad_input_finite_diff() {
     let (ctx, stream) = setup();
     let bt = 4i32;
@@ -253,7 +253,6 @@ fn flce_bw_f32_grad_input_finite_diff() {
 }
 
 #[test]
-#[ignore]
 fn flce_bw_f32_dy_scalar_2_doubles_gradients() {
     // Run FW twice; second time apply BW with dy_scalar=2.0; verify the
     // gradient is 2× the first.

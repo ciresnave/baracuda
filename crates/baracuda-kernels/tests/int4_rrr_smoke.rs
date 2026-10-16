@@ -10,11 +10,12 @@
 //! Identity epilogue with `beta = 0` is bit-exact against the int32
 //! CPU reference; mismatch tolerance is zero.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --no-default-features --features sm89 \
-//!  --release --test int4_rrr_smoke -- --ignored`.
+//!  --release --test int4_rrr_smoke --features device-tests`.
 
 #![cfg(feature = "sm89")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -322,43 +323,35 @@ fn run_u4(m: i32, n: i32, k: i32) {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn s4_rrr_identity_64_64_64() {
     run_s4(64, 64, 64);
 }
 #[test]
-#[ignore]
 fn s4_rrr_identity_128_128_128() {
     run_s4(128, 128, 128);
 }
 #[test]
-#[ignore]
 fn s4_rrr_identity_256_128_64() {
     run_s4(256, 128, 64);
 }
 #[test]
-#[ignore]
 fn s4_rrr_identity_100_70_64() {
     run_s4(100, 70, 64);
 }
 
 #[test]
-#[ignore]
 fn u4_rrr_identity_64_64_64() {
     run_u4(64, 64, 64);
 }
 #[test]
-#[ignore]
 fn u4_rrr_identity_128_128_128() {
     run_u4(128, 128, 128);
 }
 #[test]
-#[ignore]
 fn u4_rrr_identity_256_128_64() {
     run_u4(256, 128, 64);
 }
 #[test]
-#[ignore]
 fn u4_rrr_identity_100_70_64() {
     run_u4(100, 70, 64);
 }

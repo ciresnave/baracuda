@@ -10,6 +10,7 @@
 //!   2. All values in `[0, 1]`.
 //!   3. Determinism — running twice with the same seed yields the
 //!      same output.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -27,7 +28,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn gumbel_softmax_f32_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [4i32, 6];
@@ -89,7 +89,6 @@ fn gumbel_softmax_f32_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn gumbel_softmax_f32_hard_one_hot() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -156,7 +155,6 @@ fn gumbel_softmax_f32_hard_one_hot() {
 }
 
 #[test]
-#[ignore]
 fn gumbel_softmax_f64_2d_axis_0() {
     let (ctx, stream) = setup();
     let shape = [5i32, 4];
@@ -218,7 +216,6 @@ fn gumbel_softmax_f64_2d_axis_0() {
 }
 
 #[test]
-#[ignore]
 fn gumbel_softmax_f16_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -280,7 +277,6 @@ fn gumbel_softmax_f16_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn gumbel_softmax_bf16_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];

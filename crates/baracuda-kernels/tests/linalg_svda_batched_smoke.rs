@@ -6,7 +6,8 @@
 //! reconstruction (`rank = min(M, N) = 3`) and a truncated-rank
 //! configuration (`rank = 2`).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -91,7 +92,6 @@ fn make_fixtures_f64() -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn svda_batched_f32_full_rank_reconstruct() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -228,7 +228,6 @@ fn svda_batched_f32_full_rank_reconstruct() {
 }
 
 #[test]
-#[ignore]
 fn svda_batched_f64_full_rank_reconstruct() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -359,7 +358,6 @@ fn svda_batched_f64_full_rank_reconstruct() {
 }
 
 #[test]
-#[ignore]
 fn svda_batched_f32_truncated_rank_singular_values() {
     let (ctx, stream) = setup();
     let b: i32 = 2;

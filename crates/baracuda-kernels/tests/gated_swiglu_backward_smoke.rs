@@ -7,6 +7,7 @@
 //! Tolerance: 8·eps relative on the result magnitude, with the same
 //! cancellation-weighted bound the unary silu BW uses (the bracket
 //! `1 + b·(1-s)` cancels for b ≈ -1.5).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -158,7 +159,6 @@ fn cpu_ref_bw_f64(
 }
 
 #[test]
-#[ignore]
 fn swiglu_bw_f32() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];
@@ -224,7 +224,6 @@ fn swiglu_bw_f32() {
 }
 
 #[test]
-#[ignore]
 fn swiglu_bw_f64() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 32];
@@ -290,7 +289,6 @@ fn swiglu_bw_f64() {
 }
 
 #[test]
-#[ignore]
 fn swiglu_bw_f16() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];
@@ -358,7 +356,6 @@ fn swiglu_bw_f16() {
 }
 
 #[test]
-#[ignore]
 fn swiglu_bw_bf16() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];

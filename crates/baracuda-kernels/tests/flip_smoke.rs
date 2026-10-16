@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `FlipPlan<f32, N>` — reverse along selected
 //! axes. Bit-exact (no math, pure element copy).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -16,7 +17,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn flip_1d() {
     let (ctx, stream) = setup();
     let shape = [16i32];
@@ -57,7 +57,6 @@ fn flip_1d() {
 }
 
 #[test]
-#[ignore]
 fn flip_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -103,7 +102,6 @@ fn flip_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn flip_3d_both_axes() {
     let (ctx, stream) = setup();
     let shape = [2i32, 4, 8];
@@ -154,7 +152,6 @@ fn flip_3d_both_axes() {
 }
 
 #[test]
-#[ignore]
 fn flip_no_axes_is_copy() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];

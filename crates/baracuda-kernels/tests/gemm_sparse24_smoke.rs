@@ -9,10 +9,11 @@
 //! 2. **K-mismatch is rejected**. K not divisible by 8 must
 //!    `Error::Unsupported` from `select`.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `xformers_sparse24` cargo feature.
 
 #![cfg(feature = "xformers_sparse24")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -154,7 +155,6 @@ fn host_gemm_reference(x: &[f32], w_dense: &[f32]) -> Vec<f32> {
 }
 
 #[test]
-#[ignore]
 fn sparse24_gemm_matches_dense_reference() {
     let (ctx, stream) = setup();
 
@@ -178,7 +178,6 @@ fn sparse24_gemm_matches_dense_reference() {
 }
 
 #[test]
-#[ignore]
 fn sparse24_rejects_k_not_multiple_of_8() {
     let (ctx, stream) = setup();
     let _ = ctx;

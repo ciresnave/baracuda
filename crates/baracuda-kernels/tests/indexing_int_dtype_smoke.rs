@@ -8,6 +8,7 @@
 //! `gather` / `index_select` integer dtypes are not exercised in this
 //! file (read-only ops; kernel structure identical to fp counterparts
 //! already covered by `gather_smoke.rs` / `index_select_smoke.rs`).
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn scatter_u8_basic() {
     let (ctx, stream) = setup();
     // dst[idx[i]] = updates[i] along scatter_dim=0
@@ -67,7 +67,6 @@ fn scatter_u8_basic() {
 }
 
 #[test]
-#[ignore]
 fn scatter_i16_basic() {
     let (ctx, stream) = setup();
     let updates: Vec<i16> = vec![-100, 200, -300];
@@ -110,7 +109,6 @@ fn scatter_i16_basic() {
 }
 
 #[test]
-#[ignore]
 fn scatter_i64_basic() {
     let (ctx, stream) = setup();
     let updates: Vec<i64> = vec![1_000_000_000_000, -2_000_000_000_000];
@@ -152,7 +150,6 @@ fn scatter_i64_basic() {
 }
 
 #[test]
-#[ignore]
 fn index_add_i32_basic() {
     let (ctx, stream) = setup();
     // dst[idx[i]] += src[i] along add_dim=0; pre-populate dst with 100.
@@ -195,7 +192,6 @@ fn index_add_i32_basic() {
 }
 
 #[test]
-#[ignore]
 fn index_add_u32_basic() {
     let (ctx, stream) = setup();
     let src: Vec<u32> = vec![5, 7, 11];
@@ -236,7 +232,6 @@ fn index_add_u32_basic() {
 }
 
 #[test]
-#[ignore]
 fn index_add_i64_basic() {
     let (ctx, stream) = setup();
     let src: Vec<i64> = vec![1_000_000, -500_000];
@@ -277,7 +272,6 @@ fn index_add_i64_basic() {
 }
 
 #[test]
-#[ignore]
 fn index_select_u32_basic() {
     let (ctx, stream) = setup();
     // out[..., j, ...] = src[..., idx[j], ...] along select_dim=0.
@@ -318,7 +312,6 @@ fn index_select_u32_basic() {
 }
 
 #[test]
-#[ignore]
 fn gather_u8_basic() {
     let (ctx, stream) = setup();
     // out[i] = src[index[i]] along gather_dim=0 (matching shapes).

@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `HuberLossBackwardPlan`. BW × 4 dtypes × Mean.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -35,7 +36,6 @@ fn host_huber_bw_f64(pred: &[f64], target: &[f64], dy: f64, n: usize, delta: f64
 }
 
 #[test]
-#[ignore]
 fn loss_huber_backward_f32_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -110,7 +110,6 @@ fn loss_huber_backward_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_huber_backward_f64_mean() {
     let (ctx, stream) = setup();
     let shape = [2i32, 6];
@@ -171,7 +170,6 @@ fn loss_huber_backward_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_huber_backward_f16_mean() {
     let (ctx, stream) = setup();
     let shape = [4i32, 4];
@@ -243,7 +241,6 @@ fn loss_huber_backward_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_huber_backward_bf16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];

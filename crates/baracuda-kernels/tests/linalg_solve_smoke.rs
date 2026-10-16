@@ -3,7 +3,8 @@
 //! Verifies `A · X ≈ B` for a small well-conditioned `A`. Storage
 //! convention is column-major end-to-end (cuSOLVER native).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -50,7 +51,6 @@ fn matmul_cm_f64(a: &[f64], x: &[f64], m: usize, nrhs: usize) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn solve_f32_basic() {
     let (ctx, stream) = setup();
     let m: i32 = 2;
@@ -130,7 +130,6 @@ fn solve_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn solve_f64_multi_rhs() {
     let (ctx, stream) = setup();
     let m: i32 = 3;

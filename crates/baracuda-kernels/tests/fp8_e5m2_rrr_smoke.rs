@@ -3,6 +3,7 @@
 //! row-major `[K, N]` (indexed `b[k * ldb + j]`).
 
 #![cfg(feature = "sm89")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -174,25 +175,21 @@ fn run_fp8_e5m2_rrr_identity(m: i32, n: i32, k: i32) {
 }
 
 #[test]
-#[ignore]
 fn fp8_e5m2_rrr_identity_64_64_32() {
     run_fp8_e5m2_rrr_identity(64, 64, 32);
 }
 
 #[test]
-#[ignore]
 fn fp8_e5m2_rrr_identity_128_128_128() {
     run_fp8_e5m2_rrr_identity(128, 128, 128);
 }
 
 #[test]
-#[ignore]
 fn fp8_e5m2_rrr_identity_256_128_64() {
     run_fp8_e5m2_rrr_identity(256, 128, 64);
 }
 
 #[test]
-#[ignore]
 fn fp8_e5m2_rrr_identity_100_70_50() {
     run_fp8_e5m2_rrr_identity(100, 70, 50);
 }

@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `BceLossPlan`. FW × 4 dtypes × Mean.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn host_bce_mean_f64(pred: &[f64], target: &[f64]) -> f64 {
 }
 
 #[test]
-#[ignore]
 fn loss_bce_f32_mean() {
     let (ctx, stream) = setup();
     let shape = [4i32, 4];
@@ -87,7 +87,6 @@ fn loss_bce_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_bce_f64_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -139,7 +138,6 @@ fn loss_bce_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_bce_f16_mean() {
     let (ctx, stream) = setup();
     let shape = [4i32, 5];
@@ -202,7 +200,6 @@ fn loss_bce_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_bce_bf16_mean() {
     let (ctx, stream) = setup();
     let shape = [4i32, 4];

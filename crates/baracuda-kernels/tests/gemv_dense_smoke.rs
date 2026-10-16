@@ -26,8 +26,9 @@
 //! `capture_replay_gather_gemv.rs` (4 graph replays byte-identical to the
 //! warm reference, confirmed on sm_89 / CUDA 13.3).
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release --test gemv_dense_smoke -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --test gemv_dense_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -210,21 +211,18 @@ fn run_gemv_f32(
 // ============================================================================
 
 #[test]
-#[ignore]
 fn gemv_f32_batch1_basic() {
     // Tight lds, single batch, β = 0.
     run_gemv_f32(29, 40, 1, 29, 29, 0, 0, 0, 1.25, 0.0);
 }
 
 #[test]
-#[ignore]
 fn gemv_f32_batch1_padded_beta() {
     // Padded ldb / ldd + β-accumulate into D in one launch.
     run_gemv_f32(24, 33, 1, 24 + 5, 24 + 2, 0, 0, 0, 0.75, 0.7);
 }
 
 #[test]
-#[ignore]
 fn gemv_f32_gqa_broadcast_b() {
     // The GQA scores·v shape: batch = n_heads, distinct A/D per head,
     // ONE shared B (stride_b = 0). This is the axis cuBLAS can't capture
@@ -242,7 +240,6 @@ fn gemv_f32_gqa_broadcast_b() {
 }
 
 #[test]
-#[ignore]
 fn gemv_f32_strided_batch_distinct_b() {
     // batch = 3 with distinct B per slot (stride_b != 0) + padded D ld.
     let (n, k, batch) = (13i32, 20i32, 3i32);
@@ -255,7 +252,6 @@ fn gemv_f32_strided_batch_distinct_b() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn gemv_bf16_batch1_basic() {
     let (ctx, stream) = gpu_context();
     let (n, k) = (28i32, 24i32);
@@ -334,7 +330,6 @@ fn gemv_bf16_batch1_basic() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn gemv_f32_direct_ffi() {
     use core::ffi::c_void;
 
@@ -397,7 +392,6 @@ fn gemv_f32_direct_ffi() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn gemv_can_implement_rejections() {
     use baracuda_kernels_sys::baracuda_kernels_gemv_dense_m1_f32_can_implement as can;
     // args: (m, n, k, batch, layout, lda, ldb, ldd, stride_a, stride_b, stride_d)

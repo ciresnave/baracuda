@@ -12,7 +12,8 @@
 //! matches the (column-major) eigenvector matrix returned in `A`'s
 //! storage on output.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -61,7 +62,6 @@ fn expected_eigenvalues_f64() -> [f64; 3] {
 }
 
 #[test]
-#[ignore]
 fn eigh_f32_symmetric_3x3() {
     let (ctx, stream) = setup();
     let n: i32 = 3;
@@ -149,7 +149,6 @@ fn eigh_f32_symmetric_3x3() {
 }
 
 #[test]
-#[ignore]
 fn eigh_f64_symmetric_3x3() {
     let (ctx, stream) = setup();
     let n: i32 = 3;

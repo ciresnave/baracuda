@@ -7,7 +7,8 @@
 //!   `dgamma[i] = Σ over non-norm-axis cells dy[..., i] · x_hat[..., i]`
 //!   `dbeta[i]  = Σ over non-norm-axis cells dy[..., i]`
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -199,7 +200,6 @@ fn host_mean_invstd_f32(
 }
 
 #[test]
-#[ignore]
 fn layer_norm_bw_f32_full_affine() {
     let (ctx, stream) = setup();
     let shape = [2i32, 4, 8];
@@ -323,7 +323,6 @@ fn layer_norm_bw_f32_full_affine() {
 }
 
 #[test]
-#[ignore]
 fn layer_norm_bw_f64_no_affine() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];
@@ -442,7 +441,6 @@ fn layer_norm_bw_f64_no_affine() {
 }
 
 #[test]
-#[ignore]
 fn layer_norm_bw_f16_full_affine() {
     let (ctx, stream) = setup();
     let shape = [3i32, 8];
@@ -568,7 +566,6 @@ fn layer_norm_bw_f16_full_affine() {
 }
 
 #[test]
-#[ignore]
 fn layer_norm_bw_bf16_no_affine() {
     let (ctx, stream) = setup();
     let shape = [2i32, 8];
