@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.115 - 2026-10-16 (baracuda-driver: no more #[ignore]; device-tests feature + self-hosted runner)
+
+Workspace alpha.115 (proposed; PM allocates at gate).
+
+- `baracuda-driver`: 91 `#[ignore]` removed. On-device tests sit behind the new `device-tests` feature, are type-checked in CI on every PR, and are run by `cargo gpu-test` (run record `target/device-test-results.json`).
+- New `device-tests.yml` (self-hosted, push main/schedule/dispatch, never fork PRs) and `device-tests-detector.yml` (red if no successful run in 7 days); both inert until `vars.DEVICE_RUNNER_ENABLED == 'true'`. `docs/DEVICE-TESTS.md`, `docs/UNVERIFIED-HARDWARE.md`.
+- Verified locally on RTX 4070: `cargo gpu-test -p baracuda-driver --features device-tests` 114 passed, 0 failed, 1 declared skip.
+
 ## 0.0.1-alpha.114 - 2026-10-16 (tests: no more #[ignore]d emitter dumps, no allow(dead_code))
 
 Workspace alpha.114 (proposed; PM allocates at gate).
