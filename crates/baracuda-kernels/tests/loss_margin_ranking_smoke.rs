@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `MarginRankingLossPlan`. FW × 4 dtypes × Mean.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn host_mr_mean_f64(x1: &[f64], x2: &[f64], t: &[f64], margin: f64) -> f64 {
 }
 
 #[test]
-#[ignore]
 fn loss_margin_ranking_f32_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -96,7 +96,6 @@ fn loss_margin_ranking_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_margin_ranking_f64_mean() {
     let (ctx, stream) = setup();
     let shape = [2i32, 5];
@@ -156,7 +155,6 @@ fn loss_margin_ranking_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_margin_ranking_f16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -223,7 +221,6 @@ fn loss_margin_ranking_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_margin_ranking_bf16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];

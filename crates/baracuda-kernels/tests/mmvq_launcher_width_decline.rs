@@ -61,6 +61,7 @@
 //! re-enabled): the same call returns a nonzero status and never runs the
 //! kernel — `dst` stays at its zero-initialized value, not 352.0 and not
 //! (by chance) 32.0.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -130,7 +131,6 @@ fn call_raw_q8_0(
 /// value (352.0, see the module doc) and not, by chance, the correct value
 /// (32.0) either: a decline, not a lucky pass.
 #[test]
-#[ignore]
 fn q8_0_ncols32_via_raw_ffi_declines() {
     let (ctx, stream) = setup();
     let nrows = 2;
@@ -163,7 +163,6 @@ fn q8_0_ncols32_via_raw_ffi_declines() {
 /// produce the correct answer — the launcher must decline the bad width,
 /// not everything.
 #[test]
-#[ignore]
 fn q8_0_ncols64_via_raw_ffi_computes_correctly() {
     let (ctx, stream) = setup();
     let nrows = 2;

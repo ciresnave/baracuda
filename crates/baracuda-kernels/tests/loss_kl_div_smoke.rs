@@ -3,6 +3,7 @@
 //! PyTorch convention: input is already log-prob;
 //! `y = mean(target·(log(target) - input))`. Cells with target == 0
 //! contribute 0.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -30,7 +31,6 @@ fn host_kl_div_mean_f64(input: &[f64], target: &[f64]) -> f64 {
 }
 
 #[test]
-#[ignore]
 fn loss_kl_div_f32_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -89,7 +89,6 @@ fn loss_kl_div_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_kl_div_f64_mean() {
     let (ctx, stream) = setup();
     let shape = [4i32, 3];
@@ -139,7 +138,6 @@ fn loss_kl_div_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_kl_div_f16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -200,7 +198,6 @@ fn loss_kl_div_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_kl_div_bf16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];

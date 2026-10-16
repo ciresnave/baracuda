@@ -3,9 +3,10 @@
 //! Covers 2D transpose (dims=[1,0]) + 3D permutations (e.g. NHWC→NCHW
 //! patterns from CV). Bit-exact compare — permute does no math.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test permute_smoke -- --ignored`.
+//!   --test permute_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -23,7 +24,6 @@ fn setup() -> (Context, Stream) {
 
 /// 2D transpose: `output[i, j] = input[j, i]`. dims = [1, 0].
 #[test]
-#[ignore]
 fn permute_2d_transpose() {
     let (ctx, stream) = setup();
     let input_shape = [16i32, 32];
@@ -75,7 +75,6 @@ fn permute_2d_transpose() {
 /// 3D permute — `[A, B, C] -> [B, C, A]` via dims=[1, 2, 0]. Common
 /// "shuffle axes" pattern.
 #[test]
-#[ignore]
 fn permute_3d_rotate() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 12];
@@ -132,7 +131,6 @@ fn permute_3d_rotate() {
 /// 4D NHWC -> NCHW pattern: `[N, H, W, C] -> [N, C, H, W]`,
 /// dims=[0, 3, 1, 2].
 #[test]
-#[ignore]
 fn permute_4d_nhwc_to_nchw() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 8, 8, 4]; // [N=2, H=8, W=8, C=4]
@@ -190,7 +188,6 @@ fn permute_4d_nhwc_to_nchw() {
 
 /// Identity permute: dims = [0, 1, 2, ...] — output == input.
 #[test]
-#[ignore]
 fn permute_identity_is_copy() {
     let (ctx, stream) = setup();
     let shape = [4i32, 16, 8];

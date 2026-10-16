@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for `PoissonNllLossBackwardPlan`. BW × 4 dtypes × Mean.
 //!
 //! `dinput = (exp(input) - target) · dy / N` (log_input=true).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -28,7 +29,6 @@ fn host_poisson_bw_f64(input: &[f64], target: &[f64], dy: f64, n: usize) -> Vec<
 }
 
 #[test]
-#[ignore]
 fn loss_poisson_nll_backward_f32_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -102,7 +102,6 @@ fn loss_poisson_nll_backward_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_poisson_nll_backward_f64_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -163,7 +162,6 @@ fn loss_poisson_nll_backward_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_poisson_nll_backward_f16_mean() {
     let (ctx, stream) = setup();
     let shape = [4i32, 5];
@@ -235,7 +233,6 @@ fn loss_poisson_nll_backward_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_poisson_nll_backward_bf16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];

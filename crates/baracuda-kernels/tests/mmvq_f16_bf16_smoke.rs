@@ -19,6 +19,7 @@
 
 // Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
 #![allow(non_snake_case)]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -141,7 +142,6 @@ fn check_close_f32(got: &[f32], expected: &[f32], rel_tol: f32, label: &str) {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn mmvq_q8_0_f16_smoke() {
     let (ctx, stream) = setup();
 
@@ -210,7 +210,6 @@ fn mmvq_q8_0_f16_smoke() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn mmvq_q8_0_bf16_smoke() {
     let (ctx, stream) = setup();
 
@@ -277,7 +276,6 @@ fn mmvq_q8_0_bf16_smoke() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn mmvq_q4_K_f16_smoke() {
     let (ctx, stream) = setup();
 
@@ -389,7 +387,6 @@ fn run_q4k_f32_ref(ctx: &Context, stream: &Stream, host_w: &[U8], host_y_f32: &[
 // =============================================================================
 
 #[test]
-#[ignore]
 fn mmvq_q8_K_bf16_smoke() {
     let (ctx, stream) = setup();
 
@@ -453,7 +450,6 @@ fn mmvq_q8_K_bf16_smoke() {
 
 /// Q8_0 + f16 with stride_y=2 — exercises the actstrided_f16 launcher.
 #[test]
-#[ignore]
 fn mmvq_q8_0_f16_stride2_smoke() {
     let (ctx, stream) = setup();
 
@@ -517,7 +513,6 @@ fn mmvq_q8_0_f16_stride2_smoke() {
 
 /// Q4_K + bf16 with stride_y=0 — broadcast: every column reads y[0].
 #[test]
-#[ignore]
 fn mmvq_q4_K_bf16_stride0_broadcast_smoke() {
     let (ctx, stream) = setup();
 

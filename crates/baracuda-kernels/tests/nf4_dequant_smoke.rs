@@ -7,18 +7,21 @@
 //! T_act cast — we test the f32 dequant path here to keep the
 //! comparison exact).
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `bnb_nf4` cargo feature.
 
 #![cfg(feature = "bnb_nf4")]
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+#[cfg(feature = "device-tests")]
 use baracuda_kernels::quantize::nf4::nf4_pack_weight;
 use baracuda_kernels::{
     NF4_CODEBOOK, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, PlanPreference, TensorMut,
     TensorRef, U8, Workspace, contiguous_stride,
 };
 
+#[cfg(feature = "device-tests")]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -54,7 +57,7 @@ fn nf4_codebook_constants() {
 /// We use the f32 dequant FFI path so the comparison is exact — no
 /// fp16 / bf16 cast noise on top of the NF4 quant error itself.
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn nf4_dequant_roundtrip_f32() {
     let (ctx, stream) = setup();
     let n: usize = 8;

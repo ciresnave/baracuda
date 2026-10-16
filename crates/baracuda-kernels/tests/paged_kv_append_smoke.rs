@@ -16,7 +16,7 @@
 //!  - `key` / `value` — `[batch_size, num_heads, head_dim]` (one new
 //!    decode-step token per request)
 //!
-//! `#[ignore]` per project convention; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --features sm89,flashinfer \
 //!    --test paged_kv_append_smoke -- --include-ignored`.
 
@@ -24,6 +24,7 @@
     any(feature = "sm80", feature = "sm89", feature = "sm90a"),
     feature = "flashinfer"
 ))]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -39,7 +40,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn paged_kv_append_can_implement_rejects_bad_head_dim() {
     let ok = unsafe {
         baracuda_kernels_sys::baracuda_kernels_flashinfer_paged_kv_append_decode_can_implement(
@@ -60,7 +60,6 @@ fn paged_kv_append_can_implement_rejects_bad_head_dim() {
 }
 
 #[test]
-#[ignore]
 fn paged_kv_append_f32_basic() {
     let (ctx, stream) = setup();
 
@@ -155,7 +154,6 @@ fn paged_kv_append_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn paged_kv_append_f16_runs_to_completion() {
     let (ctx, stream) = setup();
 
@@ -202,7 +200,6 @@ fn paged_kv_append_f16_runs_to_completion() {
 }
 
 #[test]
-#[ignore]
 fn paged_kv_append_bf16_runs_to_completion() {
     let (ctx, stream) = setup();
 

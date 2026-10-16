@@ -8,10 +8,11 @@
 //! the kernel must match the *dequantize-then-matmul* path tightly —
 //! the only delta is the fp16 activation cast inside the kernel.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `bnb_nf4` cargo feature.
 
 #![cfg(feature = "bnb_nf4")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::quantize::nf4::nf4_pack_weight;
@@ -62,7 +63,6 @@ fn build_nf4_weight(n: usize, k: usize, block_size: usize) -> (Vec<u8>, Vec<f32>
 }
 
 #[test]
-#[ignore]
 fn nf4_gemv_m1_f16() {
     let (ctx, stream) = setup();
     let n: usize = 16;
@@ -153,7 +153,6 @@ fn nf4_gemv_m1_f16() {
 }
 
 #[test]
-#[ignore]
 fn nf4_gemv_m1_bf16() {
     let (ctx, stream) = setup();
     let n: usize = 16;

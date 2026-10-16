@@ -7,9 +7,10 @@
 //! producing deterministic in-order f32 addition. Host reference does
 //! the same in-order addition, so compare is bit-exact.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_sum_smoke -- --ignored`.
+//!   --test reduce_sum_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -116,26 +117,22 @@ fn run_case(reduce_axis: usize) {
 }
 
 #[test]
-#[ignore]
 fn reduce_sum_axis_0() {
     run_case(0);
 }
 
 #[test]
-#[ignore]
 fn reduce_sum_axis_1() {
     run_case(1);
 }
 
 #[test]
-#[ignore]
 fn reduce_sum_axis_2() {
     run_case(2);
 }
 
 /// Trivial 1D reduction → output is rank-1 with shape [1].
 #[test]
-#[ignore]
 fn reduce_sum_1d() {
     let (ctx, stream) = setup();
     let input_shape = [256i32];

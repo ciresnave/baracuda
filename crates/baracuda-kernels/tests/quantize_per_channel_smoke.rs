@@ -5,6 +5,7 @@
 //! (the typical per-output-channel weight quant pattern). The input
 //! tensor is shape `[B, C, D]`; the caller pads to rank 4 with a
 //! trailing `1` extent.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn quantize_per_channel_f32_s8_rank3_axis1() {
     let (ctx, stream) = setup();
     // Logical shape [B=2, C=3, D=4]. Pad to rank-4 with trailing 1.

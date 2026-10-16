@@ -4,6 +4,7 @@
 //! Verifies the broadcast-reverse min/prod against a tight Rust
 //! reference. Covers f32 (trailblazer) and bf16 (half-precision).
 //! Shape: `[2, 3, 4] → [1, 3, 1]` — reduces dim 0 and dim 2.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -93,7 +94,6 @@ fn cpu_prod_to_f32(
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_min_to_f32_3d() {
     let (ctx, stream) = setup();
     let in_shape: Vec<i32> = vec![2, 3, 4];
@@ -138,7 +138,6 @@ fn ffi_reduce_min_to_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_prod_to_f32_3d() {
     let (ctx, stream) = setup();
     let in_shape: Vec<i32> = vec![2, 3, 4];
@@ -184,7 +183,6 @@ fn ffi_reduce_prod_to_f32_3d() {
 
 /// bf16 min_to: small fixture, loose tolerance for half-precision.
 #[test]
-#[ignore]
 fn ffi_reduce_min_to_bf16_3d() {
     let (ctx, stream) = setup();
     let in_shape: Vec<i32> = vec![2, 3, 4];
@@ -237,7 +235,6 @@ fn ffi_reduce_min_to_bf16_3d() {
 
 /// f16 prod_to: keep values within 1.0 ± 0.05 to stay numerically tame.
 #[test]
-#[ignore]
 fn ffi_reduce_prod_to_f16_3d() {
     use half::f16;
 

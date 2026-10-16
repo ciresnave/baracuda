@@ -5,6 +5,7 @@
 //!   1. [3, 4] → [1, 4]  — reduce dim 0.
 //!   2. [2, 3, 4] → [1, 3, 1] — reduce dims 0 and 2.
 //!   3. [5] → [1] — full reduction.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -70,7 +71,6 @@ fn cpu_sum_to_f32(src: &[f32], in_shape: &[i32], in_stride: &[i64], out_shape: &
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_sum_to_f32_2d_reduce_dim0() {
     let (ctx, stream) = setup();
     let in_shape: Vec<i32> = vec![3, 4];
@@ -114,7 +114,6 @@ fn ffi_reduce_sum_to_f32_2d_reduce_dim0() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_sum_to_f32_3d_reduce_dim0_dim2() {
     let (ctx, stream) = setup();
     let in_shape: Vec<i32> = vec![2, 3, 4];
@@ -158,7 +157,6 @@ fn ffi_reduce_sum_to_f32_3d_reduce_dim0_dim2() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_sum_to_f32_full_reduce() {
     let (ctx, stream) = setup();
     let in_shape: Vec<i32> = vec![5];

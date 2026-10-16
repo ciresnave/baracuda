@@ -3,6 +3,7 @@
 //! `[1, 2, 8]` input, window 2, stride 2, pad 0 → `[1, 2, 4]` output.
 //! Each output cell is the max over a disjoint 2-element input tile.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -19,7 +20,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn max_pool1d_f32() {
     let (ctx, stream) = setup();
     let (n, c, l_in) = (1i32, 2i32, 8i32);

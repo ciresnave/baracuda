@@ -14,6 +14,7 @@
 
 // Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
 #![allow(non_snake_case)]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -51,7 +52,6 @@ fn pack_q8_0_row(d_f32: f32, qs: &[i8; 32]) -> Vec<u8> {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn batched_q8_0_f32_top_k_1_no_aliasing() {
     let (ctx, stream) = setup();
 
@@ -195,7 +195,6 @@ fn batched_q8_0_f32_top_k_1_no_aliasing() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn batched_q8_0_f32_top_k_2_atomic() {
     let (ctx, stream) = setup();
 
@@ -354,7 +353,6 @@ fn pack_q4_k_trivial(d_f32: f32, nibbles_low: &[u8; 128]) -> Vec<u8> {
 }
 
 #[test]
-#[ignore]
 fn batched_q4_K_f16_top_k_1() {
     let (ctx, stream) = setup();
 
@@ -528,7 +526,6 @@ fn batched_q4_K_f16_top_k_1() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn batched_fp_f16_top_k_1() {
     let (ctx, stream) = setup();
 
@@ -765,7 +762,6 @@ fn run_q8_0_with_optional_topk_weights(
 }
 
 #[test]
-#[ignore]
 fn batched_q8_0_with_topk_weights() {
     let (ctx, stream) = setup();
     let multiplier = 0.5_f32;
@@ -781,7 +777,6 @@ fn batched_q8_0_with_topk_weights() {
 }
 
 #[test]
-#[ignore]
 fn batched_q8_0_no_topk_weights_path() {
     let (ctx, stream) = setup();
     // multiplier param is ignored when use_topk_weights=false; expected

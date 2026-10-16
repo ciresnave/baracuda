@@ -10,6 +10,7 @@
 //!
 //! Tolerance: matches the contig smoke test (Q8_0 ≈ 1e-2 relative due
 //! to fp16 scale round-trip; Q8_K ≈ 1e-3 since it has an f32 scale).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -101,7 +102,6 @@ fn check_close(got: &[f32], expected: &[f32], rel_tol: f32, label: &str) {
 
 /// Sanity: explicit stride=1 must match the contig kernel exactly.
 #[test]
-#[ignore]
 fn mmvq_q8_0_stride1_matches_contig() {
     let (ctx, stream) = setup();
 
@@ -176,7 +176,6 @@ fn mmvq_q8_0_stride1_matches_contig() {
 
 /// Stride-2 activation: y has 64 elements, MMVQ reads every other one.
 #[test]
-#[ignore]
 fn mmvq_q8_0_stride2() {
     let (ctx, stream) = setup();
 
@@ -242,7 +241,6 @@ fn mmvq_q8_0_stride2() {
 
 /// Stride-0 broadcast: kernel reads y[0] for every column.
 #[test]
-#[ignore]
 fn mmvq_q8_0_stride0_broadcast() {
     let (ctx, stream) = setup();
 
@@ -303,7 +301,6 @@ fn mmvq_q8_0_stride0_broadcast() {
 
 /// W-allocation-sharing: two matrices in one buffer, dispatch via offset.
 #[test]
-#[ignore]
 fn mmvq_q8_0_w_start_byte_offset() {
     let (ctx, stream) = setup();
 
@@ -413,7 +410,6 @@ fn mmvq_q8_0_w_start_byte_offset() {
 // ---- Q4_0: combined stride + offset --------------------------------------
 
 #[test]
-#[ignore]
 fn mmvq_q4_0_stride_and_offset() {
     let (ctx, stream) = setup();
 
@@ -486,7 +482,6 @@ fn mmvq_q4_0_stride_and_offset() {
 // ---- Q8_K: k-quants strided path -----------------------------------------
 
 #[test]
-#[ignore]
 fn mmvq_q8_k_stride2() {
     let (ctx, stream) = setup();
 
@@ -546,7 +541,6 @@ fn mmvq_q8_k_stride2() {
 }
 
 #[test]
-#[ignore]
 fn mmvq_q8_k_stride0_broadcast() {
     let (ctx, stream) = setup();
 
@@ -611,7 +605,6 @@ fn mmvq_q8_k_stride0_broadcast() {
 /// an offset that satisfies its requirement and confirm `select()`
 /// returns Ok.
 #[test]
-#[ignore]
 fn mmvq_w_offset_alignment_aligned_ok() {
     let (_ctx, stream) = setup();
     // Each entry: (format, an aligned non-zero offset).
@@ -659,7 +652,6 @@ fn mmvq_w_offset_alignment_aligned_ok() {
 /// the rejection. Tests inherit the same gate.
 #[cfg(debug_assertions)]
 #[test]
-#[ignore]
 fn mmvq_w_offset_alignment_misaligned_rejected_debug() {
     let (_ctx, stream) = setup();
 
@@ -707,7 +699,6 @@ fn mmvq_w_offset_alignment_misaligned_rejected_debug() {
 /// 2-byte offset is fine on the 2-byte-aligned formats — sanity check
 /// that the guard isn't over-rejecting.
 #[test]
-#[ignore]
 fn mmvq_w_offset_alignment_two_byte_ok_on_2aligned() {
     let (_ctx, stream) = setup();
     let cases: &[GgufBlockFormat] = &[

@@ -2,6 +2,7 @@
 //! AdaptiveAvgPool1d / 3d, AdaptiveMaxPool1d / 2d / 3d, and the stubbed
 //! FractionalMaxPool* / LpPool* plans (which assert `select()` rejects).
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -23,7 +24,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn adaptive_avg_pool1d_8_to_4_f32() {
     let (ctx, stream) = setup();
     let host_x: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -70,7 +70,6 @@ fn adaptive_avg_pool1d_8_to_4_f32() {
 }
 
 #[test]
-#[ignore]
 fn adaptive_avg_pool3d_2x2x2_to_1x1x1_f32() {
     let (ctx, stream) = setup();
     let host_x: Vec<f32> = (1..=8).map(|v| v as f32).collect();
@@ -112,7 +111,6 @@ fn adaptive_avg_pool3d_2x2x2_to_1x1x1_f32() {
 }
 
 #[test]
-#[ignore]
 fn adaptive_max_pool1d_8_to_4_f32() {
     let (ctx, stream) = setup();
     let host_x: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -154,7 +152,6 @@ fn adaptive_max_pool1d_8_to_4_f32() {
 }
 
 #[test]
-#[ignore]
 fn adaptive_max_pool2d_4x4_to_2x2_f32() {
     let (ctx, stream) = setup();
     let host_x: Vec<f32> = (1..=16).map(|v| v as f32).collect();
@@ -196,7 +193,6 @@ fn adaptive_max_pool2d_4x4_to_2x2_f32() {
 }
 
 #[test]
-#[ignore]
 fn adaptive_max_pool3d_2x2x2_to_1x1x1_f32() {
     let (ctx, stream) = setup();
     let host_x: Vec<f32> = (1..=8).map(|v| v as f32).collect();
@@ -236,7 +232,7 @@ fn adaptive_max_pool3d_2x2x2_to_1x1x1_f32() {
 
 // ---------------------------------------------------------------------------
 // Stub-plan rejections — these don't need a real GPU, but we keep them
-// behind `#[ignore]` for consistency with the rest of the smoke suite.
+// behind gated behind the `device-tests` feature for consistency with the rest of the smoke suite.
 // ---------------------------------------------------------------------------
 
 // Phase 16.3 — FractionalMaxPool is now implemented as a bespoke
@@ -245,7 +241,6 @@ fn adaptive_max_pool3d_2x2x2_to_1x1x1_f32() {
 // `fractional_max_pool_smoke.rs`.
 
 #[test]
-#[ignore]
 fn fractional_max_pool2d_select_accepts() {
     let (_ctx, stream) = setup();
     let desc = FractionalMaxPool2dDescriptor::new(1, 1, 8, 8, 2, 2, 4, 4, ElementKind::F32);
@@ -257,7 +252,6 @@ fn fractional_max_pool2d_select_accepts() {
 }
 
 #[test]
-#[ignore]
 fn fractional_max_pool3d_select_accepts() {
     let (_ctx, stream) = setup();
     let desc =
@@ -275,7 +269,6 @@ fn fractional_max_pool3d_select_accepts() {
 // `lp_pool_smoke.rs`.
 
 #[test]
-#[ignore]
 fn lp_pool1d_select_accepts() {
     let (_ctx, stream) = setup();
     let desc = LpPool1dDescriptor::new(1, 1, 8, 2, 2.0, ElementKind::F32).with_stride(2);
@@ -284,7 +277,6 @@ fn lp_pool1d_select_accepts() {
 }
 
 #[test]
-#[ignore]
 fn lp_pool2d_select_accepts() {
     let (_ctx, stream) = setup();
     let desc = LpPool2dDescriptor::new(1, 1, 8, 8, 2, 2, 2.0, ElementKind::F32).with_stride(2, 2);

@@ -5,8 +5,9 @@
 //! stride 2, pad 0, producing a 1×2×2×2 output (each output cell is the
 //! reduction over a disjoint 2×2 input tile).
 //!
-//! `#[ignore]` by default — requires a real CUDA device + cuDNN.
+//! Gated behind the `device-tests` feature — requires a real CUDA device + cuDNN.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -270,7 +271,6 @@ fn fixture_input_4x4_f32() -> Vec<f32> {
 }
 
 #[test]
-#[ignore]
 fn max_pool2d_f32() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 2i32, 4i32, 4i32);
@@ -395,7 +395,6 @@ fn max_pool2d_f32() {
 }
 
 #[test]
-#[ignore]
 fn max_pool2d_f64() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 2i32, 4i32, 4i32);
@@ -519,7 +518,6 @@ fn max_pool2d_f64() {
 }
 
 #[test]
-#[ignore]
 fn avg_pool2d_f32() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 2i32, 4i32, 4i32);
@@ -647,7 +645,6 @@ fn avg_pool2d_f32() {
 }
 
 #[test]
-#[ignore]
 fn avg_pool2d_f64() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 2i32, 4i32, 4i32);
@@ -779,7 +776,6 @@ fn avg_pool2d_f64() {
 }
 
 #[test]
-#[ignore]
 fn pool2d_f16_smoke() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 2i32, 4i32, 4i32);
@@ -901,7 +897,6 @@ fn pool2d_f16_smoke() {
 }
 
 #[test]
-#[ignore]
 fn pool2d_bf16_smoke() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 2i32, 4i32, 4i32);
@@ -1021,7 +1016,6 @@ fn pool2d_bf16_smoke() {
 }
 
 #[test]
-#[ignore]
 fn max_pool2d_with_padding_f32() {
     // 3x3 input, 3x3 window, stride 1, pad 1 → 3x3 output. Each output
     // cell is the max over a 3x3 neighborhood (with zero padding on the

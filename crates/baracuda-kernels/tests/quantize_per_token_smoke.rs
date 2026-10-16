@@ -4,7 +4,8 @@
 //! verifies the kernel matches `clamp(round(x/s)+zp, qmin, qmax)`. Test
 //! includes one clipped element so the saturation path is exercised.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -45,7 +46,6 @@ fn cpu_quantize_per_token_s8(
 }
 
 #[test]
-#[ignore]
 fn quantize_per_token_f32_s8_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 2;

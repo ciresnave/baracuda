@@ -2,6 +2,7 @@
 //!
 //! Verifies bit-exact (within rounding) `dx[i] = dy[i] * mask[i] * scale`.
 //! No randomness involved — the mask is a deterministic input.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -20,7 +21,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn dropout_backward_f32_p_half() {
     let (ctx, stream) = setup();
     let shape = [N as i32];
@@ -94,7 +94,6 @@ fn dropout_backward_f32_p_half() {
 }
 
 #[test]
-#[ignore]
 fn dropout_backward_f64_p_one_third() {
     let (ctx, stream) = setup();
     let shape = [N as i32];

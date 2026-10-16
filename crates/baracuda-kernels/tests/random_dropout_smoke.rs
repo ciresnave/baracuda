@@ -6,6 +6,7 @@
 //! 2. The empirical fraction of kept cells matches `1 - p` within a
 //!    statistical tolerance.
 //! 3. Per-cell: `mask = 0 ⇒ y == 0`, `mask = 1 ⇒ y == x / (1 - p)`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -103,25 +104,21 @@ fn run_case_f32(p: f32, seed: u64) {
 }
 
 #[test]
-#[ignore]
 fn dropout_f32_p_half() {
     run_case_f32(0.5, 0xABAB_CDCD_EFEF_0101);
 }
 
 #[test]
-#[ignore]
 fn dropout_f32_p_one_tenth() {
     run_case_f32(0.1, 0x1111_2222_3333_4444);
 }
 
 #[test]
-#[ignore]
 fn dropout_f32_p_nine_tenths() {
     run_case_f32(0.9, 0x9999_8888_7777_6666);
 }
 
 #[test]
-#[ignore]
 fn dropout_f64_p_half() {
     let (ctx, stream) = setup();
     let shape = [N as i32];

@@ -11,6 +11,7 @@
 //! pooling kernel is deterministic for fixed input + descriptor, so
 //! we expect exact bit-equality on the same hardware.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -40,7 +41,6 @@ fn setup() -> (Context, Stream) {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn max_pool_2d_f32_ffi_matches_plan() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (2i32, 3i32, 4i32, 4i32);
@@ -373,13 +373,11 @@ fn avg_pool_2d_f32_one_mode(count_include_pad: bool) {
 }
 
 #[test]
-#[ignore]
 fn avg_pool_2d_f32_count_include_pad_true() {
     avg_pool_2d_f32_one_mode(true);
 }
 
 #[test]
-#[ignore]
 fn avg_pool_2d_f32_count_include_pad_false() {
     avg_pool_2d_f32_one_mode(false);
 }
@@ -389,7 +387,6 @@ fn avg_pool_2d_f32_count_include_pad_false() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn max_pool_1d_f16_fw_ffi_matches_plan() {
     let (ctx, stream) = setup();
     let (n, c, l_in) = (1i32, 2i32, 16i32);
@@ -471,7 +468,6 @@ fn max_pool_1d_f16_fw_ffi_matches_plan() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn avg_pool_3d_bf16_fw_ffi_matches_plan() {
     let (ctx, stream) = setup();
     let (n, c, d_in, h_in, w_in) = (1i32, 1i32, 4i32, 4i32, 4i32);

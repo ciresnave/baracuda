@@ -7,7 +7,8 @@
 //! `x[c] != 0` per cell.
 //!
 //! Run with: `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_prod_backward_smoke -- --ignored`.
+//!   --test reduce_prod_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -76,7 +77,6 @@ fn host_prod_bw_f32(
 }
 
 #[test]
-#[ignore]
 fn prod_backward_f32_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];
@@ -145,7 +145,6 @@ fn prod_backward_f32_3d_axis1() {
 }
 
 #[test]
-#[ignore]
 fn prod_backward_f64_3d_axis2() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];
@@ -217,7 +216,6 @@ fn prod_backward_f64_3d_axis2() {
 }
 
 #[test]
-#[ignore]
 fn prod_backward_f16_3d_axis0() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];
@@ -290,7 +288,6 @@ fn prod_backward_f16_3d_axis0() {
 }
 
 #[test]
-#[ignore]
 fn prod_backward_bf16_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];

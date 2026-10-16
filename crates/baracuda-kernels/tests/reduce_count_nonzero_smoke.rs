@@ -4,6 +4,7 @@
 //!
 //! Bit-exact comparison — pure integer accumulation of `(x != 0 ? 1 :
 //! 0)`, no FP math.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -89,7 +90,6 @@ fn assert_expected(got: &[i64]) {
 }
 
 #[test]
-#[ignore]
 fn count_nonzero_f32() {
     let (ctx, stream) = setup();
     let mut host = Vec::<f32>::new();
@@ -99,7 +99,6 @@ fn count_nonzero_f32() {
 }
 
 #[test]
-#[ignore]
 fn count_nonzero_f16() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -110,7 +109,6 @@ fn count_nonzero_f16() {
 }
 
 #[test]
-#[ignore]
 fn count_nonzero_bf16() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -121,7 +119,6 @@ fn count_nonzero_bf16() {
 }
 
 #[test]
-#[ignore]
 fn count_nonzero_f64() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -132,7 +129,6 @@ fn count_nonzero_f64() {
 }
 
 #[test]
-#[ignore]
 fn count_nonzero_i32() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -143,7 +139,6 @@ fn count_nonzero_i32() {
 }
 
 #[test]
-#[ignore]
 fn count_nonzero_i64() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -154,7 +149,6 @@ fn count_nonzero_i64() {
 }
 
 #[test]
-#[ignore]
 fn count_nonzero_bool() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();

@@ -5,9 +5,10 @@
 //! mirrors `permute_3d_rotate` from the f32 file: `[A, B, C] -> [B, C,
 //! A]` via dims=[1, 2, 0].
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test permute_dtype_smoke -- --ignored`.
+//!   --test permute_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn permute_3d_rotate_f16() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 12];
@@ -84,7 +84,6 @@ fn permute_3d_rotate_f16() {
 }
 
 #[test]
-#[ignore]
 fn permute_3d_rotate_bf16() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 12];
@@ -143,7 +142,6 @@ fn permute_3d_rotate_bf16() {
 }
 
 #[test]
-#[ignore]
 fn permute_3d_rotate_f64() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 12];

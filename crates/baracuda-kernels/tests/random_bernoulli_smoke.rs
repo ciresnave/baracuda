@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for `RandomPlan + RandomKind::Bernoulli`.
 //! Verifies the empirical mean of the Bool output matches the requested
 //! probability `p` within a statistical tolerance.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -70,25 +71,21 @@ fn run_case(p: f32, seed: u64) {
 }
 
 #[test]
-#[ignore]
 fn bernoulli_p_half() {
     run_case(0.5, 0xCAFE_BABE_DEAD_BEEF);
 }
 
 #[test]
-#[ignore]
 fn bernoulli_p_quarter() {
     run_case(0.25, 0x1357_9BDF_2468_ACE0);
 }
 
 #[test]
-#[ignore]
 fn bernoulli_p_three_quarter() {
     run_case(0.75, 0xFEED_FACE_BAAD_F00D);
 }
 
 #[test]
-#[ignore]
 fn bernoulli_p_zero() {
     // All cells should be 0.
     let (ctx, stream) = setup();

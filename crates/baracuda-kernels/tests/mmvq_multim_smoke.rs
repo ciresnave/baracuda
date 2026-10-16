@@ -10,12 +10,15 @@
 // Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
 #![allow(non_snake_case)]
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+#[cfg(feature = "device-tests")]
 use baracuda_kernels::{
     BlockQ8_0, GgufBlockFormat, GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan,
     PlanPreference, TensorMut, TensorRef, U8, Workspace, contiguous_stride,
 };
 
+#[cfg(feature = "device-tests")]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -24,6 +27,7 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
+#[cfg(feature = "device-tests")]
 /// Build a small Q8_0 weight matrix of nrows=4, ncols=64 (= 2 blocks/row).
 /// Returns (host_bytes, host_w_fp32_ref) where the second is the
 /// dequantized fp32 weight matrix for the reference compute.
@@ -59,6 +63,7 @@ fn build_q8_0_weights(nrows: i32, ncols: i32) -> (Vec<U8>, Vec<f32>) {
     (host_w, fp_ref)
 }
 
+#[cfg(feature = "device-tests")]
 fn run_for_m(m: i32) {
     let (ctx, stream) = setup();
     let nrows = 4i32;
@@ -152,25 +157,25 @@ fn run_for_m(m: i32) {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q8_0_m1() {
     run_for_m(1);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q8_0_m2() {
     run_for_m(2);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q8_0_m4() {
     run_for_m(4);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q8_0_m8() {
     run_for_m(8);
 }
@@ -206,8 +211,10 @@ fn mmvq_multim_workspace_helper_matches_plan() {
 // quant noise.
 // =============================================================================
 
+#[cfg(feature = "device-tests")]
 use baracuda_kernels::{GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan};
 
+#[cfg(feature = "device-tests")]
 fn run_per_format(fmt: GgufBlockFormat, m: i32) {
     let (ctx, stream) = setup();
 
@@ -371,55 +378,55 @@ fn run_per_format(fmt: GgufBlockFormat, m: i32) {
 // One smoke test per format @ M=8 (covers the prefill regime — heaviest
 // use of the kernel's cross-warp reduction).
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q4_0_m8() {
     run_per_format(GgufBlockFormat::Q4_0, 8);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q4_1_m8() {
     run_per_format(GgufBlockFormat::Q4_1, 8);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q5_0_m8() {
     run_per_format(GgufBlockFormat::Q5_0, 8);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q5_1_m8() {
     run_per_format(GgufBlockFormat::Q5_1, 8);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q2_K_m8() {
     run_per_format(GgufBlockFormat::Q2K, 8);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q3_K_m8() {
     run_per_format(GgufBlockFormat::Q3K, 8);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q4_K_m8() {
     run_per_format(GgufBlockFormat::Q4K, 8);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q5_K_m8() {
     run_per_format(GgufBlockFormat::Q5K, 8);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q6_K_m8() {
     run_per_format(GgufBlockFormat::Q6K, 8);
 }
@@ -427,7 +434,7 @@ fn mmvq_multim_q6_K_m8() {
 // One additional M=1 (decode regime) test against Q4_0 to verify the
 // nwarps=4 / rows_per_cuda_block=1 dispatch path.
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q4_0_m1() {
     run_per_format(GgufBlockFormat::Q4_0, 1);
 }
@@ -435,13 +442,13 @@ fn mmvq_multim_q4_0_m1() {
 // Diagnostic M=1 tests — isolate per-format dot helper bugs from the
 // multi-warp reduction path.
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q5_0_m1() {
     run_per_format(GgufBlockFormat::Q5_0, 1);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn mmvq_multim_q5_1_m1() {
     run_per_format(GgufBlockFormat::Q5_1, 1);
 }

@@ -2,7 +2,8 @@
 //! `[outer=2, axis_size=8]`, `group_size=4` → 2 groups per row, so
 //! `scale` / `zp` shape is `[2, 2]`.
 //!
-//! `#[ignore]`.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -19,7 +20,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn quantize_per_group_f32_s8_basic() {
     let (ctx, stream) = setup();
     let outer: i32 = 2;

@@ -8,9 +8,10 @@
 //! checked via `to_bits()` against a CPU reference that does the same
 //! coord-by-coord walk.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test pad_dtype_smoke -- --ignored`.
+//!   --test pad_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -90,7 +91,6 @@ fn output_shape_3d() -> [i32; 3] {
 }
 
 #[test]
-#[ignore]
 fn pad_constant_3d_f16() {
     let (ctx, stream) = setup();
     let input_shape = INPUT_SHAPE_3D;
@@ -150,7 +150,6 @@ fn pad_constant_3d_f16() {
 }
 
 #[test]
-#[ignore]
 fn pad_constant_3d_bf16() {
     let (ctx, stream) = setup();
     let input_shape = INPUT_SHAPE_3D;
@@ -208,7 +207,6 @@ fn pad_constant_3d_bf16() {
 }
 
 #[test]
-#[ignore]
 fn pad_constant_3d_f64() {
     let (ctx, stream) = setup();
     let input_shape = INPUT_SHAPE_3D;

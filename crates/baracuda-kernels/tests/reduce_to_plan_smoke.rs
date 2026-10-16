@@ -8,9 +8,10 @@
 //! empty reduce set (`[0, 4] → [1, 4]` ⇒ all 1s). CPU references are
 //! computed in f64.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_to_plan_smoke -- --ignored`.
+//!   --test reduce_to_plan_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -149,28 +150,24 @@ fn run_f32_3d(op: ReduceToOp, host_src: &[f32]) {
 }
 
 #[test]
-#[ignore]
 fn plan_reduce_to_sum_f32_3d() {
     let host_src: Vec<f32> = (0..24).map(|i| (i as f32) * 0.05 - 0.5).collect();
     run_f32_3d(ReduceToOp::Sum, &host_src);
 }
 
 #[test]
-#[ignore]
 fn plan_reduce_to_max_f32_3d() {
     let host_src: Vec<f32> = (0..24).map(|i| (i as f32) * 0.13 - 1.5).collect();
     run_f32_3d(ReduceToOp::Max, &host_src);
 }
 
 #[test]
-#[ignore]
 fn plan_reduce_to_min_f32_3d() {
     let host_src: Vec<f32> = (0..24).map(|i| (i as f32) * 0.13 - 1.5).collect();
     run_f32_3d(ReduceToOp::Min, &host_src);
 }
 
 #[test]
-#[ignore]
 fn plan_reduce_to_prod_f32_3d() {
     // Keep values close to 1 so the 12-element product stays in a
     // numerically safe range.
@@ -182,7 +179,6 @@ fn plan_reduce_to_prod_f32_3d() {
 /// narrows once on store, so the tolerance is the f16 ULP of the
 /// result, not the f16 ULP compounded over the 12-element walk.
 #[test]
-#[ignore]
 fn plan_reduce_to_sum_f16_3d() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3, 4];
@@ -249,7 +245,6 @@ fn plan_reduce_to_sum_f16_3d() {
 /// stride `[1, m]` (column-major over a contiguous `[n, m]` buffer);
 /// dim 0 reduces → `[1, n]`.
 #[test]
-#[ignore]
 fn plan_reduce_to_sum_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;
@@ -317,7 +312,6 @@ fn plan_reduce_to_sum_f32_strided_transposed() {
 /// `len >= numel` check would falsely reject it). Sum over the
 /// reduced dim 0 hits the same buffer row 4× ⇒ `out[j] = 4·src[j]`.
 #[test]
-#[ignore]
 fn plan_reduce_to_sum_f32_stride0_broadcast_input() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 5];
@@ -367,7 +361,6 @@ fn plan_reduce_to_sum_f32_stride0_broadcast_input() {
 /// Prod over an empty reduce set: `[0, 4] → [1, 4]` — dim 0 is reduced
 /// but has extent 0, so every output cell gets the identity `1`.
 #[test]
-#[ignore]
 fn plan_reduce_to_prod_f32_empty_reduce_set_identity() {
     let (ctx, stream) = setup();
     let input_shape = [0i32, 4];

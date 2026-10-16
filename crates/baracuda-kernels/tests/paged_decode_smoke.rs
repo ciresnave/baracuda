@@ -10,10 +10,11 @@
 //! equivalent contiguous layout) is left to a follow-up integration
 //! test once the plan layer's args-builder helpers are merged.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `flashinfer` cargo feature.
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, Stream, init};
 use baracuda_kernels::{
@@ -31,7 +32,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn paged_decode_plan_select_validates() {
     let (_ctx, stream) = setup();
     let paged = PagedKvCacheDescriptor {
@@ -79,7 +79,6 @@ fn paged_decode_plan_select_validates() {
 }
 
 #[test]
-#[ignore]
 fn paged_kv_append_plan_select_validates() {
     let (_ctx, stream) = setup();
     let paged = PagedKvCacheDescriptor {
@@ -99,7 +98,6 @@ fn paged_kv_append_plan_select_validates() {
 }
 
 #[test]
-#[ignore]
 fn paged_decode_workspace_size_matches_formula() {
     // The Rust-side workspace_size() reports `(3 * batch + 2) * 4`
     // bytes, matching the launcher's auxiliary index buffers.

@@ -2,9 +2,10 @@
 //! cuRAND. Verifies basic statistical sanity (mean, range) rather than
 //! exact bit-equality, because cuRAND is intrinsically stochastic.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test random_uniform_smoke -- --ignored`.
+//!   --test random_uniform_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -23,7 +24,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn uniform_f32_unit_interval() {
     let (ctx, stream) = setup();
     let shape = [N as i32];
@@ -82,7 +82,6 @@ fn uniform_f32_unit_interval() {
 }
 
 #[test]
-#[ignore]
 fn uniform_f64_unit_interval() {
     let (ctx, stream) = setup();
     let shape = [N as i32];
@@ -136,7 +135,6 @@ fn uniform_f64_unit_interval() {
 }
 
 #[test]
-#[ignore]
 fn uniform_f32_affine_range() {
     // Verify the in-place affine remap into Uniform(-3, 7].
     let (ctx, stream) = setup();

@@ -7,10 +7,11 @@
 //! rounding tolerance only; the actual codebook + absmax path is
 //! identical).
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `bnb_nf4` cargo feature.
 
 #![cfg(feature = "bnb_nf4")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::quantize::nf4::nf4_pack_weight;
@@ -176,25 +177,21 @@ fn run_for_m(m_test: i32) {
 }
 
 #[test]
-#[ignore]
 fn nf4_multim_m1_f16() {
     run_for_m(1);
 }
 
 #[test]
-#[ignore]
 fn nf4_multim_m2_f16() {
     run_for_m(2);
 }
 
 #[test]
-#[ignore]
 fn nf4_multim_m4_f16() {
     run_for_m(4);
 }
 
 #[test]
-#[ignore]
 fn nf4_multim_m8_f16() {
     run_for_m(8);
 }

@@ -7,7 +7,8 @@
 //! - `dx[i] = 0` for cells where the rounded result is out of range
 //!   (clipped in FW → no gradient flow).
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use std::marker::PhantomData;
 
@@ -27,7 +28,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn quantize_per_tensor_backward_f32_s8_ste() {
     let (ctx, stream) = setup();
     let scale: f32 = 0.1;

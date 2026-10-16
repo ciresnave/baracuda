@@ -6,7 +6,8 @@
 //! `I: IndexElement` (default `i32` for source-compat). This file
 //! covers the new i64 output path.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -23,7 +24,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn nonzero_f32_i64idx_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -94,7 +94,6 @@ fn nonzero_f32_i64idx_2d() {
 }
 
 #[test]
-#[ignore]
 fn nonzero_bool_i64idx_1d() {
     let (ctx, stream) = setup();
     let shape = [20i32];
@@ -162,7 +161,6 @@ fn nonzero_bool_i64idx_1d() {
 /// the legacy FFI symbol — Phase 15.2 must not break pre-existing
 /// call sites.
 #[test]
-#[ignore]
 fn nonzero_f32_i32idx_default_path() {
     let (ctx, stream) = setup();
     let shape = [3i32, 3];

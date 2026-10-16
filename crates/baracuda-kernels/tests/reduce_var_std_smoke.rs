@@ -7,6 +7,7 @@
 //!   the final store. Tolerance accounts for that single-store ULP.
 //! - f64: Welford in f64 end-to-end. Bit-stable vs host f64 Welford for
 //!   var; 4 ULP for std.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -360,38 +361,32 @@ fn run_case_f64(kind: ReduceKind, reduce_axis: usize, correction: i32) {
 }
 
 #[test]
-#[ignore]
 fn var_axis_0_bessel() {
     run_case(ReduceKind::Var, 0, 1);
 }
 
 #[test]
-#[ignore]
 fn var_axis_1_bessel() {
     run_case(ReduceKind::Var, 1, 1);
 }
 
 #[test]
-#[ignore]
 fn var_axis_2_bessel() {
     run_case(ReduceKind::Var, 2, 1);
 }
 
 #[test]
-#[ignore]
 fn var_axis_0_population() {
     // correction = 0 → population variance
     run_case(ReduceKind::Var, 0, 0);
 }
 
 #[test]
-#[ignore]
 fn std_axis_1_bessel() {
     run_case(ReduceKind::Std, 1, 1);
 }
 
 #[test]
-#[ignore]
 fn std_axis_2_population() {
     run_case(ReduceKind::Std, 2, 0);
 }
@@ -399,17 +394,14 @@ fn std_axis_2_population() {
 // ----- f16 -----
 
 #[test]
-#[ignore]
 fn var_f16_axis_0_bessel() {
     run_case_f16(ReduceKind::Var, 0, 1);
 }
 #[test]
-#[ignore]
 fn var_f16_axis_1_population() {
     run_case_f16(ReduceKind::Var, 1, 0);
 }
 #[test]
-#[ignore]
 fn std_f16_axis_2_bessel() {
     run_case_f16(ReduceKind::Std, 2, 1);
 }
@@ -417,17 +409,14 @@ fn std_f16_axis_2_bessel() {
 // ----- bf16 -----
 
 #[test]
-#[ignore]
 fn var_bf16_axis_1_bessel() {
     run_case_bf16(ReduceKind::Var, 1, 1);
 }
 #[test]
-#[ignore]
 fn var_bf16_axis_2_population() {
     run_case_bf16(ReduceKind::Var, 2, 0);
 }
 #[test]
-#[ignore]
 fn std_bf16_axis_0_bessel() {
     run_case_bf16(ReduceKind::Std, 0, 1);
 }
@@ -435,17 +424,14 @@ fn std_bf16_axis_0_bessel() {
 // ----- f64 -----
 
 #[test]
-#[ignore]
 fn var_f64_axis_2_bessel() {
     run_case_f64(ReduceKind::Var, 2, 1);
 }
 #[test]
-#[ignore]
 fn var_f64_axis_0_population() {
     run_case_f64(ReduceKind::Var, 0, 0);
 }
 #[test]
-#[ignore]
 fn std_f64_axis_1_bessel() {
     run_case_f64(ReduceKind::Std, 1, 1);
 }

@@ -6,6 +6,7 @@
 //! same kernel as Max BW — the routing logic is identical, only y
 //! differs (min vs max). Tests fill x with strictly-increasing values
 //! so the min is always at the first position along the reduced axis.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -47,7 +48,6 @@ fn dy_index<const N: usize>(dx_coord: [i32; N], axis: usize, dy_shape: [i32; N])
 }
 
 #[test]
-#[ignore]
 fn min_backward_f32_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -120,7 +120,6 @@ fn min_backward_f32_3d_axis1() {
 }
 
 #[test]
-#[ignore]
 fn min_backward_f64_3d_axis0() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -193,7 +192,6 @@ fn min_backward_f64_3d_axis0() {
 }
 
 #[test]
-#[ignore]
 fn min_backward_f16_3d_axis2() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -270,7 +268,6 @@ fn min_backward_f16_3d_axis2() {
 }
 
 #[test]
-#[ignore]
 fn min_backward_bf16_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];

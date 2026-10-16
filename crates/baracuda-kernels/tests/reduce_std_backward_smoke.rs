@@ -16,7 +16,8 @@
 //!   cast to T introduces 1 store-time ULP).
 //!
 //! Run with: `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_std_backward_smoke -- --ignored`.
+//!   --test reduce_std_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -178,19 +179,16 @@ fn run_case(axis: usize, correction: i32) {
 }
 
 #[test]
-#[ignore]
 fn std_backward_f32_3d_axis1_corr1() {
     run_case(1, 1);
 }
 
 #[test]
-#[ignore]
 fn std_backward_f32_3d_axis2_corr0() {
     run_case(2, 0);
 }
 
 #[test]
-#[ignore]
 fn std_backward_f32_3d_axis0_corr1() {
     run_case(0, 1);
 }
@@ -494,49 +492,40 @@ fn run_case_f64(axis: usize, correction: i32) {
 }
 
 #[test]
-#[ignore]
 fn std_backward_f16_3d_axis0_corr1() {
     run_case_f16(0, 1);
 }
 #[test]
-#[ignore]
 fn std_backward_f16_3d_axis1_corr1() {
     run_case_f16(1, 1);
 }
 #[test]
-#[ignore]
 fn std_backward_f16_3d_axis2_corr0() {
     run_case_f16(2, 0);
 }
 
 #[test]
-#[ignore]
 fn std_backward_bf16_3d_axis0_corr1() {
     run_case_bf16(0, 1);
 }
 #[test]
-#[ignore]
 fn std_backward_bf16_3d_axis1_corr0() {
     run_case_bf16(1, 0);
 }
 #[test]
-#[ignore]
 fn std_backward_bf16_3d_axis2_corr1() {
     run_case_bf16(2, 1);
 }
 
 #[test]
-#[ignore]
 fn std_backward_f64_3d_axis0_corr1() {
     run_case_f64(0, 1);
 }
 #[test]
-#[ignore]
 fn std_backward_f64_3d_axis1_corr0() {
     run_case_f64(1, 0);
 }
 #[test]
-#[ignore]
 fn std_backward_f64_3d_axis2_corr1() {
     run_case_f64(2, 1);
 }

@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for `RandomPlan + RandomKind::Normal` over
 //! cuRAND. Verifies sample mean / stddev match the requested parameters
 //! within a generous statistical tolerance.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -19,7 +20,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn normal_f32_standard() {
     let (ctx, stream) = setup();
     let shape = [N as i32];
@@ -72,7 +72,6 @@ fn normal_f32_standard() {
 }
 
 #[test]
-#[ignore]
 fn normal_f32_shifted() {
     let (ctx, stream) = setup();
     let shape = [N as i32];
@@ -121,7 +120,6 @@ fn normal_f32_shifted() {
 }
 
 #[test]
-#[ignore]
 fn normal_f64_standard() {
     let (ctx, stream) = setup();
     let shape = [N as i32];

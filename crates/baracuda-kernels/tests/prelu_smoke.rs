@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `PReluPlan`. FW × 4 dtypes × {per-channel, scalar}.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -19,7 +20,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn prelu_f32_per_channel() {
     let (ctx, stream) = setup();
     // Shape [N, C, S] = [2, 3, 4], channel axis = 1.
@@ -82,7 +82,6 @@ fn prelu_f32_per_channel() {
 }
 
 #[test]
-#[ignore]
 fn prelu_f32_scalar() {
     let (ctx, stream) = setup();
     let shape = [4i32, 5];
@@ -134,7 +133,6 @@ fn prelu_f32_scalar() {
 }
 
 #[test]
-#[ignore]
 fn prelu_f64_per_channel() {
     let (ctx, stream) = setup();
     let shape = [2i32, 3, 2];
@@ -191,7 +189,6 @@ fn prelu_f64_per_channel() {
 }
 
 #[test]
-#[ignore]
 fn prelu_f64_scalar() {
     let (ctx, stream) = setup();
     let shape = [4i32, 5];
@@ -243,7 +240,6 @@ fn prelu_f64_scalar() {
 }
 
 #[test]
-#[ignore]
 fn prelu_f16_per_channel() {
     let (ctx, stream) = setup();
     let shape = [2i32, 3, 4];
@@ -309,7 +305,6 @@ fn prelu_f16_per_channel() {
 }
 
 #[test]
-#[ignore]
 fn prelu_f16_scalar() {
     let (ctx, stream) = setup();
     let shape = [4i32, 5];
@@ -372,7 +367,6 @@ fn prelu_f16_scalar() {
 }
 
 #[test]
-#[ignore]
 fn prelu_bf16_per_channel() {
     let (ctx, stream) = setup();
     let shape = [2i32, 3, 4];
@@ -438,7 +432,6 @@ fn prelu_bf16_per_channel() {
 }
 
 #[test]
-#[ignore]
 fn prelu_bf16_scalar() {
     let (ctx, stream) = setup();
     let shape = [4i32, 5];

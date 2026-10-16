@@ -14,7 +14,8 @@
 //!    reference (int8 quantization adds ~1% per-row + ~1% per-column
 //!    noise — 2% is the LLM W8A8 convention).
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -76,7 +77,6 @@ fn cpu_fp_matmul(m: usize, c_out: usize, k: usize, a: &[f32], w: &[f32]) -> Vec<
 }
 
 #[test]
-#[ignore]
 fn quantized_linear_w8a8_f32_basic() {
     let (ctx, stream) = setup();
     let m: i32 = 2;

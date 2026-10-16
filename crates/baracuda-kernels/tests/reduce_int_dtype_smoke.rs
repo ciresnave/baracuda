@@ -8,6 +8,7 @@
 //!
 //! Shape: `[3, 4]`, reduce axis = 1 (so output shape `[3, 1]`). Each
 //! output cell sums/min/max/prods 4 elements.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -79,7 +80,6 @@ unsafe fn run_reduce(f: ReduceFn, stream: &Stream, src_ptr: *const c_void, dst_p
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn ffi_reduce_sum_i32_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<i32> = vec![
@@ -107,7 +107,6 @@ fn ffi_reduce_sum_i32_2d() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_min_i32_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<i32> = vec![1, 2, 3, 4, -1, -2, -3, -4, 5, 5, 5, 5];
@@ -131,7 +130,6 @@ fn ffi_reduce_min_i32_2d() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_max_i32_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<i32> = vec![1, 2, 3, 4, -1, -2, -3, -4, 5, 5, 5, 5];
@@ -155,7 +153,6 @@ fn ffi_reduce_max_i32_2d() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_prod_i32_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<i32> = vec![
@@ -187,7 +184,6 @@ fn ffi_reduce_prod_i32_2d() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn ffi_reduce_sum_u8_2d_no_overflow() {
     let (ctx, stream) = setup();
     let host_src: Vec<u8> = vec![
@@ -218,7 +214,6 @@ fn ffi_reduce_sum_u8_2d_no_overflow() {
 /// which mod 256 = 232. The widened accumulator (u64) produces 1000
 /// exactly; narrowing to u8 wraps to 232.
 #[test]
-#[ignore]
 fn ffi_reduce_sum_u8_wrap_on_overflow() {
     let (ctx, stream) = setup();
     let host_src: Vec<u8> = vec![
@@ -246,7 +241,6 @@ fn ffi_reduce_sum_u8_wrap_on_overflow() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_min_u8_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<u8> = vec![1, 2, 3, 4, 10, 5, 100, 200, 255, 1, 255, 255];
@@ -270,7 +264,6 @@ fn ffi_reduce_min_u8_2d() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_max_u8_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<u8> = vec![1, 2, 3, 4, 10, 5, 100, 200, 255, 1, 255, 255];
@@ -294,7 +287,6 @@ fn ffi_reduce_max_u8_2d() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_prod_u8_2d() {
     let (ctx, stream) = setup();
     // Row 0 prods to 24; row 1 prods to 16 * 4 * 1 * 1 = 64; row 2
@@ -325,7 +317,6 @@ fn ffi_reduce_prod_u8_2d() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn ffi_reduce_sum_i8_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<i8> = vec![1, 2, 3, 4, -1, -2, -3, -4, 10, 10, 10, 10];
@@ -349,7 +340,6 @@ fn ffi_reduce_sum_i8_2d() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_sum_i16_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<i16> = vec![
@@ -375,7 +365,6 @@ fn ffi_reduce_sum_i16_2d() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_sum_u32_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<u32> = vec![1, 2, 3, 4, 100, 200, 300, 400, 10000, 20000, 30000, 40000];
@@ -399,7 +388,6 @@ fn ffi_reduce_sum_u32_2d() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_sum_i64_2d() {
     let (ctx, stream) = setup();
     let host_src: Vec<i64> = vec![1, 2, 3, 4, -1, -2, -3, -4, 1_000_000_000_000, 1, 1, 1];
