@@ -8,6 +8,7 @@
 //!
 //! Tests fill `x` with strictly-increasing row-major values, so within
 //! any reduced group every value is unique → no ties → bit-exact compare.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -65,7 +66,6 @@ fn host_max_f32(input_shape: [i32; 3], axis: usize, x: &[f32]) -> Vec<f32> {
 }
 
 #[test]
-#[ignore]
 fn max_backward_f32_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -138,7 +138,6 @@ fn max_backward_f32_3d_axis1() {
 }
 
 #[test]
-#[ignore]
 fn max_backward_f64_3d_axis2() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -212,7 +211,6 @@ fn max_backward_f64_3d_axis2() {
 }
 
 #[test]
-#[ignore]
 fn max_backward_f16_3d_axis0() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -289,7 +287,6 @@ fn max_backward_f16_3d_axis0() {
 }
 
 #[test]
-#[ignore]
 fn max_backward_bf16_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];

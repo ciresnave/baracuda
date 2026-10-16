@@ -3,6 +3,7 @@
 //! `[1, 1, 2, 2, 2]` input, window 2³, stride 2³ → `[1, 1, 1, 1, 1]`
 //! output (a single max over the whole input). Cleanest 3-D fixture.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -19,7 +20,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn max_pool3d_f32() {
     let (ctx, stream) = setup();
     let (n, c, d_in, h_in, w_in) = (1i32, 1i32, 2i32, 2i32, 2i32);

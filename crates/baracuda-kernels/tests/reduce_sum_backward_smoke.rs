@@ -5,9 +5,10 @@
 //! c[k] = 0]` — broadcast dy across the reduced axis. Pure copy, no
 //! math — bit-exact compare for every dtype.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_sum_backward_smoke -- --ignored`.
+//!   --test reduce_sum_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -54,7 +55,6 @@ fn for_each_coord<const N: usize, F: FnMut([i32; N], i64)>(shape: [i32; N], mut 
 // -------- f32 --------
 
 #[test]
-#[ignore]
 fn sum_backward_f32_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -107,7 +107,6 @@ fn sum_backward_f32_3d_axis1() {
 }
 
 #[test]
-#[ignore]
 fn sum_backward_f32_2d_axis0() {
     let (ctx, stream) = setup();
     let input_shape = [16i32, 32];
@@ -161,7 +160,6 @@ fn sum_backward_f32_2d_axis0() {
 // -------- f16 / bf16 / f64 --------
 
 #[test]
-#[ignore]
 fn sum_backward_f16_3d_axis2() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -215,7 +213,6 @@ fn sum_backward_f16_3d_axis2() {
 }
 
 #[test]
-#[ignore]
 fn sum_backward_bf16_3d_axis0() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -268,7 +265,6 @@ fn sum_backward_bf16_3d_axis0() {
 }
 
 #[test]
-#[ignore]
 fn sum_backward_f64_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];

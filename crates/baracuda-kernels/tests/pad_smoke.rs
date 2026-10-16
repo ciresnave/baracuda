@@ -5,9 +5,10 @@
 //! identity case (pad amounts all 0 → output == input). Bit-exact
 //! against host reference — pad does no arithmetic.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test pad_smoke -- --ignored`.
+//!   --test pad_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -75,7 +76,6 @@ fn cpu_pad_constant<const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn pad_constant_1d() {
     let (ctx, stream) = setup();
     let input_shape = [16i32];
@@ -128,7 +128,6 @@ fn pad_constant_1d() {
 }
 
 #[test]
-#[ignore]
 fn pad_constant_2d() {
     let (ctx, stream) = setup();
     let input_shape = [8i32, 12];
@@ -185,7 +184,6 @@ fn pad_constant_2d() {
 }
 
 #[test]
-#[ignore]
 fn pad_constant_3d() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 12];
@@ -243,7 +241,6 @@ fn pad_constant_3d() {
 }
 
 #[test]
-#[ignore]
 fn pad_zero_amounts_is_identity() {
     // pad_low = pad_high = 0 everywhere → output == input, no pad
     // region. Edge case for the pad-region branch.

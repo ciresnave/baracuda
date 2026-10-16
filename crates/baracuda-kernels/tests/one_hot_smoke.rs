@@ -3,7 +3,8 @@
 //! Output rank = input_rank + 1; last output axis = `num_classes`.
 //! Output dtypes covered: f32, f64, i32, bool.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -20,7 +21,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn one_hot_f32_2d() {
     let (ctx, stream) = setup();
     let num_classes = 5i32;
@@ -67,7 +67,6 @@ fn one_hot_f32_2d() {
 }
 
 #[test]
-#[ignore]
 fn one_hot_f64_2d_with_oob() {
     let (ctx, stream) = setup();
     let num_classes = 4i32;
@@ -114,7 +113,6 @@ fn one_hot_f64_2d_with_oob() {
 }
 
 #[test]
-#[ignore]
 fn one_hot_i32_2d() {
     let (ctx, stream) = setup();
     let num_classes = 6i32;
@@ -158,7 +156,6 @@ fn one_hot_i32_2d() {
 }
 
 #[test]
-#[ignore]
 fn one_hot_bool_2d() {
     let (ctx, stream) = setup();
     let num_classes = 3i32;

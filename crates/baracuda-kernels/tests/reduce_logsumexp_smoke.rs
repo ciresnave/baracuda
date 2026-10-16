@@ -11,9 +11,10 @@
 //! `exp` + one `log`). f16/bf16 absorb additional rounding at every
 //! step — use `8 * dtype_eps`.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_logsumexp_smoke -- --ignored`.
+//!   --test reduce_logsumexp_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -53,7 +54,6 @@ fn out_numel() -> usize {
 }
 
 #[test]
-#[ignore]
 fn reduce_logsumexp_f32() {
     let (ctx, stream) = setup();
 
@@ -145,7 +145,6 @@ fn reduce_logsumexp_f32() {
 }
 
 #[test]
-#[ignore]
 fn reduce_logsumexp_f16() {
     let (ctx, stream) = setup();
 
@@ -236,7 +235,6 @@ fn reduce_logsumexp_f16() {
 }
 
 #[test]
-#[ignore]
 fn reduce_logsumexp_bf16() {
     let (ctx, stream) = setup();
 
@@ -327,7 +325,6 @@ fn reduce_logsumexp_bf16() {
 }
 
 #[test]
-#[ignore]
 fn reduce_logsumexp_f64() {
     let (ctx, stream) = setup();
 

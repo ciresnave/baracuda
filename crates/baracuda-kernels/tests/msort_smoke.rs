@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `MsortPlan<T>` — stable sort with tie-break
-//! on input index (Phase 9 Category O). `#[ignore]` by default.
+//! on input index (Phase 9 Category O). gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -16,7 +17,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn msort_f32_ties_stable() {
     let (ctx, stream) = setup();
     let batch: i32 = 1;

@@ -20,7 +20,8 @@
 //!     f32 already covered above; f16 / bf16 / f64 verify all dtypes
 //!     wired through the strided launcher.
 //!
-//! `#[ignore]` by default; run with `--ignored` on a CUDA host.
+//! Gated behind the `device-tests` feature; run with `--features device-tests` on a CUDA host.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -56,7 +57,6 @@ fn make_x_f32(numel: usize) -> Vec<f32> {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn powi_strided_fw_f32_contig_fastpath() {
     // Plan should choose `_run` (contig) rather than `_strided_run`,
     // but either way the numerics must match the host reference. This
@@ -107,7 +107,6 @@ fn powi_strided_fw_f32_contig_fastpath() {
 }
 
 #[test]
-#[ignore]
 fn powi_strided_fw_f32_transposed_input() {
     // Build x in [M, N] contig layout, then describe it to the plan as
     // [N, M] with strides [1, N] — a logical transpose. y is contig
@@ -169,7 +168,6 @@ fn powi_strided_fw_f32_transposed_input() {
 }
 
 #[test]
-#[ignore]
 fn powi_strided_fw_f32_strided_output() {
     // x contig [M, N]; y is a sliced view onto a larger buffer
     // [M, 2*N] picking every other column. The kernel writes to the
@@ -233,7 +231,6 @@ fn powi_strided_fw_f32_strided_output() {
 }
 
 #[test]
-#[ignore]
 fn powi_strided_fw_f16_transposed() {
     // Same transposed-input pattern as the f32 case; n=2 collapses to
     // a single multiply so half-precision rounding is bounded.
@@ -293,7 +290,6 @@ fn powi_strided_fw_f16_transposed() {
 }
 
 #[test]
-#[ignore]
 fn powi_strided_fw_bf16_transposed() {
     let (ctx, stream) = setup();
     let m = M as usize;
@@ -351,7 +347,6 @@ fn powi_strided_fw_bf16_transposed() {
 }
 
 #[test]
-#[ignore]
 fn powi_strided_fw_f64_transposed() {
     let (ctx, stream) = setup();
     let m = M as usize;
@@ -412,7 +407,6 @@ fn powi_strided_fw_f64_transposed() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn powi_strided_bw_f32_contig_fastpath() {
     // Same as the FW contig-fastpath — confirms BW dispatcher routes
     // canonical args through `_run` and matches the host reference.
@@ -474,7 +468,6 @@ fn powi_strided_bw_f32_contig_fastpath() {
 }
 
 #[test]
-#[ignore]
 fn powi_strided_bw_f32_transposed() {
     // dy and x are described as transposed views of physical [M, N]
     // buffers. dx is contig [N, M]. The kernel must read from the

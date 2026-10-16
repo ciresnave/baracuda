@@ -7,9 +7,10 @@
 //! input cell. Comparison is **bit-exact** via `to_bits()` for all
 //! four dtypes.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test pad_modes_smoke -- --ignored`.
+//!   --test pad_modes_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -317,64 +318,52 @@ fn run_f64(mode: PadMode) {
 // 12 cells = 3 modes × 4 dtypes.
 
 #[test]
-#[ignore]
 fn pad_reflect_2d_f32() {
     run_f32(PadMode::Reflect);
 }
 #[test]
-#[ignore]
 fn pad_reflect_2d_f16() {
     run_f16(PadMode::Reflect);
 }
 #[test]
-#[ignore]
 fn pad_reflect_2d_bf16() {
     run_bf16(PadMode::Reflect);
 }
 #[test]
-#[ignore]
 fn pad_reflect_2d_f64() {
     run_f64(PadMode::Reflect);
 }
 
 #[test]
-#[ignore]
 fn pad_replicate_2d_f32() {
     run_f32(PadMode::Replicate);
 }
 #[test]
-#[ignore]
 fn pad_replicate_2d_f16() {
     run_f16(PadMode::Replicate);
 }
 #[test]
-#[ignore]
 fn pad_replicate_2d_bf16() {
     run_bf16(PadMode::Replicate);
 }
 #[test]
-#[ignore]
 fn pad_replicate_2d_f64() {
     run_f64(PadMode::Replicate);
 }
 
 #[test]
-#[ignore]
 fn pad_circular_2d_f32() {
     run_f32(PadMode::Circular);
 }
 #[test]
-#[ignore]
 fn pad_circular_2d_f16() {
     run_f16(PadMode::Circular);
 }
 #[test]
-#[ignore]
 fn pad_circular_2d_bf16() {
     run_bf16(PadMode::Circular);
 }
 #[test]
-#[ignore]
 fn pad_circular_2d_f64() {
     run_f64(PadMode::Circular);
 }

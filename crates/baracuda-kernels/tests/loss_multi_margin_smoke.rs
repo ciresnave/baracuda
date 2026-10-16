@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `MultiMarginLossPlan`. FW × 4 dtypes.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -36,7 +37,6 @@ fn host_mm_mean_f64(input: &[f64], t: &[i64], n: usize, c: usize, margin: f64, p
 }
 
 #[test]
-#[ignore]
 fn loss_multi_margin_f32_mean() {
     let (ctx, stream) = setup();
     let n = 3usize;
@@ -102,7 +102,6 @@ fn loss_multi_margin_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_multi_margin_f64_mean() {
     let (ctx, stream) = setup();
     let n = 2usize;
@@ -156,7 +155,6 @@ fn loss_multi_margin_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_multi_margin_f16_mean() {
     let (ctx, stream) = setup();
     let n = 3usize;
@@ -218,7 +216,6 @@ fn loss_multi_margin_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_multi_margin_bf16_mean() {
     let (ctx, stream) = setup();
     let n = 3usize;

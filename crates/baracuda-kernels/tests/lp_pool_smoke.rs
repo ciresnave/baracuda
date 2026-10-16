@@ -6,8 +6,9 @@
 //! is validated against a finite-difference reference for the most
 //! common case (p=2, 2x2 window).
 //!
-//! All tests are `#[ignore]` by default (require real CUDA device).
+//! All tests are gated behind the `device-tests` feature (require real CUDA device).
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -116,7 +117,6 @@ fn host_lp_pool1d_fw(
 // =============================================================================
 
 #[test]
-#[ignore]
 fn lp_pool_p2_l2_2x2_kernel_f32() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 2i32, 4i32, 4i32);
@@ -179,7 +179,6 @@ fn lp_pool_p2_l2_2x2_kernel_f32() {
 }
 
 #[test]
-#[ignore]
 fn lp_pool_p1_l1_2x2_kernel_f32() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 4i32, 4i32);
@@ -238,7 +237,6 @@ fn lp_pool_p1_l1_2x2_kernel_f32() {
 }
 
 #[test]
-#[ignore]
 fn lp_pool_p3_2x2_kernel_f32() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 4i32, 4i32);
@@ -299,7 +297,6 @@ fn lp_pool_p3_2x2_kernel_f32() {
 }
 
 #[test]
-#[ignore]
 fn lp_pool_1d_p2_f32() {
     let (ctx, stream) = setup();
     let (n, c, l_in) = (1i32, 2i32, 8i32);
@@ -349,7 +346,6 @@ fn lp_pool_1d_p2_f32() {
 }
 
 #[test]
-#[ignore]
 fn lp_pool_bw_p2_2x2_f32() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 4i32, 4i32);
@@ -477,7 +473,6 @@ fn lp_pool_bw_p2_2x2_f32() {
 }
 
 #[test]
-#[ignore]
 fn lp_pool_f16_p2_2x2() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 4i32, 4i32);

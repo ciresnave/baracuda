@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for `L1LossBackwardPlan`. BW × 4 dtypes × Mean.
 //!
 //! `dpred[i] = sign(pred[i] - target[i]) · dy / N`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -36,7 +37,6 @@ fn host_l1_bw_f64(pred: &[f64], target: &[f64], dy: f64, n: usize) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn loss_l1_backward_f32_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -108,7 +108,6 @@ fn loss_l1_backward_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_l1_backward_f64_mean() {
     let (ctx, stream) = setup();
     let shape = [2i32, 6];
@@ -167,7 +166,6 @@ fn loss_l1_backward_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_l1_backward_f16_mean() {
     let (ctx, stream) = setup();
     let shape = [4i32, 4];
@@ -238,7 +236,6 @@ fn loss_l1_backward_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_l1_backward_bf16_mean() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];

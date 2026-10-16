@@ -3,7 +3,8 @@
 //! math.
 //!
 //! Run: `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test permute_backward_smoke -- --ignored`.
+//!   --test permute_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -113,7 +114,6 @@ fn run_case<T, const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn permute_backward_f32_2d_transpose() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 5];
@@ -123,7 +123,6 @@ fn permute_backward_f32_2d_transpose() {
 }
 
 #[test]
-#[ignore]
 fn permute_backward_f32_3d_perm_201() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3, 4];
@@ -133,7 +132,6 @@ fn permute_backward_f32_3d_perm_201() {
 }
 
 #[test]
-#[ignore]
 fn permute_backward_f32_identity_is_copy() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3, 4];
@@ -143,7 +141,6 @@ fn permute_backward_f32_identity_is_copy() {
 }
 
 #[test]
-#[ignore]
 fn permute_backward_f16_3d_perm_120() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3, 4];
@@ -155,7 +152,6 @@ fn permute_backward_f16_3d_perm_120() {
 }
 
 #[test]
-#[ignore]
 fn permute_backward_bf16_2d_transpose() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 6];
@@ -165,7 +161,6 @@ fn permute_backward_bf16_2d_transpose() {
 }
 
 #[test]
-#[ignore]
 fn permute_backward_f64_3d_perm_201() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3, 4];

@@ -36,7 +36,8 @@
 //! Routing convention identical to `moe_wmma_smoke.rs` — top_k=1 to
 //! avoid the kernel's no-synchronization contract surface.
 //!
-//! Marked `#[ignore]` per project convention.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -59,7 +60,6 @@ fn setup() -> (Context, Stream) {
 /// directly with raw pointers, mirroring how a Fuel-style consumer
 /// will invoke the kernel post-20.2.
 #[test]
-#[ignore]
 fn moe_wmma_f16_via_ffi_direct() {
     let (ctx, stream) = setup();
 
@@ -185,7 +185,6 @@ fn moe_wmma_f16_via_ffi_direct() {
 /// expert-row. Exercises the scalar GGUF path through the FFI symbol
 /// directly. Caller is responsible for `gguf_dtype` numbering: Q8_0=0.
 #[test]
-#[ignore]
 fn moe_scalar_gguf_q8_0_via_ffi_direct() {
     use baracuda_kernels::BlockQ8_0;
 

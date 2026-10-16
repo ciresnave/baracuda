@@ -3,7 +3,8 @@
 //! `out[i] = mask[i] ? value : src[i]`. f32, f64, i32, bool coverage.
 //! Bit-exact (pure element-select).
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -20,7 +21,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn masked_fill_f32_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 6];
@@ -68,7 +68,6 @@ fn masked_fill_f32_2d() {
 }
 
 #[test]
-#[ignore]
 fn masked_fill_f64_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -116,7 +115,6 @@ fn masked_fill_f64_2d() {
 }
 
 #[test]
-#[ignore]
 fn masked_fill_i32_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 4];
@@ -162,7 +160,6 @@ fn masked_fill_i32_2d() {
 }
 
 #[test]
-#[ignore]
 fn masked_fill_bool_1d() {
     let (ctx, stream) = setup();
     let shape = [16i32];

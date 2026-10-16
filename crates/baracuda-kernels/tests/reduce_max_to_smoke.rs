@@ -1,4 +1,5 @@
 //! Phase 31 — direct-FFI smoke for `reduce_max_to_<dtype>_run`.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -52,7 +53,6 @@ fn cpu_max_to_f32(src: &[f32], in_shape: &[i32], out_shape: &[i32]) -> Vec<f32> 
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_max_to_f32_2d_reduce_dim0() {
     let (ctx, stream) = setup();
     let in_shape: Vec<i32> = vec![4, 5];
@@ -102,7 +102,6 @@ fn ffi_reduce_max_to_f32_2d_reduce_dim0() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_max_to_f32_full_reduce_with_negatives() {
     let (ctx, stream) = setup();
     let in_shape: Vec<i32> = vec![6];
@@ -142,7 +141,6 @@ fn ffi_reduce_max_to_f32_full_reduce_with_negatives() {
 }
 
 #[test]
-#[ignore]
 fn ffi_reduce_max_to_f64_3d() {
     let (ctx, stream) = setup();
     let in_shape: Vec<i32> = vec![2, 3, 4];

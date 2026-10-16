@@ -5,6 +5,7 @@
 //!
 //! Bit-exact comparison — All is integer-style AND of `(x != 0)`
 //! predicates, no FP math.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -91,7 +92,6 @@ fn assert_expected(got: &[u8]) {
 }
 
 #[test]
-#[ignore]
 fn all_f32() {
     let (ctx, stream) = setup();
     let mut host = Vec::<f32>::new();
@@ -101,7 +101,6 @@ fn all_f32() {
 }
 
 #[test]
-#[ignore]
 fn all_f16() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -112,7 +111,6 @@ fn all_f16() {
 }
 
 #[test]
-#[ignore]
 fn all_bf16() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -123,7 +121,6 @@ fn all_bf16() {
 }
 
 #[test]
-#[ignore]
 fn all_f64() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -134,7 +131,6 @@ fn all_f64() {
 }
 
 #[test]
-#[ignore]
 fn all_i32() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -145,7 +141,6 @@ fn all_i32() {
 }
 
 #[test]
-#[ignore]
 fn all_i64() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();
@@ -156,7 +151,6 @@ fn all_i64() {
 }
 
 #[test]
-#[ignore]
 fn all_bool() {
     let (ctx, stream) = setup();
     let mut host_f32 = Vec::<f32>::new();

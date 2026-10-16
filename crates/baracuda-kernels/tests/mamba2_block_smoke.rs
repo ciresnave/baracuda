@@ -4,6 +4,7 @@
 //! scan + residual add. Sanity-checks finiteness + non-collapse.
 
 #![cfg(feature = "mamba")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn mamba2_block_tiny_end_to_end() {
     let (ctx, stream) = setup();
 

@@ -2,9 +2,10 @@
 //! `pad(mode=Constant)` is a pure slice (`dx = dy[pad_low :
 //! pad_low + input_shape]`). Bit-exact, no math.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test pad_backward_smoke -- --ignored`.
+//!   --test pad_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -53,7 +54,6 @@ fn cpu_slice_ref<const N: usize, T: Copy>(
 // -------- f32 --------
 
 #[test]
-#[ignore]
 fn pad_backward_f32_2d() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 5];
@@ -102,7 +102,6 @@ fn pad_backward_f32_2d() {
 }
 
 #[test]
-#[ignore]
 fn pad_backward_f32_3d_zero_pad_is_copy() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3, 5];
@@ -152,7 +151,6 @@ fn pad_backward_f32_3d_zero_pad_is_copy() {
 // -------- f16 --------
 
 #[test]
-#[ignore]
 fn pad_backward_f16_2d() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 6];
@@ -205,7 +203,6 @@ fn pad_backward_f16_2d() {
 // -------- bf16 --------
 
 #[test]
-#[ignore]
 fn pad_backward_bf16_2d() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4];
@@ -258,7 +255,6 @@ fn pad_backward_bf16_2d() {
 // -------- f64 --------
 
 #[test]
-#[ignore]
 fn pad_backward_f64_3d() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3, 4];
@@ -309,7 +305,6 @@ fn pad_backward_f64_3d() {
 
 // Validation guard — reject non-constant modes.
 #[test]
-#[ignore]
 fn pad_backward_rejects_non_constant_mode() {
     let (_ctx, stream) = setup();
     let desc = PadBackwardDescriptor {

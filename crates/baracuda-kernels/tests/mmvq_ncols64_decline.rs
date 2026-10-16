@@ -13,6 +13,7 @@
 //!
 //! `GgufMmvqMultiMPlan` is deliberately NOT declined: its loop is bounded by
 //! whole blocks and does not over-read. `multim_plan_still_accepts_96` pins that.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, Stream, init};
 use baracuda_kernels::{
@@ -85,7 +86,6 @@ fn assert_declined_for_127(r: Result<(), Error>, what: &str) {
 }
 
 #[test]
-#[ignore]
 fn single_plan_declines_type01_widths_not_multiple_of_64() {
     let (_ctx, stream) = setup();
     for fmt in TYPE_0_1 {
@@ -99,7 +99,6 @@ fn single_plan_declines_type01_widths_not_multiple_of_64() {
 }
 
 #[test]
-#[ignore]
 fn single_plan_accepts_type01_widths_multiple_of_64() {
     let (_ctx, stream) = setup();
     for fmt in TYPE_0_1 {
@@ -112,7 +111,6 @@ fn single_plan_accepts_type01_widths_multiple_of_64() {
 }
 
 #[test]
-#[ignore]
 fn single_plan_kquants_unaffected() {
     let (_ctx, stream) = setup();
     for fmt in [
@@ -127,7 +125,6 @@ fn single_plan_kquants_unaffected() {
 }
 
 #[test]
-#[ignore]
 fn batched_plan_declines_type01_widths_not_multiple_of_64() {
     let (_ctx, stream) = setup();
     for fmt in TYPE_0_1 {
@@ -141,7 +138,6 @@ fn batched_plan_declines_type01_widths_not_multiple_of_64() {
 }
 
 #[test]
-#[ignore]
 fn batched_plan_accepts_type01_widths_multiple_of_64() {
     let (_ctx, stream) = setup();
     for fmt in TYPE_0_1 {
@@ -156,7 +152,6 @@ fn batched_plan_accepts_type01_widths_multiple_of_64() {
 /// Scope pin: the multi-matrix plan's loop is block-bounded, so it must keep
 /// accepting widths the other two plans now decline.
 #[test]
-#[ignore]
 fn multim_plan_still_accepts_96() {
     let (_ctx, stream) = setup();
     for fmt in TYPE_0_1 {

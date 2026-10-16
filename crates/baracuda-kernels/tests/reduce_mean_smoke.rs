@@ -11,9 +11,10 @@
 //! - `f16` / `bf16`: relative `4 * eps` (every accumulate step + the
 //!   final divide detours through f32).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_mean_smoke -- --ignored`.
+//!   --test reduce_mean_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -51,7 +52,6 @@ fn out_numel() -> usize {
 }
 
 #[test]
-#[ignore]
 fn reduce_mean_f32() {
     let (ctx, stream) = setup();
     let host_x: Vec<f32> = (0..in_numel())
@@ -129,7 +129,6 @@ fn reduce_mean_f32() {
 }
 
 #[test]
-#[ignore]
 fn reduce_mean_f64() {
     let (ctx, stream) = setup();
     let host_x: Vec<f64> = (0..in_numel())
@@ -207,7 +206,6 @@ fn reduce_mean_f64() {
 }
 
 #[test]
-#[ignore]
 fn reduce_mean_f16() {
     let (ctx, stream) = setup();
     let host_x: Vec<f16> = (0..in_numel())
@@ -286,7 +284,6 @@ fn reduce_mean_f16() {
 }
 
 #[test]
-#[ignore]
 fn reduce_mean_bf16() {
     let (ctx, stream) = setup();
     let host_x: Vec<bf16> = (0..in_numel())

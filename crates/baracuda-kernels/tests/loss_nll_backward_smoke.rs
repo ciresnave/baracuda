@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `NllLossBackwardPlan`. BW × 4 dtypes × Mean.
 //! `dinput[i, c] = -dy/N if c == target[i] else 0`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn host_nll_bw_f64(n_rows: usize, classes: usize, target: &[i64], dy: f64) -> Ve
 }
 
 #[test]
-#[ignore]
 fn loss_nll_backward_f32_mean() {
     let (ctx, stream) = setup();
     let n_rows = 4i32;
@@ -83,7 +83,6 @@ fn loss_nll_backward_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_nll_backward_f64_mean() {
     let (ctx, stream) = setup();
     let n_rows = 3i32;
@@ -137,7 +136,6 @@ fn loss_nll_backward_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_nll_backward_f16_mean() {
     let (ctx, stream) = setup();
     let n_rows = 4i32;
@@ -195,7 +193,6 @@ fn loss_nll_backward_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_nll_backward_bf16_mean() {
     let (ctx, stream) = setup();
     let n_rows = 3i32;

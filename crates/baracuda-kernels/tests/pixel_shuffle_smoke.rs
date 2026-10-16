@@ -1,7 +1,8 @@
 //! Real-GPU smoke for `PixelShufflePlan<T>` / `PixelUnshufflePlan<T>`
 //! (Phase 9 Category T). Pure index permutation → bit-exact at every
 //! dtype. Verifies inverse property (unshuffle(shuffle(x)) == x).
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -20,7 +21,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn pixel_shuffle_roundtrip_f32() {
     let (ctx, stream) = setup();
     let (n, c, h, w, r) = (1, 2, 3, 3, 2);
@@ -104,7 +104,6 @@ fn pixel_shuffle_roundtrip_f32() {
 }
 
 #[test]
-#[ignore]
 fn pixel_shuffle_known_permutation_f32() {
     // Input: 1×4×1×1 (4 = 1·2·2) with channels {10, 20, 30, 40}.
     // Expected output: 1×1×2×2 with values laid out as
@@ -153,7 +152,6 @@ fn pixel_shuffle_known_permutation_f32() {
 }
 
 #[test]
-#[ignore]
 fn pixel_shuffle_roundtrip_f64() {
     let (ctx, stream) = setup();
     let (n, c, h, w, r) = (1, 1, 2, 2, 2);
@@ -233,7 +231,6 @@ fn pixel_shuffle_roundtrip_f64() {
 }
 
 #[test]
-#[ignore]
 fn pixel_shuffle_f16_bf16_smoke() {
     let (ctx, stream) = setup();
     let (n, c, h, w, r) = (1, 1, 1, 1, 2);

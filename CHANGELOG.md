@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.119 - 2026-10-16 (Test: retire #[ignore] in baracuda-kernels (slice 3/5))
+
+Workspace alpha.119 (proposed; PM allocates at gate).
+
+- Slice 3 of 5 behind the device-tests feature; no library code changes.
+
 ## 0.0.1-alpha.118 - 2026-10-16 (baracuda-kernels: #[ignore] retired, slice 2/5)
 
 Workspace alpha.118 (proposed; PM allocates at gate).

@@ -13,10 +13,11 @@
 //! the quantization error itself is a separate concern that lives in
 //! the packer, not the kernel).
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `marlin` cargo feature on `baracuda-kernels-sys`.
 
 #![cfg(feature = "marlin")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, require};
 use baracuda_kernels::{
@@ -34,7 +35,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore = "device-gated: needs a Stream to reach select(), so this rejection-path check silently skips on a CUDA-absent host (was a vacuous default-run green). Run via `cargo gpu-test`; interim pending the declare-and-report skippability primitive."]
 fn marlin_plan_select_rejects_invalid_descriptor() {
     let _ = init();
     // select() does no GPU work, but reaching it needs a real Stream, which
@@ -91,7 +91,6 @@ fn marlin_plan_select_rejects_invalid_descriptor() {
 /// `#[cfg(feature = "marlin_strict_fidelity")]` arm that requires the
 /// upstream packer to validate against.
 #[test]
-#[ignore]
 fn marlin_gemm_minimal_smoke() {
     let (ctx, stream) = setup();
     let m: i32 = 1;

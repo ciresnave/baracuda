@@ -11,9 +11,10 @@
 //! rounding error grows with extent); relative `4 * eps` for f16 / bf16
 //! (every multiply detours through f32 → 16 rounding steps).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_prod_smoke -- --ignored`.
+//!   --test reduce_prod_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -51,7 +52,6 @@ fn out_numel() -> usize {
 }
 
 #[test]
-#[ignore]
 fn reduce_prod_f32() {
     let (ctx, stream) = setup();
     // Keep magnitudes near 1 so the product over 16 cells stays well
@@ -130,7 +130,6 @@ fn reduce_prod_f32() {
 }
 
 #[test]
-#[ignore]
 fn reduce_prod_f64() {
     let (ctx, stream) = setup();
     let host_x: Vec<f64> = (0..in_numel())
@@ -207,7 +206,6 @@ fn reduce_prod_f64() {
 }
 
 #[test]
-#[ignore]
 fn reduce_prod_f16() {
     let (ctx, stream) = setup();
     // Stay tight around 1 — product over 16 cells must stay representable.
@@ -287,7 +285,6 @@ fn reduce_prod_f16() {
 }
 
 #[test]
-#[ignore]
 fn reduce_prod_bf16() {
     let (ctx, stream) = setup();
     let host_x: Vec<bf16> = (0..in_numel())

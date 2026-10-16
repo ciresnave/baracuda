@@ -5,7 +5,8 @@
 //! Rust plan wrapper to be generic over `I: IndexElement` (default
 //! `i32` for source-compat). This file covers the new i64 path.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn one_hot_f32_i64idx_2d() {
     let (ctx, stream) = setup();
     let num_classes = 5i32;
@@ -75,7 +75,6 @@ fn one_hot_f32_i64idx_2d() {
 }
 
 #[test]
-#[ignore]
 fn one_hot_i32_i64idx_2d_with_oob() {
     let (ctx, stream) = setup();
     let num_classes = 4i32;
@@ -124,7 +123,6 @@ fn one_hot_i32_i64idx_2d_with_oob() {
 /// the legacy FFI symbol — Phase 15.2 must not break pre-existing
 /// call sites.
 #[test]
-#[ignore]
 fn one_hot_f32_i32idx_default_path() {
     let (ctx, stream) = setup();
     let num_classes = 3i32;

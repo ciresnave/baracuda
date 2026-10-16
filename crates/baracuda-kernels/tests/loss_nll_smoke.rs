@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `NllLossPlan`. FW × 4 dtypes × Mean reduction.
 //! `y = -mean(input[i, target[i]])`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn host_nll_mean_f64(input: &[f64], target: &[i64], n_rows: usize, classes: usiz
 }
 
 #[test]
-#[ignore]
 fn loss_nll_f32_mean() {
     let (ctx, stream) = setup();
     let n_rows = 4i32;
@@ -89,7 +89,6 @@ fn loss_nll_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_nll_f64_mean() {
     let (ctx, stream) = setup();
     let n_rows = 3i32;
@@ -142,7 +141,6 @@ fn loss_nll_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_nll_f16_mean() {
     let (ctx, stream) = setup();
     let n_rows = 4i32;
@@ -207,7 +205,6 @@ fn loss_nll_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_nll_bf16_mean() {
     let (ctx, stream) = setup();
     let n_rows = 3i32;

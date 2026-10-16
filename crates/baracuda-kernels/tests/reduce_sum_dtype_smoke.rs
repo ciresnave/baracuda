@@ -11,9 +11,10 @@
 //! - `f16` / `bf16`: relative `4 * eps` since every step detours
 //!   through f32 (round → f32 → add → round → f16/bf16).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_sum_dtype_smoke -- --ignored`.
+//!   --test reduce_sum_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -52,7 +53,6 @@ fn out_numel() -> usize {
 }
 
 #[test]
-#[ignore]
 fn reduce_sum_dtype_f16() {
     let (ctx, stream) = setup();
 
@@ -134,7 +134,6 @@ fn reduce_sum_dtype_f16() {
 }
 
 #[test]
-#[ignore]
 fn reduce_sum_dtype_bf16() {
     let (ctx, stream) = setup();
 
@@ -213,7 +212,6 @@ fn reduce_sum_dtype_bf16() {
 }
 
 #[test]
-#[ignore]
 fn reduce_sum_dtype_f64() {
     let (ctx, stream) = setup();
 

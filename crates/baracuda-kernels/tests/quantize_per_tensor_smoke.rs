@@ -5,9 +5,10 @@
 //! reference, including clip-edge cases (values that round out of the
 //! s8 range — verifies the clamp).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test quantize_per_tensor_smoke -- --ignored`.
+//!   --test quantize_per_tensor_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -24,7 +25,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn quantize_per_tensor_f32_s8_clipping() {
     let (ctx, stream) = setup();
     let scale: f32 = 0.1;

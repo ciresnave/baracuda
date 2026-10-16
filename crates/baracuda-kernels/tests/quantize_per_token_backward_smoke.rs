@@ -2,7 +2,8 @@
 //! STE verification: gradient passes through (divided by scale) inside
 //! the un-clipped range, zero outside.
 //!
-//! `#[ignore]`.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -19,7 +20,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn quantize_per_token_backward_f32_ste() {
     let (ctx, stream) = setup();
     let n: i32 = 2;

@@ -2,7 +2,8 @@
 //!
 //! `dsrc[i] = mask[i] ? 0 : dout[i]`. f32, f64, i32, bool coverage.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -19,7 +20,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn masked_fill_backward_f32_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 6];
@@ -73,7 +73,6 @@ fn masked_fill_backward_f32_2d() {
 }
 
 #[test]
-#[ignore]
 fn masked_fill_backward_f64_1d() {
     let (ctx, stream) = setup();
     let shape = [20i32];
@@ -127,7 +126,6 @@ fn masked_fill_backward_f64_1d() {
 }
 
 #[test]
-#[ignore]
 fn masked_fill_backward_i32_1d() {
     let (ctx, stream) = setup();
     let shape = [16i32];

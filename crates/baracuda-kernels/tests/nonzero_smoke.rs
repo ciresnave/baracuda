@@ -4,7 +4,8 @@
 //! ordering is NOT row-major (atomic-counter races), so the test sorts
 //! the returned coords before comparing.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn nonzero_f32_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -91,7 +91,6 @@ fn nonzero_f32_2d() {
 }
 
 #[test]
-#[ignore]
 fn nonzero_i32_1d() {
     let (ctx, stream) = setup();
     let shape = [16i32];

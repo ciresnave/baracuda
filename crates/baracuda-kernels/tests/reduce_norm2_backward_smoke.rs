@@ -6,6 +6,7 @@
 //! `x` (full shape) and saved `y` (keepdim shape). Caller must ensure
 //! `y != 0` (which means at least one `x` in each reduced group is
 //! non-zero).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -75,7 +76,6 @@ fn host_norm2_bw_f32(
 }
 
 #[test]
-#[ignore]
 fn norm2_backward_f32_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];
@@ -141,7 +141,6 @@ fn norm2_backward_f32_3d_axis1() {
 }
 
 #[test]
-#[ignore]
 fn norm2_backward_f64_3d_axis2() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];
@@ -213,7 +212,6 @@ fn norm2_backward_f64_3d_axis2() {
 }
 
 #[test]
-#[ignore]
 fn norm2_backward_f16_3d_axis0() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];
@@ -280,7 +278,6 @@ fn norm2_backward_f16_3d_axis0() {
 }
 
 #[test]
-#[ignore]
 fn norm2_backward_bf16_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4, 5];

@@ -7,6 +7,7 @@
 //! T at use. We tolerance-compare (the inv_extent rounding + the
 //! multiplication round may diverge by 1 ULP from the host's `dy / k`
 //! single-rounded division).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -51,7 +52,6 @@ fn for_each_coord<const N: usize, F: FnMut([i32; N], i64)>(shape: [i32; N], mut 
 }
 
 #[test]
-#[ignore]
 fn mean_backward_f32_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -105,7 +105,6 @@ fn mean_backward_f32_3d_axis1() {
 }
 
 #[test]
-#[ignore]
 fn mean_backward_f64_3d_axis2() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -156,7 +155,6 @@ fn mean_backward_f64_3d_axis2() {
 }
 
 #[test]
-#[ignore]
 fn mean_backward_f16_3d_axis0() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];
@@ -213,7 +211,6 @@ fn mean_backward_f16_3d_axis0() {
 }
 
 #[test]
-#[ignore]
 fn mean_backward_bf16_3d_axis1() {
     let (ctx, stream) = setup();
     let input_shape = [4i32, 8, 6];

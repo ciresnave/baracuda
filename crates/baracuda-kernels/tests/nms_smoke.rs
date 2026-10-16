@@ -1,6 +1,7 @@
 //! Real-GPU smoke for `NmsPlan<T>` (Phase 9 Category T).
 //! Three boxes pre-sorted by score; box 1 overlaps box 0 above
 //! threshold and box 2 is disjoint. Expected: keep_mask = [1, 0, 1].
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -17,7 +18,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn nms_basic_overlap_f32() {
     let (ctx, stream) = setup();
     // 3 boxes in (x1, y1, x2, y2). All in decreasing-score order.
@@ -69,7 +69,6 @@ fn nms_basic_overlap_f32() {
 }
 
 #[test]
-#[ignore]
 fn nms_all_disjoint_f64() {
     let (ctx, stream) = setup();
     let boxes: Vec<f64> = vec![

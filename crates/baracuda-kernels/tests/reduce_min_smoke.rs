@@ -5,9 +5,10 @@
 //! Min is pure comparisons — no rounding — so result is bit-exact at
 //! every dtype. Host reference mirrors the GPU's in-order `fmin` walk.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_min_smoke -- --ignored`.
+//!   --test reduce_min_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -76,7 +77,6 @@ fn host_min<T: Copy + PartialOrd>(host_x: &[T], init: T) -> Vec<T> {
 }
 
 #[test]
-#[ignore]
 fn reduce_min_f32() {
     let (ctx, stream) = setup();
     let host_x: Vec<f32> = (0..in_numel())
@@ -124,7 +124,6 @@ fn reduce_min_f32() {
 }
 
 #[test]
-#[ignore]
 fn reduce_min_f64() {
     let (ctx, stream) = setup();
     let host_x: Vec<f64> = (0..in_numel())
@@ -172,7 +171,6 @@ fn reduce_min_f64() {
 }
 
 #[test]
-#[ignore]
 fn reduce_min_f16() {
     let (ctx, stream) = setup();
     let host_x: Vec<f16> = (0..in_numel())
@@ -222,7 +220,6 @@ fn reduce_min_f16() {
 }
 
 #[test]
-#[ignore]
 fn reduce_min_bf16() {
     let (ctx, stream) = setup();
     let host_x: Vec<bf16> = (0..in_numel())

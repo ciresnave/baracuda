@@ -5,9 +5,10 @@
 //! Norm2 introduces a sqrt rounding step on top of the sequential
 //! sum-of-squares — tolerance: `4 * dtype_eps` relative.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test reduce_norm2_smoke -- --ignored`.
+//!   --test reduce_norm2_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -49,7 +50,6 @@ fn out_numel() -> usize {
 }
 
 #[test]
-#[ignore]
 fn reduce_norm2_f32() {
     let (ctx, stream) = setup();
 
@@ -128,7 +128,6 @@ fn reduce_norm2_f32() {
 }
 
 #[test]
-#[ignore]
 fn reduce_norm2_f16() {
     let (ctx, stream) = setup();
 
@@ -210,7 +209,6 @@ fn reduce_norm2_f16() {
 }
 
 #[test]
-#[ignore]
 fn reduce_norm2_bf16() {
     let (ctx, stream) = setup();
 
@@ -289,7 +287,6 @@ fn reduce_norm2_bf16() {
 }
 
 #[test]
-#[ignore]
 fn reduce_norm2_f64() {
     let (ctx, stream) = setup();
 

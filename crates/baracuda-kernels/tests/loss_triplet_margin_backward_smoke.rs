@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `TripletMarginLossBackwardPlan`. BW × 4 dtypes.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -74,7 +75,6 @@ fn host_triplet_bw_f64(
 }
 
 #[test]
-#[ignore]
 fn loss_triplet_margin_backward_f32_mean() {
     let (ctx, stream) = setup();
     let n = 3usize;
@@ -180,7 +180,6 @@ fn loss_triplet_margin_backward_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_triplet_margin_backward_f64_mean() {
     let (ctx, stream) = setup();
     let n = 2usize;
@@ -271,7 +270,6 @@ fn loss_triplet_margin_backward_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_triplet_margin_backward_f16_mean() {
     let (ctx, stream) = setup();
     let n = 3usize;
@@ -378,7 +376,6 @@ fn loss_triplet_margin_backward_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_triplet_margin_backward_bf16_mean() {
     let (ctx, stream) = setup();
     let n = 3usize;

@@ -20,7 +20,8 @@
 //! pre-allocate an [`MoePlan::Wmma`]-style scratch + accumulate
 //! upstream of the kernel.
 //!
-//! Marked `#[ignore]` per project convention.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -38,7 +39,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn moe_scalar_gguf_q8_0_small_fixture() {
     let (ctx, stream) = setup();
 

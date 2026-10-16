@@ -31,6 +31,7 @@
 //! `ncols`, including one not even a multiple of the block size, and get
 //! silent cross-row/cross-expert contamination exactly like #128's
 //! single-row bug, just reachable through a different entry point.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -107,7 +108,6 @@ fn call_raw_q8_0_batched(
 /// raw batched FFI symbol -- `dst` must stay at its zero-init value, not
 /// silently populated with a cross-row-contaminated value.
 #[test]
-#[ignore]
 fn q8_0_batched_ncols32_via_raw_ffi_declines() {
     let (ctx, stream) = setup();
     let n_rows_per_expert = 2;
@@ -144,7 +144,6 @@ fn q8_0_batched_ncols32_via_raw_ffi_declines() {
 /// Positive control: `ncols=64` must still be ACCEPTED and compute the
 /// correct answer via the raw batched FFI symbol.
 #[test]
-#[ignore]
 fn q8_0_batched_ncols64_via_raw_ffi_computes_correctly() {
     let (ctx, stream) = setup();
     let n_rows_per_expert = 2;
@@ -183,7 +182,6 @@ fn q8_0_batched_ncols64_via_raw_ffi_computes_correctly() {
 /// check must not leak into the K-quant fanout (which uses `QK_K` as its
 /// `qk`, not 32, and has `needs_dmmv=false`).
 #[test]
-#[ignore]
 fn q2_k_batched_ncols256_via_raw_ffi_computes() {
     let (ctx, stream) = setup();
     let n_experts = 1;
