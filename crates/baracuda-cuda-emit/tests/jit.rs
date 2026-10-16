@@ -65,7 +65,7 @@ fn synthesize_fused_relu_add() {
     assert!(resp.recipe.decompose.contains("op: Relu"));
     // the link row makes entry_point resolvable at load.
     assert_eq!(resp.link.entry_point, resp.kernel.entry_point);
-    assert!(resp.link.structure_key.starts_with("sk5|"));
+    assert!(resp.link.structure_key.starts_with("sk6|"));
 }
 
 #[test]
