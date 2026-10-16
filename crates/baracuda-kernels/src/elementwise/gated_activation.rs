@@ -25,7 +25,6 @@ use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, GatedActivationKind, KernelSku, MathPrecision,
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
-    contiguous_stride,
 };
 
 /// Descriptor for a gated-activation forward op.
@@ -516,13 +515,6 @@ impl<T: Element, const N: usize> GatedActivationPlan<T, N> {
         };
         map_status(status)
     }
-}
-
-// Silence the unused-import warning when callers don't exercise this
-// helper directly; it's retained for parity with sibling Plans.
-#[allow(dead_code)]
-fn _strides_used<const N: usize>(s: [i32; N]) -> [i64; N] {
-    contiguous_stride(s)
 }
 
 fn map_status(code: i32) -> Result<()> {

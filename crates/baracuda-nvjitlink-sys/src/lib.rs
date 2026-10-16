@@ -7,7 +7,7 @@
 #![allow(non_camel_case_types)]
 #![warn(missing_debug_implementations)]
 
-use core::ffi::{c_char, c_int, c_uint, c_void};
+use core::ffi::{c_char, c_uint, c_void};
 use std::sync::OnceLock;
 
 use baracuda_core::{Library, LoaderError};
@@ -166,10 +166,6 @@ pub type PFN_nvJitLinkGetInfoLog =
 /// function pointer for `nvJitLinkVersion`
 pub type PFN_nvJitLinkVersion =
     unsafe extern "C" fn(major: *mut c_uint, minor: *mut c_uint) -> nvJitLinkResult;
-
-// Silence unused-import warnings for c_int.
-#[allow(dead_code)]
-type _CInt = c_int;
 
 // ---- loader ----
 

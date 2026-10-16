@@ -36,8 +36,7 @@ pub struct MemoryPool {
 struct MemoryPoolInner {
     handle: CUmemoryPool,
     owned: bool,
-    #[allow(dead_code)]
-    context: Context,
+    _context: Context,
 }
 
 unsafe impl Send for MemoryPoolInner {}
@@ -80,7 +79,7 @@ impl MemoryPool {
             inner: Arc::new(MemoryPoolInner {
                 handle,
                 owned: true,
-                context: context.clone(),
+                _context: context.clone(),
             }),
         })
     }
@@ -96,7 +95,7 @@ impl MemoryPool {
             inner: Arc::new(MemoryPoolInner {
                 handle,
                 owned: false,
-                context: context.clone(),
+                _context: context.clone(),
             }),
         }
     }

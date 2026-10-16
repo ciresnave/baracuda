@@ -329,7 +329,7 @@ macro_rules! cufile_fns {
         }
 
         impl Cufile {
-            #[allow(dead_code)]
+            #[cfg(target_os = "linux")]
             fn empty(lib: Library) -> Self {
                 Self { lib, $($name: OnceLock::new(),)* }
             }

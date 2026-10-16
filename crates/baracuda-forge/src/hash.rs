@@ -250,28 +250,6 @@ pub(crate) fn hash_paths(paths: &[PathBuf]) -> String {
     to_hex(&hasher.finalize())
 }
 
-/// Check if output file is newer than all input files.
-#[allow(dead_code)]
-pub(crate) fn output_is_current(output: &Path, inputs: &[PathBuf]) -> bool {
-    let output_modified = match output.metadata().and_then(|m| m.modified()) {
-        Ok(t) => t,
-        Err(_) => return false,
-    };
-
-    for input in inputs {
-        let input_modified = match input.metadata().and_then(|m| m.modified()) {
-            Ok(t) => t,
-            Err(_) => return false,
-        };
-
-        if input_modified.duration_since(output_modified).is_ok() {
-            return false;
-        }
-    }
-
-    true
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -45,8 +45,7 @@ pub mod flags {
 pub struct PinnedBuffer<T: DeviceRepr> {
     ptr: *mut T,
     len: usize,
-    #[allow(dead_code)]
-    context: Context,
+    _context: Context,
     _marker: core::marker::PhantomData<T>,
 }
 
@@ -86,7 +85,7 @@ impl<T: DeviceRepr> PinnedBuffer<T> {
             return Ok(Self {
                 ptr: core::ptr::NonNull::<T>::dangling().as_ptr(),
                 len,
-                context: context.clone(),
+                _context: context.clone(),
                 _marker: core::marker::PhantomData,
             });
         }
@@ -98,7 +97,7 @@ impl<T: DeviceRepr> PinnedBuffer<T> {
         Ok(Self {
             ptr: p as *mut T,
             len,
-            context: context.clone(),
+            _context: context.clone(),
             _marker: core::marker::PhantomData,
         })
     }

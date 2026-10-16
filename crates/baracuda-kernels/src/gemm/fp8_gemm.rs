@@ -21,8 +21,8 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, ElementKind, EpilogueKind, Fp8E4M3FN, Fp8E5M2, FpElement, LayoutSku, MatrixMut,
-    MatrixRef, PlanPreference, PrecisionGuarantee, VectorRef, Workspace,
+    ArchSku, ElementKind, EpilogueKind, FpElement, LayoutSku, MatrixMut, MatrixRef, PlanPreference,
+    PrecisionGuarantee, VectorRef, Workspace,
 };
 
 // Reuse the SKU descriptor from baracuda-cutlass — it carries the same
@@ -738,16 +738,6 @@ impl<T: FpElement> Fp8GemmPlan<T> {
             unreachable!("returned earlier under #[cfg(not(feature = \"sm89\"))]")
         }
     }
-}
-
-// Type-level guard that the FP8 element re-exports are in scope; kept
-// for clarity in case a future commit adds compile-time
-// element-specific dispatch branches that need to refer to them by
-// path.
-#[allow(dead_code)]
-fn _hold_fp8_elements_in_scope() {
-    let _ = Fp8E4M3FN(0);
-    let _ = Fp8E5M2(0);
 }
 
 #[cfg(feature = "sm89")]

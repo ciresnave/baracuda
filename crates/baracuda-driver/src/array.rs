@@ -34,8 +34,7 @@ struct ArrayInner {
     height: usize,
     format: u32,
     num_channels: u32,
-    #[allow(dead_code)]
-    context: Context,
+    _context: Context,
 }
 
 unsafe impl Send for ArrayInner {}
@@ -147,7 +146,7 @@ impl Array {
                 height,
                 format: format.raw(),
                 num_channels,
-                context: context.clone(),
+                _context: context.clone(),
             }),
         })
     }

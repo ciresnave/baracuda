@@ -9,7 +9,7 @@ use std::ffi::CString;
 use std::sync::Arc;
 
 use baracuda_cuda_sys::runtime::{cudaKernel_t, cudaLibrary_t, runtime};
-use baracuda_types::{CudaVersion, Feature, supports};
+use baracuda_types::{Feature, supports};
 
 use crate::error::{Error, Result, check};
 
@@ -211,18 +211,5 @@ impl Kernel {
         let r = runtime()?;
         let cu = r.cuda_func_set_attribute()?;
         check(unsafe { cu(self.as_launch_ptr(), attr, value) })
-    }
-}
-
-/// Unused helper to check `CudaVersion` availability from outside this module.
-#[allow(dead_code)]
-fn require_library_management(installed: CudaVersion) -> Result<()> {
-    if supports(installed, Feature::LibraryManagement) {
-        Ok(())
-    } else {
-        Err(Error::FeatureNotSupported {
-            api: "cudaLibraryLoadData",
-            since: Feature::LibraryManagement.required_version(),
-        })
     }
 }

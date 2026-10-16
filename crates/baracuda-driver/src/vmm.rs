@@ -70,8 +70,7 @@ pub struct AddressRange {
 struct AddressRangeInner {
     ptr: CUdeviceptr,
     size: usize,
-    #[allow(dead_code)]
-    context: Context,
+    _context: Context,
 }
 
 unsafe impl Send for AddressRangeInner {}
@@ -112,7 +111,7 @@ impl AddressRange {
             inner: Arc::new(AddressRangeInner {
                 ptr,
                 size,
-                context: context.clone(),
+                _context: context.clone(),
             }),
         })
     }
@@ -152,8 +151,7 @@ struct PhysicalMemoryInner {
     handle: CUmemGenericAllocationHandle,
     size: usize,
     device: CUdevice,
-    #[allow(dead_code)]
-    context: Context,
+    _context: Context,
 }
 
 unsafe impl Send for PhysicalMemoryInner {}
@@ -198,7 +196,7 @@ impl PhysicalMemory {
                 handle,
                 size,
                 device: device.as_raw(),
-                context: context.clone(),
+                _context: context.clone(),
             }),
         })
     }

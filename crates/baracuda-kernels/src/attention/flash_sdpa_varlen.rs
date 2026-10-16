@@ -60,6 +60,7 @@
 //! significant nvcc build time on top of the forward build, so they're
 //! opt-in separately from plain `fa2`.
 
+#[cfg(feature = "fa2")]
 use core::ffi::c_void;
 use core::marker::PhantomData;
 
@@ -794,6 +795,7 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "fa2")]
 fn map_status(code: i32) -> Result<()> {
     match code {
         0 => Ok(()),
@@ -878,17 +880,4 @@ fn alibi_dispatch(
             (ptr, batch_stride)
         }
     }
-}
-
-// Fallback shape-matched stub for the `fa2`-OFF path. The varlen plan's
-// `run()` returns `Error::Unsupported` without ever calling this when
-// `fa2` is OFF, so the function is dead in that build; we keep it so the
-// call-site type-checks under both feature configurations.
-#[cfg(not(feature = "fa2"))]
-#[allow(dead_code)]
-fn alibi_dispatch(
-    _desc: &FlashSdpaVarlenDescriptor,
-    _slopes: &Option<TensorRef<'_, f32, 2>>,
-) -> (*const c_void, i32) {
-    (core::ptr::null::<c_void>(), 0)
 }

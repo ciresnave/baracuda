@@ -893,7 +893,6 @@ pub struct GraphExec {
 
 struct GraphExecInner {
     handle: CUgraphExec,
-    #[allow(dead_code)]
     context: Context,
 }
 

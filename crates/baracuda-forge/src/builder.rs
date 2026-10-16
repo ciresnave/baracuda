@@ -734,7 +734,6 @@ impl KernelBuilder {
             println!("cargo:warning=All PTX kernels up-to-date, skipping compilation");
             return Ok(PtxOutput {
                 paths: kernel_files,
-                out_dir: self.out_dir.clone(),
             });
         }
 
@@ -838,7 +837,6 @@ impl KernelBuilder {
 
         Ok(PtxOutput {
             paths: kernel_files,
-            out_dir: self.out_dir.clone(),
         })
     }
 
@@ -1099,8 +1097,6 @@ fn archive_with_msvc_lib(out_file: &Path, obj_files: &[PathBuf], out_dir: &Path)
 #[derive(Debug)]
 pub struct PtxOutput {
     paths: Vec<PathBuf>,
-    #[allow(dead_code)]
-    out_dir: PathBuf,
 }
 
 impl PtxOutput {

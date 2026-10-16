@@ -15,8 +15,6 @@
 
 #![warn(missing_debug_implementations)]
 
-use core::ffi::c_void;
-
 use baracuda_driver::DeviceBuffer;
 use baracuda_npp_sys::{NppLibraryVersion, NppStatus, nppc, npps};
 
@@ -429,10 +427,4 @@ pub fn adds_32f_in_place(
     n: i32,
 ) -> Result<()> {
     signal::add_32f_in_place(src, src_dst, n)
-}
-
-// Silence a "unused import" if nothing in this module currently needs `c_void`.
-#[allow(dead_code)]
-fn _touch() -> *mut c_void {
-    core::ptr::null_mut()
 }

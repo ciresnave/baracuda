@@ -210,12 +210,13 @@ pub struct Function {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 enum FunctionOwner {
     /// Owned by a `Module` (classic Driver API flow).
     Module(Module),
     /// Owned by a `Library` (CUDA 12.0+ cuLibrary flow).
-    Library(crate::library::Library),
+    ///
+    /// Held only to keep the library loaded for the life of the handle.
+    Library { _library: crate::library::Library },
 }
 
 impl Function {
@@ -228,7 +229,7 @@ impl Function {
     ) -> Self {
         Self {
             handle,
-            _owner: FunctionOwner::Library(library),
+            _owner: FunctionOwner::Library { _library: library },
         }
     }
 }
@@ -250,7 +251,7 @@ impl Function {
     pub fn module(&self) -> Option<&Module> {
         match &self._owner {
             FunctionOwner::Module(m) => Some(m),
-            FunctionOwner::Library(_) => None,
+            FunctionOwner::Library { .. } => None,
         }
     }
 

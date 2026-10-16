@@ -12,7 +12,7 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 #![warn(missing_debug_implementations)]
 
-use core::ffi::{c_int, c_void};
+use core::ffi::c_int;
 use std::sync::OnceLock;
 
 use baracuda_core::{Library, LoaderError, platform};
@@ -485,10 +485,4 @@ pub fn nppist() -> Result<&'static Nppist, LoaderError> {
     let lib = Nppist::load_library("nppist", nppist_candidates())?;
     let _ = L.set(Nppist::empty(lib));
     Ok(L.get().expect("OnceLock set or lost race"))
-}
-
-// Placeholder silences an unused import lint when only one of the libs is used.
-#[allow(dead_code)]
-fn _touch() -> *mut c_void {
-    core::ptr::null_mut()
 }

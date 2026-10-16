@@ -10,11 +10,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    Element, ElementKind, KernelSku, PlanPreference, PrecisionGuarantee, SortKind, TensorMut,
-    TensorRef, Workspace,
+    Element, ElementKind, KernelSku, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef,
+    Workspace,
 };
-
-use super::histogram::build_atomic_sku;
 
 /// Descriptor for a `histogramdd` op (reserved).
 #[derive(Copy, Clone, Debug)]
@@ -114,11 +112,4 @@ impl<T: Element> HistogramddPlan<T> {
             "baracuda-kernels::HistogramddPlan: reserved API surface",
         ))
     }
-}
-
-// Anchor `build_atomic_sku` for the future N-D path so the import is
-// kept warm. (Drop this once the real implementation lands.)
-#[allow(dead_code)]
-fn _anchor<T: Element>() -> KernelSku {
-    build_atomic_sku::<T>(SortKind::Histogramdd)
 }

@@ -834,18 +834,10 @@ mod compile_time_alias_checks {
 
     use super::*;
 
-    #[allow(dead_code)]
-    fn red_op_alias_is_same(x: NcclReduceOp) -> RedOp {
-        x
-    }
-
-    #[allow(dead_code)]
-    fn unique_id_alias_is_same(x: NcclUniqueId) -> UniqueId {
-        x
-    }
-
-    #[allow(dead_code)]
-    fn nccl_data_type_alias_is_sealed<T: NcclDataType>(_: &T) {
-        // Compile-only — proves `NcclDataType` is reachable as a trait.
-    }
+    // Compile-only: each alias must be the same type as its `Nccl*` original,
+    // and `NcclDataType` must be reachable as a trait.
+    const _: fn(NcclReduceOp) -> RedOp = |x| x;
+    const _: fn(NcclUniqueId) -> UniqueId = |x| x;
+    const _: fn() = nccl_data_type_is_reachable::<f32>;
+    fn nccl_data_type_is_reachable<T: NcclDataType>() {}
 }

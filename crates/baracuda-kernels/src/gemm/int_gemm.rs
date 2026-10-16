@@ -24,7 +24,7 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BiasElement, BiasElementKind, ElementKind, EpilogueKind, IntElement, LayoutSku,
-    PlanPreference, PrecisionGuarantee, S8, Workspace,
+    PlanPreference, PrecisionGuarantee, Workspace,
 };
 
 // Public re-exports of the descriptor / args structs. These live in
@@ -650,12 +650,4 @@ fn map_bespoke_status(code: i32) -> Result<()> {
         4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
         n => Err(Error::CutlassInternal(n)),
     }
-}
-
-// Type-level guard that the `S8` re-export is in scope; kept for clarity
-// in case a future commit adds compile-time element-specific dispatch
-// branches that need to refer to `S8` by path.
-#[allow(dead_code)]
-fn _hold_s8_in_scope() {
-    let _ = S8(0);
 }

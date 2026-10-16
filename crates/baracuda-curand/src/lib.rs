@@ -71,7 +71,6 @@ use baracuda_curand_sys::{
     curand, curandGenerator_t, curandOrdering_t, curandRngType_t, curandStatus_t,
 };
 use baracuda_driver::{DeviceBuffer, Stream};
-use baracuda_types::DeviceRepr;
 
 /// Error type for cuRAND operations.
 pub type Error = baracuda_core::Error<curandStatus_t>;
@@ -404,8 +403,3 @@ impl Drop for GeneratorInner {
         }
     }
 }
-
-/// Unused trait binding; keeps `DeviceRepr` visible at the top level so
-/// safe users don't need an extra import.
-#[allow(dead_code)]
-fn _bind_device_repr<T: DeviceRepr>() {}

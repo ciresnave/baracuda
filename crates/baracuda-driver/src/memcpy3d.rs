@@ -37,8 +37,7 @@ struct Array3DInner {
     depth: usize,
     format: u32,
     num_channels: u32,
-    #[allow(dead_code)]
-    context: Context,
+    _context: Context,
 }
 
 unsafe impl Send for Array3DInner {}
@@ -120,7 +119,7 @@ impl Array3D {
                 depth,
                 format: format_raw(format),
                 num_channels,
-                context: context.clone(),
+                _context: context.clone(),
             }),
         })
     }
@@ -149,7 +148,7 @@ impl Array3D {
                 depth,
                 format: format_raw(format),
                 num_channels,
-                context: context.clone(),
+                _context: context.clone(),
             }),
         }
     }

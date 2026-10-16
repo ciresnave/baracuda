@@ -43,8 +43,7 @@ pub struct ExternalMemory {
 
 struct ExternalMemoryInner {
     handle: CUexternalMemory,
-    #[allow(dead_code)]
-    context: Context,
+    _context: Context,
 }
 
 unsafe impl Send for ExternalMemoryInner {}
@@ -86,7 +85,7 @@ impl ExternalMemory {
             Ok(Self {
                 inner: Arc::new(ExternalMemoryInner {
                     handle,
-                    context: context.clone(),
+                    _context: context.clone(),
                 }),
             })
         }
@@ -138,8 +137,7 @@ pub struct ExternalSemaphore {
 
 struct ExternalSemaphoreInner {
     handle: CUexternalSemaphore,
-    #[allow(dead_code)]
-    context: Context,
+    _context: Context,
 }
 
 unsafe impl Send for ExternalSemaphoreInner {}
@@ -179,7 +177,7 @@ impl ExternalSemaphore {
             Ok(Self {
                 inner: Arc::new(ExternalSemaphoreInner {
                     handle,
-                    context: context.clone(),
+                    _context: context.clone(),
                 }),
             })
         }
