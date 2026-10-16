@@ -45,7 +45,7 @@ fn egl_frame_size_matches_cuda_abi() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn nvsci_attrs_fail_gracefully_without_jetson() {
     baracuda_driver::init().unwrap();
     let device = baracuda_driver::Device::get(0).unwrap();

@@ -2,13 +2,14 @@
 //! `cuArrayCreate_v2` + 2-D memcpy to/from CUarray,
 //! `cuTexObjectCreate/Destroy`, `cuSurfObjectCreate/Destroy`.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_driver::{
     Array, ArrayFormat, Context, Device, SurfaceObject, TextureDesc, TextureFilterMode,
     TextureObject,
 };
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn array_host_roundtrip_f32x1() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -29,7 +30,6 @@ fn array_host_roundtrip_f32x1() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn array_host_roundtrip_u8x4() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -59,7 +59,6 @@ fn array_host_roundtrip_u8x4() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn tex_and_surf_object_lifecycle() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

@@ -2,13 +2,15 @@
 //!
 //! The short-circuit itself is pure bookkeeping (null pointer + len = 0),
 //! but verifying it end-to-end requires a live context, so the test is
-//! ignored by default. Run with `BARACUDA_GPU_TESTS=1` on a machine with
-//! a working NVIDIA driver.
+//! gated behind the `device-tests` feature. Run with
+//! `cargo gpu-test -p baracuda-driver --features device-tests` on a machine
+//! with a working NVIDIA driver.
+
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, PinnedBuffer, Stream};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn zero_length_buffer_round_trips_without_cuda_calls() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -42,7 +44,6 @@ fn zero_length_buffer_round_trips_without_cuda_calls() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn nonempty_buffer_still_works_after_short_circuit_additions() {
     // Regression guard: the short-circuit must not affect non-empty paths.
     baracuda_driver::init().unwrap();
@@ -57,7 +58,6 @@ fn nonempty_buffer_still_works_after_short_circuit_additions() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn zero_length_pinned_buffer_is_sound() {
     // cuMemHostAlloc(0) returns a null pointer; without the short-circuit,
     // PinnedBuffer's Deref would trigger UB in slice::from_raw_parts.
@@ -80,7 +80,6 @@ fn zero_length_pinned_buffer_is_sound() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn nonempty_pinned_buffer_still_works() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

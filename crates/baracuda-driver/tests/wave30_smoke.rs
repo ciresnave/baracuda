@@ -19,7 +19,7 @@ fn d3d_symbols_resolve() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn d3d11_get_devices_with_null_device_returns_gracefully() {
     baracuda_driver::init().unwrap();
     // Passing a null ID3D11Device* — CUDA should reject with INVALID_VALUE

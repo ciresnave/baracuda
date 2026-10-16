@@ -1,15 +1,18 @@
 //! GPU-gated integration tests for `baracuda-driver`.
 //!
-//! These tests are marked `#[ignore]` so `cargo test` skips them by default.
-//! Run them on a machine with an NVIDIA GPU via:
+//! Gated behind the `device-tests` feature, which CI type-checks on every PR and
+//! the self-hosted device runner builds and runs. Run them on a machine with an
+//! NVIDIA GPU via:
 //!
 //! ```text
-//! cargo test -p baracuda-driver -- --ignored
+//! cargo gpu-test -p baracuda-driver --features device-tests
 //! ```
 //!
 //! They exercise the Day-11/12/13/14 happy path: device enumeration,
 //! context creation, memory transfer round-trip, module load, and kernel
 //! launch.
+
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Module, Stream};
 
@@ -24,7 +27,6 @@ fn setup() -> baracuda_driver::Result<(Device, Context, Stream)> {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn device_enumeration() {
     baracuda_driver::init().expect("cuInit should succeed on a GPU host");
     let count = Device::count().expect("cuDeviceGetCount");
@@ -47,7 +49,6 @@ fn device_enumeration() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn memcpy_roundtrip() {
     let (_dev, ctx, stream) = setup().expect("setup");
     let host: Vec<f32> = (0..4096).map(|i| i as f32 * 0.25).collect();
@@ -59,7 +60,6 @@ fn memcpy_roundtrip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn vector_add_kernel_launch() {
     let (_dev, ctx, stream) = setup().expect("setup");
 
@@ -108,7 +108,6 @@ fn vector_add_kernel_launch() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn zero_reuses_existing_buffer() {
     let (_dev, ctx, stream) = setup().expect("setup");
 

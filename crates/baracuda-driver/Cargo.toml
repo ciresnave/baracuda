@@ -17,6 +17,13 @@ async = ["dep:futures-core"]
 # (declare-and-report skippability — see src/test_support.rs). Enabled by
 # downstream test crates in their dev-dependencies; no production cost.
 test-support = []
+# On-device integration tests (`tests/*`): built only with this feature, so a
+# no-GPU `cargo test` does not compile them. NOT ignored and NOT hidden: CI
+# type-checks them on every PR (`cargo clippy --all-targets --all-features`) and
+# the self-hosted device runner builds and RUNS them (`cargo gpu-test -p
+# baracuda-driver --features device-tests`); a stale or missing device run is a
+# red check. See docs/UNVERIFIED-HARDWARE.md for what cannot run on that box.
+device-tests = []
 
 [dependencies]
 baracuda-types.workspace = true

@@ -2,12 +2,13 @@
 //! multicast objects. End-to-end multicast requires NVSwitch fabric, so
 //! we only verify the symbols resolve and the granularity query returns.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_driver::multicast;
 use baracuda_driver::multicast::MulticastObject;
 use baracuda_driver::{Context, Device};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + NVSwitch fabric for full behavior"]
 fn multicast_granularity_and_create() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

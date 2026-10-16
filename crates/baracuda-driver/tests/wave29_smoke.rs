@@ -4,11 +4,13 @@
 //! unmap. We at least verify the symbols resolve and the "list GL
 //! devices" call handles "no GL context" cleanly.
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::graphics::GLDeviceList;
+#[cfg(feature = "device-tests")]
 use baracuda_driver::graphics::gl;
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn gl_get_devices_without_gl_context_is_graceful() {
     baracuda_driver::init().unwrap();
 

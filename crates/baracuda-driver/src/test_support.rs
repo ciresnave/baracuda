@@ -22,7 +22,6 @@
 //! ```ignore
 //! use baracuda_driver::require;
 //! #[test]
-//! #[ignore = "on-device"]
 //! fn my_gpu_test() {
 //!     let stream = require!(setup_stream(), "CUDA device + stream");
 //!     // ... assertions that only make sense with a device ...

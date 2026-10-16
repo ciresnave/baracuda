@@ -2,6 +2,8 @@
 //! explicit graph node construction via `cuGraphAddKernelNode_v2`,
 //! `cuGraphAddEmptyNode`, `cuGraphAddMemsetNode`, and `cuGraphClone`.
 
+#![cfg(feature = "device-tests")]
+
 use core::ffi::c_void;
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Graph, Module, Stream};
@@ -9,7 +11,6 @@ use baracuda_driver::{Context, Device, DeviceBuffer, Graph, Module, Stream};
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn explicit_graph_empty_memset_kernel() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -79,7 +80,6 @@ fn explicit_graph_empty_memset_kernel() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn cloned_graph_runs_independently() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

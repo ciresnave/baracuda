@@ -2,11 +2,12 @@
 //! Hopper TMA descriptor encoding. Encoding works on any device; actual
 //! TMA instructions require SM 9.0+.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_driver::tensor_map::{DataType, Interleave, L2Promotion, OOBFill, Swizzle, TensorMap};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn tensor_map_encode_tiled_produces_non_empty_descriptor() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

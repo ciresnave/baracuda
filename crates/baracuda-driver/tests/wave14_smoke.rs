@@ -1,12 +1,13 @@
 //! GPU-gated integration tests for Wave-14 Driver-API additions:
 //! miscellaneous memcpy + memset variants.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::driver;
 use baracuda_driver::memory::{memset_u8_async, memset_u16, memset_u16_async, memset_u32_async};
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn dtod_async_copy() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -27,7 +28,6 @@ fn dtod_async_copy() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn memset_16_and_async_variants() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -61,7 +61,6 @@ fn memset_16_and_async_variants() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn generic_cumemcpy_smoke() {
     // cuMemcpy is the "smart" generic routing: src/dst are device
     // pointers but can refer to unified/host-mapped addresses.

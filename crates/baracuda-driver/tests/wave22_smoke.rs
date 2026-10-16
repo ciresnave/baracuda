@@ -1,6 +1,8 @@
 //! GPU-gated integration test for Wave-22 Driver-API additions:
 //! user objects attached to graphs.
 
+#![cfg(feature = "device-tests")]
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -10,7 +12,6 @@ use baracuda_driver::{Context, Device, Graph, require};
 static DESTRUCTOR_CALLS: AtomicU32 = AtomicU32::new(0);
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 12+"]
 fn user_object_destructor_fires_when_graph_drops() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

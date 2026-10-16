@@ -261,6 +261,13 @@ jobs:
       # invoke nvcc, so `--all-features` can't be used — enumerate the CUDA-free one.
       - name: clippy baracuda-optim distributed_optim (feature-gated, CUDA-free)
         run: cargo clippy --locked -p baracuda-optim --features distributed_optim -- -D warnings
+      # Device-test targets are gated behind the `device-tests` feature, not `#[ignore]`d.
+      # They COMPILE without CUDA (libloading), so type-check + lint them here on every PR:
+      # a gated test that CI never builds is indistinguishable from a passing one. They are
+      # RUN by .github/workflows/device-tests.yml on the self-hosted device runner, and a
+      # stale run is caught by device-tests-detector.yml. See docs/DEVICE-TESTS.md.
+      - name: clippy device-tests targets (type-check, CUDA-free)
+        run: cargo clippy --locked -p baracuda-driver --tests --features device-tests -- -D warnings
 
   msrv-driver-free:
     name: MSRV 1.85 (driver-free surface)

@@ -1,6 +1,8 @@
 //! GPU-gated integration tests for Wave-2 Driver-API additions:
 //! cuFuncGetAttribute, cuModuleGetGlobal, cuDevicePrimaryCtxGetState.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::types::CUfunction_attribute;
 use baracuda_driver::{Context, Device, DeviceBuffer, Module};
 
@@ -17,7 +19,6 @@ extern "C" __global__ void read_counter(unsigned int* out) {
 "#;
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn function_attributes() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -41,7 +42,6 @@ fn function_attributes() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn set_max_dynamic_shared_mem() {
     // Some GPUs allow raising the per-kernel dynamic shared-memory limit
     // above the per-block default. If the device rejects the request, the
@@ -66,7 +66,6 @@ fn set_max_dynamic_shared_mem() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn module_get_global_reads_device_variable() {
     use baracuda_cuda_sys::driver;
     baracuda_driver::init().unwrap();
@@ -118,7 +117,6 @@ fn module_get_global_reads_device_variable() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn primary_ctx_state() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

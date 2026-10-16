@@ -3,6 +3,8 @@
 //! pointer attributes, stream priority, stream host callback,
 //! event record-with-flags, primary-context state.
 
+#![cfg(feature = "device-tests")]
+
 use std::sync::{
     Arc,
     atomic::{AtomicU32, Ordering},
@@ -25,7 +27,6 @@ fn setup() -> baracuda_driver::Result<(Device, Context, Stream)> {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn occupancy_max_active_blocks_and_potential_size() {
     let (_dev, ctx, _stream) = setup().expect("setup");
     let module = Module::load_ptx(&ctx, PTX).unwrap();
@@ -45,7 +46,6 @@ fn occupancy_max_active_blocks_and_potential_size() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn mem_get_info_reports_sensible_sizes() {
     let (_dev, _ctx, _stream) = setup().expect("setup");
     let (free, total) = mem_get_info().expect("cuMemGetInfo");
@@ -60,7 +60,6 @@ fn mem_get_info_reports_sensible_sizes() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn device_vram_methods_agree_with_mem_get_info() {
     let (dev, _ctx, _stream) = setup().expect("setup");
 
@@ -81,7 +80,6 @@ fn device_vram_methods_agree_with_mem_get_info() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU with managed-memory support"]
 fn managed_buffer_round_trip() {
     let (dev, ctx, stream) = setup().expect("setup");
 
@@ -113,7 +111,6 @@ fn managed_buffer_round_trip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pointer_attribute_queries() {
     let (dev, ctx, _stream) = setup().expect("setup");
 
@@ -141,7 +138,6 @@ fn pointer_attribute_queries() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn context_limits_and_cache_config() {
     let (_dev, ctx, _stream) = setup().expect("setup");
     ctx.set_current().unwrap();
@@ -179,7 +175,6 @@ fn context_limits_and_cache_config() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn device_self_peer_query() {
     let (dev, _ctx, _stream) = setup().expect("setup");
     // A device cannot access itself as a peer (makes no sense).
@@ -188,7 +183,6 @@ fn device_self_peer_query() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_priority_and_flags() {
     let (_dev, ctx, _stream) = setup().expect("setup");
     let (least, greatest) = Context::stream_priority_range().unwrap();
@@ -202,7 +196,6 @@ fn stream_priority_and_flags() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_host_callback_runs() {
     let (_dev, _ctx, stream) = setup().expect("setup");
     let counter = Arc::new(AtomicU32::new(0));
@@ -217,7 +210,6 @@ fn stream_host_callback_runs() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn event_record_with_flags() {
     let (_dev, ctx, stream) = setup().expect("setup");
     let e = baracuda_driver::Event::new(&ctx).unwrap();
@@ -227,7 +219,6 @@ fn event_record_with_flags() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_is_idle_after_sync() {
     // `is_idle()` is the load-probe alias of `is_complete()`: read-only,
     // never synchronizes. After a synchronize the freshly-drained stream

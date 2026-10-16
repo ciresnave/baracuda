@@ -2,11 +2,12 @@
 //! stream memory ops (`cuStreamWriteValue32/64_v2`,
 //! `cuStreamWaitValue32/64_v2`, `cuStreamBatchMemOp_v2`).
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::types::{CUstreamBatchMemOpParams, CUstreamWaitValue_flags};
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_write_value_32_writes_through() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -23,7 +24,6 @@ fn stream_write_value_32_writes_through() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_wait_value_32_releases_when_value_matches() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -51,7 +51,6 @@ fn stream_wait_value_32_releases_when_value_matches() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_batch_mem_op_applies_all_entries() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

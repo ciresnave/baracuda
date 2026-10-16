@@ -1,12 +1,13 @@
 //! GPU-gated integration tests for Wave-10 Driver-API additions:
 //! 3-D arrays + `cuMemcpy3D` + mipmapped arrays.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_driver::array::ArrayFormat;
 use baracuda_driver::memcpy3d::{Array3D, MipmappedArray};
 use baracuda_driver::{Context, Device};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn array3d_host_roundtrip_f32() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -28,7 +29,6 @@ fn array3d_host_roundtrip_f32() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn mipmapped_array_level_dimensions() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

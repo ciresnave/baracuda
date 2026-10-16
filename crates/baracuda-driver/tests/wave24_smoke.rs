@@ -1,6 +1,8 @@
 //! GPU-gated integration tests for Wave-24 Driver-API additions:
 //! graph memory nodes + `cuGraphExecUpdate_v2` + device graph-mem attrs.
 
+#![cfg(feature = "device-tests")]
+
 use core::ffi::c_void;
 
 use baracuda_cuda_sys::types::{CUgraphExecUpdateResult, CUgraphMem_attribute, CUgraphNodeType};
@@ -10,7 +12,6 @@ use baracuda_driver::{Context, Device, DeviceBuffer, Graph, Module, Stream};
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn mem_alloc_and_free_nodes_round_trip() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -43,7 +44,6 @@ fn mem_alloc_and_free_nodes_round_trip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn graph_exec_update_accepts_topology_invariant_changes() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

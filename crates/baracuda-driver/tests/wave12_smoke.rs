@@ -1,6 +1,8 @@
 //! GPU-gated integration tests for Wave-12 Driver-API additions:
 //! full graph node builders + param edit APIs.
 
+#![cfg(feature = "device-tests")]
+
 use core::ffi::c_void;
 use core::mem::size_of;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -17,7 +19,6 @@ unsafe extern "C" fn bump_counter(_user_data: *mut c_void) {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn graph_memcpy_and_host_nodes_run_in_order() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -79,7 +80,6 @@ fn graph_memcpy_and_host_nodes_run_in_order() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn graph_exec_live_edit_kernel_params() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -151,7 +151,6 @@ fn graph_exec_live_edit_kernel_params() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn graph_memset_node_param_edit() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -182,7 +181,6 @@ fn graph_memset_node_param_edit() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn graph_child_and_event_nodes() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

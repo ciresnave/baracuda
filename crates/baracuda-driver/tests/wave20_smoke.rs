@@ -2,11 +2,12 @@
 //! IPC handle export. Only validates that symbols resolve; IPC is
 //! Linux-only (Windows returns NOT_SUPPORTED).
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_driver::ipc;
 use baracuda_driver::{Context, Device, DeviceBuffer, Event};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn ipc_get_event_and_mem_handles_resolve() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

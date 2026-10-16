@@ -1,11 +1,12 @@
 //! GPU-gated integration tests for Wave-11 Driver-API additions:
 //! pinned host memory (`cuMemHostAlloc` + `cuMemHostRegister` paths).
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_driver::pinned::{PinnedBuffer, PinnedRegistration, flags};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pinned_buffer_allocates_and_readbacks() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -32,7 +33,6 @@ fn pinned_buffer_allocates_and_readbacks() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pinned_registration_pins_existing_vec() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -57,7 +57,6 @@ fn pinned_registration_pins_existing_vec() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pinned_buffer_with_device_map() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

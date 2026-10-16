@@ -2,6 +2,8 @@
 //! array introspection, context-level events, P2P query, exec-affinity
 //! probe, core-dump settings, library-extras (enumerate kernels + module).
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::types::{CUcoredumpSettings, CUdevice_P2PAttribute, CUexecAffinityType};
 use baracuda_driver::array::{Array, ArrayFormat};
 use baracuda_driver::library::Library;
@@ -10,7 +12,6 @@ use baracuda_driver::{Context, Device, Event, coredump, require};
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn array_descriptor_and_memory_requirements() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -36,7 +37,6 @@ fn array_descriptor_and_memory_requirements() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn ctx_record_and_wait_event() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -54,7 +54,6 @@ fn ctx_record_and_wait_event() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn p2p_attribute_self_query() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -67,7 +66,6 @@ fn p2p_attribute_self_query() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn exec_affinity_support_probe() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -79,7 +77,6 @@ fn exec_affinity_support_probe() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn coredump_enable_on_exception_round_trip() {
     baracuda_driver::init().unwrap();
     // Per-context: need a current context first.
@@ -104,7 +101,6 @@ fn coredump_enable_on_exception_round_trip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 12.4+"]
 fn library_enumerate_kernels_and_module() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

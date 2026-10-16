@@ -1,12 +1,13 @@
 //! GPU-gated integration tests for Wave-8 Driver-API additions:
 //! memory pools (`cuMemPool*` + `cuMemAllocFromPoolAsync`).
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::driver;
 use baracuda_driver::mempool::{self, MemoryPool};
 use baracuda_driver::{Context, Device, Stream};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pool_roundtrip_via_alloc_from_pool_async() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -73,7 +74,6 @@ fn pool_roundtrip_via_alloc_from_pool_async() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn default_and_current_pool_queries() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
