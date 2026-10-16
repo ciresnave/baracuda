@@ -5,9 +5,9 @@
 //! creation with the SPARSE flag or the map call fails — we verify
 //! either the full end-to-end path or a graceful `NOT_SUPPORTED` return.
 
-use baracuda_cuda_sys::types::CUarrayMapInfo;
 #[cfg(feature = "device-tests")]
 use baracuda_cuda_sys::types::CUarray3D_flags;
+use baracuda_cuda_sys::types::CUarrayMapInfo;
 #[cfg(feature = "device-tests")]
 use baracuda_driver::array::ArrayFormat;
 #[cfg(feature = "device-tests")]

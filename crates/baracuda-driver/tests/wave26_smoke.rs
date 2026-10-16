@@ -3,9 +3,9 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::launch_attr::LaunchAttr;
 #[cfg(feature = "device-tests")]
 use baracuda_driver::launch_attr;
+use baracuda_driver::launch_attr::LaunchAttr;
 #[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Module, Stream};
 
