@@ -3,7 +3,8 @@
 //!
 //! Bilinear-2D upsample of a 1×1×2×2 input to 1×1×4×4, compared
 //! against an inline CPU reference using PyTorch's
-//! `align_corners=false` mapping. `#[ignore]` by default.
+//! `align_corners=false` mapping. gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -150,7 +151,6 @@ fn cpu_interp_bilinear_f32(
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_f32_upsample_2x() {
     let (ctx, stream) = setup();
     let (n, c, ih, iw) = (1, 1, 2, 2);
@@ -200,7 +200,6 @@ fn interpolate_bilinear_2d_f32_upsample_2x() {
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_f64_upsample_2x() {
     let (ctx, stream) = setup();
     let (n, c, ih, iw) = (1, 1, 2, 2);
@@ -275,7 +274,6 @@ fn interpolate_bilinear_2d_f64_upsample_2x() {
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_backward_f32_smoke() {
     // Check that BW returns nonzero gradient at all 4 input cells.
     let (ctx, stream) = setup();
@@ -397,7 +395,6 @@ fn run_fw_f32_case(
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_f32_align_corners_true_4x4_to_7x7() {
     // 4x4 → 7x7 with align_corners=true should differ from
     // align_corners=false: corners are exactly preserved (top-left,
@@ -443,7 +440,6 @@ fn interpolate_bilinear_2d_f32_align_corners_true_4x4_to_7x7() {
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_f32_scale_factor_override_differs() {
     // 2x2 → 4x4, but with scale_h_factor=3.0 / scale_w_factor=3.0,
     // i.e. a SCALE override that doesn't match the (4/2)=2 ratio.
@@ -486,7 +482,6 @@ fn interpolate_bilinear_2d_f32_scale_factor_override_differs() {
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_f16_fw_matches_f32_ref() {
     // f16 path correctness within Q8_0-style tolerance against the
     // f32 CPU reference (computed at f32, then compared after the
@@ -548,7 +543,6 @@ fn interpolate_bilinear_2d_f16_fw_matches_f32_ref() {
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_bf16_fw_matches_f32_ref() {
     let (ctx, stream) = setup();
     let (n, c, ih, iw) = (1i32, 1i32, 4i32, 4i32);
@@ -751,7 +745,6 @@ fn run_bw_f32_case(
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_bw_f32_align_corners_false_matches_cpu() {
     let (ctx, stream) = setup();
     let (n, c, ih, iw) = (1, 1, 3, 3);
@@ -780,7 +773,6 @@ fn interpolate_bilinear_2d_bw_f32_align_corners_false_matches_cpu() {
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_bw_f32_align_corners_true_matches_cpu() {
     let (ctx, stream) = setup();
     // 4x4 → 7x7 with align_corners=true exercises the corner-pinning
@@ -804,7 +796,6 @@ fn interpolate_bilinear_2d_bw_f32_align_corners_true_matches_cpu() {
 }
 
 #[test]
-#[ignore]
 fn interpolate_bilinear_2d_bw_f32_scale_factor_override_matches_cpu() {
     let (ctx, stream) = setup();
     let (n, c, ih, iw) = (1, 1, 2, 2);

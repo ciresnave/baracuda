@@ -5,7 +5,8 @@
 //! the canonical test; we also verify the odd-n behavior and that
 //! `ifftshift(fftshift(x)) == x` for any `n`.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn fftshift_even_n_f32() {
     // [0, 1, 2, 3] -> [2, 3, 0, 1] (n=4).
     let (ctx, stream) = setup();
@@ -63,7 +63,6 @@ fn fftshift_even_n_f32() {
 }
 
 #[test]
-#[ignore]
 fn ifftshift_even_n_f32() {
     // For even n, ifftshift == fftshift.
     let (ctx, stream) = setup();
@@ -104,7 +103,6 @@ fn ifftshift_even_n_f32() {
 }
 
 #[test]
-#[ignore]
 fn fftshift_odd_n_is_not_ifftshift() {
     // n=5 — NumPy / PyTorch convention.
     //   fftshift(x)  = roll(x,   n//2)  → y[i] = x[(i - n//2) % n]
@@ -213,7 +211,6 @@ fn fftshift_odd_n_is_not_ifftshift() {
 }
 
 #[test]
-#[ignore]
 fn fftshift_batched_complex32() {
     // Batch=2, n=4. Per-row shift, two rows independent.
     // row 0: [(0+0i), (1+0i), (2+0i), (3+0i)] -> [(2+0i), (3+0i), (0+0i), (1+0i)]

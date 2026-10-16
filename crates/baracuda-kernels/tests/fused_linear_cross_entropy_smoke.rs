@@ -7,6 +7,7 @@
 //! Tested dtypes: f32 / f16 / bf16. f64 spot-check only (extreme
 //! precision isn't the bottleneck in LLM training; the plan supports it
 //! for API completeness).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -76,7 +77,6 @@ fn host_flce_mean_f64(
 }
 
 #[test]
-#[ignore]
 fn flce_fw_f32_mean_small() {
     let (ctx, stream) = setup();
     let bt = 8i32;
@@ -159,7 +159,6 @@ fn flce_fw_f32_mean_small() {
 }
 
 #[test]
-#[ignore]
 fn flce_fw_f16_mean_small() {
     let (ctx, stream) = setup();
     let bt = 8i32;
@@ -248,7 +247,6 @@ fn flce_fw_f16_mean_small() {
 }
 
 #[test]
-#[ignore]
 fn flce_fw_bf16_mean_small() {
     let (ctx, stream) = setup();
     let bt = 8i32;
@@ -337,7 +335,6 @@ fn flce_fw_bf16_mean_small() {
 }
 
 #[test]
-#[ignore]
 fn flce_fw_f32_sum_with_ignore_index() {
     // Verifies the ignore_index path: half the targets are -100,
     // the other half are valid. Sum mode means no divide.

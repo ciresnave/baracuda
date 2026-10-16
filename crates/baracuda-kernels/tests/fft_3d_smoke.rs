@@ -4,7 +4,8 @@
 //! the 2-D suite (`fft_2d_smoke`); rank-3 exercises cuFFT's
 //! `cufftPlanMany` with three transform axes per batched entry.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn fft3_ifft3_roundtrip_complex32() {
     let (ctx, stream) = setup();
 
@@ -109,7 +109,6 @@ fn fft3_ifft3_roundtrip_complex32() {
 }
 
 #[test]
-#[ignore]
 fn fft3_ifft3_roundtrip_complex64() {
     let (ctx, stream) = setup();
 

@@ -5,12 +5,13 @@
 //! shape; the inverse branch applies the `1/n` normalization at the
 //! plan layer so the round-trip is the identity.
 //!
-//! `#[ignore]` by default — requires a real CUDA device. Run with:
+//! Gated behind the `device-tests` feature — requires a real CUDA device. Run with:
 //!
 //! ```text
 //! cargo test -p baracuda-kernels --release --features sm89 \
-//!     --test fft_fft_smoke -- --ignored
+//!     --test fft_fft_smoke --features device-tests
 //! ```
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -30,7 +31,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn fft_ifft_roundtrip_complex32() {
     let (ctx, stream) = setup();
 
@@ -124,7 +124,6 @@ fn fft_ifft_roundtrip_complex32() {
 }
 
 #[test]
-#[ignore]
 fn fft_ifft_roundtrip_complex64() {
     let (ctx, stream) = setup();
 
@@ -215,7 +214,6 @@ fn fft_ifft_roundtrip_complex64() {
 }
 
 #[test]
-#[ignore]
 fn fft_forward_constant_signal() {
     // FFT of a constant real signal (cast into the complex slot) yields
     // a single non-zero bin at k=0 with value `n * c`; all other bins

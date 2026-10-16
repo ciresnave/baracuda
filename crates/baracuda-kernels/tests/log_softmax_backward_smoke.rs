@@ -3,6 +3,7 @@
 //! Forward: `y = log_softmax(x, axis)`. Backward:
 //! `dx[k] = dy[k] - exp(y[k]) · Σ_j dy[j]`. Needs saved log-softmax
 //! output `y` (so `exp(y) ∈ [0, 1]` recovers the softmax probabilities).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -77,7 +78,6 @@ fn host_log_softmax_bw_f32(shape: [i32; 2], axis: usize, y: &[f32], dy: &[f32]) 
 }
 
 #[test]
-#[ignore]
 fn log_softmax_bw_f32_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -136,7 +136,6 @@ fn log_softmax_bw_f32_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_bw_f64_2d_axis_0() {
     let (ctx, stream) = setup();
     let shape = [6i32, 5];
@@ -220,7 +219,6 @@ fn log_softmax_bw_f64_2d_axis_0() {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_bw_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];
@@ -280,7 +278,6 @@ fn log_softmax_bw_f16_2d() {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_bw_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];

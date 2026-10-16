@@ -14,6 +14,7 @@
 //! output by one extra step at the right magnitude bucket.
 
 #![cfg(feature = "sm89")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -322,22 +323,18 @@ const K: i32 = 128;
 // ---- E4M3 × RCR ----
 
 #[test]
-#[ignore]
 fn fp8_e4m3_rcr_bias() {
     run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias);
 }
 #[test]
-#[ignore]
 fn fp8_e4m3_rcr_bias_relu() {
     run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu);
 }
 #[test]
-#[ignore]
 fn fp8_e4m3_rcr_bias_gelu() {
     run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu);
 }
 #[test]
-#[ignore]
 fn fp8_e4m3_rcr_bias_silu() {
     run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu);
 }
@@ -345,22 +342,18 @@ fn fp8_e4m3_rcr_bias_silu() {
 // ---- E4M3 × RRR ----
 
 #[test]
-#[ignore]
 fn fp8_e4m3_rrr_bias() {
     run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias);
 }
 #[test]
-#[ignore]
 fn fp8_e4m3_rrr_bias_relu() {
     run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu);
 }
 #[test]
-#[ignore]
 fn fp8_e4m3_rrr_bias_gelu() {
     run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu);
 }
 #[test]
-#[ignore]
 fn fp8_e4m3_rrr_bias_silu() {
     run_fp8_bias::<Fp8E4M3FN>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu);
 }
@@ -368,22 +361,18 @@ fn fp8_e4m3_rrr_bias_silu() {
 // ---- E5M2 × RCR ----
 
 #[test]
-#[ignore]
 fn fp8_e5m2_rcr_bias() {
     run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::Bias);
 }
 #[test]
-#[ignore]
 fn fp8_e5m2_rcr_bias_relu() {
     run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasRelu);
 }
 #[test]
-#[ignore]
 fn fp8_e5m2_rcr_bias_gelu() {
     run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasGelu);
 }
 #[test]
-#[ignore]
 fn fp8_e5m2_rcr_bias_silu() {
     run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rcr, EpilogueKind::BiasSilu);
 }
@@ -391,22 +380,18 @@ fn fp8_e5m2_rcr_bias_silu() {
 // ---- E5M2 × RRR ----
 
 #[test]
-#[ignore]
 fn fp8_e5m2_rrr_bias() {
     run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::Bias);
 }
 #[test]
-#[ignore]
 fn fp8_e5m2_rrr_bias_relu() {
     run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasRelu);
 }
 #[test]
-#[ignore]
 fn fp8_e5m2_rrr_bias_gelu() {
     run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasGelu);
 }
 #[test]
-#[ignore]
 fn fp8_e5m2_rrr_bias_silu() {
     run_fp8_bias::<Fp8E5M2>(M, N, K, LayoutSku::Rrr, EpilogueKind::BiasSilu);
 }

@@ -14,10 +14,11 @@
 //!      launches with the same inputs (matches the
 //!      `bit_stable_on_same_hardware = true` claim).
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the `mhc`
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the `mhc`
 //! cargo feature.
 
 #![cfg(feature = "mhc")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -151,7 +152,6 @@ fn run_once(
 }
 
 #[test]
-#[ignore]
 fn hyper_connection_f32_static_h_basic() {
     let (ctx, stream) = setup();
     let x = gen_x();
@@ -203,7 +203,6 @@ fn hyper_connection_f32_static_h_basic() {
 }
 
 #[test]
-#[ignore]
 fn hyper_connection_f32_static_h_h_post_changes_output() {
     // Verify that the H_post code path is exercised: doubling
     // (in logit space → bigger post-sigmoid scale) H_post should

@@ -4,6 +4,7 @@
 //! numerically stable via max subtraction. Each y is a log-probability
 //! and lives in `[-INF, 0]`; we verify the per-cell formula and that
 //! `Σ_j exp(y[j]) = 1` (invariant).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -76,7 +77,6 @@ fn host_log_softmax_f32(input_shape: [i32; 3], axis: usize, x: &[f32]) -> Vec<f3
 }
 
 #[test]
-#[ignore]
 fn log_softmax_f32_3d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [2i32, 5, 4];
@@ -141,7 +141,6 @@ fn log_softmax_f32_3d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_f64_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -205,7 +204,6 @@ fn log_softmax_f64_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_f16_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [3i32, 8];
@@ -254,7 +252,6 @@ fn log_softmax_f16_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_bf16_2d_axis_0() {
     let (ctx, stream) = setup();
     let shape = [6i32, 4];

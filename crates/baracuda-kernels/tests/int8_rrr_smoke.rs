@@ -15,8 +15,9 @@
 //! activation chain (gelu, silu) is not bit-stable between libdevice
 //! (CUDA) and Rust's libm equivalents.
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -438,7 +439,6 @@ fn bias_to_f32_i32(b: i32) -> f32 {
 // ---- S8 Identity — 4 problem shapes ----
 
 #[test]
-#[ignore]
 fn s8_rrr_identity_64_64_32() {
     run_s8_smoke::<f32>(
         64,
@@ -453,7 +453,6 @@ fn s8_rrr_identity_64_64_32() {
 }
 
 #[test]
-#[ignore]
 fn s8_rrr_identity_128_128_128() {
     run_s8_smoke::<f32>(
         128,
@@ -468,7 +467,6 @@ fn s8_rrr_identity_128_128_128() {
 }
 
 #[test]
-#[ignore]
 fn s8_rrr_identity_256_128_64() {
     run_s8_smoke::<f32>(
         256,
@@ -483,7 +481,6 @@ fn s8_rrr_identity_256_128_64() {
 }
 
 #[test]
-#[ignore]
 fn s8_rrr_identity_100_70_50() {
     run_s8_smoke::<f32>(
         100,
@@ -504,7 +501,6 @@ const N: i32 = 128;
 const K: i32 = 128;
 
 #[test]
-#[ignore]
 fn s8_rrr_bias_f32() {
     run_s8_smoke::<f32>(
         M,
@@ -518,7 +514,6 @@ fn s8_rrr_bias_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s8_rrr_bias_relu_f32() {
     run_s8_smoke::<f32>(
         M,
@@ -532,7 +527,6 @@ fn s8_rrr_bias_relu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s8_rrr_bias_gelu_f32() {
     run_s8_smoke::<f32>(
         M,
@@ -546,7 +540,6 @@ fn s8_rrr_bias_gelu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s8_rrr_bias_silu_f32() {
     run_s8_smoke::<f32>(
         M,
@@ -563,7 +556,6 @@ fn s8_rrr_bias_silu_f32() {
 // ---- S8 × i32 bias ----
 
 #[test]
-#[ignore]
 fn s8_rrr_bias_i32() {
     run_s8_smoke::<i32>(
         M,
@@ -577,7 +569,6 @@ fn s8_rrr_bias_i32() {
     );
 }
 #[test]
-#[ignore]
 fn s8_rrr_bias_relu_i32() {
     run_s8_smoke::<i32>(
         M,
@@ -591,7 +582,6 @@ fn s8_rrr_bias_relu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn s8_rrr_bias_gelu_i32() {
     run_s8_smoke::<i32>(
         M,
@@ -605,7 +595,6 @@ fn s8_rrr_bias_gelu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn s8_rrr_bias_silu_i32() {
     run_s8_smoke::<i32>(
         M,
@@ -622,7 +611,6 @@ fn s8_rrr_bias_silu_i32() {
 // ---- U8 Identity ----
 
 #[test]
-#[ignore]
 fn u8_rrr_identity_128_128_128() {
     run_u8_smoke::<f32>(
         M,
@@ -639,7 +627,6 @@ fn u8_rrr_identity_128_128_128() {
 // ---- U8 × f32 bias ----
 
 #[test]
-#[ignore]
 fn u8_rrr_bias_f32() {
     run_u8_smoke::<f32>(
         M,
@@ -653,7 +640,6 @@ fn u8_rrr_bias_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u8_rrr_bias_relu_f32() {
     run_u8_smoke::<f32>(
         M,
@@ -667,7 +653,6 @@ fn u8_rrr_bias_relu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u8_rrr_bias_gelu_f32() {
     run_u8_smoke::<f32>(
         M,
@@ -681,7 +666,6 @@ fn u8_rrr_bias_gelu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u8_rrr_bias_silu_f32() {
     run_u8_smoke::<f32>(
         M,
@@ -698,7 +682,6 @@ fn u8_rrr_bias_silu_f32() {
 // ---- U8 × i32 bias ----
 
 #[test]
-#[ignore]
 fn u8_rrr_bias_i32() {
     run_u8_smoke::<i32>(
         M,
@@ -712,7 +695,6 @@ fn u8_rrr_bias_i32() {
     );
 }
 #[test]
-#[ignore]
 fn u8_rrr_bias_relu_i32() {
     run_u8_smoke::<i32>(
         M,
@@ -726,7 +708,6 @@ fn u8_rrr_bias_relu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn u8_rrr_bias_gelu_i32() {
     run_u8_smoke::<i32>(
         M,
@@ -740,7 +721,6 @@ fn u8_rrr_bias_gelu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn u8_rrr_bias_silu_i32() {
     run_u8_smoke::<i32>(
         M,

@@ -26,6 +26,7 @@
 //! PyTorch-convention `exp(log_probs) − γ` output by subtracting
 //! `exp(log_probs)`; they now run on-device as value-level guards
 //! (the row-sum invariant is only the necessary condition).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -481,7 +482,6 @@ fn fd_check_f64(eps: f64, tol: f64) {
 /// target=[1], uniform log_probs = -log(2). Loss = log(4/3); expected
 /// gradient = [+1/6, -1/6] at t=0 and at t=1 (uniform → time-symmetric).
 #[test]
-#[ignore]
 fn ctc_bw_f32_uniform_t2_hand_computed() {
     let (ctx, stream) = setup();
     let log_p = -(2.0f32.ln());
@@ -525,16 +525,14 @@ fn ctc_bw_f32_uniform_t2_hand_computed() {
 // from the kernel output. Promoted 2026-08-27 from dormant `_helper` fns to live GPU
 // tests so the value-level gradient is guarded — not only the necessary-condition
 // row-sum invariant (`Σ_c grad = 0`), which catches the γ-collapse regression but
-// passes for any wrong gradient that still sums to zero. `#[ignore]` like the sibling
+// passes for any wrong gradient that still sums to zero. gated behind the `device-tests` feature like the sibling
 // CTC BW tests: runs on-device via `cargo gpu-test`.
 #[test]
-#[ignore]
 fn ctc_bw_f32_finite_difference() {
     fd_check_f32(1e-3, 5e-3);
 }
 
 #[test]
-#[ignore]
 fn ctc_bw_f64_finite_difference() {
     fd_check_f64(1e-5, 1e-7);
 }
@@ -589,7 +587,6 @@ fn check_pytorch_invariant<T: Copy + 'static>(
 }
 
 #[test]
-#[ignore]
 fn ctc_bw_f32_pytorch_invariant() {
     let (ctx, stream) = setup();
     let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
@@ -612,7 +609,6 @@ fn ctc_bw_f32_pytorch_invariant() {
 }
 
 #[test]
-#[ignore]
 fn ctc_bw_f16_pytorch_invariant() {
     let (ctx, stream) = setup();
     let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
@@ -638,7 +634,6 @@ fn ctc_bw_f16_pytorch_invariant() {
 }
 
 #[test]
-#[ignore]
 fn ctc_bw_bf16_pytorch_invariant() {
     let (ctx, stream) = setup();
     let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
@@ -699,7 +694,6 @@ fn make_log_probs_f64() -> (Vec<f64>, i32, i32, i32, i32, Vec<i64>, Vec<i64>, Ve
 }
 
 #[test]
-#[ignore]
 fn ctc_bw_f64_pytorch_invariant() {
     let (ctx, stream) = setup();
     let (host_lp, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs_f64();
@@ -744,7 +738,6 @@ fn check_finite_nonzero_fp64(got: &[f64]) {
 }
 
 #[test]
-#[ignore]
 fn ctc_bw_f32_finite_and_nonzero() {
     // Smoke: kernel launches, produces finite gradient, not all zeros.
     // Does NOT validate numerical correctness (see module docs for the
@@ -770,7 +763,6 @@ fn ctc_bw_f32_finite_and_nonzero() {
 }
 
 #[test]
-#[ignore]
 fn ctc_bw_f64_finite_and_nonzero() {
     let (ctx, stream) = setup();
     let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
@@ -825,7 +817,6 @@ fn check_finite<T: Copy + 'static>(got: &[T], elem: ElementKind) {
 }
 
 #[test]
-#[ignore]
 fn ctc_bw_f16_finite_and_nonzero() {
     let (ctx, stream) = setup();
     let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();
@@ -849,7 +840,6 @@ fn ctc_bw_f16_finite_and_nonzero() {
 }
 
 #[test]
-#[ignore]
 fn ctc_bw_bf16_finite_and_nonzero() {
     let (ctx, stream) = setup();
     let (host_lp_f32, t_max, n, c, s_max, host_tgt, host_in_lens, host_tgt_lens) = make_log_probs();

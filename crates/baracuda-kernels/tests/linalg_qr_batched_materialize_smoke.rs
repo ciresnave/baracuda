@@ -7,7 +7,8 @@
 //!      `BatchedQrMaterializePlan`.
 //!   4. Verify `Q · R == A` (per slot, column-major) and `Q^T · Q == I`.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -72,7 +73,6 @@ fn matmul_cm_f64(a: &[f64], b: &[f64], ma: usize, k: usize, nb: usize) -> Vec<f6
 }
 
 #[test]
-#[ignore]
 fn qr_batched_materialize_f32_basic() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -225,7 +225,6 @@ fn qr_batched_materialize_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn qr_batched_materialize_f64_basic() {
     let (ctx, stream) = setup();
     let b: i32 = 2;

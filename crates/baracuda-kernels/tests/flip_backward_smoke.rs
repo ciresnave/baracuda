@@ -1,9 +1,10 @@
 //! Real-GPU smoke test for `FlipBackwardPlan<T, N>` — backward of
 //! `flip` is the same op applied to `dy`. Bit-exact, no math.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test flip_backward_smoke -- --ignored`.
+//!   --test flip_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -57,7 +58,6 @@ fn cpu_flip_ref<const N: usize, T: Copy>(
 // -------- f32 --------
 
 #[test]
-#[ignore]
 fn flip_backward_f32_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -98,7 +98,6 @@ fn flip_backward_f32_2d() {
 }
 
 #[test]
-#[ignore]
 fn flip_backward_f32_3d_both() {
     let (ctx, stream) = setup();
     let shape = [2i32, 4, 8];
@@ -138,7 +137,6 @@ fn flip_backward_f32_3d_both() {
 }
 
 #[test]
-#[ignore]
 fn flip_backward_f32_no_axes_is_copy() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -182,7 +180,6 @@ fn flip_backward_f32_no_axes_is_copy() {
 // -------- f16 --------
 
 #[test]
-#[ignore]
 fn flip_backward_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -226,7 +223,6 @@ fn flip_backward_f16_2d() {
 // -------- bf16 --------
 
 #[test]
-#[ignore]
 fn flip_backward_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 7];
@@ -270,7 +266,6 @@ fn flip_backward_bf16_2d() {
 // -------- f64 --------
 
 #[test]
-#[ignore]
 fn flip_backward_f64_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];

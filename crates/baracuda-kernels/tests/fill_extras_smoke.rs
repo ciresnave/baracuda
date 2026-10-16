@@ -1,10 +1,13 @@
 //! Phase 36 (Fuel ask Gap 4) — direct-FFI smoke for the new fill
 //! dtypes (`u32`, `i16`, FP8 E4M3) + a representative strided case.
 
+#[cfg(feature = "device-tests")]
 use core::ffi::c_void;
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
+#[cfg(feature = "device-tests")]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -14,7 +17,7 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fill_u32_contig() {
     let (ctx, stream) = setup();
     let numel = 1024usize;
@@ -42,7 +45,7 @@ fn fill_u32_contig() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fill_i16_contig() {
     let (ctx, stream) = setup();
     let numel = 1024usize;
@@ -70,7 +73,7 @@ fn fill_i16_contig() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fill_fp8e4m3_contig() {
     let (ctx, stream) = setup();
     let numel = 1024usize;
@@ -99,7 +102,7 @@ fn fill_fp8e4m3_contig() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fill_f32_strided_skip_every_other_row() {
     // Logical shape [4, 8], stride_y = [16, 1]. The kernel writes
     // every other "row" of a [4, 16] backing buffer — the first 8

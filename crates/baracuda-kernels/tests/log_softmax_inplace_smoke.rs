@@ -11,11 +11,12 @@
 //! Dtypes: f32 / f16 / bf16. f64 falls back to the legacy
 //! multi-pass-global kernel (not in-place safe) and is skipped.
 //!
-//! `#[ignore]` per project convention; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --features sm89 \
 //!    --test log_softmax_inplace_smoke -- --include-ignored`.
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -31,7 +32,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_f32_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
     let outer: usize = 4;
@@ -106,7 +106,6 @@ fn log_softmax_f32_inplace_matches_non_aliased() {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_f16_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
     let outer: usize = 4;
@@ -182,7 +181,6 @@ fn log_softmax_f16_inplace_matches_non_aliased() {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_bf16_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
     let outer: usize = 4;
@@ -256,7 +254,6 @@ fn log_softmax_bf16_inplace_matches_non_aliased() {
 }
 
 #[test]
-#[ignore]
 fn log_softmax_f64_inplace_matches_non_aliased() {
     // Phase 65d-ext: f64 routes through SMEM via `block_reduce_{max,sum}_f64`.
     let (ctx, stream) = setup();

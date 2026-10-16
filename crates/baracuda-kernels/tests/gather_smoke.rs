@@ -4,9 +4,10 @@
 //! kernel does no arithmetic (pure load + store) so output is bit-exact
 //! against the CPU reference.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test gather_smoke -- --ignored`.
+//!   --test gather_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -23,7 +24,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn gather_f32_2d_dim1() {
     let (ctx, stream) = setup();
     let src_shape = [4i32, 5];
@@ -84,7 +84,6 @@ fn gather_f32_2d_dim1() {
 }
 
 #[test]
-#[ignore]
 fn gather_f64_3d_dim0() {
     let (ctx, stream) = setup();
     let src_shape = [6i32, 3, 4];
@@ -148,7 +147,6 @@ fn gather_f64_3d_dim0() {
 }
 
 #[test]
-#[ignore]
 fn gather_i32_2d_dim1() {
     let (ctx, stream) = setup();
     let src_shape = [3i32, 4];

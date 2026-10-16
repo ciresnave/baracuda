@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `CrossEntropyLossPlan` with `target_kind=SoftProb`.
 //! FW × 4 dtypes × Mean.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -51,7 +52,6 @@ fn make_soft_target(n_rows: usize, classes: usize) -> Vec<f32> {
 }
 
 #[test]
-#[ignore]
 fn loss_cross_entropy_soft_f32_mean() {
     let (ctx, stream) = setup();
     let n_rows = 4i32;
@@ -117,7 +117,6 @@ fn loss_cross_entropy_soft_f32_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_cross_entropy_soft_f64_mean() {
     let (ctx, stream) = setup();
     let n_rows = 3i32;
@@ -175,7 +174,6 @@ fn loss_cross_entropy_soft_f64_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_cross_entropy_soft_f16_mean() {
     let (ctx, stream) = setup();
     let n_rows = 4i32;
@@ -242,7 +240,6 @@ fn loss_cross_entropy_soft_f16_mean() {
 }
 
 #[test]
-#[ignore]
 fn loss_cross_entropy_soft_bf16_mean() {
     let (ctx, stream) = setup();
     let n_rows = 3i32;

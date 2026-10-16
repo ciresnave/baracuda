@@ -13,6 +13,7 @@
 // llama.cpp and are part of the public quantization vocabulary; keep
 // the capital `K` in test names.
 #![allow(non_snake_case)]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -29,7 +30,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn gguf_mmvq_q8_0_2x64() {
     let (ctx, stream) = setup();
 
@@ -130,7 +130,6 @@ fn gguf_mmvq_q8_0_2x64() {
 }
 
 #[test]
-#[ignore]
 fn gguf_mmvq_q8_K_2x256() {
     // Phase 11.4 — Q8_K MMVQ is now a supported bespoke kernel (closing
     // the Fuel team's feedback gap). Geometry: 2 rows × 1 super-block

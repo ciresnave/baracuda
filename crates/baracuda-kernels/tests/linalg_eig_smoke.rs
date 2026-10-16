@@ -13,7 +13,8 @@
 //! For real input: `wr ≈ [0, 0]`, `|wi[0]| ≈ |wi[1]| ≈ 1` with opposite
 //! signs. For complex input: `W` contains `±i` directly.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -58,7 +59,6 @@ fn rotation_2x2_c64() -> Vec<Complex128> {
 }
 
 #[test]
-#[ignore]
 fn eig_f32_pm_i() {
     let (ctx, stream) = setup();
     let n: i32 = 2;
@@ -132,7 +132,6 @@ fn eig_f32_pm_i() {
 }
 
 #[test]
-#[ignore]
 fn eig_f64_pm_i() {
     let (ctx, stream) = setup();
     let n: i32 = 2;
@@ -203,7 +202,6 @@ fn eig_f64_pm_i() {
 }
 
 #[test]
-#[ignore]
 fn eig_complex32_pm_i() {
     let (ctx, stream) = setup();
     let n: i32 = 2;
@@ -274,7 +272,6 @@ fn eig_complex32_pm_i() {
 }
 
 #[test]
-#[ignore]
 fn eig_complex64_pm_i() {
     let (ctx, stream) = setup();
     let n: i32 = 2;

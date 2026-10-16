@@ -11,11 +11,12 @@
 //! is not bit-stable between libdevice (CUDA) and Rust's libm
 //! equivalents.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --no-default-features --features sm89 \
-//!  --release --test int4_bias_smoke -- --ignored`.
+//!  --release --test int4_bias_smoke --features device-tests`.
 
 #![cfg(feature = "sm89")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -449,7 +450,6 @@ const U4_OUT_MAX: f32 = 12.0;
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn s4_rcr_bias_f32() {
     run_int4_bias_smoke::<S4, f32>(
         M,
@@ -468,7 +468,6 @@ fn s4_rcr_bias_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rcr_bias_relu_f32() {
     run_int4_bias_smoke::<S4, f32>(
         M,
@@ -487,7 +486,6 @@ fn s4_rcr_bias_relu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rcr_bias_gelu_f32() {
     run_int4_bias_smoke::<S4, f32>(
         M,
@@ -506,7 +504,6 @@ fn s4_rcr_bias_gelu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rcr_bias_silu_f32() {
     run_int4_bias_smoke::<S4, f32>(
         M,
@@ -525,7 +522,6 @@ fn s4_rcr_bias_silu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rcr_bias_i32() {
     run_int4_bias_smoke::<S4, i32>(
         M,
@@ -544,7 +540,6 @@ fn s4_rcr_bias_i32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rcr_bias_relu_i32() {
     run_int4_bias_smoke::<S4, i32>(
         M,
@@ -563,7 +558,6 @@ fn s4_rcr_bias_relu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rcr_bias_gelu_i32() {
     run_int4_bias_smoke::<S4, i32>(
         M,
@@ -582,7 +576,6 @@ fn s4_rcr_bias_gelu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rcr_bias_silu_i32() {
     run_int4_bias_smoke::<S4, i32>(
         M,
@@ -606,7 +599,6 @@ fn s4_rcr_bias_silu_i32() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn u4_rcr_bias_f32() {
     run_int4_bias_smoke::<U4, f32>(
         M,
@@ -625,7 +617,6 @@ fn u4_rcr_bias_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rcr_bias_relu_f32() {
     run_int4_bias_smoke::<U4, f32>(
         M,
@@ -644,7 +635,6 @@ fn u4_rcr_bias_relu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rcr_bias_gelu_f32() {
     run_int4_bias_smoke::<U4, f32>(
         M,
@@ -663,7 +653,6 @@ fn u4_rcr_bias_gelu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rcr_bias_silu_f32() {
     run_int4_bias_smoke::<U4, f32>(
         M,
@@ -682,7 +671,6 @@ fn u4_rcr_bias_silu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rcr_bias_i32() {
     run_int4_bias_smoke::<U4, i32>(
         M,
@@ -701,7 +689,6 @@ fn u4_rcr_bias_i32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rcr_bias_relu_i32() {
     run_int4_bias_smoke::<U4, i32>(
         M,
@@ -720,7 +707,6 @@ fn u4_rcr_bias_relu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rcr_bias_gelu_i32() {
     run_int4_bias_smoke::<U4, i32>(
         M,
@@ -739,7 +725,6 @@ fn u4_rcr_bias_gelu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rcr_bias_silu_i32() {
     run_int4_bias_smoke::<U4, i32>(
         M,
@@ -763,7 +748,6 @@ fn u4_rcr_bias_silu_i32() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn s4_rrr_bias_f32() {
     run_int4_bias_smoke::<S4, f32>(
         M,
@@ -782,7 +766,6 @@ fn s4_rrr_bias_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rrr_bias_relu_f32() {
     run_int4_bias_smoke::<S4, f32>(
         M,
@@ -801,7 +784,6 @@ fn s4_rrr_bias_relu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rrr_bias_gelu_f32() {
     run_int4_bias_smoke::<S4, f32>(
         M,
@@ -820,7 +802,6 @@ fn s4_rrr_bias_gelu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rrr_bias_silu_f32() {
     run_int4_bias_smoke::<S4, f32>(
         M,
@@ -839,7 +820,6 @@ fn s4_rrr_bias_silu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rrr_bias_i32() {
     run_int4_bias_smoke::<S4, i32>(
         M,
@@ -858,7 +838,6 @@ fn s4_rrr_bias_i32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rrr_bias_relu_i32() {
     run_int4_bias_smoke::<S4, i32>(
         M,
@@ -877,7 +856,6 @@ fn s4_rrr_bias_relu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rrr_bias_gelu_i32() {
     run_int4_bias_smoke::<S4, i32>(
         M,
@@ -896,7 +874,6 @@ fn s4_rrr_bias_gelu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn s4_rrr_bias_silu_i32() {
     run_int4_bias_smoke::<S4, i32>(
         M,
@@ -920,7 +897,6 @@ fn s4_rrr_bias_silu_i32() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn u4_rrr_bias_f32() {
     run_int4_bias_smoke::<U4, f32>(
         M,
@@ -939,7 +915,6 @@ fn u4_rrr_bias_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rrr_bias_relu_f32() {
     run_int4_bias_smoke::<U4, f32>(
         M,
@@ -958,7 +933,6 @@ fn u4_rrr_bias_relu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rrr_bias_gelu_f32() {
     run_int4_bias_smoke::<U4, f32>(
         M,
@@ -977,7 +951,6 @@ fn u4_rrr_bias_gelu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rrr_bias_silu_f32() {
     run_int4_bias_smoke::<U4, f32>(
         M,
@@ -996,7 +969,6 @@ fn u4_rrr_bias_silu_f32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rrr_bias_i32() {
     run_int4_bias_smoke::<U4, i32>(
         M,
@@ -1015,7 +987,6 @@ fn u4_rrr_bias_i32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rrr_bias_relu_i32() {
     run_int4_bias_smoke::<U4, i32>(
         M,
@@ -1034,7 +1005,6 @@ fn u4_rrr_bias_relu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rrr_bias_gelu_i32() {
     run_int4_bias_smoke::<U4, i32>(
         M,
@@ -1053,7 +1023,6 @@ fn u4_rrr_bias_gelu_i32() {
     );
 }
 #[test]
-#[ignore]
 fn u4_rrr_bias_silu_i32() {
     run_int4_bias_smoke::<U4, i32>(
         M,

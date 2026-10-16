@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `HistogramPlan<T>` + `BincountPlan<T>`
-//! (Phase 9 Category O). `#[ignore]` by default.
+//! (Phase 9 Category O). gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -17,7 +18,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn histogram_f32_basic() {
     let (ctx, stream) = setup();
     let numel: i64 = 1000;
@@ -77,7 +77,6 @@ fn histogram_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn bincount_i32_basic() {
     let (ctx, stream) = setup();
     let input: Vec<i32> = vec![0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 5];

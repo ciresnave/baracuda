@@ -4,7 +4,8 @@
 //! of small well-conditioned matrices. Singular values must be non-
 //! negative and sorted descending (per cuSOLVER's default `sort_eig`).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -36,7 +37,6 @@ fn matmul_cm_f32(a: &[f32], b: &[f32], m: usize, n: usize, p: usize) -> Vec<f32>
 }
 
 #[test]
-#[ignore]
 fn svd_batched_f32_basic() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -171,7 +171,6 @@ fn svd_batched_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn svd_batched_f64_values_only() {
     let (ctx, stream) = setup();
     let b: i32 = 2;

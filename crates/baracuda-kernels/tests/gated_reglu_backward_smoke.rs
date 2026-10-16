@@ -4,6 +4,7 @@
 //!   da = (b > 0) ? dy·b : 0
 //!   db = (b > 0) ? dy·a : 0
 //! Bit-exact at f32 / f64; 1 ULP detour rounding at f16 / bf16.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -112,7 +113,6 @@ fn cpu_ref_bw_f64(x: &[f64], dy: &[f64], input_shape: &[i32], split_dim: usize) 
 }
 
 #[test]
-#[ignore]
 fn reglu_bw_f32() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];
@@ -170,7 +170,6 @@ fn reglu_bw_f32() {
 }
 
 #[test]
-#[ignore]
 fn reglu_bw_f64() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 32];
@@ -228,7 +227,6 @@ fn reglu_bw_f64() {
 }
 
 #[test]
-#[ignore]
 fn reglu_bw_f16() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];
@@ -290,7 +288,6 @@ fn reglu_bw_f16() {
 }
 
 #[test]
-#[ignore]
 fn reglu_bw_bf16() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];

@@ -3,6 +3,7 @@
 //! Forward: `y = a · relu(b) = a · max(b, 0)`. Bit-exact at f32 / f64
 //! (pure mul-or-zero, no transcendental). f16 / bf16 detour through f32
 //! → 1 ULP from final round.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -94,7 +95,6 @@ fn cpu_ref_f64(x: &[f64], input_shape: &[i32], split_dim: usize) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn reglu_fw_f32() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];
@@ -139,7 +139,6 @@ fn reglu_fw_f32() {
 }
 
 #[test]
-#[ignore]
 fn reglu_fw_f64() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 32];
@@ -183,7 +182,6 @@ fn reglu_fw_f64() {
 }
 
 #[test]
-#[ignore]
 fn reglu_fw_f16() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];
@@ -234,7 +232,6 @@ fn reglu_fw_f16() {
 }
 
 #[test]
-#[ignore]
 fn reglu_fw_bf16() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];

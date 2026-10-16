@@ -8,7 +8,8 @@
 //! validate end-to-end status, that the upper triangle is non-zero, and
 //! that `info[b] == 0` for every batch slot.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn qr_batched_f32_basic() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -94,7 +94,6 @@ fn qr_batched_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn qr_batched_f64_basic() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -148,7 +147,6 @@ fn qr_batched_f64_basic() {
 }
 
 #[test]
-#[ignore]
 fn qr_batched_complex32_basic() {
     let (ctx, stream) = setup();
     let b: i32 = 2;
@@ -223,7 +221,6 @@ fn qr_batched_complex32_basic() {
 }
 
 #[test]
-#[ignore]
 fn qr_batched_complex64_basic() {
     let (ctx, stream) = setup();
     let b: i32 = 2;

@@ -6,7 +6,8 @@
 //! pointer plumbing. `i64` idx for gather already had coverage in
 //! `gather_smoke.rs`.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -23,7 +24,6 @@ fn setup() -> (Context, Stream) {
 /// Mirrors the kernel's coord layout: out[i,j] = src[i, idx[i,j]] along
 /// `gather_dim=1`. Index dtype is u8.
 #[test]
-#[ignore]
 fn gather_u8idx_f32_2d_dim1() {
     let (ctx, stream) = setup();
     let out_shape = [3i32, 4]; // index shape == out shape
@@ -89,7 +89,6 @@ fn gather_u8idx_f32_2d_dim1() {
 }
 
 #[test]
-#[ignore]
 fn gather_u8idx_f64_2d_dim0() {
     let (ctx, stream) = setup();
     let out_shape = [3i32, 4]; // == index shape

@@ -5,12 +5,13 @@
 //! `1/(H*W)` normalization at the plan layer so the round-trip is the
 //! identity.
 //!
-//! `#[ignore]` by default — requires a real CUDA device. Run with:
+//! Gated behind the `device-tests` feature — requires a real CUDA device. Run with:
 //!
 //! ```text
 //! cargo test -p baracuda-kernels --release --features sm89 \
-//!     --test fft_2d_smoke -- --ignored
+//!     --test fft_2d_smoke --features device-tests
 //! ```
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -31,7 +32,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn fft2_ifft2_roundtrip_complex32() {
     let (ctx, stream) = setup();
 
@@ -114,7 +114,6 @@ fn fft2_ifft2_roundtrip_complex32() {
 }
 
 #[test]
-#[ignore]
 fn fft2_ifft2_roundtrip_complex64() {
     let (ctx, stream) = setup();
 
@@ -195,7 +194,6 @@ fn fft2_ifft2_roundtrip_complex64() {
 }
 
 #[test]
-#[ignore]
 fn fft2_forward_constant_signal() {
     // FFT2 of a constant signal produces a single non-zero bin at
     // (0,0) with value `H * W * c`, all other bins zero. Confirms

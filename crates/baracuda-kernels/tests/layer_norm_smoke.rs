@@ -4,7 +4,8 @@
 //! biased (population) variance, matching PyTorch's `nn.LayerNorm`.
 //! Tests cover affine on/off across all four dtypes.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -110,7 +111,6 @@ fn host_layer_norm_f32(
 }
 
 #[test]
-#[ignore]
 fn layer_norm_f32_full_affine() {
     let (ctx, stream) = setup();
     let shape = [2i32, 3, 8];
@@ -216,7 +216,6 @@ fn layer_norm_f32_full_affine() {
 }
 
 #[test]
-#[ignore]
 fn layer_norm_f64_no_affine() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];
@@ -327,7 +326,6 @@ fn layer_norm_f64_no_affine() {
 }
 
 #[test]
-#[ignore]
 fn layer_norm_f16_full_affine() {
     let (ctx, stream) = setup();
     let shape = [3i32, 8];
@@ -421,7 +419,6 @@ fn layer_norm_f16_full_affine() {
 }
 
 #[test]
-#[ignore]
 fn layer_norm_bf16_no_affine() {
     let (ctx, stream) = setup();
     let shape = [2i32, 8];

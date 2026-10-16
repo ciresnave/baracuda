@@ -6,7 +6,8 @@
 //! `attn`, but the produced gradients match within the documented
 //! tile-by-tile rounding envelope.
 //!
-//! Covers BW × 4 FP dtypes. `#[ignore]` by default — requires a real CUDA device.
+//! Covers BW × 4 FP dtypes. gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -69,7 +70,6 @@ fn gen_dy_f64() -> Vec<f64> {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_backward_f32_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -391,7 +391,6 @@ fn flash_sdpa_backward_f32_basic() {
 // tiles cleanly. Compares against the naive Milestone 6.2 reference
 // kernel at 64·EPS tolerance, matching the f32 BW test pattern.
 #[test]
-#[ignore]
 fn flash_sdpa_backward_f64_basic() {
     let (ctx, stream) = setup();
     let q_h = gen_q_f64();
@@ -700,7 +699,6 @@ fn flash_sdpa_backward_f64_basic() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn flash_sdpa_backward_f16_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -1011,7 +1009,6 @@ fn flash_sdpa_backward_f16_basic() {
 }
 
 #[test]
-#[ignore]
 fn flash_sdpa_backward_bf16_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();

@@ -5,7 +5,8 @@
 //! atomic-accumulation path (multiple `i` mapping to the same `dst`
 //! row) — this is what makes the op valuable over a pure assign.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn index_add_f32_2d_dim0() {
     let (ctx, stream) = setup();
     // dst: [5, 4], src: [3, 4], idx 1-D length 3.
@@ -89,7 +89,6 @@ fn index_add_f32_2d_dim0() {
 }
 
 #[test]
-#[ignore]
 fn index_add_f64_2d_dim0_duplicate_target() {
     let (ctx, stream) = setup();
     // Heavier duplicate-target test: 5 src rows, idx maps {0, 1, 0, 2, 0},
@@ -155,7 +154,6 @@ fn index_add_f64_2d_dim0_duplicate_target() {
 }
 
 #[test]
-#[ignore]
 fn index_add_f32_i64idx_2d_dim0() {
     let (ctx, stream) = setup();
     let src_shape = [4i32, 3];

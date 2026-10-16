@@ -5,9 +5,10 @@
 //! mirrors `flip_2d_axis_1` from the f32 file (reverse each row of a
 //! 4x8 matrix).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test flip_dtype_smoke -- --ignored`.
+//!   --test flip_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn flip_2d_axis_1_f16() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -77,7 +77,6 @@ fn flip_2d_axis_1_f16() {
 }
 
 #[test]
-#[ignore]
 fn flip_2d_axis_1_bf16() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -128,7 +127,6 @@ fn flip_2d_axis_1_bf16() {
 }
 
 #[test]
-#[ignore]
 fn flip_2d_axis_1_f64() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];

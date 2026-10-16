@@ -3,7 +3,8 @@
 //! Verifies `min ||A·x - b||²` for a small overdetermined full-rank
 //! system. Column-major end-to-end.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -48,7 +49,6 @@ fn matmul_cm_f64(a: &[f64], x: &[f64], m: usize, n: usize, p: usize) -> Vec<f64>
 }
 
 #[test]
-#[ignore]
 fn lstsq_f32_overdetermined() {
     let (ctx, stream) = setup();
     let m: i32 = 4;
@@ -125,7 +125,6 @@ fn lstsq_f32_overdetermined() {
 }
 
 #[test]
-#[ignore]
 fn lstsq_f64_overdetermined() {
     let (ctx, stream) = setup();
     let m: i32 = 4;
@@ -299,7 +298,6 @@ fn host_lstsq_f64(a: &[f64], b: &[f64], m: usize, n: usize) -> Vec<f64> {
 // inner solver does happen to fail.
 
 #[test]
-#[ignore]
 fn lstsq_f32_qr_fallback_succeeds_with_backup() {
     let (ctx, stream) = setup();
     let m: i32 = 6;
@@ -410,7 +408,6 @@ fn lstsq_f32_qr_fallback_succeeds_with_backup() {
 }
 
 #[test]
-#[ignore]
 fn lstsq_f64_qr_fallback_succeeds_with_backup() {
     let (ctx, stream) = setup();
     let m: i32 = 6;

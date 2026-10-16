@@ -20,16 +20,19 @@
 //! line on every other family member's docstring, the contract holds
 //! for those too.
 //!
-//! Marked `#[ignore]` per project convention; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --features sm89 \
 //!    --test inplace_aliasing_contract_smoke -- --include-ignored`.
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 
+#[cfg(feature = "device-tests")]
 use core::ffi::c_void;
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
+#[cfg(feature = "device-tests")]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -38,6 +41,7 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
+#[cfg(feature = "device-tests")]
 fn close_enough_f32(a: f32, b: f32) -> bool {
     let tol = b.abs().max(1.0) * 2.0 * f32::EPSILON;
     (a - b).abs() <= tol
@@ -50,7 +54,7 @@ fn close_enough_f32(a: f32, b: f32) -> bool {
 /// Unary contig: `x_ptr == y_ptr` must produce the same result as a
 /// separately-output `x → y` run.
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn unary_neg_f32_contig_aliasing_safe() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -107,7 +111,7 @@ fn unary_neg_f32_contig_aliasing_safe() {
 /// Binary contig: `a_ptr == y_ptr` must produce the same result as a
 /// non-aliased run.
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn binary_add_f32_contig_aliasing_a_eq_y_safe() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -168,7 +172,7 @@ fn binary_add_f32_contig_aliasing_a_eq_y_safe() {
 
 /// Binary contig: `b_ptr == y_ptr` symmetric to above.
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn binary_add_f32_contig_aliasing_b_eq_y_safe() {
     let (ctx, stream) = setup();
     let numel = 512;
@@ -223,7 +227,7 @@ fn binary_add_f32_contig_aliasing_b_eq_y_safe() {
 /// Ternary contig: clamp with `a_ptr == y_ptr` (the input being clamped
 /// is also the output).
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn ternary_clamp_f32_contig_aliasing_a_eq_y_safe() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -294,11 +298,15 @@ fn ternary_clamp_f32_contig_aliasing_a_eq_y_safe() {
 // the Phase 62 contract.
 // =========================================================================
 
+#[cfg(feature = "device-tests")]
 const STRIDED_SHAPE: [i32; 2] = [8, 16];
 const STRIDED_STRIDE: [i64; 2] = [32, 1];
+#[cfg(feature = "device-tests")]
 const STRIDED_PHYS_LEN: usize = 8 * 32;
+#[cfg(feature = "device-tests")]
 const STRIDED_NUMEL: usize = 8 * 16;
 
+#[cfg(feature = "device-tests")]
 fn addressed_offsets() -> Vec<usize> {
     let mut out = Vec::with_capacity(STRIDED_NUMEL);
     for r in 0..STRIDED_SHAPE[0] as usize {
@@ -310,7 +318,7 @@ fn addressed_offsets() -> Vec<usize> {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn unary_neg_f32_strided_aliasing_equal_strides_safe() {
     let (ctx, stream) = setup();
     let pad: f32 = 999_999.5;
@@ -386,7 +394,7 @@ fn unary_neg_f32_strided_aliasing_equal_strides_safe() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn binary_add_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
     let (ctx, stream) = setup();
     let pad: f32 = 999_999.5;
@@ -463,7 +471,7 @@ fn binary_add_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn ternary_clamp_f32_strided_aliasing_a_eq_y_equal_strides_safe() {
     let (ctx, stream) = setup();
     let pad: f32 = 999_999.5;

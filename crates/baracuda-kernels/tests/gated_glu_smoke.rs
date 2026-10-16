@@ -3,6 +3,7 @@
 //!
 //! Forward: `y = a · sigmoid(b)`. Tolerances: 4·eps (f32/f64),
 //! 4·F16_EPS / 4·BF16_EPS (f16/bf16) — sigmoid+exp inside.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -111,7 +112,6 @@ fn cpu_ref_f64(x: &[f64], input_shape: &[i32], split_dim: usize) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn glu_fw_f32() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];
@@ -156,7 +156,6 @@ fn glu_fw_f32() {
 }
 
 #[test]
-#[ignore]
 fn glu_fw_f64() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 32];
@@ -201,7 +200,6 @@ fn glu_fw_f64() {
 }
 
 #[test]
-#[ignore]
 fn glu_fw_f16() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];
@@ -248,7 +246,6 @@ fn glu_fw_f16() {
 }
 
 #[test]
-#[ignore]
 fn glu_fw_bf16() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 4, 8];

@@ -19,6 +19,7 @@
 //! before and during the FW pass, then asserts the headroom delta
 //! is below an upper bound derived from chunk_size (with generous
 //! slack for CUDA's allocator quantization).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, memory::mem_get_info};
 use baracuda_kernels::{
@@ -36,7 +37,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn flce_chunk_size_picks_small_for_large_vocab() {
     // First a pure-host test on the chunk-size heuristic — proves the
     // value prop *plan-statically* before we do any GPU work.
@@ -76,7 +76,6 @@ fn flce_chunk_size_picks_small_for_large_vocab() {
 }
 
 #[test]
-#[ignore]
 fn flce_real_gpu_memory_under_bound() {
     let (ctx, stream) = setup();
 

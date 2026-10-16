@@ -9,7 +9,8 @@
 //! block-format dispatch, and ABI alignment between the FFI launchers
 //! and the Rust `BlockQ4_0` struct.
 //!
-//! Marked `#[ignore]` per the project convention for real-GPU tests.
+//! Marked gated behind the `device-tests` feature per the project convention for real-GPU tests.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn gguf_dequantize_q4_0_all_high_nibbles() {
     let (ctx, stream) = setup();
 
@@ -88,7 +88,6 @@ fn gguf_dequantize_q4_0_all_high_nibbles() {
 }
 
 #[test]
-#[ignore]
 fn gguf_dequantize_q8_0_known_values() {
     use baracuda_kernels::BlockQ8_0;
 

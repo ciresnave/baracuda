@@ -7,7 +7,8 @@
 //!   2. append at a non-zero uniform offset (subsequent decode step)
 //!   3. ragged offsets — different `cache_offsets[b]` per sample
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -255,25 +256,21 @@ where
 }
 
 #[test]
-#[ignore]
 fn kv_cache_append_f32() {
     run_three_cases::<f32>(|v| v, ElementKind::F32);
 }
 
 #[test]
-#[ignore]
 fn kv_cache_append_f16() {
     run_three_cases::<f16>(f16::from_f32, ElementKind::F16);
 }
 
 #[test]
-#[ignore]
 fn kv_cache_append_bf16() {
     run_three_cases::<bf16>(bf16::from_f32, ElementKind::Bf16);
 }
 
 #[test]
-#[ignore]
 fn kv_cache_append_f64() {
     run_three_cases::<f64>(|v| v as f64, ElementKind::F64);
 }

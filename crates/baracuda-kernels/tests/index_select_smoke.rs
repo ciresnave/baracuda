@@ -3,7 +3,8 @@
 //! `out[..., j, ...] = src[..., idx[j], ...]` along `select_dim` with
 //! a 1-D i32 idx. f32, f64, i32 coverage. Bit-exact (no arithmetic).
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -20,7 +21,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn index_select_f32_2d_dim0() {
     let (ctx, stream) = setup();
     let src_shape = [5i32, 4];
@@ -76,7 +76,6 @@ fn index_select_f32_2d_dim0() {
 }
 
 #[test]
-#[ignore]
 fn index_select_f64_3d_dim2() {
     let (ctx, stream) = setup();
     let src_shape = [2i32, 3, 6];
@@ -134,7 +133,6 @@ fn index_select_f64_3d_dim2() {
 }
 
 #[test]
-#[ignore]
 fn index_select_i32_2d_dim1() {
     let (ctx, stream) = setup();
     let src_shape = [3i32, 5];
