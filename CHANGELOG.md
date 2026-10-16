@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.112 — 2026-10-16 (sk6 adoption: `unpopped` family 0.17.3 -> 0.18.0) — Breaking
+
+Workspace alpha.112 (proposed; PM allocates at gate); `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.18.0 (they follow the `unpopped` 0.18.0 they work with).
+
+- Dependencies: `unpopped`, `unpopped-vocab`, `unpopped-cpu-c`, `unpopped-slang` and `tools/kiss-ref-diff` move to 0.18.0 (KISS#588, conformance 0.4.0: structure key `sk5` -> `sk6`, optional `q<dtype>` on quantized `ctr` cells, Announce `list_version` 2 + `op_identity`). Breaking: every emitted structure key now starts `sk6|`.
+- `baracuda-cuda-emit` goldens `contract_canonical{,_batched}_f32.cu`: line 2 only, `sk5|ctr|` -> `sk6|ctr|`; kernel bodies byte-identical. Test prefixes: `contract.rs`, `jit.rs`, `link.rs` `sk5|` -> `sk6|`.
+- Announce speakers and the keyer live in `unpopped`; baracuda has none of its own, so there is nothing to regenerate here beyond the above.
+- Verified: emit 305 unit + integration tests, parse, seam, cuda-vocab, kernels-types, types all pass; sk harness (`unpopped-vocab =0.18.0`) vs KISS `structure_key_derivation_vectors.json` at KISS `86196f7`: 36 vectors, 31 PASS(non-prefix), 1 PASS, 4 DECLINE-DIFFERS (3 classifier string artifacts, 1 contraction skip KISS#543), 0 FAIL.
+
 ## 0.0.1-alpha.111 — 2026-10-15 (unpopped family 0.17.1 -> 0.17.3)
 
 Workspace alpha.111 (proposed; PM allocates at gate); `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.17.3 (they follow the `unpopped` 0.17.3 they work with).
