@@ -57,10 +57,11 @@ fn round_trip_reemits_to_cuda_and_cpuc() {
 }
 
 /// Output directory for the dump: `$var` if set, else a per-test directory under
-/// the system temp dir, so the test runs in a plain `cargo test`.
+/// the crate's `target/`, so the test runs in a plain `cargo test`.
 fn dump_dir(var: &str, test: &str) -> String {
     let dir = std::env::var(var).unwrap_or_else(|_| {
-        std::env::temp_dir()
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
             .join("baracuda-emit-dump")
             .join(test)
             .to_string_lossy()

@@ -7943,12 +7943,13 @@ fn param_args_multi(exprs: &[&ScalarExpr], param_ctype: &str) -> String {
 }
 
 /// Output directory for a test source dump: `$var` if set (the on-device
-/// harness workflow), else a per-test directory under the system temp dir, so
+/// harness workflow), else a per-test directory under the crate's `target/`, so
 /// the dump runs in a plain `cargo test` without littering the cwd.
 #[cfg(test)]
 pub(crate) fn dump_dir(var: &str, test: &str) -> String {
     let dir = std::env::var(var).unwrap_or_else(|_| {
-        std::env::temp_dir()
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
             .join("baracuda-emit-dump")
             .join(test)
             .to_string_lossy()
