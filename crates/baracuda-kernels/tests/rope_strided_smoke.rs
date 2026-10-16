@@ -9,9 +9,10 @@
 //!   * f32 + f16 dtype quick coverage.
 //!   * One backward case to confirm BW strided also works.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test rope_strided_smoke -- --ignored`.
+//!   --test rope_strided_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -76,7 +77,6 @@ fn host_rope_ref_f32(
 
 /// 1. Contiguous path still works (sanity check).
 #[test]
-#[ignore]
 fn rope_strided_contig_f32() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -150,7 +150,6 @@ fn rope_strided_contig_f32() {
 /// swapped). We pretend it's `[B, H, S, D]` by reordering the strides.
 /// This exercises the strided FFI: outer-dim strides are non-canonical.
 #[test]
-#[ignore]
 fn rope_strided_transposed_view_f32() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -232,7 +231,6 @@ fn rope_strided_transposed_view_f32() {
 
 /// 3. Reject non-unit head_dim stride at the plan layer.
 #[test]
-#[ignore]
 fn rope_strided_rejects_non_unit_headdim_stride() {
     let (ctx, stream) = setup();
     let batch = 1i32;
@@ -286,7 +284,6 @@ fn rope_strided_rejects_non_unit_headdim_stride() {
 
 /// 4. f16 strided coverage.
 #[test]
-#[ignore]
 fn rope_strided_transposed_f16() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -364,7 +361,6 @@ fn rope_strided_transposed_f16() {
 
 /// 5. BW strided case — verifies the BW plan dispatches.
 #[test]
-#[ignore]
 fn rope_strided_backward_transposed_f32() {
     let (ctx, stream) = setup();
     let batch = 2i32;

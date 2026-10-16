@@ -2,7 +2,8 @@
 //! `roll` is `roll` with negated shifts. Bit-exact, no math.
 //!
 //! Run: `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test roll_backward_smoke -- --ignored`.
+//!   --test roll_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -50,7 +51,6 @@ fn cpu_roll_ref<const N: usize, T: Copy>(src: &[T], shape: [i32; N], shifts: [i3
 }
 
 #[test]
-#[ignore]
 fn roll_backward_f32_1d() {
     let (ctx, stream) = setup();
     let shape = [16i32];
@@ -91,7 +91,6 @@ fn roll_backward_f32_1d() {
 }
 
 #[test]
-#[ignore]
 fn roll_backward_f32_2d_negative_shift() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -131,7 +130,6 @@ fn roll_backward_f32_2d_negative_shift() {
 }
 
 #[test]
-#[ignore]
 fn roll_backward_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -173,7 +171,6 @@ fn roll_backward_f16_2d() {
 }
 
 #[test]
-#[ignore]
 fn roll_backward_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 7];
@@ -215,7 +212,6 @@ fn roll_backward_bf16_2d() {
 }
 
 #[test]
-#[ignore]
 fn roll_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [2i32, 3, 5];

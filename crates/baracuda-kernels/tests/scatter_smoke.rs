@@ -4,7 +4,8 @@
 //! on duplicate-target races). Tests use **disjoint target indices** so
 //! the output is deterministic.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn scatter_f32_2d_dim1_disjoint() {
     let (ctx, stream) = setup();
     let out_shape = [3i32, 6];
@@ -87,7 +87,6 @@ fn scatter_f32_2d_dim1_disjoint() {
 }
 
 #[test]
-#[ignore]
 fn scatter_f64_2d_dim0_disjoint() {
     let (ctx, stream) = setup();
     let out_shape = [6i32, 3];
@@ -150,7 +149,6 @@ fn scatter_f64_2d_dim0_disjoint() {
 }
 
 #[test]
-#[ignore]
 fn scatter_f32_2d_dim1_i64idx() {
     let (ctx, stream) = setup();
     let out_shape = [2i32, 5];

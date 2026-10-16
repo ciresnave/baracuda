@@ -6,9 +6,10 @@
 //! for f32, and weighted `(4 * eps * D)` for f16/bf16 (32 sequential
 //! adds each carry a half-precision rounding).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test trace_smoke -- --ignored`.
+//!   --test trace_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -36,7 +37,6 @@ fn shape() -> [i32; 2] {
 }
 
 #[test]
-#[ignore]
 fn trace_f32() {
     let (ctx, stream) = setup();
     let numel = (D as usize) * (D as usize);
@@ -90,7 +90,6 @@ fn trace_f32() {
 }
 
 #[test]
-#[ignore]
 fn trace_f16() {
     let (ctx, stream) = setup();
     let numel = (D as usize) * (D as usize);
@@ -143,7 +142,6 @@ fn trace_f16() {
 }
 
 #[test]
-#[ignore]
 fn trace_bf16() {
     let (ctx, stream) = setup();
     let numel = (D as usize) * (D as usize);
@@ -196,7 +194,6 @@ fn trace_bf16() {
 }
 
 #[test]
-#[ignore]
 fn trace_f64() {
     let (ctx, stream) = setup();
     let numel = (D as usize) * (D as usize);

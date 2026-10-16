@@ -3,7 +3,8 @@
 //!
 //! Round-trip identity: `IRFFT3(RFFT3(x)) ≈ x`.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn rfft3_irfft3_roundtrip_f32() {
     let (ctx, stream) = setup();
     let per_real = (D * H * W) as usize;
@@ -99,7 +99,6 @@ fn rfft3_irfft3_roundtrip_f32() {
 }
 
 #[test]
-#[ignore]
 fn rfft3_irfft3_roundtrip_f64() {
     let (ctx, stream) = setup();
     let per_real = (D * H * W) as usize;

@@ -7,6 +7,7 @@
 //!
 //! Direct FFI smoke (NOT through the plan layer) since the plan
 //! still hardcodes α = 1.0 until a future descriptor-param session.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -25,7 +26,6 @@ fn cpu_elu_f32(x: f32, alpha: f32) -> f32 {
 }
 
 #[test]
-#[ignore]
 fn ffi_unary_elu_f32_alpha_2_5_matches_cpu() {
     let (ctx, stream) = setup();
     let alpha = 2.5_f32;
@@ -63,7 +63,6 @@ fn ffi_unary_elu_f32_alpha_2_5_matches_cpu() {
 }
 
 #[test]
-#[ignore]
 fn ffi_unary_elu_f64_alpha_negative_branch_uses_alpha() {
     // Pick a fully-negative input range so EVERY cell takes the
     // negative branch — this is where α matters. Asserts the kernel

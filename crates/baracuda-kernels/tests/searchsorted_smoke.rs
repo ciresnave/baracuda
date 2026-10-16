@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `SearchsortedPlan<T>` (Phase 9 Category O).
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -16,7 +17,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn searchsorted_f32_lower_bound() {
     let (ctx, stream) = setup();
     let sorted: Vec<f32> = vec![1.0, 3.0, 5.0, 7.0, 9.0];

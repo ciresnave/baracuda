@@ -5,7 +5,8 @@
 //! `1e-12` (f64). The complex-side last-axis extent is the
 //! Hermitian-half (`W / 2 + 1`).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn rfft2_irfft2_roundtrip_f32() {
     let (ctx, stream) = setup();
     let per_real = (H * W) as usize;
@@ -97,7 +97,6 @@ fn rfft2_irfft2_roundtrip_f32() {
 }
 
 #[test]
-#[ignore]
 fn rfft2_irfft2_roundtrip_f64() {
     let (ctx, stream) = setup();
     let per_real = (H * W) as usize;

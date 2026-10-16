@@ -5,6 +5,7 @@
 //!
 //! So Cumsum BW dispatches the SAME forward kernel with `reverse`
 //! flipped. No new kernel; pure plan-shape work.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -80,7 +81,6 @@ fn host_cumsum_bw_f32<const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn cumsum_bw_f32_2d_axis_1_forward_fw() {
     // Forward fw_reverse=false → BW reverse=true (reverse cumsum of dy).
     let (ctx, stream) = setup();
@@ -126,7 +126,6 @@ fn cumsum_bw_f32_2d_axis_1_forward_fw() {
 }
 
 #[test]
-#[ignore]
 fn cumsum_bw_f32_3d_axis_0_reverse_fw() {
     // fw_reverse=true → BW reverse=false (forward cumsum of dy).
     let (ctx, stream) = setup();
@@ -175,7 +174,6 @@ fn cumsum_bw_f32_3d_axis_0_reverse_fw() {
 }
 
 #[test]
-#[ignore]
 fn cumsum_bw_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -222,7 +220,6 @@ fn cumsum_bw_f16_2d() {
 }
 
 #[test]
-#[ignore]
 fn cumsum_bw_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];
@@ -269,7 +266,6 @@ fn cumsum_bw_bf16_2d() {
 }
 
 #[test]
-#[ignore]
 fn cumsum_bw_f64_1d() {
     let (ctx, stream) = setup();
     let shape = [16i32];

@@ -13,9 +13,10 @@
 //!   `to_f32()` / `from_f32(...)`, so the rounding paths agree
 //!   bit-for-bit.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test ternary_clamp_dtype_smoke -- --ignored`.
+//!   --test ternary_clamp_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -33,7 +34,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn clamp_f16_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -107,7 +107,6 @@ fn clamp_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn clamp_bf16_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -179,7 +178,6 @@ fn clamp_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn clamp_f64_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];

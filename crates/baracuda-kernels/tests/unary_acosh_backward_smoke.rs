@@ -2,6 +2,7 @@
 //! (`UnaryBackwardPlan<T, 3> + UnaryKind::Acosh`). Backward:
 //! `dx = dy / sqrt(x² - 1)`. Saved-x. Inputs stay in `[1.1, 5.0]` to
 //! keep us strictly above the singularity at 1.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn acosh_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -78,7 +78,6 @@ fn acosh_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn acosh_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -136,7 +135,6 @@ fn acosh_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn acosh_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -194,7 +192,6 @@ fn acosh_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn acosh_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

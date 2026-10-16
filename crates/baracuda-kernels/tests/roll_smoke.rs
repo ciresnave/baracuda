@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `RollPlan<f32, N>` — cyclic shift along axes.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -15,7 +16,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn roll_1d_positive() {
     let (ctx, stream) = setup();
     let shape = [8i32];
@@ -61,7 +61,6 @@ fn roll_1d_positive() {
 }
 
 #[test]
-#[ignore]
 fn roll_1d_negative() {
     let (ctx, stream) = setup();
     let shape = [8i32];
@@ -106,7 +105,6 @@ fn roll_1d_negative() {
 }
 
 #[test]
-#[ignore]
 fn roll_2d_mixed() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -154,7 +152,6 @@ fn roll_2d_mixed() {
 }
 
 #[test]
-#[ignore]
 fn roll_zero_shifts_is_copy() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];

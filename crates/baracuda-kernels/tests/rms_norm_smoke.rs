@@ -6,7 +6,8 @@
 //! reuse by BW. Each test covers both `has_gamma=true` and a no-gamma
 //! variant.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -102,7 +103,6 @@ fn host_rms_norm_f32(
 }
 
 #[test]
-#[ignore]
 fn rms_norm_f32_with_gamma() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4, 8];
@@ -188,7 +188,6 @@ fn rms_norm_f32_with_gamma() {
 }
 
 #[test]
-#[ignore]
 fn rms_norm_f64_no_gamma() {
     let (ctx, stream) = setup();
     let shape = [2i32, 6];
@@ -279,7 +278,6 @@ fn rms_norm_f64_no_gamma() {
 }
 
 #[test]
-#[ignore]
 fn rms_norm_f16_with_gamma() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -351,7 +349,6 @@ fn rms_norm_f16_with_gamma() {
 }
 
 #[test]
-#[ignore]
 fn rms_norm_bf16_no_gamma() {
     let (ctx, stream) = setup();
     let shape = [3i32, 8];

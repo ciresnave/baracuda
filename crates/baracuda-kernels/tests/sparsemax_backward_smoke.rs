@@ -3,6 +3,7 @@
 //! BW formula: for active positions (`y > 0`),
 //!   `dx[i] = dy[i] - mean(dy[active])`;
 //! else 0.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -57,7 +58,6 @@ fn host_sparsemax_bw_f32(shape: [i32; 2], axis: usize, y: &[f32], dy: &[f32]) ->
 }
 
 #[test]
-#[ignore]
 fn sparsemax_bw_f32_known() {
     let (ctx, stream) = setup();
     let shape = [1i32, 3];
@@ -116,7 +116,6 @@ fn sparsemax_bw_f32_known() {
 }
 
 #[test]
-#[ignore]
 fn sparsemax_bw_f32_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 6];
@@ -180,7 +179,6 @@ fn sparsemax_bw_f32_2d() {
 }
 
 #[test]
-#[ignore]
 fn sparsemax_bw_f64_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -264,7 +262,6 @@ fn sparsemax_bw_f64_2d() {
 }
 
 #[test]
-#[ignore]
 fn sparsemax_bw_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -324,7 +321,6 @@ fn sparsemax_bw_f16_2d() {
 }
 
 #[test]
-#[ignore]
 fn sparsemax_bw_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];

@@ -5,6 +5,7 @@
 //!   1. Known reference: for input `[2, 1, 0]`, sparsemax → `[0.5, 0.5, 0]`.
 //!   2. Row-sums-to-1 invariant on a random input.
 //!   3. All outputs `>= 0`, with some genuinely zero (sparsity).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -57,7 +58,6 @@ fn host_sparsemax_f32(shape: [i32; 2], axis: usize, x: &[f32]) -> Vec<f32> {
 }
 
 #[test]
-#[ignore]
 fn sparsemax_f32_known_reference() {
     let (ctx, stream) = setup();
     // Known reference: sparsemax([0.5, 0.5, 0]) — already on the simplex,
@@ -153,7 +153,6 @@ fn sparsemax_f32_known_reference() {
 }
 
 #[test]
-#[ignore]
 fn sparsemax_f32_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [4i32, 6];
@@ -216,7 +215,6 @@ fn sparsemax_f32_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn sparsemax_f64_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -279,7 +277,6 @@ fn sparsemax_f64_2d() {
 }
 
 #[test]
-#[ignore]
 fn sparsemax_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -328,7 +325,6 @@ fn sparsemax_f16_2d() {
 }
 
 #[test]
-#[ignore]
 fn sparsemax_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];

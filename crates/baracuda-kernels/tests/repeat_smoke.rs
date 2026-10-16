@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `RepeatPlan<f32, N>` — per-axis tile.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -15,7 +16,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn repeat_1d() {
     let (ctx, stream) = setup();
     let input_shape = [4i32];
@@ -61,7 +61,6 @@ fn repeat_1d() {
 }
 
 #[test]
-#[ignore]
 fn repeat_2d() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3];
@@ -112,7 +111,6 @@ fn repeat_2d() {
 }
 
 #[test]
-#[ignore]
 fn repeat_one_is_identity() {
     // repeats = [1, 1, ...] means output == input.
     let (ctx, stream) = setup();

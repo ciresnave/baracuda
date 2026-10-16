@@ -10,9 +10,10 @@
 //! no math. Test inputs are constructed so that each cell lands in a
 //! different branch (some below lo, some in-range, some above hi).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test ternary_clamp_backward_smoke -- --ignored`.
+//!   --test ternary_clamp_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -46,7 +47,6 @@ fn gen_abc_f32(i: usize) -> (f32, f32, f32) {
 }
 
 #[test]
-#[ignore]
 fn clamp_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32, 96];
@@ -153,7 +153,6 @@ fn clamp_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn clamp_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32, 96];
@@ -250,7 +249,6 @@ fn clamp_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn clamp_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32, 96];
@@ -359,7 +357,6 @@ fn clamp_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn clamp_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32, 96];

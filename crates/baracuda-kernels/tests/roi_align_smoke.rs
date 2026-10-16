@@ -1,6 +1,7 @@
 //! Real-GPU smoke for `RoiAlignPlan<T>` (Phase 9 Category T).
 //! Single full-image RoI on a 1×1×4×4 input pooled to 2×2 →
-//! 2x2 block-average of the 4 input quadrants. `#[ignore]`.
+//! 2x2 block-average of the 4 input quadrants. gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -18,7 +19,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn roi_align_full_image_f32_smoke() {
     let (ctx, stream) = setup();
     let (n, c, h, w) = (1, 1, 4, 4);
@@ -92,7 +92,6 @@ fn roi_align_full_image_f32_smoke() {
 }
 
 #[test]
-#[ignore]
 fn roi_align_backward_smoke_f32() {
     let (ctx, stream) = setup();
     let (n, c, h, w) = (1, 1, 4, 4);
@@ -156,7 +155,6 @@ fn roi_align_backward_smoke_f32() {
 }
 
 #[test]
-#[ignore]
 fn roi_align_f64_smoke() {
     let (ctx, stream) = setup();
     let (n, c, h, w) = (1, 1, 4, 4);

@@ -5,7 +5,8 @@
 //!              `- x[..., i] · (Σ_j dy[..., j] · gamma[j] · x[..., j]) / (rms³ · N)`
 //!   `dgamma[i] = Σ over non-norm-axis cells dy[..., i] · (x[..., i] / rms[..., 0, ...])`
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -149,7 +150,6 @@ fn host_rms_per_row_f32(shape: &[i32], norm_axis: usize, x: &[f32], eps: f32) ->
 }
 
 #[test]
-#[ignore]
 fn rms_norm_bw_f32_with_gamma() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5, 8];
@@ -253,7 +253,6 @@ fn rms_norm_bw_f32_with_gamma() {
 }
 
 #[test]
-#[ignore]
 fn rms_norm_bw_f64_no_gamma() {
     let (ctx, stream) = setup();
     let shape = [2i32, 6];
@@ -352,7 +351,6 @@ fn rms_norm_bw_f64_no_gamma() {
 }
 
 #[test]
-#[ignore]
 fn rms_norm_bw_f16_with_gamma() {
     let (ctx, stream) = setup();
     let shape = [3i32, 8];
@@ -457,7 +455,6 @@ fn rms_norm_bw_f16_with_gamma() {
 }
 
 #[test]
-#[ignore]
 fn rms_norm_bw_bf16_no_gamma() {
     let (ctx, stream) = setup();
     let shape = [2i32, 8];

@@ -5,9 +5,10 @@
 //! forward kernel, so the BW smokes are just the FW smokes with the
 //! buffers renamed.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test triu_tril_smoke -- --ignored`.
+//!   --test triu_tril_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -73,7 +74,6 @@ fn triu_ref_i32(input: &[i32], m: i32, n: i32, batch: i32, diagonal: i32) -> Vec
 }
 
 #[test]
-#[ignore]
 fn triu_f32_3x3_diagonal_0() {
     let (ctx, stream) = setup();
     let shape = [3i32, 3];
@@ -113,7 +113,6 @@ fn triu_f32_3x3_diagonal_0() {
 }
 
 #[test]
-#[ignore]
 fn triu_f32_3x3_diagonal_1() {
     let (ctx, stream) = setup();
     let shape = [3i32, 3];
@@ -153,7 +152,6 @@ fn triu_f32_3x3_diagonal_1() {
 }
 
 #[test]
-#[ignore]
 fn triu_f32_3x4_diagonal_neg1() {
     let (ctx, stream) = setup();
     let shape = [3i32, 4];
@@ -197,7 +195,6 @@ fn triu_f32_3x4_diagonal_neg1() {
 }
 
 #[test]
-#[ignore]
 fn tril_f32_3x3_diagonal_0() {
     let (ctx, stream) = setup();
     let shape = [3i32, 3];
@@ -237,7 +234,6 @@ fn tril_f32_3x3_diagonal_0() {
 }
 
 #[test]
-#[ignore]
 fn tril_f32_3x3_diagonal_neg2() {
     let (ctx, stream) = setup();
     let shape = [3i32, 3];
@@ -281,7 +277,6 @@ fn tril_f32_3x3_diagonal_neg2() {
 }
 
 #[test]
-#[ignore]
 fn triu_batched_f32_2x3x4_diagonal_0() {
     let (ctx, stream) = setup();
     let shape = [2i32, 3, 4];
@@ -321,7 +316,6 @@ fn triu_batched_f32_2x3x4_diagonal_0() {
 }
 
 #[test]
-#[ignore]
 fn triu_bw_f32_3x3_diagonal_0() {
     let (ctx, stream) = setup();
     let shape = [3i32, 3];
@@ -362,7 +356,6 @@ fn triu_bw_f32_3x3_diagonal_0() {
 }
 
 #[test]
-#[ignore]
 fn tril_bw_f32_3x3_diagonal_neg1() {
     let (ctx, stream) = setup();
     let shape = [3i32, 3];
@@ -402,7 +395,6 @@ fn tril_bw_f32_3x3_diagonal_neg1() {
 }
 
 #[test]
-#[ignore]
 fn triu_i32_3x3_diagonal_0() {
     let (ctx, stream) = setup();
     let shape = [3i32, 3];

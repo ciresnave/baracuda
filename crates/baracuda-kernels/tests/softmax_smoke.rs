@@ -4,6 +4,7 @@
 //! numerically stable via max subtraction. Each output row sums to 1
 //! (up to floating-point rounding); we verify both the per-cell
 //! formula and the row-sum invariant.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -79,7 +80,6 @@ fn host_softmax_f32(input_shape: [i32; 3], axis: usize, x: &[f32]) -> Vec<f32> {
 }
 
 #[test]
-#[ignore]
 fn softmax_f32_3d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [2i32, 5, 4];
@@ -140,7 +140,6 @@ fn softmax_f32_3d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn softmax_f64_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -204,7 +203,6 @@ fn softmax_f64_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn softmax_f16_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [3i32, 8];
@@ -257,7 +255,6 @@ fn softmax_f16_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn softmax_bf16_2d_axis_0() {
     let (ctx, stream) = setup();
     let shape = [6i32, 4];

@@ -9,9 +9,10 @@
 //!   * Causal masked path.
 //!   * f16 dtype.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test sdpa_strided_smoke -- --ignored`.
+//!   --test sdpa_strided_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -120,7 +121,6 @@ fn host_sdpa_ref_f64(
 
 /// 1. Contiguous case — fast path sanity check.
 #[test]
-#[ignore]
 fn sdpa_strided_contig_f32() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -236,7 +236,6 @@ fn sdpa_strided_contig_f32() {
 /// `stride_h = 0`. Output should match the reference where K/V is
 /// expanded across all Q heads.
 #[test]
-#[ignore]
 fn sdpa_strided_gqa_broadcast_f32() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -376,7 +375,6 @@ fn sdpa_strided_gqa_broadcast_f32() {
 /// Physical buffer layout is `[H, B, Q, D_k]` (heads outermost), viewed
 /// as `[B, H, Q, D_k]` with permuted strides.
 #[test]
-#[ignore]
 fn sdpa_strided_causal_transposed_q_f32() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -502,7 +500,6 @@ fn sdpa_strided_causal_transposed_q_f32() {
 
 /// 4. f16 strided coverage — GQA broadcast.
 #[test]
-#[ignore]
 fn sdpa_strided_gqa_broadcast_f16() {
     let (ctx, stream) = setup();
     let batch = 1i32;

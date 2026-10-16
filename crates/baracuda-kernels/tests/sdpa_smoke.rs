@@ -4,7 +4,8 @@
 //! (scores / row-softmax / out) bundled under one launcher.
 //!
 //! Covers FW × 4 FP dtypes × 3 mask modes (none, explicit, causal).
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -262,19 +263,16 @@ fn run_f32(is_causal: bool, has_mask: bool) {
 }
 
 #[test]
-#[ignore]
 fn sdpa_f32_no_mask() {
     run_f32(false, false);
 }
 
 #[test]
-#[ignore]
 fn sdpa_f32_explicit_mask() {
     run_f32(false, true);
 }
 
 #[test]
-#[ignore]
 fn sdpa_f32_causal() {
     run_f32(true, false);
 }
@@ -284,7 +282,6 @@ fn sdpa_f32_causal() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn sdpa_f64_basic() {
     let (ctx, stream) = setup();
     let q_h = gen_q_f64();
@@ -483,7 +480,6 @@ fn run_f16() {
 }
 
 #[test]
-#[ignore]
 fn sdpa_f16_basic() {
     run_f16();
 }
@@ -587,7 +583,6 @@ fn run_bf16() {
 }
 
 #[test]
-#[ignore]
 fn sdpa_bf16_basic() {
     run_bf16();
 }

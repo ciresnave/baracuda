@@ -6,6 +6,7 @@
 //!
 //! Tests use x in [0.9, 1.1] (no zeros) to avoid the divide-by-zero
 //! footgun.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -119,7 +120,6 @@ fn host_cumprod_bw_f32<const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn cumprod_bw_f32_2d_forward_fw() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];
@@ -182,7 +182,6 @@ fn cumprod_bw_f32_2d_forward_fw() {
 }
 
 #[test]
-#[ignore]
 fn cumprod_bw_f64_2d_reverse_fw() {
     let (ctx, stream) = setup();
     let shape = [4i32, 5];
@@ -246,7 +245,6 @@ fn cumprod_bw_f64_2d_reverse_fw() {
 }
 
 #[test]
-#[ignore]
 fn cumprod_bw_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -316,7 +314,6 @@ fn cumprod_bw_f16_2d() {
 }
 
 #[test]
-#[ignore]
 fn cumprod_bw_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];

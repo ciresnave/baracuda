@@ -8,9 +8,10 @@
 //! deterministic two-rounding-step pipeline; the device matches host
 //! exactly on f32).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test ternary_clamp_smoke -- --ignored`.
+//!   --test ternary_clamp_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -95,19 +96,16 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn clamp_f32_1d() {
     run_contig::<1>([2048]);
 }
 
 #[test]
-#[ignore]
 fn clamp_f32_2d() {
     run_contig::<2>([64, 64]);
 }
 
 #[test]
-#[ignore]
 fn clamp_f32_3d() {
     run_contig::<3>([8, 128, 128]);
 }
@@ -116,7 +114,6 @@ fn clamp_f32_3d() {
 /// lo and hi are rank-2 tensors with shape `[1, 1]` and stride `[0, 0]`
 /// — broadcast across every output cell.
 #[test]
-#[ignore]
 fn clamp_f32_scalar_broadcast() {
     let (ctx, stream) = setup();
     const M: usize = 64;

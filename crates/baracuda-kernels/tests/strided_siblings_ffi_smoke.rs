@@ -12,11 +12,12 @@
 //!   3. Validates the result matches a CPU reference computed against the
 //!      same non-contig view.
 //!
-//! `#[ignore]` per the GPU smoke suite convention. Run with
+//! Gated behind the `device-tests` feature. Run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test strided_siblings_ffi_smoke -- --ignored`.
+//!   --test strided_siblings_ffi_smoke --features device-tests`.
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels_sys as sys;
@@ -34,7 +35,6 @@ fn setup() -> (Context, Stream) {
 /// 2*cols]` with last-axis stride 2 over an outer-padded layout. RMSNorm
 /// applies along the last axis (norm_axes_mask = 1 << (rank-1)).
 #[test]
-#[ignore]
 fn rms_norm_f32_strided_smoke() {
     let (ctx, stream) = setup();
     let rows = 4i32;
@@ -111,7 +111,6 @@ fn rms_norm_f32_strided_smoke() {
 
 /// LayerNorm FW strided sibling, f32. Same stride-2 layout as rms_norm.
 #[test]
-#[ignore]
 fn layer_norm_f32_strided_smoke() {
     let (ctx, stream) = setup();
     let rows = 4i32;
@@ -194,7 +193,6 @@ fn layer_norm_f32_strided_smoke() {
 /// Softmax FW strided sibling, f32. Non-contig input over last axis with
 /// stride 2 (over a 2x-padded buffer).
 #[test]
-#[ignore]
 fn softmax_f32_strided_smoke() {
     let (ctx, stream) = setup();
     let rows = 4i32;
@@ -270,7 +268,6 @@ fn softmax_f32_strided_smoke() {
 
 /// LogSoftmax FW strided sibling, f32.
 #[test]
-#[ignore]
 fn log_softmax_f32_strided_smoke() {
     let (ctx, stream) = setup();
     let rows = 4i32;
@@ -348,7 +345,6 @@ fn log_softmax_f32_strided_smoke() {
 /// axis 0 (the logical W-axis = the physical contig axis of the underlying
 /// matrix, accessed via the transposed view's stride 1).
 #[test]
-#[ignore]
 fn flip_f32_strided_smoke() {
     let (ctx, stream) = setup();
     let h = 4i32;
@@ -406,7 +402,6 @@ fn flip_f32_strided_smoke() {
 /// Roll strided sibling, f32. Stride-2 input over a 2x-padded buffer; roll
 /// the last axis by 3 positions.
 #[test]
-#[ignore]
 fn roll_f32_strided_smoke() {
     let (ctx, stream) = setup();
     let rows = 3i32;
@@ -465,7 +460,6 @@ fn roll_f32_strided_smoke() {
 /// `dims = [1, 0]` produces the transpose. Reads from contig input
 /// (stride `[W, 1]`) and writes to contig output (stride `[H, 1]`).
 #[test]
-#[ignore]
 fn permute_f32_strided_smoke() {
     let (ctx, stream) = setup();
     let h = 4i32;

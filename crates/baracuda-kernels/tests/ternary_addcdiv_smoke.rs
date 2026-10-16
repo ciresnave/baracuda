@@ -6,6 +6,7 @@
 //!
 //! Inputs keep `|c| >= 0.5` to avoid divide-by-zero / catastrophic-
 //! cancellation territory.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn addcdiv_f32_contig() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -101,7 +101,6 @@ fn addcdiv_f32_contig() {
 }
 
 #[test]
-#[ignore]
 fn addcdiv_f64_contig() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -177,7 +176,6 @@ fn addcdiv_f64_contig() {
 }
 
 #[test]
-#[ignore]
 fn addcdiv_f16_contig() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -256,7 +254,6 @@ fn addcdiv_f16_contig() {
 }
 
 #[test]
-#[ignore]
 fn addcdiv_bf16_contig() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

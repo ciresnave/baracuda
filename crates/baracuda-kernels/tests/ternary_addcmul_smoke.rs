@@ -8,9 +8,10 @@
 //! `4 * dtype_eps` relative tolerance band (same as other Phase 3
 //! transcendental smoke tests).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test ternary_addcmul_smoke -- --ignored`.
+//!   --test ternary_addcmul_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -31,7 +32,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn addcmul_f32_contig() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -107,7 +107,6 @@ fn addcmul_f32_contig() {
 }
 
 #[test]
-#[ignore]
 fn addcmul_f64_contig() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -191,7 +190,6 @@ where
 }
 
 #[test]
-#[ignore]
 fn addcmul_f16_contig() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -273,7 +271,6 @@ fn addcmul_f16_contig() {
 }
 
 #[test]
-#[ignore]
 fn addcmul_bf16_contig() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -354,7 +351,6 @@ fn addcmul_bf16_contig() {
 /// Strided: per-row scalar `c` broadcast (`c.shape = [M, 1]`).
 /// Realistic optimizer pattern (per-parameter learning rates).
 #[test]
-#[ignore]
 fn addcmul_f32_broadcast_per_row_c() {
     let (ctx, stream) = setup();
     const M: usize = 32;

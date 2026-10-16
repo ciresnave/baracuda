@@ -2,6 +2,7 @@
 //! (`UnaryBackwardPlan<T, 3> + UnaryKind::Atanh`). Backward:
 //! `dx = dy / (1 - x²)`. Saved-x, no transcendental. Inputs stay in
 //! `[-0.95, 0.95]` to keep us strictly inside `(-1, 1)`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn atanh_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -78,7 +78,6 @@ fn atanh_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn atanh_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -136,7 +135,6 @@ fn atanh_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn atanh_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -194,7 +192,6 @@ fn atanh_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn atanh_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

@@ -12,9 +12,10 @@
 //!   * Per-dtype quick coverage: f32, f16, bf16, i32.
 //!   * One backward case to confirm BW strided also works.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test triu_tril_strided_smoke -- --ignored`.
+//!   --test triu_tril_strided_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -63,7 +64,6 @@ fn triu_ref_strided_f32(
 // ============================================================================
 
 #[test]
-#[ignore]
 fn triu_strided_dispatch_contig_f32() {
     let (ctx, stream) = setup();
     let shape = [3i32, 3];
@@ -111,7 +111,6 @@ fn triu_strided_dispatch_contig_f32() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn triu_strided_transposed_input_f32() {
     let (ctx, stream) = setup();
     // Physical layout: 3 rows × 4 cols, row-major.
@@ -167,7 +166,6 @@ fn triu_strided_transposed_input_f32() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn tril_strided_interior_output_f32() {
     let (ctx, stream) = setup();
     // Logical shape: 3x3. Output is an interior view of a 4x4 buffer
@@ -251,7 +249,6 @@ fn tril_strided_interior_output_f32() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn triu_strided_transposed_input_f16() {
     let (ctx, stream) = setup();
     let phys_cols = 4i32;
@@ -298,7 +295,6 @@ fn triu_strided_transposed_input_f16() {
 }
 
 #[test]
-#[ignore]
 fn triu_strided_transposed_input_bf16() {
     let (ctx, stream) = setup();
     let phys_cols = 4i32;
@@ -345,7 +341,6 @@ fn triu_strided_transposed_input_bf16() {
 }
 
 #[test]
-#[ignore]
 fn triu_strided_transposed_input_i32() {
     let (ctx, stream) = setup();
     let phys_cols = 4i32;
@@ -405,7 +400,6 @@ fn triu_strided_transposed_input_i32() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn triu_bw_strided_transposed_input_f32() {
     let (ctx, stream) = setup();
     // Same transposed-input pattern as the FW case — BW is just the

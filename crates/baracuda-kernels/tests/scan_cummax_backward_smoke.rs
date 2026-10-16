@@ -2,6 +2,7 @@
 //!
 //! Gradient flows to the first-occurrence argmax (PyTorch semantics).
 //! Tests use strictly non-monotone (but tie-free) input sequences.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -89,7 +90,6 @@ fn host_cummax_bw_f32<const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn cummax_bw_f32_1d_forward_fw() {
     let (ctx, stream) = setup();
     let shape = [8i32];
@@ -141,7 +141,6 @@ fn cummax_bw_f32_1d_forward_fw() {
 }
 
 #[test]
-#[ignore]
 fn cummax_bw_f64_2d_reverse_fw() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -198,7 +197,6 @@ fn cummax_bw_f64_2d_reverse_fw() {
 }
 
 #[test]
-#[ignore]
 fn cummax_bw_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -257,7 +255,6 @@ fn cummax_bw_f16_2d() {
 }
 
 #[test]
-#[ignore]
 fn cummax_bw_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];

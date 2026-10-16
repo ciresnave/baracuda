@@ -4,6 +4,7 @@
 //! cells. Other grads (dB, dC, ddt, dA) sanity-checked for finiteness.
 
 #![cfg(feature = "mamba")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -102,7 +103,6 @@ fn run_fw_and_sum(
 }
 
 #[test]
-#[ignore]
 fn ssd_bw_dx_matches_fd_and_others_finite() {
     let (ctx, stream) = setup();
     let x_host: Vec<f32> = (0..B * L * H * D).map(|i| (i as f32) * 0.01).collect();

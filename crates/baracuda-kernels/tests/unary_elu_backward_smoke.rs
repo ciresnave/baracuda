@@ -6,6 +6,7 @@
 //! Tolerance: `4 * eps` (8 * eps on the negative branch, since exp is
 //! involved); we use a uniform `8 * eps` for f32/f64 and the equivalent
 //! ULP-eps for f16/bf16.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn elu_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -90,7 +90,6 @@ fn elu_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn elu_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -153,7 +152,6 @@ fn elu_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn elu_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -216,7 +214,6 @@ fn elu_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn elu_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

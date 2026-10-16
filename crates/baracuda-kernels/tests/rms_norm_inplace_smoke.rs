@@ -15,11 +15,12 @@
 //! the legacy multi-pass-global kernel which is NOT in-place safe
 //! — skipped here.
 //!
-//! `#[ignore]` per project convention; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --features sm89 \
 //!    --test rms_norm_inplace_smoke -- --include-ignored`.
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -54,7 +55,6 @@ fn host_rms_norm_f32(host_x: &[f32], outer: usize, inner: usize, eps: f32) -> Ve
 }
 
 #[test]
-#[ignore]
 fn rms_norm_f32_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
 
@@ -158,7 +158,6 @@ fn rms_norm_f32_inplace_matches_non_aliased() {
 }
 
 #[test]
-#[ignore]
 fn rms_norm_f16_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
     let outer: usize = 4;
@@ -242,7 +241,6 @@ fn rms_norm_f16_inplace_matches_non_aliased() {
 }
 
 #[test]
-#[ignore]
 fn rms_norm_bf16_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
     let outer: usize = 4;
@@ -324,7 +322,6 @@ fn rms_norm_bf16_inplace_matches_non_aliased() {
 }
 
 #[test]
-#[ignore]
 fn rms_norm_f64_inplace_matches_non_aliased() {
     // Phase 65d-ext: f64 now routes through the SMEM-staged kernel via
     // the `block_reduce_sum_f64` reducer. Same in-place safety as f32.

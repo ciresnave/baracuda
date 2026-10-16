@@ -4,6 +4,7 @@
 //!
 //! `sinf` is not bit-exact between Rust libm and CUDA libdevice, so all
 //! dtypes use a tolerance compare.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -24,7 +25,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn cos_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -79,7 +79,6 @@ fn cos_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn cos_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -137,7 +136,6 @@ fn cos_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn cos_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -195,7 +193,6 @@ fn cos_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn cos_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

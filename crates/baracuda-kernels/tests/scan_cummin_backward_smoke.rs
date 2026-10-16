@@ -2,6 +2,7 @@
 //!
 //! Mirror of cummax BW with `<` instead of `>`. First-occurrence
 //! argmin (PyTorch semantics).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -83,7 +84,6 @@ fn host_cummin_bw_f32<const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn cummin_bw_f32_1d_forward_fw() {
     let (ctx, stream) = setup();
     let shape = [8i32];
@@ -135,7 +135,6 @@ fn cummin_bw_f32_1d_forward_fw() {
 }
 
 #[test]
-#[ignore]
 fn cummin_bw_f64_2d_reverse_fw() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -192,7 +191,6 @@ fn cummin_bw_f64_2d_reverse_fw() {
 }
 
 #[test]
-#[ignore]
 fn cummin_bw_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -249,7 +247,6 @@ fn cummin_bw_f16_2d() {
 }
 
 #[test]
-#[ignore]
 fn cummin_bw_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];

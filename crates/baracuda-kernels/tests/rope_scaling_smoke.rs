@@ -14,9 +14,10 @@
 //! host" — the kernel is supposed to do exactly that, so the check
 //! is for end-to-end algorithmic correctness, not novel math.
 //!
-//! `#[ignore]` by default; needs a real CUDA device. The
+//! Gated behind the `device-tests` feature; needs a real CUDA device. The
 //! pure-host-side unit tests in `attention::rope_scaling::tests` run
 //! unconditionally and cover the math without needing a GPU.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -63,7 +64,6 @@ fn rope_apply_host_ref(
 }
 
 #[test]
-#[ignore]
 fn rope_apply_linear_builder_matches_kernel() {
     let (ctx, stream) = setup();
     let batch = 1i32;
@@ -129,7 +129,6 @@ fn rope_apply_linear_builder_matches_kernel() {
 }
 
 #[test]
-#[ignore]
 fn rope_apply_yarn_builder_matches_host_ref() {
     let (ctx, stream) = setup();
     let batch = 1i32;
@@ -197,7 +196,6 @@ fn rope_apply_yarn_builder_matches_host_ref() {
 }
 
 #[test]
-#[ignore]
 fn rope_apply_longrope_builder_matches_host_ref() {
     let (ctx, stream) = setup();
     let batch = 1i32;

@@ -4,7 +4,8 @@
 //! scatter dim. Duplicate indices in the update tensor exercise the
 //! `atomicAdd` dup-safe path.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn scatter_add_f32_2d_dim1() {
     let (ctx, stream) = setup();
     let out_shape = [3i32, 6];
@@ -84,7 +84,6 @@ fn scatter_add_f32_2d_dim1() {
 }
 
 #[test]
-#[ignore]
 fn scatter_add_f64_2d_dim0() {
     let (ctx, stream) = setup();
     let out_shape = [5i32, 3];
