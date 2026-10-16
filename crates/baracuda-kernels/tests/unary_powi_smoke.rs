@@ -13,7 +13,8 @@
 //!   * `n = 0` — verify `dx == 0`.
 //!   * `n = 1` — verify `dx == dy`.
 //!
-//! `#[ignore]` by default; run with `--ignored` on a CUDA host.
+//! Gated behind the `device-tests` feature; run with `--features device-tests` on a CUDA host.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -94,37 +95,31 @@ fn run_powi_f32(shape: [i32; 3], n: i32) {
 }
 
 #[test]
-#[ignore]
 fn powi_f32_n0() {
     run_powi_f32([2, 16, 32], 0);
 }
 
 #[test]
-#[ignore]
 fn powi_f32_n1() {
     run_powi_f32([2, 16, 32], 1);
 }
 
 #[test]
-#[ignore]
 fn powi_f32_n2() {
     run_powi_f32([2, 16, 32], 2);
 }
 
 #[test]
-#[ignore]
 fn powi_f32_n3() {
     run_powi_f32([2, 16, 32], 3);
 }
 
 #[test]
-#[ignore]
 fn powi_f32_n_neg1() {
     run_powi_f32([2, 16, 32], -1);
 }
 
 #[test]
-#[ignore]
 fn powi_f16_n2() {
     let (ctx, stream) = setup();
     let shape = [2i32, 16, 32];
@@ -185,7 +180,6 @@ fn powi_f16_n2() {
 }
 
 #[test]
-#[ignore]
 fn powi_bf16_n2() {
     let (ctx, stream) = setup();
     let shape = [2i32, 16, 32];
@@ -242,7 +236,6 @@ fn powi_bf16_n2() {
 }
 
 #[test]
-#[ignore]
 fn powi_f64_n2() {
     let (ctx, stream) = setup();
     let shape = [2i32, 16, 32];
@@ -370,21 +363,18 @@ fn run_powi_bw_f32(n: i32, expect: impl Fn(f32, f32) -> f32) {
 }
 
 #[test]
-#[ignore]
 fn powi_backward_f32_n2() {
     // dx = 2 · x · dy
     run_powi_bw_f32(2, |x, dy| 2.0 * x * dy);
 }
 
 #[test]
-#[ignore]
 fn powi_backward_f32_n0() {
     // dx = 0 (gradient of a constant)
     run_powi_bw_f32(0, |_x, _dy| 0.0);
 }
 
 #[test]
-#[ignore]
 fn powi_backward_f32_n1() {
     // dx = dy (identity gradient)
     run_powi_bw_f32(1, |_x, dy| dy);

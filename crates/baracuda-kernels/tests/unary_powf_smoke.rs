@@ -3,6 +3,7 @@
 //! `y = pow(x, exponent)`. Exercises both integer and non-integer
 //! exponents (the latter distinguishing PowF from PowI's power-by-
 //! squaring path).
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -17,7 +18,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn ffi_unary_powf_f32_integer_exponent_matches_cpu() {
     let (ctx, stream) = setup();
     let exponent = 3.0_f32;
@@ -60,7 +60,6 @@ fn ffi_unary_powf_f32_integer_exponent_matches_cpu() {
 }
 
 #[test]
-#[ignore]
 fn ffi_unary_powf_f32_fractional_exponent_matches_cpu() {
     let (ctx, stream) = setup();
     let exponent = 0.5_f32; // sqrt
@@ -98,7 +97,6 @@ fn ffi_unary_powf_f32_fractional_exponent_matches_cpu() {
 }
 
 #[test]
-#[ignore]
 fn ffi_unary_powf_f64_matches_cpu() {
     let (ctx, stream) = setup();
     let exponent = 2.5_f32;

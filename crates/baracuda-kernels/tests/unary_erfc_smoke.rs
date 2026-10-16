@@ -7,9 +7,10 @@
 //!
 //! Input range: `[-5, 5]`. `erfc` saturates near `0` for large positive x and near `2` for large negative x; the `max(|expected|, 1.0)` floor in the tolerance helper absorbs the small-value end.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \`
-//!   `--test unary_erfc_smoke -- --ignored`.
+//!   `--test unary_erfc_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -261,7 +262,6 @@ fn run_f64_contig_3d(shape: [i32; 3]) {
 // --- f32 strided (transposed view) ------------------------------------------
 
 #[test]
-#[ignore]
 fn erfc_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;
@@ -318,25 +318,21 @@ fn erfc_f32_strided_transposed() {
 }
 
 #[test]
-#[ignore]
 fn erfc_f32_3d() {
     run_f32_contig::<3>([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn erfc_f16_3d() {
     run_f16_contig_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn erfc_bf16_3d() {
     run_bf16_contig_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn erfc_f64_3d() {
     run_f64_contig_3d([8, 128, 128]);
 }

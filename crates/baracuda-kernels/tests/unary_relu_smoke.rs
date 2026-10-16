@@ -6,9 +6,10 @@
 //! over the dtype epsilon — the activation composes from transcendentals
 //! whose libdevice / Rust libm implementations may diverge by ~1 ULP.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \`
-//!   `--test unary_relu_smoke -- --ignored`.
+//!   `--test unary_relu_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -257,7 +258,6 @@ fn run_f64_contig_3d(shape: [i32; 3]) {
 // --- f32 strided (transposed view) ------------------------------------------
 
 #[test]
-#[ignore]
 fn relu_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;
@@ -314,25 +314,21 @@ fn relu_f32_strided_transposed() {
 }
 
 #[test]
-#[ignore]
 fn relu_f32_3d() {
     run_f32_contig::<3>([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn relu_f16_3d() {
     run_f16_contig_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn relu_bf16_3d() {
     run_bf16_contig_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn relu_f64_3d() {
     run_f64_contig_3d([8, 128, 128]);
 }

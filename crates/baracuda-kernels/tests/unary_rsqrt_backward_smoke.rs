@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for unary rsqrt backward
 //! (`UnaryBackwardPlan<T, 3> + UnaryKind::Rsqrt`). Backward:
 //! `dx = -0.5 * dy * y³`. Saved-y.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn rsqrt_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -77,7 +77,6 @@ fn rsqrt_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn rsqrt_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -126,7 +125,6 @@ fn rsqrt_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn rsqrt_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -184,7 +182,6 @@ fn rsqrt_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn rsqrt_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

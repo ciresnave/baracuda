@@ -6,6 +6,7 @@
 //! relative to expected magnitude — the negative branch involves a
 //! 0.01 multiplication that introduces ~1 ULP of rounding error on
 //! f32 / f64.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -69,7 +70,6 @@ fn assert_close_bf16(got: f32, expected: f32, idx: usize) {
 }
 
 #[test]
-#[ignore]
 fn leaky_relu_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -108,7 +108,6 @@ fn leaky_relu_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn leaky_relu_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -147,7 +146,6 @@ fn leaky_relu_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn leaky_relu_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -191,7 +189,6 @@ fn leaky_relu_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn leaky_relu_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

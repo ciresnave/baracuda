@@ -6,7 +6,8 @@
 //! (the matched branch returns `x` unchanged; the unmatched branch
 //! returns `v` rounded to T exactly the same way on host and device).
 //!
-//! `#[ignore]` by default; run with `--ignored`.
+//! Gated behind the `device-tests` feature; run with `--features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -27,7 +28,6 @@ const T: f32 = 0.5;
 const V: f32 = -1.25;
 
 #[test]
-#[ignore]
 fn threshold_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -84,7 +84,6 @@ fn threshold_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn threshold_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -131,7 +130,6 @@ fn threshold_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn threshold_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -187,7 +185,6 @@ fn threshold_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn threshold_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

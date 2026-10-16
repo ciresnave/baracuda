@@ -3,6 +3,7 @@
 //! Backward: `dx = dy / (x * ln(2))`. Saved-x; the kernel hardcodes
 //! `ln(2)`. Tolerance compare since f16/bf16 lose precision on the
 //! constant.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn log2_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -78,7 +78,6 @@ fn log2_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn log2_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -126,7 +125,6 @@ fn log2_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn log2_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -184,7 +182,6 @@ fn log2_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn log2_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

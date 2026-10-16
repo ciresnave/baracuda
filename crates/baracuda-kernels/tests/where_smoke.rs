@@ -9,9 +9,10 @@
 //! `where` does no arithmetic, just element selection, so host and
 //! device produce identical bit patterns regardless of dtype.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test where_smoke -- --ignored`.
+//!   --test where_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -93,19 +94,16 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn where_f32_1d() {
     run_contig::<1>([2048]);
 }
 
 #[test]
-#[ignore]
 fn where_f32_2d() {
     run_contig::<2>([64, 64]);
 }
 
 #[test]
-#[ignore]
 fn where_f32_3d() {
     run_contig::<3>([8, 128, 128]);
 }
@@ -114,7 +112,6 @@ fn where_f32_3d() {
 /// Common pattern — a row mask is broadcast across the column dim to
 /// select between two full matrices row-by-row.
 #[test]
-#[ignore]
 fn where_f32_broadcast_row_cond() {
     let (ctx, stream) = setup();
     const M: usize = 32;
@@ -197,7 +194,6 @@ fn where_f32_broadcast_row_cond() {
 /// to a or b. Degenerate but verifies the stride-0-on-every-axis path
 /// on the cond input.
 #[test]
-#[ignore]
 fn where_f32_scalar_cond() {
     let (ctx, stream) = setup();
     const M: usize = 64;

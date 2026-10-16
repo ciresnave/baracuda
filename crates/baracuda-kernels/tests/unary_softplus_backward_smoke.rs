@@ -3,6 +3,7 @@
 //!
 //! Forward: `y = log(1 + exp(x))`. Backward: `dx = dy / (1 + exp(-x))`.
 //! Saved-x; smooth. 4×eps tolerance — single `exp` chain.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -23,7 +24,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn softplus_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -79,7 +79,6 @@ fn softplus_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn softplus_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -129,7 +128,6 @@ fn softplus_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn softplus_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -187,7 +185,6 @@ fn softplus_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn softplus_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

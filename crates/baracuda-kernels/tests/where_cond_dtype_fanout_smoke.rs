@@ -14,9 +14,10 @@
 //! is pure element selection — no arithmetic. The reference is
 //! `cond.iter().zip(a).zip(b).map(|((c, a), b)| if *c != 0 { *a } else { *b })`.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!    --test where_cond_dtype_fanout_smoke -- --ignored`.
+//!    --test where_cond_dtype_fanout_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -36,7 +37,6 @@ fn setup() -> (Context, Stream) {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn ffi_where_u32cond_f32_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 4096;
@@ -87,7 +87,6 @@ fn ffi_where_u32cond_f32_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_i64cond_f64_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 2048;
@@ -135,7 +134,6 @@ fn ffi_where_i64cond_f64_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_u32cond_f16_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 2048;
@@ -181,7 +179,6 @@ fn ffi_where_u32cond_f16_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_i64cond_bf16_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 2048;
@@ -233,7 +230,6 @@ fn ffi_where_i64cond_bf16_matches_cpu_ref() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn ffi_where_u8cond_i32_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 4096;
@@ -275,7 +271,6 @@ fn ffi_where_u8cond_i32_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_u8cond_i64_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 1024;
@@ -317,7 +312,6 @@ fn ffi_where_u8cond_i64_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_u32cond_u32_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 2048;
@@ -363,7 +357,6 @@ fn ffi_where_u32cond_u32_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_i64cond_i16_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 2048;
@@ -405,7 +398,6 @@ fn ffi_where_i64cond_i16_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_u32cond_i8_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 1024;
@@ -449,7 +441,6 @@ fn ffi_where_u32cond_i8_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_u8cond_u8_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 512;
@@ -499,7 +490,6 @@ fn ffi_where_u8cond_u8_matches_cpu_ref() {
 // contiguously (`stride = [cols, 1]`).
 
 #[test]
-#[ignore]
 fn ffi_where_u8cond_f32_strided_per_row_mask() {
     let (ctx, stream) = setup();
     let rows: i32 = 32;
@@ -572,7 +562,6 @@ fn ffi_where_u8cond_f32_strided_per_row_mask() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_u32cond_i32_strided_per_row_mask() {
     let (ctx, stream) = setup();
     let rows: i32 = 32;
@@ -635,7 +624,6 @@ fn ffi_where_u32cond_i32_strided_per_row_mask() {
 }
 
 #[test]
-#[ignore]
 fn ffi_where_i64cond_f32_strided_per_row_mask() {
     let (ctx, stream) = setup();
     let rows: i32 = 16;
@@ -706,7 +694,6 @@ fn ffi_where_i64cond_f32_strided_per_row_mask() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn ffi_where_u8cond_fp8e4m3_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let n: usize = 1024;
@@ -753,7 +740,6 @@ fn ffi_where_u8cond_fp8e4m3_matches_cpu_ref() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn ffi_where_u32cond_f32_can_implement_accepts_valid() {
     let (ctx, _stream) = setup();
     let n: usize = 64;

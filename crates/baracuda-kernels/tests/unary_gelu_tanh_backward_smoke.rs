@@ -20,6 +20,7 @@
 //! the cancellation magnitude `|dy| · s · (1 + |2x(1-s)u'|)` so the
 //! tolerance scales with what's actually being added/subtracted; K = 16
 //! absorbs the 1-2 ULP libdevice-vs-libm gap × the multiplicative chain.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -66,7 +67,6 @@ fn gelu_tanh_bw_f64(dy: f64, x: f64) -> (f64, f64) {
 }
 
 #[test]
-#[ignore]
 fn gelu_tanh_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -125,7 +125,6 @@ fn gelu_tanh_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn gelu_tanh_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -175,7 +174,6 @@ fn gelu_tanh_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn gelu_tanh_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -233,7 +231,6 @@ fn gelu_tanh_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn gelu_tanh_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

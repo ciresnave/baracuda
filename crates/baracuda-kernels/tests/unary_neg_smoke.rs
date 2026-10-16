@@ -6,9 +6,10 @@
 //! cases — `-x` on f32 is exact (one PTX `neg.f32` instruction per
 //! element).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test unary_neg_smoke -- --ignored`.
+//!   --test unary_neg_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -73,38 +74,32 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn neg_f32_1d() {
     run_contig::<1>([2048]);
 }
 
 #[test]
-#[ignore]
 fn neg_f32_1d_huge() {
     // Exercises the grid-cap loop.
     run_contig::<1>([1 << 20]);
 }
 
 #[test]
-#[ignore]
 fn neg_f32_2d() {
     run_contig::<2>([64, 64]);
 }
 
 #[test]
-#[ignore]
 fn neg_f32_3d() {
     run_contig::<3>([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn neg_f32_4d() {
     run_contig::<4>([2, 32, 8, 64]);
 }
 
 #[test]
-#[ignore]
 fn neg_f32_ragged_1d() {
     run_contig::<1>([2049]);
 }
@@ -118,7 +113,6 @@ fn neg_f32_ragged_1d() {
 // Output is plain contig `[M, N]`. The strided kernel reads
 // `x_logical[i, j] = x_buf[j * M + i]` via the swapped stride.
 #[test]
-#[ignore]
 fn neg_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;

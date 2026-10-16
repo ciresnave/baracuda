@@ -9,9 +9,10 @@
 //! CUDA's libdevice, so we use the same 4×eps relative tolerance as the
 //! forward Sin test.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test unary_sin_backward_smoke -- --ignored`.
+//!   --test unary_sin_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -95,19 +96,16 @@ fn run_case<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn sin_backward_f32_1d() {
     run_case::<1>([2048]);
 }
 
 #[test]
-#[ignore]
 fn sin_backward_f32_2d() {
     run_case::<2>([64, 64]);
 }
 
 #[test]
-#[ignore]
 fn sin_backward_f32_3d() {
     run_case::<3>([8, 128, 128]);
 }
@@ -115,7 +113,6 @@ fn sin_backward_f32_3d() {
 // --- f16 / bf16 / f64 fanout ------------------------------------------------
 
 #[test]
-#[ignore]
 fn sin_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -173,7 +170,6 @@ fn sin_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn sin_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -231,7 +227,6 @@ fn sin_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn sin_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

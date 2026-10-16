@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `UnsortedSegmentMaxBackwardPlan<T>` (Phase 25).
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -49,7 +50,6 @@ fn cpu_unsorted_max_bw(
 }
 
 #[test]
-#[ignore]
 fn unsorted_segment_max_backward_f32_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 6;

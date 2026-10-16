@@ -6,9 +6,10 @@
 //! detour pattern; the host reference mirrors that lift so the
 //! comparison stays apples-to-apples.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \`
-//!   `--test unary_frac_smoke -- --ignored`.
+//!   `--test unary_frac_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -241,7 +242,6 @@ fn run_f64_contig_3d(shape: [i32; 3]) {
 // --- f32 strided (transposed view) ------------------------------------------
 
 #[test]
-#[ignore]
 fn frac_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;
@@ -303,25 +303,21 @@ fn frac_f32_strided_transposed() {
 }
 
 #[test]
-#[ignore]
 fn frac_f32_3d() {
     run_f32_contig::<3>([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn frac_f16_3d() {
     run_f16_contig_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn frac_bf16_3d() {
     run_bf16_contig_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn frac_f64_3d() {
     run_f64_contig_3d([8, 128, 128]);
 }

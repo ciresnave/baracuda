@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `UnsortedSegmentProdBackwardPlan<T>` (Phase 25).
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -17,7 +18,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn unsorted_segment_prod_backward_f32_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 6;

@@ -3,6 +3,7 @@
 //! Forward: `y = (x > t) ? x : v`. Backward: `dx = (x > t) ? dy : 0`.
 //! Saved-x. Like the forward, the BW is a pure compare + select, so the
 //! result is bit-exact against the CPU reference.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -23,7 +24,6 @@ const T: f32 = 0.5;
 const V: f32 = -1.25; // ignored by BW
 
 #[test]
-#[ignore]
 fn threshold_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -78,7 +78,6 @@ fn threshold_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn threshold_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -135,7 +134,6 @@ fn threshold_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn threshold_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -197,7 +195,6 @@ fn threshold_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn threshold_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

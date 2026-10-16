@@ -4,6 +4,7 @@
 //! else 0`. λ hardcoded to 0.5.
 //!
 //! Bit-exact across all four dtypes: kernel just masks dy.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn hardshrink_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -82,7 +82,6 @@ fn hardshrink_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn hardshrink_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -135,7 +134,6 @@ fn hardshrink_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn hardshrink_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -190,7 +188,6 @@ fn hardshrink_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn hardshrink_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

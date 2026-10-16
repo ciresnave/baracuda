@@ -2,6 +2,7 @@
 //! (`UnaryBackwardPlan<T, 3> + UnaryKind::Sqrt`). Backward:
 //! `dx = dy / (2 * y)`. Saved-y. `y` is bounded well above zero
 //! (>= 1.0) so 1/y stays finite and bit patterns stay defined.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn sqrt_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -75,7 +75,6 @@ fn sqrt_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn sqrt_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -123,7 +122,6 @@ fn sqrt_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn sqrt_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -181,7 +179,6 @@ fn sqrt_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn sqrt_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

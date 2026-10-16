@@ -2,6 +2,7 @@
 //! (`UnaryBackwardPlan<T, 3> + UnaryKind::Logit`).
 //! Backward: `dx = dy / (x * (1 - x))`. Saved-x, no transcendental.
 //! Domain: strictly `0 < x < 1` — test data lives in `[0.1, 0.9]`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn logit_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -75,7 +75,6 @@ fn logit_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn logit_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -123,7 +122,6 @@ fn logit_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn logit_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -181,7 +179,6 @@ fn logit_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn logit_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
