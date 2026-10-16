@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.117 - 2026-10-16 (baracuda-kernels: device-tests feature; #[ignore] retired, slice 1/5)
+
+Workspace alpha.117 (proposed; PM allocates at gate).
+
+- New `device-tests` feature on `baracuda-kernels`; 104 GPU test files (adaptive_avg_pool2d_smoke .. fa2_varlen_smoke) lose every `#[ignore]` (file-level cfg, per-test cfg in 3 files that keep host-only tests). Tests that never carried `#[ignore]` but need a device (`select_rejects_*` and kin) are gated too: they failed a no-GPU `cargo test`.
+- CI `arch-gated-check` type-checks the kernels test targets with and without `device-tests`; `device-tests.yml` runs the kernels suite on the self-hosted runner (still inert until `DEVICE_RUNNER_ENABLED`).
+- Verified on RTX 4070: `cargo gpu-test -p baracuda-kernels --features device-tests` 2055 passed, 0 failed, 0 skips (default sm80+fa2). Files behind other cargo features (cudnn, fa2_backward, mamba, sm89, awq, flashinfer: 20 in this slice) are not run by that command: UNVERIFIED.
+
 ## 0.0.1-alpha.116 - 2026-10-16 (unpopped 0.20.1; contraction v1 typed declines)
 
 Workspace alpha.116 (proposed; PM allocates at gate).
