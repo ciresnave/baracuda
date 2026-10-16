@@ -6,11 +6,12 @@
 //!  - Out-of-range (`< 0` or `>= num_bins`) silently dropped contract
 //!  - Empty input (n = 0) returns zero-filled output
 //!
-//! `#[ignore]` per project convention; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --features sm89 \
 //!    --test bincount_smoke -- --include-ignored`.
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -45,7 +46,6 @@ fn host_bincount_i64(x: &[i64], num_bins: i32) -> Vec<i32> {
 }
 
 #[test]
-#[ignore]
 fn bincount_i32_basic() {
     let (ctx, stream) = setup();
     let num_bins: i32 = 16;
@@ -77,7 +77,6 @@ fn bincount_i32_basic() {
 }
 
 #[test]
-#[ignore]
 fn bincount_i32_empty_input() {
     let (ctx, stream) = setup();
     let num_bins: i32 = 8;
@@ -121,7 +120,6 @@ fn bincount_i32_empty_input() {
 }
 
 #[test]
-#[ignore]
 fn bincount_i64_basic() {
     let (ctx, stream) = setup();
     let num_bins: i32 = 32;
@@ -152,7 +150,6 @@ fn bincount_i64_basic() {
 }
 
 #[test]
-#[ignore]
 fn bincount_i32_all_in_range_dense() {
     let (ctx, stream) = setup();
     let num_bins: i32 = 64;

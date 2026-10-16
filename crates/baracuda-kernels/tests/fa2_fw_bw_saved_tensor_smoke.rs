@@ -23,17 +23,21 @@
 //!    is end-to-end callable on the BW path, which `fa2_backward_smoke.rs`
 //!    leaves untested.)
 //!
-//! Marked `#[ignore]` per project convention; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --features fa2_backward,sm89 \
 //!    --test fa2_fw_bw_saved_tensor_smoke -- --include-ignored`.
 
 #![cfg(feature = "fa2_backward")]
 
+#[cfg(feature = "device-tests")]
 use core::ffi::c_void;
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+#[cfg(feature = "device-tests")]
 use half::{bf16, f16};
 
+#[cfg(feature = "device-tests")]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -42,16 +46,19 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
+#[cfg(feature = "device-tests")]
 fn default_scale(d: i32) -> f32 {
     1.0 / (d as f32).sqrt()
 }
 
+#[cfg(feature = "device-tests")]
 fn gen_f16(n: usize, phase: f32) -> Vec<f16> {
     (0..n)
         .map(|i| f16::from_f32(((i as f32) * 0.013 + phase).sin() * 0.25))
         .collect()
 }
 
+#[cfg(feature = "device-tests")]
 fn gen_bf16(n: usize, phase: f32) -> Vec<bf16> {
     (0..n)
         .map(|i| bf16::from_f32(((i as f32) * 0.013 + phase).sin() * 0.25))
@@ -101,6 +108,7 @@ fn lse_size_large_values_dont_overflow() {
 //   5. Verify dQ/dK/dV are finite and non-zero
 // =========================================================================
 
+#[cfg(feature = "device-tests")]
 fn run_fw_bw_roundtrip_f16(dk: i32, is_causal: bool) {
     let (ctx, stream) = setup();
     let b: i32 = 1;
@@ -244,6 +252,7 @@ fn run_fw_bw_roundtrip_f16(dk: i32, is_causal: bool) {
     }
 }
 
+#[cfg(feature = "device-tests")]
 fn run_fw_bw_roundtrip_bf16(dk: i32, is_causal: bool) {
     let (ctx, stream) = setup();
     let b: i32 = 1;
@@ -375,27 +384,27 @@ fn run_fw_bw_roundtrip_bf16(dk: i32, is_causal: bool) {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fw_bw_roundtrip_f16_d128_noncausal() {
     run_fw_bw_roundtrip_f16(128, false);
 }
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fw_bw_roundtrip_f16_d128_causal() {
     run_fw_bw_roundtrip_f16(128, true);
 }
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fw_bw_roundtrip_f16_d64_causal() {
     run_fw_bw_roundtrip_f16(64, true);
 }
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fw_bw_roundtrip_bf16_d128_noncausal() {
     run_fw_bw_roundtrip_bf16(128, false);
 }
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fw_bw_roundtrip_bf16_d128_causal() {
     run_fw_bw_roundtrip_bf16(128, true);
 }
@@ -408,6 +417,7 @@ fn fw_bw_roundtrip_bf16_d128_causal() {
 // end-to-end BW exercise of these features.
 // =========================================================================
 
+#[cfg(feature = "device-tests")]
 /// Helper: run a FW with feature-enabled flags, capture LSE, then run
 /// BW with the same flags. Asserts both calls succeed + grads are
 /// finite. (Accuracy vs CPU oracle is deferred — this test layer just
@@ -548,7 +558,7 @@ fn run_fw_bw_with_features_f16(
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fw_bw_with_sliding_window_f16() {
     // Sliding window: each query attends to a 32-token left window (no right).
     // Causal-compatible: causal + left=32 == "last 32 past tokens, no future".
@@ -560,7 +570,7 @@ fn fw_bw_with_sliding_window_f16() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fw_bw_with_softcap_f16() {
     // Gemma-2 style tanh softcap on logits: tanh(s/cap) * cap.
     run_fw_bw_with_features_f16(
@@ -571,7 +581,7 @@ fn fw_bw_with_softcap_f16() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fw_bw_with_alibi_f16() {
     // Per-head ALiBi slopes — 4 slopes for h=4.
     // Standard ALiBi geometric series: slope_i = 2^(-8*i/H) for i in 0..H.
@@ -589,7 +599,7 @@ fn fw_bw_with_alibi_f16() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn fw_bw_with_all_features_f16() {
     // Composition smoke: causal + sliding window + softcap + ALiBi all
     // enabled simultaneously. Validates the FW+BW feature plumbing

@@ -4,9 +4,10 @@
 //! fast path and the strided FFI sibling based on the input / output
 //! stride pattern, and that both paths produce identical results.
 //!
-//! `#[ignore]` like the rest of the GPU smoke suite. Run with
+//! Gated behind the `device-tests` feature like the rest of the GPU smoke suite. Run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test affine_strided_smoke -- --ignored`.
+//!   --test affine_strided_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -27,7 +28,6 @@ fn setup() -> (Context, Stream) {
 /// updated dispatch — the canonical-contig detector must hit the fast
 /// path, and the result must match the CPU reference.
 #[test]
-#[ignore]
 fn affine_f32_contig_path_still_correct() {
     let (ctx, stream) = setup();
     let numel = 512usize;
@@ -77,7 +77,6 @@ fn affine_f32_contig_path_still_correct() {
 /// every other element. The strided FFI sibling must fire and produce
 /// `y[i] = a * x[2*i] + b`.
 #[test]
-#[ignore]
 fn affine_f32_strided_input_stride2() {
     let (ctx, stream) = setup();
     let numel = 256usize;
@@ -131,7 +130,6 @@ fn affine_f32_strided_input_stride2() {
 /// the kernel writes only into the strided positions and leaves the
 /// in-between slots untouched.
 #[test]
-#[ignore]
 fn affine_f32_strided_output_stride2_interior_view() {
     let (ctx, stream) = setup();
     let numel = 128usize;
@@ -197,7 +195,6 @@ fn affine_f32_strided_output_stride2_interior_view() {
 /// routes through f32 compute and stores as bf16, matching the contig
 /// sibling's precision contract.
 #[test]
-#[ignore]
 fn affine_bf16_strided_input_stride2() {
     let (ctx, stream) = setup();
     let numel = 256usize;
@@ -259,7 +256,6 @@ fn affine_bf16_strided_input_stride2() {
 
 /// i32 strided correctness — pure integer multiply / add, no rounding.
 #[test]
-#[ignore]
 fn affine_i32_strided_input_stride2() {
     let (ctx, stream) = setup();
     let numel = 128usize;
@@ -313,7 +309,6 @@ fn affine_i32_strided_input_stride2() {
 /// ships independently per Fuel's request, so this test exercises the
 /// FFI symbol directly rather than going through the plan.
 #[test]
-#[ignore]
 fn affine_u8_strided_input_stride2() {
     let (ctx, stream) = setup();
     let numel = 64usize;

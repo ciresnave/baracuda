@@ -9,7 +9,8 @@
 //! - f32 with `padding_idx` — row-zero on match, OOB skip.
 //! - f16 / bf16 — pure-copy parity (FW only).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -27,7 +28,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn embedding_f32_basic() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -82,7 +82,6 @@ fn embedding_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn embedding_f64_basic() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -137,7 +136,6 @@ fn embedding_f64_basic() {
 }
 
 #[test]
-#[ignore]
 fn embedding_f32_padding_idx_zeros_row() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -201,7 +199,6 @@ fn embedding_f32_padding_idx_zeros_row() {
 }
 
 #[test]
-#[ignore]
 fn embedding_f16_basic() {
     let (ctx, stream) = setup();
     let v: usize = 4;
@@ -257,7 +254,6 @@ fn embedding_f16_basic() {
 }
 
 #[test]
-#[ignore]
 fn embedding_bf16_basic() {
     let (ctx, stream) = setup();
     let v: usize = 4;

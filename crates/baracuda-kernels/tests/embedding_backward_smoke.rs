@@ -3,7 +3,8 @@
 //! `dweight[indices[n], :] += dout[n, :]` along axis 0 (atomicAdd),
 //! skipping rows where `indices[n] == padding_idx` (or OOB).
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -20,7 +21,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn embedding_backward_f32_duplicate_indices() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -84,7 +84,6 @@ fn embedding_backward_f32_duplicate_indices() {
 }
 
 #[test]
-#[ignore]
 fn embedding_backward_f32_padding_idx_skipped() {
     let (ctx, stream) = setup();
     let v: usize = 4;
@@ -157,7 +156,6 @@ fn embedding_backward_f32_padding_idx_skipped() {
 }
 
 #[test]
-#[ignore]
 fn embedding_backward_f64_basic() {
     let (ctx, stream) = setup();
     let v: usize = 4;

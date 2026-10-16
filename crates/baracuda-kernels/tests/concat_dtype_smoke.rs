@@ -5,9 +5,10 @@
 //! mirrors `concat_3d_axis_1` from the f32 file (concat along the
 //! middle axis of a rank-3 tensor).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test concat_dtype_smoke -- --ignored`.
+//!   --test concat_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -74,7 +75,6 @@ fn cpu_concat_3d<T: Copy + Default>(
 }
 
 #[test]
-#[ignore]
 fn concat_3d_axis_1_f16() {
     let (ctx, stream) = setup();
     let a_shape = [4i32, 5, 12];
@@ -138,7 +138,6 @@ fn concat_3d_axis_1_f16() {
 }
 
 #[test]
-#[ignore]
 fn concat_3d_axis_1_bf16() {
     let (ctx, stream) = setup();
     let a_shape = [4i32, 5, 12];
@@ -201,7 +200,6 @@ fn concat_3d_axis_1_bf16() {
 }
 
 #[test]
-#[ignore]
 fn concat_3d_axis_1_f64() {
     let (ctx, stream) = setup();
     let a_shape = [4i32, 5, 12];

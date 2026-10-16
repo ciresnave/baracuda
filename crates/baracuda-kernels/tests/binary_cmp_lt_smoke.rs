@@ -4,9 +4,10 @@
 //! IEEE semantics: any comparison with NaN returns 0. Mix three regimes
 //! (equal / a smaller / a larger) so both outcomes are exercised.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_cmp_lt_smoke -- --ignored`.
+//!   --test binary_cmp_lt_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -24,7 +25,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn cmp_lt_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -86,7 +86,6 @@ fn cmp_lt_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_lt_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -150,7 +149,6 @@ fn cmp_lt_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_lt_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -214,7 +212,6 @@ fn cmp_lt_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_lt_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -276,7 +273,6 @@ fn cmp_lt_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_lt_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;

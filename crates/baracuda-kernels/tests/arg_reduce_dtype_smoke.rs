@@ -6,9 +6,10 @@
 //! `[-10, 10]` (integers) so they are exactly representable in
 //! f16/bf16; that way the argmax/argmin index is rounding-independent.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test arg_reduce_dtype_smoke -- --ignored`.
+//!   --test arg_reduce_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -151,7 +152,6 @@ fn run_arg_reduce_f64(kind: ArgReduceKind, host_x_f32: &[f32; 16]) -> i64 {
 }
 
 #[test]
-#[ignore]
 fn argmax_1d_f16() {
     let (host_x, max_idx, _min_idx) = build_pattern_f32();
     let got = run_arg_reduce_f16(ArgReduceKind::Argmax, &host_x);
@@ -163,7 +163,6 @@ fn argmax_1d_f16() {
 }
 
 #[test]
-#[ignore]
 fn argmin_1d_f16() {
     let (host_x, _max_idx, min_idx) = build_pattern_f32();
     let got = run_arg_reduce_f16(ArgReduceKind::Argmin, &host_x);
@@ -175,7 +174,6 @@ fn argmin_1d_f16() {
 }
 
 #[test]
-#[ignore]
 fn argmax_1d_bf16() {
     let (host_x, max_idx, _min_idx) = build_pattern_f32();
     let got = run_arg_reduce_bf16(ArgReduceKind::Argmax, &host_x);
@@ -187,7 +185,6 @@ fn argmax_1d_bf16() {
 }
 
 #[test]
-#[ignore]
 fn argmin_1d_bf16() {
     let (host_x, _max_idx, min_idx) = build_pattern_f32();
     let got = run_arg_reduce_bf16(ArgReduceKind::Argmin, &host_x);
@@ -199,7 +196,6 @@ fn argmin_1d_bf16() {
 }
 
 #[test]
-#[ignore]
 fn argmax_1d_f64() {
     let (host_x, max_idx, _min_idx) = build_pattern_f32();
     let got = run_arg_reduce_f64(ArgReduceKind::Argmax, &host_x);
@@ -211,7 +207,6 @@ fn argmax_1d_f64() {
 }
 
 #[test]
-#[ignore]
 fn argmin_1d_f64() {
     let (host_x, _max_idx, min_idx) = build_pattern_f32();
     let got = run_arg_reduce_f64(ArgReduceKind::Argmin, &host_x);

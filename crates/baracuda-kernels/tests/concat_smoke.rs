@@ -4,9 +4,10 @@
 //! edge case. Bit-exact compare — concat does no math, just element
 //! copy.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test concat_smoke -- --ignored`.
+//!   --test concat_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -132,26 +133,22 @@ fn run_case_3d(concat_dim: usize) {
 }
 
 #[test]
-#[ignore]
 fn concat_3d_axis_0() {
     run_case_3d(0);
 }
 
 #[test]
-#[ignore]
 fn concat_3d_axis_1() {
     run_case_3d(1);
 }
 
 #[test]
-#[ignore]
 fn concat_3d_axis_2() {
     run_case_3d(2);
 }
 
 /// 1D concat — simplest case, just appends b after a.
 #[test]
-#[ignore]
 fn concat_1d() {
     let (ctx, stream) = setup();
     let a_shape = [128i32];
@@ -206,7 +203,6 @@ fn concat_1d() {
 /// Residual-style 2D concat — `[B, H_a] cat [B, H_b]` along the H axis.
 /// Most common pattern in real ML code.
 #[test]
-#[ignore]
 fn concat_2d_feature_dim() {
     let (ctx, stream) = setup();
     let a_shape = [16i32, 64];

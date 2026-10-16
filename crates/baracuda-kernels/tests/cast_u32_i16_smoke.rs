@@ -2,6 +2,7 @@
 //!
 //! Covers the four cells of the matrix that exercise both new dtypes
 //! as source and destination: f32→u32, u32→f32, f32→i16, i16→f32.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -16,7 +17,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn ffi_cast_f32_u32_matches_cpp_static_cast() {
     let (ctx, stream) = setup();
     // Positive range; static_cast<uint32_t> of a negative float is
@@ -49,7 +49,6 @@ fn ffi_cast_f32_u32_matches_cpp_static_cast() {
 }
 
 #[test]
-#[ignore]
 fn ffi_cast_u32_f32_matches_cpp_static_cast() {
     let (ctx, stream) = setup();
     let host_x: Vec<u32> = (0..2048u32).map(|i| i * 7919).collect();
@@ -84,7 +83,6 @@ fn ffi_cast_u32_f32_matches_cpp_static_cast() {
 }
 
 #[test]
-#[ignore]
 fn ffi_cast_f32_i16_matches_cpp_static_cast() {
     let (ctx, stream) = setup();
     // Range that exercises both positive and negative cells, and the
@@ -125,7 +123,6 @@ fn ffi_cast_f32_i16_matches_cpp_static_cast() {
 }
 
 #[test]
-#[ignore]
 fn ffi_cast_i16_f32_sign_extends() {
     let (ctx, stream) = setup();
     let host_x: Vec<i16> = vec![-32768, -1, 0, 1, 32767, 12345, -12345];
@@ -160,7 +157,6 @@ fn ffi_cast_i16_f32_sign_extends() {
 }
 
 #[test]
-#[ignore]
 fn ffi_cast_u32_i16_truncates_low_bits() {
     let (ctx, stream) = setup();
     // Round-trip through u32 → i16.

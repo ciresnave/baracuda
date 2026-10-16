@@ -14,7 +14,7 @@
 //!   4. Capture-mode auto-fallback to bespoke (FA2's launch-time
 //!      `cudaFuncSetAttribute` for opt-in SMEM isn't capture-safe).
 //!
-//! All tests are `#[ignore]` by default — requires a real CUDA device
+//! All tests are gated behind the `device-tests` feature — requires a real CUDA device
 //! plus a build with `--features fa2,sm80` (and `cudnn` for the
 //! workspace allocator path's link surface).
 //!
@@ -22,6 +22,7 @@
 //! GQA test is therefore omitted (no FA2 path under Tier 1).
 
 #![cfg(feature = "fa2")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -75,7 +76,6 @@ fn gen_bf16(n: usize, phase: f32) -> Vec<bf16> {
 // ===========================================================================
 
 #[test]
-#[ignore]
 fn fa2_heuristic_short_picks_bespoke() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaDescriptor::new(
@@ -104,7 +104,6 @@ fn fa2_heuristic_short_picks_bespoke() {
 // ===========================================================================
 
 #[test]
-#[ignore]
 fn fa2_heuristic_long_picks_fa2() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaDescriptor::new(
@@ -133,7 +132,6 @@ fn fa2_heuristic_long_picks_fa2() {
 // ===========================================================================
 
 #[test]
-#[ignore]
 fn fa2_force_via_preference() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaDescriptor::new(
@@ -323,13 +321,11 @@ fn run_correctness_f16(is_causal: bool) {
 }
 
 #[test]
-#[ignore]
 fn fa2_f16_vs_bespoke_non_causal() {
     run_correctness_f16(false);
 }
 
 #[test]
-#[ignore]
 fn fa2_f16_vs_bespoke_causal() {
     run_correctness_f16(true);
 }
@@ -486,13 +482,11 @@ fn run_correctness_bf16(is_causal: bool) {
 }
 
 #[test]
-#[ignore]
 fn fa2_bf16_vs_bespoke_non_causal() {
     run_correctness_bf16(false);
 }
 
 #[test]
-#[ignore]
 fn fa2_bf16_vs_bespoke_causal() {
     run_correctness_bf16(true);
 }
@@ -505,7 +499,6 @@ fn fa2_bf16_vs_bespoke_causal() {
 // ===========================================================================
 
 #[test]
-#[ignore]
 fn fa2_capture_falls_back_to_bespoke() {
     use baracuda_driver::CaptureMode;
     let (ctx, stream) = setup();

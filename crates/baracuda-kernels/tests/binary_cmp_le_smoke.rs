@@ -5,9 +5,10 @@
 //! when `a < b` or `a == b`. Mix three regimes (equal / a smaller / a
 //! larger) so both true outcomes and the false outcome are covered.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_cmp_le_smoke -- --ignored`.
+//!   --test binary_cmp_le_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn cmp_le_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -87,7 +87,6 @@ fn cmp_le_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_le_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -151,7 +150,6 @@ fn cmp_le_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_le_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -215,7 +213,6 @@ fn cmp_le_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_le_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -277,7 +274,6 @@ fn cmp_le_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_le_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;

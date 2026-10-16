@@ -3,9 +3,10 @@
 //! `torch.minimum`). Any NaN input → NaN output. Bit-exact across
 //! all dtypes.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_minimum_smoke -- --ignored`.
+//!   --test binary_minimum_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -48,7 +49,6 @@ fn minimum_ref_f64(a: f64, b: f64) -> f64 {
 }
 
 #[test]
-#[ignore]
 fn minimum_f32_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64];
@@ -117,7 +117,6 @@ fn minimum_f32_contig() {
 }
 
 #[test]
-#[ignore]
 fn minimum_f64_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 32];
@@ -183,7 +182,6 @@ fn minimum_f64_contig() {
 }
 
 #[test]
-#[ignore]
 fn minimum_f16_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32];
@@ -254,7 +252,6 @@ fn minimum_f16_contig() {
 }
 
 #[test]
-#[ignore]
 fn minimum_bf16_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];

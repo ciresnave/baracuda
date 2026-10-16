@@ -7,9 +7,10 @@
 //! equalities (every 3rd cell → 0) and non-equalities (other cells →
 //! 1) so the kernel exercises both outcomes.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_cmp_ne_smoke -- --ignored`.
+//!   --test binary_cmp_ne_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -30,7 +31,6 @@ fn setup() -> (Context, Stream) {
 // Contig: f32
 // =========================================================================
 #[test]
-#[ignore]
 fn cmp_ne_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -102,7 +102,6 @@ fn cmp_ne_f32_3d() {
 // Contig: f16
 // =========================================================================
 #[test]
-#[ignore]
 fn cmp_ne_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -175,7 +174,6 @@ fn cmp_ne_f16_3d() {
 // Contig: bf16
 // =========================================================================
 #[test]
-#[ignore]
 fn cmp_ne_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -248,7 +246,6 @@ fn cmp_ne_bf16_3d() {
 // Contig: f64
 // =========================================================================
 #[test]
-#[ignore]
 fn cmp_ne_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -324,7 +321,6 @@ fn cmp_ne_f64_3d() {
 // contig `[M, N]`. The strided kernel reads
 // `a_logical[i, j] = a_buf[j * M + i]` via the swapped stride.
 #[test]
-#[ignore]
 fn cmp_ne_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;

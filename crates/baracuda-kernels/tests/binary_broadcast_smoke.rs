@@ -8,9 +8,10 @@
 //! against a CPU reference that walks the same strides — f32 add is one
 //! IEEE rounding step, so the GPU and host agree exactly.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_broadcast_smoke -- --ignored`.
+//!   --test binary_broadcast_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -70,7 +71,6 @@ fn cpu_strided_add<const N: usize>(
 // of b. a is stored as N elements but logically [1, N] with stride [0, 1];
 // b is stored contig as [M, N] with stride [N, 1].
 #[test]
-#[ignore]
 fn broadcast_add_row_bias() {
     let (ctx, stream) = setup();
     const M: usize = 64;
@@ -144,7 +144,6 @@ fn broadcast_add_row_bias() {
 // per output row. a has stride [1, 0]: along axis 0 (rows) it advances
 // one element; along axis 1 (cols) it doesn't move.
 #[test]
-#[ignore]
 fn broadcast_add_col_bias() {
     let (ctx, stream) = setup();
     const M: usize = 64;
@@ -218,7 +217,6 @@ fn broadcast_add_col_bias() {
 // Scalar-broadcast pattern — single value added to every cell. Even more
 // degenerate than row-bias; both axes have stride 0 on `a`.
 #[test]
-#[ignore]
 fn broadcast_add_scalar() {
     let (ctx, stream) = setup();
     const M: usize = 32;
@@ -291,7 +289,6 @@ fn broadcast_add_scalar() {
 // batch and feature dims. `a` has stride [0, D_dim, 0] — only varies
 // along the sequence axis.
 #[test]
-#[ignore]
 fn broadcast_add_rank3_seq_only() {
     let (ctx, stream) = setup();
     const B: usize = 4;
@@ -372,7 +369,6 @@ fn broadcast_add_rank3_seq_only() {
 // contig [M, N]. The kernel reads b[i, j] = b_buf[j * M + i] via the
 // swapped stride.
 #[test]
-#[ignore]
 fn strided_add_transposed_b() {
     let (ctx, stream) = setup();
     const M: usize = 48;

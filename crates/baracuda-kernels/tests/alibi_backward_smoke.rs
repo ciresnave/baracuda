@@ -3,7 +3,8 @@
 //! BW:  dA[b, h, i, j] = dy[b, h, i, j]                (pass-through copy)
 //!      dslope[h]     = Σ_{b, i, j} dy[b, h, i, j] · (j - i)
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -51,7 +52,6 @@ fn host_alibi_backward_f32(
 }
 
 #[test]
-#[ignore]
 fn alibi_backward_f32_basic() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -133,7 +133,6 @@ fn alibi_backward_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn alibi_backward_f64_basic() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -221,7 +220,6 @@ fn alibi_backward_f64_basic() {
 }
 
 #[test]
-#[ignore]
 fn alibi_backward_f16_basic() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -307,7 +305,6 @@ fn alibi_backward_f16_basic() {
 }
 
 #[test]
-#[ignore]
 fn alibi_backward_bf16_basic() {
     let (ctx, stream) = setup();
     let batch = 2i32;

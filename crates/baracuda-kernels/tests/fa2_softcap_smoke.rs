@@ -15,6 +15,7 @@
 //!   4. Negative softcap is rejected at select time.
 
 #![cfg(feature = "fa2")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::Error;
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
@@ -141,19 +142,16 @@ fn run_with_softcap(softcap: f32, is_causal: bool) {
 }
 
 #[test]
-#[ignore]
 fn fa2_softcap_gemma_default_noncausal() {
     run_with_softcap(30.0, false);
 }
 
 #[test]
-#[ignore]
 fn fa2_softcap_gemma_default_causal() {
     run_with_softcap(30.0, true);
 }
 
 #[test]
-#[ignore]
 fn fa2_softcap_rejected_on_bespoke() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -184,7 +182,6 @@ fn fa2_softcap_rejected_on_bespoke() {
 }
 
 #[test]
-#[ignore]
 fn fa2_softcap_negative_rejected() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");

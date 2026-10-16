@@ -1,9 +1,10 @@
 //! Real-GPU smoke test for `BinaryPlan + BinaryKind::Hypot` —
 //! `y = sqrt(a² + b²)`. Transcendental — relative-eps compare per dtype.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_hypot_smoke -- --ignored`.
+//!   --test binary_hypot_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 // but matching ranges keeps the suite consistent).
 
 #[test]
-#[ignore]
 fn hypot_f32_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64];
@@ -84,7 +84,6 @@ fn hypot_f32_contig() {
 }
 
 #[test]
-#[ignore]
 fn hypot_f64_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 32];
@@ -142,7 +141,6 @@ fn hypot_f64_contig() {
 }
 
 #[test]
-#[ignore]
 fn hypot_f16_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32];
@@ -205,7 +203,6 @@ fn hypot_f16_contig() {
 }
 
 #[test]
-#[ignore]
 fn hypot_bf16_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];

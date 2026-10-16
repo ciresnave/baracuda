@@ -3,9 +3,10 @@
 //!
 //! Pure sign-bit manipulation — bit-exact across all dtypes.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_copysign_smoke -- --ignored`.
+//!   --test binary_copysign_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 // arguments so every quadrant of (a, b) is covered.
 
 #[test]
-#[ignore]
 fn copysign_f32_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64];
@@ -86,7 +86,6 @@ fn copysign_f32_contig() {
 }
 
 #[test]
-#[ignore]
 fn copysign_f64_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 32];
@@ -145,7 +144,6 @@ fn copysign_f64_contig() {
 }
 
 #[test]
-#[ignore]
 fn copysign_f16_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32];
@@ -209,7 +207,6 @@ fn copysign_f16_contig() {
 }
 
 #[test]
-#[ignore]
 fn copysign_bf16_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];

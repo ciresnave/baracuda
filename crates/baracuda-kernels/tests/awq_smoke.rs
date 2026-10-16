@@ -9,10 +9,11 @@
 //! reconstructs the weight as `1.0 * (q - 0) = q`. With `q = 0`
 //! everywhere the dequant is 0, so the GEMM output should be 0.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the `awq`
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the `awq`
 //! cargo feature on `baracuda-kernels-sys`.
 
 #![cfg(feature = "awq")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, require};
 use baracuda_kernels::{
@@ -33,7 +34,6 @@ fn setup() -> Option<(Context, Stream)> {
 }
 
 #[test]
-#[ignore = "device-gated: select() needs a Stream, so this rejection-path check silently skips on a CUDA-absent host (was a vacuous default-run green). Run via `cargo gpu-test`; interim pending the declare-and-report skippability primitive."]
 fn awq_plan_select_rejects_invalid_descriptor() {
     let (_ctx, stream) = require!(
         setup(),
@@ -65,7 +65,6 @@ fn awq_plan_select_rejects_invalid_descriptor() {
 /// All zeros = 0, all scales = 1.0, all weights = nibble 0 →
 /// dequant = 0 → output should be all zeros.
 #[test]
-#[ignore]
 fn awq_gemm_zero_weights_smoke() {
     let (ctx, stream) = require!(setup(), "a CUDA device + stream (AWQ GEMM smoke)");
     let m: i32 = 1;

@@ -2,9 +2,10 @@
 //! (`CastPlan<TIn, TOut>`).
 //!
 //! Exercises a handful of common cross-dtype casts against a CPU
-//! reference. `#[ignore]` by default; run with
+//! reference. gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test cast_smoke -- --ignored`.
+//!   --test cast_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn cast_f32_to_f64_bit_exact() {
     let (ctx, stream) = setup();
     let numel = 1024usize;
@@ -62,7 +62,6 @@ fn cast_f32_to_f64_bit_exact() {
 }
 
 #[test]
-#[ignore]
 fn cast_f64_to_f32_bit_exact() {
     let (ctx, stream) = setup();
     let numel = 1024usize;
@@ -102,7 +101,6 @@ fn cast_f64_to_f32_bit_exact() {
 }
 
 #[test]
-#[ignore]
 fn cast_f32_to_i32_truncates_toward_zero() {
     let (ctx, stream) = setup();
     // Mixed signs + half-integers so truncation behaviour is observable.
@@ -143,7 +141,6 @@ fn cast_f32_to_i32_truncates_toward_zero() {
 }
 
 #[test]
-#[ignore]
 fn cast_i32_to_f32_lossless_in_24bit_range() {
     let (ctx, stream) = setup();
     let numel = 256usize;
@@ -184,7 +181,6 @@ fn cast_i32_to_f32_lossless_in_24bit_range() {
 }
 
 #[test]
-#[ignore]
 fn cast_f32_to_f16_round_to_nearest_even() {
     let (ctx, stream) = setup();
     let numel = 256usize;
@@ -227,7 +223,6 @@ fn cast_f32_to_f16_round_to_nearest_even() {
 }
 
 #[test]
-#[ignore]
 fn cast_bf16_to_f32_lossless() {
     let (ctx, stream) = setup();
     let numel = 256usize;

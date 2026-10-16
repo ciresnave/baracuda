@@ -2,9 +2,10 @@
 //! (`AffinePlan<T>`).
 //!
 //! Validates `y = a * x + b` against a CPU reference for f32 / f64.
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test affine_smoke -- --ignored`.
+//!   --test affine_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn affine_f32_bit_exact_when_no_fma_fusion() {
     let (ctx, stream) = setup();
     let numel = 1024usize;
@@ -74,7 +74,6 @@ fn affine_f32_bit_exact_when_no_fma_fusion() {
 }
 
 #[test]
-#[ignore]
 fn affine_f64_close_to_reference() {
     let (ctx, stream) = setup();
     let numel = 1024usize;

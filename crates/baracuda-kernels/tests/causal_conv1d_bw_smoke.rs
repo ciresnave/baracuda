@@ -6,6 +6,7 @@
 //! tolerance (5e-2 relative) because FD at f32 has its own noise floor.
 
 #![cfg(feature = "mamba")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -87,7 +88,6 @@ fn run_fw_and_sum(
 }
 
 #[test]
-#[ignore]
 fn causal_conv1d_bw_dx_dw_db_match_fd() {
     let (ctx, stream) = setup();
     let use_silu = false;

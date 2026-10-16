@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for `DequantizePerGroupPlan<f32, S8>`.
 //!
-//! `#[ignore]`.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -17,7 +18,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn dequantize_per_group_f32_s8_basic() {
     let (ctx, stream) = setup();
     let outer: i32 = 2;

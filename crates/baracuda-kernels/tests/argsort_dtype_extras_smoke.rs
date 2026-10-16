@@ -4,11 +4,15 @@
 //! `row_len ≤ 1024` block-bitonic, same kernel structure as the
 //! existing F32/F64/I32/I64 family.
 
+#[cfg(feature = "device-tests")]
 use core::ffi::c_void;
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+#[cfg(feature = "device-tests")]
 use half::{bf16, f16};
 
+#[cfg(feature = "device-tests")]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -17,6 +21,7 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
+#[cfg(feature = "device-tests")]
 fn check_ascending<T: PartialOrd + Copy + core::fmt::Debug>(input: &[T], indices: &[i32]) {
     assert_eq!(input.len(), indices.len());
     for i in 1..indices.len() {
@@ -32,7 +37,7 @@ fn check_ascending<T: PartialOrd + Copy + core::fmt::Debug>(input: &[T], indices
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_u8_basic() {
     let (ctx, stream) = setup();
     let row_len: i32 = 16;
@@ -59,7 +64,7 @@ fn argsort_u8_basic() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_i8_basic() {
     let (ctx, stream) = setup();
     let row_len: i32 = 8;
@@ -86,7 +91,7 @@ fn argsort_i8_basic() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_u32_basic() {
     let (ctx, stream) = setup();
     let row_len: i32 = 8;
@@ -113,7 +118,7 @@ fn argsort_u32_basic() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_i16_descending() {
     let (ctx, stream) = setup();
     let row_len: i32 = 8;
@@ -145,7 +150,7 @@ fn argsort_i16_descending() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_f16_basic() {
     let (ctx, stream) = setup();
     let row_len: i32 = 16;
@@ -178,7 +183,7 @@ fn argsort_f16_basic() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_bf16_basic() {
     let (ctx, stream) = setup();
     let row_len: i32 = 16;
@@ -211,7 +216,7 @@ fn argsort_bf16_basic() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_fp8e4m3_basic() {
     let (ctx, stream) = setup();
     // FP8 E4M3 raw byte encodings. Choose distinct values to avoid

@@ -12,8 +12,9 @@
 //! matching PyTorch's contract. We exercise the sign-extension path
 //! by including negative values in the input mix.
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release --features sm89 -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --features sm89 --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -233,31 +234,26 @@ fn run_case_i64(kind: BinaryKind, shape: [i32; 2]) {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn bitwise_and_i32() {
     run_case_i32(BinaryKind::BitwiseAnd, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn bitwise_or_i32() {
     run_case_i32(BinaryKind::BitwiseOr, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn bitwise_xor_i32() {
     run_case_i32(BinaryKind::BitwiseXor, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn bitwise_left_shift_i32() {
     run_case_i32(BinaryKind::BitwiseLeftShift, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn bitwise_right_shift_i32() {
     run_case_i32(BinaryKind::BitwiseRightShift, [64, 65]);
 }
@@ -267,31 +263,26 @@ fn bitwise_right_shift_i32() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn bitwise_and_i64() {
     run_case_i64(BinaryKind::BitwiseAnd, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn bitwise_or_i64() {
     run_case_i64(BinaryKind::BitwiseOr, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn bitwise_xor_i64() {
     run_case_i64(BinaryKind::BitwiseXor, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn bitwise_left_shift_i64() {
     run_case_i64(BinaryKind::BitwiseLeftShift, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn bitwise_right_shift_i64() {
     run_case_i64(BinaryKind::BitwiseRightShift, [64, 65]);
 }

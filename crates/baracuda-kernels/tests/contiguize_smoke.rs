@@ -11,6 +11,7 @@
 //!   - Quick correctness on f16, bf16, f64 with a transposed source.
 //!
 //! Bit-exact compare via `to_bits()` (contiguize is pure copy — no math).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -32,7 +33,6 @@ fn setup() -> (Context, Stream) {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn contiguize_already_contiguous_rank3_f32() {
     let (ctx, stream) = setup();
     let shape = [2i32, 3, 4];
@@ -83,7 +83,6 @@ fn contiguize_already_contiguous_rank3_f32() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn contiguize_inner_stride1_fastpath_f32() {
     let (ctx, stream) = setup();
     // Underlying buffer of shape [N=2, H=3, W=4], canonical layout.
@@ -154,7 +153,6 @@ fn contiguize_inner_stride1_fastpath_f32() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn contiguize_transposed_rank2_f32() {
     let (ctx, stream) = setup();
     // Physical layout: shape [N=3, M=4] row-major.
@@ -213,7 +211,6 @@ fn contiguize_transposed_rank2_f32() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn contiguize_negative_stride_rank2_f32() {
     let (ctx, stream) = setup();
     let shape = [4i32, 3];
@@ -271,7 +268,6 @@ fn contiguize_negative_stride_rank2_f32() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn contiguize_zero_stride_rank3_f32() {
     let (ctx, stream) = setup();
     let phys_shape_outer = 2usize;
@@ -331,7 +327,6 @@ fn contiguize_zero_stride_rank3_f32() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn contiguize_s4_contiguous_rank1() {
     let (ctx, stream) = setup();
     // 8 s4 elements packed into 4 bytes. Values in [-8, +7].
@@ -441,7 +436,6 @@ fn contiguize_transposed_dtype<T>(
 }
 
 #[test]
-#[ignore]
 fn contiguize_transposed_f16() {
     contiguize_transposed_dtype::<f16>(
         ElementKind::F16,
@@ -451,7 +445,6 @@ fn contiguize_transposed_f16() {
 }
 
 #[test]
-#[ignore]
 fn contiguize_transposed_bf16() {
     contiguize_transposed_dtype::<bf16>(
         ElementKind::Bf16,
@@ -461,7 +454,6 @@ fn contiguize_transposed_bf16() {
 }
 
 #[test]
-#[ignore]
 fn contiguize_transposed_f64() {
     contiguize_transposed_dtype::<f64>(
         ElementKind::F64,

@@ -13,10 +13,11 @@
 //!      banded -INF mask matches an explicit naive reference that
 //!      applies the same band.
 //!
-//! All tests are `#[ignore]` by default — require a real CUDA device.
+//! All tests are gated behind the `device-tests` feature — require a real CUDA device.
 //! The arbmask path is bespoke (Phase 51) and does NOT require the
 //! `fa2` cargo feature — it's its own SDPA SKU. The test file is
 //! cargo-feature-free.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -135,7 +136,6 @@ fn assert_close_f32(got: &[f32], expect: &[f32], label: &str) {
 // ===========================================================================
 
 #[test]
-#[ignore]
 fn arbmask_random_f32_matches_host_ref() {
     let (ctx, stream) = setup();
 
@@ -259,7 +259,6 @@ fn arbmask_random_f32_matches_host_ref() {
 // ===========================================================================
 
 #[test]
-#[ignore]
 fn arbmask_tree_attention_pattern() {
     let (ctx, stream) = setup();
 
@@ -510,7 +509,6 @@ fn arbmask_tree_attention_pattern() {
 // ===========================================================================
 
 #[test]
-#[ignore]
 fn arbmask_sliding_window_matches_naive() {
     let (ctx, stream) = setup();
 
@@ -638,7 +636,6 @@ fn arbmask_sliding_window_matches_naive() {
 // ===========================================================================
 
 #[test]
-#[ignore]
 fn arbmask_with_causal_compose() {
     let (ctx, stream) = setup();
 

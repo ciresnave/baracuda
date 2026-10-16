@@ -4,6 +4,7 @@
 //! `db = weight·dy`. No saves. Tolerance: `4·eps` relative — each output
 //! is one mul (the `(1 - weight)` factor for `da` is computed in f32 at
 //! kernel-build time on the f64 path, contributing negligible error).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn lerp_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -90,7 +90,6 @@ fn lerp_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn lerp_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -153,7 +152,6 @@ fn lerp_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn lerp_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -216,7 +214,6 @@ fn lerp_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn lerp_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

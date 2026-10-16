@@ -19,8 +19,9 @@
 //! replay that drops/mis-writes any element surfaces as a divergence from
 //! the warm result.
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release --test capture_replay_gather_gemv -- --ignored --nocapture`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --test capture_replay_gather_gemv --features device-tests -- --nocapture`.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 use std::cell::Cell;
@@ -52,7 +53,6 @@ fn wte_table(v: i64, h: i64) -> Vec<f32> {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn gather_rows_capture_replay_correct() {
     let (ctx, stream) = gpu();
     let (v, h, n) = (3i64, 4i64, 1i64); // decode embedding lookup: n = 1 token
@@ -127,7 +127,6 @@ fn gather_rows_capture_replay_correct() {
 // bug reproduces on this box — a strong signal for Fuel's root-cause.
 
 #[test]
-#[ignore]
 fn index_select_element0_replay_repro() {
     let (ctx, stream) = gpu();
     let (v, h) = (3i64, 4i64);
@@ -226,7 +225,6 @@ fn index_select_element0_replay_repro() {
 // the rank=2 framing above. Same-box A/B: does the exact framing trigger it?
 
 #[test]
-#[ignore]
 fn index_select_element0_replay_repro_fuel_exact() {
     let (ctx, stream) = gpu();
     let (v, h) = (3i64, 4i64);
@@ -316,7 +314,6 @@ fn index_select_element0_replay_repro_fuel_exact() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn gemv_dense_capture_replay_byte_identical() {
     let (ctx, stream) = gpu();
     // A GQA-shaped decode GEMV: n=17, k=40, batch=4 heads, shared B (stride_b=0).

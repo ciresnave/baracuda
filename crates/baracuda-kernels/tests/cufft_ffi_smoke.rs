@@ -11,9 +11,10 @@
 //! - `fft_nd` × c32 — 2-D forward + inverse round-trip
 //! - `rfft_nd` × f32 + `irfft_nd` × f32 — 2-D R2C / C2R round-trip
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
 
 #![allow(unused_mut)]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -40,7 +41,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn fft_1d_c32_roundtrip_ffi() {
     let (ctx, stream) = setup();
     let n: i32 = 32;
@@ -115,7 +115,6 @@ fn fft_1d_c32_roundtrip_ffi() {
 }
 
 #[test]
-#[ignore]
 fn rfft_irfft_1d_f32_roundtrip_ffi() {
     let (ctx, stream) = setup();
     let n: i32 = 64;
@@ -181,7 +180,6 @@ fn rfft_irfft_1d_f32_roundtrip_ffi() {
 }
 
 #[test]
-#[ignore]
 fn fft_nd_c32_2d_roundtrip_ffi() {
     let (ctx, stream) = setup();
     let dims_host: [i32; 2] = [8, 16];
@@ -264,7 +262,6 @@ fn fft_nd_c32_2d_roundtrip_ffi() {
 }
 
 #[test]
-#[ignore]
 fn rfft_irfft_nd_f32_2d_roundtrip_ffi() {
     let (ctx, stream) = setup();
     let dims_host: [i32; 2] = [4, 8];

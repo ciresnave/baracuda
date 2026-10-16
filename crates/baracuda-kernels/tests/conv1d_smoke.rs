@@ -4,8 +4,9 @@
 //! plus a shape-only sanity check for f16. Compares against a hand-
 //! rolled CPU reference (naive NCL cross-correlation).
 //!
-//! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
+//! All tests are gated behind the `device-tests` feature — need a real CUDA device + cuDNN at runtime.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -162,7 +163,6 @@ fn desc_from(d: &Dims, elem: ElementKind) -> Conv1dDescriptor {
 }
 
 #[test]
-#[ignore]
 fn conv1d_f32_fw_bw() {
     let (ctx, stream) = setup();
     let d = D;

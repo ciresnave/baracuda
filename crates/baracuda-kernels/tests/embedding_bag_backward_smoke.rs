@@ -3,7 +3,8 @@
 //! Sum-mode: `dweight[indices[k], :] += dout[b, :]` for k in bag b.
 //! Mean-mode: same, divided by post-skip bag size.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -72,7 +73,6 @@ fn cpu_embedding_bag_backward_f32(
 }
 
 #[test]
-#[ignore]
 fn embedding_bag_backward_f32_sum() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -149,7 +149,6 @@ fn embedding_bag_backward_f32_sum() {
 }
 
 #[test]
-#[ignore]
 fn embedding_bag_backward_f32_mean_with_padding() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -235,7 +234,6 @@ fn embedding_bag_backward_f32_mean_with_padding() {
 }
 
 #[test]
-#[ignore]
 fn embedding_bag_backward_f64_sum() {
     let (ctx, stream) = setup();
     let v: usize = 4;

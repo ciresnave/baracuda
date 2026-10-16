@@ -13,9 +13,10 @@
 //! at f32 / f64. At f16 / bf16 we use a 1-ULP relative tolerance for
 //! both outputs, matching the forward Div fanout convention.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_div_backward_smoke -- --ignored`.
+//!   --test binary_div_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -38,7 +39,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn div_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -111,7 +111,6 @@ fn div_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn div_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -194,7 +193,6 @@ fn div_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn div_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -276,7 +274,6 @@ fn div_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn div_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

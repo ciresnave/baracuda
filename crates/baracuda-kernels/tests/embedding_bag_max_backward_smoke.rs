@@ -3,7 +3,8 @@
 //! BW pass: `dweight[output_index[b, d], d] += dout[b, d]` (atomicAdd).
 //! Skip cells where `output_index[b, d] < 0`.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -41,7 +42,6 @@ fn cpu_bag_max_bw_f32(
 }
 
 #[test]
-#[ignore]
 fn embedding_bag_max_backward_f32_basic() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -104,7 +104,6 @@ fn embedding_bag_max_backward_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn embedding_bag_max_backward_f64_basic() {
     let (ctx, stream) = setup();
     let v: usize = 4;

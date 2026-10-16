@@ -4,6 +4,7 @@
 //! Verifies s8 → f32 is the exact inverse of `quantize_per_tensor` when
 //! no clipping happens — i.e. for any `q ∈ [qmin, qmax]`,
 //! `dequant(q) = scale * (q - zp)` exactly.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -20,7 +21,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn dequantize_per_tensor_s8_f32_exact_inverse() {
     let (ctx, stream) = setup();
     let scale: f32 = 0.5;

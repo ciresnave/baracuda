@@ -18,6 +18,7 @@
 //!  13 14 | 15 16
 //! ```
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -34,7 +35,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn adaptive_avg_pool2d_4x4_to_2x2_f32() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 4i32, 4i32);

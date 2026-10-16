@@ -5,8 +5,9 @@
 //! against a naive CPU reference. Also confirms BW-data and BW-filter
 //! dispatch (no NaN / no crash).
 //!
-//! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
+//! All tests are gated behind the `device-tests` feature — need a real CUDA device + cuDNN at runtime.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -85,7 +86,6 @@ fn make_seq(n: usize, seed: u32, scale: f64) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn conv_transpose2d_f32_fw() {
     let (ctx, stream) = setup();
     let n = 1;
@@ -178,7 +178,6 @@ fn conv_transpose2d_f32_fw() {
 }
 
 #[test]
-#[ignore]
 fn conv_transpose2d_f32_bw_directions_run() {
     let (ctx, stream) = setup();
     let n = 1;

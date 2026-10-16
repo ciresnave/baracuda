@@ -15,6 +15,7 @@
 //! (FA2's masked-softmax order is hard to match exactly).
 
 #![cfg(feature = "fa2")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::Error;
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
@@ -49,7 +50,6 @@ fn gen_f16(n: usize, phase: f32) -> Vec<f16> {
 }
 
 #[test]
-#[ignore]
 fn fa2_sliding_window_left_runs() {
     let (ctx, stream) = setup();
     let n_q = (B * H * Q * D) as usize;
@@ -132,7 +132,6 @@ fn fa2_sliding_window_left_runs() {
 }
 
 #[test]
-#[ignore]
 fn fa2_sliding_window_causal_compose() {
     let (ctx, stream) = setup();
     let n_q = (B * H * Q * D) as usize;
@@ -216,7 +215,6 @@ fn fa2_sliding_window_causal_compose() {
 }
 
 #[test]
-#[ignore]
 fn fa2_sliding_window_rejected_on_bespoke() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");

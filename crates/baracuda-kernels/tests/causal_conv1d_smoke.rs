@@ -4,10 +4,11 @@
 //! reference implementation that follows the same depthwise-causal
 //! cross-correlation contract.
 //!
-//! All tests are `#[ignore]` by default — requires a real CUDA device
+//! All tests are gated behind the `device-tests` feature — requires a real CUDA device
 //! and a build with `--features mamba`.
 
 #![cfg(feature = "mamba")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -73,7 +74,6 @@ fn check_close(a: &[f32], b: &[f32], tol: f32, tag: &str) {
 }
 
 #[test]
-#[ignore]
 fn causal_conv1d_f32_width4_silu_matches_cpu_ref() {
     let (ctx, stream) = setup();
 
@@ -155,7 +155,6 @@ fn causal_conv1d_f32_width4_silu_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn causal_conv1d_f32_width2_no_silu_no_bias() {
     let (ctx, stream) = setup();
     let b = 1;
@@ -215,7 +214,6 @@ fn causal_conv1d_f32_width2_no_silu_no_bias() {
 }
 
 #[test]
-#[ignore]
 fn causal_conv1d_width_5_rejected() {
     let (_ctx, stream) = setup();
     let desc = CausalConv1dDescriptor {

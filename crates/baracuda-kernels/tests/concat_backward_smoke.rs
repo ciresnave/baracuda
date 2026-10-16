@@ -3,9 +3,10 @@
 //! (`da = dy[..., :split, ...]`, `db = dy[..., split:, ...]`).
 //! Bit-exact, no math.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test concat_backward_smoke -- --ignored`.
+//!   --test concat_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -76,7 +77,6 @@ fn cpu_split_ref<const N: usize, T: Copy + Default>(
 // -------- f32 --------
 
 #[test]
-#[ignore]
 fn concat_backward_f32_2d_dim0() {
     let (ctx, stream) = setup();
     let output_shape = [7i32, 5];
@@ -145,7 +145,6 @@ fn concat_backward_f32_2d_dim0() {
 }
 
 #[test]
-#[ignore]
 fn concat_backward_f32_3d_dim1() {
     let (ctx, stream) = setup();
     let output_shape = [2i32, 9, 4];
@@ -224,7 +223,6 @@ fn concat_backward_f32_3d_dim1() {
 // -------- f16 --------
 
 #[test]
-#[ignore]
 fn concat_backward_f16_2d_dim1() {
     let (ctx, stream) = setup();
     let output_shape = [4i32, 8];
@@ -297,7 +295,6 @@ fn concat_backward_f16_2d_dim1() {
 // -------- bf16 --------
 
 #[test]
-#[ignore]
 fn concat_backward_bf16_3d_dim2() {
     let (ctx, stream) = setup();
     let output_shape = [2i32, 3, 7];
@@ -370,7 +367,6 @@ fn concat_backward_bf16_3d_dim2() {
 // -------- f64 --------
 
 #[test]
-#[ignore]
 fn concat_backward_f64_2d_dim0() {
     let (ctx, stream) = setup();
     let output_shape = [6i32, 4];
@@ -440,7 +436,6 @@ fn concat_backward_f64_2d_dim0() {
 
 // Edge case: split_offset == 0 (entire dy goes to db; da is empty).
 #[test]
-#[ignore]
 fn concat_backward_f32_split_zero_all_to_b() {
     let (ctx, stream) = setup();
     let output_shape = [3i32, 4];
@@ -498,7 +493,6 @@ fn concat_backward_f32_split_zero_all_to_b() {
 
 // Validation guard — reject out-of-range concat_dim.
 #[test]
-#[ignore]
 fn concat_backward_rejects_bad_concat_dim() {
     let (_ctx, stream) = setup();
     let desc = ConcatBackwardDescriptor::<2> {

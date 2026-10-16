@@ -4,9 +4,10 @@
 //! Forward: `y = a + b`. Backward: `(da, db) = (dy, dy)`. Bit-exact —
 //! no math, pure copy of upstream gradient to both gradient outputs.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_add_backward_smoke -- --ignored`.
+//!   --test binary_add_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -80,19 +81,16 @@ fn run_case_f32<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn add_backward_f32_1d() {
     run_case_f32::<1>([2048]);
 }
 
 #[test]
-#[ignore]
 fn add_backward_f32_2d() {
     run_case_f32::<2>([64, 64]);
 }
 
 #[test]
-#[ignore]
 fn add_backward_f32_3d() {
     run_case_f32::<3>([8, 128, 128]);
 }
@@ -100,7 +98,6 @@ fn add_backward_f32_3d() {
 // --- f16 / bf16 / f64 fanout (Add backward is a pure copy — bit-exact) ----
 
 #[test]
-#[ignore]
 fn add_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -161,7 +158,6 @@ fn add_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn add_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -222,7 +218,6 @@ fn add_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn add_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

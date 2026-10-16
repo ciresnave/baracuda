@@ -3,7 +3,8 @@
 //! Per-bag reduction over a flat indices buffer partitioned by an
 //! offsets table. Sum + Mean modes; empty-bag and padding_idx behavior.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -71,7 +72,6 @@ fn cpu_embedding_bag_f32(
 }
 
 #[test]
-#[ignore]
 fn embedding_bag_f32_sum_basic() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -149,7 +149,6 @@ fn embedding_bag_f32_sum_basic() {
 }
 
 #[test]
-#[ignore]
 fn embedding_bag_f32_mean_basic() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -226,7 +225,6 @@ fn embedding_bag_f32_mean_basic() {
 }
 
 #[test]
-#[ignore]
 fn embedding_bag_f32_padding_idx_and_empty_bag() {
     let (ctx, stream) = setup();
     let v: usize = 5;
@@ -314,7 +312,6 @@ fn embedding_bag_f32_padding_idx_and_empty_bag() {
 }
 
 #[test]
-#[ignore]
 fn embedding_bag_f64_sum() {
     let (ctx, stream) = setup();
     let v: usize = 4;

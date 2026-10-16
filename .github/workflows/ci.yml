@@ -345,6 +345,15 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: cargo check baracuda-kernels --features ${{ matrix.arch }}
         run: cargo check --locked -p baracuda-kernels --features ${{ matrix.arch }}
+      # The kernels' on-device test targets are gated behind the `device-tests` feature (not
+      # `#[ignore]`d). They compile without CUDA (DOCS_RS stubs the kernel crates), so type-check
+      # both builds on every PR: with the feature (the gated tests still build) and without it
+      # (the always-on tests build). RUN by .github/workflows/device-tests.yml on the self-hosted
+      # device runner; see docs/DEVICE-TESTS.md.
+      - name: cargo check baracuda-kernels --tests (device-tests off)
+        run: cargo check --locked -p baracuda-kernels --tests --features ${{ matrix.arch }}
+      - name: cargo check baracuda-kernels --tests (device-tests on)
+        run: cargo check --locked -p baracuda-kernels --tests --features ${{ matrix.arch }},device-tests
       # `baracuda-kernels-bench`'s tests/ are 12 files / 3,103 lines that NO job
       # compiled until this step: the variant gate, the RowReduce bit-move matrix
       # and the precision-first numerics all live there. They are device tests, so
