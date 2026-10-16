@@ -3629,6 +3629,97 @@ fn operand_stride_binding(
     }
 }
 
+/// The facts the v1 skinny contraction schedule can honour, as a typed decline instead of
+/// an abort (KISS-EMIT §6.8-0004). A cell outside them is the key declaring something this
+/// emitter does not spell: emitting anyway would produce bits the key does not promise.
+fn check_contraction_admissible(
+    plan: &KernelPlan<'_>,
+    c: &unpopped_vocab::structure_key::ContractionKey,
+) -> Result<(), LowerError> {
+    if c.m != unpopped_vocab::SizeClass::Tiny {
+        return Err(LowerError::UnsupportedPlanShape {
+            detail: format!(
+                "contraction v1 emits the Tiny-M skinny schedule only; M class {:?} is the \
+                 tiled variant's territory (and all-Large routes to the vendor)",
+                c.m
+            ),
+        });
+    }
+    if !matches!(
+        plan.dtype,
+        ElementKind::F16
+            | ElementKind::Bf16
+            | ElementKind::F32
+            | ElementKind::F32Strict
+            | ElementKind::F64
+    ) {
+        return Err(LowerError::UnsupportedDtype {
+            dtype: plan.dtype,
+            detail: "contraction v1: float dtypes only".to_string(),
+        });
+    }
+    // This emitter accumulates in `float` (`double` for f64). The key's `<acc>` is the
+    // caller-declared accumulator (else operand 0's dtype), and the contract's
+    // `accumulation_type` must equal it, so any other declaration is not what we emit.
+    let our_acc = if matches!(plan.dtype, ElementKind::F64) {
+        ElementKind::F64
+    } else {
+        ElementKind::F32
+    };
+    if c.acc != our_acc {
+        return Err(LowerError::UnsupportedPlanShape {
+            detail: format!(
+                "contraction v1 accumulates at {our_acc:?} for {:?}; the key declares \
+                 accumulator {:?}",
+                plan.dtype, c.acc
+            ),
+        });
+    }
+    // The emitted chain is a full-precision multiply-add: the declared strict (`st`) math
+    // fidelity. `rm` only PERMITS reduced-mantissa input rounding (KISS-CLASSIFY-6.7-0006), so
+    // an un-rounded binary32 chain is a valid implementation of an `rm` cell (same or tighter
+    // numerics); the keyer keys every plain-F32 contraction `rm` (the vendor TF32 policy). For
+    // any other dtype an `rm` declaration is not something this emitter spells, so it declines.
+    // A cache joining variants on the key alone treats this kernel and a TF32 vendor kernel as
+    // interchangeable for that cell; a caller needing bit-exact binary32 must declare `st`.
+    let rm_accepted = plan.dtype == ElementKind::F32;
+    if c.mp != unpopped_vocab::structure_key::MpCode::St && !rm_accepted {
+        return Err(LowerError::UnsupportedPlanShape {
+            detail: format!(
+                "contraction v1 emits strict-precision math only; the key declares math \
+                 fidelity {:?}",
+                c.mp
+            ),
+        });
+    }
+    // A quantized weight (designated scale operand) or a weight dtype other than the
+    // operand dtype needs a dequantizing schedule this emitter does not have.
+    if let Some(scale) = c.scale {
+        return Err(LowerError::UnsupportedPlanShape {
+            detail: format!(
+                "contraction v1 has no dequantizing schedule; the key designates a {scale:?} scale operand"
+            ),
+        });
+    }
+    let canon = |d: ElementKind| {
+        if d == ElementKind::F32Strict {
+            ElementKind::F32
+        } else {
+            d
+        }
+    };
+    if c.wdt != canon(plan.dtype) {
+        return Err(LowerError::UnsupportedPlanShape {
+            detail: format!(
+                "contraction v1 needs the weight in the operand dtype {:?}; the key says {:?}",
+                canon(plan.dtype),
+                c.wdt
+            ),
+        });
+    }
+    Ok(())
+}
+
 /// Emit a **contraction** ([`Access::Contraction`]) — the terminal ORDER-3
 /// node, v1 = the **skinny SIMT** schedule for the `Tiny`-M long-tail cell
 /// (decode / FlashDecoding++ flat-GEMM): `out[mm,col] = epi(Σ_k lhs[mm,k] ·
@@ -3653,12 +3744,7 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKerne
         .key
         .contraction
         .expect("build_plan asserted contraction facts");
-    assert_eq!(
-        c.m,
-        unpopped_vocab::SizeClass::Tiny,
-        "contraction v1 emits the Tiny-M skinny schedule only; larger M classes \
-         are the tiled variant's territory (and all-Large routes to the vendor)"
-    );
+    check_contraction_admissible(plan, &c)?;
     // The CONTRACTION accumulator follows the canonical sk3 `<acc>` lattice
     // (`unpopped_vocab::structure_key`'s `contraction_acc`, mirroring
     // `GemmSku::precision_guarantee`): f16/bf16/f32/f32-strict → `float`,
@@ -3669,18 +3755,6 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> Result<GeneratedKerne
     // "full IEEE 754 binary32 multiply-add THROUGHOUT" — a double accumulator
     // would produce different (non-binary32-chain) bits than declared.
     let dbl = matches!(plan.dtype, ElementKind::F64);
-    assert!(
-        matches!(
-            plan.dtype,
-            ElementKind::F16
-                | ElementKind::Bf16
-                | ElementKind::F32
-                | ElementKind::F32Strict
-                | ElementKind::F64
-        ),
-        "contraction v1: float dtypes only; got {:?}",
-        plan.dtype
-    );
     let acc = if dbl { "double" } else { "float" };
     let zero = if dbl { "0.0" } else { "0.0f" };
     // Loads up-convert to the accumulator width, exactly as the reductions do
@@ -9744,6 +9818,93 @@ got:
                 .contains("float w = __half2float(in1[kk * n + col]);")
         );
         assert!(kh.source.contains("out[mm * n + col] = __float2half(r0);"));
+    }
+
+    /// The canonical decode cell `[8,4096]·[4096,4096] -> [8,4096]` at `dt`, keyed by the
+    /// bridge (the declared facts the keyer's GEMM routing policy implies).
+    fn contraction_cell(dt: ElementKind) -> (OpDef, unpopped_vocab::StructureKey) {
+        use unpopped::ir::{ContractionAxes, reduced};
+        let mm = OpDef::contraction("matmul", &[dt], ContractionAxes::matmul(), reduced(0));
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], dt, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], dt, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], dt, 256);
+        (
+            mm,
+            structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89),
+        )
+    }
+
+    /// Lower `(op, key)` and return the typed decline's detail, panicking if it lowered.
+    fn contraction_decline(op: &OpDef, key: &unpopped_vocab::StructureKey) -> String {
+        use unpopped::backend::LowerError;
+        use unpopped::try_generate;
+        match try_generate(op, key, &Cuda) {
+            Err(LowerError::UnsupportedPlanShape { detail }) => detail,
+            Err(LowerError::UnsupportedDtype { detail, .. }) => detail,
+            Err(other) => panic!("expected a typed backend decline, got {other:?}"),
+            Ok(k) => panic!("expected a decline, lowered {}", k.name),
+        }
+    }
+
+    #[test]
+    fn contraction_control_lowers_and_f32_rm_key_is_accepted() {
+        use unpopped::try_generate;
+        // The keyer keys every plain-F32 contraction `rm` (the vendor TF32 routing policy);
+        // `rm` PERMITS input rounding (KISS-CLASSIFY-6.7-0006), so this full-precision binary32
+        // SIMT kernel conforms to it (same or tighter numerics). If this assert flips, the
+        // keyer's policy changed - revisit the emitter.
+        let (mm, key) = contraction_cell(ElementKind::F32);
+        let c = key.contraction.expect("gemm key carries contraction facts");
+        assert_eq!(c.mp, unpopped_vocab::structure_key::MpCode::Rm);
+        assert!(try_generate(&mm, &key, &Cuda).is_ok());
+        // Control for the declines below: f16 keys st / acc f32 and lowers.
+        let (mm16, key16) = contraction_cell(ElementKind::F16);
+        assert_eq!(
+            key16.contraction.unwrap().mp,
+            unpopped_vocab::structure_key::MpCode::St
+        );
+        assert!(try_generate(&mm16, &key16, &Cuda).is_ok());
+    }
+
+    #[test]
+    fn contraction_declines_non_tiny_m_as_typed_error() {
+        let (mm, mut key) = contraction_cell(ElementKind::F32);
+        key.contraction.as_mut().unwrap().m = unpopped_vocab::SizeClass::Small;
+        assert!(contraction_decline(&mm, &key).contains("Tiny-M"));
+    }
+
+    #[test]
+    fn contraction_declines_accumulator_other_than_the_lattice() {
+        // The declared accumulator (key `<acc>`) is f16 here; this kernel accumulates f32.
+        let (mm, mut key) = contraction_cell(ElementKind::F16);
+        key.contraction.as_mut().unwrap().acc = ElementKind::F16;
+        let d = contraction_decline(&mm, &key);
+        assert!(d.contains("accumulat") && d.contains("F16"), "{d}");
+        // And an f64 contraction declared at f32.
+        let (mm64, mut key64) = contraction_cell(ElementKind::F64);
+        key64.contraction.as_mut().unwrap().acc = ElementKind::F32;
+        assert!(contraction_decline(&mm64, &key64).contains("accumulat"));
+    }
+
+    #[test]
+    fn contraction_declines_reduced_mantissa_for_non_f32() {
+        let (mm, mut key) = contraction_cell(ElementKind::F16);
+        key.contraction.as_mut().unwrap().mp = unpopped_vocab::structure_key::MpCode::Rm;
+        assert!(contraction_decline(&mm, &key).contains("math fidelity"));
+    }
+
+    #[test]
+    fn contraction_declines_a_designated_scale_operand() {
+        let (mm, mut key) = contraction_cell(ElementKind::F16);
+        key.contraction.as_mut().unwrap().scale = Some(ElementKind::F16);
+        assert!(contraction_decline(&mm, &key).contains("scale operand"));
+    }
+
+    #[test]
+    fn contraction_declines_weight_dtype_other_than_operand_dtype() {
+        let (mm, mut key) = contraction_cell(ElementKind::F16);
+        key.contraction.as_mut().unwrap().wdt = ElementKind::Bf16;
+        assert!(contraction_decline(&mm, &key).contains("weight"));
     }
 
     #[test]
