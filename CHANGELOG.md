@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.113 - 2026-10-16 (`unpopped` family 0.18.0 -> 0.19.0) - Breaking
+
+Workspace alpha.113 (proposed; PM allocates at gate); `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.19.0 (they follow the `unpopped` 0.19.0 they work with).
+
+- Dependencies: `unpopped`, `unpopped-vocab`, `unpopped-cpu-c`, `unpopped-slang` and `tools/kiss-ref-diff` move to 0.19.0 (KISS 0.4.3 `ctr` stage: caller-declared M/N/K/batch axes, accumulator and math fidelity; the keyer now declines malformed role hints).
+- No source or golden change: baracuda has no caller of `derive_structure_key*` or `CellFacts`, so no `ContractionAxesNotDeclared` site. Emit 305 lib + integration, parse, all pass unchanged.
+- Verified: sk harness (`unpopped-vocab =0.19.0`) vs KISS `026feba` `structure_key_derivation_vectors.json`, 63 vectors: ctr FAIL 15 -> 0; 47 PASS(non-prefix) + 1 PASS; 15 decline vectors give the same reason under a different name string.
+
 ## 0.0.1-alpha.112 — 2026-10-16 (sk6 adoption: `unpopped` family 0.17.3 -> 0.18.0) — Breaking
 
 Workspace alpha.112 (proposed; PM allocates at gate); `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.18.0 (they follow the `unpopped` 0.18.0 they work with).
