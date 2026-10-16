@@ -114,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-emit"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "baracuda-nvrtc",
  "unpopped",
@@ -125,7 +125,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-parse"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "tree-sitter",
  "tree-sitter-cuda",
@@ -1591,9 +1591,9 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "unpopped"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27b3394f4a98109cc99ddd465debfb85459f7f488864ab21aeff01a7dda2c195"
+checksum = "5db15d842420bc69d951537c1bb512829c3f7f152a99943022f9b52abb2f2c57"
 dependencies = [
  "libm",
  "serde",
@@ -1606,9 +1606,9 @@ dependencies = [
 
 [[package]]
 name = "unpopped-cpu-c"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "195cc54ed9ad838d8a710a9557c3d27813b3e2bd96316c5b8b24757d06fb79ed"
+checksum = "ef52f6e57c2cf11c892535c3a760cbcc69d5179fa04756011cc310bd6279fa5e"
 dependencies = [
  "unpopped",
  "unpopped-vocab",
@@ -1616,9 +1616,9 @@ dependencies = [
 
 [[package]]
 name = "unpopped-slang"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61a3b268fefeb7484e42a86f27cb7410e1f54371637d1c7d21f0bb4f3d316973"
+checksum = "30803c4f379905564f2808f6caeab69b6d1858f7c34d299c1b87e2a7a50d37ff"
 dependencies = [
  "unpopped",
  "unpopped-vocab",
@@ -1626,9 +1626,9 @@ dependencies = [
 
 [[package]]
 name = "unpopped-vocab"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e717260e676a54401b7cd0761dd7886a38725c08ca29157dbf501e600b875420"
+checksum = "e4aae1d238486503d0f13357d1f50aa68799a62daafece0d9ccd3c3328173410"
 dependencies = [
  "float8",
  "half",

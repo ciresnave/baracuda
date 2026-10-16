@@ -341,7 +341,7 @@ later.
 ### Trait layering: why `T: Element` and `T: DeviceRepr + Copy` coexist
 
 The split is **intentional** (API-freeze review, `docs/planning/api-freeze/README.md` §5). All of
-these traits are defined and sealed in `unpopped-vocab` (0.18.0, `src/element.rs`), not in
+these traits are defined and sealed in `unpopped-vocab` (0.19.0, `src/element.rs`), not in
 baracuda, and are re-exported by `baracuda-kernels-types`:
 
 ```text
