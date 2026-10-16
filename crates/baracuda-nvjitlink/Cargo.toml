@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvjitlink"
-version = "0.0.1-alpha.118"
+version = "0.0.1-alpha.119"
 description = "Safe Rust wrappers for NVIDIA nvJitLink (CUDA 12.0+ JIT linker)."
 edition.workspace = true
 license.workspace = true
