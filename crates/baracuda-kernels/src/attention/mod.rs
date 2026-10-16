@@ -135,10 +135,6 @@ pub(crate) fn map_status(code: i32) -> Result<()> {
 /// because the call sites are feature-gated (`xformers_sparse24`) and
 /// the function ships unconditionally.
 #[doc(hidden)]
-#[allow(dead_code)]
-pub(crate) fn map_status_pub(code: i32) -> Result<()> {
-    map_status(code)
-}
 
 /// Default RoPE base — `10000.0`, matching the original Llama /
 /// Mistral / Gemma conventions.

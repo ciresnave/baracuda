@@ -46,8 +46,7 @@ pub struct GraphicsResource {
 
 struct GraphicsResourceInner {
     handle: CUgraphicsResource,
-    #[allow(dead_code)]
-    context: Context,
+    _context: Context,
 }
 
 unsafe impl Send for GraphicsResourceInner {}
@@ -79,7 +78,7 @@ impl GraphicsResource {
         Self {
             inner: Arc::new(GraphicsResourceInner {
                 handle,
-                context: context.clone(),
+                _context: context.clone(),
             }),
         }
     }

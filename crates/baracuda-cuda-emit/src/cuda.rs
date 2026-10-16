@@ -7942,6 +7942,23 @@ fn param_args_multi(exprs: &[&ScalarExpr], param_ctype: &str) -> String {
         .collect()
 }
 
+/// Output directory for a test source dump: `$var` if set (the on-device
+/// harness workflow), else a per-test directory under the crate's `target/`, so
+/// the dump runs in a plain `cargo test` without littering the cwd.
+#[cfg(test)]
+pub(crate) fn dump_dir(var: &str, test: &str) -> String {
+    let dir = std::env::var(var).unwrap_or_else(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("baracuda-emit-dump")
+            .join(test)
+            .to_string_lossy()
+            .into_owned()
+    });
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 #[cfg(test)]
 mod tests {
     use crate::Cuda;
@@ -8020,11 +8037,10 @@ mod tests {
 
     /// Regenerate the generated coord-unravel helper for the on-device
     /// `ondevice/unravel_bench.cu` harness. Run with:
-    ///   `UNRAVEL_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_coord_unravel_helper -- --ignored --nocapture`
+    ///   `UNRAVEL_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_coord_unravel_helper -- --nocapture`
     #[test]
-    #[ignore = "writes the generated coord-unravel helper for the on-device bench"]
     fn dump_coord_unravel_helper() {
-        let out = std::env::var("UNRAVEL_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("UNRAVEL_OUT", "dump_coord_unravel_helper");
         let path = format!("{out}/coord_unravel_gen.cuh");
         std::fs::write(&path, super::emit_coord_unravel_helper(8)).unwrap();
         println!("wrote {path}");
@@ -8078,11 +8094,10 @@ mod tests {
     }
 
     /// Regenerate the generated dtype-promote helper for the on-device validator.
-    ///   `DTYPE_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_dtype_promote_helper -- --ignored --nocapture`
+    ///   `DTYPE_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_dtype_promote_helper -- --nocapture`
     #[test]
-    #[ignore = "writes the generated dtype-promote helper for the on-device validator"]
     fn dump_dtype_promote_helper() {
-        let out = std::env::var("DTYPE_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("DTYPE_OUT", "dump_dtype_promote_helper");
         let path = format!("{out}/dtype_promote_gen.cuh");
         std::fs::write(&path, super::emit_dtype_promote_helper()).unwrap();
         println!("wrote {path}");
@@ -8195,11 +8210,10 @@ mod tests {
     }
 
     /// Regenerate the generated cast helper for the on-device validator.
-    ///   `CAST_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_cast_helper -- --ignored --nocapture`
+    ///   `CAST_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_cast_helper -- --nocapture`
     #[test]
-    #[ignore = "writes the generated cast helper for the on-device validator"]
     fn dump_cast_helper() {
-        let out = std::env::var("CAST_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("CAST_OUT", "dump_cast_helper");
         let path = format!("{out}/cast_gen.cuh");
         std::fs::write(&path, super::emit_cast_helper()).unwrap();
         println!("wrote {path}");
@@ -8826,14 +8840,13 @@ mod tests {
     /// pasting it into a fixture) is the point: a hand-copied kernel validates a
     /// transcription, not the generator.
     #[test]
-    #[ignore = "writes the bf16 reduce_max emission for the on-device validator"]
     fn dump_bf16_reduce_max() {
         use unpopped::ir::ReduceOp;
         let op = OpDef::reduction("r", 1, &[ElementKind::Bf16], input(0), ReduceOp::Max);
         let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], ElementKind::Bf16, 256);
         let o = OperandDesc::new(1, &[128], &[1], ElementKind::Bf16, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
-        let dir = std::env::var("BARACUDA_DUMP_DIR").expect("BARACUDA_DUMP_DIR");
+        let dir = crate::cuda::dump_dir("BARACUDA_DUMP_DIR", "dump_bf16_reduce_max");
         let src = generate(&op, &key, &Cuda).source;
         std::fs::write(std::path::Path::new(&dir).join("reduce_max_bf16.cu"), src).unwrap();
     }
@@ -8842,11 +8855,10 @@ mod tests {
     /// serial base AND the blockscan, because they are separate code paths and
     /// only the blockscan exercises `__shfl_up_sync` on a narrow type.
     #[test]
-    #[ignore = "writes the bf16 cummax emissions for the on-device validator"]
     fn dump_bf16_cummax() {
         use unpopped::generate_variants;
         use unpopped::ir::ReduceOp;
-        let dir = std::env::var("BARACUDA_DUMP_DIR").expect("BARACUDA_DUMP_DIR");
+        let dir = crate::cuda::dump_dir("BARACUDA_DUMP_DIR", "dump_bf16_cummax");
         let dt = ElementKind::Bf16;
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
         let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
@@ -8861,10 +8873,9 @@ mod tests {
     /// differential: a sign edit INSIDE the element, and an epilogue that is
     /// itself a move.
     #[test]
-    #[ignore = "writes the nested-move emissions for the on-device validator"]
     fn dump_bf16_nested_moves() {
         use unpopped::ir::{ReduceOp, UnaryOp, input, reduced};
-        let dir = std::env::var("BARACUDA_DUMP_DIR").expect("BARACUDA_DUMP_DIR");
+        let dir = crate::cuda::dump_dir("BARACUDA_DUMP_DIR", "dump_bf16_nested_moves");
         let dt = ElementKind::Bf16;
         let a = OperandDesc::new(2, &[128, 4096], &[4096, 1], dt, 256);
         let o = OperandDesc::new(1, &[128], &[1], dt, 256);
@@ -14994,11 +15005,10 @@ mod dropout_hetero_tests {
 
     /// Regenerate the generated kernels `ondevice/dropout_validate.cu` and
     /// `ondevice/dropout_f64_validate.cu` include. Run with:
-    ///   `DROPOUT_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_dropout_sources -- --ignored --nocapture`
+    ///   `DROPOUT_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_dropout_sources -- --nocapture`
     #[test]
-    #[ignore = "writes generated sources for the on-device dropout harness"]
     fn dump_dropout_sources() {
-        let out = std::env::var("DROPOUT_OUT").expect("set DROPOUT_OUT=<outdir>");
+        let out = crate::cuda::dump_dir("DROPOUT_OUT", "dump_dropout_sources");
         let write = |k: unpopped::GeneratedKernel| {
             let path = format!("{out}/{}.cu", k.name);
             std::fs::write(&path, &k.source).unwrap();
@@ -15489,15 +15499,14 @@ mod scan_tests {
     /// {f32,f64,f16,bf16}: a SCALAR cell (align = dtype size ⇒ no vectorization ⇒
     /// the clean per-element `(const T*, T*, long long)` oracle) and a CONTIG cell
     /// (256-align ⇒ the vectorized path Fuel would adopt). Run with:
-    ///   `RELU_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_relu_sources -- --ignored --nocapture`
+    ///   `RELU_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_relu_sources -- --nocapture`
     /// then copy `ondevice/relu_propagating_validate.cu` beside the emitted files
     /// and `nvcc` it (this replaces the old scratchpad `dump_relu` bin).
     #[test]
-    #[ignore = "manual regeneration tool for ondevice/relu_propagating_validate.cu"]
     fn dump_relu_sources() {
         use unpopped::ir::input;
         use unpopped_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
-        let out = std::env::var("RELU_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("RELU_OUT", "dump_relu_sources");
         for dt in [
             ElementKind::F32,
             ElementKind::F64,
@@ -15526,14 +15535,13 @@ mod scan_tests {
     /// Manual dump tool (not a wired assertion): regenerate the GENERATED offset
     /// `.cu` sources the on-device validator `ondevice/offset_validate.cu`
     /// `#include`s (BASE_OFFSET SLICE). Run with:
-    ///   `OFFSET_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_offset_sources -- --ignored --nocapture`
+    ///   `OFFSET_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_offset_sources -- --nocapture`
     /// then copy `ondevice/offset_validate.cu` beside the emitted files and `nvcc` it.
     #[test]
-    #[ignore = "manual regeneration tool for ondevice/offset_validate.cu"]
     fn dump_offset_sources() {
         use unpopped::ir::{BaseOffset, input};
         use unpopped_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
-        let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("OFFSET_OUT", "dump_offset_sources");
         let write = |k: unpopped::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
@@ -15664,13 +15672,12 @@ mod scan_tests {
     /// Two single-output launches over the pair axis `[BH,S,P]` (P=D/2), stride-2
     /// innermost; the odd-lane cross-read is the `+1` view origin (a Runtime offset
     /// on `x_o`), the odd output is the stride-2 write at origin `+1`. Run with:
-    ///   `OFFSET_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_rope_pair_sources -- --ignored --nocapture`
+    ///   `OFFSET_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_rope_pair_sources -- --nocapture`
     #[test]
-    #[ignore = "manual regeneration tool for ondevice/offset_validate.cu (rope E2E)"]
     fn dump_rope_pair_sources() {
         use unpopped::ir::{BaseOffset, input};
         use unpopped_vocab::{ArchSku, OpCategory, OperandDesc, structure_key};
-        let out = std::env::var("OFFSET_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("OFFSET_OUT", "dump_rope_pair_sources");
         let write = |k: unpopped::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
@@ -15745,12 +15752,11 @@ mod scan_tests {
 
     /// Manual dump tool (not a wired assertion): regenerate the scan `.cu` sources
     /// the on-device validator `#include`s. Run with:
-    ///   `cargo test -p baracuda-cuda-emit dump_scan_sources -- --ignored --nocapture`
+    ///   `cargo test -p baracuda-cuda-emit dump_scan_sources -- --nocapture`
     /// then copy `ondevice/scan_validate.cu` beside the emitted files and `nvcc` it.
     #[test]
-    #[ignore = "manual regeneration tool for ondevice/scan_validate.cu"]
     fn dump_scan_sources() {
-        let out = std::env::var("SCAN_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("SCAN_OUT", "dump_scan_sources");
         let write = |k: unpopped::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
@@ -15839,9 +15845,8 @@ mod window_tests {
 
     /// Writes the bf16 max-pool emission for the on-device validator.
     #[test]
-    #[ignore = "writes the bf16 window max-pool emission for the on-device validator"]
     fn dump_bf16_maxpool() {
-        let dir = std::env::var("BARACUDA_DUMP_DIR").expect("BARACUDA_DUMP_DIR");
+        let dir = crate::cuda::dump_dir("BARACUDA_DUMP_DIR", "dump_bf16_maxpool");
         let dt = ElementKind::Bf16;
         let p = OpDef::window_simple("pool", &[dt], ReduceOp::Max, 1, 3, 2, 1, 1, 1, false);
         let src = generate(&p, &window_key(dt, 128, 64), &Cuda).source;
@@ -16199,11 +16204,10 @@ mod window_tests {
 
     /// Manual dump tool (not a wired assertion): regenerate the window `.cu`
     /// sources the on-device validator `#include`s. Run with:
-    ///   `cargo test -p baracuda-cuda-emit dump_window_sources -- --ignored --nocapture`
+    ///   `cargo test -p baracuda-cuda-emit dump_window_sources -- --nocapture`
     #[test]
-    #[ignore = "manual regeneration tool for ondevice/window_validate.cu"]
     fn dump_window_sources() {
-        let out = std::env::var("WINDOW_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("WINDOW_OUT", "dump_window_sources");
         let write = |k: unpopped::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
@@ -16556,11 +16560,10 @@ mod im2col_tests {
 
     /// Manual dump tool (not a wired assertion): regenerate the im2col `.cu` sources
     /// the on-device validator `#include`s. Run with:
-    ///   `IM2COL_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_im2col_sources -- --ignored --nocapture`
+    ///   `IM2COL_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_im2col_sources -- --nocapture`
     #[test]
-    #[ignore = "manual regeneration tool for ondevice/im2col_validate.cu"]
     fn dump_im2col_sources() {
-        let out = std::env::var("IM2COL_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("IM2COL_OUT", "dump_im2col_sources");
         let write = |k: unpopped::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
@@ -17802,12 +17805,11 @@ mod sort_tests {
 
     /// Manual dump tool (not a wired assertion): regenerate the sort `.cu` sources
     /// the on-device validator `#include`s. Run with:
-    ///   `cargo test -p baracuda-cuda-emit dump_sort_sources -- --ignored --nocapture`
+    ///   `cargo test -p baracuda-cuda-emit dump_sort_sources -- --nocapture`
     /// then copy `ondevice/sort_validate.cu` beside the emitted files and `nvcc` it.
     #[test]
-    #[ignore = "manual regeneration tool for ondevice/sort_validate.cu"]
     fn dump_sort_sources() {
-        let out = std::env::var("SORT_OUT").unwrap_or_else(|_| ".".to_string());
+        let out = crate::cuda::dump_dir("SORT_OUT", "dump_sort_sources");
         let write = |k: unpopped::GeneratedKernel| {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
@@ -17935,7 +17937,7 @@ mod sort_tests {
 mod select_tests {
     //! WHERE/SELECT emitter tests: emission goldens (the exact bitwise-pick
     //! spellings), the packed fallback (G7), the Tier-2 int backstop (G5),
-    //! and the `#[ignore]`d source dump for `ondevice/select_validate.cu`.
+    //! and the source dump for `ondevice/select_validate.cu`.
     //! On-device numeric proof (triu/tril memcmp vs bespoke, NaN payloads,
     //! signed zeros) lives in that harness; these pin the source text.
     use crate::Cuda;
@@ -18523,11 +18525,10 @@ mod select_tests {
 
     /// Regenerate the generated kernels `ondevice/select_validate.cu` includes.
     /// Run with:
-    ///   `SELECT_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_select_sources -- --ignored --nocapture`
+    ///   `SELECT_OUT=<outdir> cargo test -p baracuda-cuda-emit dump_select_sources -- --nocapture`
     #[test]
-    #[ignore = "writes generated sources for the on-device select harness"]
     fn dump_select_sources() {
-        let out = std::env::var("SELECT_OUT").expect("set SELECT_OUT=<outdir>");
+        let out = crate::cuda::dump_dir("SELECT_OUT", "dump_select_sources");
         let write = |k: unpopped::GeneratedKernel| {
             let path = format!("{out}/{}.cu", k.name);
             std::fs::write(&path, &k.source).unwrap();

@@ -56,17 +56,31 @@ fn round_trip_reemits_to_cuda_and_cpuc() {
     println!("=== re-emitted CpuC ===\n{}", cpuc.source);
 }
 
+/// Output directory for the dump: `$var` if set, else a per-test directory under
+/// the crate's `target/`, so the test runs in a plain `cargo test`.
+fn dump_dir(var: &str, test: &str) -> String {
+    let dir = std::env::var(var).unwrap_or_else(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("baracuda-emit-dump")
+            .join(test)
+            .to_string_lossy()
+            .into_owned()
+    });
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 /// Dump the lift round-trip PAIR for the on-device differential validator
 /// (`ondevice/lift_roundtrip_validate.cu`): the re-emitted CUDA kernel and a
 /// hand-authored ORIGINAL with the SAME body. On device the two must produce
 /// BIT-IDENTICAL output — the numerical proof that CUDA → IR → re-emit is
 /// faithful. Mirrors `cuda::tests::dump_coord_unravel_helper` (env var +
 /// `fs::write`). Run with:
-///   `LIFT_OUT=<outdir> cargo test -p baracuda-cuda-emit --test lift dump_lift_roundtrip -- --ignored --nocapture`
+///   `LIFT_OUT=<outdir> cargo test -p baracuda-cuda-emit --test lift dump_lift_roundtrip -- --nocapture`
 #[test]
-#[ignore = "writes the lift round-trip pair for the on-device differential validator"]
 fn dump_lift_roundtrip() {
-    let out = std::env::var("LIFT_OUT").unwrap_or_else(|_| ".".to_string());
+    let out = dump_dir("LIFT_OUT", "dump_lift_roundtrip");
 
     // A hand-written CUDA elementwise kernel with a couple of fused ops: a
     // per-element expression referencing TWO inputs, `in0` twice. The lifted

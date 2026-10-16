@@ -310,12 +310,6 @@ pub type PFN_cublasDgemv = unsafe extern "C" fn(
     incy: c_int,
 ) -> cublasStatus_t;
 
-// Placeholder for library-specific opaque arguments passed as *void.
-#[allow(dead_code)]
-pub(crate) fn _placeholder_void() -> *mut c_void {
-    core::ptr::null_mut()
-}
-
 // ==========================================================================
 // Complex types (cuComplex / cuDoubleComplex)
 // ==========================================================================

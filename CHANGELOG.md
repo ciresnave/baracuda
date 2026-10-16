@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.114 - 2026-10-16 (tests: no more #[ignore]d emitter dumps, no allow(dead_code))
+
+Workspace alpha.114 (proposed; PM allocates at gate).
+
+- `baracuda-cuda-emit`: the 17 source-dump tests (16 in `cuda.rs`, `lift.rs::dump_lift_roundtrip`) run in a plain `cargo test`; output goes to `$VAR` if set, else `<crate>/target/baracuda-emit-dump/<test>`.
+- All 37 `#[allow(dead_code)]` removed: dead items deleted, keep-alive fields renamed `_x`, cfg-only items gated by the cfg that uses them (cufile, fa2). No public API change.
+- Verified: `DOCS_RS=1 cargo check --workspace --all-targets --locked`, kernels in 3 feature configs, emit 321 tests, nccl/megatron/forge/core/npp/curand tests, rustfmt.
+
 ## 0.0.1-alpha.113 - 2026-10-16 (`unpopped` family 0.18.0 -> 0.19.0) - Breaking
 
 Workspace alpha.113 (proposed; PM allocates at gate); `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.19.0 (they follow the `unpopped` 0.19.0 they work with).

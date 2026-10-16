@@ -665,8 +665,3 @@ pub fn cupti() -> Result<&'static Cupti, LoaderError> {
     let _ = CUPTI.set(Cupti::empty(lib));
     Ok(CUPTI.get().expect("OnceLock set or lost race"))
 }
-
-#[allow(dead_code)]
-fn _touch() -> *mut c_void {
-    core::ptr::null_mut()
-}

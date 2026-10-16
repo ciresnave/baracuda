@@ -20,7 +20,6 @@ use baracuda_kernels::{
     TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
-#[allow(dead_code)]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");

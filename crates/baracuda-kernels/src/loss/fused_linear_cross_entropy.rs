@@ -1023,12 +1023,6 @@ pub struct FusedLinearCrossEntropyBackwardArgs<'a, T: Element> {
 /// the upstream `dy` scalar.
 #[derive(Debug)]
 pub struct FusedLinearCrossEntropyBackwardPlan<T: Element> {
-    // The BW plan validates `desc` at `select()` time and then runs a
-    // pure dy-scalar broadcast; nothing on the runtime path reads the
-    // descriptor back. Kept on the struct for shape-symmetry with the
-    // FW plan and for future use (e.g. mixed-precision toggles).
-    #[allow(dead_code)]
-    desc: FusedLinearCrossEntropyBackwardDescriptor,
     sku: KernelSku,
     _marker: PhantomData<T>,
 }
@@ -1073,7 +1067,6 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
             precision_guarantee,
         };
         Ok(Self {
-            desc: *desc,
             sku,
             _marker: PhantomData,
         })

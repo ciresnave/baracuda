@@ -31,12 +31,6 @@ const CU_GET_PROC_ADDRESS_LEGACY_STREAM: u64 = 1;
 /// Flag passed to `cuGetProcAddress` in [`StreamMode::PerThread`].
 const CU_GET_PROC_ADDRESS_PER_THREAD_DEFAULT_STREAM: u64 = 2;
 
-/// `CU_GET_PROC_ADDRESS_VERSION_NOT_SUFFICIENT` from `cuda.h`. Returned by
-/// `cuGetProcAddress` when the symbol exists in newer CUDA versions than the
-/// one we asked for.
-#[allow(dead_code)]
-const CU_GET_PROC_ADDRESS_VERSION_NOT_SUFFICIENT: i32 = 222;
-
 macro_rules! driver_fns {
     ($(
         $(#[$attr:meta])*

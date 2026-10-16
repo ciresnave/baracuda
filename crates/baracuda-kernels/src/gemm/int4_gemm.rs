@@ -42,7 +42,7 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BiasElement, ElementKind, EpilogueKind, IntElement, LayoutSku, MatrixMut, MatrixRef,
-    PlanPreference, PrecisionGuarantee, S4, U4, VectorRef, Workspace,
+    PlanPreference, PrecisionGuarantee, VectorRef, Workspace,
 };
 // `BiasElementKind` is matched on ONLY in the int4-bias run methods, which are
 // all `#[cfg(feature = "sm89")]` (int4 GEMM is sm89-only). Gate the import to
@@ -1189,13 +1189,6 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
             unreachable!("returned earlier under #[cfg(not(feature = \"sm89\"))]")
         }
     }
-}
-
-// Type-level guard that the int4 element re-exports are in scope.
-#[allow(dead_code)]
-fn _hold_int4_elements_in_scope() {
-    let _ = S4(0);
-    let _ = U4(0);
 }
 
 #[cfg(feature = "sm89")]

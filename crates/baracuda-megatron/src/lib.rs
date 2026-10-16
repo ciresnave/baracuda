@@ -1299,7 +1299,6 @@ mod tests {
     use super::*;
 
     /// Compile-time check that `f32` satisfies the dtype trait bounds.
-    #[allow(dead_code)]
     fn require_megatron_scalar<T: MegatronGemmScalar>() {}
 
     #[test]

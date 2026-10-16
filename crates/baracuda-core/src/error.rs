@@ -221,8 +221,3 @@ where
         }
     }
 }
-
-/// Path-returning variant used by `find_library` probes. (Kept out of public
-/// API surface for now — re-exported here so doc-links work.)
-#[allow(dead_code)]
-pub(crate) type PathList = Vec<PathBuf>;
