@@ -16,6 +16,14 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.116 - 2026-10-16 (unpopped 0.20.1; contraction v1 typed declines)
+
+Workspace alpha.116 (proposed; PM allocates at gate).
+
+- Dependencies: `unpopped`, `unpopped-vocab`, `unpopped-cpu-c`, `unpopped-slang` and `tools/kiss-ref-diff` move to 0.20.1 (`ContractionAxes` -> `ContractionRoles`; the plan gate's `PlanError::UnservableContraction` arrives as `LowerError::InadmissiblePlan` with no baracuda code). `baracuda-cuda-emit` and `baracuda-cuda-parse` 0.20.1 (they follow the `unpopped` they work with).
+- `baracuda-cuda-emit` contraction v1: the Tiny-M `assert_eq!` and float-dtype `assert!` are now typed `LowerError`s, and the emitter also declines what the 0.20 key can declare but it does not spell: accumulator other than f32 (f64 for f64), reduced-mantissa math for non-F32, a designated scale operand, and a weight dtype other than the operand dtype. One test per case plus a lowering control.
+- The keyer keys every plain-F32 contraction `rm` (vendor TF32 routing policy); this SIMT kernel is a full-precision binary32 FMA chain with no input rounding. That conforms: `rm` only PERMITS reduced-mantissa rounding (KISS-CLASSIFY-6.7-0006; confirmed by the Unpopped lane), so plain F32 accepts `rm` and other dtypes decline it. A cache joining variants on the key alone treats this kernel and a TF32 vendor kernel as interchangeable; a caller needing bit-exact binary32 declares `st`. Pinned by `contraction_control_lowers_and_f32_rm_key_is_accepted`.
+
 ## 0.0.1-alpha.115 - 2026-10-16 (baracuda-driver: no more #[ignore]; device-tests feature + self-hosted runner)
 
 Workspace alpha.115 (proposed; PM allocates at gate).
