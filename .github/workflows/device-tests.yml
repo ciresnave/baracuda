@@ -1,0 +1,47 @@
+name: Device tests (self-hosted)
+
+# Runs the on-device tests on the maintainer's GPU laptop. See docs/DEVICE-TESTS.md.
+#
+# SECURITY (public repo): this job runs on a self-hosted machine, so it must never run
+# code from a fork. Triggers are limited to push to main, a schedule, and manual
+# dispatch — all of which run only code that is already on `main` or that a maintainer
+# chose to dispatch. There is deliberately NO `pull_request` trigger.
+#
+# INERT until the repository variable DEVICE_RUNNER_ENABLED is 'true' (set only after
+# the runner is registered).
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  BARACUDA_RESULTS_FILE: device-test-results.json
+
+jobs:
+  device:
+    name: baracuda-driver on-device tests
+    if: vars.DEVICE_RUNNER_ENABLED == 'true'
+    runs-on: [self-hosted, windows, gpu, baracuda]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      # Takes the machine-wide gpu-run lock (shared with Fuel/Vulkane) and fails the step
+      # if any test fails, if a required device resource is absent, or if 0 tests passed.
+      - name: cargo gpu-test (baracuda-driver, device-tests)
+        shell: bash
+        run: cargo gpu-test -p baracuda-driver --features device-tests
+      - name: Upload run record
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: device-test-results
+          path: device-test-results.json
+          if-no-files-found: error

@@ -2,11 +2,12 @@
 //! stream extras (`cuStreamGetId`, `cuStreamGetCaptureInfo`,
 //! `cuStreamCopyAttributes`, `cuStreamAttachMemAsync`).
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::CUdeviceptr;
 use baracuda_driver::{CaptureMode, Context, Device, ManagedBuffer, Stream};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_get_id_and_copy_attributes() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -26,7 +27,6 @@ fn stream_get_id_and_copy_attributes() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_capture_info_reflects_state() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -47,7 +47,6 @@ fn stream_capture_info_reflects_state() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_attach_mem_async_on_managed() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

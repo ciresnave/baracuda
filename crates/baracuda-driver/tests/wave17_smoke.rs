@@ -1,12 +1,13 @@
 //! GPU-gated integration test for Wave-17 Driver-API additions:
 //! green contexts (CUDA 12.4+).
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::types::CUstream_flags;
 use baracuda_driver::green::{GreenContext, device_sm_resource, sm_resource_split_by_count};
 use baracuda_driver::{Context, Device, require};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 12.4+"]
 fn split_sms_and_create_green_context() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

@@ -1,6 +1,8 @@
 //! GPU-gated integration tests for CUDA Graphs + async allocations.
 //!
-//! Run with: `cargo test -p baracuda-driver --test graph_smoke -- --ignored`
+//! Run with: `cargo gpu-test -p baracuda-driver --features device-tests --test graph_smoke`
+
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{CaptureMode, Context, Device, DeviceBuffer, Module, Stream};
 
@@ -15,7 +17,6 @@ fn setup() -> baracuda_driver::Result<(Context, Stream)> {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_capture_and_replay_vector_add() {
     let (ctx, stream) = setup().expect("setup");
     let _ = &ctx;
@@ -74,7 +75,6 @@ fn stream_capture_and_replay_vector_add() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 11.2+"]
 fn async_alloc_roundtrip() {
     let (ctx, stream) = setup().expect("setup");
     let n = 1024usize;
@@ -101,7 +101,6 @@ fn async_alloc_roundtrip() {
 /// pattern Fuel's async dispatch relies on (drop the per-op `synchronize`,
 /// let scratch / output buffers free safely on the stream).
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 11.2+"]
 fn async_drop_is_stream_ordered() {
     let (ctx, stream) = setup().expect("setup");
     let n: u32 = 1 << 14;
@@ -155,7 +154,6 @@ fn async_drop_is_stream_ordered() {
 
 /// `zeros_async` returns a stream-ordered, zeroed buffer.
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 11.2+"]
 fn zeros_async_is_zeroed() {
     let (ctx, stream) = setup().expect("setup");
     let n = 4096usize;
@@ -173,7 +171,6 @@ fn zeros_async_is_zeroed() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn empty_graph_instantiates() {
     let (_ctx, stream) = setup().expect("setup");
     // Capture with no operations -> empty graph. Should still instantiate

@@ -1,12 +1,13 @@
 //! GPU-gated integration tests for Wave-3 Driver-API additions:
 //! cuLaunchKernelEx, and cuLibrary* (context-independent module loading).
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_driver::{Context, Device, DeviceBuffer, Module, Stream, library::Library};
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 12.0+"]
 fn launch_ex_no_attributes_matches_classic_launch() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -53,7 +54,6 @@ fn launch_ex_no_attributes_matches_classic_launch() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 12.0+"]
 fn library_load_and_launch_across_implicit_context() {
     // Load the PTX through the context-independent library API, then
     // materialize a Function in the current thread's context and launch.

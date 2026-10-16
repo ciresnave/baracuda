@@ -3,13 +3,17 @@
 
 use core::ffi::c_void;
 
-use baracuda_driver::launch_attr::{self, LaunchAttr};
+#[cfg(feature = "device-tests")]
+use baracuda_driver::launch_attr;
+use baracuda_driver::launch_attr::LaunchAttr;
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Module, Stream};
 
+#[cfg(feature = "device-tests")]
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 12.0+"]
+#[cfg(feature = "device-tests")]
 fn launch_ex_with_typed_priority_attribute() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

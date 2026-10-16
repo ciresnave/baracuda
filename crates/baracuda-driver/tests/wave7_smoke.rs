@@ -1,12 +1,13 @@
 //! GPU-gated integration test for Wave-7 Driver-API additions:
 //! the Virtual Memory Management (VMM) API round-trip.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::driver;
 use baracuda_driver::vmm::{self, AccessFlags, AddressRange, MappedRange, PhysicalMemory};
 use baracuda_driver::{Context, Device};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + VMM support"]
 fn vmm_roundtrip_via_memcpy() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

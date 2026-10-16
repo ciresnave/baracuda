@@ -1,11 +1,12 @@
 //! GPU-gated integration test for Wave-19 Driver-API additions:
 //! conditional graph nodes (CUDA 12.3+).
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::types::{CUgraphConditionalNodeType, CUgraphNodeType};
 use baracuda_driver::{Context, Device, DeviceBuffer, Graph, Stream, require_optional};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 12.3+"]
 fn add_conditional_if_node_with_memset_body() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

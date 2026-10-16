@@ -1,12 +1,13 @@
 //! GPU-gated integration test for Wave-15 Driver-API additions:
 //! batched pointer-attribute + range-attribute queries.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::types::CUpointer_attribute;
 use baracuda_driver::pointer;
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pointer_attributes_batched_returns_memory_type_and_ordinal() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

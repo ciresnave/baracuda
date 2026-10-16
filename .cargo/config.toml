@@ -6,7 +6,8 @@
 # and reproducibly.
 
 [alias]
-# Run on-device (`#[ignore]`d) GPU tests through the machine-wide `gpu-run` lock.
+# Run on-device GPU tests (`device-tests` feature; legacy `#[ignore]`d ones too) through the
+# machine-wide `gpu-run` lock. Writes target/device-test-results.json (see docs/DEVICE-TESTS.md).
 # This is the SANCTIONED way to run device tests: lock acquisition is structural
 # (the xtask subcommand *is* the wrapper call), so a device run cannot silently
 # skip the mutex — the "convention in a docs file is not a control" failure the

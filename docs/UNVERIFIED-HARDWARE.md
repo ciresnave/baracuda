@@ -1,0 +1,39 @@
+# Tests that cannot run on the device runner — UNVERIFIED
+
+Policy (CireSnave, 2026-10-16): a test that cannot run on a GitHub-hosted runner but can
+run on the self-hosted device runner runs there; it is never `#[ignore]`d and never hidden
+behind a feature nobody builds. A test that cannot run **even there** is named below and
+is **UNVERIFIED** — nothing in this repo may claim it as covered.
+
+The device runner is one Windows laptop with a single RTX 4070 (sm_89). Source: `git grep`
+of the `#[ignore = "…"]` reasons on `main` at the time of writing. These crates have not been
+migrated to the `device-tests` feature yet (`baracuda-driver` is the pilot), so each still
+carries its `#[ignore]` until its migration PR.
+
+## A. Needs hardware or an OS the runner lacks — UNVERIFIED
+
+| Test | Needs | Where |
+|---|---|---|
+| `distributed_adam_two_ranks_all_reduce_then_step_then_all_gather` | 2+ GPUs, NCCL multi-rank | `baracuda-optim/tests/distributed_adam_multi_rank_scaffold.rs` |
+| `ring_attention_multi_rank_scaffold` | 2+ GPUs, multi-process NCCL bring-up | `baracuda-kernels/tests/ring_attention_smoke.rs` |
+| `column_parallel_world_size_2_smoke` | 2+ GPUs + NCCL | `baracuda-megatron/tests/multi_rank_scaffold.rs` |
+| `row_parallel_world_size_2_smoke` | 2+ GPUs + NCCL | `baracuda-megatron/tests/multi_rank_scaffold.rs` |
+| `nvshmem_loads_and_reports_version`, `context_init_and_pe_discovery`, `symmetric_heap_alloc_and_self_put`, `world_team_matches_context` | NVSHMEM runtime (Linux, sm_70+) + a PE launcher | `baracuda-nvshmem/tests/smoke.rs` |
+| `cufile_write_read_roundtrip` | cuFile + GDS-capable filesystem (Linux-only) | `baracuda-cufile/tests/read_write.rs` |
+
+## B. Needs a vendor library whose presence on the runner is not yet confirmed — UNVERIFIED until the runner inventory says otherwise
+
+NCCL (17: `baracuda-nccl` 11, `baracuda-megatron` single-rank 4, `baracuda-optim` single-rank 2;
+NCCL is described in its own test reasons as "typically Linux multi-GPU hosts"), cuDNN 3
+(`baracuda-cudnn`), TensorRT 2 (`baracuda-tensorrt`, also needs the C-ABI shim), cuVS 2
+(`baracuda-cuvs`, RAPIDS), nvImageCodec 3, cuTENSOR 2, nvCOMP 1, NPP 1.
+
+Once the runner is set up, an inventory step should record which of these libraries load; each
+that does moves out of this list into its crate's `device-tests` run, and each that does not
+stays here by name.
+
+## C. Runtime-declared skips
+
+A `require_optional!` that declines at run time (an optional capability absent on the box) is
+reported by reason in the run record (`skips_by_reason` in `target/device-test-results.json`,
+and the job summary). It is a named skip, not a pass.

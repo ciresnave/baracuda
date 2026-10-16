@@ -1,6 +1,8 @@
 //! GPU-gated integration tests for Wave-27 Driver-API additions:
 //! v2 prefetch/advise + VMM reverse lookups.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::types::CUmem_advise;
 use baracuda_driver::memory::{
     self, PrefetchTarget, allocation_properties_from_handle, mem_advise_v2, mem_prefetch_v2,
@@ -10,7 +12,6 @@ use baracuda_driver::vmm::{AccessFlags, AddressRange, MappedRange, PhysicalMemor
 use baracuda_driver::{Context, Device, ManagedBuffer, Stream, vmm};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn managed_prefetch_and_advise_v2() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -45,7 +46,6 @@ fn managed_prefetch_and_advise_v2() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn vmm_retain_handle_round_trip() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

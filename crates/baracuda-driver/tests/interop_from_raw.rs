@@ -1,10 +1,10 @@
 //! Interop ownership tests for `from_raw` (transfer) / `borrow_raw` (borrow)
 //! on the cross-framework driver handles (Context / Stream / Event / Device).
 //!
-//! GPU-gated (`#[ignore]`). Run on a machine with an NVIDIA GPU via:
+//! GPU-gated (`device-tests` feature). Run on a machine with an NVIDIA GPU via:
 //!
 //! ```text
-//! cargo test -p baracuda-driver --test interop_from_raw -- --ignored
+//! cargo gpu-test -p baracuda-driver --features device-tests --test interop_from_raw
 //! ```
 //!
 //! The load-bearing invariant is that a **borrowed** wrapper must NOT destroy
@@ -12,6 +12,8 @@
 //! / event would corrupt that library. Each `borrow_*` test drops the borrowed
 //! view and then keeps using the original handle: if `Drop` wrongly destroyed
 //! it, the subsequent use would fail.
+
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, Event, Stream};
 
@@ -24,7 +26,6 @@ fn setup() -> baracuda_driver::Result<(Device, Context, Stream)> {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn borrow_raw_stream_does_not_destroy() {
     let (_dev, ctx, _stream) = setup().expect("setup");
     let owned = Stream::new(&ctx).expect("create stream");
@@ -46,7 +47,6 @@ fn borrow_raw_stream_does_not_destroy() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn borrow_raw_context_does_not_destroy() {
     let (dev, ctx, _stream) = setup().expect("setup");
     let raw = ctx.as_raw();
@@ -64,7 +64,6 @@ fn borrow_raw_context_does_not_destroy() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn borrow_raw_event_does_not_destroy() {
     let (_dev, ctx, stream) = setup().expect("setup");
     let owned = Event::new(&ctx).expect("create event");
@@ -84,7 +83,6 @@ fn borrow_raw_event_does_not_destroy() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn from_raw_stream_transfer_destroys_on_drop() {
     let (_dev, ctx, _stream) = setup().expect("setup");
     let created = Stream::new(&ctx).expect("create stream");
@@ -114,7 +112,6 @@ fn from_raw_stream_transfer_destroys_on_drop() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn from_raw_event_transfer_destroys_on_drop() {
     let (_dev, ctx, _stream) = setup().expect("setup");
     let created = Event::new(&ctx).expect("create event");
@@ -135,7 +132,6 @@ fn from_raw_event_transfer_destroys_on_drop() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn from_raw_context_transfer_destroys_on_drop() {
     let (dev, ctx, _stream) = setup().expect("setup");
     // A fresh, explicitly-created context to transfer (creating it makes it
@@ -163,7 +159,6 @@ fn from_raw_context_transfer_destroys_on_drop() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn device_from_raw_round_trips() {
     baracuda_driver::init().expect("init");
     let dev = Device::get(0).expect("device 0");

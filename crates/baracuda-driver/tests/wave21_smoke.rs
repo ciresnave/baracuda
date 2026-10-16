@@ -1,6 +1,8 @@
 //! GPU-gated integration test for Wave-21 Driver-API additions:
 //! kernel-attribute extension (cuKernel*) on library-loaded kernels.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_cuda_sys::types::CUfunction_attribute;
 use baracuda_driver::library::Library;
 use baracuda_driver::{Context, Device};
@@ -8,7 +10,6 @@ use baracuda_driver::{Context, Device};
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 12+"]
 fn library_kernel_attrs_and_name() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

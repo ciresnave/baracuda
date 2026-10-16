@@ -5,9 +5,14 @@
 //! creation with the SPARSE flag or the map call fails — we verify
 //! either the full end-to-end path or a graceful `NOT_SUPPORTED` return.
 
-use baracuda_cuda_sys::types::{CUarray3D_flags, CUarrayMapInfo};
+#[cfg(feature = "device-tests")]
+use baracuda_cuda_sys::types::CUarray3D_flags;
+use baracuda_cuda_sys::types::CUarrayMapInfo;
+#[cfg(feature = "device-tests")]
 use baracuda_driver::array::ArrayFormat;
+#[cfg(feature = "device-tests")]
 use baracuda_driver::memcpy3d::{self, Array3D};
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, Stream, require_optional};
 
 #[test]
@@ -36,7 +41,7 @@ fn array_map_info_size_and_builder_layout() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU with sparse-array support"]
+#[cfg(feature = "device-tests")]
 fn map_array_async_on_sparse_capable_device() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

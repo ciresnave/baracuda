@@ -2,12 +2,13 @@
 //! profiler start/stop, func/kernel name + param info, device UUID,
 //! context ID, module loading mode, graph dot-print.
 
+#![cfg(feature = "device-tests")]
+
 use baracuda_driver::{Context, Device, Graph, Module, profiler};
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn misc_metadata_and_profiler_controls() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
