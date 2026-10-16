@@ -9,9 +9,10 @@
 //! for this dx cell = `prod(repeats[d])`). CPU reference accumulates in
 //! f64 for headroom against the half / bf16 kernel's f32 acc.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test repeat_backward_smoke -- --ignored`.
+//!   --test repeat_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -79,7 +80,6 @@ fn cpu_ref<const N: usize, F: Fn(usize) -> f64>(
 // -------- f32 --------
 
 #[test]
-#[ignore]
 fn repeat_backward_f32_2d() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 4];
@@ -134,7 +134,6 @@ fn repeat_backward_f32_2d() {
 // -------- f16 --------
 
 #[test]
-#[ignore]
 fn repeat_backward_f16_3d() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 3, 4];
@@ -202,7 +201,6 @@ fn repeat_backward_f16_3d() {
 // -------- bf16 --------
 
 #[test]
-#[ignore]
 fn repeat_backward_bf16_2d() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 5];
@@ -264,7 +262,6 @@ fn repeat_backward_bf16_2d() {
 // -------- f64 --------
 
 #[test]
-#[ignore]
 fn repeat_backward_f64_3d() {
     let (ctx, stream) = setup();
     let input_shape = [2i32, 2, 3];

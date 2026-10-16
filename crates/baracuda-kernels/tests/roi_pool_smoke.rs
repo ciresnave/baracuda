@@ -1,4 +1,5 @@
 //! Real-GPU smoke for `RoiPoolPlan<T>` (Phase 9 Category T).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -16,7 +17,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn roi_pool_full_image_f32_smoke() {
     let (ctx, stream) = setup();
     let (n, c, h, w) = (1, 1, 4, 4);
@@ -83,7 +83,6 @@ fn roi_pool_full_image_f32_smoke() {
 }
 
 #[test]
-#[ignore]
 fn roi_pool_backward_smoke_f32() {
     let (ctx, stream) = setup();
     let (n, c, h, w) = (1, 1, 4, 4);

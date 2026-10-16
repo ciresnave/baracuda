@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `SortPlan<T>` (Phase 9 Category O).
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -16,7 +17,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn sort_f32_ascending_basic() {
     let (ctx, stream) = setup();
     let batch: i32 = 3;
@@ -94,7 +94,6 @@ fn sort_f32_ascending_basic() {
 }
 
 #[test]
-#[ignore]
 fn sort_i32_descending_basic() {
     let (ctx, stream) = setup();
     let batch: i32 = 2;

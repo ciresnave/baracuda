@@ -5,9 +5,10 @@
 //! requires 2+ GPUs and is deferred — a scaffold test is included
 //! but marked `requires 2+ GPUs`.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + NCCL.
+//! Gated behind the `device-tests` feature — requires a real CUDA device + NCCL.
 
 #![cfg(feature = "ring_attention")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, require_optional};
 use baracuda_kernels::{
@@ -58,7 +59,6 @@ fn gen_qkv_f64(seed: u64) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
 // f16 single-rank degenerate case — should match FlashSdpaPlan output
 // within streaming-softmax tolerance.
 #[test]
-#[ignore]
 fn ring_attention_f16_single_rank_matches_flash_sdpa() {
     let (ctx, stream) = setup();
     let scale = default_scale();
@@ -232,7 +232,6 @@ fn ring_attention_f16_single_rank_matches_flash_sdpa() {
 
 // bf16 single-rank degenerate case.
 #[test]
-#[ignore]
 fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
     let (ctx, stream) = setup();
     let scale = default_scale();
@@ -392,7 +391,6 @@ fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
 // correctly (in single-rank both are zero, so this is a baseline
 // causal check rather than a cross-rank index check).
 #[test]
-#[ignore]
 fn ring_attention_f16_single_rank_causal() {
     let (ctx, stream) = setup();
     let scale = default_scale();
@@ -543,7 +541,6 @@ fn ring_attention_f16_single_rank_causal() {
 // but does not actually launch a multi-rank communicator. Multi-rank
 // validation lands in a future hardware-enabled session.
 #[test]
-#[ignore = "requires 2+ GPUs and a multi-process NCCL bringup"]
 fn ring_attention_multi_rank_scaffold() {
     // This test exists for API discoverability. The actual multi-rank
     // run would:

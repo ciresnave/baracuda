@@ -3,7 +3,8 @@
 //! reverse directions covered.
 //!
 //! Run with: `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test scan_cumsum_smoke -- --ignored`.
+//!   --test scan_cumsum_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -78,7 +79,6 @@ fn host_cumsum_f32<const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn cumsum_f32_1d_forward() {
     let (ctx, stream) = setup();
     let shape = [16i32];
@@ -124,7 +124,6 @@ fn cumsum_f32_1d_forward() {
 }
 
 #[test]
-#[ignore]
 fn cumsum_f32_2d_axis_1_reverse() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -170,7 +169,6 @@ fn cumsum_f32_2d_axis_1_reverse() {
 }
 
 #[test]
-#[ignore]
 fn cumsum_f64_3d_axis_1_forward() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5, 4];
@@ -240,7 +238,6 @@ fn cumsum_f64_3d_axis_1_forward() {
 }
 
 #[test]
-#[ignore]
 fn cumsum_f16_2d_axis_0_forward() {
     let (ctx, stream) = setup();
     let shape = [8i32, 4];
@@ -291,7 +288,6 @@ fn cumsum_f16_2d_axis_0_forward() {
 }
 
 #[test]
-#[ignore]
 fn cumsum_bf16_2d_axis_1_reverse() {
     let (ctx, stream) = setup();
     let shape = [4i32, 6];

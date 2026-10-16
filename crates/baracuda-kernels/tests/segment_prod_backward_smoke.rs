@@ -1,8 +1,9 @@
 //! Real-GPU smoke test for `SegmentProdBackwardPlan<T>` (Phase 25).
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
 //!
 //! BW formula: `d_input[k, d] = d_output[seg, d] * (output[seg, d] / input[k, d])`.
 //! Test uses non-zero inputs to avoid the divide-by-zero limitation.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -19,7 +20,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn segment_prod_backward_f32_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 5;
@@ -107,7 +107,6 @@ fn segment_prod_backward_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn segment_prod_backward_f64_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 4;

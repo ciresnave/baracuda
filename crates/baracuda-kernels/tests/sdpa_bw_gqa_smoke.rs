@@ -10,8 +10,8 @@
 //!   * `sdpa_bw_no_broadcast_strided` — regression guard: ensures the
 //!     fast-path (non-broadcast) strided BW still works.
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release --test sdpa_bw_gqa_smoke -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --test sdpa_bw_gqa_smoke --features device-tests`.
 //!
 //! Reference approach for the broadcast tests: build an *expanded*
 //! `[B, kv_heads_expanded=H, K, D]` K/V tensor (each Q-head sees the
@@ -19,6 +19,7 @@
 //! then collapse the resulting `dK_expanded` / `dV_expanded` back to
 //! `[B, 1, K, D]` by summing across the Q-head axis. That sum is what
 //! the broadcast path's atomicAdd should compute.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -379,7 +380,6 @@ fn run_bw_strided_f32(
 /// Expected dK / dV is `sum_{q-head} dK_expanded[h]` from the contig
 /// reference (this is exactly what atomicAdd computes).
 #[test]
-#[ignore]
 fn sdpa_bw_gqa_broadcast_f32() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -512,7 +512,6 @@ fn sdpa_bw_gqa_broadcast_f32() {
 
 /// 2. GQA broadcast f16 — exercises the `__half` atomicAdd CAS path.
 #[test]
-#[ignore]
 fn sdpa_bw_gqa_broadcast_f16() {
     let (ctx, stream) = setup();
     let batch = 1i32;
@@ -780,7 +779,6 @@ fn sdpa_bw_gqa_broadcast_f16() {
 /// Q layout is `[H, B, Q, D_k]` viewed as `[B, H, Q, D_k]` with permuted
 /// strides; K/V remain contig with non-zero head stride.
 #[test]
-#[ignore]
 fn sdpa_bw_no_broadcast_strided() {
     let (ctx, stream) = setup();
     let batch = 2i32;

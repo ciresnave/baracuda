@@ -10,15 +10,20 @@
 //!   with `stride_b == D/2` so the per-t cs lookup reduces to a single
 //!   linear walk, matching a CPU reference.
 //!
-//! `#[ignore]` by default — needs a real CUDA device.
+//! Gated behind the `device-tests` feature — needs a real CUDA device.
 
+#[cfg(feature = "device-tests")]
 use core::ffi::c_void;
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+#[cfg(feature = "device-tests")]
 use half::{bf16, f16};
 
+#[cfg(feature = "device-tests")]
 const ROPE_DEFAULT_BASE: f32 = 10000.0;
 
+#[cfg(feature = "device-tests")]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -27,6 +32,7 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
+#[cfg(feature = "device-tests")]
 /// Build per-seq cos/sin tables for the default RoPE schedule:
 ///   `cos[s, pair] = cos(s · base^(-2·pair / d))`
 /// Layout: `[seq, d/2]` shared across all outer rows.
@@ -47,6 +53,7 @@ fn default_cs_tables(seq: usize, d: usize, base: f32) -> (Vec<f32>, Vec<f32>) {
     (cos_t, sin_t)
 }
 
+#[cfg(feature = "device-tests")]
 /// CPU reference for the interleaved RoPE-apply variant: pair
 /// `(2k, 2k+1)`, cos/sin indexed by `pair = dim_idx >> 1`. Same
 /// arithmetic as `rope_apply_fp_kernel`, so the reference exists
@@ -82,6 +89,7 @@ fn cpu_rope_apply_interleaved_f32(
     y
 }
 
+#[cfg(feature = "device-tests")]
 /// CPU reference for the THD-layout RoPE-apply variant.
 /// Operand layout `[T, H, D]`. cs is `cs[t * stride_b + pair]`.
 fn cpu_rope_apply_thd_f32(
@@ -118,7 +126,7 @@ fn cpu_rope_apply_thd_f32(
 // =============================================================================
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_interleaved_f32_matches_canonical_apply() {
     // The interleaved variant is functionally equivalent to the existing
     // `rope_apply_f32_run` (both pair `(2k, 2k+1)`). The two symbols must
@@ -212,7 +220,7 @@ fn rope_apply_interleaved_f32_matches_canonical_apply() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_interleaved_backward_f32_matches_canonical() {
     let (ctx, stream) = setup();
     let bh = 4i32;
@@ -279,7 +287,7 @@ fn rope_apply_interleaved_backward_f32_matches_canonical() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_interleaved_f16_matches_canonical_apply() {
     let (ctx, stream) = setup();
     let bh = 2i32;
@@ -380,7 +388,7 @@ fn interleaved_can_implement_validates_args() {
 // =============================================================================
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_thd_f32_single_head_single_t_matches_cpu() {
     // `[T, H, D] == [1, 1, D]` reduces to a single RoPE vector. Drives
     // the per-t stride codepath with the minimal outer extent.
@@ -438,7 +446,7 @@ fn rope_apply_thd_f32_single_head_single_t_matches_cpu() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_thd_f32_full_extent_matches_cpu() {
     let (ctx, stream) = setup();
     let t_outer = 6i32;
@@ -495,7 +503,7 @@ fn rope_apply_thd_f32_full_extent_matches_cpu() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_thd_backward_f32_matches_cpu() {
     // The BW is the orthogonal-rotation reverse; we check that
     // `BW(FW(x)) == x` to confirm trig-sign correctness.
@@ -562,7 +570,7 @@ fn rope_apply_thd_backward_f32_matches_cpu() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_thd_bf16_smoke() {
     let (ctx, stream) = setup();
     let t_outer = 2i32;

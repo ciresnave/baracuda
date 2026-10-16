@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for Phase 50 [`SsdChunkScanPlan`] (FW).
 
 #![cfg(feature = "mamba")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -73,7 +74,6 @@ fn check_close(a: &[f32], b: &[f32], tol: f32, tag: &str) {
 }
 
 #[test]
-#[ignore]
 fn ssd_chunk_scan_f32_tiny_matches_cpu_ref() {
     let (ctx, stream) = setup();
 
@@ -164,7 +164,6 @@ fn ssd_chunk_scan_f32_tiny_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn ssd_chunk_scan_state_dim_too_large_rejected() {
     let (_ctx, stream) = setup();
     let desc = SsdChunkScanDescriptor {

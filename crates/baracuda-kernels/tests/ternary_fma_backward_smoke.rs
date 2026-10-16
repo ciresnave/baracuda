@@ -12,9 +12,10 @@
 //!   FW pattern — each grad is a single multiply through the f32
 //!   detour).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test ternary_fma_backward_smoke -- --ignored`.
+//!   --test ternary_fma_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -36,7 +37,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn fma_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 64, 64];
@@ -121,7 +121,6 @@ fn fma_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn fma_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64, 64];
@@ -227,7 +226,6 @@ fn fma_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn fma_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64, 64];
@@ -332,7 +330,6 @@ fn fma_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn fma_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 64, 64];

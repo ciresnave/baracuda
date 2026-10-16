@@ -22,9 +22,10 @@
 //! Input ranges: `|a|, |b|, |c|` ≤ 5 so `a*b + c` stays well within
 //! f16 / bf16 range (max magnitude ~30, easily representable).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test ternary_fma_smoke -- --ignored`.
+//!   --test ternary_fma_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -65,7 +66,6 @@ fn assert_close_bf16(got: f32, expected: f32, idx: usize) {
 }
 
 #[test]
-#[ignore]
 fn fma_f32_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -141,7 +141,6 @@ fn fma_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn fma_f16_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -213,7 +212,6 @@ fn fma_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn fma_bf16_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -283,7 +281,6 @@ fn fma_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn fma_f64_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -362,7 +359,6 @@ fn fma_f64_3d() {
 /// contig `[M, N]`. The non-contig `c` forces the dispatcher down
 /// the `run_strided` arm.
 #[test]
-#[ignore]
 fn fma_f32_strided_broadcast_c() {
     let (ctx, stream) = setup();
     const M: usize = 64;

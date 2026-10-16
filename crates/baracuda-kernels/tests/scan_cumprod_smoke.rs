@@ -2,7 +2,8 @@
 //! inclusive prefix product along a single axis.
 //!
 //! Run with: `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test scan_cumprod_smoke -- --ignored`.
+//!   --test scan_cumprod_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -117,7 +118,6 @@ fn host_cumprod_f64<const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn cumprod_f32_1d_forward() {
     let (ctx, stream) = setup();
     let shape = [16i32];
@@ -163,7 +163,6 @@ fn cumprod_f32_1d_forward() {
 }
 
 #[test]
-#[ignore]
 fn cumprod_f64_2d_axis_1_reverse() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];
@@ -207,7 +206,6 @@ fn cumprod_f64_2d_axis_1_reverse() {
 }
 
 #[test]
-#[ignore]
 fn cumprod_f16_2d_axis_0_forward() {
     let (ctx, stream) = setup();
     let shape = [6i32, 4];
@@ -256,7 +254,6 @@ fn cumprod_f16_2d_axis_0_forward() {
 }
 
 #[test]
-#[ignore]
 fn cumprod_bf16_2d_axis_1_forward() {
     let (ctx, stream) = setup();
     let shape = [4i32, 5];

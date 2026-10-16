@@ -5,7 +5,8 @@
 //! callers wire through `GatherPlan` directly. This test verifies that
 //! the natural routing produces the correct adjoint for a small fixture.
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn scatter_add_backward_via_gather_f32_2d_dim1() {
     let (ctx, stream) = setup();
     // FW: scatter_add(out: [3, 6], dim=1, idx: [3, 4], updates: [3, 4]).

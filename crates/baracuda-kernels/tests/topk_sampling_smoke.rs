@@ -10,10 +10,11 @@
 //! is left to follow-up integration tests once the random-plan
 //! testing harness can be shared.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `flashinfer` cargo feature.
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, Stream, init};
 use baracuda_kernels::{
@@ -29,7 +30,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn topk_topp_sampling_plan_select_validates() {
     let (_ctx, stream) = setup();
     let desc = TopKTopPSamplingDescriptor {
@@ -68,7 +68,6 @@ fn topk_topp_sampling_plan_select_validates() {
 }
 
 #[test]
-#[ignore]
 fn topk_sampling_plan_selectable() {
     let (_ctx, stream) = setup();
     let desc = TopKTopPSamplingDescriptor {
@@ -81,7 +80,6 @@ fn topk_sampling_plan_selectable() {
 }
 
 #[test]
-#[ignore]
 fn topp_sampling_plan_selectable() {
     let (_ctx, stream) = setup();
     let desc = TopKTopPSamplingDescriptor {
@@ -94,7 +92,6 @@ fn topp_sampling_plan_selectable() {
 }
 
 #[test]
-#[ignore]
 fn min_p_sampling_plan_selectable() {
     let (_ctx, stream) = setup();
     let desc = TopKTopPSamplingDescriptor {
@@ -107,7 +104,6 @@ fn min_p_sampling_plan_selectable() {
 }
 
 #[test]
-#[ignore]
 fn topk_topp_sampling_plan_selectable() {
     let (_ctx, stream) = setup();
     let desc = TopKTopPSamplingDescriptor {

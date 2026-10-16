@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `SegmentMinBackwardPlan<T>` (Phase 25).
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -55,7 +56,6 @@ fn cpu_segment_min_backward_f32(
 }
 
 #[test]
-#[ignore]
 fn segment_min_backward_f32_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 6;

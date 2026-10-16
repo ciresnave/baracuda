@@ -15,10 +15,11 @@
 //!    output + `-INF` lse (matches the "all-masked-input" branch of
 //!    Flash).
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `xformers_blocksparse` cargo feature.
 
 #![cfg(feature = "xformers_blocksparse")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -217,7 +218,6 @@ fn run_dense_sdpa_reference(
 }
 
 #[test]
-#[ignore]
 fn block_sparse_all_ones_matches_dense_sdpa() {
     let (ctx, stream) = setup();
     let (q, k, v) = gen_qkv();
@@ -246,7 +246,6 @@ fn block_sparse_all_ones_matches_dense_sdpa() {
 }
 
 #[test]
-#[ignore]
 fn block_sparse_diagonal_band_zero_outside() {
     // Diagonal-band pattern: only block (qb, kb=qb) is active. This is
     // equivalent to a sliding-window attention with window = block_size.
@@ -294,7 +293,6 @@ fn block_sparse_diagonal_band_zero_outside() {
 }
 
 #[test]
-#[ignore]
 fn block_sparse_empty_pattern_zero_output() {
     let (ctx, stream) = setup();
     let (q, k, v) = gen_qkv();

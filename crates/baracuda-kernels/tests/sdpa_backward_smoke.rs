@@ -8,7 +8,8 @@
 //!   dQ       = dscores @ K * scale
 //!   dK       = dscores^T @ Q * scale
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -181,7 +182,6 @@ fn host_sdpa_bw_f64(
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn sdpa_backward_f32_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -369,7 +369,6 @@ fn sdpa_backward_f32_basic() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn sdpa_backward_f64_basic() {
     let (ctx, stream) = setup();
     let q_h = gen_q_f64();
@@ -545,7 +544,6 @@ fn sdpa_backward_f64_basic() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn sdpa_backward_f16_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();
@@ -726,7 +724,6 @@ fn sdpa_backward_f16_basic() {
 }
 
 #[test]
-#[ignore]
 fn sdpa_backward_bf16_basic() {
     let (ctx, stream) = setup();
     let q_f64 = gen_q_f64();

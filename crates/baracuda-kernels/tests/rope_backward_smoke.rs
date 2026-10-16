@@ -4,7 +4,8 @@
 //!   dx[2i]   = dy[2i]   · cos(θ) + dy[2i+1] · sin(θ)
 //!   dx[2i+1] = dy[2i+1] · cos(θ) - dy[2i]   · sin(θ)
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -62,7 +63,6 @@ fn host_rope_backward_f32(
 }
 
 #[test]
-#[ignore]
 fn rope_backward_f32_default_positions() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -138,7 +138,6 @@ fn rope_backward_f32_default_positions() {
 }
 
 #[test]
-#[ignore]
 fn rope_backward_f64_default_positions() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -223,7 +222,6 @@ fn rope_backward_f64_default_positions() {
 }
 
 #[test]
-#[ignore]
 fn rope_backward_f16_default_positions() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -296,7 +294,6 @@ fn rope_backward_f16_default_positions() {
 }
 
 #[test]
-#[ignore]
 fn rope_backward_bf16_default_positions() {
     let (ctx, stream) = setup();
     let batch = 2i32;

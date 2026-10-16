@@ -9,6 +9,7 @@
 //!   - All three FP dtypes (f32 / f16 / bf16) at the vanilla path
 
 #![cfg(feature = "mamba")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -216,7 +217,6 @@ fn run_fw_f32(
 }
 
 #[test]
-#[ignore]
 fn selective_scan_f32_vanilla_matches_cpu_ref() {
     let (ctx, stream) = setup();
     let (u, delta, a, b, c) = make_inputs();
@@ -230,7 +230,6 @@ fn selective_scan_f32_vanilla_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_f32_with_d_skip() {
     let (ctx, stream) = setup();
     let (u, delta, a, b, c) = make_inputs();
@@ -267,7 +266,6 @@ fn selective_scan_f32_with_d_skip() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_f32_with_z_gate() {
     let (ctx, stream) = setup();
     let (u, delta, a, b, c) = make_inputs();
@@ -306,7 +304,6 @@ fn selective_scan_f32_with_z_gate() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_f32_with_delta_bias_and_softplus() {
     let (ctx, stream) = setup();
     let (u, delta, a, b, c) = make_inputs();
@@ -348,7 +345,6 @@ fn selective_scan_f32_with_delta_bias_and_softplus() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_f32_full_combo_matches_cpu_ref() {
     // The full set of options simultaneously — D skip + z gating +
     // delta_bias + softplus. This is the path Mamba-1 actually uses
@@ -392,7 +388,6 @@ fn selective_scan_f32_full_combo_matches_cpu_ref() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_f16_vanilla_matches_cpu_ref_loose() {
     let (ctx, stream) = setup();
     let (u_f, delta_f, a_f, b_f, c_f) = make_inputs();
@@ -478,7 +473,6 @@ fn selective_scan_f16_vanilla_matches_cpu_ref_loose() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_bf16_vanilla_matches_cpu_ref_loose() {
     let (ctx, stream) = setup();
     let (u_f, delta_f, a_f, b_f, c_f) = make_inputs();
@@ -563,7 +557,6 @@ fn selective_scan_bf16_vanilla_matches_cpu_ref_loose() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_dstate_too_large_rejected() {
     let (_ctx, stream) = setup();
     let desc = SelectiveScanDescriptor {
@@ -579,7 +572,6 @@ fn selective_scan_dstate_too_large_rejected() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_with_last_state_saves_final_h() {
     // Sanity: when last_state is requested, the kernel writes a value
     // that matches the CPU reference's final h vector.

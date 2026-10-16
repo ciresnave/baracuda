@@ -1,7 +1,8 @@
 //! Real-GPU smoke test for `SegmentSumPlan<T>` (Phase 7 7.6).
 //!
 //! Sorted-seg-ids `segment_sum`: `out[s, d] = Σ_{n : seg[n]==s} input[n, d]`.
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -18,7 +19,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn segment_sum_f32_basic() {
     let (ctx, stream) = setup();
     // N=8, D=3, num_segments=4. seg_ids: 0 0 1 1 2 2 2 3 (sorted).
@@ -82,7 +82,6 @@ fn segment_sum_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn segment_sum_f64_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 6;

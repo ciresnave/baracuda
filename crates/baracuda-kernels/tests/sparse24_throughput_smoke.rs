@@ -1,6 +1,6 @@
 //! Real-GPU throughput smoke test for `GemmSparse24Plan` (Phase 54).
 //!
-//! **Tier-1 caveat**: this test is `#[ignore]` by default AND additionally
+//! **Tier-1 caveat**: this test is gated behind the `device-tests` feature AND additionally
 //! documents that the Tier-1 inflate-then-naive-GEMM path is **NOT**
 //! faster than dense cuBLAS. The "2:4 is faster than dense" perf claim
 //! requires the sparse-tensor-core (`mma.sp.sync.aligned` / cuSPARSELt)
@@ -20,6 +20,7 @@
 //! dense cuBLAS at large shapes".
 
 #![cfg(feature = "xformers_sparse24")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Event, Stream, init};
 use baracuda_kernels::{
@@ -36,7 +37,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn sparse24_throughput_smoke_documentation() {
     let (ctx, stream) = setup();
 

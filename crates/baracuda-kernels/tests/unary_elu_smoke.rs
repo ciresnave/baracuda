@@ -5,6 +5,7 @@
 //! Inputs straddle zero. Tolerance: relative `4 * eps` — the negative
 //! branch contains `exp(x) - 1` which composes from libdevice / Rust libm
 //! transcendentals (may diverge by ~1 ULP).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -68,7 +69,6 @@ fn assert_close_bf16(got: f32, expected: f32, idx: usize) {
 }
 
 #[test]
-#[ignore]
 fn elu_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -110,7 +110,6 @@ fn elu_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn elu_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -151,7 +150,6 @@ fn elu_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn elu_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -195,7 +193,6 @@ fn elu_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn elu_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

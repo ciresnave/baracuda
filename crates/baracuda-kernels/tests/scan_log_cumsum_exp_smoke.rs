@@ -11,7 +11,8 @@
 //! `log(Σ exp(x - m)) + m` two-pass — same answer, easier to read).
 //!
 //! Run with: `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test scan_log_cumsum_exp_smoke -- --ignored`.
+//!   --test scan_log_cumsum_exp_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -90,7 +91,6 @@ fn host_log_cumsum_exp_f32<const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn lcse_fw_f32_2d_axis_1_reverse() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -136,7 +136,6 @@ fn lcse_fw_f32_2d_axis_1_reverse() {
 }
 
 #[test]
-#[ignore]
 fn lcse_fw_f64_2d_axis_0_forward() {
     let (ctx, stream) = setup();
     let shape = [5i32, 4];
@@ -214,7 +213,6 @@ fn lcse_fw_f64_2d_axis_0_forward() {
 }
 
 #[test]
-#[ignore]
 fn lcse_fw_f16_2d_axis_1_forward() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];
@@ -265,7 +263,6 @@ fn lcse_fw_f16_2d_axis_1_forward() {
 }
 
 #[test]
-#[ignore]
 fn lcse_fw_bf16_2d_axis_1_reverse() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];

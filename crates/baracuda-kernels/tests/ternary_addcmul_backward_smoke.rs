@@ -12,9 +12,10 @@
 //! - f16 / bf16: 2-ULP relative (matches the FW `4 * dtype_eps` band for
 //!   uniformity).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test ternary_addcmul_backward_smoke -- --ignored`.
+//!   --test ternary_addcmul_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -37,7 +38,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn addcmul_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64, 64];
@@ -144,7 +144,6 @@ fn addcmul_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn addcmul_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32, 64];
@@ -252,7 +251,6 @@ fn addcmul_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn addcmul_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32, 64];
@@ -358,7 +356,6 @@ fn addcmul_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn addcmul_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64, 64];

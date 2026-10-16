@@ -11,11 +11,12 @@
 //! reduction nondeterminism, satfinite-clamp matches host `clamp`).
 //! Mismatch tolerance is therefore zero.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --no-default-features --features sm89 \
-//!  --release --test s4_rcr_smoke -- --ignored`.
+//!  --release --test s4_rcr_smoke --features device-tests`.
 
 #![cfg(feature = "sm89")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -288,28 +289,24 @@ fn run_s4_rcr_identity(m: i32, n: i32, k: i32) {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn s4_rcr_identity_64_64_64() {
     // Smallest tile-aligned shape: 1 block, 1 K-tile. Pure smoke.
     run_s4_rcr_identity(64, 64, 64);
 }
 
 #[test]
-#[ignore]
 fn s4_rcr_identity_128_128_128() {
     // 2x2 grid, 2 K-tiles. Exercises smem reuse across K iters.
     run_s4_rcr_identity(128, 128, 128);
 }
 
 #[test]
-#[ignore]
 fn s4_rcr_identity_256_128_64() {
     // 4x2 grid, 1 K-tile. Larger M, asymmetric tile count.
     run_s4_rcr_identity(256, 128, 64);
 }
 
 #[test]
-#[ignore]
 fn s4_rcr_identity_100_70_64() {
     // Ragged in M (100 not a multiple of 64) and N (70 not a multiple
     // of 64; still even so packing is well-defined). K = 64 = 1 K-tile.

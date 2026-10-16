@@ -9,7 +9,8 @@
 //! `positions = [0, 1, ..., S-1]` (None case) or an explicit positions
 //! tensor.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -69,7 +70,6 @@ fn host_rope_f32(
 }
 
 #[test]
-#[ignore]
 fn rope_f32_default_positions() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -142,7 +142,6 @@ fn rope_f32_default_positions() {
 }
 
 #[test]
-#[ignore]
 fn rope_f64_explicit_positions() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -236,7 +235,6 @@ fn rope_f64_explicit_positions() {
 }
 
 #[test]
-#[ignore]
 fn rope_f16_default_positions() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -308,7 +306,6 @@ fn rope_f16_default_positions() {
 }
 
 #[test]
-#[ignore]
 fn rope_bf16_default_positions() {
     let (ctx, stream) = setup();
     let batch = 2i32;

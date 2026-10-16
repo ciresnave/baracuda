@@ -6,9 +6,10 @@
 //! the comparison is **bit-exact** via `to_bits()` against a CPU
 //! reference that does the same coord walk.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test repeat_dtype_smoke -- --ignored`.
+//!   --test repeat_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -51,7 +52,6 @@ fn cpu_repeat_2d<T: Copy>(x: &[T], input_shape: [i32; 2], output_shape: [i32; 2]
 }
 
 #[test]
-#[ignore]
 fn repeat_2d_f16() {
     let (ctx, stream) = setup();
     let input_shape = INPUT_SHAPE_2D;
@@ -100,7 +100,6 @@ fn repeat_2d_f16() {
 }
 
 #[test]
-#[ignore]
 fn repeat_2d_bf16() {
     let (ctx, stream) = setup();
     let input_shape = INPUT_SHAPE_2D;
@@ -149,7 +148,6 @@ fn repeat_2d_bf16() {
 }
 
 #[test]
-#[ignore]
 fn repeat_2d_f64() {
     let (ctx, stream) = setup();
     let input_shape = INPUT_SHAPE_2D;

@@ -5,15 +5,20 @@
 //! `θ = pos · base^(-2i/D)` schedule, then verify the apply path
 //! produces the same output as `baracuda_kernels_rope_<dt>_run`.
 //!
-//! `#[ignore]` by default; needs a real CUDA device.
+//! Gated behind the `device-tests` feature; needs a real CUDA device.
 
+#[cfg(feature = "device-tests")]
 use core::ffi::c_void;
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+#[cfg(feature = "device-tests")]
 use half::{bf16, f16};
 
+#[cfg(feature = "device-tests")]
 const ROPE_DEFAULT_BASE: f32 = 10000.0;
 
+#[cfg(feature = "device-tests")]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -22,6 +27,7 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
+#[cfg(feature = "device-tests")]
 /// Build per-batch cos/sin tables for the default RoPE schedule:
 ///   `cos[s, pair] = cos(s · base^(-2·pair / d))`
 /// Layout: `[seq, d/2]` — shared across all `bh` rows (`stride_b = 0`).
@@ -43,7 +49,7 @@ fn default_cs_tables(seq: usize, d: usize, base: f32) -> (Vec<f32>, Vec<f32>) {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_f32_matches_default_rope() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -127,7 +133,7 @@ fn rope_apply_f32_matches_default_rope() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_backward_f32_matches_default() {
     let (ctx, stream) = setup();
     let batch = 1i32;
@@ -196,7 +202,7 @@ fn rope_apply_backward_f32_matches_default() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_f16_matches_default() {
     let (ctx, stream) = setup();
     let batch = 1i32;
@@ -276,7 +282,7 @@ fn rope_apply_f16_matches_default() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn rope_apply_bf16_matches_default() {
     let (ctx, stream) = setup();
     let batch = 1i32;

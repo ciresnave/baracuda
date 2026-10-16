@@ -2,6 +2,7 @@
 //!
 //! Forward: `y = softmax(x, axis)`. Backward:
 //! `dx[k] = y[k] · (dy[k] - Σ_j y[j] · dy[j])`. Needs saved `y`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -76,7 +77,6 @@ fn host_softmax_bw_f32(shape: [i32; 2], axis: usize, y: &[f32], dy: &[f32]) -> V
 }
 
 #[test]
-#[ignore]
 fn softmax_bw_f32_2d_axis_1() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];
@@ -135,7 +135,6 @@ fn softmax_bw_f32_2d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn softmax_bw_f64_2d_axis_0() {
     let (ctx, stream) = setup();
     let shape = [6i32, 5];
@@ -215,7 +214,6 @@ fn softmax_bw_f64_2d_axis_0() {
 }
 
 #[test]
-#[ignore]
 fn softmax_bw_f16_2d() {
     let (ctx, stream) = setup();
     let shape = [3i32, 6];
@@ -275,7 +273,6 @@ fn softmax_bw_f16_2d() {
 }
 
 #[test]
-#[ignore]
 fn softmax_bw_bf16_2d() {
     let (ctx, stream) = setup();
     let shape = [4i32, 8];

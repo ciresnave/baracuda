@@ -5,6 +5,7 @@
 //! magnitude. Run with `--features mamba`.
 
 #![cfg(feature = "mamba")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -105,7 +106,6 @@ fn run_fw_and_sum(
 }
 
 #[test]
-#[ignore]
 fn selective_scan_bw_du_ddelta_da_match_fd_others_finite() {
     let (ctx, stream) = setup();
     let u_host: Vec<f32> = (0..BSZ * L * DIM)
@@ -321,7 +321,6 @@ fn selective_scan_bw_du_ddelta_da_match_fd_others_finite() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_bw_with_d_skip_dz_ddelta_bias_runs_finite() {
     // End-to-end: full optional surface (D + z + delta_bias) with all
     // matching gradients enabled. Just checks the launcher accepts the
@@ -507,7 +506,6 @@ fn selective_scan_bw_with_d_skip_dz_ddelta_bias_runs_finite() {
 }
 
 #[test]
-#[ignore]
 fn selective_scan_bw_missing_dD_when_d_given_errors() {
     // Topology check: if FW D given, BW must supply dD or error.
     let (ctx, stream) = setup();

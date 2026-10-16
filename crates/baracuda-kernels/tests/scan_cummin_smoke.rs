@@ -1,4 +1,5 @@
 //! Real-GPU smoke test for `ScanPlan<T, N> + ScanKind::Cummin`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -75,7 +76,6 @@ fn host_cummin_f32<const N: usize>(
 }
 
 #[test]
-#[ignore]
 fn cummin_f32_1d_forward() {
     let (ctx, stream) = setup();
     let shape = [10i32];
@@ -113,7 +113,6 @@ fn cummin_f32_1d_forward() {
 }
 
 #[test]
-#[ignore]
 fn cummin_f64_2d_axis_1_reverse() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];
@@ -154,7 +153,6 @@ fn cummin_f64_2d_axis_1_reverse() {
 }
 
 #[test]
-#[ignore]
 fn cummin_f16_2d_axis_0_forward() {
     let (ctx, stream) = setup();
     let shape = [5i32, 3];
@@ -195,7 +193,6 @@ fn cummin_f16_2d_axis_0_forward() {
 }
 
 #[test]
-#[ignore]
 fn cummin_bf16_2d_axis_1_forward() {
     let (ctx, stream) = setup();
     let shape = [3i32, 5];

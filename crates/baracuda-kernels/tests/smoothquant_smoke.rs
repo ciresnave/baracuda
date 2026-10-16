@@ -22,9 +22,10 @@
 //!    rounding noise than typical LLM-sized matrices, but the
 //!    contract is "comparable to FP linear within W8A8 noise").
 //!
-//! `#[ignore]` by default; needs a real CUDA device. Run with
-//! `cargo test -p baracuda-kernels --release -- --ignored \
+//! Gated behind the `device-tests` feature; needs a real CUDA device. Run with
+//! `cargo test -p baracuda-kernels --release --features device-tests \
 //!  smoothquant_smoke`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -141,7 +142,6 @@ fn cpu_fp_matmul(m: usize, n: usize, k: usize, a: &[f32], w: &[f32]) -> Vec<f32>
 }
 
 #[test]
-#[ignore]
 fn smoothquant_linear_f32_basic() {
     let (ctx, stream) = setup();
     let m: i32 = 2;
@@ -281,7 +281,6 @@ fn smoothquant_linear_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn smoothquant_select_rejects_unsupported_dtypes() {
     // Compile-time: smoke that select rejects unsupported dtype combos
     // without needing a GPU. Uses a stub stream — select() only
@@ -302,7 +301,6 @@ fn smoothquant_select_rejects_unsupported_dtypes() {
 }
 
 #[test]
-#[ignore]
 fn smoothquant_select_rejects_negative_dims() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -316,7 +314,6 @@ fn smoothquant_select_rejects_negative_dims() {
 }
 
 #[test]
-#[ignore]
 fn smoothquant_select_rejects_non_finite_scale() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
