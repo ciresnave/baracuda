@@ -7,9 +7,10 @@
 //! (transposed) cases. Bit-exact compare against a host reference
 //! (`a == b ? 1 : 0`) — equality on f32 is exact (no math).
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_cmp_eq_smoke -- --ignored`.
+//!   --test binary_cmp_eq_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -98,26 +99,22 @@ fn run_contig<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn cmp_eq_f32_1d() {
     run_contig::<1>([2048]);
 }
 
 #[test]
-#[ignore]
 fn cmp_eq_f32_2d() {
     run_contig::<2>([64, 64]);
 }
 
 #[test]
-#[ignore]
 fn cmp_eq_f32_3d() {
     run_contig::<3>([8, 128, 128]);
 }
 
 /// Broadcast: `a: [1, N]` vs `b: [M, N]` → `y: [M, N]`.
 #[test]
-#[ignore]
 fn cmp_eq_f32_broadcast_row() {
     let (ctx, stream) = setup();
     const M: usize = 32;

@@ -20,6 +20,7 @@
 //! The PyTorch bit-exact behavior is the contract this test family
 //! pins.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -52,7 +53,6 @@ fn pt_end(i: i32, in_sz: i32, out_sz: i32) -> i32 {
 // formula above (independent per H/W axis).
 
 #[test]
-#[ignore]
 fn adaptive_avg_pool2d_5x5_to_3x3_f32_bitexact() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 5i32, 5i32);
@@ -125,7 +125,6 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bitexact() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn adaptive_max_pool2d_5x5_to_3x3_f32_bitexact() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 5i32, 5i32);
@@ -205,7 +204,6 @@ fn adaptive_max_pool2d_5x5_to_3x3_f32_bitexact() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn adaptive_avg_pool3d_5x7x4_to_3x4x2_f32_bitexact() {
     let (ctx, stream) = setup();
     let (n, c) = (1i32, 1i32);
@@ -301,7 +299,6 @@ fn adaptive_avg_pool3d_5x7x4_to_3x4x2_f32_bitexact() {
 // it belongs to. The expected `dx[j] = Σ_{i: j ∈ window_i} dy[i] / win_size_i`.
 
 #[test]
-#[ignore]
 fn adaptive_avg_pool2d_5x5_to_3x3_f32_bw_bitexact() {
     let (ctx, stream) = setup();
     let (n, c, h_in, w_in) = (1i32, 1i32, 5i32, 5i32);
@@ -398,7 +395,6 @@ mod spot_dtypes {
     use half::{bf16, f16};
 
     #[test]
-    #[ignore]
     fn adaptive_avg_pool1d_5_to_3_f64_spot() {
         let (ctx, stream) = setup();
         let host_x: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
@@ -441,7 +437,6 @@ mod spot_dtypes {
     }
 
     #[test]
-    #[ignore]
     fn adaptive_avg_pool1d_5_to_3_f16_spot() {
         let (ctx, stream) = setup();
         let host_x: Vec<f16> = [1.0f32, 2.0, 3.0, 4.0, 5.0]
@@ -487,7 +482,6 @@ mod spot_dtypes {
     }
 
     #[test]
-    #[ignore]
     fn adaptive_avg_pool1d_5_to_3_bf16_spot() {
         let (ctx, stream) = setup();
         let host_x: Vec<bf16> = [1.0f32, 2.0, 3.0, 4.0, 5.0]

@@ -2,9 +2,10 @@
 //! IEEE 754 `fmin(a, b)`. NaN-aware: returns the non-NaN operand
 //! when exactly one input is NaN. Bit-exact across all dtypes.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_fmin_smoke -- --ignored`.
+//!   --test binary_fmin_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -52,7 +53,6 @@ fn fmin_ref_f64(a: f64, b: f64) -> f64 {
 }
 
 #[test]
-#[ignore]
 fn fmin_f32_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64];
@@ -119,7 +119,6 @@ fn fmin_f32_contig() {
 }
 
 #[test]
-#[ignore]
 fn fmin_f64_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 32];
@@ -182,7 +181,6 @@ fn fmin_f64_contig() {
 }
 
 #[test]
-#[ignore]
 fn fmin_f16_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32];
@@ -255,7 +253,6 @@ fn fmin_f16_contig() {
 }
 
 #[test]
-#[ignore]
 fn fmin_bf16_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];

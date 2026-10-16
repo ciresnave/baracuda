@@ -13,9 +13,10 @@
 //! Tolerances are wide (3σ × wide) — these are smoke checks, not
 //! convergence tests; bias issues should surface as gross failures.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
 
 #![allow(unused_mut)]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -36,7 +37,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn curand_uniform_f32_ffi() {
     let (ctx, stream) = setup();
     let numel: i64 = 1 << 15; // 32768 cells — enough to bound moments tightly.
@@ -94,7 +94,6 @@ fn curand_uniform_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn curand_uniform_f64_ffi() {
     let (ctx, stream) = setup();
     let numel: i64 = 4096;
@@ -131,7 +130,6 @@ fn curand_uniform_f64_ffi() {
 }
 
 #[test]
-#[ignore]
 fn curand_normal_f32_ffi() {
     let (ctx, stream) = setup();
     let numel: i64 = 1 << 16; // 65536 cells, even (Box-Muller).
@@ -188,7 +186,6 @@ fn curand_normal_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn curand_normal_f64_ffi() {
     let (ctx, stream) = setup();
     let numel: i64 = 1 << 15;

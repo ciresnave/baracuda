@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for `ArgReducePlan<f32, N>` — argmax / argmin.
 //! Output dtype is i64 (PyTorch convention). Ties broken by first
 //! occurrence.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -17,7 +18,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn argmax_1d() {
     let (ctx, stream) = setup();
     let input_shape = [128i32];
@@ -61,7 +61,6 @@ fn argmax_1d() {
 }
 
 #[test]
-#[ignore]
 fn argmin_1d() {
     let (ctx, stream) = setup();
     let input_shape = [128i32];
@@ -104,7 +103,6 @@ fn argmin_1d() {
 }
 
 #[test]
-#[ignore]
 fn argmax_3d_axis_1() {
     let (ctx, stream) = setup();
     let input_shape = [3i32, 16, 5];
@@ -169,7 +167,6 @@ fn argmax_3d_axis_1() {
 }
 
 #[test]
-#[ignore]
 fn argmax_ties_pick_first() {
     let (ctx, stream) = setup();
     let input_shape = [16i32];

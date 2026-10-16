@@ -8,8 +8,9 @@
 //! unnormalized input bytes (e.g. arbitrary non-zero values
 //! representing "true").
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release --features sm89 -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --features sm89 --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -113,19 +114,16 @@ fn run_case_bool(kind: BinaryKind, shape: [i32; 2]) {
 }
 
 #[test]
-#[ignore]
 fn logical_and_bool() {
     run_case_bool(BinaryKind::LogicalAnd, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn logical_or_bool() {
     run_case_bool(BinaryKind::LogicalOr, [64, 65]);
 }
 
 #[test]
-#[ignore]
 fn logical_xor_bool() {
     run_case_bool(BinaryKind::LogicalXor, [64, 65]);
 }

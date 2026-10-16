@@ -6,8 +6,9 @@
 //! kernel (no tensor cores, no warp reduction), so the result is
 //! **bit-exact** against the CPU reference — no tolerance.
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release --features sm89 -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --features sm89 --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -109,13 +110,11 @@ fn run_case<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn add_f32_1d() {
     run_case::<1>([2048]);
 }
 
 #[test]
-#[ignore]
 fn add_f32_1d_huge() {
     // Exercises the grid-cap loop (numel > 65535 * 256 elements would
     // overflow a single-grid launch; this stays under but well past
@@ -124,26 +123,22 @@ fn add_f32_1d_huge() {
 }
 
 #[test]
-#[ignore]
 fn add_f32_2d() {
     run_case::<2>([64, 64]);
 }
 
 #[test]
-#[ignore]
 fn add_f32_3d() {
     run_case::<3>([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn add_f32_4d() {
     // Realistic transformer activation shape [B, S, H, D].
     run_case::<4>([2, 32, 8, 64]);
 }
 
 #[test]
-#[ignore]
 fn add_f32_ragged_1d() {
     // Non-power-of-two; tail thread coverage.
     run_case::<1>([2049]);
@@ -401,19 +396,16 @@ fn run_case_f64_3d(shape: [i32; 3]) {
 }
 
 #[test]
-#[ignore]
 fn add_f16_3d() {
     run_case_f16_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn add_bf16_3d() {
     run_case_bf16_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn add_f64_3d() {
     run_case_f64_3d([8, 128, 128]);
 }

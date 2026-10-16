@@ -11,8 +11,9 @@
 //! NaNs whose payload bits aren't guaranteed identical between the
 //! host f32 path and the device f32 path.
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release --features sm89 -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --features sm89 --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -112,7 +113,6 @@ fn run_case<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn div_f32_3d() {
     run_case::<3>([8, 128, 128]);
 }
@@ -364,19 +364,16 @@ fn run_case_f64_3d(shape: [i32; 3]) {
 }
 
 #[test]
-#[ignore]
 fn div_f16_3d() {
     run_case_f16_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn div_bf16_3d() {
     run_case_bf16_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn div_f64_3d() {
     run_case_f64_3d([8, 128, 128]);
 }

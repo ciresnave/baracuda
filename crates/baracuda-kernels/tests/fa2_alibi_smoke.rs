@@ -23,6 +23,7 @@
 //! FFI plumbing + descriptor validation are wired correctly.
 
 #![cfg(feature = "fa2")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -56,7 +57,6 @@ fn gen_f16(n: usize, phase: f32) -> Vec<f16> {
 }
 
 #[test]
-#[ignore]
 fn fa2_alibi_per_head_broadcast() {
     let (ctx, stream) = setup();
     let n_q = (B * H * Q * D) as usize;
@@ -157,7 +157,6 @@ fn fa2_alibi_per_head_broadcast() {
 }
 
 #[test]
-#[ignore]
 fn fa2_alibi_per_batch_per_head() {
     let (ctx, stream) = setup();
     let n_q = (B * H * Q * D) as usize;
@@ -246,7 +245,6 @@ fn fa2_alibi_per_batch_per_head() {
 }
 
 #[test]
-#[ignore]
 fn fa2_alibi_rejected_on_bespoke() {
     // ALiBi must error when the backend is bespoke. select() picks
     // bespoke (short shape + caller override); can_implement() trips

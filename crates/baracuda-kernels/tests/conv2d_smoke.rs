@@ -4,7 +4,7 @@
 //! across the four floating-point dtypes (f32, f64, f16, bf16), plus
 //! padding / stride sanity for f32.
 //!
-//! All tests are `#[ignore]` — they need a real CUDA device + cuDNN at
+//! All tests are gated behind the `device-tests` feature — they need a real CUDA device + cuDNN at
 //! runtime.
 //!
 //! ## CPU reference
@@ -20,6 +20,7 @@
 //! dy[n,co,oh,ow] · x[n,c,oh·sh + kh·dh - ph, ow·sw + kw·dw - pw]`,
 //! treating out-of-bound `x` cells as zero.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -307,7 +308,6 @@ fn run_fw_and_check<T, F, G>(
 }
 
 #[test]
-#[ignore]
 fn conv2d_f32_no_padding() {
     let (ctx, stream) = setup();
     let d = TRAILBLAZER;
@@ -327,7 +327,6 @@ fn conv2d_f32_no_padding() {
 }
 
 #[test]
-#[ignore]
 fn conv2d_f64_no_padding() {
     let (ctx, stream) = setup();
     let d = TRAILBLAZER;
@@ -347,7 +346,6 @@ fn conv2d_f64_no_padding() {
 }
 
 #[test]
-#[ignore]
 fn conv2d_f16_no_padding() {
     let (ctx, stream) = setup();
     let d = TRAILBLAZER;
@@ -367,7 +365,6 @@ fn conv2d_f16_no_padding() {
 }
 
 #[test]
-#[ignore]
 fn conv2d_bf16_no_padding() {
     let (ctx, stream) = setup();
     let d = TRAILBLAZER;
@@ -387,7 +384,6 @@ fn conv2d_bf16_no_padding() {
 }
 
 #[test]
-#[ignore]
 fn conv2d_f32_with_padding() {
     let (ctx, stream) = setup();
     let d = ConvDims {
@@ -415,7 +411,6 @@ fn conv2d_f32_with_padding() {
 }
 
 #[test]
-#[ignore]
 fn conv2d_f32_stride2() {
     let (ctx, stream) = setup();
     // 7x7 input, 3x3 filter, stride 2, pad 0 → output 3x3.
@@ -445,7 +440,6 @@ fn conv2d_f32_stride2() {
 }
 
 #[test]
-#[ignore]
 fn conv2d_f32_bw_data() {
     let (ctx, stream) = setup();
     let d = TRAILBLAZER;
@@ -532,7 +526,6 @@ fn conv2d_f32_bw_data() {
 }
 
 #[test]
-#[ignore]
 fn conv2d_f32_bw_filter() {
     let (ctx, stream) = setup();
     let d = TRAILBLAZER;

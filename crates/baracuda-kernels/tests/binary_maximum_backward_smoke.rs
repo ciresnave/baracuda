@@ -7,9 +7,10 @@
 //! Per dtype, the input pattern hits all four branches deliberately:
 //! `a > b`, `a < b`, `a == b`, and (for FP only) `NaN`.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_maximum_backward_smoke -- --ignored`.
+//!   --test binary_maximum_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -83,7 +84,6 @@ fn ref_maximum_backward(dy: f32, a: f32, b: f32) -> (f32, f32) {
 }
 
 #[test]
-#[ignore]
 fn maximum_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -157,7 +157,6 @@ fn maximum_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn maximum_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -231,7 +230,6 @@ fn maximum_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn maximum_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -327,7 +325,6 @@ fn maximum_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn maximum_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

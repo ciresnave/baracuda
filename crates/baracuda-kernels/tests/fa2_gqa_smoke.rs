@@ -13,6 +13,7 @@
 //! tolerance.
 
 #![cfg(feature = "fa2")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -64,7 +65,6 @@ fn broadcast_kv_f16(src: &[f16], _b: i32, nh_k: i32, k: i32, d: i32, nh_q: i32) 
 }
 
 #[test]
-#[ignore]
 fn fa2_gqa_f16_vs_dense_bespoke() {
     let (ctx, stream) = setup();
     assert_eq!(

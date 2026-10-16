@@ -6,6 +6,7 @@
 //! matches FP family.
 //!
 //! Shape: `[3, 4]` reducing axis=1; output is `[3, 1]` (one idx per row).
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -82,7 +83,6 @@ unsafe fn run_arg_reduce(
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn ffi_argmax_u8_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<u8> = vec![
@@ -110,7 +110,6 @@ fn ffi_argmax_u8_i32() {
 }
 
 #[test]
-#[ignore]
 fn ffi_argmin_i8_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<i8> = vec![
@@ -138,7 +137,6 @@ fn ffi_argmin_i8_i32() {
 }
 
 #[test]
-#[ignore]
 fn ffi_argmax_u32_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<u32> = vec![1, 2, 3, 4, 10, 200, 30, 40, u32::MAX, 1, u32::MAX, u32::MAX];
@@ -162,7 +160,6 @@ fn ffi_argmax_u32_i32() {
 }
 
 #[test]
-#[ignore]
 fn ffi_argmin_i16_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<i16> = vec![
@@ -199,7 +196,6 @@ fn ffi_argmin_i16_i32() {
 }
 
 #[test]
-#[ignore]
 fn ffi_argmax_i32_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<i32> = vec![1, 2, 3, 4, 10, 200, 30, 40, i32::MAX, 1, i32::MAX, i32::MAX];
@@ -223,7 +219,6 @@ fn ffi_argmax_i32_i32() {
 }
 
 #[test]
-#[ignore]
 fn ffi_argmin_i64_i32() {
     let (ctx, stream) = setup();
     let host_src: Vec<i64> = vec![
@@ -265,7 +260,6 @@ fn ffi_argmin_i64_i32() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn ffi_argmax_i32_i64() {
     let (ctx, stream) = setup();
     let host_src: Vec<i32> = vec![1, 2, 3, 4, 10, 200, 30, 40, i32::MAX, 1, i32::MAX, i32::MAX];
@@ -289,7 +283,6 @@ fn ffi_argmax_i32_i64() {
 }
 
 #[test]
-#[ignore]
 fn ffi_argmin_u8_i64() {
     let (ctx, stream) = setup();
     let host_src: Vec<u8> = vec![

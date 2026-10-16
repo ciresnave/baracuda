@@ -2,9 +2,10 @@
 //! `y = floor(a / b)`. Matches PyTorch's
 //! `torch.div(a, b, rounding_mode='floor')`. Inputs avoid `b == 0`.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_floor_divide_smoke -- --ignored`.
+//!   --test binary_floor_divide_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn floor_divide_f32_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64];
@@ -87,7 +87,6 @@ fn floor_divide_f32_contig() {
 }
 
 #[test]
-#[ignore]
 fn floor_divide_f64_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 32];
@@ -149,7 +148,6 @@ fn floor_divide_f64_contig() {
 }
 
 #[test]
-#[ignore]
 fn floor_divide_f16_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32];
@@ -214,7 +212,6 @@ fn floor_divide_f16_contig() {
 }
 
 #[test]
-#[ignore]
 fn floor_divide_bf16_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];

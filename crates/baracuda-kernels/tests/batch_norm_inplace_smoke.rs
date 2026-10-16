@@ -12,11 +12,12 @@
 //! this proof covers **f64 as well** — unlike LN/SM/LSM/RMSNorm
 //! where f64 falls back to a multi-pass-global kernel.
 //!
-//! `#[ignore]` per project convention; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --features sm89 \
 //!    --test batch_norm_inplace_smoke -- --include-ignored`.
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -45,7 +46,6 @@ fn host_x_f32() -> Vec<f32> {
 }
 
 #[test]
-#[ignore]
 fn batch_norm_f32_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
     let host_x = host_x_f32();
@@ -119,7 +119,6 @@ fn batch_norm_f32_inplace_matches_non_aliased() {
 }
 
 #[test]
-#[ignore]
 fn batch_norm_f16_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
     let host_x: Vec<f16> = host_x_f32().iter().map(|&v| f16::from_f32(v)).collect();
@@ -191,7 +190,6 @@ fn batch_norm_f16_inplace_matches_non_aliased() {
 }
 
 #[test]
-#[ignore]
 fn batch_norm_bf16_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
     let host_x: Vec<bf16> = host_x_f32().iter().map(|&v| bf16::from_f32(v)).collect();
@@ -263,7 +261,6 @@ fn batch_norm_bf16_inplace_matches_non_aliased() {
 }
 
 #[test]
-#[ignore]
 fn batch_norm_f64_inplace_matches_non_aliased() {
     let (ctx, stream) = setup();
     let host_x: Vec<f64> = host_x_f32().iter().map(|&v| v as f64).collect();

@@ -3,6 +3,7 @@
 //! Forward: `y = a + weight·(b - a)`. Tolerance: `4·eps` relative — the
 //! kernel does one subtract, one multiply, one add (3 roundings); plus
 //! f16/bf16 round once on the store.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn lerp_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -81,7 +81,6 @@ fn lerp_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn lerp_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -137,7 +136,6 @@ fn lerp_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn lerp_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -203,7 +201,6 @@ fn lerp_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn lerp_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

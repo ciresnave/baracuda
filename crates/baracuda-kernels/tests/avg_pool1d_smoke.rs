@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `AvgPool1dPlan` FW + BW.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -16,7 +17,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn avg_pool1d_f32() {
     let (ctx, stream) = setup();
     let (n, c, l_in) = (1i32, 1i32, 8i32);

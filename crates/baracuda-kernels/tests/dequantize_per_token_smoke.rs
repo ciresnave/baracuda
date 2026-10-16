@@ -2,7 +2,8 @@
 //! Verifies `y[n, d] = (q[n, d] - zp[n]) * scale[n]` — exact inverse of
 //! `quantize_per_token` (modulo FW rounding).
 //!
-//! `#[ignore]`.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -19,7 +20,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn dequantize_per_token_f32_s8_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 2;

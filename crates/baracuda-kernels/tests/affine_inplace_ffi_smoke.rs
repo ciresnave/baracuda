@@ -15,11 +15,12 @@
 //! symbol directly with raw device pointers (no plan-layer wrapping),
 //! mirroring how Fuel's in-place op family executor will dispatch.
 //!
-//! Marked `#[ignore]` per project convention; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --features sm89 \
 //!    --test affine_inplace_ffi_smoke -- --include-ignored`.
 
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -40,7 +41,6 @@ fn setup() -> (Context, Stream) {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn affine_inplace_f32_contig() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -76,7 +76,6 @@ fn affine_inplace_f32_contig() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_f64_contig() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -112,7 +111,6 @@ fn affine_inplace_f64_contig() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_bf16_contig() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -158,7 +156,6 @@ fn affine_inplace_bf16_contig() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_f16_contig() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -209,7 +206,6 @@ fn affine_inplace_f16_contig() {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn affine_inplace_i32_contig() {
     let (ctx, stream) = setup();
     let numel = 1024;
@@ -240,7 +236,6 @@ fn affine_inplace_i32_contig() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_i64_contig() {
     let (ctx, stream) = setup();
     let numel = 512;
@@ -271,7 +266,6 @@ fn affine_inplace_i64_contig() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_u8_contig() {
     let (ctx, stream) = setup();
     let numel: usize = 256;
@@ -309,7 +303,6 @@ fn affine_inplace_u8_contig() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_i8_contig() {
     let (ctx, stream) = setup();
     let numel = 256;
@@ -372,7 +365,6 @@ fn addressed_offsets() -> Vec<usize> {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_strided_f32() {
     let (ctx, stream) = setup();
     // Sentinel pattern in the padding so we can verify it's untouched.
@@ -434,7 +426,6 @@ fn affine_inplace_strided_f32() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_strided_f64() {
     let (ctx, stream) = setup();
     let pad_sentinel: f64 = 999_999.5;
@@ -484,7 +475,6 @@ fn affine_inplace_strided_f64() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_strided_i32() {
     let (ctx, stream) = setup();
     let pad_sentinel: i32 = i32::MAX;
@@ -524,7 +514,6 @@ fn affine_inplace_strided_i32() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_strided_i64() {
     let (ctx, stream) = setup();
     let pad_sentinel: i64 = i64::MAX;
@@ -564,7 +553,6 @@ fn affine_inplace_strided_i64() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_strided_u8() {
     let (ctx, stream) = setup();
     let pad_sentinel: u8 = u8::MAX;
@@ -604,7 +592,6 @@ fn affine_inplace_strided_u8() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_strided_bf16() {
     let (ctx, stream) = setup();
     let pad_sentinel = bf16::from_f32(9999.0);
@@ -650,7 +637,6 @@ fn affine_inplace_strided_bf16() {
 }
 
 #[test]
-#[ignore]
 fn affine_inplace_strided_f16() {
     let (ctx, stream) = setup();
     let pad_sentinel = f16::from_f32(99.0);
@@ -700,7 +686,6 @@ fn affine_inplace_strided_f16() {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn affine_inplace_strided_rank0() {
     // Rank-0 (scalar) → numel = 1. The kernel's inner unravel loop
     // runs zero iterations, so off_y stays at 0 — kernel writes to

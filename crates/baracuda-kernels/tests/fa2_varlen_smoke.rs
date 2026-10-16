@@ -10,7 +10,7 @@
 //!   4. End-to-end varlen BW launches: assert dQ is non-zero.
 //!   5. GQA × varlen combo.
 //!
-//! All `#[ignore]`-gated. Build with `--features fa2_backward,sm80`.
+//! All gated behind the `device-tests` feature-gated. Build with `--features fa2_backward,sm80`.
 //!
 //! Gated on `fa2_backward` (not just `fa2`) because this file exercises
 //! both the varlen FW plan AND `FlashSdpaVarlenBackwardPlan` (BW) in the
@@ -18,6 +18,7 @@
 //! still runs whenever this file runs.
 
 #![cfg(feature = "fa2_backward")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -50,7 +51,6 @@ fn gen_f16(n: usize, phase: f32) -> Vec<f16> {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn fa2_varlen_fw_plan_selects_fa2_backend() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaVarlenDescriptor::new(
@@ -71,7 +71,6 @@ fn fa2_varlen_fw_plan_selects_fa2_backend() {
 }
 
 #[test]
-#[ignore]
 fn fa2_varlen_lse_size_matches_formula() {
     let (_ctx, stream) = setup();
     let b = 3_i32;
@@ -103,7 +102,6 @@ fn fa2_varlen_lse_size_matches_formula() {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn fa2_varlen_fw_smoke_f16() {
     let (ctx, stream) = setup();
     let lens = [30_i32, 70, 40];
@@ -217,7 +215,6 @@ fn fa2_varlen_fw_smoke_f16() {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn fa2_varlen_bw_smoke_f16() {
     let (ctx, stream) = setup();
     let lens = [30_i32, 50];
@@ -407,7 +404,6 @@ fn fa2_varlen_bw_smoke_f16() {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn fa2_varlen_gqa_fw_smoke_bf16() {
     let (ctx, stream) = setup();
     let lens = [50_i32, 30, 70];

@@ -3,8 +3,9 @@
 //! Covers FW + BW data + BW filter for f32 over a small NCDHW tensor.
 //! Compares against a naive 3-D cross-correlation CPU reference.
 //!
-//! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
+//! All tests are gated behind the `device-tests` feature — need a real CUDA device + cuDNN at runtime.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -101,7 +102,6 @@ fn make_seq(n: usize, seed: u32, scale: f64) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn conv3d_f32_fw() {
     let (ctx, stream) = setup();
     let d = D;
@@ -185,7 +185,6 @@ fn conv3d_f32_fw() {
 }
 
 #[test]
-#[ignore]
 fn conv3d_f32_bw_data_filter_runs() {
     // Shape-only smoke for the BW directions — confirms the plan launches
     // without errors and writes the expected element count. Heavy

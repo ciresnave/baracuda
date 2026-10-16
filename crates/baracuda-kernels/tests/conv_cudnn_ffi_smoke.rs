@@ -14,8 +14,9 @@
 //!   - Conv1d f16 FW (verifies the FFI-side pad-to-rank-4 logic).
 //!   - ConvTranspose2d f32 FW.
 //!
-//! All tests `#[ignore]` — need a real CUDA device + cuDNN at runtime.
+//! All tests are gated behind the `device-tests` feature — need a real CUDA device + cuDNN at runtime.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -207,7 +208,6 @@ fn ffi_conv2d_fw_f32(
 }
 
 #[test]
-#[ignore]
 fn ffi_conv2d_f32_fw_matches_plan() {
     let (ctx, stream) = setup();
     let d = TRAILBLAZER_2D;
@@ -224,7 +224,6 @@ fn ffi_conv2d_f32_fw_matches_plan() {
 }
 
 #[test]
-#[ignore]
 fn ffi_conv2d_f32_bw_data_matches_plan() {
     let (ctx, stream) = setup();
     let d = TRAILBLAZER_2D;
@@ -321,7 +320,6 @@ fn ffi_conv2d_f32_bw_data_matches_plan() {
 }
 
 #[test]
-#[ignore]
 fn ffi_conv2d_f32_bw_filter_matches_plan() {
     let (ctx, stream) = setup();
     let d = TRAILBLAZER_2D;
@@ -415,7 +413,6 @@ fn ffi_conv2d_f32_bw_filter_matches_plan() {
 }
 
 #[test]
-#[ignore]
 fn ffi_conv2d_f32_depthwise_fw_matches_plan() {
     let (ctx, stream) = setup();
     let d = Conv2dDims {
@@ -443,7 +440,6 @@ fn ffi_conv2d_f32_depthwise_fw_matches_plan() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn ffi_conv1d_f16_fw_matches_plan() {
     let (ctx, stream) = setup();
     let n = 2;
@@ -564,7 +560,6 @@ fn ffi_conv1d_f16_fw_matches_plan() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn ffi_conv_transpose_2d_f32_fw_matches_plan() {
     let (ctx, stream) = setup();
     // 1×2×3×3 → 1×3×5×5 with kH=kW=3, stride=2, pad=1, output_pad=0.

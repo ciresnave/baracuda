@@ -16,6 +16,7 @@
 //!   logits (`exp(log_probs) − γ`), so each per-`(t, n)` row sums to
 //!   zero.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -192,7 +193,6 @@ fn run_bespoke_f32_fw(
 }
 
 #[test]
-#[ignore]
 fn cudnn_ctc_f32_uniform_t2_c2() {
     // Hand-checked: T=2, B=1, C=2, blank=0, target=[1]. Uniform
     // log_probs = -log(2). Expected loss = log(4/3) ≈ 0.28768.
@@ -237,7 +237,6 @@ fn cudnn_ctc_f32_uniform_t2_c2() {
 }
 
 #[test]
-#[ignore]
 fn cudnn_ctc_f32_general_matches_bespoke() {
     let (ctx, stream) = setup();
     let t_max: i32 = 4;
@@ -321,7 +320,6 @@ fn cudnn_ctc_f32_general_matches_bespoke() {
 }
 
 #[test]
-#[ignore]
 fn cudnn_ctc_f64_general_matches_bespoke() {
     // Same fixture as f32 but routed through cuDNN's f64 path. The
     // bespoke f64 plan is used as the oracle (we already trust it

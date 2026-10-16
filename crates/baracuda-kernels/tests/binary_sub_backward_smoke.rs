@@ -6,9 +6,10 @@
 //! (single sign-bit flip on finite values, NaN canonicalization aside).
 //! Bit-exact compare across all wired dtypes.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_sub_backward_smoke -- --ignored`.
+//!   --test binary_sub_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn sub_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -78,7 +78,6 @@ fn sub_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn sub_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -132,7 +131,6 @@ fn sub_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn sub_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -190,7 +188,6 @@ fn sub_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn sub_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

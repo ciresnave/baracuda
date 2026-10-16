@@ -23,13 +23,14 @@
 //! - Inverse (f32)
 //! - ormqr (f32) — composes with QR for dense-Q materialization.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
 
 // Many `dev_*` buffers are written by the FFI side (cuSOLVER mutates
 // them through raw pointers), but the Rust side only reads `.as_raw()`
 // — the borrow checker can't see the write-through, so it warns about
 // unused-mut. Silence project-wide since every test exhibits this.
 #![allow(unused_mut)]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -114,7 +115,6 @@ fn tall_matrix_f32(m: usize, n: usize, seed: u32) -> Vec<f32> {
 }
 
 #[test]
-#[ignore]
 fn cholesky_f32_ffi() {
     let (ctx, stream) = setup();
     let n: i32 = 6;
@@ -150,7 +150,6 @@ fn cholesky_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn lu_f32_ffi() {
     let (ctx, stream) = setup();
     let n: i32 = 5;
@@ -188,7 +187,6 @@ fn lu_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn qr_f32_ffi() {
     let (ctx, stream) = setup();
     let (m, n) = (6i32, 4i32);
@@ -225,7 +223,6 @@ fn qr_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn ormqr_f32_ffi() {
     // Compose qr + ormqr to materialize dense Q over a caller-staged
     // identity matrix.
@@ -299,7 +296,6 @@ fn ormqr_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn svd_f32_ffi() {
     let (ctx, stream) = setup();
     let (m, n) = (5i32, 3i32);
@@ -344,7 +340,6 @@ fn svd_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn svd_batched_f32_ffi() {
     let (ctx, stream) = setup();
     let n: i32 = 4;
@@ -404,7 +399,6 @@ fn svd_batched_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn svda_batched_f32_ffi() {
     let (ctx, stream) = setup();
     let (m, n) = (4i32, 3i32);
@@ -481,7 +475,6 @@ fn svda_batched_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn eigh_f32_ffi() {
     let (ctx, stream) = setup();
     let n: i32 = 4;
@@ -519,7 +512,6 @@ fn eigh_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn eigh_c32_ffi() {
     // Hermitian eigh on a complex-Hermitian input (built from a real
     // SPD matrix lifted into the real component; imag = 0 keeps the
@@ -567,7 +559,6 @@ fn eigh_c32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn eig_f32_ffi() {
     let (ctx, stream) = setup();
     let n: i64 = 4;
@@ -625,7 +616,6 @@ fn eig_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn lstsq_f32_ffi() {
     let (ctx, stream) = setup();
     let (m, n, nrhs) = (6i32, 4i32, 2i32);
@@ -675,7 +665,6 @@ fn lstsq_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn solve_f32_ffi() {
     let (ctx, stream) = setup();
     let (n, nrhs) = (4i32, 2i32);
@@ -718,7 +707,6 @@ fn solve_f32_ffi() {
 }
 
 #[test]
-#[ignore]
 fn inverse_f32_ffi() {
     let (ctx, stream) = setup();
     let n: i32 = 4;

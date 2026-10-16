@@ -5,6 +5,7 @@
 //!   db = dy * a^b * ln(a)
 //! Needs saved `a`, `b`. Test inputs restricted to `a > 0` so all paths
 //! are well-defined.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn pow_backward_f32() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32];
@@ -106,7 +106,6 @@ fn pow_backward_f32() {
 }
 
 #[test]
-#[ignore]
 fn pow_backward_f64() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];
@@ -180,7 +179,6 @@ fn pow_backward_f64() {
 }
 
 #[test]
-#[ignore]
 fn pow_backward_f16() {
     let (ctx, stream) = setup();
     let shape = [4i32, 16];
@@ -274,7 +272,6 @@ fn pow_backward_f16() {
 }
 
 #[test]
-#[ignore]
 fn pow_backward_bf16() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];

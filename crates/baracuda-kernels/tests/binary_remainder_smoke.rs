@@ -2,9 +2,10 @@
 //! C-style remainder via `fmod`. Result sign matches `a`. Distinct from
 //! `BinaryKind::Mod` (Python-style, sign of b). Inputs avoid `b == 0`.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_remainder_smoke -- --ignored`.
+//!   --test binary_remainder_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -22,7 +23,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn remainder_f32_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 64];
@@ -87,7 +87,6 @@ fn remainder_f32_contig() {
 }
 
 #[test]
-#[ignore]
 fn remainder_f64_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 32];
@@ -149,7 +148,6 @@ fn remainder_f64_contig() {
 }
 
 #[test]
-#[ignore]
 fn remainder_f16_contig() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32];
@@ -214,7 +212,6 @@ fn remainder_f16_contig() {
 }
 
 #[test]
-#[ignore]
 fn remainder_bf16_contig() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];

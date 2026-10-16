@@ -8,11 +8,12 @@
 //! Integer popcount has no warp-reduction nondeterminism, so the
 //! tolerance is **zero** — any mismatch is a kernel bug.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --no-default-features --features sm89 \
-//!  --release --test bin_smoke -- --ignored`.
+//!  --release --test bin_smoke --features device-tests`.
 
 #![cfg(feature = "sm89")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -176,28 +177,24 @@ fn run_bin_rcr(m: i32, n: i32, k: i32) {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn bin_rcr_64_64_256() {
     // Smallest tile-aligned shape (M_TILE=N_TILE=K_TILE).
     run_bin_rcr(64, 64, 256);
 }
 
 #[test]
-#[ignore]
 fn bin_rcr_128_128_512() {
     // 2x2 grid, 2 K-tiles.
     run_bin_rcr(128, 128, 512);
 }
 
 #[test]
-#[ignore]
 fn bin_rcr_256_128_256() {
     // 4x2 grid, 1 K-tile.
     run_bin_rcr(256, 128, 256);
 }
 
 #[test]
-#[ignore]
 fn bin_rcr_100_70_128() {
     // Ragged in M and N; K=128 is below K_TILE=256 (exercises K-tile
     // padding at the boundary).
@@ -205,7 +202,6 @@ fn bin_rcr_100_70_128() {
 }
 
 #[test]
-#[ignore]
 fn bin_rcr_65_65_264() {
     // Tile-edge ragged: M, N each 1 past tile boundary; K=264 is one
     // K-tile + 8 bits (exercises K-tile padding when the second tile

@@ -2,7 +2,8 @@
 //!
 //! Covers all four FP dtypes (f32 / f16 / bf16 / f64).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -74,7 +75,6 @@ fn host_batch_norm_f32(
 }
 
 #[test]
-#[ignore]
 fn batch_norm_f32_with_affine() {
     let (ctx, stream) = setup();
     let n = 4i32;
@@ -182,7 +182,6 @@ fn batch_norm_f32_with_affine() {
 }
 
 #[test]
-#[ignore]
 fn batch_norm_f32_no_affine() {
     let (ctx, stream) = setup();
     let n = 3i32;
@@ -259,7 +258,6 @@ fn batch_norm_f32_no_affine() {
 }
 
 #[test]
-#[ignore]
 fn batch_norm_f64_with_affine() {
     let (ctx, stream) = setup();
     let n = 4i32;
@@ -375,7 +373,6 @@ fn batch_norm_f64_with_affine() {
 }
 
 #[test]
-#[ignore]
 fn batch_norm_f16_with_affine() {
     let (ctx, stream) = setup();
     let n = 4i32;
@@ -479,7 +476,6 @@ fn batch_norm_f16_with_affine() {
 }
 
 #[test]
-#[ignore]
 fn batch_norm_bf16_with_affine() {
     let (ctx, stream) = setup();
     let n = 4i32;

@@ -12,7 +12,8 @@
 //!     in the CPU ref produces the same result up to f32 path
 //!     associativity).
 //!
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -61,7 +62,6 @@ fn cpu_dynamic_range_quantize_per_token_symmetric(
 }
 
 #[test]
-#[ignore]
 fn dynamic_range_quantize_f32_s8_per_token_symmetric_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 2;

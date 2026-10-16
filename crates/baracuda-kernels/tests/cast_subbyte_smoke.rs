@@ -14,9 +14,10 @@
 //! depends on the source value already being representable on the Fp8
 //! lattice — we use a small grid that we know IS).
 //!
-//! `#[ignore]` by default — run with:
+//! Gated behind the `device-tests` feature — run with:
 //!   `cargo test -p baracuda-kernels --release --features sm89 \
-//!     --test cast_subbyte_smoke -- --ignored`.
+//!     --test cast_subbyte_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -37,7 +38,6 @@ fn setup() -> (Context, Stream) {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn cast_s4_to_i32_unpacks_with_sign_extension() {
     let (ctx, stream) = setup();
     // 8 elements packed in 4 bytes:
@@ -95,7 +95,6 @@ fn cast_s4_to_i32_unpacks_with_sign_extension() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn cast_u4_to_i32_unpacks_with_zero_extension() {
     let (ctx, stream) = setup();
     // 8 elements packed in 4 bytes.
@@ -153,7 +152,6 @@ fn cast_u4_to_i32_unpacks_with_zero_extension() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn cast_fp8e4m3_to_f32_lattice_grid() {
     let (ctx, stream) = setup();
     let grid: Vec<f32> = vec![0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0];
@@ -198,7 +196,6 @@ fn cast_fp8e4m3_to_f32_lattice_grid() {
 }
 
 #[test]
-#[ignore]
 fn cast_f32_to_fp8e4m3_lattice_grid() {
     let (ctx, stream) = setup();
     // Same exactly-representable grid as the reverse test.
@@ -247,7 +244,6 @@ fn cast_f32_to_fp8e4m3_lattice_grid() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn cast_bool_to_f32_normalizes_truthy_bytes() {
     let (ctx, stream) = setup();
     // Mix of false (0), canonical true (1), and non-canonical truthy

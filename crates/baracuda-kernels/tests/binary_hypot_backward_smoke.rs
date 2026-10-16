@@ -6,6 +6,7 @@
 //! The kernel reconstructs `y` from saved `a`/`b` inline (saved-y not
 //! exposed in `BinaryBackwardArgs` — single sqrt overhead per cell).
 //! Test inputs keep `b` strictly positive so y > 0 everywhere.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -23,7 +24,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn hypot_backward_f32() {
     let (ctx, stream) = setup();
     let shape = [4i32, 32];
@@ -108,7 +108,6 @@ fn hypot_backward_f32() {
 }
 
 #[test]
-#[ignore]
 fn hypot_backward_f64() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];
@@ -189,7 +188,6 @@ fn hypot_backward_f64() {
 }
 
 #[test]
-#[ignore]
 fn hypot_backward_f16() {
     let (ctx, stream) = setup();
     let shape = [4i32, 16];
@@ -284,7 +282,6 @@ fn hypot_backward_f16() {
 }
 
 #[test]
-#[ignore]
 fn hypot_backward_bf16() {
     let (ctx, stream) = setup();
     let shape = [3i32, 16];

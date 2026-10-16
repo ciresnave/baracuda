@@ -9,9 +9,10 @@
 //! those return `Error::Unsupported` from `FlashSdpaPlan::select` when
 //! FA2 is forced (or fall back to bespoke if d_k ≤ 128).
 //!
-//! All tests `#[ignore]`-gated for real-GPU + `--features fa2,sm80`.
+//! All tests are gated behind the `device-tests` feature-gated for real-GPU + `--features fa2,sm80`.
 
 #![cfg(feature = "fa2")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -358,7 +359,6 @@ fn run_one_bf16(d: i32, is_causal: bool) {
 macro_rules! hdim_test {
     ($name:ident, $d:expr, $dtype_fn:ident, $causal:expr) => {
         #[test]
-        #[ignore]
         fn $name() {
             $dtype_fn($d, $causal);
         }

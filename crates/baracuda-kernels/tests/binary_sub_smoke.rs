@@ -6,8 +6,9 @@
 //! (no tensor cores, no warp reduction), so the result is **bit-exact**
 //! against the CPU reference — no tolerance.
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release --features sm89 -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --features sm89 --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -105,7 +106,6 @@ fn run_case<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn sub_f32_3d() {
     run_case::<3>([8, 128, 128]);
 }
@@ -353,19 +353,16 @@ fn run_case_f64_3d(shape: [i32; 3]) {
 }
 
 #[test]
-#[ignore]
 fn sub_f16_3d() {
     run_case_f16_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn sub_bf16_3d() {
     run_case_bf16_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn sub_f64_3d() {
     run_case_f64_3d([8, 128, 128]);
 }

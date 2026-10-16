@@ -11,9 +11,10 @@
 //! Layout: a 2x4 input. Argmax along axis 1 ⇒ per-row index of the
 //! maximum (extent 4). Same for argmin.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test arg_axis_dtype_smoke -- --ignored`.
+//!   --test arg_axis_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -120,21 +121,18 @@ fn download_as_i64<I: IndexOutputElement>(buf: &DeviceBuffer<I>, n: usize) -> Ve
 // =============================================================================
 
 #[test]
-#[ignore]
 fn argmax_axis1_f32_u32_output() {
     let got = run_arg_axis::<u32>(ArgReduceKind::Argmax);
     assert_eq!(got, EXPECT_ARGMAX_AXIS1, "argmax u32 mismatch");
 }
 
 #[test]
-#[ignore]
 fn argmax_axis1_f32_i32_output() {
     let got = run_arg_axis::<i32>(ArgReduceKind::Argmax);
     assert_eq!(got, EXPECT_ARGMAX_AXIS1, "argmax i32 mismatch");
 }
 
 #[test]
-#[ignore]
 fn argmax_axis1_f32_i64_output() {
     let got = run_arg_axis::<i64>(ArgReduceKind::Argmax);
     assert_eq!(got, EXPECT_ARGMAX_AXIS1, "argmax i64 mismatch");
@@ -145,21 +143,18 @@ fn argmax_axis1_f32_i64_output() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn argmin_axis1_f32_u32_output() {
     let got = run_arg_axis::<u32>(ArgReduceKind::Argmin);
     assert_eq!(got, EXPECT_ARGMIN_AXIS1, "argmin u32 mismatch");
 }
 
 #[test]
-#[ignore]
 fn argmin_axis1_f32_i32_output() {
     let got = run_arg_axis::<i32>(ArgReduceKind::Argmin);
     assert_eq!(got, EXPECT_ARGMIN_AXIS1, "argmin i32 mismatch");
 }
 
 #[test]
-#[ignore]
 fn argmin_axis1_f32_i64_output() {
     let got = run_arg_axis::<i64>(ArgReduceKind::Argmin);
     assert_eq!(got, EXPECT_ARGMIN_AXIS1, "argmin i64 mismatch");
@@ -171,12 +166,11 @@ fn argmin_axis1_f32_i64_output() {
 // an alpha.28 u32 caller don't collide on the same code path).
 //
 // Compile-time / select-time test: doesn't need GPU dispatch beyond
-// successful `select`, so it doesn't need `#[ignore]`-gating beyond the
+// successful `select`, so it doesn't need gated behind the `device-tests` feature-gating beyond the
 // driver init.
 // =============================================================================
 
 #[test]
-#[ignore]
 fn sku_differs_between_u32_and_i64_output() {
     let (_ctx, stream) = setup();
     let desc = ArgReduceDescriptor {

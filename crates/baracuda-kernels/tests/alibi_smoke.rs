@@ -2,7 +2,8 @@
 //!
 //! `y[b, h, i, j] = scores[b, h, i, j] + slope[h] · (j - i)`.
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -47,7 +48,6 @@ fn host_alibi_f32(
 }
 
 #[test]
-#[ignore]
 fn alibi_f32_basic() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -119,7 +119,6 @@ fn alibi_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn alibi_f64_basic() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -192,7 +191,6 @@ fn alibi_f64_basic() {
 }
 
 #[test]
-#[ignore]
 fn alibi_f16_basic() {
     let (ctx, stream) = setup();
     let batch = 2i32;
@@ -266,7 +264,6 @@ fn alibi_f16_basic() {
 }
 
 #[test]
-#[ignore]
 fn alibi_bf16_basic() {
     let (ctx, stream) = setup();
     let batch = 2i32;

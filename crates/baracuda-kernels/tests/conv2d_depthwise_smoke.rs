@@ -6,6 +6,7 @@
 //! convolved with its own filter independently. Compares against a
 //! naive depthwise CPU reference.
 #![cfg(feature = "cudnn")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -75,7 +76,6 @@ fn make_seq(n: usize, seed: u32, scale: f64) -> Vec<f64> {
 }
 
 #[test]
-#[ignore]
 fn conv2d_depthwise_f32() {
     let (ctx, stream) = setup();
     let n = 2;

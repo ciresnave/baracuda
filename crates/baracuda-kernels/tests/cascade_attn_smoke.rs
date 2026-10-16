@@ -8,10 +8,11 @@
 //! follow-up integration test once the DeviceBuffer testing helpers
 //! are stabilized.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `flashinfer` cargo feature.
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, Stream, init};
 use baracuda_kernels::{
@@ -27,7 +28,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn cascade_attention_plan_select_validates_f32() {
     let (_ctx, stream) = setup();
     let desc = CascadeAttentionDescriptor {
@@ -49,7 +49,6 @@ fn cascade_attention_plan_select_validates_f32() {
 }
 
 #[test]
-#[ignore]
 fn cascade_attention_plan_select_validates_f16() {
     let (_ctx, stream) = setup();
     let desc = CascadeAttentionDescriptor {
@@ -64,7 +63,6 @@ fn cascade_attention_plan_select_validates_f16() {
 }
 
 #[test]
-#[ignore]
 fn cascade_attention_plan_select_validates_bf16() {
     let (_ctx, stream) = setup();
     let desc = CascadeAttentionDescriptor {

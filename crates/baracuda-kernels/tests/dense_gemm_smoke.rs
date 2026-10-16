@@ -20,8 +20,9 @@
 //! f16 / bf16 accumulate in f32 and round once to half storage —
 //! tolerance is a few storage ULPs (`4e-3` / `1.6e-2` relative).
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-kernels --release --test dense_gemm_smoke -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-kernels --release --test dense_gemm_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -248,7 +249,6 @@ fn run_dense_f32(
 // ============================================================================
 
 #[test]
-#[ignore]
 fn dense_f32_rrr_basic() {
     // Tight lds, single batch, β = 0, ragged shape.
     run_dense_f32(
@@ -269,7 +269,6 @@ fn dense_f32_rrr_basic() {
 }
 
 #[test]
-#[ignore]
 fn dense_f32_rcr_basic() {
     // RCR: B col-major [K, N] → ldb ≥ K.
     run_dense_f32(
@@ -290,7 +289,6 @@ fn dense_f32_rcr_basic() {
 }
 
 #[test]
-#[ignore]
 fn dense_f32_crr_basic() {
     // CRR: A col-major [M, K] → lda ≥ M. The grad-weight shape.
     run_dense_f32(
@@ -311,7 +309,6 @@ fn dense_f32_crr_basic() {
 }
 
 #[test]
-#[ignore]
 fn dense_f32_rrr_padded_lds_beta() {
     // Padded leading dims (row-slice views) + β-accumulate in one go.
     run_dense_f32(
@@ -332,7 +329,6 @@ fn dense_f32_rrr_padded_lds_beta() {
 }
 
 #[test]
-#[ignore]
 fn dense_f32_rcr_padded_lds() {
     run_dense_f32(
         20,
@@ -352,7 +348,6 @@ fn dense_f32_rcr_padded_lds() {
 }
 
 #[test]
-#[ignore]
 fn dense_f32_crr_padded_lds() {
     run_dense_f32(
         21,
@@ -372,7 +367,6 @@ fn dense_f32_crr_padded_lds() {
 }
 
 #[test]
-#[ignore]
 fn dense_f32_rrr_strided_batch() {
     // batch = 3, disjoint slots, padded D ld.
     let (m, n, k) = (16usize, 13usize, 9usize);
@@ -394,7 +388,6 @@ fn dense_f32_rrr_strided_batch() {
 }
 
 #[test]
-#[ignore]
 fn dense_f32_rrr_batch_broadcast_a() {
     // stride_a = 0: one A shared across all 3 slots (the GQA-ish case).
     let (m, n, k) = (8usize, 12usize, 10usize);
@@ -420,7 +413,6 @@ fn dense_f32_rrr_batch_broadcast_a() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn dense_f64_rrr_basic() {
     let (ctx, stream) = gpu_context();
     let (m, n, k) = (24i32, 19i32, 15i32);
@@ -603,7 +595,6 @@ fn run_dense_half<T, FI, FO>(
 }
 
 #[test]
-#[ignore]
 fn dense_f16_rrr_basic() {
     run_dense_half::<f16, _, _>(
         DenseGemmLayout::Rrr,
@@ -616,7 +607,6 @@ fn dense_f16_rrr_basic() {
 }
 
 #[test]
-#[ignore]
 fn dense_bf16_rcr_basic() {
     run_dense_half::<bf16, _, _>(
         DenseGemmLayout::Rcr,
@@ -633,7 +623,6 @@ fn dense_bf16_rcr_basic() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn dense_f32_direct_ffi() {
     use core::ffi::c_void;
 
@@ -713,7 +702,6 @@ fn dense_f32_direct_ffi() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn dense_can_implement_rejections() {
     // Valid baseline.
     assert_eq!(
@@ -792,7 +780,6 @@ fn dense_can_implement_rejections() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn dense_plan_rejects_undersized_and_negative_stride_buffers() {
     let (ctx, stream) = gpu_context();
     let (m, n, k) = (8i32, 6i32, 4i32);
@@ -891,7 +878,6 @@ fn dense_plan_rejects_undersized_and_negative_stride_buffers() {
 // ============================================================================
 
 #[test]
-#[ignore]
 fn dense_f32_concurrent_handle_pool() {
     init().expect("driver init");
     let threads: Vec<_> = (0..12)

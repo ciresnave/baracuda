@@ -38,10 +38,17 @@ jobs:
       - name: cargo gpu-test (baracuda-driver, device-tests)
         shell: bash
         run: cargo gpu-test -p baracuda-driver --features device-tests
+      - name: cargo gpu-test (baracuda-kernels, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels.json
+        run: cargo gpu-test -p baracuda-kernels --features device-tests
       - name: Upload run record
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: device-test-results
-          path: device-test-results.json
+          path: |
+            device-test-results.json
+            device-test-results-kernels.json
           if-no-files-found: error

@@ -14,9 +14,10 @@
 //! - f32 / f64: bit-exact.
 //! - f16 / bf16: relative tolerance matching the contig dtype tests.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_broadcast_dtype_smoke -- --ignored`.
+//!   --test binary_broadcast_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -449,91 +450,76 @@ fn run_bf16(op: Op) {
 // `binary_broadcast_smoke.rs`.
 
 #[test]
-#[ignore]
 fn broadcast_add_f16_row_bias() {
     run_f16(Op::Add);
 }
 
 #[test]
-#[ignore]
 fn broadcast_add_bf16_row_bias() {
     run_bf16(Op::Add);
 }
 
 #[test]
-#[ignore]
 fn broadcast_add_f64_row_bias() {
     run_f64(Op::Add);
 }
 
 #[test]
-#[ignore]
 fn broadcast_sub_f32_row_bias() {
     run_f32(Op::Sub);
 }
 
 #[test]
-#[ignore]
 fn broadcast_sub_f16_row_bias() {
     run_f16(Op::Sub);
 }
 
 #[test]
-#[ignore]
 fn broadcast_sub_bf16_row_bias() {
     run_bf16(Op::Sub);
 }
 
 #[test]
-#[ignore]
 fn broadcast_sub_f64_row_bias() {
     run_f64(Op::Sub);
 }
 
 #[test]
-#[ignore]
 fn broadcast_mul_f32_row_bias() {
     run_f32(Op::Mul);
 }
 
 #[test]
-#[ignore]
 fn broadcast_mul_f16_row_bias() {
     run_f16(Op::Mul);
 }
 
 #[test]
-#[ignore]
 fn broadcast_mul_bf16_row_bias() {
     run_bf16(Op::Mul);
 }
 
 #[test]
-#[ignore]
 fn broadcast_mul_f64_row_bias() {
     run_f64(Op::Mul);
 }
 
 #[test]
-#[ignore]
 fn broadcast_div_f32_row_bias() {
     run_f32(Op::Div);
 }
 
 #[test]
-#[ignore]
 fn broadcast_div_f16_row_bias() {
     run_f16(Op::Div);
 }
 
 #[test]
-#[ignore]
 fn broadcast_div_bf16_row_bias() {
     run_bf16(Op::Div);
 }
 
 #[test]
-#[ignore]
 fn broadcast_div_f64_row_bias() {
     run_f64(Op::Div);
 }

@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels"
-version = "0.0.1-alpha.116"
+version = "0.0.1-alpha.117"
 description = "Unified ML op facade for the baracuda CUDA ecosystem. Exposes every primitive an ML framework would expect (union of PyTorch torch.* + nn.functional and JAX lax.* / numpy ops) through a single Plan-based Rust surface, internally dispatching to baracuda-cutlass, the baracuda-* NVIDIA-library wrappers, or bespoke baracuda-kernels-sys kernels."
 edition.workspace = true
 license.workspace = true
@@ -21,6 +21,15 @@ exclude = ["*.profraw", "target/"]
 # `default-features = false, features = ["sm80"]` if you don't want
 # the ~3-5min nvcc cost on first build.
 default = ["sm80", "fa2"]
+
+# On-device integration tests (`tests/*`): built only with this feature, so a
+# no-GPU `cargo test` does not compile them. NOT ignored and NOT hidden: CI
+# type-checks them on every PR (`DOCS_RS=1 cargo clippy -p baracuda-kernels
+# --tests --features device-tests`) and the self-hosted device runner builds and
+# RUNS them (`cargo gpu-test -p baracuda-kernels --features device-tests`); a
+# stale or missing device run is a red check. See docs/DEVICE-TESTS.md and
+# docs/UNVERIFIED-HARDWARE.md for what cannot run on that box.
+device-tests = []
 
 # Architecture features forwarded to the bespoke kernel crate.
 sm80 = ["baracuda-kernels-sys/sm80", "baracuda-cutlass/sm80"]

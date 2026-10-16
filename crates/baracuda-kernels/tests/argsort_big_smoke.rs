@@ -5,10 +5,13 @@
 //! family. Verifies that the resulting permutation actually sorts the
 //! row across {f32, f64, i32, i64} × rows of length {2000, 5000, 32000}.
 
+#[cfg(feature = "device-tests")]
 use core::ffi::c_void;
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
+#[cfg(feature = "device-tests")]
 fn setup() -> (Context, Stream) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -17,6 +20,7 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
+#[cfg(feature = "device-tests")]
 fn check_sorted_ascending<T: PartialOrd + Copy + core::fmt::Debug>(input: &[T], indices: &[i32]) {
     assert_eq!(input.len(), indices.len());
     for i in 1..indices.len() {
@@ -31,6 +35,7 @@ fn check_sorted_ascending<T: PartialOrd + Copy + core::fmt::Debug>(input: &[T], 
     }
 }
 
+#[cfg(feature = "device-tests")]
 fn check_sorted_descending<T: PartialOrd + Copy + core::fmt::Debug>(input: &[T], indices: &[i32]) {
     assert_eq!(input.len(), indices.len());
     for i in 1..indices.len() {
@@ -78,7 +83,7 @@ fn argsort_big_workspace_size_grows_with_inputs() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_big_f32_row_2000_ascending() {
     let (ctx, stream) = setup();
     let row_len = 2000i32;
@@ -116,7 +121,7 @@ fn argsort_big_f32_row_2000_ascending() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_big_f32_row_32000_descending() {
     let (ctx, stream) = setup();
     let row_len = 32000i32;
@@ -153,7 +158,7 @@ fn argsort_big_f32_row_32000_descending() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_big_f64_row_5000_multibatch() {
     let (ctx, stream) = setup();
     let row_len = 5000i32;
@@ -207,7 +212,7 @@ fn argsort_big_f64_row_5000_multibatch() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_big_i32_row_2048_ascending() {
     let (ctx, stream) = setup();
     let row_len = 2048i32;
@@ -245,7 +250,7 @@ fn argsort_big_i32_row_2048_ascending() {
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn argsort_big_i64_row_2000_ascending() {
     let (ctx, stream) = setup();
     let row_len = 2000i32;
@@ -282,6 +287,7 @@ fn argsort_big_i64_row_2000_ascending() {
 }
 
 #[test]
+#[cfg(feature = "device-tests")]
 fn argsort_big_workspace_too_small_returns_4() {
     let (ctx, stream) = setup();
     let row_len = 2048i32;

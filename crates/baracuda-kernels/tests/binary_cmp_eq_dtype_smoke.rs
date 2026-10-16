@@ -7,9 +7,10 @@
 //! exact u8 results (0 / 1) so bit-exact compare against the host
 //! reference applies for all dtypes.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test binary_cmp_eq_dtype_smoke -- --ignored`.
+//!   --test binary_cmp_eq_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -27,7 +28,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn cmp_eq_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -92,7 +92,6 @@ fn cmp_eq_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_eq_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -157,7 +156,6 @@ fn cmp_eq_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn cmp_eq_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

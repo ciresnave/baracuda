@@ -9,9 +9,10 @@
 //!      ({64, 128, 192, 256} × {f16, bf16} × {causal, non-causal});
 //!      asserts the launch succeeds and writes a non-zero dQ.
 //!
-//! All tests are `#[ignore]`-gated. Build with `--features fa2_backward,sm80`.
+//! All tests are gated behind the `device-tests` feature-gated. Build with `--features fa2_backward,sm80`.
 
 #![cfg(feature = "fa2_backward")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -50,7 +51,6 @@ fn gen_bf16(n: usize, phase: f32) -> Vec<bf16> {
 // =========================================================================
 
 #[test]
-#[ignore]
 fn fa2_bw_workspace_size_nonzero_when_fa2() {
     let (_ctx, stream) = setup();
     for &dk in &[32_i32, 64, 96, 128, 192, 256] {
@@ -86,7 +86,6 @@ fn fa2_bw_workspace_size_nonzero_when_fa2() {
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_workspace_size_zero_when_bespoke() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaBackwardDescriptor::new(
@@ -107,7 +106,6 @@ fn fa2_bw_workspace_size_zero_when_bespoke() {
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_eligibility_f32_picks_bespoke() {
     let (_ctx, stream) = setup();
     let desc = FlashSdpaBackwardDescriptor::new(
@@ -134,7 +132,6 @@ fn fa2_bw_eligibility_f32_picks_bespoke() {
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_eligibility_bad_hdim_picks_bespoke() {
     let (_ctx, stream) = setup();
     // 72 is NOT in {32, 64, 96, 128, 192, 256} and ≤ 128 (bespoke eligible).
@@ -622,49 +619,41 @@ fn run_fa2_bw_bf16(dk: i32, is_causal: bool) {
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_smoke_f16_d64_noncausal() {
     run_fa2_bw_f16(64, false);
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_smoke_f16_d64_causal() {
     run_fa2_bw_f16(64, true);
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_smoke_f16_d128_noncausal() {
     run_fa2_bw_f16(128, false);
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_smoke_f16_d128_causal() {
     run_fa2_bw_f16(128, true);
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_smoke_f16_d192_noncausal() {
     run_fa2_bw_f16(192, false);
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_smoke_f16_d256_noncausal() {
     run_fa2_bw_f16(256, false);
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_smoke_bf16_d128_noncausal() {
     run_fa2_bw_bf16(128, false);
 }
 
 #[test]
-#[ignore]
 fn fa2_bw_smoke_bf16_d128_causal() {
     run_fa2_bw_bf16(128, true);
 }

@@ -13,9 +13,10 @@
 //! - Strided-batched GEMM, f32 alpha/beta — `batched_f16_rcr` (uses
 //!   `half::f16` for activations).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
 
 #![allow(unused_mut)]
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -41,7 +42,6 @@ fn setup() -> (Context, Stream) {
 /// `f32_simt_rrr` non-bias GEMM. Tests the most universally-available
 /// trampoline (SIMT works on every Cutlass-supported arch).
 #[test]
-#[ignore]
 fn gemm_f32_simt_rrr_ffi() {
     let (ctx, stream) = setup();
 
@@ -130,7 +130,6 @@ fn gemm_f32_simt_rrr_ffi() {
 /// `bias_f32_simt_rrr` bias-fused GEMM. Adds a per-column broadcast
 /// bias on top of the base GEMM result.
 #[test]
-#[ignore]
 fn gemm_bias_f32_simt_rrr_ffi() {
     let (ctx, stream) = setup();
 
@@ -212,7 +211,6 @@ fn gemm_bias_f32_simt_rrr_ffi() {
 
 /// `batched_f16_rcr` strided-batched GEMM. Two batches, equal stride.
 #[test]
-#[ignore]
 fn gemm_batched_f16_rcr_ffi() {
     let (ctx, stream) = setup();
 
