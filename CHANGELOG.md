@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.122 - 2026-10-16 (Docs: UNVERIFIED list for baracuda-kernels feature-gated tests)
+
+Workspace alpha.122 (proposed; PM allocates at gate).
+
+- Adds section D to docs/UNVERIFIED-HARDWARE.md (57 files / 263 tests behind features the device run does not build).
+
 ## 0.0.1-alpha.121 - 2026-10-16 (Test: retire #[ignore] in baracuda-kernels (slice 5/5))
 
 Workspace alpha.121 (proposed; PM allocates at gate).

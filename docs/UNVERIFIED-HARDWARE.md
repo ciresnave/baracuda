@@ -32,6 +32,34 @@ Once the runner is set up, an inventory step should record which of these librar
 that does moves out of this list into its crate's `device-tests` run, and each that does not
 stays here by name.
 
+## D. `baracuda-kernels` test files behind cargo features the device run does not build — UNVERIFIED
+
+The kernels `#[ignore]` retirement (alpha.117-121) gates device tests behind `device-tests`; the
+device run builds `--features device-tests` plus the defaults (`sm80`, `fa2`) and ran
+2055 passed, 0 failed, 0 skipped (`cargo gpu-test`, RTX 4070 sm_89, 2026-10-16). Test files that
+additionally need another feature, a vendor library or a source-only build option are NOT built
+by that run and are UNVERIFIED (counts are `#[test]` attributes at `main`, alpha.121; they are
+type-checked in CI, never executed):
+
+| Feature | Files | Tests |
+|---|---|---|
+| `sm89` | 13 | 98 |
+| `cudnn` | 19 | 73 |
+| `fa2_backward` | 3 | 29 |
+| `mamba` | 8 | 21 |
+| `flashinfer` | 3 | 11 |
+| `bnb_nf4` | 3 | 9 |
+| `marlin` | 2 | 8 |
+| `ring_attention` | 1 | 4 |
+| `xformers_sparse24` | 2 | 3 |
+| `xformers_blocksparse` | 1 | 3 |
+| `awq` | 1 | 2 |
+| `mhc` | 1 | 2 |
+
+Total 57 files / 263 tests. `sm89` is the closest to runnable (the runner is sm_89); the next
+step is adding feature sets to the device-run command, one at a time, each reporting its
+ran-count. A feature that builds and runs moves out of this table.
+
 ## C. Runtime-declared skips
 
 A `require_optional!` that declines at run time (an optional capability absent on the box) is
