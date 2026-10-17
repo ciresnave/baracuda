@@ -11,7 +11,8 @@
 //! (the bug) is distinguishable from "kernel never wrote" (a launch/ABI failure).
 //!
 //! Ignored by default (needs a CUDA device + nvrtc); run with:
-//! `cargo test -p baracuda-kernels-bench --test alpha78_relu_add_ondevice -- --ignored --nocapture`
+//! `cargo test -p baracuda-kernels-bench --test alpha78_relu_add_ondevice --features device-tests -- --nocapture`
+#![cfg(feature = "device-tests")]
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::{DeviceBuffer, Module};
@@ -41,7 +42,6 @@ fn count_unit_divisor(contract_text: &str) -> u32 {
 }
 
 #[test]
-#[ignore = "requires a CUDA device + nvrtc"]
 fn relu_add_f32_scalar_writes_the_right_answer_on_device() {
     let (ctx, stream) = setup_device();
 
@@ -151,7 +151,6 @@ fn relu_add_f32_scalar_writes_the_right_answer_on_device() {
 }
 
 #[test]
-#[ignore = "requires a CUDA device + nvrtc"]
 fn relu_add_f32_vectorized_launches_by_count_unit_on_device() {
     // The VECTORIZED (float4) path — align 16 → Schedule::Vectorized{4}, whose
     // contract advertises `count_unit: vectors_x4`. A launcher that reads count_unit
@@ -248,7 +247,6 @@ fn relu_add_f32_vectorized_launches_by_count_unit_on_device() {
 }
 
 #[test]
-#[ignore = "GAP-001 emitter-attribution sweep — requires a CUDA device + nvrtc"]
 fn gap001_relu_add_n7_fuel_geometry_sweep() {
     // GAP-001 attribution: does the EMITTED relu(add) kernel, at Fuel's exact
     // failing geometry (n=7, their a/b), launched with a CORRECT synced launch,

@@ -27,20 +27,33 @@
 //! out; if the emitter and this file disagree, one of them is wrong and the
 //! test can say so.
 //!
-//! `#[ignore]`d — needs a CUDA device + nvrtc. Run with:
-//! `cargo test -p baracuda-kernels-bench --test rowreduce_bitmove_matrix -- --ignored`
+//! Gated behind the `device-tests` feature — needs a CUDA device + nvrtc. Run with:
+//! `cargo test -p baracuda-kernels-bench --test rowreduce_bitmove_matrix --features device-tests`
 
+#[cfg(feature = "device-tests")]
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
+#[cfg(feature = "device-tests")]
 use baracuda_driver::DeviceBuffer;
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, Module, Stream, require_optional};
+#[cfg(feature = "device-tests")]
 use baracuda_kernels_bench::{current_hwstamp, setup_device};
-use baracuda_kernels_types::{ArchSku, ElementKind, OpCategory, OperandDesc, structure_key};
+use baracuda_kernels_types::ElementKind;
+#[cfg(feature = "device-tests")]
+use baracuda_kernels_types::{ArchSku, OpCategory, OperandDesc, structure_key};
+#[cfg(feature = "device-tests")]
 use unpopped::Compiler;
+#[cfg(feature = "device-tests")]
 use unpopped::GeneratedKernel;
-use unpopped::ir::{ReduceOp, ReduceStage, UnaryOp, reduced};
+use unpopped::ir::{ReduceOp, UnaryOp};
+#[cfg(feature = "device-tests")]
+use unpopped::ir::{ReduceStage, reduced};
+#[cfg(feature = "device-tests")]
 use unpopped::{OpDef, generate, input};
 
+#[cfg(feature = "device-tests")]
 const ROWS: i64 = 32;
+#[cfg(feature = "device-tests")]
 const K: i64 = 128;
 
 /// One matrix cell. Every expectation is a hand-written bit pattern.
@@ -120,6 +133,7 @@ const CELLS: &[Cell] = &[
     },
 ];
 
+#[cfg(feature = "device-tests")]
 /// Emit the cell and assert the emitter took the bit-move route.
 ///
 /// The control is here, with the emission: it is a claim about the EMITTER,
@@ -172,15 +186,19 @@ fn emit(cell: &Cell) -> GeneratedKernel {
     kernel
 }
 
+#[cfg(feature = "device-tests")]
 /// The row the NaN goes in, and the column within it. Named because the flat
 /// index alone (`host[60]`) states neither, and the assertions read `out[0]`
 /// for "the NaN row" and `out[K]` for "a finite row" — a relationship the
 /// constant has to preserve and could not express.
 const NAN_ROW: usize = 0;
+#[cfg(feature = "device-tests")]
 const NAN_COL: usize = 60;
+#[cfg(feature = "device-tests")]
 /// The column carrying the second finite value in every row.
 const ALT_COL: usize = 7;
 
+#[cfg(feature = "device-tests")]
 /// Row `NAN_ROW` carries the NaN; every row carries both finite values.
 fn rows(cell: &Cell) -> Vec<u16> {
     let k = K as usize;
@@ -196,6 +214,7 @@ fn rows(cell: &Cell) -> Vec<u16> {
     host
 }
 
+#[cfg(feature = "device-tests")]
 fn run(ctx: &Context, stream: &Stream, kernel: &GeneratedKernel, host: &[u16]) -> Vec<u16> {
     let compiler =
         NvrtcCompiler::new(ArchSku::Sm89.into()).expect("Sm89 is a well-formed cuda: target");
@@ -227,6 +246,7 @@ fn run(ctx: &Context, stream: &Stream, kernel: &GeneratedKernel, host: &[u16]) -
     out
 }
 
+#[cfg(feature = "device-tests")]
 fn check(cell: &Cell, out: &[u16]) {
     eprintln!(
         "  {:<14} NaN row: want 0x{:04X} got 0x{:04X}   finite row: want 0x{:04X} got 0x{:04X}",
@@ -295,7 +315,7 @@ fn controls_discriminate_a_no_fold_kernel() {
 }
 
 #[test]
-#[ignore = "requires a CUDA device + nvrtc"]
+#[cfg(feature = "device-tests")]
 fn bitmove_rowreduce_matrix_preserves_payloads() {
     let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
         .lock()

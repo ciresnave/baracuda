@@ -1321,6 +1321,7 @@ impl PytorchBaseline {
 #[cfg(test)]
 mod gate_tests {
     use super::*;
+    #[cfg(feature = "device-tests")]
     use baracuda_kernels_types::{
         DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc, Provenance, merge,
         structure_key,
@@ -1497,9 +1498,9 @@ mod gate_tests {
 
     /// On-device smoke: the RTX 4070 stamps as sm89, and `gate_cell` times two
     /// candidates into a measured `DispatchEntry` that `merge` folds over a seed.
-    /// Ignored by default (needs a live GPU); run with `--ignored`.
+    /// Gated behind the `device-tests` feature (needs a live GPU).
     #[test]
-    #[ignore = "requires a CUDA device"]
+    #[cfg(feature = "device-tests")]
     fn hwstamp_and_gate_on_device() {
         let (ctx, stream) = setup_device();
         let device = Device::get(0).expect("device");

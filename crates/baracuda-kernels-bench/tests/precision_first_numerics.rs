@@ -15,7 +15,8 @@
 //! bitwise cross-hardware reproducibility, validated by construction.)
 //!
 //! Ignored by default (needs a CUDA device + nvrtc); run with:
-//! `cargo test -p baracuda-kernels-bench --test precision_first_numerics -- --ignored --nocapture`
+//! `cargo test -p baracuda-kernels-bench --test precision_first_numerics --features device-tests -- --nocapture`
+#![cfg(feature = "device-tests")]
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::{DeviceBuffer, Module};
@@ -26,7 +27,6 @@ use baracuda_kernels_types::{
 use unpopped::{Compiler, OpDef, ReduceOp, VariantFidelity, generate_variants, input};
 
 #[test]
-#[ignore = "requires a CUDA device + nvrtc"]
 fn prec_reduction_beats_saturating_float_serial_sum() {
     let (ctx, stream) = setup_device();
 

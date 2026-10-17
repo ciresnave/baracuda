@@ -18,8 +18,9 @@
 //! bit-move path does not, END TO END through a real fold, a real warp shuffle
 //! and a real store — not through a hand-written probe.
 //!
-//! `#[ignore]`d — needs a CUDA device + nvrtc. Run with:
-//! `cargo test -p baracuda-kernels-bench --test rowreduce_bitmove_ondevice -- --ignored`
+//! Gated behind the `device-tests` featured — needs a CUDA device + nvrtc. Run with:
+//! `cargo test -p baracuda-kernels-bench --test rowreduce_bitmove_ondevice --features device-tests`
+#![cfg(feature = "device-tests")]
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
@@ -122,7 +123,6 @@ fn input_rows() -> Vec<u16> {
 }
 
 #[test]
-#[ignore = "requires a CUDA device + nvrtc"]
 fn bitmove_rowreduce_preserves_the_nan_payload_end_to_end() {
     let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
         .lock()

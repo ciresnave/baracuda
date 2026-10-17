@@ -5,7 +5,8 @@
 //! EXACTLY as Fuel's jit_cuda_load.rs does: it only launches a symbol ending in
 //! `_scalar`, and passes n = output element count (scalar ABI: in0,in1,out,n).
 //!
-//! Run: `cargo test -p baracuda-kernels-bench --test synthesize_relu_add_repro -- --ignored --nocapture`
+//! Run: `cargo test -p baracuda-kernels-bench --test synthesize_relu_add_repro --features device-tests -- --nocapture`
+#![cfg(feature = "device-tests")]
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::{DeviceBuffer, Module};
@@ -182,7 +183,6 @@ fn run_case(
 }
 
 #[test]
-#[ignore = "requires CUDA + nvrtc; on-device synthesize-path correctness guard"]
 fn synthesize_relu_add_across_configs() {
     let (ctx, stream) = setup_device();
     // Sweep operand configs Fuel could plausibly send. align + contiguous-length

@@ -34,7 +34,8 @@
 //!
 //! Run under the gpu-run lock:
 //!   pwsh scripts/gpu-run.ps1 -Project baracuda -- cargo test -p baracuda-kernels-bench \
-//!       --test max_nan_propagation -- --ignored --nocapture
+//!       --test max_nan_propagation --features device-tests -- --nocapture
+#![cfg(feature = "device-tests")]
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::{Context, DeviceBuffer, Module, Stream};
@@ -223,7 +224,6 @@ fn check_op(ctx: &Context, stream: &Stream, region_op: &str, fused_id: &str, is_
 }
 
 #[test]
-#[ignore = "requires CUDA + nvrtc; on-device N2 NaN-propagation check on the 4070"]
 fn max_and_min_nan_propagate_through_cuda_compile_chain() {
     let (ctx, stream) = setup_device();
     // Serial (one context, one test) — never two GPU contexts in parallel.

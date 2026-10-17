@@ -401,3 +401,12 @@ jobs:
       # failing.
       - name: cargo check baracuda-kernels-bench --tests --features ${{ matrix.arch }}
         run: cargo check --locked -p baracuda-kernels-bench --tests --features ${{ matrix.arch }}
+      - name: cargo check baracuda-kernels-bench --tests --features device-tests
+        run: cargo check --locked -p baracuda-kernels-bench --tests --features ${{ matrix.arch }},device-tests
+      - name: cargo check baracuda-cuda-emit / cuda-seam --tests (nvrtc, device-tests off / on)
+        if: matrix.arch == 'sm80'
+        run: |
+          cargo check --locked -p baracuda-cuda-emit --tests --features nvrtc
+          cargo check --locked -p baracuda-cuda-emit --tests --features nvrtc,device-tests
+          cargo check --locked -p baracuda-cuda-seam --tests --features nvrtc
+          cargo check --locked -p baracuda-cuda-seam --tests --features nvrtc,device-tests

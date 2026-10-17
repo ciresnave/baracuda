@@ -31,6 +31,7 @@
 //!
 //! Run under the gpu-run lock:
 //!   cargo gpu-test -p baracuda-kernels-bench --test emitter_integer_ondevice -- --nocapture
+#![cfg(feature = "device-tests")]
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::{Context, DeviceBuffer, Module, Stream};
@@ -127,7 +128,6 @@ where
 }
 
 #[test]
-#[ignore = "requires CUDA + nvrtc; on-device emitter-integer correctness on the 4070"]
 fn emitter_integer_kernels_are_correct_on_device() {
     let (ctx, stream) = setup_device();
 

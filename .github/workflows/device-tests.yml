@@ -58,6 +58,21 @@ jobs:
         env:
           BARACUDA_RESULTS_FILE: device-test-results-ozimmu.json
         run: cargo gpu-test -p baracuda-ozimmu --features device-tests
+      - name: cargo gpu-test (baracuda-kernels-bench, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-kernels-bench.json
+        run: cargo gpu-test -p baracuda-kernels-bench --features sm89,device-tests
+      - name: cargo gpu-test (baracuda-cuda-emit, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cuda-emit.json
+        run: cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests
+      - name: cargo gpu-test (baracuda-cuda-seam, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cuda-seam.json
+        run: cargo gpu-test -p baracuda-cuda-seam --features nvrtc,device-tests
       - name: cargo gpu-test (baracuda-runtime, device-tests)
         shell: bash
         env:
@@ -74,5 +89,8 @@ jobs:
             device-test-results-cutlass.json
             device-test-results-flashinfer.json
             device-test-results-ozimmu.json
+            device-test-results-kernels-bench.json
+            device-test-results-cuda-emit.json
+            device-test-results-cuda-seam.json
             device-test-results-runtime.json
           if-no-files-found: error

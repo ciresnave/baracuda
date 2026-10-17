@@ -90,7 +90,8 @@
 //!
 //! Run:
 //!   cargo test -p baracuda-kernels-bench --release \
-//!     --test linalg_sample_convergence -- --ignored --nocapture
+//!     --test linalg_sample_convergence --features device-tests -- --nocapture
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::DeviceBuffer;
 use baracuda_kernels::{
@@ -111,7 +112,6 @@ const LADDER: &[(usize, u64)] = &[(5, 3), (5, 10), (11, 10), (11, 50), (25, 50)]
 const CRITERION_NS: f64 = 807_700.0;
 
 #[test]
-#[ignore = "requires a CUDA device; run explicitly with --ignored"]
 fn linalg_timing_dispersion_swamps_any_sample_size_trend() {
     let (ctx, stream) = setup_device();
     let nu = N as usize;

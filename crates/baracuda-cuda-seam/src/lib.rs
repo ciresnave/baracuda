@@ -882,10 +882,10 @@ mod tests {
 
     /// End-to-end live path on-device: a Fuel `JitRequest` through the
     /// `Synthesizer` impl yields a real nvrtc PTX artifact (retrievable for the
-    /// seam-call site to bind). Ignored (needs nvrtc + CUDA).
+    /// seam-call site to bind). Gated behind the `device-tests` feature (needs nvrtc + CUDA).
     #[cfg(feature = "nvrtc")]
     #[test]
-    #[ignore = "requires nvrtc runtime + CUDA install"]
+    #[cfg(feature = "device-tests")]
     fn synthesizer_produces_real_ptx_on_device() {
         let region = op(
             OpTag::Relu,

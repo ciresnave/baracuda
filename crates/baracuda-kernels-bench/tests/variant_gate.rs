@@ -12,7 +12,8 @@
 //! elect the split-K variant and the artifact should record its entry point.
 //!
 //! Ignored by default (needs a CUDA device + nvrtc); run with:
-//! `cargo test -p baracuda-kernels-bench --test variant_gate -- --ignored`
+//! `cargo test -p baracuda-kernels-bench --test variant_gate --features device-tests`
+#![cfg(feature = "device-tests")]
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
@@ -31,7 +32,6 @@ const N_CHUNKS: i64 = 256;
 const BLOCK: u32 = 256;
 
 #[test]
-#[ignore = "requires a CUDA device + nvrtc"]
 fn variant_gate_loop_end_to_end() {
     // ⚠️ Held for the WHOLE body, not just the timing call. Two device tests
     // sharing one GPU flip this gate's winner 2 runs in 3 — and a lock inside
@@ -256,7 +256,6 @@ fn variant_gate_loop_end_to_end() {
 /// oracle its `BitIdentical` fidelity earns: the two kernels' outputs must be
 /// **memcmp-identical**, not merely close.
 #[test]
-#[ignore = "requires a CUDA device + nvrtc"]
 fn smemrow_variant_is_bit_identical_and_gated() {
     // ⚠️ Held for the WHOLE body, not just the timing call. Two device tests
     // sharing one GPU flip this gate's winner 2 runs in 3 — and a lock inside
