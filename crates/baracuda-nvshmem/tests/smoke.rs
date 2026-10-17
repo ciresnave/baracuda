@@ -1,13 +1,13 @@
 //! NVSHMEM smoke tests. NVSHMEM is Linux-only in practice and requires the
 //! NVSHMEM runtime installed *and* a multi-process launch (`nvshmrun` /
 //! `mpirun`). On hosts without it, or when run as a plain `cargo test` single
-//! process, these skip gracefully instead of failing — hence `#[ignore]`.
+//! process, these skip gracefully instead of failing — hence gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::require_optional;
 use baracuda_nvshmem::{Context, Team, version};
 
 #[test]
-#[ignore = "requires NVSHMEM runtime (Linux, sm_70+) + a PE launcher"]
 fn nvshmem_loads_and_reports_version() {
     match version() {
         Ok((major, minor)) => {
@@ -19,7 +19,6 @@ fn nvshmem_loads_and_reports_version() {
 }
 
 #[test]
-#[ignore = "requires NVSHMEM runtime + a PE launcher"]
 fn context_init_and_pe_discovery() {
     match Context::init() {
         Ok(ctx) => {
@@ -34,7 +33,6 @@ fn context_init_and_pe_discovery() {
 }
 
 #[test]
-#[ignore = "requires NVSHMEM runtime + a PE launcher"]
 fn symmetric_heap_alloc_and_self_put() {
     let ctx = require_optional!(
         Context::init(),
@@ -49,7 +47,6 @@ fn symmetric_heap_alloc_and_self_put() {
 }
 
 #[test]
-#[ignore = "requires NVSHMEM runtime + a PE launcher"]
 fn world_team_matches_context() {
     let ctx = require_optional!(
         Context::init(),

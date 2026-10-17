@@ -2,18 +2,18 @@
 //!
 //! These tests require a working NCCL install (typically Linux multi-GPU
 //! hosts; Windows NCCL is experimental and rarely shipped). On hosts
-//! without NCCL the tests skip gracefully via `#[ignore]` — they would
+//! without NCCL the tests skip gracefully via `require_optional!` (the file is gated behind the `device-tests` feature) — they would
 //! otherwise fail at `NcclUniqueId::generate()` with `LoaderError::
 //! LibraryNotFound`.
 //!
 //! Multi-rank validation of the id is out of scope for Phase 52 (needs
 //! 2+ GPUs or a process-spawning harness).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::require_optional;
 use baracuda_nccl::NcclUniqueId;
 
 #[test]
-#[ignore = "requires NCCL installed (typically Linux multi-GPU hosts)"]
 fn nccl_unique_id_generate_roundtrip() {
     let id = require_optional!(NcclUniqueId::generate(), "NCCL runtime (ncclGetUniqueId)");
 
@@ -30,7 +30,6 @@ fn nccl_unique_id_generate_roundtrip() {
 }
 
 #[test]
-#[ignore = "requires NCCL installed"]
 fn nccl_unique_id_generate_is_nonzero() {
     let id = require_optional!(NcclUniqueId::generate(), "NCCL runtime (ncclGetUniqueId)");
     let bytes = id.as_bytes();
@@ -43,7 +42,6 @@ fn nccl_unique_id_generate_is_nonzero() {
 }
 
 #[test]
-#[ignore = "requires NCCL installed"]
 fn nccl_unique_id_generate_is_unique_per_call() {
     let a = require_optional!(NcclUniqueId::generate(), "NCCL runtime (ncclGetUniqueId)");
     let b = NcclUniqueId::generate().expect("second generate should succeed");

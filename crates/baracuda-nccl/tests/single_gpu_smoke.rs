@@ -14,9 +14,10 @@
 //! the standard dev environment. Phase 53+ (Megatron TP, FSDP) will
 //! introduce a multi-rank harness.
 //!
-//! These tests are `#[ignore]`-d by default. Run with
-//! `cargo test -p baracuda-nccl --test single_gpu_smoke -- --ignored`
+//! These tests are gated behind the `device-tests` feature. Run with
+//! `cargo test -p baracuda-nccl --test single_gpu_smoke --features device-tests`
 //! on a host that has NCCL installed.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, require_optional};
 use baracuda_nccl::{Communicator, NcclReduceOp};
@@ -40,7 +41,6 @@ fn try_bringup() -> Option<(Context, Stream, Communicator)> {
 }
 
 #[test]
-#[ignore = "requires NCCL installed (typically Linux multi-GPU hosts)"]
 fn new_single_gpu_reports_rank0_worldsize1() {
     let (_ctx, _stream, comm) =
         require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
@@ -53,7 +53,6 @@ fn new_single_gpu_reports_rank0_worldsize1() {
 }
 
 #[test]
-#[ignore = "requires NCCL installed"]
 fn all_reduce_single_gpu_passes_through() {
     let (ctx, stream, comm) =
         require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
@@ -72,7 +71,6 @@ fn all_reduce_single_gpu_passes_through() {
 }
 
 #[test]
-#[ignore = "requires NCCL installed"]
 fn reduce_single_gpu_passes_through() {
     let (ctx, stream, comm) =
         require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
@@ -98,7 +96,6 @@ fn reduce_single_gpu_passes_through() {
 }
 
 #[test]
-#[ignore = "requires NCCL installed"]
 fn broadcast_single_gpu_passes_through() {
     let (ctx, stream, comm) =
         require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
@@ -119,7 +116,6 @@ fn broadcast_single_gpu_passes_through() {
 }
 
 #[test]
-#[ignore = "requires NCCL installed"]
 fn all_gather_single_gpu_passes_through() {
     let (ctx, stream, comm) =
         require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
@@ -139,7 +135,6 @@ fn all_gather_single_gpu_passes_through() {
 }
 
 #[test]
-#[ignore = "requires NCCL installed"]
 fn reduce_scatter_single_gpu_passes_through() {
     let (ctx, stream, comm) =
         require_optional!(try_bringup(), "NCCL single-GPU communicator bring-up");
@@ -162,7 +157,6 @@ fn reduce_scatter_single_gpu_passes_through() {
 }
 
 #[test]
-#[ignore = "requires NCCL installed"]
 fn send_recv_self_loop_in_group() {
     // P2P self-loop: rank 0 sends to rank 0. NCCL requires `send` and
     // `recv` paired inside a group bracket on the same communicator.

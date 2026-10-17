@@ -1,19 +1,22 @@
 //! Runtime-path smoke tests for `baracuda-tensorrt`.
 //!
-//! The inference tests are `#[ignore]`d: they require a working TensorRT
+//! The inference tests are gated behind the `device-tests` feature: they require a working TensorRT
 //! install (`libnvinfer` resolvable on the loader path) **and** the C-ABI shim,
 //! which is compiled only with the `shim` feature (needs the TensorRT SDK
 //! headers; see `AUDIT.md`). Neither is present on a stock machine, so these are
 //! opt-in:
 //!
 //! ```text
-//! cargo test -p baracuda-tensorrt --features shim -- --ignored
+//! cargo test -p baracuda-tensorrt --features shim --features device-tests
 //! ```
 //!
 //! The non-ignored test exercises the pure-Rust `Dims` helper and always runs.
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::require_optional;
-use baracuda_tensorrt::{Dims, Runtime};
+use baracuda_tensorrt::Dims;
+#[cfg(feature = "device-tests")]
+use baracuda_tensorrt::Runtime;
 
 #[test]
 fn dims_new_and_slice_roundtrip() {
@@ -33,7 +36,7 @@ fn dims_new_and_slice_roundtrip() {
 }
 
 #[test]
-#[ignore = "requires a working TensorRT install + the C-ABI shim (see AUDIT.md)"]
+#[cfg(feature = "device-tests")]
 fn version_reports_trt10_or_newer() {
     // TensorRT absent (libnvinfer not loadable) is a legitimate skip under
     // `cargo gpu-test`, but a non-Loader error means TRT is present and
@@ -50,7 +53,7 @@ fn version_reports_trt10_or_newer() {
 }
 
 #[test]
-#[ignore = "requires a working TensorRT install + the C-ABI shim (see AUDIT.md)"]
+#[cfg(feature = "device-tests")]
 fn deserialize_garbage_blob_is_graceful() {
     // A runtime built without a logger; older TRT may refuse (returns null),
     // which surfaces as Err — that is itself an acceptable graceful outcome.

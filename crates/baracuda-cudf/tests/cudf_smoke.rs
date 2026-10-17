@@ -8,11 +8,15 @@
 //! validation, etc.). Those host-only checks ship as default and run on
 //! every `cargo test -p baracuda-cudf` even without a GPU or RAPIDS install.
 //!
-//! GPU/library-touching checks are marked `#[ignore]` so they run only
-//! under `cargo test -p baracuda-cudf -- --include-ignored` on a machine
+//! GPU/library-touching checks are gated behind the `device-tests` feature so they run only
+//! under `cargo gpu-test -p baracuda-cudf --features device-tests` on a machine
 //! that has `libcudf` on the loader path.
 
-use baracuda_cudf::{Column, Error, Result, Table, TypeId, version};
+use baracuda_cudf::{Column, Error, Result, Table, TypeId};
+#[cfg(feature = "device-tests")]
+use baracuda_cudf::version;
+#[cfg(feature = "device-tests")]
+use baracuda_driver::require_optional;
 use baracuda_cudf_sys::cudfStatus_t;
 
 // ---------------------------------------------------------------------------
@@ -134,17 +138,17 @@ fn result_alias_is_usable() {
 }
 
 // ---------------------------------------------------------------------------
-// GPU / libcudf-required checks. Skipped by default. Run with:
-//   cargo test -p baracuda-cudf -- --include-ignored
+// GPU / libcudf-required checks. Gated behind `device-tests`. Run with:
+//   cargo gpu-test -p baracuda-cudf --features device-tests
 // on a host that has libcudf installed.
 // ---------------------------------------------------------------------------
 
 /// Loader probe + version query. Confirms `cudf()` can find a candidate
 /// libcudf and that `cudfGetVersion` returns successfully.
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn loader_returns_version() {
-    let v = version().expect("cudf loader/version failed");
+    let v = require_optional!(version(), "libcudf (RAPIDS) shared library");
     // The C ABI returns an integer such as 25_06_00; assert it's
     // monotonic with the oldest supported RAPIDS release we target.
     assert!(v >= 22_00_00, "unexpectedly old libcudf: {v}");
@@ -154,8 +158,9 @@ fn loader_returns_version() {
 /// and type back, then let the destructor run. Catches handle-lifecycle
 /// bugs in the safe wrapper.
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn create_empty_column_lifecycle() {
+    let _libcudf = require_optional!(version(), "libcudf (RAPIDS) shared library");
     let types = [
         TypeId::Int8,
         TypeId::Int32,
@@ -178,7 +183,7 @@ fn create_empty_column_lifecycle() {
 /// `from_csv`/`from_parquet` on a non-existent path should surface as a
 /// non-success `cudfStatus_t`, not panic.
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn from_csv_missing_file_returns_error() {
     let r = Table::from_csv("/definitely/does/not/exist.csv");
     assert!(r.is_err(), "expected error from missing csv path");

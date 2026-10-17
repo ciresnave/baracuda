@@ -3,6 +3,7 @@
 //! Compresses a small batch of known input buffers, decompresses, and
 //! checks the result matches the original. Skips if nvCOMP isn't
 //! installed.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -11,7 +12,6 @@ use baracuda_nvcomp::{lz4, nvcompBatchedLZ4DecompressOpts_t, nvcompBatchedLZ4Opt
 use baracuda_runtime::{Device, DeviceBuffer, Stream};
 
 #[test]
-#[ignore = "requires nvCOMP installed + NVIDIA GPU"]
 fn lz4_compress_decompress_roundtrip() {
     require_optional!(baracuda_nvcomp::probe(), "nvCOMP runtime library installed");
 
