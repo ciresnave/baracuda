@@ -64,10 +64,10 @@
 //! ```no_run
 //! # #[cfg(feature = "flashinfer")]
 //! # fn demo(stream: &baracuda_driver::Stream) -> baracuda_flashinfer::Result<()> {
-//! use baracuda_flashinfer::{
-//!     BatchPagedDecodePlan, BatchPagedDecodeDescriptor, PagedKvCacheDescriptor,
-//!     ElementKind, PlanPreference,
+//! use baracuda_flashinfer::attention::{
+//!     BatchPagedDecodeDescriptor, BatchPagedDecodePlan, PagedKvCacheDescriptor,
 //! };
+//! use baracuda_flashinfer::{ElementKind, PlanPreference};
 //! use half::f16;
 //!
 //! let desc = BatchPagedDecodeDescriptor {

@@ -52037,6 +52037,8 @@ unsafe extern "C" {
 #[cfg(feature = "flashinfer")]
 unsafe extern "C" {
     // Paged KV-cache append (decode-time, 1 token per request).
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_f16_run(
         batch_size: i32,
         page_size: i32,
@@ -52051,12 +52053,16 @@ unsafe extern "C" {
         value: *const c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_f16_can_implement(
         batch_size: i32,
         page_size: i32,
         num_heads: i32,
         head_dim: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_bf16_run(
         batch_size: i32,
         page_size: i32,
@@ -52071,12 +52077,16 @@ unsafe extern "C" {
         value: *const c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_bf16_can_implement(
         batch_size: i32,
         page_size: i32,
         num_heads: i32,
         head_dim: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_f32_run(
         batch_size: i32,
         page_size: i32,
@@ -52091,12 +52101,16 @@ unsafe extern "C" {
         value: *const c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_f32_can_implement(
         batch_size: i32,
         page_size: i32,
         num_heads: i32,
         head_dim: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_can_implement(
         batch_size: i32,
         page_size: i32,
@@ -52105,7 +52119,11 @@ unsafe extern "C" {
     ) -> i32;
 
     // Batched paged-KV decode.
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_workspace_size(batch_size: i32) -> usize;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_f16_run(
         batch_size: i32,
         page_size: i32,
@@ -52125,6 +52143,8 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_f16_can_implement(
         batch_size: i32,
         page_size: i32,
@@ -52134,6 +52154,8 @@ unsafe extern "C" {
         sm_scale: f32,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_bf16_run(
         batch_size: i32,
         page_size: i32,
@@ -52153,6 +52175,8 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_bf16_can_implement(
         batch_size: i32,
         page_size: i32,
@@ -52161,6 +52185,8 @@ unsafe extern "C" {
         num_kv_heads: i32,
         sm_scale: f32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_f32_run(
         batch_size: i32,
         page_size: i32,
@@ -52180,6 +52206,8 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_f32_can_implement(
         batch_size: i32,
         page_size: i32,
@@ -52188,6 +52216,8 @@ unsafe extern "C" {
         num_kv_heads: i32,
         sm_scale: f32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_can_implement(
         batch_size: i32,
         page_size: i32,
@@ -52199,6 +52229,8 @@ unsafe extern "C" {
     // Batched paged-KV prefill (Phase 66 Tier 2). Ragged q via q_indptr;
     // f16/bf16; causal flag; `enable_split` opts into KV-split parallelism.
     // Workspace allocated internally (synchronous).
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_prefill_f16_run(
         batch_size: i32,
         total_num_rows: i32,
@@ -52220,6 +52252,8 @@ unsafe extern "C" {
         lse: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_prefill_f16_can_implement(
         batch_size: i32,
         total_num_rows: i32,
@@ -52232,6 +52266,8 @@ unsafe extern "C" {
         enable_split: i32,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_prefill_bf16_run(
         batch_size: i32,
         total_num_rows: i32,
@@ -52253,6 +52289,8 @@ unsafe extern "C" {
         lse: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_prefill_bf16_can_implement(
         batch_size: i32,
         total_num_rows: i32,
@@ -52264,6 +52302,8 @@ unsafe extern "C" {
         causal: i32,
         enable_split: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_prefill_can_implement(
         batch_size: i32,
         total_num_rows: i32,
@@ -52275,6 +52315,8 @@ unsafe extern "C" {
 
     // Batched RAGGED-KV prefill (Phase 66 Tier 2). K/V contiguous via
     // kv_indptr (no page table). f16/bf16; causal + enable_split flags.
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_ragged_prefill_f16_run(
         batch_size: i32,
         total_num_rows: i32,
@@ -52294,6 +52336,8 @@ unsafe extern "C" {
         lse: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_ragged_prefill_f16_can_implement(
         batch_size: i32,
         total_num_rows: i32,
@@ -52305,6 +52349,8 @@ unsafe extern "C" {
         causal: i32,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_ragged_prefill_bf16_run(
         batch_size: i32,
         total_num_rows: i32,
@@ -52324,6 +52370,8 @@ unsafe extern "C" {
         lse: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_ragged_prefill_bf16_can_implement(
         batch_size: i32,
         total_num_rows: i32,
@@ -52334,6 +52382,8 @@ unsafe extern "C" {
         sm_scale: f32,
         causal: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_ragged_prefill_can_implement(
         batch_size: i32,
         total_num_rows: i32,
@@ -52344,6 +52394,8 @@ unsafe extern "C" {
     ) -> i32;
 
     // Cascade: in-place pairwise LSE merge.
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_state_in_place_f16_run(
         seq_len: i32,
         num_heads: i32,
@@ -52354,12 +52406,16 @@ unsafe extern "C" {
         s_other: *const c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_state_in_place_f16_can_implement(
         seq_len: i32,
         num_heads: i32,
         head_dim: i32,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_state_in_place_bf16_run(
         seq_len: i32,
         num_heads: i32,
@@ -52370,11 +52426,15 @@ unsafe extern "C" {
         s_other: *const c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_state_in_place_bf16_can_implement(
         seq_len: i32,
         num_heads: i32,
         head_dim: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_state_in_place_f32_run(
         seq_len: i32,
         num_heads: i32,
@@ -52385,11 +52445,15 @@ unsafe extern "C" {
         s_other: *const c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_state_in_place_f32_can_implement(
         seq_len: i32,
         num_heads: i32,
         head_dim: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_state_in_place_can_implement(
         seq_len: i32,
         num_heads: i32,
@@ -52397,6 +52461,8 @@ unsafe extern "C" {
     ) -> i32;
 
     // Cascade: many-way merge.
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_states_f16_run(
         num_index_sets: i32,
         seq_len: i32,
@@ -52408,6 +52474,8 @@ unsafe extern "C" {
         s_merged: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_states_f16_can_implement(
         num_index_sets: i32,
         seq_len: i32,
@@ -52415,6 +52483,8 @@ unsafe extern "C" {
         head_dim: i32,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_states_bf16_run(
         num_index_sets: i32,
         seq_len: i32,
@@ -52426,12 +52496,16 @@ unsafe extern "C" {
         s_merged: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_states_bf16_can_implement(
         num_index_sets: i32,
         seq_len: i32,
         num_heads: i32,
         head_dim: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_states_f32_run(
         num_index_sets: i32,
         seq_len: i32,
@@ -52443,12 +52517,16 @@ unsafe extern "C" {
         s_merged: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_states_f32_can_implement(
         num_index_sets: i32,
         seq_len: i32,
         num_heads: i32,
         head_dim: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_merge_states_can_implement(
         num_index_sets: i32,
         seq_len: i32,
@@ -52457,6 +52535,8 @@ unsafe extern "C" {
     ) -> i32;
 
     // Sort-free sampling: top-K only.
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_k_sampling_f32_run(
         batch: i32,
         vocab: i32,
@@ -52470,6 +52550,8 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_k_sampling_f32_can_implement(
         batch: i32,
         vocab: i32,
@@ -52477,6 +52559,8 @@ unsafe extern "C" {
     ) -> i32;
 
     // Sort-free sampling: top-P only.
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_p_sampling_f32_run(
         batch: i32,
         vocab: i32,
@@ -52490,6 +52574,8 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_p_sampling_f32_can_implement(
         batch: i32,
         vocab: i32,
@@ -52497,6 +52583,8 @@ unsafe extern "C" {
     ) -> i32;
 
     // Sort-free sampling: min-P only.
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_min_p_sampling_f32_run(
         batch: i32,
         vocab: i32,
@@ -52510,6 +52598,8 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_min_p_sampling_f32_can_implement(
         batch: i32,
         vocab: i32,
@@ -52517,6 +52607,8 @@ unsafe extern "C" {
     ) -> i32;
 
     // Sort-free sampling: combined top-K + top-P.
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_run(
         batch: i32,
         vocab: i32,
@@ -52531,6 +52623,8 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_can_implement(
         batch: i32,
         vocab: i32,
@@ -52541,6 +52635,8 @@ unsafe extern "C" {
     // Per-row sampler parameter arrays (Phase 66 Tier 2). The threshold
     // is a device array `[batch]` instead of a scalar. `top_k_arr` is i32
     // (converted to float internally for the standalone Top-K sampler).
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_k_sampling_f32_arr_run(
         batch: i32,
         vocab: i32,
@@ -52553,11 +52649,15 @@ unsafe extern "C" {
         valid: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_k_sampling_f32_arr_can_implement(
         batch: i32,
         vocab: i32,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_p_sampling_f32_arr_run(
         batch: i32,
         vocab: i32,
@@ -52570,10 +52670,14 @@ unsafe extern "C" {
         valid: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_p_sampling_f32_arr_can_implement(
         batch: i32,
         vocab: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_min_p_sampling_f32_arr_run(
         batch: i32,
         vocab: i32,
@@ -52586,10 +52690,14 @@ unsafe extern "C" {
         valid: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_min_p_sampling_f32_arr_can_implement(
         batch: i32,
         vocab: i32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_arr_run(
         batch: i32,
         vocab: i32,
@@ -52603,12 +52711,16 @@ unsafe extern "C" {
         valid: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_arr_can_implement(
         batch: i32,
         vocab: i32,
     ) -> i32;
 
     // Speculative-decode verification (Phase 66 Tier 2).
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_chain_speculative_sampling_f32_run(
         batch: i32,
         num_speculative_tokens: i32,
@@ -52624,6 +52736,8 @@ unsafe extern "C" {
         output_emitted_draft_token_num: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_chain_speculative_sampling_f32_can_implement(
         batch: i32,
         num_speculative_tokens: i32,
@@ -52633,6 +52747,8 @@ unsafe extern "C" {
     // FP8 KV-cache decode (Phase 66 Tier 2). k_data/v_data are fp8
     // (e4m3 / e5m2); q/o are f16 or bf16. Same arg layout as the
     // homogeneous `paged_decode_*_run` symbols.
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_f16_e4m3_run(
         batch_size: i32,
         page_size: i32,
@@ -52652,6 +52768,8 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_f16_e4m3_can_implement(
         batch_size: i32,
         page_size: i32,
@@ -52661,6 +52779,8 @@ unsafe extern "C" {
         sm_scale: f32,
     ) -> i32;
 
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_f16_e5m2_run(
         batch_size: i32,
         page_size: i32,
@@ -52680,6 +52800,8 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_f16_e5m2_can_implement(
         batch_size: i32,
         page_size: i32,
@@ -52688,6 +52810,8 @@ unsafe extern "C" {
         num_kv_heads: i32,
         sm_scale: f32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_bf16_e4m3_run(
         batch_size: i32,
         page_size: i32,
@@ -52707,6 +52831,8 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_bf16_e4m3_can_implement(
         batch_size: i32,
         page_size: i32,
@@ -52715,6 +52841,8 @@ unsafe extern "C" {
         num_kv_heads: i32,
         sm_scale: f32,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_bf16_e5m2_run(
         batch_size: i32,
         page_size: i32,
@@ -52734,6 +52862,8 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// FFI binding to the FlashInfer-derived launcher of this name; the caller
+    /// contract (argument meaning, return code) is in the launcher's `.cu` under `kernels/`.
     pub fn baracuda_kernels_flashinfer_paged_decode_bf16_e5m2_can_implement(
         batch_size: i32,
         page_size: i32,

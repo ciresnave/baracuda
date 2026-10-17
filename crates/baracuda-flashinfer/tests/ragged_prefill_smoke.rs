@@ -1,10 +1,11 @@
 //! Smoke tests for ragged (non-paged) prefill — Phase 66 Tier 2.
-//! `#[ignore]` + `flashinfer` feature.
+//! Gated behind the `device-tests` feature + `flashinfer` feature.
 //!
 //! Same closed-form trick as paged prefill: identical keys across KV ⇒
 //! uniform softmax ⇒ output = mean(attended V).
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn ragged_prefill_plan_select_validates() {
     let (_ctx, stream) = setup();
     let desc = BatchRaggedPrefillDescriptor {
@@ -53,7 +53,6 @@ fn ragged_prefill_plan_select_validates() {
 /// Non-causal, identical keys, 1 request, 2 q rows over 2 KV tokens ⇒ both
 /// rows output mean(V).
 #[test]
-#[ignore]
 fn ragged_prefill_uniform_key_is_mean() {
     let (ctx, stream) = setup();
     let qo_len = 2usize;

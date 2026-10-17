@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.126 - 2026-10-16 (Test: retire #[ignore] in baracuda-flashinfer; repair the flashinfer feature build)
+
+Workspace alpha.126 (proposed; PM allocates at gate).
+
+- baracuda-flashinfer device tests now behind device-tests (21 run with --features flashinfer,device-tests on the sm_89 device runner: 0 failed).
+- Fix: the flashinfer feature did not compile at all (never built by CI): 65 undocumented FFI declarations in baracuda-kernels-sys tripped missing_docs=deny, eight baracuda-kernels attention/random modules lost their c_void/map_status imports to an unused-import sweep run without the feature (now cfg-gated), and the crate-level doctest used stale import paths.
+
 ## 0.0.1-alpha.125 - 2026-10-16 (Test: retire #[ignore] in baracuda-runtime)
 
 Workspace alpha.125 (proposed; PM allocates at gate).

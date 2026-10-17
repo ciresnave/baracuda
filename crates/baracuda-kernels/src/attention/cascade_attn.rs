@@ -39,6 +39,10 @@
 //! - No mask (pairwise merge always merges; pass equal LSE values
 //!   if you want to weight one side out).
 
+#[cfg(feature = "flashinfer")]
+use super::map_status;
+#[cfg(feature = "flashinfer")]
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};

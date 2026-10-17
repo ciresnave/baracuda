@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-flashinfer"
-version = "0.0.1-alpha.125"
+version = "0.0.1-alpha.126"
 description = "Safe, typed Rust wrappers for NVIDIA FlashInfer's inference-serving kernels: batched paged-KV attention decode, decode-time KV-cache append, cascade / prefix-cache attention-state merge, and sort-free top-K / top-P / min-P sampling. The canonical vLLM-style serving surface for the baracuda CUDA stack. Apache-2.0 (FlashInfer upstream)."
 readme = "README.md"
 edition.workspace = true
@@ -13,6 +13,12 @@ categories = ["api-bindings", "science"]
 
 [features]
 default = []
+
+# On-device integration tests (`tests/*`): built only with this feature, so a
+# plain `cargo test` never compiles or runs a test that needs a GPU. CI type-checks
+# them (`cargo check --tests --features flashinfer,device-tests`) and the self-hosted
+# device runner builds and RUNS them. See docs/DEVICE-TESTS.md.
+device-tests = []
 # Enable the FlashInfer-backed plans. Pulls the vendored kernel
 # compilation in through `baracuda-kernels/flashinfer`. OFF by default;
 # enable when wiring vLLM-style serving infrastructure.
