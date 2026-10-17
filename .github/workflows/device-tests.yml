@@ -47,7 +47,7 @@ jobs:
         shell: bash
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cutlass.json
-        run: cargo gpu-test -p baracuda-cutlass --features device-tests
+        run: cargo gpu-test -p baracuda-cutlass --features device-tests,ozimmu
       - name: cargo gpu-test (baracuda-flashinfer, device-tests)
         shell: bash
         env:
