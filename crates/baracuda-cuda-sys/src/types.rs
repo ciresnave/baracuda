@@ -580,6 +580,10 @@ pub struct CUeglFrame {
     pub raw: [u64; 10],
 }
 
+#[allow(
+    clippy::derivable_impls,
+    reason = "zero-initialised Default for an FFI-mirror type, spelled out to show the zeroed layout"
+)]
 impl Default for CUeglFrame {
     fn default() -> Self {
         Self { raw: [0; 10] }

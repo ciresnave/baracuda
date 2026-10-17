@@ -2,11 +2,11 @@
 //!
 //! These require BOTH a CUDA GPU **and** a working NVIDIA RAPIDS / cuVS
 //! install (`libcuvs.so` on the loader path), neither of which is present on
-//! the Windows dev machine, so they are `#[ignore]`-gated. Run them on a
+//! the Windows dev machine, so they are gated behind the `device-tests` feature. Run them on a
 //! Linux box with cuVS via:
 //!
 //! ```text
-//! cargo test -p baracuda-cuvs --features cuvs -- --ignored
+//! cargo test -p baracuda-cuvs --features cuvs --features device-tests
 //! ```
 //!
 //! Install cuVS with e.g. `conda install -c rapidsai -c conda-forge -c nvidia cuvs`
@@ -14,16 +14,22 @@
 
 #![cfg(feature = "cuvs")]
 
-use baracuda_cuvs::{
-    BruteForce, IvfFlat, IvfFlatBuildParams, IvfFlatSearchParams, Metric, Resources,
-};
-use baracuda_driver::{Context, Device, DeviceBuffer};
+use baracuda_cuvs::Resources;
+#[cfg(feature = "device-tests")]
+use baracuda_cuvs::{BruteForce, IvfFlat, IvfFlatBuildParams, IvfFlatSearchParams, Metric};
+#[cfg(feature = "device-tests")]
+use baracuda_driver::{Context, Device, DeviceBuffer, require_optional};
 
+#[cfg(feature = "device-tests")]
 const N_ROWS: usize = 100;
+#[cfg(feature = "device-tests")]
 const DIM: usize = 128;
+#[cfg(feature = "device-tests")]
 const K: usize = 5;
+#[cfg(feature = "device-tests")]
 const N_QUERIES: usize = 5;
 
+#[cfg(feature = "device-tests")]
 /// Deterministic pseudo-random fixture (xorshift) so tests are reproducible
 /// without a `rand` dependency.
 fn fixture(n: usize) -> Vec<f32> {
@@ -39,6 +45,7 @@ fn fixture(n: usize) -> Vec<f32> {
         .collect()
 }
 
+#[cfg(feature = "device-tests")]
 fn ctx() -> Context {
     Context::new(&Device::get(0).expect("device 0")).expect("context")
 }
@@ -59,10 +66,10 @@ fn resources_new_does_not_panic() {
 }
 
 #[test]
-#[ignore = "requires a GPU and a RAPIDS/cuVS install"]
+#[cfg(feature = "device-tests")]
 fn brute_force_finds_self() {
     let ctx = ctx();
-    let res = Resources::new().expect("resources");
+    let res = require_optional!(Resources::new(), "NVIDIA RAPIDS / cuVS runtime");
 
     let host = fixture(N_ROWS * DIM);
     let dataset = DeviceBuffer::from_slice(&ctx, &host).expect("upload dataset");
@@ -104,10 +111,10 @@ fn brute_force_finds_self() {
 }
 
 #[test]
-#[ignore = "requires a GPU and a RAPIDS/cuVS install"]
+#[cfg(feature = "device-tests")]
 fn ivf_flat_build_and_search() {
     let ctx = ctx();
-    let res = Resources::new().expect("resources");
+    let res = require_optional!(Resources::new(), "NVIDIA RAPIDS / cuVS runtime");
 
     let host = fixture(N_ROWS * DIM);
     let dataset = DeviceBuffer::from_slice(&ctx, &host).expect("upload dataset");

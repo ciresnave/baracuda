@@ -5,11 +5,11 @@
 //! `baracuda-npp` only proves the loader works via `nppGetLibVersion`;
 //! wrapping the `_Ctx` family with an ergonomic context builder lands in
 //! baracuda-npp v0.2.
+#![cfg(feature = "device-tests")]
 
 use baracuda_npp::version;
 
 #[test]
-#[ignore = "requires an NVIDIA GPU with NPP installed"]
 fn query_version() {
     let v = version().expect("nppGetLibVersion");
     eprintln!("NPP {}.{}.{}", v.major, v.minor, v.build);

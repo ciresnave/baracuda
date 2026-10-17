@@ -169,6 +169,7 @@ version = "0.0.1-alpha.131"
 dependencies = [
  "baracuda-core",
  "baracuda-cudf-sys",
+ "baracuda-driver",
  "baracuda-types",
  "thiserror",
 ]

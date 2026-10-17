@@ -8,20 +8,20 @@
 //! installs (cuDNN 9.17+ with CUDA 13, or cuDNN 9.x with CUDA 12) the
 //! wrapper works; the conv test will be re-enabled when CI has a matched
 //! install.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cudnn::{
     ActivationDescriptor, ActivationMode, DType, Handle, TensorDescriptor, TensorFormat,
     activation_forward,
 };
-use baracuda_driver::{Context, Device, DeviceBuffer};
+use baracuda_driver::{Context, Device, DeviceBuffer, require_optional};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU and cuDNN 9.x"]
 fn relu_forward_matches_cpu() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
     let ctx = Context::new(&device).unwrap();
-    let handle = Handle::new().unwrap();
+    let handle = require_optional!(Handle::new(), "cuDNN 9.x runtime library");
 
     let x_h: [f32; 8] = [-2.0, -0.5, 0.0, 0.5, 1.0, -3.0, 4.0, -7.0];
     let expected: [f32; 8] = [0.0, 0.0, 0.0, 0.5, 1.0, 0.0, 4.0, 0.0];
@@ -44,7 +44,6 @@ fn relu_forward_matches_cpu() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU and cuDNN 9.x"]
 fn conv_descriptors_sanity() {
     // Build the descriptors and compute output dims without executing the
     // kernel — that exercises the safe wrapper without triggering cuDNN's
@@ -52,6 +51,7 @@ fn conv_descriptors_sanity() {
     use baracuda_cudnn::{ConvMode, ConvolutionDescriptor, FilterDescriptor};
     baracuda_driver::init().unwrap();
     let _device = Device::get(0).unwrap();
+    let _cudnn = require_optional!(Handle::new(), "cuDNN 9.x runtime library");
     let x = TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, 1, 1, 5, 5).unwrap();
     let w = FilterDescriptor::new_4d(TensorFormat::Nchw, DType::F32, 1, 1, 3, 3).unwrap();
     let conv =
@@ -62,9 +62,8 @@ fn conv_descriptors_sanity() {
 }
 
 #[test]
-#[ignore = "requires cuDNN"]
 fn cudnn_version_is_reasonable() {
-    let v = baracuda_cudnn::version().unwrap();
+    let v = require_optional!(baracuda_cudnn::version(), "cuDNN 9.x runtime library");
     eprintln!("cuDNN version: {v}");
     assert!(v >= 8000, "cudnnGetVersion returned unusually low: {v}");
 }

@@ -10,11 +10,21 @@ homepage.workspace = true
 keywords.workspace = true
 categories = ["api-bindings"]
 
+[features]
+# On-device integration tests: built only with this feature, so a plain `cargo test`
+# never compiles or runs a test that needs a GPU. CI type-checks them and the
+# self-hosted device runner builds and RUNS them (`cargo gpu-test -p baracuda-cudf --features device-tests ...`).
+# See docs/DEVICE-TESTS.md.
+device-tests = []
+
 [dependencies]
 baracuda-core.workspace = true
 baracuda-types.workspace = true
 baracuda-cudf-sys.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+baracuda-driver = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

@@ -1,10 +1,10 @@
 //! GPU-gated integration tests for cuRAND.
+#![cfg(feature = "device-tests")]
 
 use baracuda_curand::{Generator, RngKind};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn uniform_deterministic_by_seed() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -40,7 +40,6 @@ fn uniform_deterministic_by_seed() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn normal_has_expected_statistics() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

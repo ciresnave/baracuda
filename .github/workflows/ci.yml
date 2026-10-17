@@ -386,6 +386,16 @@ jobs:
           cargo check --locked -p baracuda-transformer-engine --tests --features sm80,device-tests
           cargo check --locked -p baracuda-optim --tests --features sm80,distributed_optim
           cargo check --locked -p baracuda-optim --tests --features sm80,distributed_optim,device-tests
+      # The libloading-based library crates (cuDNN, NCCL, cuFFT, ...): their device tests are gated
+      # behind `device-tests` and compile without the library installed, so type-check both states.
+      - name: cargo check library crates --tests (device-tests off / on)
+        if: matrix.arch == 'sm80'
+        run: |
+          for c in cudf cudnn cufft cufile curand cusolver cusparse cutensor cuvs cvcuda megatron nccl npp nvcomp nvimagecodec nvjitlink nvjpeg nvml nvrtc nvshmem tensorrt; do
+            cargo check --locked -p "baracuda-$c" --tests
+            cargo check --locked -p "baracuda-$c" --tests --features "$([ "$c" = cuvs ] && echo cuvs,)device-tests"
+          done
+          cargo check --locked -p baracuda-cuvs --tests --features cuvs
       # `baracuda-kernels-bench`'s tests/ are 12 files / 3,103 lines that NO job
       # compiled until this step: the variant gate, the RowReduce bit-move matrix
       # and the precision-first numerics all live there. They are device tests, so

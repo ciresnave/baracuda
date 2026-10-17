@@ -11,6 +11,12 @@ keywords.workspace = true
 categories.workspace = true
 
 [features]
+# On-device integration tests: built only with this feature, so a plain `cargo test`
+# never compiles or runs a test that needs a GPU. CI type-checks them and the
+# self-hosted device runner builds and RUNS them (`cargo gpu-test -p baracuda-cuvs --features device-tests ...`).
+# See docs/DEVICE-TESTS.md.
+device-tests = []
+
 default = []
 # Compile the safe cuVS API. Off by default for the same reason as the
 # `-sys` crate: cuVS ships only with NVIDIA RAPIDS (Linux / WSL2). Enabling
@@ -28,6 +34,9 @@ baracuda-cuvs-sys.workspace = true
 baracuda-driver.workspace = true
 thiserror.workspace = true
 half = { workspace = true, optional = true }
+
+[dev-dependencies]
+baracuda-driver = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

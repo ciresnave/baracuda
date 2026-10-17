@@ -1,10 +1,10 @@
 //! NCCL smoke test. NCCL is Linux-only in practice; on other hosts or when
 //! NCCL isn't installed the test skips gracefully instead of failing.
+#![cfg(feature = "device-tests")]
 
 use baracuda_nccl::{Communicator, version};
 
 #[test]
-#[ignore = "requires NCCL installed (typically Linux multi-GPU hosts)"]
 fn nccl_loads_and_reports_version() {
     match version() {
         Ok(v) => {
@@ -18,7 +18,6 @@ fn nccl_loads_and_reports_version() {
 }
 
 #[test]
-#[ignore = "requires NCCL installed"]
 fn single_device_comm_roundtrip() {
     // Single-device NCCL comm — degenerate but exercises the full loader path.
     match Communicator::init_all(&[0]) {

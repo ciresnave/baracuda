@@ -1,10 +1,10 @@
 //! GPU-gated integration test for cuSOLVER dense LU + solve.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cusolver::{DnHandle, Op, sgetrf, sgetrs};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn dense_lu_solve_3x3() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

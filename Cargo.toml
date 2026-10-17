@@ -227,10 +227,7 @@ unreachable_pub = "warn"
 [workspace.lints.clippy]
 # Pragmatic clippy posture: warn loud, but no draconian style enforcement.
 all = { level = "warn", priority = -1 }
-# Allow the patterns that idiomatic Rust at scale uses heavily. This is the ONE place
-# `too_many_arguments` is allowed: the FFI-shaped signatures (kernel launchers, cuBLAS/cuDNN
-# wrappers) mirror the C API's parameter lists, so crates inherit it via `[lints] workspace = true`
-# and carry no per-item copies.
+# Allow the patterns that idiomatic Rust at scale uses heavily:
 too_many_arguments = "allow"
 type_complexity = "allow"
 

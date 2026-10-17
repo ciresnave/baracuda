@@ -1,4 +1,5 @@
 //! GPU-gated nvJPEG smoke test: decode a 1×1 JPEG into an RGB device buffer.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer};
 use baracuda_nvjpeg::{Handle, PixelFormat, State, decode_interleaved};
@@ -38,7 +39,6 @@ const MIN_JPEG: &[u8] = &[
 ];
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn decode_tiny_jpeg() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
