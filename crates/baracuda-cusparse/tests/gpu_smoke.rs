@@ -1,10 +1,10 @@
 //! GPU-gated integration test for cuSPARSE SpMV.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cusparse::{DnVec, Handle, Op, SpMVAlg, SpMat, spmv, spmv_buffer_size};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn csr_spmv_matches_cpu_reference() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

@@ -93,6 +93,111 @@ jobs:
         env:
           BARACUDA_RESULTS_FILE: device-test-results-optim.json
         run: cargo gpu-test -p baracuda-optim --features sm89,distributed_optim,device-tests
+      - name: cargo gpu-test (baracuda-cudf, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cudf.json
+        run: cargo gpu-test -p baracuda-cudf --features device-tests
+      - name: cargo gpu-test (baracuda-cudnn, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cudnn.json
+        run: cargo gpu-test -p baracuda-cudnn --features device-tests
+      - name: cargo gpu-test (baracuda-cufft, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cufft.json
+        run: cargo gpu-test -p baracuda-cufft --features device-tests
+      - name: cargo gpu-test (baracuda-cufile, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cufile.json
+        run: cargo gpu-test -p baracuda-cufile --features device-tests
+      - name: cargo gpu-test (baracuda-curand, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-curand.json
+        run: cargo gpu-test -p baracuda-curand --features device-tests
+      - name: cargo gpu-test (baracuda-cusolver, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cusolver.json
+        run: cargo gpu-test -p baracuda-cusolver --features device-tests
+      - name: cargo gpu-test (baracuda-cusparse, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cusparse.json
+        run: cargo gpu-test -p baracuda-cusparse --features device-tests
+      - name: cargo gpu-test (baracuda-cutensor, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cutensor.json
+        run: cargo gpu-test -p baracuda-cutensor --features device-tests
+      - name: cargo gpu-test (baracuda-cuvs, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cuvs.json
+        run: cargo gpu-test -p baracuda-cuvs --features cuvs,device-tests
+      - name: cargo gpu-test (baracuda-cvcuda, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cvcuda.json
+        run: cargo gpu-test -p baracuda-cvcuda --features device-tests
+      - name: cargo gpu-test (baracuda-megatron, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-megatron.json
+        run: cargo gpu-test -p baracuda-megatron --features device-tests
+      - name: cargo gpu-test (baracuda-nccl, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-nccl.json
+        run: cargo gpu-test -p baracuda-nccl --features device-tests
+      - name: cargo gpu-test (baracuda-npp, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-npp.json
+        run: cargo gpu-test -p baracuda-npp --features device-tests
+      - name: cargo gpu-test (baracuda-nvcomp, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-nvcomp.json
+        run: cargo gpu-test -p baracuda-nvcomp --features device-tests
+      - name: cargo gpu-test (baracuda-nvimagecodec, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-nvimagecodec.json
+        run: cargo gpu-test -p baracuda-nvimagecodec --features device-tests
+      - name: cargo gpu-test (baracuda-nvjitlink, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-nvjitlink.json
+        run: cargo gpu-test -p baracuda-nvjitlink --features device-tests
+      - name: cargo gpu-test (baracuda-nvjpeg, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-nvjpeg.json
+        run: cargo gpu-test -p baracuda-nvjpeg --features device-tests
+      - name: cargo gpu-test (baracuda-nvml, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-nvml.json
+        run: cargo gpu-test -p baracuda-nvml --features device-tests
+      - name: cargo gpu-test (baracuda-nvrtc, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-nvrtc.json
+        run: cargo gpu-test -p baracuda-nvrtc --features device-tests
+      - name: cargo gpu-test (baracuda-nvshmem, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-nvshmem.json
+        run: cargo gpu-test -p baracuda-nvshmem --features device-tests
+      - name: cargo gpu-test (baracuda-tensorrt, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-tensorrt.json
+        run: cargo gpu-test -p baracuda-tensorrt --features device-tests
       - name: Upload run record
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -111,4 +216,25 @@ jobs:
             device-test-results-cublas.json
             device-test-results-transformer-engine.json
             device-test-results-optim.json
+            device-test-results-cudf.json
+            device-test-results-cudnn.json
+            device-test-results-cufft.json
+            device-test-results-cufile.json
+            device-test-results-curand.json
+            device-test-results-cusolver.json
+            device-test-results-cusparse.json
+            device-test-results-cutensor.json
+            device-test-results-cuvs.json
+            device-test-results-cvcuda.json
+            device-test-results-megatron.json
+            device-test-results-nccl.json
+            device-test-results-npp.json
+            device-test-results-nvcomp.json
+            device-test-results-nvimagecodec.json
+            device-test-results-nvjitlink.json
+            device-test-results-nvjpeg.json
+            device-test-results-nvml.json
+            device-test-results-nvrtc.json
+            device-test-results-nvshmem.json
+            device-test-results-tensorrt.json
           if-no-files-found: error

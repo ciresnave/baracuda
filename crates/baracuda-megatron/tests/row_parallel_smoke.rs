@@ -4,6 +4,7 @@
 //! plan. On a single-rank communicator `X_local == X` (the input
 //! isn't actually sharded) and `all_reduce` is a D2D copy, so the
 //! plan reduces to a plain Linear layer.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, require_optional};
 use baracuda_megatron::{RowParallelLinearPlan, TensorParallelContext};
@@ -65,7 +66,6 @@ fn try_bringup(device: i32) -> Option<Communicator> {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + NCCL"]
 fn row_parallel_f32_forward_single_rank_matches_linear() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0u32).unwrap();
@@ -113,7 +113,6 @@ fn row_parallel_f32_forward_single_rank_matches_linear() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + NCCL"]
 fn row_parallel_f32_backward_single_rank_matches_linear() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0u32).unwrap();

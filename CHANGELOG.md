@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.130 - 2026-10-16 (Retire #[ignore] in the 21 remaining library crates behind device-tests)
+
+Workspace alpha.130 (proposed; PM allocates at gate).
+
+- baracuda-{cudf,cudnn,cufft,cufile,curand,cusolver,cusparse,cutensor,cuvs,cvcuda,megatron,nccl,npp,nvcomp,nvimagecodec,nvjitlink,nvjpeg,nvml,nvrtc,nvshmem,tensorrt} device tests (53 `#[ignore]`) move behind a per-crate `device-tests` feature, run by the self-hosted device runner. Missing optional libraries (cuDNN, libcudf, cuVS, nvImageCodec, ...) are now declared skips (`require_optional!`) instead of panics. Ran on RTX 4070 (sm_89): 112 passed, 0 failed, 34 declared skips.
+
 ## 0.0.1-alpha.129 - 2026-10-16 (Retire #[ignore] in cublas, transformer-engine, optim behind device-tests)
 
 Workspace alpha.129 (proposed; PM allocates at gate).

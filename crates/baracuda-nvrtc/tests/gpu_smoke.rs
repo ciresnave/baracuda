@@ -1,5 +1,6 @@
 //! GPU-gated integration test: compile a kernel via NVRTC and execute it
 //! through the Driver API.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Module, Stream};
 use baracuda_nvrtc::Program;
@@ -19,7 +20,6 @@ extern "C" __global__ void saxpy(
 "#;
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn compile_and_launch_saxpy() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -72,7 +72,6 @@ fn compile_and_launch_saxpy() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn nvrtc_version_is_reasonable() {
     let (major, minor) = baracuda_nvrtc::version().expect("nvrtcVersion");
     eprintln!("NVRTC {major}.{minor}");
@@ -80,7 +79,6 @@ fn nvrtc_version_is_reasonable() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn compile_error_surfaces_log() {
     let prog =
         Program::new("this is definitely not valid CUDA C++", "broken.cu").expect("create program");

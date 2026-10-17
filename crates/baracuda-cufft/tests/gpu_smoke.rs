@@ -1,11 +1,11 @@
 //! GPU-gated integration tests for cuFFT.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cufft::{Direction, Plan1d, Transform};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 use baracuda_types::Complex32;
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn c2c_forward_then_inverse_roundtrip() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -41,7 +41,6 @@ fn c2c_forward_then_inverse_roundtrip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn version_is_queryable() {
     let _ = baracuda_cufft::version().expect("cufftGetVersion");
 }

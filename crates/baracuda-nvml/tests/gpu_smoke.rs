@@ -1,9 +1,9 @@
 //! GPU-gated NVML smoke test. Requires the NVIDIA driver (not the CUDA toolkit).
+#![cfg(feature = "device-tests")]
 
 use baracuda_nvml::Nvml;
 
 #[test]
-#[ignore = "requires an NVIDIA driver"]
 fn query_device_health() {
     let nvml = Nvml::init().expect("nvmlInit");
     let driver = nvml.driver_version().expect("driver version");

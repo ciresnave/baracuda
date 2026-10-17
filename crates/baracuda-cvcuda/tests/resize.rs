@@ -2,6 +2,7 @@
 //!
 //! CV-CUDA ships as Linux binaries only (as of 2026). On Windows this
 //! test skips gracefully.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cvcuda::{Interpolation, Resize, Tensor};
 use baracuda_driver::require_optional;
@@ -11,7 +12,6 @@ const LAYOUT_NHWC: i32 = 0; // NVCVTensorLayout::NHWC
 const DTYPE_U8: i32 = 2; // NVCVDataType::U8 (first unsigned 8-bit slot)
 
 #[test]
-#[ignore = "requires CV-CUDA installed + NVIDIA GPU (Linux-only)"]
 fn resize_tensor_smoke() {
     require_optional!(
         baracuda_cvcuda::probe(),

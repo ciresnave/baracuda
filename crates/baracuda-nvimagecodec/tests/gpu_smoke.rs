@@ -1,10 +1,11 @@
 //! GPU-gated nvImageCodec smoke tests: probe + decode tiny embedded images.
 //!
 //! These require both an NVIDIA GPU **and** a separately-installed
-//! `libnvimgcodec` (see the crate README). They are `#[ignore]`d so a plain
+//! `libnvimgcodec` (see the crate README). They are gated behind the `device-tests` feature so a plain
 //! `cargo test` stays green on machines without the codec library.
+#![cfg(feature = "device-tests")]
 
-use baracuda_driver::{Context, Device, DeviceBuffer};
+use baracuda_driver::{Context, Device, DeviceBuffer, require_optional};
 use baracuda_nvimagecodec::{CodeStream, DecodeParams, Decoder, Image, Instance};
 
 /// A minimal valid baseline JPEG encoding a 1×1 grayscale image (≈200 bytes).
@@ -61,7 +62,7 @@ fn decode_one(bytes: &[u8], label: &str) {
     let device = Device::get(0).unwrap();
     let ctx = Context::new(&device).unwrap();
 
-    let instance = Instance::new().expect("nvimgcodecInstanceCreate");
+    let instance = require_optional!(Instance::new(), "libnvimgcodec shared library");
     let decoder = Decoder::new(&instance).expect("nvimgcodecDecoderCreate");
 
     let stream = CodeStream::from_host_mem(&instance, bytes).expect("code stream");
@@ -97,21 +98,18 @@ fn decode_one(bytes: &[u8], label: &str) {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + installed libnvimgcodec"]
 fn decode_tiny_jpeg() {
     decode_one(MIN_JPEG, "jpeg");
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + installed libnvimgcodec"]
 fn decode_tiny_png() {
     decode_one(MIN_PNG, "png");
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + installed libnvimgcodec"]
 fn report_properties() {
-    let instance = Instance::new().expect("instance");
+    let instance = require_optional!(Instance::new(), "libnvimgcodec shared library");
     let props = instance.properties().expect("properties");
     eprintln!(
         "nvimgcodec version {:#x}, cudart {:#x}",

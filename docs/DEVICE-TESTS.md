@@ -1,7 +1,7 @@
 # On-device tests
 
 Tests that need an NVIDIA GPU are **not** `#[ignore]`d. In a migrated crate (`baracuda-driver`,
-`baracuda-kernels`, `baracuda-cutlass`, `baracuda-runtime`, `baracuda-flashinfer`, `baracuda-ozimmu`, `baracuda-kernels-bench`, `baracuda-cuda-emit`, `baracuda-cuda-seam`, `baracuda-cublas`, `baracuda-transformer-engine`, `baracuda-optim`) they sit behind the crate's `device-tests` cargo feature, and three
+`baracuda-kernels`, `baracuda-cutlass`, `baracuda-runtime`, `baracuda-flashinfer`, `baracuda-ozimmu`, `baracuda-kernels-bench`, `baracuda-cuda-emit`, `baracuda-cuda-seam`, `baracuda-cublas`, `baracuda-transformer-engine`, `baracuda-optim`, and the 21 library crates listed in `.github/workflows/device-tests.yml`) they sit behind the crate's `device-tests` cargo feature, and three
 things keep that from being a way to hide them:
 
 1. **Type-checked on every PR.** CI runs
