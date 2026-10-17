@@ -13,7 +13,10 @@
 //! pure-FP and Q8_K's f32 scale tolerate ~1e-3.
 
 // Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
-#![allow(non_snake_case)]
+#![allow(
+    non_snake_case,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};

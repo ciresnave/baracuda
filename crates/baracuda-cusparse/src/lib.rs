@@ -395,7 +395,6 @@ impl<'buf, T: SparseScalar + baracuda_types::DeviceRepr> SpMat<'buf, T> {
     }
 
     /// Build a BSR (block-sparse-row) descriptor.
-    #[allow(clippy::too_many_arguments)]
     pub fn bsr(
         brows: i64,
         bcols: i64,
@@ -715,7 +714,6 @@ impl<T> Drop for DnMat<'_, T> {
 // ---- SpMV ---------------------------------------------------------------
 
 /// Query buffer-size for `y = alpha * op(A) * x + beta * y`.
-#[allow(clippy::too_many_arguments)]
 pub fn spmv_buffer_size<T: SparseScalar>(
     handle: &Handle,
     op: Op,
@@ -747,7 +745,6 @@ pub fn spmv_buffer_size<T: SparseScalar>(
 }
 
 /// `y = alpha * op(A) * x + beta * y`.
-#[allow(clippy::too_many_arguments)]
 pub fn spmv<T: SparseScalar>(
     handle: &Handle,
     op: Op,
@@ -780,7 +777,6 @@ pub fn spmv<T: SparseScalar>(
 // ---- SpMM ---------------------------------------------------------------
 
 /// Query buffer-size for `C = alpha * op(A) * op(B) + beta * C`, `A` sparse.
-#[allow(clippy::too_many_arguments)]
 pub fn spmm_buffer_size<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -815,7 +811,6 @@ pub fn spmm_buffer_size<T: SparseScalar>(
 
 /// `C = alpha * op(A) * op(B) + beta * C` with `A` sparse, `B`/`C` dense
 /// (`cusparseSpMM`).
-#[allow(clippy::too_many_arguments)]
 pub fn spmm<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -851,7 +846,6 @@ pub fn spmm<T: SparseScalar>(
 /// state into `workspace` so subsequent [`spmm`] calls (with the same A
 /// sparsity pattern + dimensions) are faster. Use this when the same
 /// matrix is multiplied many times.
-#[allow(clippy::too_many_arguments)]
 pub fn spmm_preprocess<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -921,7 +915,6 @@ impl Drop for SpGEMMPlan {
 /// `buffer1` must be either null (size-query mode) or a valid device
 /// pointer to at least `*size1` bytes of writable scratch memory that
 /// remains live for the duration of the underlying cuSPARSE call.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn spgemm_work_estimation<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -964,7 +957,6 @@ pub unsafe fn spgemm_work_estimation<T: SparseScalar>(
 /// `buffer2` must be either null (size-query mode) or a valid device
 /// pointer to at least `*size2` bytes of writable scratch memory that
 /// remains live for the duration of the underlying cuSPARSE call.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn spgemm_compute<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -1001,7 +993,6 @@ pub unsafe fn spgemm_compute<T: SparseScalar>(
 }
 
 /// Phase 3: write output arrays into the pre-populated output `SpMat`.
-#[allow(clippy::too_many_arguments)]
 pub fn spgemm_copy<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -1065,7 +1056,6 @@ impl Drop for SpSVPlan {
 
 /// Query buffer-size for a sparse triangular solve
 /// (`cusparseSpSV_bufferSize`).
-#[allow(clippy::too_many_arguments)]
 pub fn spsv_buffer_size<T: SparseScalar>(
     handle: &Handle,
     op: Op,
@@ -1098,7 +1088,6 @@ pub fn spsv_buffer_size<T: SparseScalar>(
 
 /// Run the SpSV analysis phase
 /// (`cusparseSpSV_analysis`) — must be called once before [`spsv_solve`].
-#[allow(clippy::too_many_arguments)]
 pub fn spsv_analysis<T: SparseScalar>(
     handle: &Handle,
     op: Op,
@@ -1130,7 +1119,6 @@ pub fn spsv_analysis<T: SparseScalar>(
 
 /// Execute the sparse triangular solve `op(A) * y = alpha * x`
 /// (`cusparseSpSV_solve`). Requires a prior [`spsv_analysis`] call.
-#[allow(clippy::too_many_arguments)]
 pub fn spsv_solve<T: SparseScalar>(
     handle: &Handle,
     op: Op,
@@ -1188,7 +1176,6 @@ impl Drop for SpSMPlan {
 
 /// Query buffer-size for a multi-RHS sparse triangular solve
 /// (`cusparseSpSM_bufferSize`).
-#[allow(clippy::too_many_arguments)]
 pub fn spsm_buffer_size<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -1223,7 +1210,6 @@ pub fn spsm_buffer_size<T: SparseScalar>(
 
 /// Run the SpSM analysis phase
 /// (`cusparseSpSM_analysis`) — must be called once before [`spsm_solve`].
-#[allow(clippy::too_many_arguments)]
 pub fn spsm_analysis<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -1257,7 +1243,6 @@ pub fn spsm_analysis<T: SparseScalar>(
 
 /// Execute the multi-RHS sparse triangular solve `op(A) * C = alpha * op(B)`
 /// (`cusparseSpSM_solve`).
-#[allow(clippy::too_many_arguments)]
 pub fn spsm_solve<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -1291,7 +1276,6 @@ pub fn spsm_solve<T: SparseScalar>(
 
 /// Query buffer-size for the sampled dense-dense matmul
 /// (`cusparseSDDMM_bufferSize`).
-#[allow(clippy::too_many_arguments)]
 pub fn sddmm_buffer_size<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -1326,7 +1310,6 @@ pub fn sddmm_buffer_size<T: SparseScalar>(
 
 /// Sampled dense-dense matrix multiply (`cusparseSDDMM`): computes
 /// `C = alpha * op(A) * op(B) + beta * C` at the sparsity pattern of `C`.
-#[allow(clippy::too_many_arguments)]
 pub fn sddmm<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -1360,7 +1343,6 @@ pub fn sddmm<T: SparseScalar>(
 
 /// One-time preprocessing before [`sddmm`]. See [`spmm_preprocess`] for
 /// the rationale.
-#[allow(clippy::too_many_arguments)]
 pub fn sddmm_preprocess<T: SparseScalar>(
     handle: &Handle,
     op_a: Op,
@@ -1486,7 +1468,6 @@ pub fn dense_to_sparse_convert<T: SparseScalar>(
 }
 
 /// Workspace size in bytes for [`csr2csc_ex2`].
-#[allow(clippy::too_many_arguments)]
 pub fn csr2csc_ex2_buffer_size<T: SparseScalar + baracuda_types::DeviceRepr>(
     handle: &Handle,
     m: i32,
@@ -1529,7 +1510,6 @@ pub fn csr2csc_ex2_buffer_size<T: SparseScalar + baracuda_types::DeviceRepr>(
 
 /// Convert a CSR matrix to CSC format using the modern Ex2 entry point —
 /// supports algorithm selection (`alg`) and arbitrary value types.
-#[allow(clippy::too_many_arguments)]
 pub fn csr2csc_ex2<T: SparseScalar + baracuda_types::DeviceRepr>(
     handle: &Handle,
     m: i32,

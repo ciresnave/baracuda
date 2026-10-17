@@ -475,7 +475,6 @@ unsafe fn copy_d2h(
     bytes: usize,
     stream: &Stream,
 ) -> Result<()> {
-    #[allow(non_camel_case_types)]
     type CUresult = i32;
     unsafe extern "system" {
         fn cuMemcpyDtoHAsync_v2(
@@ -498,7 +497,6 @@ unsafe fn copy_h2d_typed(
     bytes: usize,
     stream: &Stream,
 ) -> Result<()> {
-    #[allow(non_camel_case_types)]
     type CUresult = i32;
     unsafe extern "system" {
         fn cuMemcpyHtoDAsync_v2(

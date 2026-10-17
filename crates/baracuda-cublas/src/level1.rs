@@ -14,7 +14,6 @@ use crate::error::{Result, check};
 /// Private dispatch trait for L1 ops — implemented for `f32` and `f64`.
 pub trait L1Scalar: DeviceRepr + l1_sealed::Sealed {
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn dot_raw(
         handle: cublasHandle_t,
         n: i32,

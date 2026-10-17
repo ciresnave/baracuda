@@ -16,7 +16,6 @@ use crate::error::{Result, check};
 ///
 /// # Safety
 /// Every pointer must be a valid device pointer of the declared type/length.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn axpy(
     handle: &crate::Handle,
     n: i32,
@@ -53,7 +52,6 @@ pub unsafe fn axpy(
 ///
 /// # Safety
 /// Same as [`axpy`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn dot(
     handle: &crate::Handle,
     n: i32,
@@ -90,7 +88,6 @@ pub unsafe fn dot(
 ///
 /// # Safety
 /// Same as [`axpy`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn dotc(
     handle: &crate::Handle,
     n: i32,
@@ -127,7 +124,6 @@ pub unsafe fn dotc(
 ///
 /// # Safety
 /// Same as [`axpy`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn nrm2(
     handle: &crate::Handle,
     n: i32,
@@ -158,7 +154,6 @@ pub unsafe fn nrm2(
 ///
 /// # Safety
 /// Same as [`axpy`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn scal(
     handle: &crate::Handle,
     n: i32,
@@ -189,7 +184,6 @@ pub unsafe fn scal(
 ///
 /// # Safety
 /// Same as [`axpy`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn rot(
     handle: &crate::Handle,
     n: i32,

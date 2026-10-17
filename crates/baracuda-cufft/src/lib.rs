@@ -516,7 +516,6 @@ impl PlanMany {
     /// plan.exec_r2c(&mut input, &mut output)?;
     /// # Ok(()) }
     /// ```
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         rank: i32,
         n: &mut [i32],
@@ -848,7 +847,6 @@ impl Plan {
     /// `n`, `inembed`, `onembed` must be writable arrays of length
     /// `rank` (cuFFT mutates them in some versions). Pass null for
     /// `inembed` / `onembed` to use defaults.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn make_plan_many(
         &self,
         rank: i32,
@@ -891,7 +889,6 @@ impl Plan {
     /// # Safety
     ///
     /// Same as [`make_plan_many`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn make_plan_many64(
         &self,
         rank: i32,

@@ -463,7 +463,6 @@ impl Drop for EncoderParams {
 /// # Safety
 /// `channels` must be device pointers of the correct size; `input_format`
 /// must match their memory layout.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn encode_image(
     handle: &Handle,
     state: &EncoderState,

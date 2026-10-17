@@ -1,6 +1,9 @@
 //! `cublasStatus_t` + `CudaStatus` impl.
 
-#![allow(non_camel_case_types)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 
 use baracuda_types::CudaStatus;
 
@@ -9,7 +12,6 @@ use baracuda_types::CudaStatus;
 #[repr(transparent)]
 pub struct cublasStatus_t(pub i32);
 
-#[allow(non_upper_case_globals)]
 impl cublasStatus_t {
     /// Success.
     pub const SUCCESS: Self = Self(0);

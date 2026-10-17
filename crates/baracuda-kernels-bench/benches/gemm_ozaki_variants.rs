@@ -22,8 +22,6 @@
 //! so `cargo bench -p baracuda-kernels-bench --no-default-features`
 //! still works.
 
-#![allow(unexpected_cfgs)]
-
 #[cfg(not(feature = "ozimmu"))]
 fn main() {
     eprintln!(

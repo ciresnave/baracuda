@@ -172,7 +172,6 @@ fn optag_name(op: OpTag) -> Option<&'static str> {
 /// synthesizer's coverage (honest miss), or a compile failure.
 /// `unpopped::synthesize` itself validates arity/budget/mixed-dtype; this
 /// wrapper does not duplicate those checks.
-#[allow(clippy::too_many_arguments)]
 fn synthesize(
     region: &SeamNode,
     operands: &[OperandDesc],

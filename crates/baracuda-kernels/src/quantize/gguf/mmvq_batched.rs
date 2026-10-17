@@ -418,7 +418,6 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_ffi<T: GgufMmvqBatchedActivation>(
     format: &GgufMmvqBatchedFormat,
     n_experts: i32,
@@ -512,7 +511,6 @@ unsafe fn dispatch_ffi<T: GgufMmvqBatchedActivation>(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_quant_ffi(
     fmt: GgufBlockFormat,
     kind: ElementKind,

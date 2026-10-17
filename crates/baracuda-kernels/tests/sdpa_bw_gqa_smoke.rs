@@ -39,7 +39,6 @@ fn setup() -> (Context, Stream) {
 /// Host BW reference operating on contiguous expanded K/V (no broadcast).
 /// Returns (dQ, dK_expanded, dV_expanded) flat row-major over
 /// `[B, H, *, D]` (H Q-heads on both Q and K/V).
-#[allow(clippy::too_many_arguments)]
 fn host_sdpa_bw_f64_contig(
     batch: usize,
     heads: usize,
@@ -203,7 +202,6 @@ fn collapse_kv_grad_f64(
 
 /// Helper: run BW with given dtype-specific buffers via the strided FFI.
 /// `dk_phys` / `dv_phys` are pre-zeroed (caller contract for broadcast).
-#[allow(clippy::too_many_arguments)]
 fn run_bw_strided_f32(
     ctx: &Context,
     stream: &Stream,

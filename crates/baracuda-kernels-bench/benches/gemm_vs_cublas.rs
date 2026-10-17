@@ -645,7 +645,10 @@ fn benches(c: &mut Criterion) {
 // signature is fixed by the macro — we can't add a doc comment to it
 // directly, so suppress the workspace `missing_docs = "deny"` lint on
 // the generated fn.
-#[allow(missing_docs)]
+#[allow(
+    missing_docs,
+    reason = "criterion_group!/criterion_main! expand to undocumented public items"
+)]
 mod criterion_glue {
     use super::*;
     criterion_group!(benches_grp, benches);

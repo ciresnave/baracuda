@@ -9,7 +9,12 @@
 //! (core) and `npps` (signal) — enough for version queries and a demo
 //! signal-arithmetic op. Image-processing DLLs (nppi*) land in follow-ups.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::c_int;
@@ -125,7 +130,6 @@ pub struct NppiPoint {
 }
 
 /// `NppiInterpolationMode` — resampling kernel for geometric ops.
-#[allow(non_snake_case)]
 pub mod NppiInterpolationMode {
     /// `NN` interpolation mode of `NppiInterpolationMode`.
     pub const NN: i32 = 1;

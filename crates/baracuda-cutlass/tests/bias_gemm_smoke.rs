@@ -15,7 +15,6 @@ use half::{bf16, f16};
 #[cfg(feature = "device-tests")]
 /// CPU reference for `D = alpha*AB + beta*C + bias_broadcast(N)`,
 /// RCR layout (A row-major, B column-major, C/D row-major).
-#[allow(clippy::too_many_arguments)]
 fn cpu_bias_gemm_rcr(
     m: usize,
     n: usize,

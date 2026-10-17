@@ -12654,7 +12654,10 @@ got:
         // assertion above and to admit new declined dtypes without a diff-shape
         // change — clippy's `single_element_loop` is a false positive for this
         // deliberate symmetry, so it is allowed here rather than broken.
-        #[allow(clippy::single_element_loop)]
+        #[allow(
+            clippy::single_element_loop,
+            reason = "deliberate symmetry with the multi-element sibling assertion"
+        )]
         for dt in [ElementKind::U32] {
             assert!(
                 !Cuda.supports_dtype(dt, unpopped_vocab::ArchSku::Sm89.into()),

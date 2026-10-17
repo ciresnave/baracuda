@@ -29,6 +29,10 @@
 //! [`baracuda-kernels`]: https://docs.rs/baracuda-kernels
 
 #![no_std]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 
 use core::ffi::c_void;
 
@@ -47966,7 +47970,6 @@ unsafe extern "C" {
 
 /// Opaque cuRAND generator handle. Treated as a stateful object owned by
 /// safe Rust at the plan layer — never inspect its internals here.
-#[allow(non_camel_case_types)]
 pub type curandGenerator_t = *mut c_void;
 
 /// `CURAND_RNG_PSEUDO_DEFAULT` — XORWOW pseudo-random generator. Adequate
@@ -52918,23 +52921,19 @@ unsafe extern "C" {
 
 /// Opaque cuSOLVER dense handle. Stateful object; the plan layer creates
 /// one lazily on first `run` and reuses across launches.
-#[allow(non_camel_case_types)]
 pub type cusolverDnHandle_t = *mut c_void;
 
 /// Opaque cuBLAS handle. Used by `cublas*geqrfBatched` (which lives in
 /// cuBLAS, not cuSOLVER) and any future cuBLAS-routed linalg paths.
-#[allow(non_camel_case_types)]
 pub type cublasHandle_t = *mut c_void;
 
 /// Opaque cuSOLVER Jacobi-SVD parameter object. Stateful; created
 /// once per plan, reused across launches, destroyed on plan drop.
 /// Used by `cusolverDn*gesvdjBatched` for the batched-SVD path.
-#[allow(non_camel_case_types)]
 pub type gesvdjInfo_t = *mut c_void;
 
 /// cuBLAS fill-mode tag re-used by cuSOLVER for triangular factorizations.
 /// `CUBLAS_FILL_MODE_LOWER = 0`, `CUBLAS_FILL_MODE_UPPER = 1`.
-#[allow(non_camel_case_types)]
 pub type cublasFillMode_t = i32;
 
 /// `CUBLAS_FILL_MODE_LOWER` — pass to `potrf` to request the lower-
@@ -52982,7 +52981,6 @@ pub const CUBLAS_SIDE_RIGHT: i32 = 1;
 
 /// cuBLAS diag-type tag for triangular solves (`trsm`).
 /// `CUBLAS_DIAG_NON_UNIT = 0`, `CUBLAS_DIAG_UNIT = 1`.
-#[allow(non_camel_case_types)]
 pub type cublasDiagType_t = i32;
 
 /// `CUBLAS_DIAG_NON_UNIT` — `trsm` reads the actual diagonal of `A`.
@@ -53006,13 +53004,11 @@ pub const CUSOLVER_STATUS_SUCCESS: i32 = 0;
 /// heevd APIs. The `CUSOLVER_EIG_MODE_NOVECTOR` / `_VECTOR` constants
 /// live further down (originally introduced for `gesvdjBatched`'s
 /// `jobz` argument; reused verbatim here for the eig family).
-#[allow(non_camel_case_types)]
 pub type cusolverEigMode_t = i32;
 
 /// `cudaDataType` tag used by the 64-bit cuSOLVER APIs (`Xgeev`,
 /// `Xgesvd`, …) to identify tensor element types. These constants
 /// originate in `<library_types.h>` and are stable across CUDA versions.
-#[allow(non_camel_case_types)]
 pub type cudaDataType = i32;
 
 /// `CUDA_R_32F` — real `f32`.
@@ -53031,7 +53027,6 @@ pub const CUDA_C_64F: i32 = 5;
 /// choice, precision modes) — for the trailblazer the plan layer leaves
 /// it at defaults. Created via `cusolverDnCreateParams` and destroyed via
 /// `cusolverDnDestroyParams`.
-#[allow(non_camel_case_types)]
 pub type cusolverDnParams_t = *mut c_void;
 
 /// ABI-compatible single-precision complex struct, matching `cuComplex`
@@ -53041,7 +53036,6 @@ pub type cusolverDnParams_t = *mut c_void;
 /// to a `*mut cuComplex` for the cuSOLVER complex APIs without copy.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
-#[allow(non_camel_case_types)]
 pub struct cuComplex {
     /// Real component.
     pub x: f32,
@@ -53053,7 +53047,6 @@ pub struct cuComplex {
 /// `cuDoubleComplex` from `<cuComplex.h>`. Sibling to [`cuComplex`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
-#[allow(non_camel_case_types)]
 pub struct cuDoubleComplex {
     /// Real component.
     pub x: f64,
@@ -53065,7 +53058,6 @@ pub struct cuDoubleComplex {
 /// complex struct — an alias for [`cuComplex`]. Surfaced so cuSOLVER's
 /// complex APIs (`cusolverDn{C,Z}unmqr`, …) can spell their signatures
 /// in the same vocabulary as the NVIDIA headers.
-#[allow(non_camel_case_types)]
 pub type cuFloatComplex = cuComplex;
 
 unsafe extern "C" {
@@ -54701,13 +54693,11 @@ pub const CUSOLVER_EIG_MODE_VECTOR: i32 = 1;
 /// **integer ID** (`int`), not a pointer. A value of `-1` is reserved
 /// at the safe-plan layer as the "not yet created" sentinel — cuFFT
 /// itself returns small non-negative integers for live handles.
-#[allow(non_camel_case_types)]
 pub type cufftHandle = i32;
 
 /// cuFFT result code type. `CUFFT_SUCCESS = 0`. Any non-zero return is
 /// mapped to a negative status at the safe-plan layer for distinct
 /// error reporting.
-#[allow(non_camel_case_types)]
 pub type cufftResult = i32;
 
 /// `CUFFT_SUCCESS` — the only success code.
@@ -54752,7 +54742,6 @@ pub const CUFFT_INVERSE: i32 = 1;
 /// plan layer pairs this with the [`crate`]-level `Complex32` newtype.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
-#[allow(non_camel_case_types)]
 pub struct cufftComplex {
     /// Real component.
     pub x: f32,
@@ -54764,7 +54753,6 @@ pub struct cufftComplex {
 /// `cufftDoubleComplex` (alias for `double2`).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
-#[allow(non_camel_case_types)]
 pub struct cufftDoubleComplex {
     /// Real component.
     pub x: f64,
@@ -55778,14 +55766,12 @@ mod cudnn_ffi {
     /// cuSOLVER, the handle is **not** thread-safe; the plan owns it via a
     /// `Cell<>` and is `!Sync` / `!Send` by virtue of that interior
     /// mutability.
-    #[allow(non_camel_case_types)]
     pub type cudnnHandle_t = *mut c_void;
 
     /// Opaque cuDNN tensor descriptor. Carries shape + layout + element
     /// type for an n-D tensor operand. Reused across launches by the plan
     /// layer (set once on first `run`, mutated only if the descriptor
     /// shape changes).
-    #[allow(non_camel_case_types)]
     pub type cudnnTensorDescriptor_t = *mut c_void;
 
     /// Opaque cuDNN filter descriptor. Same shape as
@@ -55793,20 +55779,17 @@ mod cudnn_ffi {
     /// input_channels, ...]` filter-bank tensor (semantics differ from a
     /// plain n-D tensor — cuDNN uses this to express convolution weights,
     /// transposed-convolution weights, etc.).
-    #[allow(non_camel_case_types)]
     pub type cudnnFilterDescriptor_t = *mut c_void;
 
     /// Opaque cuDNN convolution descriptor. Carries the
     /// (pad, stride, dilation, mode, accumulator-dtype) tuple. Reused
     /// across launches by the conv plan.
-    #[allow(non_camel_case_types)]
     pub type cudnnConvolutionDescriptor_t = *mut c_void;
 
     /// cuDNN data-type tag — `cudnnDataType_t` from the C header.
     /// Used by `cudnnSetTensor4dDescriptor`, `cudnnSetFilter4dDescriptor`,
     /// `cudnnSetConvolution2dDescriptor` to encode the per-operand element
     /// type.
-    #[allow(non_camel_case_types)]
     pub type cudnnDataType_t = i32;
 
     /// `CUDNN_DATA_FLOAT` — `f32`.
@@ -55822,7 +55805,6 @@ mod cudnn_ffi {
     /// Selects between channel-first (NCHW, PyTorch default) and channel-
     /// last (NHWC, TensorFlow default) storage. Trailblazer wires NCHW
     /// only; NHWC is a follow-up.
-    #[allow(non_camel_case_types)]
     pub type cudnnTensorFormat_t = i32;
 
     /// `CUDNN_TENSOR_NCHW` — channel-first storage (PyTorch / default).
@@ -55833,7 +55815,6 @@ mod cudnn_ffi {
     /// cuDNN NaN-propagation tag — `cudnnNanPropagation_t` from the C
     /// header. Controls whether pooling / activation kernels propagate
     /// NaN values through reductions (matters for max-pool etc.).
-    #[allow(non_camel_case_types)]
     pub type cudnnNanPropagation_t = i32;
 
     /// `CUDNN_NOT_PROPAGATE_NAN` — NaN inputs are ignored (treated as
@@ -55849,7 +55830,6 @@ mod cudnn_ffi {
     /// applied directly). **PyTorch's `torch.nn.Conv2d` is actually
     /// cross-correlation** despite the name — pass
     /// [`CUDNN_CROSS_CORRELATION`] for PyTorch parity.
-    #[allow(non_camel_case_types)]
     pub type cudnnConvolutionMode_t = i32;
 
     /// `CUDNN_CONVOLUTION` — true mathematical convolution (kernel
@@ -55866,7 +55846,6 @@ mod cudnn_ffi {
     /// [`CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM`] (algo `0`) as the
     /// universally supported baseline; the heuristic search via
     /// `cudnnGetConvolutionForwardAlgorithm_v7` is a follow-up.
-    #[allow(non_camel_case_types)]
     pub type cudnnConvolutionFwdAlgo_t = i32;
 
     /// `CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM` — universal-coverage
@@ -55879,7 +55858,6 @@ mod cudnn_ffi {
     /// pins [`CUDNN_CONVOLUTION_BWD_DATA_ALGO_1`] (algo `1`, the
     /// `IMPLICIT_PRECOMP_GEMM`-style universal baseline for backward
     /// data).
-    #[allow(non_camel_case_types)]
     pub type cudnnConvolutionBwdDataAlgo_t = i32;
 
     /// `CUDNN_CONVOLUTION_BWD_DATA_ALGO_1` — universal-coverage baseline
@@ -55889,7 +55867,6 @@ mod cudnn_ffi {
     /// cuDNN backward-filter-convolution algorithm tag —
     /// `cudnnConvolutionBwdFilterAlgo_t` from the C header. Trailblazer
     /// pins [`CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1`].
-    #[allow(non_camel_case_types)]
     pub type cudnnConvolutionBwdFilterAlgo_t = i32;
 
     /// `CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1` — universal-coverage
@@ -55906,14 +55883,12 @@ mod cudnn_ffi {
     /// norm_mode, nan_prop)` tuple configured via
     /// [`cudnnSetCTCLossDescriptorEx`]. Owned by the CTC plan, reused
     /// across launches.
-    #[allow(non_camel_case_types)]
     pub type cudnnCTCLossDescriptor_t = *mut c_void;
 
     /// cuDNN CTC-loss algorithm tag — `cudnnCTCLossAlgo_t` from the C
     /// header. Selects between deterministic and non-deterministic
     /// internal algorithms (cuDNN's non-deterministic variant uses
     /// atomic-add reductions for higher throughput on large batches).
-    #[allow(non_camel_case_types)]
     pub type cudnnCTCLossAlgo_t = i32;
 
     /// `CUDNN_CTC_LOSS_ALGO_DETERMINISTIC` — bit-stable across runs
@@ -55928,7 +55903,6 @@ mod cudnn_ffi {
     /// `cudnnLossNormalizationMode_t` from the C header. Selects how
     /// cuDNN interprets the input probability tensor for losses that
     /// can take either raw probabilities or pre-softmaxed log-probs.
-    #[allow(non_camel_case_types)]
     pub type cudnnLossNormalizationMode_t = i32;
 
     /// `CUDNN_LOSS_NORMALIZATION_NONE` — input is raw probabilities;
@@ -55946,7 +55920,6 @@ mod cudnn_ffi {
     /// Opaque cuDNN pooling descriptor. Carries the
     /// `(mode, nan_prop, window, pad, stride)` tuple. Reused across launches
     /// by the pool plan.
-    #[allow(non_camel_case_types)]
     pub type cudnnPoolingDescriptor_t = *mut c_void;
 
     /// cuDNN pooling-mode tag — `cudnnPoolingMode_t` from the C header.
@@ -55955,7 +55928,6 @@ mod cudnn_ffi {
     /// [`CUDNN_POOLING_MAX`]; `nn.AvgPool2d` with the PyTorch default
     /// `count_include_pad=False` corresponds to
     /// [`CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING`].
-    #[allow(non_camel_case_types)]
     pub type cudnnPoolingMode_t = i32;
 
     /// `CUDNN_POOLING_MAX` — pick the maximum element in each window.

@@ -69,7 +69,6 @@ pub struct FractionalMaxPool3dDescriptor {
 impl FractionalMaxPool3dDescriptor {
     /// Build a descriptor with `seed = 0`. Chain with
     /// [`Self::with_seed`] to override.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         batch: i32,
         channels: i32,

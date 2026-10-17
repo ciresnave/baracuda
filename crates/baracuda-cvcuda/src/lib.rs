@@ -330,7 +330,6 @@ impl Normalize {
     /// # Safety
     ///
     /// `stream` must be a live `cudaStream_t`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -466,7 +465,6 @@ impl WarpAffine {
     /// # Safety
     ///
     /// `stream` live; `xform.len() == 6`; `border_value.len() == 4`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -503,7 +501,6 @@ impl WarpPerspective {
     /// # Safety
     ///
     /// `xform.len() == 9`; `border_value.len() == 4`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -540,7 +537,6 @@ impl Remap {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -679,7 +675,6 @@ impl CopyMakeBorder {
     /// # Safety
     ///
     /// `stream` live; `border_value.len() == 4`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -805,7 +800,6 @@ impl AverageBlur {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -874,7 +868,6 @@ impl BilateralFilter {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -979,7 +972,6 @@ impl BoxFilter {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1016,7 +1008,6 @@ impl Morphology {
     /// # Safety
     ///
     /// `stream` live; `workspace` must be a correctly-shaped scratch tensor.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1059,7 +1050,6 @@ impl Canny {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1149,7 +1139,6 @@ impl MinMaxLoc {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1249,7 +1238,6 @@ impl AdaptiveThreshold {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1320,7 +1308,6 @@ impl BrightnessContrast {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1503,7 +1490,6 @@ impl Erase {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1591,7 +1577,6 @@ impl AddWeighted {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1669,7 +1654,6 @@ impl PadAndStack {
     /// # Safety
     ///
     /// `stream` live; `input_batch` is a live `NVCVImageBatchHandle`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1710,7 +1694,6 @@ impl Pad {
     /// # Safety
     ///
     /// `stream` live; `border_value.len() == 4`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1748,7 +1731,6 @@ impl JointBilateralFilter {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -1804,7 +1786,6 @@ impl Label {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -2008,7 +1989,6 @@ impl RandomResizedCrop {
     /// Wraps `cvcudaRandomResizedCropCreate`. `min_scale`/`max_scale` bound
     /// the crop area fraction, `min_ratio`/`max_ratio` bound the aspect
     /// ratio, `max_batch_size` caps batches, `seed` reseeds the RNG.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         min_scale: f64,
         max_scale: f64,
@@ -2082,7 +2062,6 @@ impl GaussianNoise {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -2177,7 +2156,6 @@ impl SaltAndPepperNoise {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -2247,7 +2225,6 @@ impl Sift {
     /// Wraps `cvcudaSiftCreate` with all the SIFT hyperparameters; values
     /// match OpenCV's defaults (`num_octave_layers=3`, `contrast_threshold=0.04`,
     /// `edge_threshold=10`, `init_sigma=1.6`).
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         max_shape: NVCVSize2D,
         max_num_features: i32,
@@ -2280,7 +2257,6 @@ impl Sift {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -2325,7 +2301,6 @@ impl HQResize {
     /// # Safety
     ///
     /// `stream` live; `roi` may be null or point at an `NVCVHQResizeRoisF`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -2367,7 +2342,6 @@ impl CropFlipNormalizeReformat {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -2415,7 +2389,6 @@ impl GuidedFilter {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -2465,7 +2438,6 @@ impl PairwiseMatcher {
     /// # Safety
     ///
     /// `stream` live.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -2542,7 +2514,6 @@ impl ResizeCropConvertReformat {
     /// # Safety
     ///
     /// `stream` live; `crop_pos` valid.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,
@@ -2626,7 +2597,6 @@ impl WarpAffineBatch {
     /// # Safety
     ///
     /// `stream` live; `border_value.len() == 4`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn submit(
         &self,
         stream: *mut c_void,

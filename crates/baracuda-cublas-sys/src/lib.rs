@@ -4,7 +4,10 @@
 //! directly only if you need a function that the safe layer hasn't wrapped
 //! yet (in which case please file a bug).
 
-#![allow(non_camel_case_types)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 pub mod functions;

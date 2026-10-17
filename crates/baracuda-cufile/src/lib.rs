@@ -325,7 +325,6 @@ impl FileHandle {
     ///
     /// All pointers must stay live until the stream reports completion.
     /// `stream` must be previously registered via [`StreamRegistration::register`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn read_async(
         &self,
         dev_buf: *mut c_void,
@@ -355,7 +354,6 @@ impl FileHandle {
     /// # Safety
     ///
     /// Same as [`Self::read_async`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn write_async(
         &self,
         dev_buf: *const c_void,

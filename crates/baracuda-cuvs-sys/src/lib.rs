@@ -22,7 +22,12 @@
 //! Note the unusual convention: [`cuvsError_t::SUCCESS`] is `1`, not `0`
 //! (`CUVS_ERROR` is `0`). [`cuvsError_t::is_success`] encodes this.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 #[cfg(feature = "cuvs")]

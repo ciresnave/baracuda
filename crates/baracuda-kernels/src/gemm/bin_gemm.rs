@@ -264,7 +264,10 @@ impl BinGemmPlan {
             map_status(status)
         }
         #[cfg(not(feature = "sm89"))]
-        #[allow(unreachable_code)]
+        #[allow(
+            unreachable_code,
+            reason = "feature-off arm intentionally unreachable: the function returned earlier under cfg"
+        )]
         {
             unreachable!("returned earlier under #[cfg(not(feature = \"sm89\"))]")
         }

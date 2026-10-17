@@ -4,6 +4,12 @@
 //! (`cudaStream_t == CUstream`, `cudaEvent_t == CUevent`, ...) so
 //! Driver↔Runtime conversions are zero-cost.
 
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
+
 use core::ffi::c_void;
 
 /// Opaque CUDA stream (typedef-compatible with [`crate::CUstream`]).
@@ -43,7 +49,6 @@ pub type cudaMemGenericAllocationHandle_t = u64;
 pub type cudaGreenCtx_t = *mut c_void;
 
 /// `cudaChannelFormatKind` — texel format family.
-#[allow(non_snake_case)]
 pub mod cudaChannelFormatKind {
     /// `cudaChannelFormatKind::SIGNED` — signed.
     pub const SIGNED: i32 = 0;
@@ -58,7 +63,6 @@ pub mod cudaChannelFormatKind {
 /// `cudaChannelFormatDesc` — 20-byte descriptor (4×c_int + c_int kind).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct cudaChannelFormatDesc {
     /// `x` field.
     pub x: core::ffi::c_int,
@@ -75,7 +79,6 @@ pub struct cudaChannelFormatDesc {
 /// `cudaExtent` — 3D size in elements (width) + texels (height/depth).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct cudaExtent {
     /// `width` field.
     pub width: usize,
@@ -88,7 +91,6 @@ pub struct cudaExtent {
 /// `cudaPos` — 3D starting offset inside an array.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct cudaPos {
     /// `x` field.
     pub x: usize,
@@ -101,7 +103,6 @@ pub struct cudaPos {
 /// `cudaPitchedPtr` — pitched device pointer (from `cudaMalloc3D`).
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaPitchedPtr {
     /// `ptr` field.
     pub ptr: *mut c_void,
@@ -127,7 +128,6 @@ impl Default for cudaPitchedPtr {
 /// `cudaMemcpy3DParms` — full 3D memcpy descriptor.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaMemcpy3DParms {
     /// `src_array` field.
     pub src_array: cudaArray_t,
@@ -163,7 +163,6 @@ impl Default for cudaMemcpy3DParms {
 }
 
 /// `cudaResourceType` — what a `cudaResourceDesc` points at.
-#[allow(non_snake_case)]
 pub mod cudaResourceType {
     /// `cudaResourceType::ARRAY` — array.
     pub const ARRAY: i32 = 0;
@@ -202,7 +201,6 @@ pub mod cudaResourceType {
 ///    build tolerated it). Fixed via `#[repr(C, align(8))]`.
 #[repr(C, align(8))]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct cudaResourceDesc {
     /// `res_type` field.
     pub res_type: core::ffi::c_int,
@@ -234,7 +232,10 @@ impl core::fmt::Debug for cudaResourceDesc {
 
 impl cudaResourceDesc {
     /// Build an `ARRAY`-type descriptor.
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    #[allow(
+        clippy::not_unsafe_ptr_arg_deref,
+        reason = "the pointer is stored or forwarded to the driver, never dereferenced in Rust"
+    )]
     pub fn from_array(array: cudaArray_t) -> Self {
         let mut s = Self {
             res_type: cudaResourceType::ARRAY,
@@ -248,7 +249,10 @@ impl cudaResourceDesc {
     }
 
     /// Build a `MIPMAPPED_ARRAY`-type descriptor.
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    #[allow(
+        clippy::not_unsafe_ptr_arg_deref,
+        reason = "the pointer is stored or forwarded to the driver, never dereferenced in Rust"
+    )]
     pub fn from_mipmapped(mipmap: cudaMipmappedArray_t) -> Self {
         let mut s = Self {
             res_type: cudaResourceType::MIPMAPPED_ARRAY,
@@ -262,7 +266,10 @@ impl cudaResourceDesc {
     }
 
     /// Build a `LINEAR`-type descriptor: bytewise view of a device pointer.
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    #[allow(
+        clippy::not_unsafe_ptr_arg_deref,
+        reason = "the pointer is stored or forwarded to the driver, never dereferenced in Rust"
+    )]
     pub fn from_linear(
         dev_ptr: *mut c_void,
         desc: cudaChannelFormatDesc,
@@ -283,7 +290,6 @@ impl cudaResourceDesc {
 }
 
 /// `cudaTextureAddressMode` — out-of-bounds sampler behavior.
-#[allow(non_snake_case)]
 pub mod cudaTextureAddressMode {
     /// `cudaTextureAddressMode::WRAP` — wrap.
     pub const WRAP: i32 = 0;
@@ -296,7 +302,6 @@ pub mod cudaTextureAddressMode {
 }
 
 /// `cudaTextureFilterMode` — filter kernel on fetch.
-#[allow(non_snake_case)]
 pub mod cudaTextureFilterMode {
     /// `cudaTextureFilterMode::POINT` — point.
     pub const POINT: i32 = 0;
@@ -305,7 +310,6 @@ pub mod cudaTextureFilterMode {
 }
 
 /// `cudaTextureReadMode` — element-type reinterpretation on fetch.
-#[allow(non_snake_case)]
 pub mod cudaTextureReadMode {
     /// `cudaTextureReadMode::ELEMENT_TYPE` — element type.
     pub const ELEMENT_TYPE: i32 = 0;
@@ -316,7 +320,6 @@ pub mod cudaTextureReadMode {
 /// `cudaTextureDesc` — sampler state (filter/address/normalize/mipmap).
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaTextureDesc {
     /// `address_mode` field.
     pub address_mode: [core::ffi::c_int; 3],
@@ -369,7 +372,6 @@ impl Default for cudaTextureDesc {
 /// `cudaResourceViewDesc` — optional view transformation applied on fetch.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct cudaResourceViewDesc {
     /// `format` field.
     pub format: core::ffi::c_int,
@@ -390,7 +392,6 @@ pub struct cudaResourceViewDesc {
 }
 
 /// `cudaLaunchAttributeID` — selectors for extended launch attributes.
-#[allow(non_snake_case)]
 pub mod cudaLaunchAttributeID {
     /// `cudaLaunchAttributeID::IGNORE` — ignore.
     pub const IGNORE: i32 = 0;
@@ -423,7 +424,6 @@ pub mod cudaLaunchAttributeID {
 /// `cudaLaunchAttributeValue` — 64-byte union payload.
 #[repr(C, align(8))]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct cudaLaunchAttributeValue {
     /// `raw` field.
     pub raw: [u8; 64],
@@ -479,7 +479,6 @@ impl cudaLaunchAttributeValue {
 /// `cudaLaunchAttribute` — paired ID + value entry.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaLaunchAttribute {
     /// `id` field.
     pub id: core::ffi::c_int,
@@ -492,7 +491,6 @@ pub struct cudaLaunchAttribute {
 /// `cudaLaunchConfig_t` — the config object consumed by `cudaLaunchKernelEx`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaLaunchConfig_t {
     /// `grid_dim` field.
     pub grid_dim: dim3,
@@ -525,7 +523,6 @@ impl Default for cudaLaunchConfig_t {
 /// Shared ABI with the Driver API's `CUmemAllocationProp`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaMemAllocationProp {
     /// `alloc_type` field.
     pub alloc_type: core::ffi::c_int, // cudaMemAllocationType
@@ -561,7 +558,6 @@ pub type cudaKernel_t = *mut c_void;
 pub type cudaUserObject_t = *mut c_void;
 
 /// `cudaDeviceScheduleFlags` — bits for `cudaSetDeviceFlags`.
-#[allow(non_snake_case)]
 pub mod cudaDeviceScheduleFlags {
     /// `cudaDeviceScheduleFlags::AUTO` — auto.
     pub const AUTO: u32 = 0x00;
@@ -629,7 +625,6 @@ impl Default for dim3 {
 }
 
 /// Stream creation flags.
-#[allow(non_snake_case)]
 pub mod cudaStreamFlags {
     /// `cudaStreamFlags::DEFAULT` — default.
     pub const DEFAULT: u32 = 0x0;
@@ -638,7 +633,6 @@ pub mod cudaStreamFlags {
 }
 
 /// Event creation flags.
-#[allow(non_snake_case)]
 pub mod cudaEventFlags {
     /// `cudaEventFlags::DEFAULT` — default.
     pub const DEFAULT: u32 = 0x0;
@@ -651,7 +645,6 @@ pub mod cudaEventFlags {
 }
 
 /// `cudaMemoryAdvise` — values accepted by `cudaMemAdvise`.
-#[allow(non_snake_case)]
 pub mod cudaMemoryAdvise {
     /// `cudaMemoryAdvise::SET_READ_MOSTLY` — set read mostly.
     pub const SET_READ_MOSTLY: i32 = 1;
@@ -668,7 +661,6 @@ pub mod cudaMemoryAdvise {
 }
 
 /// `cudaMemAttach*` — flags for `cudaMallocManaged` / `cudaStreamAttachMemAsync`.
-#[allow(non_snake_case)]
 pub mod cudaMemAttach {
     /// `cudaMemAttach::GLOBAL` — global.
     pub const GLOBAL: u32 = 0x01;
@@ -679,7 +671,6 @@ pub mod cudaMemAttach {
 }
 
 /// `cudaHostAllocFlags` — flags for `cudaHostAlloc`.
-#[allow(non_snake_case)]
 pub mod cudaHostAllocFlags {
     /// `cudaHostAllocFlags::DEFAULT` — default.
     pub const DEFAULT: u32 = 0x00;
@@ -692,7 +683,6 @@ pub mod cudaHostAllocFlags {
 }
 
 /// `cudaStreamCaptureMode` — argument to `cudaStreamBeginCapture`.
-#[allow(non_snake_case)]
 pub mod cudaStreamCaptureMode {
     /// `cudaStreamCaptureMode::GLOBAL` — global.
     pub const GLOBAL: i32 = 0;
@@ -703,7 +693,6 @@ pub mod cudaStreamCaptureMode {
 }
 
 /// `cudaStreamCaptureStatus` — returned by `cudaStreamIsCapturing`.
-#[allow(non_snake_case)]
 pub mod cudaStreamCaptureStatus {
     /// `cudaStreamCaptureStatus::NONE` — none.
     pub const NONE: i32 = 0;
@@ -719,7 +708,6 @@ pub type cudaHostFn_t = Option<unsafe extern "C" fn(user_data: *mut c_void)>;
 // ---- Memory-pool types ---------------------------------------------------
 
 /// `cudaMemAllocationType` — same values as the Driver side.
-#[allow(non_snake_case)]
 pub mod cudaMemAllocationType {
     /// `cudaMemAllocationType::INVALID` — invalid.
     pub const INVALID: i32 = 0;
@@ -728,7 +716,6 @@ pub mod cudaMemAllocationType {
 }
 
 /// `cudaMemLocationType` — same values as the Driver side.
-#[allow(non_snake_case)]
 pub mod cudaMemLocationType {
     /// `cudaMemLocationType::INVALID` — invalid.
     pub const INVALID: i32 = 0;
@@ -743,7 +730,6 @@ pub mod cudaMemLocationType {
 }
 
 /// `cudaMemAccessFlags`.
-#[allow(non_snake_case)]
 pub mod cudaMemAccessFlags {
     /// `cudaMemAccessFlags::NONE` — none.
     pub const NONE: i32 = 0;
@@ -754,7 +740,6 @@ pub mod cudaMemAccessFlags {
 }
 
 /// `cudaMemAllocationHandleType` — IPC export type.
-#[allow(non_snake_case)]
 pub mod cudaMemAllocationHandleType {
     /// `cudaMemAllocationHandleType::NONE` — none.
     pub const NONE: i32 = 0;
@@ -769,7 +754,6 @@ pub mod cudaMemAllocationHandleType {
 }
 
 /// `cudaMemPoolAttr` — selector for `cudaMemPoolSetAttribute` / `GetAttribute`.
-#[allow(non_snake_case)]
 pub mod cudaMemPoolAttr {
     /// `cudaMemPoolAttr::REUSE_FOLLOW_EVENT_DEPENDENCIES` — reuse follow event dependencies.
     pub const REUSE_FOLLOW_EVENT_DEPENDENCIES: i32 = 1;
@@ -791,7 +775,6 @@ pub mod cudaMemPoolAttr {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 /// `cudaMemLocation` — CUDA descriptor / record.
 pub struct cudaMemLocation {
     /// `type_` field.
@@ -802,7 +785,6 @@ pub struct cudaMemLocation {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 /// `cudaMemAccessDesc` — CUDA descriptor / record.
 pub struct cudaMemAccessDesc {
     /// `location` field.
@@ -815,7 +797,6 @@ pub struct cudaMemAccessDesc {
 /// `CUmemPoolProps` layout byte-for-byte.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaMemPoolProps {
     /// `alloc_type` field.
     pub alloc_type: core::ffi::c_int,
@@ -850,7 +831,6 @@ impl Default for cudaMemPoolProps {
 /// `cudaMemPoolPtrExportData` — 64-byte opaque blob.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaMemPoolPtrExportData {
     /// `reserved` field.
     pub reserved: [core::ffi::c_uchar; 64],
@@ -869,7 +849,6 @@ impl Default for cudaMemPoolPtrExportData {
 /// `cudaKernelNodeParams` — parameters for `cudaGraphAddKernelNode`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaKernelNodeParams {
     /// `func` field.
     pub func: *mut c_void,
@@ -901,7 +880,6 @@ impl Default for cudaKernelNodeParams {
 /// `cudaMemsetParams` — parameters for `cudaGraphAddMemsetNode`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct cudaMemsetParams {
     /// `dst` field.
     pub dst: *mut c_void,
@@ -920,7 +898,6 @@ pub struct cudaMemsetParams {
 /// `cudaHostNodeParams` — `{ fn, user_data }` for `cudaGraphAddHostNode`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaHostNodeParams {
     /// `fn_` field.
     pub fn_: cudaHostFn_t,
@@ -940,7 +917,6 @@ impl Default for cudaHostNodeParams {
 /// `cudaMemAllocNodeParams` — parameters for `cudaGraphAddMemAllocNode`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaMemAllocNodeParams {
     /// `pool_props` field.
     pub pool_props: cudaMemPoolProps,
@@ -967,7 +943,6 @@ impl Default for cudaMemAllocNodeParams {
 }
 
 /// `cudaGraphExecUpdateResult` — outcome of `cudaGraphExecUpdate`.
-#[allow(non_snake_case)]
 pub mod cudaGraphExecUpdateResult {
     /// `cudaGraphExecUpdateResult::SUCCESS` — success.
     pub const SUCCESS: i32 = 0;
@@ -996,7 +971,6 @@ pub mod cudaGraphExecUpdateResult {
 /// The C struct is 48 bytes. We model the fields directly.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct cudaPointerAttributes {
     /// `cudaMemoryType` — 0=unregistered, 1=host, 2=device, 3=managed.
     pub type_: core::ffi::c_int,
@@ -1020,7 +994,6 @@ impl Default for cudaPointerAttributes {
 }
 
 /// `cudaMemoryType` — `cudaPointerAttributes::type_` values.
-#[allow(non_snake_case)]
 pub mod cudaMemoryType {
     /// `cudaMemoryType::UNREGISTERED` — unregistered.
     pub const UNREGISTERED: i32 = 0;
@@ -1035,7 +1008,6 @@ pub mod cudaMemoryType {
 /// `cudaFuncAttributes` — kernel metadata (36 bytes in C).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct cudaFuncAttributes {
     /// `shared_size_bytes` field.
     pub shared_size_bytes: usize,
@@ -1074,7 +1046,6 @@ pub struct cudaFuncAttributes {
 }
 
 /// `cudaStreamWriteValueFlags`.
-#[allow(non_snake_case)]
 pub mod cudaStreamWriteValueFlags {
     /// `cudaStreamWriteValueFlags::DEFAULT` — default.
     pub const DEFAULT: u32 = 0x0;
@@ -1083,7 +1054,6 @@ pub mod cudaStreamWriteValueFlags {
 }
 
 /// `cudaStreamWaitValueFlags`.
-#[allow(non_snake_case)]
 pub mod cudaStreamWaitValueFlags {
     /// `cudaStreamWaitValueFlags::GEQ` — geq.
     pub const GEQ: u32 = 0x0;
@@ -1098,7 +1068,6 @@ pub mod cudaStreamWaitValueFlags {
 }
 
 /// Device-attribute selector (matches `cudaDeviceAttr` values).
-#[allow(non_snake_case)]
 pub mod cudaDeviceAttr {
     /// `cudaDeviceAttr::MAX_THREADS_PER_BLOCK` — max threads per block.
     pub const MAX_THREADS_PER_BLOCK: i32 = 1;

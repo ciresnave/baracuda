@@ -59,7 +59,6 @@ fn silu(x: f32) -> f32 {
 }
 
 #[cfg(feature = "device-tests")]
-#[allow(clippy::too_many_arguments)]
 fn cpu_bias_act_gemm_rcr(
     m: usize,
     n: usize,

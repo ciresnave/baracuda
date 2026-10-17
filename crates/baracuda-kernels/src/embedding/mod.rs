@@ -31,7 +31,10 @@
 //! padding-disabled sentinel is `i32::MIN` (mapped from `Option::None`).
 
 // Renaming this submodule is API-breaking (it is part of the public module path).
-#[allow(clippy::module_inception)]
+#[allow(
+    clippy::module_inception,
+    reason = "renaming this submodule is API-breaking (public module path)"
+)]
 pub mod embedding;
 pub mod embedding_backward;
 pub mod embedding_bag;

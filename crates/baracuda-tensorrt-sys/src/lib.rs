@@ -10,7 +10,12 @@
 //! builder side of TensorRT remains C++-only; use the TRT `trtexec` tool or
 //! the Python bindings to produce serialized engines, then load them here.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::{c_char, c_int, c_void};

@@ -73,7 +73,6 @@ impl Diag {
 /// scalar kinds (symm / syrk / trmm / trsm).
 pub trait L3Scalar: DeviceRepr + l3_sealed::Sealed {
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn symm_raw(
         h: cublasHandle_t,
         side: cublasSideMode_t,
@@ -91,7 +90,6 @@ pub trait L3Scalar: DeviceRepr + l3_sealed::Sealed {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn syrk_raw(
         h: cublasHandle_t,
         uplo: cublasFillMode_t,
@@ -107,7 +105,6 @@ pub trait L3Scalar: DeviceRepr + l3_sealed::Sealed {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn trmm_raw(
         h: cublasHandle_t,
         side: cublasSideMode_t,
@@ -126,7 +123,6 @@ pub trait L3Scalar: DeviceRepr + l3_sealed::Sealed {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn trsm_raw(
         h: cublasHandle_t,
         side: cublasSideMode_t,
@@ -410,7 +406,6 @@ pub trait HermitianScalar: L3Scalar + l3_sealed::SealedComplex {
     type Real: DeviceRepr;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn hemm_raw(
         h: cublasHandle_t,
         side: cublasSideMode_t,
@@ -428,7 +423,6 @@ pub trait HermitianScalar: L3Scalar + l3_sealed::SealedComplex {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn herk_raw(
         h: cublasHandle_t,
         uplo: cublasFillMode_t,
@@ -611,7 +605,6 @@ mod l3_sealed {
 /// Symmetric matrix × general matrix: `C = alpha * A * B + beta * C` (Left)
 /// or `C = alpha * B * A + beta * C` (Right), where `A` is symmetric and only
 /// the triangle indicated by `uplo` is read.
-#[allow(clippy::too_many_arguments)]
 pub fn symm<T: L3Scalar>(
     handle: &crate::Handle,
     side: Side,
@@ -648,7 +641,6 @@ pub fn symm<T: L3Scalar>(
 }
 
 /// Symmetric rank-k update: `C = alpha * A * Aᵀ + beta * C` (or with trans).
-#[allow(clippy::too_many_arguments)]
 pub fn syrk<T: L3Scalar>(
     handle: &crate::Handle,
     uplo: Fill,
@@ -682,7 +674,6 @@ pub fn syrk<T: L3Scalar>(
 
 /// Triangular matrix × general matrix: `C = alpha * op(A) * B` or
 /// `C = alpha * B * op(A)`, writing to `C` (which may alias `B`).
-#[allow(clippy::too_many_arguments)]
 pub fn trmm<T: L3Scalar>(
     handle: &crate::Handle,
     side: Side,
@@ -721,7 +712,6 @@ pub fn trmm<T: L3Scalar>(
 }
 
 /// Solve `op(A) * X = alpha * B` for `X`, in place on `B`. `A` is triangular.
-#[allow(clippy::too_many_arguments)]
 pub fn trsm<T: L3Scalar>(
     handle: &crate::Handle,
     side: Side,
@@ -756,7 +746,6 @@ pub fn trsm<T: L3Scalar>(
 }
 
 /// Hermitian matrix × general matrix (complex only).
-#[allow(clippy::too_many_arguments)]
 pub fn hemm<T: HermitianScalar>(
     handle: &crate::Handle,
     side: Side,
@@ -793,7 +782,6 @@ pub fn hemm<T: HermitianScalar>(
 }
 
 /// Hermitian rank-k update (complex only). Note alpha/beta are real-typed.
-#[allow(clippy::too_many_arguments)]
 pub fn herk<T: HermitianScalar>(
     handle: &crate::Handle,
     uplo: Fill,

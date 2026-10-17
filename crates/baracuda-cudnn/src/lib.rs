@@ -431,7 +431,6 @@ impl Drop for ActivationDescriptor {
 /// activation_forward(&cudnn, &act, 1.0, &tdesc, &x, 0.0, &tdesc, &mut y)?;
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn activation_forward<T: DeviceRepr>(
     handle: &Handle,
     activation: &ActivationDescriptor,
@@ -593,7 +592,6 @@ impl ConvolutionDescriptor {
     /// - `dilation_h`/`dilation_w`: per-axis dilation (1 = standard).
     /// - `mode`: [`ConvMode::CrossCorrelation`] for ML; [`ConvMode::Convolution`] for true math convolution.
     /// - `compute`: accumulation dtype (pass [`DType::F32`] even for mixed-precision FP16 input/output).
-    #[allow(clippy::too_many_arguments)]
     pub fn new_2d(
         pad_h: i32,
         pad_w: i32,
@@ -818,7 +816,6 @@ pub fn convolution_forward_workspace_size(
 /// )?;
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn convolution_forward<T: DeviceRepr>(
     handle: &Handle,
     alpha: f32,
@@ -976,7 +973,6 @@ pub fn convolution_backward_filter_workspace_size(
 }
 
 /// `dX = alpha * conv_bwd_data(W, dY) + beta * dX`.
-#[allow(clippy::too_many_arguments)]
 pub fn convolution_backward_data<T: DeviceRepr>(
     handle: &Handle,
     alpha: f32,
@@ -1013,7 +1009,6 @@ pub fn convolution_backward_data<T: DeviceRepr>(
 }
 
 /// `dW = alpha * conv_bwd_filter(X, dY) + beta * dW`.
-#[allow(clippy::too_many_arguments)]
 pub fn convolution_backward_filter<T: DeviceRepr>(
     handle: &Handle,
     alpha: f32,
@@ -1119,7 +1114,6 @@ impl core::fmt::Debug for PoolingDescriptor {
 impl PoolingDescriptor {
     /// 2-D pooling descriptor with explicit window / padding / stride.
     /// NaN propagation defaults to `PropagateNan`.
-    #[allow(clippy::too_many_arguments)]
     pub fn new_2d(
         mode: PoolingMode,
         window_h: i32,
@@ -1201,7 +1195,6 @@ impl Drop for PoolingDescriptor {
 /// pooling_forward(&cudnn, &pool, 1.0, &x_desc, &x, 0.0, &y_desc, &mut y)?;
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn pooling_forward<T: DeviceRepr>(
     handle: &Handle,
     pool: &PoolingDescriptor,
@@ -1229,7 +1222,6 @@ pub fn pooling_forward<T: DeviceRepr>(
 }
 
 /// `dX = alpha * pool_backward(Y, dY, X) + beta * dX`.
-#[allow(clippy::too_many_arguments)]
 pub fn pooling_backward<T: DeviceRepr>(
     handle: &Handle,
     pool: &PoolingDescriptor,
@@ -1308,7 +1300,6 @@ impl SoftmaxMode {
 }
 
 /// `Y = alpha * softmax(X, algo, mode) + beta * Y`.
-#[allow(clippy::too_many_arguments)]
 pub fn softmax_forward<T: DeviceRepr>(
     handle: &Handle,
     algo: SoftmaxAlgo,
@@ -1338,7 +1329,6 @@ pub fn softmax_forward<T: DeviceRepr>(
 }
 
 /// `dX = alpha * softmax_backward(Y, dY) + beta * dX`.
-#[allow(clippy::too_many_arguments)]
 pub fn softmax_backward<T: DeviceRepr>(
     handle: &Handle,
     algo: SoftmaxAlgo,
@@ -1397,7 +1387,6 @@ impl BatchNormMode {
 
 /// Training-time BN forward: updates running statistics and returns saved
 /// `mean` / `inv_variance` for use by [`batch_normalization_backward`].
-#[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_forward_training<T: DeviceRepr>(
     handle: &Handle,
     mode: BatchNormMode,
@@ -1443,7 +1432,6 @@ pub fn batch_normalization_forward_training<T: DeviceRepr>(
 }
 
 /// BN backward — matched with [`batch_normalization_forward_training`].
-#[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_backward<T: DeviceRepr>(
     handle: &Handle,
     mode: BatchNormMode,
@@ -1532,7 +1520,6 @@ pub fn batch_normalization_backward<T: DeviceRepr>(
 /// )?;
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_forward_inference<T: DeviceRepr>(
     handle: &Handle,
     mode: BatchNormMode,
@@ -1655,7 +1642,6 @@ pub fn dropout_reserve_size(x: &TensorDescriptor) -> Result<usize> {
 
 /// Apply dropout to `x`, writing scaled survivors to `y` and the
 /// keep/drop mask into `reserve` for the matching backward call.
-#[allow(clippy::too_many_arguments)]
 pub fn dropout_forward<T: DeviceRepr>(
     handle: &Handle,
     dropout: &DropoutDescriptor,
@@ -1684,7 +1670,6 @@ pub fn dropout_forward<T: DeviceRepr>(
 /// Backward dropout: replays the mask saved in `reserve` to produce `dx`
 /// from `dy`. `reserve` must be the exact buffer populated by the
 /// matching [`dropout_forward`] call.
-#[allow(clippy::too_many_arguments)]
 pub fn dropout_backward<T: DeviceRepr>(
     handle: &Handle,
     dropout: &DropoutDescriptor,
@@ -1844,7 +1829,6 @@ impl Drop for OpTensorDescriptor {
 }
 
 /// `C = alpha1 * op(A) + alpha2 * op(B) + beta * C` element-wise.
-#[allow(clippy::too_many_arguments)]
 pub fn op_tensor<T: DeviceRepr>(
     handle: &Handle,
     op: &OpTensorDescriptor,
@@ -1989,7 +1973,6 @@ impl Drop for ReduceTensorDescriptor {
 
 /// `C = alpha * reduce(A) + beta * C` over the axes where `A`'s extent is
 /// preserved and `C`'s is 1.
-#[allow(clippy::too_many_arguments)]
 pub fn reduce_tensor<T: DeviceRepr>(
     handle: &Handle,
     reducer: &ReduceTensorDescriptor,
@@ -2204,7 +2187,6 @@ impl Drop for CtcLossDescriptor {
 }
 
 /// Bytes of scratch workspace needed for [`ctc_loss`].
-#[allow(clippy::too_many_arguments)]
 pub fn ctc_loss_workspace_size(
     handle: &Handle,
     probs: &TensorDescriptor,
@@ -2235,7 +2217,6 @@ pub fn ctc_loss_workspace_size(
 }
 
 /// CTC (Connectionist Temporal Classification) loss.
-#[allow(clippy::too_many_arguments)]
 pub fn ctc_loss<T: DeviceRepr>(
     handle: &Handle,
     probs_desc: &TensorDescriptor,
@@ -2348,7 +2329,6 @@ pub fn spatial_tf_grid_generator<T: DeviceRepr>(
 }
 
 /// Bilinearly sample `x` at `grid` points to produce `y`.
-#[allow(clippy::too_many_arguments)]
 pub fn spatial_tf_sampler<T: DeviceRepr>(
     handle: &Handle,
     st: &SpatialTransformerDescriptor,
@@ -2445,7 +2425,6 @@ impl ReorderType {
 /// # Safety
 /// Output buffers must have at least the same byte size as the inputs.
 /// `bias_data` / `reordered_bias` may be null when `reorder_bias` is false.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn reorder_filter_and_bias(
     handle: &Handle,
     filter_desc: &FilterDescriptor,
@@ -2475,7 +2454,6 @@ pub unsafe fn reorder_filter_and_bias(
 /// Fused convolution + bias + activation forward:
 /// `Y = activation(alpha1 * conv(X, W) + alpha2 * Z + bias)`.
 /// `Z` may alias `Y` for in-place residual add.
-#[allow(clippy::too_many_arguments)]
 pub fn convolution_bias_activation_forward<T: DeviceRepr>(
     handle: &Handle,
     alpha1: f32,
@@ -2522,7 +2500,6 @@ pub fn convolution_bias_activation_forward<T: DeviceRepr>(
 }
 
 /// `dx = alpha * activation_backward(y, dy, x) + beta * dx`.
-#[allow(clippy::too_many_arguments)]
 pub fn activation_backward<T: DeviceRepr>(
     handle: &Handle,
     activation: &ActivationDescriptor,
@@ -2558,7 +2535,6 @@ pub fn activation_backward<T: DeviceRepr>(
 }
 
 /// Cross-channel LRN backward.
-#[allow(clippy::too_many_arguments)]
 pub fn lrn_cross_channel_backward<T: DeviceRepr>(
     handle: &Handle,
     lrn: &LrnDescriptor,
@@ -2848,7 +2824,6 @@ impl BnOp {
 }
 
 /// Workspace bytes for [`batch_normalization_forward_training_ex`].
-#[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_forward_training_ex_workspace_size(
     handle: &Handle,
     mode: BatchNormMode,
@@ -2879,7 +2854,6 @@ pub fn batch_normalization_forward_training_ex_workspace_size(
 }
 
 /// Workspace bytes for [`batch_normalization_backward_ex`].
-#[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_backward_ex_workspace_size(
     handle: &Handle,
     mode: BatchNormMode,
@@ -2966,7 +2940,6 @@ impl RnnDescriptor {
 
     /// Configure with the v8 setup. After this, call
     /// [`build_rnn_dynamic`] to bind a specific minibatch size.
-    #[allow(clippy::too_many_arguments)]
     pub fn set_v8(
         &self,
         algo: i32,
@@ -3147,7 +3120,6 @@ impl AttnDescriptor {
 
     /// Configure the descriptor. See `cudnnSetAttnDescriptor` in the
     /// cuDNN reference for each parameter.
-    #[allow(clippy::too_many_arguments)]
     pub fn set(
         &self,
         attn_mode: u32,
@@ -3251,7 +3223,6 @@ impl SeqDataDescriptor {
 
     /// # Safety
     /// `padding_fill` must point to a value of the descriptor's data type.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn set(
         &self,
         data_type: DType,
@@ -3304,7 +3275,6 @@ pub use baracuda_cudnn_sys::{
 impl TensorDescriptor {
     /// Strided 4-D constructor — per-axis strides instead of the
     /// row-major / channels-last layouts [`new_4d`](Self::new_4d) implies.
-    #[allow(clippy::too_many_arguments)]
     pub fn new_4d_ex(
         dtype: DType,
         n: i32,
@@ -3341,7 +3311,6 @@ impl TensorDescriptor {
 
     /// Read the 4-D parameters back out: `(dtype, n, c, h, w, n_stride,
     /// c_stride, h_stride, w_stride)`.
-    #[allow(clippy::type_complexity)]
     pub fn get_4d(&self) -> Result<(DType, i32, i32, i32, i32, i32, i32, i32, i32)> {
         let cu = cudnn()?;
         let f = cu.cudnn_get_tensor_4d_descriptor()?;
@@ -3450,7 +3419,6 @@ impl DropoutDescriptor {
 // ============================================================================
 
 /// BN training forward with optional fused activation / residual add.
-#[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_forward_training_ex<T: DeviceRepr>(
     handle: &Handle,
     mode: BatchNormMode,
@@ -3510,7 +3478,6 @@ pub fn batch_normalization_forward_training_ex<T: DeviceRepr>(
 }
 
 /// BN backward matching [`batch_normalization_forward_training_ex`].
-#[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_backward_ex<T: DeviceRepr>(
     handle: &Handle,
     mode: BatchNormMode,
@@ -3584,7 +3551,6 @@ pub fn batch_normalization_backward_ex<T: DeviceRepr>(
 // ============================================================================
 
 /// Inference-time generic normalization.
-#[allow(clippy::too_many_arguments)]
 pub fn normalization_forward_inference<T: DeviceRepr>(
     handle: &Handle,
     mode: NormMode,
@@ -3638,7 +3604,6 @@ pub fn normalization_forward_inference<T: DeviceRepr>(
 }
 
 /// Workspace bytes for normalization_forward_training.
-#[allow(clippy::too_many_arguments)]
 pub fn normalization_forward_training_workspace_size(
     handle: &Handle,
     mode: NormMode,
@@ -3675,7 +3640,6 @@ pub fn normalization_forward_training_workspace_size(
 }
 
 /// Workspace bytes for normalization_backward.
-#[allow(clippy::too_many_arguments)]
 pub fn normalization_backward_workspace_size(
     handle: &Handle,
     mode: NormMode,
@@ -3744,7 +3708,6 @@ pub fn normalization_training_reserve_space_size(
 }
 
 /// Training-time forward generic normalization.
-#[allow(clippy::too_many_arguments)]
 pub fn normalization_forward_training<T: DeviceRepr>(
     handle: &Handle,
     mode: NormMode,
@@ -3810,7 +3773,6 @@ pub fn normalization_forward_training<T: DeviceRepr>(
 }
 
 /// Backward generic normalization.
-#[allow(clippy::too_many_arguments)]
 pub fn normalization_backward<T: DeviceRepr>(
     handle: &Handle,
     mode: NormMode,
@@ -3899,7 +3861,6 @@ pub fn normalization_backward<T: DeviceRepr>(
 /// # Safety
 /// `weights` must point at the multi-head attention weight buffer
 /// produced from `multi_head_attn_buffers`.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn get_multi_head_attn_weights(
     handle: &Handle,
     attn: &AttnDescriptor,
@@ -3933,7 +3894,6 @@ pub unsafe fn get_multi_head_attn_weights(
 /// All device buffers must satisfy the size and alignment requirements
 /// reported by [`multi_head_attn_buffers`]. `lo_win_idx`/`hi_win_idx`
 /// must be host arrays of length `qo_max_seq_length`.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn multi_head_attn_forward(
     handle: &Handle,
     attn: &AttnDescriptor,
@@ -3989,7 +3949,6 @@ pub unsafe fn multi_head_attn_forward(
 ///
 /// # Safety
 /// Same buffer-sizing rules as [`multi_head_attn_forward`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn multi_head_attn_backward_data(
     handle: &Handle,
     attn: &AttnDescriptor,
@@ -4049,7 +4008,6 @@ pub unsafe fn multi_head_attn_backward_data(
 ///
 /// # Safety
 /// Same as [`multi_head_attn_forward`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn multi_head_attn_backward_weights(
     handle: &Handle,
     attn: &AttnDescriptor,
@@ -4109,7 +4067,6 @@ pub unsafe fn multi_head_attn_backward_weights(
 /// # Safety
 /// Buffer sizes must match what [`rnn_temp_space_sizes`] /
 /// [`rnn_weight_space_size`] reported.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn rnn_forward(
     handle: &Handle,
     rnn: &RnnDescriptor,
@@ -4163,7 +4120,6 @@ pub unsafe fn rnn_forward(
 /// Same buffer-sizing rules as [`rnn_forward`]. The reserve space must
 /// be the exact one populated during the matching training-mode
 /// `rnn_forward`.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn rnn_backward_data_v8(
     handle: &Handle,
     rnn: &RnnDescriptor,
@@ -4221,7 +4177,6 @@ pub unsafe fn rnn_backward_data_v8(
 ///
 /// # Safety
 /// Same as [`rnn_forward`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn rnn_backward_weights_v8(
     handle: &Handle,
     rnn: &RnnDescriptor,

@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.131 - 2026-10-16 (lint: collapse no-reason allow attributes)
+
+Workspace alpha.131 (proposed; PM allocates at gate).
+
+- Removed 394 dead too_many_arguments allows; FFI naming allows collapsed to one reasoned crate-level allow; the rest carry reasons.
+
 ## 0.0.1-alpha.130 - 2026-10-16 (Retire #[ignore] in the 21 remaining library crates behind device-tests)
 
 Workspace alpha.130 (proposed; PM allocates at gate).

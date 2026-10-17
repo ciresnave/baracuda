@@ -6,6 +6,12 @@
 //! are `#[repr(transparent)]` newtypes so they cannot be accidentally
 //! confused with other integer parameters.
 
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
+
 use core::ffi::c_void;
 
 /// Ordinal of a CUDA device. `cuDeviceGet(&dev, ordinal)` yields one of these.
@@ -85,7 +91,6 @@ pub const CU_STREAM_LEGACY: CUstream = 0x1 as CUstream;
 pub const CU_STREAM_PER_THREAD: CUstream = 0x2 as CUstream;
 
 /// Event flags (OR-able into `cuEventCreate`).
-#[allow(non_snake_case)]
 pub mod CUevent_flags {
     /// `CUevent_flags::DEFAULT` — default.
     pub const DEFAULT: u32 = 0x0;
@@ -98,7 +103,6 @@ pub mod CUevent_flags {
 }
 
 /// Stream flags (OR-able into `cuStreamCreate`).
-#[allow(non_snake_case)]
 pub mod CUstream_flags {
     /// `CUstream_flags::DEFAULT` — default.
     pub const DEFAULT: u32 = 0x0;
@@ -107,7 +111,6 @@ pub mod CUstream_flags {
 }
 
 /// Context flags (OR-able into `cuCtxCreate`).
-#[allow(non_snake_case)]
 pub mod CUcontext_flags {
     /// `CUcontext_flags::SCHED_AUTO` — sched auto.
     pub const SCHED_AUTO: u32 = 0x0;
@@ -124,7 +127,6 @@ pub mod CUcontext_flags {
 }
 
 /// `CUlimit` — selector for `cuCtxGetLimit` / `cuCtxSetLimit`.
-#[allow(non_snake_case)]
 pub mod CUlimit {
     /// `CUlimit::STACK_SIZE` — stack size.
     pub const STACK_SIZE: u32 = 0x00;
@@ -143,7 +145,6 @@ pub mod CUlimit {
 }
 
 /// `CUfunc_cache` — L1-vs-shared carveout preference.
-#[allow(non_snake_case)]
 pub mod CUfunc_cache {
     /// `CUfunc_cache::PREFER_NONE` — prefer none.
     pub const PREFER_NONE: u32 = 0x00;
@@ -156,7 +157,6 @@ pub mod CUfunc_cache {
 }
 
 /// Memory-attach flags for `cuMemAllocManaged`.
-#[allow(non_snake_case)]
 pub mod CUmemAttach_flags {
     /// Accessible from any stream on any device (default).
     pub const GLOBAL: u32 = 0x01;
@@ -167,7 +167,6 @@ pub mod CUmemAttach_flags {
 }
 
 /// `CUmem_advise` — hints for `cuMemAdvise`.
-#[allow(non_snake_case)]
 pub mod CUmem_advise {
     /// `CUmem_advise::SET_READ_MOSTLY` — set read mostly.
     pub const SET_READ_MOSTLY: i32 = 1;
@@ -184,7 +183,6 @@ pub mod CUmem_advise {
 }
 
 /// `CUmemRangeHandleType` — for `cuMemGetHandleForAddressRange`.
-#[allow(non_snake_case)]
 pub mod CUmemRangeHandleType {
     /// `CUmemRangeHandleType::DMA_BUF_FD` — dma buf fd.
     pub const DMA_BUF_FD: i32 = 1;
@@ -192,7 +190,6 @@ pub mod CUmemRangeHandleType {
 
 /// `CUarraySparseSubresourceType` — tag for the `subresource` union inside
 /// [`CUarrayMapInfo`].
-#[allow(non_snake_case)]
 pub mod CUarraySparseSubresourceType {
     /// Tile-indexed sparse level update.
     pub const SPARSE_LEVEL: i32 = 0;
@@ -202,7 +199,6 @@ pub mod CUarraySparseSubresourceType {
 
 /// `CUmemOperationType` — whether a [`CUarrayMapInfo`] describes a map
 /// or an unmap operation.
-#[allow(non_snake_case)]
 pub mod CUmemOperationType {
     /// `CUmemOperationType::MAP` — map.
     pub const MAP: i32 = 1;
@@ -212,7 +208,6 @@ pub mod CUmemOperationType {
 
 /// `CUmemHandleType` — handle kind for the `memHandle` union inside
 /// [`CUarrayMapInfo`].
-#[allow(non_snake_case)]
 pub mod CUmemHandleType {
     /// `CUmemHandleType::GENERIC` — generic.
     pub const GENERIC: i32 = 0;
@@ -247,7 +242,6 @@ pub mod CUmemHandleType {
 /// ```
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUarrayMapInfo {
     /// `resource_type` field.
     pub resource_type: core::ffi::c_int,
@@ -277,6 +271,10 @@ pub struct CUarrayMapInfo {
 }
 
 impl Default for CUarrayMapInfo {
+    #[allow(
+        clippy::derivable_impls,
+        reason = "zero-initialised Default for an FFI-mirror type, spelled out to show the zeroed layout"
+    )]
     fn default() -> Self {
         Self {
             resource_type: 0,
@@ -324,7 +322,6 @@ impl CUarrayMapInfo {
 
     /// Set the subresource to a sparse-level tile update. `offset_*`
     /// and `extent_*` are in tiles (not bytes).
-    #[allow(clippy::too_many_arguments)]
     pub fn with_sparse_level(
         mut self,
         level: u32,
@@ -417,14 +414,12 @@ impl CUarrayMapInfo {
 // ---- Wave 28: medium-value consolidated ---------------------------------
 
 /// `CUexecAffinityType` — kind of per-context execution affinity.
-#[allow(non_snake_case)]
 pub mod CUexecAffinityType {
     /// `CUexecAffinityType::SM_COUNT` — sm count.
     pub const SM_COUNT: i32 = 0;
 }
 
 /// `CUdevice_P2PAttribute` — passed to `cuDeviceGetP2PAttribute`.
-#[allow(non_snake_case)]
 pub mod CUdevice_P2PAttribute {
     /// `CUdevice_P2PAttribute::PERFORMANCE_RANK` — performance rank.
     pub const PERFORMANCE_RANK: i32 = 1;
@@ -437,14 +432,12 @@ pub mod CUdevice_P2PAttribute {
 }
 
 /// `CUflushGPUDirectRDMAWritesTarget`.
-#[allow(non_snake_case)]
 pub mod CUflushGPUDirectRDMAWritesTarget {
     /// `CUflushGPUDirectRDMAWritesTarget::CURRENT_CTX` — current ctx.
     pub const CURRENT_CTX: i32 = 0;
 }
 
 /// `CUflushGPUDirectRDMAWritesScope`.
-#[allow(non_snake_case)]
 pub mod CUflushGPUDirectRDMAWritesScope {
     /// `CUflushGPUDirectRDMAWritesScope::TO_OWNER` — to owner.
     pub const TO_OWNER: i32 = 100;
@@ -453,7 +446,6 @@ pub mod CUflushGPUDirectRDMAWritesScope {
 }
 
 /// `CUcoredumpSettings` — attribute selectors for `cuCoredumpGet/SetAttribute`.
-#[allow(non_snake_case)]
 pub mod CUcoredumpSettings {
     /// `CUcoredumpSettings::ENABLE_ON_EXCEPTION` — enable on exception.
     pub const ENABLE_ON_EXCEPTION: i32 = 1;
@@ -474,7 +466,6 @@ pub mod CUcoredumpSettings {
 /// `CUDA_ARRAY_SPARSE_PROPERTIES` — per-array sparse / tiled layout info.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_ARRAY_SPARSE_PROPERTIES {
     /// `tile_extent_width` field.
     pub tile_extent_width: core::ffi::c_uint,
@@ -496,7 +487,6 @@ pub struct CUDA_ARRAY_SPARSE_PROPERTIES {
 /// backing VMM allocation.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_ARRAY_MEMORY_REQUIREMENTS {
     /// `size` field.
     pub size: usize,
@@ -509,7 +499,6 @@ pub struct CUDA_ARRAY_MEMORY_REQUIREMENTS {
 // ---- Wave 29-31: graphics interop + Jetson NvSci ------------------------
 
 /// `CUgraphicsMapResourceFlags` — map-time access hints.
-#[allow(non_snake_case)]
 pub mod CUgraphicsMapResourceFlags {
     /// `CUgraphicsMapResourceFlags::NONE` — none.
     pub const NONE: u32 = 0;
@@ -521,7 +510,6 @@ pub mod CUgraphicsMapResourceFlags {
 
 /// `CUgraphicsRegisterFlags` — shared register-time flags across GL /
 /// D3D / VDPAU / EGL.
-#[allow(non_snake_case)]
 pub mod CUgraphicsRegisterFlags {
     /// `CUgraphicsRegisterFlags::NONE` — none.
     pub const NONE: u32 = 0;
@@ -536,7 +524,6 @@ pub mod CUgraphicsRegisterFlags {
 }
 
 /// Selector for `cuGLGetDevices_v2` / `cu<API>GetDevices`.
-#[allow(non_snake_case)]
 pub mod CUGLDeviceList {
     /// `CUGLDeviceList::ALL` — all.
     pub const ALL: u32 = 0x01;
@@ -588,14 +575,16 @@ pub type EGLSyncKHR = *mut c_void;
 /// blob so callers can populate from bindgen-generated layouts.
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUeglFrame {
     /// `raw` field.
     pub raw: [u64; 10],
 }
 
+#[allow(
+    clippy::derivable_impls,
+    reason = "zero-initialised Default for an FFI-mirror type, spelled out to show the zeroed layout"
+)]
 impl Default for CUeglFrame {
-    #[allow(clippy::derivable_impls)]
     fn default() -> Self {
         Self { raw: [0; 10] }
     }
@@ -622,7 +611,6 @@ pub type NvSciBufObj = *mut c_void;
 
 /// `CUnvSciSyncAttr` — direction flags for
 /// `cuDeviceGetNvSciSyncAttributes`.
-#[allow(non_snake_case)]
 pub mod CUnvSciSyncAttr {
     /// `CUnvSciSyncAttr::SIGNAL` — signal.
     pub const SIGNAL: i32 = 1;
@@ -631,7 +619,6 @@ pub mod CUnvSciSyncAttr {
 }
 
 /// `CUpointer_attribute` — selector for `cuPointerGetAttribute`.
-#[allow(non_snake_case)]
 pub mod CUpointer_attribute {
     /// `CUpointer_attribute::CONTEXT` — context.
     pub const CONTEXT: i32 = 1;
@@ -676,7 +663,6 @@ pub mod CUpointer_attribute {
 }
 
 /// `CUmemorytype` — values returned via `CUpointer_attribute::MEMORY_TYPE`.
-#[allow(non_snake_case)]
 pub mod CUmemorytype {
     /// `CUmemorytype::HOST` — host.
     pub const HOST: u32 = 0x01;
@@ -690,7 +676,6 @@ pub mod CUmemorytype {
 
 /// `CUlaunchAttributeID` — selector for entries in a `CUlaunchConfig`'s
 /// attribute array (passed to `cuLaunchKernelEx`, CUDA 12.0+).
-#[allow(non_snake_case)]
 pub mod CUlaunchAttributeID {
     /// `CUlaunchAttributeID::IGNORE` — ignore.
     pub const IGNORE: u32 = 0;
@@ -725,7 +710,6 @@ pub mod CUlaunchAttributeID {
 /// array so callers can bit-cast. Zero-initialized for "no payload".
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUlaunchAttributeValue(pub [u8; 64]);
 
 impl Default for CUlaunchAttributeValue {
@@ -736,7 +720,6 @@ impl Default for CUlaunchAttributeValue {
 
 /// `CUaccessProperty` — hit/miss cache policy used inside a
 /// [`CUaccessPolicyWindow`].
-#[allow(non_snake_case)]
 pub mod CUaccessProperty {
     /// `CUaccessProperty::NORMAL` — normal.
     pub const NORMAL: i32 = 0;
@@ -750,7 +733,6 @@ pub mod CUaccessProperty {
 /// to a launch via the `ACCESS_POLICY_WINDOW` attribute.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUaccessPolicyWindow {
     /// `base_ptr` field.
     pub base_ptr: *mut c_void,
@@ -779,7 +761,6 @@ impl Default for CUaccessPolicyWindow {
 /// `CUlaunchAttribute` — one entry in a `CUlaunchConfig`'s attribute list.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUlaunchAttribute {
     /// `id` field.
     pub id: core::ffi::c_uint,
@@ -792,7 +773,6 @@ pub struct CUlaunchAttribute {
 /// `CUlaunchConfig` — the descriptor passed to `cuLaunchKernelEx`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUlaunchConfig {
     /// `grid_dim_x` field.
     pub grid_dim_x: core::ffi::c_uint,
@@ -835,7 +815,6 @@ impl Default for CUlaunchConfig {
 }
 
 /// `CUfunction_attribute` — selector for `cuFuncGetAttribute` / `cuFuncSetAttribute`.
-#[allow(non_snake_case)]
 pub mod CUfunction_attribute {
     /// `CUfunction_attribute::MAX_THREADS_PER_BLOCK` — max threads per block.
     pub const MAX_THREADS_PER_BLOCK: i32 = 0;
@@ -875,7 +854,6 @@ pub mod CUfunction_attribute {
 /// of host / device / array memory.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_MEMCPY2D {
     /// `src_x_in_bytes` field.
     pub src_x_in_bytes: usize,
@@ -943,7 +921,6 @@ impl Default for CUDA_MEMCPY2D {
 /// they're silently ignored, so writing zero for both is portable.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_KERNEL_NODE_PARAMS {
     /// `func` field.
     pub func: CUfunction,
@@ -993,7 +970,6 @@ impl Default for CUDA_KERNEL_NODE_PARAMS {
 /// `CUDA_MEMSET_NODE_PARAMS` — shape passed to `cuGraphAddMemsetNode`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_MEMSET_NODE_PARAMS {
     /// `dst` field.
     pub dst: CUdeviceptr,
@@ -1015,7 +991,6 @@ pub type CUhostFnRaw = Option<unsafe extern "C" fn(user_data: *mut c_void)>;
 /// `CUDA_HOST_NODE_PARAMS` — `{ fn, user_data }` for `cuGraphAddHostNode`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_HOST_NODE_PARAMS {
     /// `fn_` field.
     pub fn_: CUhostFnRaw,
@@ -1037,13 +1012,15 @@ impl Default for CUDA_HOST_NODE_PARAMS {
 /// instructions in SM 9.0+ kernels.
 #[repr(C, align(64))]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUtensorMap {
     /// `opaque` field.
     pub opaque: [u64; 16],
 }
 
-#[allow(clippy::derivable_impls)]
+#[allow(
+    clippy::derivable_impls,
+    reason = "zero-initialised Default for an FFI-mirror type, spelled out to show the zeroed layout"
+)]
 impl Default for CUtensorMap {
     fn default() -> Self {
         Self { opaque: [0; 16] }
@@ -1051,7 +1028,6 @@ impl Default for CUtensorMap {
 }
 
 /// `CUtensorMapDataType` — element type encoding for TMA descriptors.
-#[allow(non_snake_case)]
 pub mod CUtensorMapDataType {
     /// `CUtensorMapDataType::UINT8` — uint8.
     pub const UINT8: i32 = 0;
@@ -1082,7 +1058,6 @@ pub mod CUtensorMapDataType {
 }
 
 /// `CUtensorMapInterleave`.
-#[allow(non_snake_case)]
 pub mod CUtensorMapInterleave {
     /// `CUtensorMapInterleave::NONE` — none.
     pub const NONE: i32 = 0;
@@ -1093,7 +1068,6 @@ pub mod CUtensorMapInterleave {
 }
 
 /// `CUtensorMapSwizzle`.
-#[allow(non_snake_case)]
 pub mod CUtensorMapSwizzle {
     /// `CUtensorMapSwizzle::NONE` — none.
     pub const NONE: i32 = 0;
@@ -1106,7 +1080,6 @@ pub mod CUtensorMapSwizzle {
 }
 
 /// `CUtensorMapL2promotion` — L2 prefetch hint.
-#[allow(non_snake_case)]
 pub mod CUtensorMapL2promotion {
     /// `CUtensorMapL2promotion::NONE` — none.
     pub const NONE: i32 = 0;
@@ -1119,7 +1092,6 @@ pub mod CUtensorMapL2promotion {
 }
 
 /// `CUtensorMapFloatOOBfill` — out-of-bounds fill behavior.
-#[allow(non_snake_case)]
 pub mod CUtensorMapFloatOOBfill {
     /// `CUtensorMapFloatOOBfill::NONE` — none.
     pub const NONE: i32 = 0;
@@ -1133,7 +1105,6 @@ pub mod CUtensorMapFloatOOBfill {
 /// processes (Linux; Windows returns NOT_SUPPORTED).
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUipcEventHandle {
     /// `reserved` field.
     pub reserved: [core::ffi::c_char; 64],
@@ -1149,7 +1120,6 @@ impl Default for CUipcEventHandle {
 /// allocations across processes.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUipcMemHandle {
     /// `reserved` field.
     pub reserved: [core::ffi::c_char; 64],
@@ -1167,7 +1137,6 @@ impl Default for CUipcMemHandle {
 pub type CUgraphConditionalHandle = u64;
 
 /// `CUgraphConditionalNodeType`.
-#[allow(non_snake_case)]
 pub mod CUgraphConditionalNodeType {
     /// `CUgraphConditionalNodeType::IF` — if.
     pub const IF: i32 = 0;
@@ -1181,7 +1150,6 @@ pub mod CUgraphConditionalNodeType {
 /// variant inside [`CUgraphNodeParams`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_CONDITIONAL_NODE_PARAMS {
     /// `handle` field.
     pub handle: CUgraphConditionalHandle,
@@ -1224,7 +1192,6 @@ impl Default for CUDA_CONDITIONAL_NODE_PARAMS {
 /// Total 256 bytes, alignment 8.
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUgraphNodeParams {
     /// `type_` field.
     pub type_: core::ffi::c_int,
@@ -1259,7 +1226,6 @@ impl core::fmt::Debug for CUgraphNodeParams {
 /// add-dependencies APIs). 8 bytes.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUgraphEdgeData {
     /// `from_port` field.
     pub from_port: u8,
@@ -1275,7 +1241,6 @@ pub struct CUgraphEdgeData {
 /// CUDA 12.0+, NVSwitch-only.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUmulticastObjectProp {
     /// `num_devices` field.
     pub num_devices: core::ffi::c_uint,
@@ -1288,7 +1253,6 @@ pub struct CUmulticastObjectProp {
 }
 
 /// `CUmulticastGranularity_flags` — pass to `cuMulticastGetGranularity`.
-#[allow(non_snake_case)]
 pub mod CUmulticastGranularity_flags {
     /// `CUmulticastGranularity_flags::MINIMUM` — minimum.
     pub const MINIMUM: i32 = 0;
@@ -1297,7 +1261,6 @@ pub mod CUmulticastGranularity_flags {
 }
 
 /// `CUdevResourceType` — green-context resource-kind enum (CUDA 12.4+).
-#[allow(non_snake_case)]
 pub mod CUdevResourceType {
     /// `CUdevResourceType::INVALID` — invalid.
     pub const INVALID: i32 = 0;
@@ -1308,7 +1271,6 @@ pub mod CUdevResourceType {
 /// `CUdevSmResource` — SM-count resource payload (12 bytes).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUdevSmResource {
     /// `sm_count` field.
     pub sm_count: core::ffi::c_uint,
@@ -1324,7 +1286,6 @@ pub struct CUdevSmResource {
 /// helpers for the SM case.
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUdevResource {
     /// `type_` field.
     pub type_: core::ffi::c_int,
@@ -1363,7 +1324,6 @@ impl CUdevResource {
 }
 
 /// `CUgraphNodeType` — returned by `cuGraphNodeGetType`.
-#[allow(non_snake_case)]
 pub mod CUgraphNodeType {
     /// `CUgraphNodeType::KERNEL` — kernel.
     pub const KERNEL: i32 = 0;
@@ -1396,7 +1356,6 @@ pub mod CUgraphNodeType {
 }
 
 /// Stream-capture mode (passed to `cuStreamBeginCapture`).
-#[allow(non_snake_case)]
 pub mod CUstreamCaptureMode {
     /// Operations on any stream in the process are captured while this
     /// thread's chosen stream is capturing. Discouraged in modern code.
@@ -1409,7 +1368,6 @@ pub mod CUstreamCaptureMode {
 }
 
 /// Stream-capture status (returned by `cuStreamIsCapturing`).
-#[allow(non_snake_case)]
 pub mod CUstreamCaptureStatus {
     /// `CUstreamCaptureStatus::NONE` — none.
     pub const NONE: u32 = 0;
@@ -1420,7 +1378,6 @@ pub mod CUstreamCaptureStatus {
 }
 
 /// Flags for `cuGraphInstantiateWithFlags`.
-#[allow(non_snake_case)]
 pub mod CUgraphInstantiate_flags {
     /// Automatically free allocations created in the graph after launch completes.
     pub const AUTO_FREE_ON_LAUNCH: u64 = 1;
@@ -1431,7 +1388,6 @@ pub mod CUgraphInstantiate_flags {
 }
 
 /// Device attribute selector (subset of `CUdevice_attribute`).
-#[allow(non_snake_case)]
 pub mod CUdevice_attribute {
     /// `CUdevice_attribute::MAX_THREADS_PER_BLOCK` — max threads per block.
     pub const MAX_THREADS_PER_BLOCK: i32 = 1;
@@ -1484,7 +1440,6 @@ pub mod CUdevice_attribute {
 // ---- Wave 6: arrays, textures, surfaces ----------------------------------
 
 /// `CUarray_format` — scalar format of an array's texels.
-#[allow(non_snake_case)]
 pub mod CUarray_format {
     /// `CUarray_format::UNSIGNED_INT8` — unsigned int8.
     pub const UNSIGNED_INT8: u32 = 0x01;
@@ -1505,7 +1460,6 @@ pub mod CUarray_format {
 }
 
 /// `CUaddress_mode` — out-of-bounds behavior for texture sampling.
-#[allow(non_snake_case)]
 pub mod CUaddress_mode {
     /// `CUaddress_mode::WRAP` — wrap.
     pub const WRAP: u32 = 0;
@@ -1518,7 +1472,6 @@ pub mod CUaddress_mode {
 }
 
 /// `CUfilter_mode` — point vs. linear filtering.
-#[allow(non_snake_case)]
 pub mod CUfilter_mode {
     /// `CUfilter_mode::POINT` — point.
     pub const POINT: u32 = 0;
@@ -1527,7 +1480,6 @@ pub mod CUfilter_mode {
 }
 
 /// `CUresourcetype` — tag for the variant inside a [`CUDA_RESOURCE_DESC`].
-#[allow(non_snake_case)]
 pub mod CUresourcetype {
     /// `CUresourcetype::ARRAY` — array.
     pub const ARRAY: u32 = 0;
@@ -1542,7 +1494,6 @@ pub mod CUresourcetype {
 /// `CUDA_ARRAY_DESCRIPTOR` — shape passed to `cuArrayCreate_v2`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_ARRAY_DESCRIPTOR {
     /// `width` field.
     pub width: usize,
@@ -1571,7 +1522,6 @@ pub struct CUDA_ARRAY_DESCRIPTOR {
 /// align 8) which reproduces the correct layout for free.
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_RESOURCE_DESC {
     /// `res_type` field.
     pub res_type: core::ffi::c_int,
@@ -1608,7 +1558,10 @@ impl CUDA_RESOURCE_DESC {
     /// Point this descriptor at a [`CUarray`] (resource-type `ARRAY`). The
     /// pointer is only *stored* in the union — never dereferenced by us —
     /// so we do not require an `unsafe` boundary here.
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    #[allow(
+        clippy::not_unsafe_ptr_arg_deref,
+        reason = "the pointer is stored or forwarded to the driver, never dereferenced in Rust"
+    )]
     pub fn from_array(array: CUarray) -> Self {
         let mut d = Self::default();
         // The `array` variant of the union is `struct { CUarray hArray; }`,
@@ -1629,7 +1582,6 @@ impl CUDA_RESOURCE_DESC {
 /// `CUDA_TEXTURE_DESC` — texture-sampling parameters.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_TEXTURE_DESC {
     /// `address_mode` field.
     pub address_mode: [u32; 3],
@@ -1673,7 +1625,6 @@ impl Default for CUDA_TEXTURE_DESC {
 // ---- Wave 7: virtual memory management (VMM) ----------------------------
 
 /// `CUmemAllocationType` — what kind of physical backing to create.
-#[allow(non_snake_case)]
 pub mod CUmemAllocationType {
     /// `CUmemAllocationType::INVALID` — invalid.
     pub const INVALID: i32 = 0;
@@ -1682,7 +1633,6 @@ pub mod CUmemAllocationType {
 }
 
 /// `CUmemLocationType` — identifies what device/host the backing lives on.
-#[allow(non_snake_case)]
 pub mod CUmemLocationType {
     /// `CUmemLocationType::INVALID` — invalid.
     pub const INVALID: i32 = 0;
@@ -1697,7 +1647,6 @@ pub mod CUmemLocationType {
 }
 
 /// `CUmemAllocationHandleType` — OS-level handle shape for IPC sharing.
-#[allow(non_snake_case)]
 pub mod CUmemAllocationHandleType {
     /// `CUmemAllocationHandleType::NONE` — none.
     pub const NONE: i32 = 0;
@@ -1712,7 +1661,6 @@ pub mod CUmemAllocationHandleType {
 }
 
 /// `CUmemAccess_flags` — access rights granted by `cuMemSetAccess`.
-#[allow(non_snake_case)]
 pub mod CUmemAccess_flags {
     /// `CUmemAccess_flags::NONE` — none.
     pub const NONE: i32 = 0;
@@ -1724,7 +1672,6 @@ pub mod CUmemAccess_flags {
 
 /// `CUmemAllocationGranularity_flags` — pass to
 /// `cuMemGetAllocationGranularity`.
-#[allow(non_snake_case)]
 pub mod CUmemAllocationGranularity_flags {
     /// `CUmemAllocationGranularity_flags::MINIMUM` — minimum.
     pub const MINIMUM: i32 = 0;
@@ -1735,7 +1682,6 @@ pub mod CUmemAllocationGranularity_flags {
 /// `CUmemLocation` — `(type, id)` pair identifying a device or NUMA node.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUmemLocation {
     /// `type_` field.
     pub type_: core::ffi::c_int,
@@ -1746,7 +1692,6 @@ pub struct CUmemLocation {
 /// Inline flag block inside [`CUmemAllocationProp`] (8 bytes).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUmemAllocationPropFlags {
     /// `compression_type` field.
     pub compression_type: core::ffi::c_uchar,
@@ -1762,7 +1707,6 @@ pub struct CUmemAllocationPropFlags {
 /// of backing (type, location, IPC handle shape) to produce.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUmemAllocationProp {
     /// `type_` field.
     pub type_: core::ffi::c_int,
@@ -1780,7 +1724,6 @@ pub struct CUmemAllocationProp {
 /// `flags` access to a virtual-memory range.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUmemAccessDesc {
     /// `location` field.
     pub location: CUmemLocation,
@@ -1791,7 +1734,6 @@ pub struct CUmemAccessDesc {
 // ---- Wave 8: memory pools -----------------------------------------------
 
 /// `CUmemPool_attribute` — pass to `cuMemPoolSetAttribute` / `GetAttribute`.
-#[allow(non_snake_case)]
 pub mod CUmemPool_attribute {
     /// `CUmemPool_attribute::REUSE_FOLLOW_EVENT_DEPENDENCIES` — reuse follow event dependencies.
     pub const REUSE_FOLLOW_EVENT_DEPENDENCIES: i32 = 1;
@@ -1814,7 +1756,6 @@ pub mod CUmemPool_attribute {
 /// `CUmemPoolProps` — creation props for `cuMemPoolCreate`. 88 bytes in C.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUmemPoolProps {
     /// `alloc_type` field.
     pub alloc_type: core::ffi::c_int,
@@ -1850,7 +1791,6 @@ impl Default for CUmemPoolProps {
 /// `cuMemPoolExportPointer`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUmemPoolPtrExportData {
     /// `reserved` field.
     pub reserved: [core::ffi::c_uchar; 64],
@@ -1867,7 +1807,6 @@ impl Default for CUmemPoolPtrExportData {
 // ---- Wave 9: external memory / semaphore interop ------------------------
 
 /// `CUexternalMemoryHandleType` — which OS handle shape you're importing.
-#[allow(non_snake_case)]
 pub mod CUexternalMemoryHandleType {
     /// `CUexternalMemoryHandleType::OPAQUE_FD` — opaque fd.
     pub const OPAQUE_FD: i32 = 1;
@@ -1888,7 +1827,6 @@ pub mod CUexternalMemoryHandleType {
 }
 
 /// `CUexternalSemaphoreHandleType` — OS handle shape for imported sem.
-#[allow(non_snake_case)]
 pub mod CUexternalSemaphoreHandleType {
     /// `CUexternalSemaphoreHandleType::OPAQUE_FD` — opaque fd.
     pub const OPAQUE_FD: i32 = 1;
@@ -1933,7 +1871,6 @@ pub type CUlogsCallbackHandle = *mut c_void;
 pub type CUlogIterator = core::ffi::c_uint;
 
 /// `CUlogLevel` returned to [`CUlogsCallback`].
-#[allow(non_snake_case)]
 pub mod CUlogLevel {
     /// `CUlogLevel::ERROR` — error.
     pub const ERROR: i32 = 0;
@@ -1956,7 +1893,6 @@ pub type CUlogsCallback = Option<
 >;
 
 /// `CUmoduleLoadingMode` — reported by `cuModuleGetLoadingMode`.
-#[allow(non_snake_case)]
 pub mod CUmoduleLoadingMode {
     /// `CUmoduleLoadingMode::EAGER_LOADING` — eager loading.
     pub const EAGER_LOADING: i32 = 0x1;
@@ -1968,7 +1904,6 @@ pub mod CUmoduleLoadingMode {
 
 /// `CUgraphExecUpdateResult` — outcome code returned from
 /// `cuGraphExecUpdate_v2` via [`CUgraphExecUpdateResultInfo::result`].
-#[allow(non_snake_case)]
 pub mod CUgraphExecUpdateResult {
     /// `CUgraphExecUpdateResult::SUCCESS` — success.
     pub const SUCCESS: i32 = 0;
@@ -1994,7 +1929,6 @@ pub mod CUgraphExecUpdateResult {
 /// on (partial) failure to identify which node diverged.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUgraphExecUpdateResultInfo {
     /// `result` field.
     pub result: core::ffi::c_int,
@@ -2015,7 +1949,6 @@ impl Default for CUgraphExecUpdateResultInfo {
 }
 
 /// `CUgraphMem_attribute` — selector for per-device graph-mem limits.
-#[allow(non_snake_case)]
 pub mod CUgraphMem_attribute {
     /// `CUgraphMem_attribute::USED_MEM_CURRENT` — used mem current.
     pub const USED_MEM_CURRENT: i32 = 0;
@@ -2032,7 +1965,6 @@ pub mod CUgraphMem_attribute {
 /// (it's the address the node will allocate when the graph runs).
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_MEM_ALLOC_NODE_PARAMS {
     /// `pool_props` field.
     pub pool_props: CUmemPoolProps,
@@ -2059,7 +1991,6 @@ impl Default for CUDA_MEM_ALLOC_NODE_PARAMS {
 }
 
 /// `CUstreamBatchMemOpType` — operation code inside a batch-memop entry.
-#[allow(non_snake_case)]
 pub mod CUstreamBatchMemOpType {
     /// `CUstreamBatchMemOpType::WAIT_VALUE_32` — wait value 32.
     pub const WAIT_VALUE_32: u32 = 1;
@@ -2077,7 +2008,6 @@ pub mod CUstreamBatchMemOpType {
 
 /// `CUstreamWriteValue_flags` / `CUstreamWaitValue_flags` — bitmask for
 /// the individual stream-value ops and their batch-memop equivalents.
-#[allow(non_snake_case)]
 pub mod CUstreamWaitValue_flags {
     /// `CUstreamWaitValue_flags::GEQ` — geq.
     pub const GEQ: u32 = 0x0;
@@ -2091,7 +2021,6 @@ pub mod CUstreamWaitValue_flags {
     pub const FLUSH: u32 = 1 << 30;
 }
 
-#[allow(non_snake_case)]
 /// `CUstreamWriteValue_flags` — submodule grouping related items.
 pub mod CUstreamWriteValue_flags {
     /// `CUstreamWriteValue_flags::DEFAULT` — default.
@@ -2105,13 +2034,15 @@ pub mod CUstreamWriteValue_flags {
 /// builders (`wait_value_32`, `write_value_64`, ...).
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUstreamBatchMemOpParams {
     /// `raw` field.
     pub raw: [u64; 6],
 }
 
-#[allow(clippy::derivable_impls)]
+#[allow(
+    clippy::derivable_impls,
+    reason = "zero-initialised Default for an FFI-mirror type, spelled out to show the zeroed layout"
+)]
 impl Default for CUstreamBatchMemOpParams {
     fn default() -> Self {
         Self { raw: [0; 6] }
@@ -2196,7 +2127,6 @@ impl CUstreamBatchMemOpParams {
 /// `cuGraphAddBatchMemOpNode`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_BATCH_MEM_OP_NODE_PARAMS {
     /// `ctx` field.
     pub ctx: CUcontext,
@@ -2233,7 +2163,6 @@ pub type CUdevResourceDesc = *mut c_void;
 /// [`from_fd`](CUDA_EXTERNAL_MEMORY_HANDLE_DESC::from_fd) for the common cases.
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_EXTERNAL_MEMORY_HANDLE_DESC {
     /// `type_` field.
     pub type_: core::ffi::c_int,
@@ -2248,7 +2177,10 @@ pub struct CUDA_EXTERNAL_MEMORY_HANDLE_DESC {
     pub reserved: [core::ffi::c_uint; 16],
 }
 
-#[allow(clippy::derivable_impls)]
+#[allow(
+    clippy::derivable_impls,
+    reason = "zero-initialised Default for an FFI-mirror type, spelled out to show the zeroed layout"
+)]
 impl Default for CUDA_EXTERNAL_MEMORY_HANDLE_DESC {
     fn default() -> Self {
         Self {
@@ -2315,7 +2247,6 @@ impl CUDA_EXTERNAL_MEMORY_HANDLE_DESC {
 /// imported external memory to expose as a device pointer.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_EXTERNAL_MEMORY_BUFFER_DESC {
     /// `offset` field.
     pub offset: u64,
@@ -2331,7 +2262,6 @@ pub struct CUDA_EXTERNAL_MEMORY_BUFFER_DESC {
 /// handle desc but without the trailing `size`.
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC {
     /// `type_` field.
     pub type_: core::ffi::c_int,
@@ -2344,7 +2274,10 @@ pub struct CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC {
     pub reserved: [core::ffi::c_uint; 16],
 }
 
-#[allow(clippy::derivable_impls)]
+#[allow(
+    clippy::derivable_impls,
+    reason = "zero-initialised Default for an FFI-mirror type, spelled out to show the zeroed layout"
+)]
 impl Default for CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC {
     fn default() -> Self {
         Self {
@@ -2402,7 +2335,6 @@ impl CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC {
 /// 48 reserved).
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS {
     /// Layout:
     /// - [0..8]   fence.value (u64) — the fence value to signal.
@@ -2416,7 +2348,10 @@ pub struct CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS {
     pub reserved: [core::ffi::c_uint; 16],
 }
 
-#[allow(clippy::derivable_impls)]
+#[allow(
+    clippy::derivable_impls,
+    reason = "zero-initialised Default for an FFI-mirror type, spelled out to show the zeroed layout"
+)]
 impl Default for CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS {
     fn default() -> Self {
         Self {
@@ -2450,7 +2385,6 @@ impl CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS {
 /// 72 bytes, just different reserved count).
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS {
     /// `params` field.
     pub params: [u64; 9],
@@ -2460,7 +2394,10 @@ pub struct CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS {
     pub reserved: [core::ffi::c_uint; 16],
 }
 
-#[allow(clippy::derivable_impls)]
+#[allow(
+    clippy::derivable_impls,
+    reason = "zero-initialised Default for an FFI-mirror type, spelled out to show the zeroed layout"
+)]
 impl Default for CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS {
     fn default() -> Self {
         Self {
@@ -2495,7 +2432,6 @@ impl CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS {
 /// `cuMipmappedArrayCreate`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_ARRAY3D_DESCRIPTOR {
     /// `width` field.
     pub width: usize,
@@ -2512,7 +2448,6 @@ pub struct CUDA_ARRAY3D_DESCRIPTOR {
 }
 
 /// `CUarray3D_flags` — creation-time flags for 3D / mipmapped arrays.
-#[allow(non_snake_case)]
 pub mod CUarray3D_flags {
     /// `CUarray3D_flags::LAYERED` — layered.
     pub const LAYERED: u32 = 0x01;
@@ -2539,7 +2474,6 @@ pub mod CUarray3D_flags {
 /// the device-pointer + pitch, `ARRAY` uses the array-handle fields.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-#[allow(non_camel_case_types)]
 pub struct CUDA_MEMCPY3D {
     /// `src_x_in_bytes` field.
     pub src_x_in_bytes: usize,

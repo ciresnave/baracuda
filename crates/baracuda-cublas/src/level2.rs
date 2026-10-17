@@ -17,7 +17,6 @@ use crate::level3::{Diag, Fill};
 /// Private dispatch trait for L2 ops.
 pub trait L2Scalar: DeviceRepr + l2_sealed::Sealed {
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn gemv_raw(
         handle: cublasHandle_t,
         trans: cublasOperation_t,
@@ -196,7 +195,6 @@ mod l2_sealed {
 /// gemv(&handle, Op::N, m, n, 1.0f32, &a, m, &x.as_slice(), 1, 0.0f32, &mut y, 1)?;
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn gemv<T: L2Scalar>(
     handle: &crate::Handle,
     trans: Op,
@@ -237,7 +235,6 @@ pub fn gemv<T: L2Scalar>(
 /// cuBLAS's public API.
 pub trait L2Real: L2Scalar + l2_sealed::SealedReal {
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn symv_raw(
         h: cublasHandle_t,
         uplo: cublasFillMode_t,
@@ -253,7 +250,6 @@ pub trait L2Real: L2Scalar + l2_sealed::SealedReal {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn trmv_raw(
         h: cublasHandle_t,
         uplo: cublasFillMode_t,
@@ -267,7 +263,6 @@ pub trait L2Real: L2Scalar + l2_sealed::SealedReal {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn trsv_raw(
         h: cublasHandle_t,
         uplo: cublasFillMode_t,
@@ -281,7 +276,6 @@ pub trait L2Real: L2Scalar + l2_sealed::SealedReal {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn ger_raw(
         h: cublasHandle_t,
         m: i32,
@@ -296,7 +290,6 @@ pub trait L2Real: L2Scalar + l2_sealed::SealedReal {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn syr_raw(
         h: cublasHandle_t,
         uplo: cublasFillMode_t,
@@ -426,7 +419,6 @@ l2_real_impl!(
 );
 
 /// Symmetric matrix-vector multiply (real types).
-#[allow(clippy::too_many_arguments)]
 pub fn symv<T: L2Real>(
     handle: &crate::Handle,
     uplo: Fill,
@@ -459,7 +451,6 @@ pub fn symv<T: L2Real>(
 }
 
 /// Triangular matrix-vector multiply, in place on `x`.
-#[allow(clippy::too_many_arguments)]
 pub fn trmv<T: L2Real>(
     handle: &crate::Handle,
     uplo: Fill,
@@ -488,7 +479,6 @@ pub fn trmv<T: L2Real>(
 }
 
 /// Solve `A * x = b` (triangular `A`), result in `x` (overwrites input).
-#[allow(clippy::too_many_arguments)]
 pub fn trsv<T: L2Real>(
     handle: &crate::Handle,
     uplo: Fill,
@@ -517,7 +507,6 @@ pub fn trsv<T: L2Real>(
 }
 
 /// Rank-1 update: `A = alpha * x * yᵀ + A`.
-#[allow(clippy::too_many_arguments)]
 pub fn ger<T: L2Real>(
     handle: &crate::Handle,
     m: i32,
@@ -548,7 +537,6 @@ pub fn ger<T: L2Real>(
 }
 
 /// Symmetric rank-1 update: `A = alpha * x * xᵀ + A`.
-#[allow(clippy::too_many_arguments)]
 pub fn syr<T: L2Real>(
     handle: &crate::Handle,
     uplo: Fill,

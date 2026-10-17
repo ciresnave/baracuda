@@ -16,7 +16,6 @@ macro_rules! runtime_fns {
         fn $name:ident as $sym:literal : $pfn:ty;
     )*) => {
         /// Lazily-resolved CUDA Runtime API function-pointer table.
-        #[allow(non_snake_case)]
         pub struct Runtime {
             lib: Library,
             $(
@@ -44,7 +43,6 @@ macro_rules! runtime_fns {
 
             $(
                 $(#[$attr])*
-                #[allow(non_snake_case)]
                 #[doc = concat!("Resolve `", $sym, "` and return the cached function pointer.")]
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }

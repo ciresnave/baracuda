@@ -49,7 +49,6 @@ impl TensorMap {
     /// - `element_strides`: per-axis element-strides (typically all 1).
     ///
     /// All arrays must have length `rank = global_dim.len()`.
-    #[allow(clippy::too_many_arguments)]
     pub fn encode_tiled(
         data_type: i32,
         global_base: CUdeviceptr,

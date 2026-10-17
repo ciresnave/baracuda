@@ -47,7 +47,6 @@ pub struct AdaptivePool3dDescriptor {
 
 impl AdaptivePool3dDescriptor {
     /// Build a descriptor. All fields are required.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         batch: i32,
         channels: i32,

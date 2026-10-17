@@ -216,7 +216,6 @@ fn validate_3d(
 
 /// Build the (handle, x_desc, y_desc, pool_desc) trio for a 2-D pool
 /// launch. Returns a status code (0 = success).
-#[allow(clippy::too_many_arguments)]
 unsafe fn setup_2d(
     res: &mut PoolResources,
     dtype: cudnnDataType_t,
@@ -306,7 +305,6 @@ unsafe fn setup_2d(
 /// launch (rank 1 or 3). `x_dims` / `y_dims` are the rank-3 or rank-5
 /// shape arrays; cuDNN's `nb_dims >= 4` floor forces rank-3 to be
 /// padded internally with a trailing `W = 1`.
-#[allow(clippy::too_many_arguments)]
 unsafe fn setup_nd(
     res: &mut PoolResources,
     dtype: cudnnDataType_t,
@@ -515,7 +513,6 @@ unsafe fn exec_bw(
 // =============================================================================
 
 #[inline]
-#[allow(clippy::too_many_arguments)]
 unsafe fn run_pool_2d_fw(
     mode: i32,
     dtype: cudnnDataType_t,
@@ -556,7 +553,6 @@ unsafe fn run_pool_2d_fw(
 }
 
 #[inline]
-#[allow(clippy::too_many_arguments)]
 unsafe fn run_pool_2d_bw(
     mode: i32,
     dtype: cudnnDataType_t,
@@ -599,7 +595,6 @@ unsafe fn run_pool_2d_bw(
 }
 
 #[inline]
-#[allow(clippy::too_many_arguments)]
 unsafe fn run_pool_1d_fw(
     mode: i32,
     dtype: cudnnDataType_t,
@@ -639,7 +634,6 @@ unsafe fn run_pool_1d_fw(
 }
 
 #[inline]
-#[allow(clippy::too_many_arguments)]
 unsafe fn run_pool_1d_bw(
     mode: i32,
     dtype: cudnnDataType_t,
@@ -681,7 +675,6 @@ unsafe fn run_pool_1d_bw(
 }
 
 #[inline]
-#[allow(clippy::too_many_arguments)]
 unsafe fn run_pool_3d_fw(
     mode: i32,
     dtype: cudnnDataType_t,
@@ -733,7 +726,6 @@ unsafe fn run_pool_3d_fw(
 }
 
 #[inline]
-#[allow(clippy::too_many_arguments)]
 unsafe fn run_pool_3d_bw(
     mode: i32,
     dtype: cudnnDataType_t,
@@ -804,7 +796,6 @@ macro_rules! max_pool_1d_pair {
         /// the duration of the launch. `stream` must be a live CUDA
         /// stream in the current context.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $fw(
             batch: i32,
             channels: i32,
@@ -845,7 +836,6 @@ macro_rules! max_pool_1d_pair {
         /// # Safety
         /// As for FW.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $bw(
             batch: i32,
             channels: i32,
@@ -914,7 +904,6 @@ macro_rules! max_pool_2d_pair {
         /// # Safety
         /// As for the 1D FW entry point.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $fw(
             batch: i32,
             channels: i32,
@@ -963,7 +952,6 @@ macro_rules! max_pool_2d_pair {
         /// # Safety
         /// As for the 1D BW entry point.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $bw(
             batch: i32,
             channels: i32,
@@ -1042,7 +1030,6 @@ macro_rules! max_pool_3d_pair {
         /// # Safety
         /// As for the 1D FW entry point.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $fw(
             batch: i32,
             channels: i32,
@@ -1098,7 +1085,6 @@ macro_rules! max_pool_3d_pair {
         /// # Safety
         /// As for the 1D BW entry point.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $bw(
             batch: i32,
             channels: i32,
@@ -1203,7 +1189,6 @@ macro_rules! avg_pool_1d_pair {
         /// # Safety
         /// As for `MaxPool1d` FW.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $fw(
             batch: i32,
             channels: i32,
@@ -1242,7 +1227,6 @@ macro_rules! avg_pool_1d_pair {
         /// # Safety
         /// As for `MaxPool1d` BW.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $bw(
             batch: i32,
             channels: i32,
@@ -1312,7 +1296,6 @@ macro_rules! avg_pool_2d_pair {
         /// # Safety
         /// As for `MaxPool2d` FW.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $fw(
             batch: i32,
             channels: i32,
@@ -1359,7 +1342,6 @@ macro_rules! avg_pool_2d_pair {
         /// # Safety
         /// As for `MaxPool2d` BW.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $bw(
             batch: i32,
             channels: i32,
@@ -1439,7 +1421,6 @@ macro_rules! avg_pool_3d_pair {
         /// # Safety
         /// As for `MaxPool3d` FW.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $fw(
             batch: i32,
             channels: i32,
@@ -1496,7 +1477,6 @@ macro_rules! avg_pool_3d_pair {
         /// # Safety
         /// As for `MaxPool3d` BW.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $bw(
             batch: i32,
             channels: i32,

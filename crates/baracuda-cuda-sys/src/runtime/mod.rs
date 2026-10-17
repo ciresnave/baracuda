@@ -1,4 +1,7 @@
-#![allow(non_camel_case_types)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 
 //! Raw FFI + dynamic loader for the CUDA Runtime API (`libcudart`).
 //!

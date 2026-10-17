@@ -80,7 +80,10 @@
 //! [`FftShiftPlan`] remains the fast path for single-axis shifts.
 
 // Renaming this submodule is API-breaking (it is part of the public module path).
-#[allow(clippy::module_inception)]
+#[allow(
+    clippy::module_inception,
+    reason = "renaming this submodule is API-breaking (public module path)"
+)]
 pub mod fft;
 pub mod fftn;
 pub mod fftshift;

@@ -702,7 +702,6 @@ unsafe fn copy_d2d(
     bytes: usize,
     stream: &Stream,
 ) -> Result<()> {
-    #[allow(non_camel_case_types)]
     type CUresult = i32;
     unsafe extern "system" {
         fn cuMemcpyDtoDAsync_v2(

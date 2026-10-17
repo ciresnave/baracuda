@@ -146,8 +146,6 @@
 //! (`m == 0 || n == 0 || batch == 0`) return `0` without launching.
 //! `k == 0` IS launched (BLAS semantics: `D = β · D`).
 
-#![allow(clippy::too_many_arguments)]
-
 use core::ffi::c_void;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
@@ -201,7 +199,6 @@ struct Slot {
     handle: AtomicPtr<c_void>,
 }
 
-#[allow(clippy::declare_interior_mutable_const)]
 const EMPTY_SLOT: Slot = Slot {
     ctx: AtomicUsize::new(0),
     handle: AtomicPtr::new(ptr::null_mut()),
