@@ -53,6 +53,11 @@ jobs:
         env:
           BARACUDA_RESULTS_FILE: device-test-results-flashinfer.json
         run: cargo gpu-test -p baracuda-flashinfer --features flashinfer,device-tests
+      - name: cargo gpu-test (baracuda-ozimmu, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-ozimmu.json
+        run: cargo gpu-test -p baracuda-ozimmu --features device-tests
       - name: cargo gpu-test (baracuda-runtime, device-tests)
         shell: bash
         env:
@@ -68,5 +73,6 @@ jobs:
             device-test-results-kernels.json
             device-test-results-cutlass.json
             device-test-results-flashinfer.json
+            device-test-results-ozimmu.json
             device-test-results-runtime.json
           if-no-files-found: error

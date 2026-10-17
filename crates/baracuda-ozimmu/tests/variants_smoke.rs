@@ -15,7 +15,8 @@
 //!     while genuine kernel breakage fails.
 //!
 //! Run with `cargo test -p baracuda-ozimmu --features build-vendor
-//! --test variants_smoke -- --ignored`.
+//! --test variants_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_ozimmu::{Handle, Op, OzakiSlices, OzakiVariant};
@@ -65,7 +66,6 @@ fn run_variant_dgemm(
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn variants_dispatch_and_produce_nonzero_output() {
     baracuda_driver::init().expect("driver init");
     let device = Device::get(0).expect("device");
@@ -101,7 +101,6 @@ fn variants_dispatch_and_produce_nonzero_output() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn variants_agree_on_well_conditioned_input() {
     baracuda_driver::init().expect("driver init");
     let device = Device::get(0).expect("device");

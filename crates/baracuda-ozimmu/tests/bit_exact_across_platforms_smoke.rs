@@ -19,6 +19,7 @@
 //!
 //! When we have a Windows + Linux side-by-side test infra, replace
 //! the print with `assert_eq!(got, &EXPECTED_BYTES[..])`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_ozimmu::{Handle, Op, OzakiSlices};
@@ -82,7 +83,6 @@ fn run_once(seed: u64) -> Vec<f64> {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn same_hardware_bit_exact_across_runs() {
     let a = run_once(SEED);
     let b = run_once(SEED);

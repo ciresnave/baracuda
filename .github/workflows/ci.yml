@@ -371,6 +371,12 @@ jobs:
         run: |
           cargo check --locked -p baracuda-flashinfer --tests --features flashinfer
           cargo check --locked -p baracuda-flashinfer --tests --features flashinfer,device-tests
+      - name: cargo check baracuda-ozimmu / cutlass+ozimmu --tests (device-tests off / on)
+        if: matrix.arch == 'sm80'
+        run: |
+          cargo check --locked -p baracuda-ozimmu --tests
+          cargo check --locked -p baracuda-ozimmu --tests --features device-tests
+          cargo check --locked -p baracuda-cutlass --features ozimmu
       # `baracuda-kernels-bench`'s tests/ are 12 files / 3,103 lines that NO job
       # compiled until this step: the variant gate, the RowReduce bit-move matrix
       # and the precision-first numerics all live there. They are device tests, so
