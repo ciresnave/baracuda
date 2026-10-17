@@ -11,11 +11,14 @@
 //!   - Pre-grow the workspace, then run multiple dgemms on it.
 //!   - `OzakiSlices::S8` works at a non-trivial shape.
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
-use baracuda_ozimmu::{Handle, MallocMode, Op, OzakiSlices};
+use baracuda_ozimmu::OzakiSlices;
+#[cfg(feature = "device-tests")]
+use baracuda_ozimmu::{Handle, MallocMode, Op};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn handle_create_drop_default() {
     baracuda_driver::init().expect("driver init");
     let device = Device::get(0).expect("device");
@@ -25,7 +28,7 @@ fn handle_create_drop_default() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn handle_create_drop_async_mode() {
     baracuda_driver::init().expect("driver init");
     let device = Device::get(0).expect("device");
@@ -35,7 +38,7 @@ fn handle_create_drop_async_mode() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn pregrown_workspace_then_dgemm() {
     baracuda_driver::init().expect("driver init");
     let device = Device::get(0).expect("device");
@@ -102,7 +105,7 @@ fn pregrown_workspace_then_dgemm() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn invalid_shape_rejected() {
     baracuda_driver::init().expect("driver init");
     let device = Device::get(0).expect("device");

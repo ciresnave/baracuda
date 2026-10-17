@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-ozimmu"
-version = "0.0.1-alpha.126"
+version = "0.0.1-alpha.127"
 description = "Safe Rust wrapper for baracuda's clean-fork of Hiroyuki Ootomo's ozIMMU — Ozaki-scheme FP64 GEMM that synthesizes a DGEMM from S^2 int8 tensor-core matmuls. Provides an RAII handle + drop-in `dgemm` shim suitable for the `BackendKind::Ozaki` path of `baracuda-kernels`'s `GemmPlan`. Opt-in (NOT bit-equivalent to native DGEMM); the default FP64 path stays on CUTLASS / cuBLAS."
 readme = "README.md"
 edition.workspace = true
@@ -22,6 +22,11 @@ default = ["build-vendor"]
 
 # Forward the vendored-source build to baracuda-ozimmu-sys.
 build-vendor = ["baracuda-ozimmu-sys/build-vendor"]
+
+# On-device integration tests (`tests/*`): built only with this feature, so a
+# plain `cargo test` never compiles or runs a test that needs a GPU. CI type-checks
+# them and the self-hosted device runner builds and RUNS them. See docs/DEVICE-TESTS.md.
+device-tests = []
 
 [dependencies]
 baracuda-ozimmu-sys = { workspace = true }

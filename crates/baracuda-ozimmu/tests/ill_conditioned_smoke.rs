@@ -5,6 +5,7 @@
 //!
 //! Not a strict accuracy claim — just a "did the algorithm respond
 //! to the precision dial?" sanity check.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cublas::{Handle as CublasHandle, Op as CublasOp, gemm as cublas_gemm};
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
@@ -104,7 +105,6 @@ fn run_hilbert(n: usize, slices: OzakiSlices) -> f64 {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn slice_count_dial_responds_to_ill_conditioned_input() {
     let n = 128;
     let err_s6 = run_hilbert(n, OzakiSlices::S6);

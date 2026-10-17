@@ -13,6 +13,7 @@
 //! on well-conditioned inputs without being so loose they'd miss a
 //! 10× regression. Real workloads with bad condition numbers are
 //! covered by `ill_conditioned_smoke.rs`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cublas::{Handle as CublasHandle, Op as CublasOp, gemm as cublas_gemm};
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
@@ -141,40 +142,34 @@ fn run_case(m: usize, slices: OzakiSlices, tolerance: f64) {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn ozimmu_dgemm_256_s6_loose() {
     // S=6 is intentionally low precision — typical ~1e-8 on uniform random.
     run_case(256, OzakiSlices::S6, 1e-6);
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn ozimmu_dgemm_256_s8_default() {
     // S=8 is the upstream-recommended default.
     run_case(256, OzakiSlices::S8, 1e-10);
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn ozimmu_dgemm_256_s10_tight() {
     // S=10 should hit double-precision sweet spot for well-conditioned input.
     run_case(256, OzakiSlices::S10, 1e-12);
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn ozimmu_dgemm_1024_s8() {
     run_case(1024, OzakiSlices::S8, 1e-10);
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn ozimmu_dgemm_2048_s8() {
     run_case(2048, OzakiSlices::S8, 1e-10);
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn ozimmu_dgemm_512_s_auto() {
     // Auto mode picks S at run-time per the mantissa-loss histogram.
     // On well-conditioned uniform inputs it lands around S=8/9 (Fro
@@ -262,7 +257,6 @@ fn relative_global(got: &[f64], ref_: &[f64]) -> f64 {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn variants_all_finite_at_s8() {
     // Sanity: every variant produces all-finite output on the sin/cos
     // fixture at S=8. The dispatch_smoke `pregrown_workspace_then_dgemm`
@@ -288,7 +282,6 @@ fn variants_all_finite_at_s8() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn ef_matches_base_at_s8() {
     // EF only reorders the int32 → f64 accumulation; on a fixture
     // small enough not to overflow the int32 budget the two outputs
@@ -306,7 +299,6 @@ fn ef_matches_base_at_s8() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn rn_and_h_finite_match_base_within_split_difference() {
     // RN uses a different split (nearest-rounding) so it does NOT
     // need to match Base bit-for-bit. We only assert that:

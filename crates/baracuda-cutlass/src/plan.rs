@@ -4483,11 +4483,15 @@ mod ozimmu_backend {
     use core::cell::RefCell;
     use std::rc::Rc;
 
-    use baracuda_driver::Stream;
+    use baracuda_driver::{Context, Stream};
     use baracuda_ozimmu::Handle as OzimmuHandle;
 
+    // Each entry also holds a clone of the `Context` its handle was created
+    // against, so the thread-exit drop of the (cuBLAS-backed) handle never runs
+    // against a destroyed context. Same hazard and fix as `cublas_backend`:
+    // tuple fields drop in order, handle before context.
     thread_local! {
-        static HANDLE_CACHE: RefCell<Vec<(usize, Rc<OzimmuHandle>)>> =
+        static HANDLE_CACHE: RefCell<Vec<(usize, Rc<OzimmuHandle>, Context)>> =
             const { RefCell::new(Vec::new()) };
     }
 
@@ -4497,7 +4501,7 @@ mod ozimmu_backend {
         let ctx_key = stream.context().as_raw() as usize;
         let handle = HANDLE_CACHE.with(|cache| -> crate::Result<Rc<OzimmuHandle>> {
             let mut cache = cache.borrow_mut();
-            if let Some((_, h)) = cache.iter().find(|(k, _)| *k == ctx_key) {
+            if let Some((_, h, _)) = cache.iter().find(|(k, _, _)| *k == ctx_key) {
                 return Ok(h.clone());
             }
             // Make sure the stream's context is current — ozIMMU's
@@ -4541,7 +4545,7 @@ mod ozimmu_backend {
                 }
             };
             let rc = Rc::new(h);
-            cache.push((ctx_key, rc.clone()));
+            cache.push((ctx_key, rc.clone(), stream.context().clone()));
             Ok(rc)
         })?;
         handle.set_stream(stream);

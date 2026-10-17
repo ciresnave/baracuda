@@ -16,13 +16,13 @@
 //! triggers because `n > 12288`.
 //!
 //! Run with `cargo test -p baracuda-ozimmu --features build-vendor
-//! --test n_blocking_smoke -- --ignored`.
+//! --test n_blocking_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_ozimmu::{Handle, Op, OzakiSlices, OzakiVariant};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn n_blocking_at_16384_matches_smaller_n_reference() {
     baracuda_driver::init().expect("driver init");
     let device = Device::get(0).expect("device");

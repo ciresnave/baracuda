@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.127 - 2026-10-16 (Test: retire #[ignore] in baracuda-ozimmu; ozIMMU handle cache holds its Context)
+
+Workspace alpha.127 (proposed; PM allocates at gate).
+
+- baracuda-ozimmu device tests now behind device-tests (19 run on the sm_89 device runner: 0 failed).
+- Fix: baracuda-cutlass's thread-local ozIMMU handle cache now holds a Context clone (same teardown hazard as the cuBLAS cache fixed in alpha.123); new tests/ozaki_backend_smoke.rs drives the Ozaki GemmPlan backend (matches CPU DGEMM; per-thread drop-order loop). The crash was NOT reproducible on the ozimmu cache before the change (0/20), so that edit is defensive.
+
 ## 0.0.1-alpha.126 - 2026-10-16 (Test: retire #[ignore] in baracuda-flashinfer; repair the flashinfer feature build)
 
 Workspace alpha.126 (proposed; PM allocates at gate).
