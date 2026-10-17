@@ -19,6 +19,7 @@
 // off-by-default no-op-stub posture), so the optimizer FFI these tests exercise
 // would not resolve at link time. No arch feature => this file compiles empty.
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use std::time::Instant;
 
@@ -29,7 +30,6 @@ const NUM_TENSORS: usize = 1000;
 const PER_TENSOR_ELEMS: usize = 256;
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn multi_tensor_dispatch_outperforms_individual_launches() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

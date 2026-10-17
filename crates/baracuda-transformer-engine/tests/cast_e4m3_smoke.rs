@@ -15,6 +15,7 @@
 // static archive. Without an arch feature the -sys build is a no-op stub, so the
 // FFI these tests exercise would not resolve at link time. No arch => empty file.
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_transformer_engine::{Fp8CastPlan, Fp8DequantPlan, Fp8Format, Fp8Recipe};
@@ -23,7 +24,6 @@ const HIST_LEN: usize = 16;
 const N_ELEMS: usize = 4096;
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn e4m3_roundtrip_f16_within_dynamic_range() {
     baracuda_driver::init().expect("driver init");
     let ctx = Context::new(&Device::get(0).expect("device")).expect("ctx");
@@ -109,7 +109,6 @@ fn e4m3_roundtrip_f16_within_dynamic_range() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn e4m3_saturates_on_overflow() {
     // E4M3's max finite value is 448.0. Inputs larger than that, with
     // the initial identity scale (1.0), should clamp to 448.0 on the

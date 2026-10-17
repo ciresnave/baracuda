@@ -9,6 +9,7 @@
 // static archive. Without an arch feature the -sys build is a no-op stub, so the
 // FFI these tests exercise would not resolve at link time. No arch => empty file.
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_transformer_engine::{Fp8CastPlan, Fp8Format, Fp8Recipe};
@@ -49,7 +50,6 @@ fn run_one(format: Fp8Format, max_input_abs: f32) -> (f32, f32, f32) {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn scale_formula_e4m3() {
     let (scale, scale_inv, expected) = run_one(Fp8Format::E4M3, 10.0);
     // E4M3 max_repr = 448, max_amax = 10, expected scale = 44.8.
@@ -70,7 +70,6 @@ fn scale_formula_e4m3() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn scale_formula_e5m2() {
     let (scale, scale_inv, expected) = run_one(Fp8Format::E5M2, 100.0);
     // E5M2 max_repr = 57344, max_amax = 100, expected scale = 573.44.
@@ -87,7 +86,6 @@ fn scale_formula_e5m2() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn scale_floors_at_one_when_history_all_zero() {
     // Recipe just created (history all zero). `update_after_pass` with
     // no prior FW pass should floor the amax at 1.0 → scale = max_repr.

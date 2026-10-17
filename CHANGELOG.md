@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.129 - 2026-10-16 (Retire #[ignore] in cublas, transformer-engine, optim behind device-tests)
+
+Workspace alpha.129 (proposed; PM allocates at gate).
+
+- baracuda-cublas (10), baracuda-transformer-engine (10) and baracuda-optim (9) device tests move behind a per-crate `device-tests` feature, run by the self-hosted device runner. Ran on RTX 4070 (sm_89): 18 + 11 + 14 passed, 0 failed; 3 optim NCCL tests declared-skipped (UNVERIFIED).
+
 ## 0.0.1-alpha.128 - 2026-10-16 (Retire #[ignore] in kernels-bench, cuda-emit, cuda-seam behind device-tests)
 
 Workspace alpha.128 (proposed; PM allocates at gate).

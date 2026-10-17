@@ -1,10 +1,10 @@
 //! GPU-gated integration tests for cuBLAS Sgemm + Saxpy.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cublas::{Handle, Op, axpy, gemm};
 use baracuda_driver::{Context, Device, DeviceBuffer};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn sgemm_2x3_times_3x2() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -60,7 +60,6 @@ fn sgemm_2x3_times_3x2() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn saxpy_basic() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -90,7 +89,6 @@ fn saxpy_basic() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn strided_batched_sgemm_small() {
     use baracuda_cublas::gemm_strided_batched;
 
@@ -151,7 +149,6 @@ fn strided_batched_sgemm_small() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn version_query_works() {
     baracuda_driver::init().unwrap();
     let _device = Device::get(0).unwrap();

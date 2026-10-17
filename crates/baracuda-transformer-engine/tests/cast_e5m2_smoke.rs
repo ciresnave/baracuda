@@ -13,6 +13,7 @@
 // static archive. Without an arch feature the -sys build is a no-op stub, so the
 // FFI these tests exercise would not resolve at link time. No arch => empty file.
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_transformer_engine::{Fp8CastPlan, Fp8DequantPlan, Fp8Format, Fp8Recipe};
@@ -21,7 +22,6 @@ const HIST_LEN: usize = 16;
 const N_ELEMS: usize = 4096;
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn e5m2_roundtrip_bf16_within_dynamic_range() {
     baracuda_driver::init().expect("driver init");
     let ctx = Context::new(&Device::get(0).expect("device")).expect("ctx");
@@ -93,7 +93,6 @@ fn e5m2_roundtrip_bf16_within_dynamic_range() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn e5m2_wider_dynamic_range_than_e4m3() {
     // Verify that E5M2 can roundtrip values that overflow E4M3:
     // ~1000.0 is fine for E5M2 (max 57344) but >448 for E4M3.

@@ -1,15 +1,15 @@
 //! Phase 58 — DistributedAdamStepPlan multi-rank scaffold.
 //!
-//! Exercises the all-reduce + local-step + all-gather path. Marked
-//! `#[ignore]` with "requires 2+ GPUs" — single-RTX-4070 dev boxes
-//! can't run this; it's wired for future multi-GPU validation.
+//! Exercises the all-reduce + local-step + all-gather path. Gated
+//! behind the `device-tests` feature. Needs 2+ GPUs: single-GPU hosts report a declared
+//! skip (`require_optional!`); it runs for real on a multi-GPU runner.
 //!
 //! ## Why the scaffold lives here
 //!
 //! Even with no second GPU available today, the test source documents
 //! the exact protocol the plan implements, gives future contributors a
-//! ready-to-run validation harness (`cargo test ... -- --ignored
-//! multi_rank` once a multi-GPU host exists), and forces the
+//! ready-to-run validation harness (`cargo gpu-test -p baracuda-optim
+//! --features distributed_optim,sm89,device-tests` on a multi-GPU host), and forces the
 //! compiler / type system to keep the DistributedAdamStepPlan API
 //! shape multi-rank-callable.
 //!
@@ -34,6 +34,7 @@
     feature = "distributed_optim",
     any(feature = "sm80", feature = "sm89", feature = "sm90a")
 ))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, require_optional};
 use baracuda_nccl::Communicator;
@@ -67,7 +68,6 @@ fn try_bringup_two_ranks() -> Option<Vec<Communicator>> {
 }
 
 #[test]
-#[ignore = "requires 2+ GPUs (NCCL multi-rank) — scaffold only on RTX 4070 dev box"]
 fn distributed_adam_two_ranks_all_reduce_then_step_then_all_gather() {
     baracuda_driver::init().unwrap();
 
