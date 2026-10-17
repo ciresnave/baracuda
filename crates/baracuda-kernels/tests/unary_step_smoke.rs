@@ -6,6 +6,7 @@
 //! false at both zeros); NaN → 0 (NaN > 0 is false). Outputs are
 //! exactly representable in every FP format ({0, 1}), so comparisons
 //! are bit-exact (same convention as `unary_sign_smoke`).
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -25,7 +26,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn ffi_unary_step_f32_matches_cpu() {
     let (ctx, stream) = setup();
     // Span (-3.0, +3.0) plus a zero and an explicit NaN.
@@ -69,7 +69,6 @@ fn ffi_unary_step_f32_matches_cpu() {
 }
 
 #[test]
-#[ignore]
 fn ffi_unary_step_f64_matches_cpu() {
     let (ctx, stream) = setup();
     let host_x: Vec<f64> = (0..256).map(|i| (i as f64) * 0.02 - 2.56).collect();
@@ -123,7 +122,6 @@ fn step_input_f32(i: usize) -> f32 {
 }
 
 #[test]
-#[ignore]
 fn plan_unary_step_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 64, 64];
@@ -172,7 +170,6 @@ fn plan_unary_step_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn plan_unary_step_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 64, 64];
@@ -228,7 +225,6 @@ fn plan_unary_step_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn plan_unary_step_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;

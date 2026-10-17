@@ -2,6 +2,7 @@
 //! (`UnaryBackwardPlan<T, 3> + UnaryKind::Log10`).
 //! Backward: `dx = dy / (x * ln(10))`. Saved-x; the kernel hardcodes
 //! `ln(10)`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -24,7 +25,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn log10_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -77,7 +77,6 @@ fn log10_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn log10_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -125,7 +124,6 @@ fn log10_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn log10_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -183,7 +181,6 @@ fn log10_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn log10_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

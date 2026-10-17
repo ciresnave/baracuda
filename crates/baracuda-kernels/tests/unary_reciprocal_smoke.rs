@@ -10,6 +10,7 @@
 //! Rust `f32 / f64` operators and CUDA's `nvcc` (uses the IEEE-754
 //! `div.rn.f32` / `div.rn.f64` instructions). f16 / bf16 use the
 //! relative-tolerance scheme since the kernel takes an f32 detour.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -241,7 +242,6 @@ fn run_f64_contig_3d(shape: [i32; 3]) {
 // --- f32 strided (transposed view) ------------------------------------------
 
 #[test]
-#[ignore]
 fn reciprocal_f32_strided_transposed() {
     let (ctx, stream) = setup();
     const M: usize = 48;
@@ -302,25 +302,21 @@ fn reciprocal_f32_strided_transposed() {
 }
 
 #[test]
-#[ignore]
 fn reciprocal_f32_3d() {
     run_f32_contig::<3>([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn reciprocal_f16_3d() {
     run_f16_contig_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn reciprocal_bf16_3d() {
     run_bf16_contig_3d([8, 128, 128]);
 }
 
 #[test]
-#[ignore]
 fn reciprocal_f64_3d() {
     run_f64_contig_3d([8, 128, 128]);
 }

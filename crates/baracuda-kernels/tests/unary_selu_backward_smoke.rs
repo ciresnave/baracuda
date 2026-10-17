@@ -6,6 +6,7 @@
 //!   x <= 0 → dy * scale * alpha * exp(x)
 //! Constants: scale = 1.0507009873554804, alpha = 1.6732632423543772.
 //! Saved-x. 4×eps tolerance (single exp on the negative branch).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -45,7 +46,6 @@ fn selu_bw_f64(dy: f64, x: f64) -> f64 {
 }
 
 #[test]
-#[ignore]
 fn selu_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -100,7 +100,6 @@ fn selu_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn selu_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -150,7 +149,6 @@ fn selu_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn selu_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -208,7 +206,6 @@ fn selu_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn selu_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

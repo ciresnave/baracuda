@@ -7,9 +7,10 @@
 //! bit-exact against host reference `cond ? a : b` regardless of
 //! dtype. Each test compares `.to_bits()` directly.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test where_dtype_smoke -- --ignored`.
+//!   --test where_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -27,7 +28,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn where_f16_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -102,7 +102,6 @@ fn where_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn where_bf16_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -174,7 +173,6 @@ fn where_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn where_f64_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];

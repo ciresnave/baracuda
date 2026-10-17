@@ -7,6 +7,7 @@
 //!   else    → dy * (2x + 3) / 6
 //! Saved-x. 4×eps relative tolerance for f32/f16/bf16 (the middle region
 //! has a multiply+divide chain).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -46,7 +47,6 @@ fn hardswish_bw_f64(dy: f64, x: f64) -> f64 {
 }
 
 #[test]
-#[ignore]
 fn hardswish_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -101,7 +101,6 @@ fn hardswish_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn hardswish_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -157,7 +156,6 @@ fn hardswish_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn hardswish_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -215,7 +213,6 @@ fn hardswish_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn hardswish_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

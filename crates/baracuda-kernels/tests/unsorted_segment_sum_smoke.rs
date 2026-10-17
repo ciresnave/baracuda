@@ -1,5 +1,6 @@
 //! Real-GPU smoke test for `UnsortedSegmentSumPlan<T>` (Phase 7 7.6).
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -16,7 +17,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn unsorted_segment_sum_f32_scrambled() {
     let (ctx, stream) = setup();
     let n: i32 = 8;

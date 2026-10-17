@@ -6,6 +6,7 @@
 //! f32 / f64 use a 4·eps relative-tolerance compare — the negative branch
 //! multiplies dy by 0.01 (one rounding). f16 / bf16 use the same
 //! relative scheme with the corresponding ULP-eps.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn leaky_relu_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -88,7 +88,6 @@ fn leaky_relu_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn leaky_relu_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -146,7 +145,6 @@ fn leaky_relu_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn leaky_relu_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -211,7 +209,6 @@ fn leaky_relu_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn leaky_relu_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

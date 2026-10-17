@@ -10,6 +10,7 @@
 //! input, no arithmetic). f16 / bf16 also bit-exact because the only
 //! op on the GPU side is a comparison + select — the dy bits are
 //! preserved on the positive branch, zero on the negative branch.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -27,7 +28,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn relu_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -83,7 +83,6 @@ fn relu_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn relu_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -130,7 +129,6 @@ fn relu_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn relu_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -186,7 +184,6 @@ fn relu_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn relu_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

@@ -7,9 +7,10 @@
 //! libm and CUDA's libdevice, so we use the same 4×eps relative
 //! tolerance as the Sin BW transcendental sibling.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test unary_erfc_backward_smoke -- --ignored`.
+//!   --test unary_erfc_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -32,7 +33,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn erfc_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -93,7 +93,6 @@ fn erfc_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn erfc_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -151,7 +150,6 @@ fn erfc_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn erfc_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -209,7 +207,6 @@ fn erfc_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn erfc_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

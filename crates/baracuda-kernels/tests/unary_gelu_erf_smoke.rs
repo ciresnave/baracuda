@@ -4,6 +4,7 @@
 //! Coexists with `unary_gelu_*` (currently bit-identical math under
 //! a different symbol name) and is distinct from
 //! `unary_gelu_tanh_*` (the tanh approximation).
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -23,7 +24,6 @@ fn cpu_gelu_erf_f32(x: f32) -> f32 {
 }
 
 #[test]
-#[ignore]
 fn ffi_unary_gelu_erf_f32_matches_cpu() {
     let (ctx, stream) = setup();
     let host_x: Vec<f32> = (0..1024).map(|i| ((i as f32) - 512.0) * 0.01).collect();
@@ -62,7 +62,6 @@ fn ffi_unary_gelu_erf_f32_matches_cpu() {
 /// output (they share the same math today). Failure indicates one of
 /// the two symbols was accidentally pointed at a different formula.
 #[test]
-#[ignore]
 fn ffi_unary_gelu_erf_matches_unary_gelu_bit_identical() {
     let (ctx, stream) = setup();
     let host_x: Vec<f32> = (0..1024).map(|i| ((i as f32) - 512.0) * 0.01).collect();

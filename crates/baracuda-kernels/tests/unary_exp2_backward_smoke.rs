@@ -2,6 +2,7 @@
 //! (`UnaryBackwardPlan<T, 3> + UnaryKind::Exp2`).
 //! Backward: `dx = dy * y * ln(2)`. Saved-y; the kernel hardcodes
 //! `ln(2)`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -24,7 +25,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn exp2_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -77,7 +77,6 @@ fn exp2_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn exp2_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -125,7 +124,6 @@ fn exp2_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn exp2_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -183,7 +181,6 @@ fn exp2_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn exp2_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

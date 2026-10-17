@@ -6,6 +6,7 @@
 //! tight relative tolerance because the kernel routes through f32 then
 //! rounds once on store — at boundary points the same exact value should
 //! round identically, but we allow 4·ULP for safety.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -45,7 +46,6 @@ fn cpu_ref_f64(x: f64) -> f64 {
 }
 
 #[test]
-#[ignore]
 fn softshrink_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -93,7 +93,6 @@ fn softshrink_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn softshrink_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -134,7 +133,6 @@ fn softshrink_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn softshrink_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -189,7 +187,6 @@ fn softshrink_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn softshrink_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

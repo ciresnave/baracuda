@@ -13,9 +13,10 @@
 //!   * Negative test: slab out of bounds → `select` rejects.
 //!   * Negative test: nibble innermost odd start → `select` rejects.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm80 \
-//!   --test write_slice_smoke -- --ignored`.
+//!   --test write_slice_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -90,7 +91,6 @@ fn cpu_write_slice<const N: usize>(
 /// [max_seq, batch, head_dim] so the slab on axis 0 covers minors
 /// fully (one row), giving the `ContiguousChunk` fast path. f32.
 #[test]
-#[ignore]
 fn write_slice_kv_cache_append_f32() {
     let (ctx, stream) = setup();
     let dest_shape = [32i32, 4, 64]; // [max_seq, batch, head_dim]
@@ -155,7 +155,6 @@ fn write_slice_kv_cache_append_f32() {
 /// Same KV-cache append shape, f16. Exercises the b2 byte-width FFI
 /// symbol via the fast path.
 #[test]
-#[ignore]
 fn write_slice_kv_cache_append_f16() {
     let (ctx, stream) = setup();
     let dest_shape = [16i32, 2, 32];
@@ -218,7 +217,6 @@ fn write_slice_kv_cache_append_f16() {
 
 /// KV-cache append on bf16.
 #[test]
-#[ignore]
 fn write_slice_kv_cache_append_bf16() {
     let (ctx, stream) = setup();
     let dest_shape = [12i32, 3, 16];
@@ -278,7 +276,6 @@ fn write_slice_kv_cache_append_bf16() {
 
 /// KV-cache append on f64. Exercises the b8 byte-width FFI symbol.
 #[test]
-#[ignore]
 fn write_slice_kv_cache_append_f64() {
     let (ctx, stream) = setup();
     let dest_shape = [8i32, 2, 16];
@@ -335,7 +332,6 @@ fn write_slice_kv_cache_append_f64() {
 /// Interior 2-D slab on f32 — both axes partial. This forces the
 /// generic kernel path because no axis past the first is full-width.
 #[test]
-#[ignore]
 fn write_slice_interior_2d_f32() {
     let (ctx, stream) = setup();
     let dest_shape = [16i32, 20];
@@ -399,7 +395,6 @@ fn write_slice_interior_2d_f32() {
 /// 1-D slab on i32 — minimal sanity. Rank-1 always hits the
 /// `ContiguousChunk` fast path.
 #[test]
-#[ignore]
 fn write_slice_1d_i32() {
     let (ctx, stream) = setup();
     let dest_shape = [32i32];
@@ -445,7 +440,6 @@ fn write_slice_1d_i32() {
 /// Nibble-packed write on S4. Rank-2, even alignment on innermost
 /// axis (all even). Exercises the dedicated nibble kernel.
 #[test]
-#[ignore]
 fn write_slice_nibble_s4_rank2() {
     let (ctx, stream) = setup();
     // 4 rows × 8 elements (= 4 bytes per row). Storage = 4*4 = 16 bytes.
@@ -519,7 +513,6 @@ fn write_slice_nibble_s4_rank2() {
 
 /// Negative: range out of bounds → `select` rejects.
 #[test]
-#[ignore]
 fn write_slice_out_of_bounds_rejected() {
     let (_ctx, stream) = setup();
     let dest_shape = [16i32, 8];
@@ -541,7 +534,6 @@ fn write_slice_out_of_bounds_rejected() {
 /// Negative: nibble innermost odd start → `select` rejects with
 /// `Unsupported`.
 #[test]
-#[ignore]
 fn write_slice_nibble_odd_start_rejected() {
     let (_ctx, stream) = setup();
     let dest_shape = [4i32, 8];

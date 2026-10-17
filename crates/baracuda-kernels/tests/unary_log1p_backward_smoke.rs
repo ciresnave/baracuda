@@ -1,6 +1,7 @@
 //! Real-GPU smoke test for unary log1p backward
 //! (`UnaryBackwardPlan<T, 3> + UnaryKind::Log1p`).
 //! Backward: `dx = dy / (1 + x)`. Saved-x.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn log1p_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -75,7 +75,6 @@ fn log1p_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn log1p_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -123,7 +122,6 @@ fn log1p_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn log1p_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -181,7 +179,6 @@ fn log1p_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn log1p_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

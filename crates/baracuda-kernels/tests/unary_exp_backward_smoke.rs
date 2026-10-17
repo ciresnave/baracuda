@@ -11,9 +11,10 @@
 //! `exp(x)` of anything — the kernel just multiplies); this isolates
 //! the backward kernel from forward Exp's transcendental precision.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test unary_exp_backward_smoke -- --ignored`.
+//!   --test unary_exp_backward_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -89,19 +90,16 @@ fn run_case<const N: usize>(shape: [i32; N]) {
 }
 
 #[test]
-#[ignore]
 fn exp_backward_f32_1d() {
     run_case::<1>([2048]);
 }
 
 #[test]
-#[ignore]
 fn exp_backward_f32_2d() {
     run_case::<2>([64, 64]);
 }
 
 #[test]
-#[ignore]
 fn exp_backward_f32_3d() {
     run_case::<3>([8, 128, 128]);
 }
@@ -165,7 +163,6 @@ fn select_rejects_unwired_unary_today() {
 // and the GPU (native half ops), so we tolerance-compare those.
 
 #[test]
-#[ignore]
 fn exp_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -223,7 +220,6 @@ fn exp_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn exp_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -281,7 +277,6 @@ fn exp_backward_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn exp_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

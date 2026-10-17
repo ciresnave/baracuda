@@ -9,6 +9,7 @@
 //! 1 + (-1.16) = -0.16). We bound the error by `|dy|·s·(1 + |x·(1-s)|)`,
 //! the textbook cancellation magnitude. K = 16 absorbs the libdevice-
 //! vs-libm gap for `expf` × the multiplicative chain.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -43,7 +44,6 @@ fn silu_bw_f64(dy: f64, x: f64) -> (f64, f64) {
 }
 
 #[test]
-#[ignore]
 fn silu_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -98,7 +98,6 @@ fn silu_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn silu_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -148,7 +147,6 @@ fn silu_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn silu_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -206,7 +204,6 @@ fn silu_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn silu_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

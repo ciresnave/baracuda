@@ -1,9 +1,10 @@
 //! Real-GPU smoke test for `UnsortedSegmentProdPlan<T>` (Phase 25).
-//! `#[ignore]` by default.
+//! Gated behind the `device-tests` feature.
 //!
 //! Validates atomicCAS-based prod FW. Uses small inputs so the multi-
 //! threaded multiply is well-conditioned; non-determinism across runs
 //! is tolerated by comparing to a small absolute tolerance.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -20,7 +21,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn unsorted_segment_prod_f32_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 6;
@@ -86,7 +86,6 @@ fn unsorted_segment_prod_f32_basic() {
 }
 
 #[test]
-#[ignore]
 fn unsorted_segment_prod_f64_basic() {
     let (ctx, stream) = setup();
     let n: i32 = 4;

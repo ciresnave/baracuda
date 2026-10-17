@@ -8,9 +8,10 @@
 //! shape-`[8, 128, 128]` contig sweep with bit-exact compare is
 //! sufficient to prove the wiring.
 //!
-//! `#[ignore]` by default; run with
+//! Gated behind the `device-tests` feature; run with
 //! `cargo test -p baracuda-kernels --release --features sm89 \
-//!   --test unary_neg_dtype_smoke -- --ignored`.
+//!   --test unary_neg_dtype_smoke --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -28,7 +29,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn neg_f16_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -80,7 +80,6 @@ fn neg_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn neg_bf16_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];
@@ -132,7 +131,6 @@ fn neg_bf16_3d() {
 }
 
 #[test]
-#[ignore]
 fn neg_f64_3d() {
     let (ctx, stream) = setup();
     let shape: [i32; 3] = [8, 128, 128];

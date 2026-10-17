@@ -6,6 +6,7 @@
 //! `tanhf` is transcendental and not bit-exact between Rust's libm and
 //! CUDA's libdevice, so we use a 4×eps relative tolerance, matching the
 //! Sin backward smoke template.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -26,7 +27,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn tanhshrink_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -85,7 +85,6 @@ fn tanhshrink_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn tanhshrink_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -136,7 +135,6 @@ fn tanhshrink_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn tanhshrink_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -195,7 +193,6 @@ fn tanhshrink_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn tanhshrink_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

@@ -12,6 +12,7 @@
 //! error by `|dy|·(|t| + |x·s·(1-t²)|)`, the textbook cancellation
 //! magnitude. K = 16 absorbs the libdevice-vs-libm gap for the three
 //! chained transcendentals (`expf`, `log1pf`, `tanhf`).
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
@@ -52,7 +53,6 @@ fn mish_bw_f64(dy: f64, x: f64) -> (f64, f64) {
 }
 
 #[test]
-#[ignore]
 fn mish_backward_f32_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -107,7 +107,6 @@ fn mish_backward_f32_3d() {
 }
 
 #[test]
-#[ignore]
 fn mish_backward_f64_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -157,7 +156,6 @@ fn mish_backward_f64_3d() {
 }
 
 #[test]
-#[ignore]
 fn mish_backward_f16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];
@@ -215,7 +213,6 @@ fn mish_backward_f16_3d() {
 }
 
 #[test]
-#[ignore]
 fn mish_backward_bf16_3d() {
     let (ctx, stream) = setup();
     let shape = [8i32, 128, 128];

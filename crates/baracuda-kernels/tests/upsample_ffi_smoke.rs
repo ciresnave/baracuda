@@ -8,7 +8,8 @@
 //! cases verify the new `upsample_nearest_2d_*` kernels against a
 //! hand-rolled host reference.
 //!
-//! All tests `#[ignore]` — need a real CUDA device.
+//! All tests are gated behind the `device-tests` feature — need a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -75,7 +76,6 @@ fn cpu_nearest_2d_bw_f32(
 }
 
 #[test]
-#[ignore]
 fn ffi_upsample_nearest_2d_f32_fw_matches_cpu() {
     let (ctx, stream) = setup();
     let (n, c, ih, iw) = (1, 1, 2, 2);
@@ -112,7 +112,6 @@ fn ffi_upsample_nearest_2d_f32_fw_matches_cpu() {
 }
 
 #[test]
-#[ignore]
 fn ffi_upsample_nearest_2d_f32_bw_matches_cpu() {
     let (ctx, stream) = setup();
     let (n, c, ih, iw) = (1, 2, 3, 3);
@@ -168,7 +167,6 @@ fn ffi_upsample_nearest_2d_f32_bw_matches_cpu() {
 /// Phase 21 update: exercises the new `align_corners` + scale-factor
 /// params end-to-end through the alias to verify forwarding.
 #[test]
-#[ignore]
 fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
     let (ctx, stream) = setup();
     let (n, c, ih, iw) = (1, 1, 2, 2);
@@ -242,7 +240,6 @@ fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
 /// as smoke (status==0 + grad-mass plausibility). Per-cell correctness
 /// is covered by `interpolate_smoke.rs` against the f32 CPU reference.
 #[test]
-#[ignore]
 fn ffi_upsample_bilinear_2d_f16_fw_returns_status_zero() {
     use half::f16;
     let (ctx, stream) = setup();
@@ -288,7 +285,6 @@ fn ffi_upsample_bilinear_2d_f16_fw_returns_status_zero() {
 }
 
 #[test]
-#[ignore]
 fn ffi_upsample_bilinear_2d_bf16_bw_returns_status_zero() {
     use half::bf16;
     let (ctx, stream) = setup();
