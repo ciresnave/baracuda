@@ -2,6 +2,7 @@
 //!
 //! Runs `D[m,n] = A[m,k] * B[k,n]` and checks the result against a CPU
 //! reference. Skips if cuTENSOR isn't installed.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 
@@ -10,7 +11,6 @@ use baracuda_driver::require_optional;
 use baracuda_runtime::{Device, DeviceBuffer, Stream};
 
 #[test]
-#[ignore = "requires cuTENSOR installed + NVIDIA GPU"]
 fn contract_matmul_small() {
     require_optional!(
         baracuda_cutensor::probe(),
@@ -128,7 +128,6 @@ fn contract_matmul_small() {
 }
 
 #[test]
-#[ignore = "requires cuTENSOR installed + NVIDIA GPU"]
 fn reduce_sum_axis() {
     require_optional!(
         baracuda_cutensor::probe(),

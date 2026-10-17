@@ -3,8 +3,11 @@
 //! The GPU-gated test targets the device's compute capability via the
 //! driver-reported version and expects a non-empty cubin blob.
 
-use baracuda_nvjitlink::{InputType, Linker, version};
+use baracuda_nvjitlink::version;
+#[cfg(feature = "device-tests")]
+use baracuda_nvjitlink::{InputType, Linker};
 
+#[cfg(feature = "device-tests")]
 const VECTOR_ADD_PTX: &str = include_str!("../../baracuda-driver/tests/kernels/vector_add.ptx");
 
 #[test]
@@ -16,7 +19,7 @@ fn nvjitlink_loads() {
 }
 
 #[test]
-#[ignore = "requires nvJitLink + an NVIDIA GPU (for compute-cap query)"]
+#[cfg(feature = "device-tests")]
 fn link_ptx_to_cubin() {
     baracuda_driver::init().expect("driver init");
     let device = baracuda_driver::Device::get(0).expect("get device 0");

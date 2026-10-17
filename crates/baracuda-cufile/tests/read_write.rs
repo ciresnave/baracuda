@@ -1,16 +1,19 @@
 //! cuFile integration test — register a temp file, write device data,
 //! read it back. Linux-only (cuFile has no Windows/macOS support).
 
+#[cfg(feature = "device-tests")]
 #[cfg(target_os = "linux")]
 use std::os::fd::AsRawFd;
 
+#[cfg(feature = "device-tests")]
 #[cfg(target_os = "linux")]
 use baracuda_driver::require_optional;
+#[cfg(feature = "device-tests")]
 #[cfg(target_os = "linux")]
 use baracuda_runtime::{Device, DeviceBuffer};
 
 #[test]
-#[ignore = "requires cuFile + GDS-capable filesystem (Linux-only)"]
+#[cfg(feature = "device-tests")]
 #[cfg(target_os = "linux")]
 fn cufile_write_read_roundtrip() {
     require_optional!(

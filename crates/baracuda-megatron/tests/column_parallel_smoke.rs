@@ -7,10 +7,15 @@
 //! stream-ordered D2D copies in this case, exercising the full
 //! Megatron path without needing multi-GPU hardware.
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, require_optional};
-use baracuda_megatron::{ColumnParallelLinearPlan, Error as MegError, TensorParallelContext};
+use baracuda_megatron::Error as MegError;
+#[cfg(feature = "device-tests")]
+use baracuda_megatron::{ColumnParallelLinearPlan, TensorParallelContext};
+#[cfg(feature = "device-tests")]
 use baracuda_nccl::Communicator;
 
+#[cfg(feature = "device-tests")]
 /// CPU reference for `y = x @ w^T`, row-major.
 fn linear_forward_cpu(x: &[f32], w: &[f32], batch: usize, in_f: usize, out_f: usize) -> Vec<f32> {
     let mut y = vec![0.0f32; batch * out_f];
@@ -26,6 +31,7 @@ fn linear_forward_cpu(x: &[f32], w: &[f32], batch: usize, in_f: usize, out_f: us
     y
 }
 
+#[cfg(feature = "device-tests")]
 /// CPU reference for `dx = dy @ w` and `dw = dy^T @ x`, row-major.
 fn linear_backward_cpu(
     x: &[f32],
@@ -60,6 +66,7 @@ fn linear_backward_cpu(
     (dx, dw)
 }
 
+#[cfg(feature = "device-tests")]
 /// Try to bring up NCCL + a single-rank communicator. On hosts
 /// without NCCL the loader fails — print + skip.
 fn try_bringup(device: i32) -> Option<Communicator> {
@@ -73,7 +80,7 @@ fn try_bringup(device: i32) -> Option<Communicator> {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + NCCL"]
+#[cfg(feature = "device-tests")]
 fn column_parallel_f32_forward_single_rank_matches_linear() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0u32).unwrap();
@@ -121,7 +128,7 @@ fn column_parallel_f32_forward_single_rank_matches_linear() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + NCCL"]
+#[cfg(feature = "device-tests")]
 fn column_parallel_f32_backward_single_rank_matches_linear() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0u32).unwrap();

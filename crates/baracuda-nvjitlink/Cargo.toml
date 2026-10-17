@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvjitlink"
-version = "0.0.1-alpha.129"
+version = "0.0.1-alpha.130"
 description = "Safe Rust wrappers for NVIDIA nvJitLink (CUDA 12.0+ JIT linker)."
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,13 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
+
+[features]
+# On-device integration tests: built only with this feature, so a plain `cargo test`
+# never compiles or runs a test that needs a GPU. CI type-checks them and the
+# self-hosted device runner builds and RUNS them (`cargo gpu-test -p baracuda-nvjitlink --features device-tests ...`).
+# See docs/DEVICE-TESTS.md.
+device-tests = []
 
 [dependencies]
 baracuda-types.workspace = true

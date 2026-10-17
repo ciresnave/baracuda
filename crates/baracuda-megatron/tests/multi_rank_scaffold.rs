@@ -1,10 +1,10 @@
-//! Multi-rank scaffold — `#[ignore]`-gated.
+//! Multi-rank scaffold — gated behind the `device-tests` feature.
 //!
 //! This test is **expected to fail** on single-GPU dev environments
 //! because it requires `world_size >= 2`. It's checked in as a
 //! scaffold so that a future multi-GPU CI step can exercise it
 //! end-to-end with no setup. The test is kept in the test binary
-//! (rather than in `examples/`) so `cargo test --ignored -- --list`
+//! (rather than in `examples/`) so `cargo test --features device-tests -- --list`
 //! advertises it as a smoke target.
 //!
 //! Real multi-rank validation requires either:
@@ -15,13 +15,13 @@
 //!   `std::process::Command::spawn` pair).
 //!
 //! This scaffold takes the simpler single-process-multi-GPU path.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, require_optional};
 use baracuda_megatron::{ColumnParallelLinearPlan, RowParallelLinearPlan, TensorParallelContext};
 use baracuda_nccl::Communicator;
 
 #[test]
-#[ignore = "requires 2+ NVIDIA GPUs + NCCL (single-GPU dev env returns early)"]
 fn column_parallel_world_size_2_smoke() {
     baracuda_driver::init().unwrap();
 
@@ -70,7 +70,6 @@ fn column_parallel_world_size_2_smoke() {
 }
 
 #[test]
-#[ignore = "requires 2+ NVIDIA GPUs + NCCL (single-GPU dev env returns early)"]
 fn row_parallel_world_size_2_smoke() {
     baracuda_driver::init().unwrap();
 
