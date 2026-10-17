@@ -6,12 +6,13 @@
 //! kernel against expert weights, and validate per-group output against
 //! a host f32 reference.
 //!
-//! Marked `#[ignore]` so `cargo test --workspace` is GPU-free by default.
+//! Marked gated behind the `device-tests` feature so `cargo test --workspace` is GPU-free by default.
 //! Run with:
 //!
 //! ```text
-//! cargo test -p baracuda-cutlass --release --test grouped_gemm_smoke -- --ignored
+//! cargo test -p baracuda-cutlass --release --test grouped_gemm_smoke --features device-tests
 //! ```
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     EpilogueKind, GroupedGemmPlan, GroupedPlanPreference, GroupedProblem, MatrixMut, MatrixRef,
@@ -37,7 +38,6 @@ fn cpu_gemm_rcr_f32(m: usize, n: usize, k: usize, a: &[f32], b: &[f32], d: &mut 
 }
 
 #[test]
-#[ignore]
 fn grouped_gemm_f16_moe_4_experts() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -177,7 +177,6 @@ fn grouped_gemm_f16_moe_4_experts() {
 }
 
 #[test]
-#[ignore]
 fn grouped_gemm_bf16_moe_3_experts() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -303,7 +302,6 @@ fn grouped_gemm_bf16_moe_3_experts() {
 /// pinned-buffer source is in place), and (b) both replays produce
 /// numerically correct output identical to a non-captured run.
 #[test]
-#[ignore]
 fn grouped_gemm_capture_replay() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");

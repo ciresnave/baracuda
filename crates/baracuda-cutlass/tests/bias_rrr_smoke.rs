@@ -2,22 +2,27 @@
 //!
 //! Coverage: {Bias, BiasRelu, BiasGelu, BiasSilu} × {f16, bf16} × Rrr.
 //! 8 SKUs, one round-trip test each. Verified against a CPU reference
-//! that applies the same activation. `#[ignore]` by default; run with
-//! `cargo test -p baracuda-cutlass --release -- --ignored`.
+//! that applies the same activation. gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-cutlass --release --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     ActivationKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut,
     MatrixRef, PlanPreference, VectorRef, Workspace,
 };
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+#[cfg(feature = "device-tests")]
 use half::{bf16, f16};
 
 // ---- CPU references (same as bias_act_smoke.rs but row-major B) ----
 
+#[cfg(feature = "device-tests")]
 fn relu(x: f32) -> f32 {
     x.max(0.0)
 }
 
+#[cfg(feature = "device-tests")]
 /// A&S 7.1.26 polynomial approximation to erf. ~1.5e-7 max abs error.
 fn erf_approx(x: f32) -> f32 {
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
@@ -33,15 +38,18 @@ fn erf_approx(x: f32) -> f32 {
     sign * y
 }
 
+#[cfg(feature = "device-tests")]
 fn gelu_exact(x: f32) -> f32 {
     let inv_sqrt_2 = 1.0 / std::f32::consts::SQRT_2;
     0.5 * x * (1.0 + erf_approx(x * inv_sqrt_2))
 }
 
+#[cfg(feature = "device-tests")]
 fn silu(x: f32) -> f32 {
     x / (1.0 + (-x).exp())
 }
 
+#[cfg(feature = "device-tests")]
 #[allow(clippy::too_many_arguments)]
 fn cpu_bias_act_gemm_rrr(
     m: usize,
@@ -282,49 +290,41 @@ fn run_bf16(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
 // ---- 8 SKU smoke tests ----
 
 #[test]
-#[ignore]
 fn f16_bias_rrr_sm80_64_64_32() {
     run_f16(64, 64, 32, EpilogueKind::Bias);
 }
 
 #[test]
-#[ignore]
 fn bf16_bias_rrr_sm80_64_64_32() {
     run_bf16(64, 64, 32, EpilogueKind::Bias);
 }
 
 #[test]
-#[ignore]
 fn f16_bias_relu_rrr_sm80_64_64_32() {
     run_f16(64, 64, 32, EpilogueKind::BiasRelu);
 }
 
 #[test]
-#[ignore]
 fn bf16_bias_relu_rrr_sm80_64_64_32() {
     run_bf16(64, 64, 32, EpilogueKind::BiasRelu);
 }
 
 #[test]
-#[ignore]
 fn f16_bias_gelu_rrr_sm80_64_64_32() {
     run_f16(64, 64, 32, EpilogueKind::BiasGelu);
 }
 
 #[test]
-#[ignore]
 fn bf16_bias_gelu_rrr_sm80_64_64_32() {
     run_bf16(64, 64, 32, EpilogueKind::BiasGelu);
 }
 
 #[test]
-#[ignore]
 fn f16_bias_silu_rrr_sm80_64_64_32() {
     run_f16(64, 64, 32, EpilogueKind::BiasSilu);
 }
 
 #[test]
-#[ignore]
 fn bf16_bias_silu_rrr_sm80_64_64_32() {
     run_bf16(64, 64, 32, EpilogueKind::BiasSilu);
 }

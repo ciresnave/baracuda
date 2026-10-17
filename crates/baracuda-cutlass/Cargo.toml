@@ -15,6 +15,13 @@ exclude = ["*.profraw", "target/"]
 [features]
 default = ["sm80"]
 
+# On-device integration tests (`tests/*`): built only with this feature, so a
+# plain `cargo test` never compiles or runs a test that needs a GPU. CI type-checks
+# them (`cargo check --tests --features device-tests`) and the self-hosted device
+# runner builds and RUNS them (`cargo gpu-test -p baracuda-cutlass --features
+# device-tests`). See docs/DEVICE-TESTS.md.
+device-tests = []
+
 # Enable Ampere (sm_80) GEMM kernels. Forwarded to the kernels crate.
 sm80 = ["baracuda-cutlass-kernels-sys/sm80"]
 

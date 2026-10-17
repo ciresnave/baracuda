@@ -4,21 +4,25 @@
 //! BiasSilu}. 5 SKUs, one round-trip each, verified against a CPU reference
 //! that applies the same activation in full f32. TF32 reduces inputs to
 //! ~10-bit mantissa for the multiply-add, so the tolerance is on relative
-//! error rather than absolute. `#[ignore]` by default — runs on real
+//! error rather than absolute. gated behind the `device-tests` feature — runs on real
 //! hardware only.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     ActivationKind, ElementKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku,
     MathPrecision, MatrixMut, MatrixRef, PlanPreference, VectorRef, Workspace,
 };
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 // ---- CPU references (f32 throughout) ----
 
+#[cfg(feature = "device-tests")]
 fn relu(x: f32) -> f32 {
     x.max(0.0)
 }
 
+#[cfg(feature = "device-tests")]
 fn erf_approx(x: f32) -> f32 {
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
     let ax = x.abs();
@@ -32,14 +36,17 @@ fn erf_approx(x: f32) -> f32 {
     sign * (1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-ax * ax).exp())
 }
 
+#[cfg(feature = "device-tests")]
 fn gelu_exact(x: f32) -> f32 {
     0.5 * x * (1.0 + erf_approx(x / std::f32::consts::SQRT_2))
 }
 
+#[cfg(feature = "device-tests")]
 fn silu(x: f32) -> f32 {
     x / (1.0 + (-x).exp())
 }
 
+#[cfg(feature = "device-tests")]
 #[allow(clippy::too_many_arguments)]
 fn cpu_bias_act_gemm_rrr(
     m: usize,
@@ -181,37 +188,31 @@ fn run_tf32_rrr(m: i32, n: i32, k: i32, epilogue: EpilogueKind) {
 }
 
 #[test]
-#[ignore]
 fn tf32_identity_rrr_sm80_64_64_32() {
     run_tf32_rrr(64, 64, 32, EpilogueKind::Identity);
 }
 
 #[test]
-#[ignore]
 fn tf32_identity_rrr_sm80_128_128_64() {
     run_tf32_rrr(128, 128, 64, EpilogueKind::Identity);
 }
 
 #[test]
-#[ignore]
 fn tf32_bias_rrr_sm80_64_64_32() {
     run_tf32_rrr(64, 64, 32, EpilogueKind::Bias);
 }
 
 #[test]
-#[ignore]
 fn tf32_bias_relu_rrr_sm80_64_64_32() {
     run_tf32_rrr(64, 64, 32, EpilogueKind::BiasRelu);
 }
 
 #[test]
-#[ignore]
 fn tf32_bias_gelu_rrr_sm80_64_64_32() {
     run_tf32_rrr(64, 64, 32, EpilogueKind::BiasGelu);
 }
 
 #[test]
-#[ignore]
 fn tf32_bias_silu_rrr_sm80_64_64_32() {
     run_tf32_rrr(64, 64, 32, EpilogueKind::BiasSilu);
 }

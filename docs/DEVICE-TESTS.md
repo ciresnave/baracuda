@@ -1,12 +1,12 @@
 # On-device tests
 
 Tests that need an NVIDIA GPU are **not** `#[ignore]`d. In a migrated crate (`baracuda-driver`,
-`baracuda-kernels`) they sit behind the crate's `device-tests` cargo feature, and three
+`baracuda-kernels`, `baracuda-cutlass`) they sit behind the crate's `device-tests` cargo feature, and three
 things keep that from being a way to hide them:
 
 1. **Type-checked on every PR.** CI runs
    `cargo clippy --locked -p baracuda-driver --tests --features device-tests -- -D warnings`
-   (and `cargo check -p baracuda-kernels --tests` with and without the feature, per arch,
+   (and `cargo check -p baracuda-kernels --tests` and, on the sm80 leg, `-p baracuda-cutlass --tests`, each with and without the feature, per arch,
    under `DOCS_RS=1`) on the hosted runners (no CUDA needed to *compile* them), so a gated test cannot rot unbuilt.
 2. **Actually run.** `.github/workflows/device-tests.yml` runs
    `cargo gpu-test -p baracuda-driver --features device-tests` on the self-hosted runner (the

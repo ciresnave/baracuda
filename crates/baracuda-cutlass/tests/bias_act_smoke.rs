@@ -7,22 +7,26 @@
 //! pre-activation values become 0 under ReLU) and (b) the precision
 //! falls within the dtype's expected tolerance.
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-cutlass --release -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-cutlass --release --features device-tests`.
 
+#[cfg(feature = "device-tests")]
 use baracuda_cutlass::{
     ActivationKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut,
     MatrixRef, PlanPreference, VectorRef, Workspace,
 };
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
 // ---- CPU references for each activation ----
 
+#[cfg(feature = "device-tests")]
 fn relu(x: f32) -> f32 {
     x.max(0.0)
 }
 
+#[cfg(feature = "device-tests")]
 /// Abramowitz & Stegun 7.1.26 polynomial approximation to erf, max abs
 /// error ~1.5e-7 — well below f16/bf16 precision so this is fine for
 /// the CPU reference. Avoids pulling in `libm` as a dev-dep.
@@ -40,6 +44,7 @@ fn erf_approx(x: f32) -> f32 {
     sign * y
 }
 
+#[cfg(feature = "device-tests")]
 /// Exact (erf-based) GELU — matches CUTLASS's `epilogue::thread::GELU`
 /// and PyTorch's default `nn.GELU()`. The closed form is
 /// `gelu(x) = 0.5 * x * (1 + erf(x / sqrt(2)))`.
@@ -48,10 +53,12 @@ fn gelu_exact(x: f32) -> f32 {
     0.5 * x * (1.0 + erf_approx(x * inv_sqrt_2))
 }
 
+#[cfg(feature = "device-tests")]
 fn silu(x: f32) -> f32 {
     x / (1.0 + (-x).exp())
 }
 
+#[cfg(feature = "device-tests")]
 #[allow(clippy::too_many_arguments)]
 fn cpu_bias_act_gemm_rcr(
     m: usize,
@@ -88,6 +95,7 @@ fn cpu_bias_act_gemm_rcr(
 
 // ---- Generic helpers, one per element type ----
 
+#[cfg(feature = "device-tests")]
 fn run_f16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: EpilogueKind) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -191,6 +199,7 @@ fn run_f16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: Epilogu
     );
 }
 
+#[cfg(feature = "device-tests")]
 fn run_bf16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: EpilogueKind) {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -294,37 +303,37 @@ fn run_bf16(m: i32, n: i32, k: i32, activation: ActivationKind, epilogue: Epilog
 // ---- 6 SKU smoke tests ----
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn f16_bias_relu_rcr_sm80_64_64_32() {
     run_f16(64, 64, 32, ActivationKind::Relu, EpilogueKind::BiasRelu);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn bf16_bias_relu_rcr_sm80_64_64_32() {
     run_bf16(64, 64, 32, ActivationKind::Relu, EpilogueKind::BiasRelu);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn f16_bias_gelu_rcr_sm80_64_64_32() {
     run_f16(64, 64, 32, ActivationKind::Gelu, EpilogueKind::BiasGelu);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn bf16_bias_gelu_rcr_sm80_64_64_32() {
     run_bf16(64, 64, 32, ActivationKind::Gelu, EpilogueKind::BiasGelu);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn f16_bias_silu_rcr_sm80_64_64_32() {
     run_f16(64, 64, 32, ActivationKind::Silu, EpilogueKind::BiasSilu);
 }
 
 #[test]
-#[ignore]
+#[cfg(feature = "device-tests")]
 fn bf16_bias_silu_rcr_sm80_64_64_32() {
     run_bf16(64, 64, 32, ActivationKind::Silu, EpilogueKind::BiasSilu);
 }

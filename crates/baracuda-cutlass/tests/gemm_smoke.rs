@@ -1,11 +1,12 @@
 //! Real-GPU smoke test: f16 + bf16 GEMM RCR sm80 against a CPU reference.
 //!
-//! Marked `#[ignore]` so `cargo test --workspace` is GPU-free by default.
+//! Marked gated behind the `device-tests` feature so `cargo test --workspace` is GPU-free by default.
 //! Run on a machine with CUDA + an NVIDIA GPU:
 //!
 //! ```text
-//! cargo test -p baracuda-cutlass --release -- --ignored
+//! cargo test -p baracuda-cutlass --release --features device-tests
 //! ```
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut, MatrixRef,
@@ -235,32 +236,27 @@ fn run_one_bf16(m: i32, n: i32, k: i32) {
 }
 
 #[test]
-#[ignore]
 fn f16_gemm_rcr_sm80_128_128_64() {
     run_one_f16(128, 128, 64);
 }
 
 #[test]
-#[ignore]
 fn f16_gemm_rcr_sm80_64_64_32() {
     run_one_f16(64, 64, 32);
 }
 
 #[test]
-#[ignore]
 fn bf16_gemm_rcr_sm80_128_128_64() {
     run_one_bf16(128, 128, 64);
 }
 
 #[test]
-#[ignore]
 fn bf16_gemm_rcr_sm80_64_64_32() {
     run_one_bf16(64, 64, 32);
 }
 
 /// `can_implement` should accept a well-formed problem.
 #[test]
-#[ignore]
 fn can_implement_accepts_aligned_problem() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -322,7 +318,6 @@ fn can_implement_accepts_aligned_problem() {
 /// to land on aligned addresses. K = 7 should be rejected by CUTLASS's
 /// `Gemm::can_implement` without launching a kernel.
 #[test]
-#[ignore]
 fn can_implement_rejects_misaligned_k() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -396,7 +391,6 @@ fn can_implement_rejects_misaligned_k() {
 /// only `alpha * A @ B` — i.e., the prior contents were *overwritten*,
 /// not accumulated.
 #[test]
-#[ignore]
 fn null_c_with_nonzero_beta_overwrites_d() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");

@@ -4,19 +4,23 @@
 //! BiasGelu, BiasSilu}` = 10 SKUs. SIMT GEMM uses CUDA cores (no tensor
 //! cores) and produces full-precision results, so the tolerance here is
 //! much tighter than for the TF32 path: ~K * 1e-5 absolute relative
-//! error vs the CPU reference. `#[ignore]` by default.
+//! error vs the CPU reference. gated behind the `device-tests` feature.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     ActivationKind, ElementKind, EpilogueKind, F32Strict, GemmArgs, GemmDescriptor, GemmPlan,
     LayoutSku, MathPrecision, MatrixMut, MatrixRef, PlanPreference, VectorRef, Workspace,
 };
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
 // ---- CPU references ----
 
+#[cfg(feature = "device-tests")]
 fn relu(x: f32) -> f32 {
     x.max(0.0)
 }
+#[cfg(feature = "device-tests")]
 fn erf_approx(x: f32) -> f32 {
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
     let ax = x.abs();
@@ -29,13 +33,16 @@ fn erf_approx(x: f32) -> f32 {
     let t = 1.0 / (1.0 + p * ax);
     sign * (1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-ax * ax).exp())
 }
+#[cfg(feature = "device-tests")]
 fn gelu_exact(x: f32) -> f32 {
     0.5 * x * (1.0 + erf_approx(x / std::f32::consts::SQRT_2))
 }
+#[cfg(feature = "device-tests")]
 fn silu(x: f32) -> f32 {
     x / (1.0 + (-x).exp())
 }
 
+#[cfg(feature = "device-tests")]
 #[allow(clippy::too_many_arguments)]
 fn cpu_bias_act_gemm(
     layout: LayoutSku,
@@ -203,32 +210,26 @@ fn run_f32_strict(layout: LayoutSku, epilogue: EpilogueKind, m: i32, n: i32, k: 
 // ---- RCR ----
 
 #[test]
-#[ignore]
 fn f32_strict_identity_rcr_64_64_32() {
     run_f32_strict(LayoutSku::Rcr, EpilogueKind::Identity, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f32_strict_identity_rcr_128_128_64() {
     run_f32_strict(LayoutSku::Rcr, EpilogueKind::Identity, 128, 128, 64);
 }
 #[test]
-#[ignore]
 fn f32_strict_bias_rcr_64_64_32() {
     run_f32_strict(LayoutSku::Rcr, EpilogueKind::Bias, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f32_strict_bias_relu_rcr_64_64_32() {
     run_f32_strict(LayoutSku::Rcr, EpilogueKind::BiasRelu, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f32_strict_bias_gelu_rcr_64_64_32() {
     run_f32_strict(LayoutSku::Rcr, EpilogueKind::BiasGelu, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f32_strict_bias_silu_rcr_64_64_32() {
     run_f32_strict(LayoutSku::Rcr, EpilogueKind::BiasSilu, 64, 64, 32);
 }
@@ -236,32 +237,26 @@ fn f32_strict_bias_silu_rcr_64_64_32() {
 // ---- RRR ----
 
 #[test]
-#[ignore]
 fn f32_strict_identity_rrr_64_64_32() {
     run_f32_strict(LayoutSku::Rrr, EpilogueKind::Identity, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f32_strict_identity_rrr_128_128_64() {
     run_f32_strict(LayoutSku::Rrr, EpilogueKind::Identity, 128, 128, 64);
 }
 #[test]
-#[ignore]
 fn f32_strict_bias_rrr_64_64_32() {
     run_f32_strict(LayoutSku::Rrr, EpilogueKind::Bias, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f32_strict_bias_relu_rrr_64_64_32() {
     run_f32_strict(LayoutSku::Rrr, EpilogueKind::BiasRelu, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f32_strict_bias_gelu_rrr_64_64_32() {
     run_f32_strict(LayoutSku::Rrr, EpilogueKind::BiasGelu, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f32_strict_bias_silu_rrr_64_64_32() {
     run_f32_strict(LayoutSku::Rrr, EpilogueKind::BiasSilu, 64, 64, 32);
 }
