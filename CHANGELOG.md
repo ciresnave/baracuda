@@ -21,7 +21,7 @@ at alpha.82.
 Workspace alpha.127 (proposed; PM allocates at gate).
 
 - baracuda-ozimmu device tests now behind device-tests (19 run on the sm_89 device runner: 0 failed).
-- Fix: baracuda-cutlass's thread-local ozIMMU handle cache now holds a Context clone (same teardown hazard as the cuBLAS cache fixed in alpha.123); compile-checked only, no test drives the Ozaki GemmPlan backend.
+- Fix: baracuda-cutlass's thread-local ozIMMU handle cache now holds a Context clone (same teardown hazard as the cuBLAS cache fixed in alpha.123); new tests/ozaki_backend_smoke.rs drives the Ozaki GemmPlan backend (matches CPU DGEMM; per-thread drop-order loop). The crash was NOT reproducible on the ozimmu cache before the change (0/20), so that edit is defensive.
 
 ## 0.0.1-alpha.126 - 2026-10-16 (Test: retire #[ignore] in baracuda-flashinfer; repair the flashinfer feature build)
 
