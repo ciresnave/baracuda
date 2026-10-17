@@ -1,8 +1,9 @@
 //! Real-GPU smoke test for bias-fused GEMM (alpha.10).
 //!
 //! Computes `D = alpha*AB + beta*C + bias_broadcast(N)` and compares
-//! against a CPU reference. `#[ignore]` by default; run with
-//! `cargo test -p baracuda-cutlass --release -- --ignored`.
+//! against a CPU reference. gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-cutlass --release --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut, MatrixRef,
@@ -11,6 +12,7 @@ use baracuda_cutlass::{
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
+#[cfg(feature = "device-tests")]
 /// CPU reference for `D = alpha*AB + beta*C + bias_broadcast(N)`,
 /// RCR layout (A row-major, B column-major, C/D row-major).
 #[allow(clippy::too_many_arguments)]
@@ -48,19 +50,16 @@ fn cpu_bias_gemm_rcr(
 }
 
 #[test]
-#[ignore]
 fn f16_bias_gemm_rcr_sm80_64_64_32() {
     bias_round_trip_f16(64, 64, 32);
 }
 
 #[test]
-#[ignore]
 fn f16_bias_gemm_rcr_sm80_128_128_64() {
     bias_round_trip_f16(128, 128, 64);
 }
 
 #[test]
-#[ignore]
 fn bf16_bias_gemm_rcr_sm80_64_64_32() {
     bias_round_trip_bf16(64, 64, 32);
 }
@@ -268,7 +267,6 @@ fn bias_round_trip_bf16(m: i32, n: i32, k: i32) {
 /// These checks are host-only (rejected before any kernel launch),
 /// but we need a Stream to construct the plan.
 #[test]
-#[ignore]
 fn epilogue_bias_mismatch_rejected() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");

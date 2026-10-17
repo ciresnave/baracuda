@@ -8,8 +8,9 @@
 //! replicates CUTLASS's int32-accumulate → float-compute →
 //! saturating-cast-to-int8 epilogue chain.
 //!
-//! `#[ignore]` by default; run with
-//! `cargo test -p baracuda-cutlass --release -- --ignored`.
+//! Gated behind the `device-tests` feature; run with
+//! `cargo test -p baracuda-cutlass --release --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     ActivationKind, BiasElement, EpilogueKind, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
@@ -22,10 +23,12 @@ use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init, require};
 // `LinearCombinationBiasElementwise` epilogue chain for int8.
 // ============================================================================
 
+#[cfg(feature = "device-tests")]
 fn relu(x: f32) -> f32 {
     x.max(0.0)
 }
 
+#[cfg(feature = "device-tests")]
 fn erf_approx(x: f32) -> f32 {
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
     let ax = x.abs();
@@ -40,15 +43,18 @@ fn erf_approx(x: f32) -> f32 {
     sign * y
 }
 
+#[cfg(feature = "device-tests")]
 fn gelu_exact(x: f32) -> f32 {
     let inv_sqrt_2 = 1.0 / std::f32::consts::SQRT_2;
     0.5 * x * (1.0 + erf_approx(x * inv_sqrt_2))
 }
 
+#[cfg(feature = "device-tests")]
 fn silu(x: f32) -> f32 {
     x / (1.0 + (-x).exp())
 }
 
+#[cfg(feature = "device-tests")]
 fn apply_activation(act: Option<ActivationKind>, x: f32) -> f32 {
     match act {
         None => x,
@@ -58,6 +64,7 @@ fn apply_activation(act: Option<ActivationKind>, x: f32) -> f32 {
     }
 }
 
+#[cfg(feature = "device-tests")]
 /// Saturating round-to-nearest-int cast — matches the PTX
 /// `cvt.rni.sat.s8.f32` / `cvt.rni.sat.u8.f32` instructions used by
 /// CUTLASS's `NumericConverter<{i8,u8}, float>` specializations.
@@ -66,11 +73,13 @@ fn sat_cast_s8(x: f32) -> i8 {
     r.clamp(i8::MIN as i32, i8::MAX as i32) as i8
 }
 
+#[cfg(feature = "device-tests")]
 fn sat_cast_u8(x: f32) -> u8 {
     let r = x.round() as i32;
     r.clamp(u8::MIN as i32, u8::MAX as i32) as u8
 }
 
+#[cfg(feature = "device-tests")]
 /// Reference int8 GEMM with optional bias + activation, RCR layout.
 /// Mirrors CUTLASS's compute order:
 ///   acc = sum_k (i32) A[i,k] * (i32) B[k,j]   // int32 accumulator
@@ -468,7 +477,6 @@ const K: i32 = 128;
 // ---- S8 Identity ----
 
 #[test]
-#[ignore]
 fn int8_smoke_s8_rcr_identity() {
     run_s8_smoke::<f32>(
         M,
@@ -485,7 +493,6 @@ fn int8_smoke_s8_rcr_identity() {
 // ---- S8 × f32 bias ----
 
 #[test]
-#[ignore]
 fn int8_smoke_s8_rcr_bias_f32() {
     run_s8_smoke::<f32>(
         M,
@@ -500,7 +507,6 @@ fn int8_smoke_s8_rcr_bias_f32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_s8_rcr_bias_relu_f32() {
     run_s8_smoke::<f32>(
         M,
@@ -515,7 +521,6 @@ fn int8_smoke_s8_rcr_bias_relu_f32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_s8_rcr_bias_gelu_f32() {
     run_s8_smoke::<f32>(
         M,
@@ -530,7 +535,6 @@ fn int8_smoke_s8_rcr_bias_gelu_f32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_s8_rcr_bias_silu_f32() {
     run_s8_smoke::<f32>(
         M,
@@ -547,7 +551,6 @@ fn int8_smoke_s8_rcr_bias_silu_f32() {
 // ---- S8 × i32 bias ----
 
 #[test]
-#[ignore]
 fn int8_smoke_s8_rcr_bias_i32() {
     run_s8_smoke::<i32>(
         M,
@@ -562,7 +565,6 @@ fn int8_smoke_s8_rcr_bias_i32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_s8_rcr_bias_relu_i32() {
     run_s8_smoke::<i32>(
         M,
@@ -577,7 +579,6 @@ fn int8_smoke_s8_rcr_bias_relu_i32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_s8_rcr_bias_gelu_i32() {
     run_s8_smoke::<i32>(
         M,
@@ -592,7 +593,6 @@ fn int8_smoke_s8_rcr_bias_gelu_i32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_s8_rcr_bias_silu_i32() {
     run_s8_smoke::<i32>(
         M,
@@ -609,7 +609,6 @@ fn int8_smoke_s8_rcr_bias_silu_i32() {
 // ---- U8 Identity ----
 
 #[test]
-#[ignore]
 fn int8_smoke_u8_rcr_identity() {
     run_u8_smoke::<f32>(
         M,
@@ -626,7 +625,6 @@ fn int8_smoke_u8_rcr_identity() {
 // ---- U8 × f32 bias ----
 
 #[test]
-#[ignore]
 fn int8_smoke_u8_rcr_bias_f32() {
     run_u8_smoke::<f32>(
         M,
@@ -641,7 +639,6 @@ fn int8_smoke_u8_rcr_bias_f32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_u8_rcr_bias_relu_f32() {
     run_u8_smoke::<f32>(
         M,
@@ -656,7 +653,6 @@ fn int8_smoke_u8_rcr_bias_relu_f32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_u8_rcr_bias_gelu_f32() {
     run_u8_smoke::<f32>(
         M,
@@ -671,7 +667,6 @@ fn int8_smoke_u8_rcr_bias_gelu_f32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_u8_rcr_bias_silu_f32() {
     run_u8_smoke::<f32>(
         M,
@@ -688,7 +683,6 @@ fn int8_smoke_u8_rcr_bias_silu_f32() {
 // ---- U8 × i32 bias ----
 
 #[test]
-#[ignore]
 fn int8_smoke_u8_rcr_bias_i32() {
     run_u8_smoke::<i32>(
         M,
@@ -703,7 +697,6 @@ fn int8_smoke_u8_rcr_bias_i32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_u8_rcr_bias_relu_i32() {
     run_u8_smoke::<i32>(
         M,
@@ -718,7 +711,6 @@ fn int8_smoke_u8_rcr_bias_relu_i32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_u8_rcr_bias_gelu_i32() {
     run_u8_smoke::<i32>(
         M,
@@ -733,7 +725,6 @@ fn int8_smoke_u8_rcr_bias_gelu_i32() {
 }
 
 #[test]
-#[ignore]
 fn int8_smoke_u8_rcr_bias_silu_i32() {
     run_u8_smoke::<i32>(
         M,
@@ -750,12 +741,11 @@ fn int8_smoke_u8_rcr_bias_silu_i32() {
 // ---- Negative: RRR int8 must report Unsupported at plan selection ----
 
 #[test]
-#[ignore = "device-gated: select() queries the stream's device, so this rejection-path check silently skips on a CUDA-absent host (was a vacuous default-run green). Run via `cargo gpu-test`; interim pending the declare-and-report skippability primitive."]
 fn int8_rrr_select_returns_unsupported() {
     // Pure host-side check — doesn't touch the device. Doesn't need a
     // real CUDA context, but `IntGemmPlan::select` does query the
     // stream's device. We probe a Stream to satisfy the API; this test
-    // is marked NOT `#[ignore]` because it's host-side validation.
+    // is marked NOT gated behind the `device-tests` feature because it's host-side validation.
     require!(init(), "CUDA driver init");
     let device = require!(Device::get(0), "a CUDA device");
     let ctx = require!(Context::new(&device), "a CUDA context");

@@ -10,8 +10,9 @@
 //! rather than in Fuel's graph-replay path.
 //!
 //! Coverage: vanilla single GEMM (Rcr Identity, Rrr Identity, TF32),
-//! bias-fused single GEMM, batched GEMM. `#[ignore]` by default; run
-//! with `cargo test -p baracuda-cutlass --release -- --ignored`.
+//! bias-fused single GEMM, batched GEMM. gated behind the `device-tests` feature; run
+//! with `cargo test -p baracuda-cutlass --release --features device-tests`.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     BatchedGemmArgs, BatchedGemmDescriptor, BatchedGemmPlan, EpilogueKind, GemmArgs,
@@ -48,6 +49,7 @@ fn cpu_gemm_rrr_f32(m: usize, n: usize, k: usize, a: &[f32], b: &[f32], d: &mut 
 }
 
 // A&S 7.1.26 erf approximation (used by gelu_exact below).
+#[cfg(feature = "device-tests")]
 fn erf_approx(x: f32) -> f32 {
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
     let ax = x.abs();
@@ -61,6 +63,7 @@ fn erf_approx(x: f32) -> f32 {
     sign * (1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-ax * ax).exp())
 }
 
+#[cfg(feature = "device-tests")]
 fn gelu_exact(x: f32) -> f32 {
     0.5 * x * (1.0 + erf_approx(x / std::f32::consts::SQRT_2))
 }
@@ -89,7 +92,6 @@ fn cpu_bias_gelu_rcr_f32(
 // ---- 1. Vanilla single GEMM: f16 Rcr Identity ----
 
 #[test]
-#[ignore]
 fn gemm_capture_replay_f16_rcr_identity() {
     init().unwrap();
     let device = Device::get(0).unwrap();
@@ -177,7 +179,6 @@ fn gemm_capture_replay_f16_rcr_identity() {
 // ---- 2. Rrr layout ----
 
 #[test]
-#[ignore]
 fn gemm_capture_replay_f16_rrr_identity() {
     init().unwrap();
     let device = Device::get(0).unwrap();
@@ -265,7 +266,6 @@ fn gemm_capture_replay_f16_rrr_identity() {
 // ---- 3. TF32 (f32 input via TF32 tensor cores) ----
 
 #[test]
-#[ignore]
 fn gemm_capture_replay_tf32_rcr_identity() {
     init().unwrap();
     let device = Device::get(0).unwrap();
@@ -357,7 +357,6 @@ fn gemm_capture_replay_tf32_rcr_identity() {
 }
 
 #[test]
-#[ignore]
 fn gemm_capture_replay_tf32_rrr_identity() {
     init().unwrap();
     let device = Device::get(0).unwrap();
@@ -451,7 +450,6 @@ fn gemm_capture_replay_tf32_rrr_identity() {
 // ---- 4. Bias-fused single GEMM (covers the bias_ptr capture path) ----
 
 #[test]
-#[ignore]
 fn gemm_capture_replay_f16_rcr_bias_gelu() {
     init().unwrap();
     let device = Device::get(0).unwrap();
@@ -546,7 +544,6 @@ fn gemm_capture_replay_f16_rcr_bias_gelu() {
 // ---- 5. Batched GEMM (uniform shape) ----
 
 #[test]
-#[ignore]
 fn batched_gemm_capture_replay_f16_rcr() {
     init().unwrap();
     let device = Device::get(0).unwrap();

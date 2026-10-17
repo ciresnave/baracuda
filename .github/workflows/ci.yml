@@ -354,6 +354,14 @@ jobs:
         run: cargo check --locked -p baracuda-kernels --tests --features ${{ matrix.arch }}
       - name: cargo check baracuda-kernels --tests (device-tests on)
         run: cargo check --locked -p baracuda-kernels --tests --features ${{ matrix.arch }},device-tests
+      # baracuda-cutlass's device tests are gated the same way; its features are sm80/sm90a
+      # only (no sm89), so type-check the default build once, on the sm80 leg.
+      - name: cargo check baracuda-cutlass --tests (device-tests off)
+        if: matrix.arch == 'sm80'
+        run: cargo check --locked -p baracuda-cutlass --tests
+      - name: cargo check baracuda-cutlass --tests (device-tests on)
+        if: matrix.arch == 'sm80'
+        run: cargo check --locked -p baracuda-cutlass --tests --features device-tests
       # `baracuda-kernels-bench`'s tests/ are 12 files / 3,103 lines that NO job
       # compiled until this step: the variant gate, the RowReduce bit-move matrix
       # and the precision-first numerics all live there. They are device tests, so

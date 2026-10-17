@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.123 - 2026-10-16 (Test: retire #[ignore] in baracuda-cutlass; fix cuBLAS handle cache)
+
+Workspace alpha.123 (proposed; PM allocates at gate).
+
+- baracuda-cutlass device tests now behind the device-tests feature (113 run on the sm_89 device runner: 0 failed).
+- Fix: the thread-local cuBLAS handle cache now holds a Context clone, so cublasDestroy at thread exit no longer runs against a destroyed context (intermittent access violation, found by the first real run of these tests).
+
 ## 0.0.1-alpha.122 - 2026-10-16 (Docs: UNVERIFIED list for baracuda-kernels feature-gated tests)
 
 Workspace alpha.122 (proposed; PM allocates at gate).

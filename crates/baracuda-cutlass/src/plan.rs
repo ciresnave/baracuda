@@ -3180,7 +3180,7 @@ mod cublas_backend {
     use core::cell::RefCell;
 
     use baracuda_cublas::Handle as CublasHandle;
-    use baracuda_driver::Stream;
+    use baracuda_driver::{Context, Stream};
 
     // Per-thread cache of cuBLAS handles, keyed by the raw context
     // pointer the handle was created against.
@@ -3198,8 +3198,15 @@ mod cublas_backend {
     // A `Vec` keyed by raw context pointer is fine here: production
     // callers have one context per process, and even
     // multi-context callers rarely exceed a handful.
+    //
+    // Each entry also holds a clone of the `Context` its handle was created
+    // against. The cache lives until thread exit, so without it the caller's
+    // context could be destroyed first and `cublasDestroy` would then run at
+    // thread teardown against a dead context (an intermittent access violation,
+    // and a stale-key hazard if the driver reuses the context pointer). Tuple
+    // fields drop in order, so the handle is destroyed before its context.
     thread_local! {
-        static HANDLE_CACHE: RefCell<Vec<(usize, CublasHandle)>> =
+        static HANDLE_CACHE: RefCell<Vec<(usize, CublasHandle, Context)>> =
             const { RefCell::new(Vec::new()) };
     }
 
@@ -3218,7 +3225,7 @@ mod cublas_backend {
         let ctx_key = stream.context().as_raw() as usize;
         let handle = HANDLE_CACHE.with(|cache| -> crate::Result<CublasHandle> {
             let mut cache = cache.borrow_mut();
-            if let Some((_, h)) = cache.iter().find(|(k, _)| *k == ctx_key) {
+            if let Some((_, h, _)) = cache.iter().find(|(k, _, _)| *k == ctx_key) {
                 return Ok(h.clone());
             }
             // First touch on this thread for this context — create.
@@ -3277,7 +3284,7 @@ mod cublas_backend {
                     }
                 }
             };
-            cache.push((ctx_key, h.clone()));
+            cache.push((ctx_key, h.clone(), stream.context().clone()));
             Ok(h)
         })?;
         // Bind to the launch stream so the GEMM enqueues on the

@@ -3,21 +3,25 @@
 //! Coverage: `f64 × {Rcr, Rrr} × {Identity, Bias, BiasRelu, BiasGelu,
 //! BiasSilu}` = 10 SKUs. f64 GEMM uses the FP64 tensor cores (mma.sync
 //! m8n8k4 in double) and accumulates into f64, so we can hold callers
-//! to a much tighter tolerance than f32. `#[ignore]` by default.
+//! to a much tighter tolerance than f32. gated behind the `device-tests` feature.
 //!
 //! Also exercises the per-element scalar refactor: `GemmArgs::<f64>` has
 //! `alpha: f64, beta: f64` (rather than the f32 used by every other
 //! shipped dtype).
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     ActivationKind, ElementKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku,
     MathPrecision, MatrixMut, MatrixRef, PlanPreference, VectorRef, Workspace,
 };
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 
+#[cfg(feature = "device-tests")]
 fn relu(x: f64) -> f64 {
     x.max(0.0)
 }
+#[cfg(feature = "device-tests")]
 fn erf_approx(x: f64) -> f64 {
     // A&S 7.1.26 — max |ε| ≈ 1.5e-7 over the full range.
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
@@ -32,15 +36,18 @@ fn erf_approx(x: f64) -> f64 {
     sign * (1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-ax * ax).exp())
 }
 
+#[cfg(feature = "device-tests")]
 fn gelu_exact(x: f64) -> f64 {
     // GELU(x) = 0.5 * x * (1 + erf(x / sqrt(2))). Matches CUTLASS's
     // GELU<double> (which calls libm `erf` on `x * sqrt(2)/2`).
     0.5 * x * (1.0 + erf_approx(x / std::f64::consts::SQRT_2))
 }
+#[cfg(feature = "device-tests")]
 fn silu(x: f64) -> f64 {
     x / (1.0 + (-x).exp())
 }
 
+#[cfg(feature = "device-tests")]
 #[allow(clippy::too_many_arguments)]
 fn cpu_bias_act_gemm(
     layout: LayoutSku,
@@ -202,32 +209,26 @@ fn run_f64(layout: LayoutSku, epilogue: EpilogueKind, m: i32, n: i32, k: i32) {
 // ---- RCR ----
 
 #[test]
-#[ignore]
 fn f64_identity_rcr_64_64_32() {
     run_f64(LayoutSku::Rcr, EpilogueKind::Identity, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f64_identity_rcr_128_128_64() {
     run_f64(LayoutSku::Rcr, EpilogueKind::Identity, 128, 128, 64);
 }
 #[test]
-#[ignore]
 fn f64_bias_rcr_64_64_32() {
     run_f64(LayoutSku::Rcr, EpilogueKind::Bias, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f64_bias_relu_rcr_64_64_32() {
     run_f64(LayoutSku::Rcr, EpilogueKind::BiasRelu, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f64_bias_gelu_rcr_64_64_32() {
     run_f64(LayoutSku::Rcr, EpilogueKind::BiasGelu, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f64_bias_silu_rcr_64_64_32() {
     run_f64(LayoutSku::Rcr, EpilogueKind::BiasSilu, 64, 64, 32);
 }
@@ -235,32 +236,26 @@ fn f64_bias_silu_rcr_64_64_32() {
 // ---- RRR ----
 
 #[test]
-#[ignore]
 fn f64_identity_rrr_64_64_32() {
     run_f64(LayoutSku::Rrr, EpilogueKind::Identity, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f64_identity_rrr_128_128_64() {
     run_f64(LayoutSku::Rrr, EpilogueKind::Identity, 128, 128, 64);
 }
 #[test]
-#[ignore]
 fn f64_bias_rrr_64_64_32() {
     run_f64(LayoutSku::Rrr, EpilogueKind::Bias, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f64_bias_relu_rrr_64_64_32() {
     run_f64(LayoutSku::Rrr, EpilogueKind::BiasRelu, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f64_bias_gelu_rrr_64_64_32() {
     run_f64(LayoutSku::Rrr, EpilogueKind::BiasGelu, 64, 64, 32);
 }
 #[test]
-#[ignore]
 fn f64_bias_silu_rrr_64_64_32() {
     run_f64(LayoutSku::Rrr, EpilogueKind::BiasSilu, 64, 64, 32);
 }

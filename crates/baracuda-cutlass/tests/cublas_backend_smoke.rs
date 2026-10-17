@@ -4,12 +4,13 @@
 //! for f16 / bf16 / f32, both via the auto-dispatch heuristic and via
 //! the explicit `PlanPreference::prefer_backend = Some(Cublas)` override.
 //!
-//! Marked `#[ignore]` so `cargo test --workspace` is GPU-free by default.
+//! Marked gated behind the `device-tests` feature so `cargo test --workspace` is GPU-free by default.
 //! Run on a CUDA + NVIDIA-GPU machine:
 //!
 //! ```text
-//! cargo test -p baracuda-cutlass --release --test cublas_backend_smoke -- --ignored
+//! cargo test -p baracuda-cutlass --release --test cublas_backend_smoke --features device-tests
 //! ```
+#![cfg(feature = "device-tests")]
 
 use baracuda_cutlass::{
     BackendKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, LayoutSku, MatrixMut, MatrixRef,
@@ -18,6 +19,7 @@ use baracuda_cutlass::{
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::{bf16, f16};
 
+#[cfg(feature = "device-tests")]
 /// Host CPU reference: D = alpha * (A @ B) + beta * C in f32.
 /// A row-major [m, k], lda=k. B column-major [k, n], ldb=k (RCR).
 fn cpu_gemm_rcr_f32(m: usize, n: usize, k: usize, a: &[f32], b: &[f32], d: &mut [f32]) {
@@ -339,7 +341,6 @@ fn run_one_f32_cublas_forced(m: i32, n: i32, k: i32) {
 /// excludes pure GEMV-shape because cuBLAS's `transa=T` path is slow
 /// at K=N=4096 — see `should_use_cublas_for_fp` rustdoc).
 #[test]
-#[ignore]
 fn f16_auto_dispatch_m1_picks_cutlass() {
     run_one_f16_cublas(1, 128, 256, /* force_cublas */ false);
 }
@@ -347,14 +348,12 @@ fn f16_auto_dispatch_m1_picks_cutlass() {
 /// Auto-dispatch: f16 at M=8 lands on cuBLAS (in the 2 <= M < 128
 /// decode-batch window).
 #[test]
-#[ignore]
 fn f16_auto_dispatch_m8_picks_cublas() {
     run_one_f16_cublas(8, 128, 256, /* force_cublas */ false);
 }
 
 /// Force cuBLAS at f16 / mid-M (still in the cuBLAS preference window).
 #[test]
-#[ignore]
 fn f16_force_cublas_m32() {
     run_one_f16_cublas(32, 256, 256, /* force_cublas */ true);
 }
@@ -363,7 +362,6 @@ fn f16_force_cublas_m32() {
 /// correct end-to-end — perf may be worse than CUTLASS at this shape
 /// but the answer must match.
 #[test]
-#[ignore]
 fn f16_force_cublas_m1() {
     run_one_f16_cublas(1, 128, 256, /* force_cublas */ true);
 }
@@ -371,21 +369,18 @@ fn f16_force_cublas_m1() {
 /// Force cuBLAS at f16 / large-M (heuristic would pick CUTLASS, override
 /// wins).
 #[test]
-#[ignore]
 fn f16_force_cublas_m256() {
     run_one_f16_cublas(256, 256, 256, /* force_cublas */ true);
 }
 
 /// Force cuBLAS at bf16.
 #[test]
-#[ignore]
 fn bf16_force_cublas_m8() {
     run_one_bf16_cublas(8, 128, 256, /* force_cublas */ true);
 }
 
 /// Force cuBLAS at f32 (CUTLASS default, override picks cuBLAS).
 #[test]
-#[ignore]
 fn f32_force_cublas_m16() {
     run_one_f32_cublas_forced(16, 128, 256);
 }
@@ -393,7 +388,6 @@ fn f32_force_cublas_m16() {
 /// Auto-dispatch at large M should stay on CUTLASS for f16 (the
 /// CUTLASS path is preferred at prefill scale).
 #[test]
-#[ignore]
 fn f16_auto_dispatch_large_m_picks_cutlass() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");
@@ -419,7 +413,6 @@ fn f16_auto_dispatch_large_m_picks_cutlass() {
 /// Force-Cublas with a Bias* epilogue must error — cuBLAS-classic has
 /// no fused-bias-activation.
 #[test]
-#[ignore]
 fn force_cublas_with_bias_epilogue_errors() {
     init().expect("driver init");
     let device = Device::get(0).expect("device 0");

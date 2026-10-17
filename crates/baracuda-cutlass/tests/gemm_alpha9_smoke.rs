@@ -4,19 +4,24 @@
 //! - TF32 GEMM (f32 input via TF32 tensor cores)
 //! - Batched GEMM with uniform shape (f16, bf16)
 //!
-//! `#[ignore]` so `cargo test --workspace` is GPU-free by default.
-//! Run with `cargo test -p baracuda-cutlass --release -- --ignored`.
+//! Gated behind the `device-tests` feature so `cargo test --workspace` is GPU-free by default.
+//! Run with `cargo test -p baracuda-cutlass --release --features device-tests`.
+#![cfg(feature = "device-tests")]
 
+#[cfg(feature = "device-tests")]
 use baracuda_cutlass::{
     BatchedGemmArgs, BatchedGemmDescriptor, BatchedGemmPlan, ElementKind, EpilogueKind, GemmArgs,
     GemmDescriptor, GemmPlan, LayoutSku, MathPrecision, MatrixMut, MatrixRef, PlanPreference,
     Workspace,
 };
+#[cfg(feature = "device-tests")]
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
+#[cfg(feature = "device-tests")]
 use half::{bf16, f16};
 
 // ---------- CPU references ----------
 
+#[cfg(feature = "device-tests")]
 #[allow(clippy::too_many_arguments)]
 fn cpu_gemm_rrr(
     m: usize,
@@ -50,6 +55,7 @@ fn cpu_gemm_rrr(
     }
 }
 
+#[cfg(feature = "device-tests")]
 #[allow(clippy::too_many_arguments)]
 fn cpu_gemm_rcr(
     m: usize,
@@ -86,19 +92,16 @@ fn cpu_gemm_rcr(
 // ---------- Rrr layout: f16 + bf16 ----------
 
 #[test]
-#[ignore]
 fn f16_gemm_rrr_sm80_64_64_32() {
     rrr_round_trip_f16(64, 64, 32);
 }
 
 #[test]
-#[ignore]
 fn bf16_gemm_rrr_sm80_64_64_32() {
     rrr_round_trip_bf16(64, 64, 32);
 }
 
 #[test]
-#[ignore]
 fn f16_gemm_rrr_sm80_128_128_64() {
     rrr_round_trip_f16(128, 128, 64);
 }
@@ -279,13 +282,11 @@ fn rrr_round_trip_bf16(m: i32, n: i32, k: i32) {
 // ---------- TF32 (f32 inputs via TF32 tensor cores) ----------
 
 #[test]
-#[ignore]
 fn tf32_gemm_rcr_sm80_64_64_32() {
     tf32_round_trip(64, 64, 32);
 }
 
 #[test]
-#[ignore]
 fn tf32_gemm_rcr_sm80_128_128_64() {
     tf32_round_trip(128, 128, 64);
 }
@@ -388,13 +389,11 @@ fn tf32_round_trip(m: i32, n: i32, k: i32) {
 // ---------- Batched GEMM (uniform shape) ----------
 
 #[test]
-#[ignore]
 fn batched_f16_rcr_sm80_4_batches() {
     batched_round_trip_f16(64, 64, 32, 4);
 }
 
 #[test]
-#[ignore]
 fn batched_bf16_rcr_sm80_4_batches() {
     batched_round_trip_bf16(64, 64, 32, 4);
 }
