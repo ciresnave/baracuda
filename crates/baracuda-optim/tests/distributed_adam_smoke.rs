@@ -7,9 +7,9 @@
 //!
 //! Multi-rank correctness validation is in
 //! `distributed_adam_multi_rank_scaffold.rs` (gated behind
-//! `--ignored`, marked "requires 2+ GPUs").
+//! `--features device-tests`, marked "requires 2+ GPUs").
 //!
-//! All tests are `#[ignore]`-gated — they need an NVIDIA GPU + a
+//! All tests are gated behind the `device-tests` feature; they need an NVIDIA GPU + a
 //! working NCCL loader path. `try_bringup()` returns `None` if NCCL
 //! can't be resolved, printing a skip notice. The single-rank Adam
 //! step (without NCCL) still runs unconditionally inside
@@ -23,6 +23,7 @@
     feature = "distributed_optim",
     any(feature = "sm80", feature = "sm89", feature = "sm90a")
 ))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, require_optional};
 use baracuda_nccl::Communicator;
@@ -45,7 +46,6 @@ fn try_bringup_single_rank() -> Option<Communicator> {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + working NCCL loader"]
 fn distributed_adam_single_rank_matches_plain_adam() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -143,7 +143,6 @@ fn distributed_adam_single_rank_matches_plain_adam() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + working NCCL loader"]
 fn distributed_adam_single_rank_three_tensors_no_collective_overhead() {
     // Exercises the multi-tensor path under single-rank: still must
     // forward to the inner AdamStepPlan and skip all collectives.

@@ -1,4 +1,5 @@
 //! GPU-gated tests for cuBLAS L1/L2 additions.
+#![cfg(feature = "device-tests")]
 
 use baracuda_cublas::{Handle, Op, asum, copy, dot, gemv, iamax, iamin, nrm2, scal};
 use baracuda_driver::{Context, Device, DeviceBuffer};
@@ -12,7 +13,6 @@ fn setup() -> (Context, Handle) {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn sdot_basic() {
     let (ctx, handle) = setup();
     let x: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0];
@@ -25,7 +25,6 @@ fn sdot_basic() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn sscal_in_place() {
     let (ctx, handle) = setup();
     let mut d = DeviceBuffer::from_slice(&ctx, &[1.0f32, 2.0, 3.0, 4.0]).unwrap();
@@ -36,7 +35,6 @@ fn sscal_in_place() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn snrm2_and_sasum() {
     let (ctx, handle) = setup();
     let d = DeviceBuffer::from_slice(&ctx, &[3.0f32, 4.0]).unwrap();
@@ -48,7 +46,6 @@ fn snrm2_and_sasum() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn iamax_iamin_are_1_based() {
     let (ctx, handle) = setup();
     let d = DeviceBuffer::from_slice(&ctx, &[0.1f32, -0.5, 0.3, 0.2]).unwrap();
@@ -59,7 +56,6 @@ fn iamax_iamin_are_1_based() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn scopy_device_to_device() {
     let (ctx, handle) = setup();
     let src = DeviceBuffer::from_slice(&ctx, &[1.0f32, 2.0, 3.0, 4.0]).unwrap();
@@ -71,7 +67,6 @@ fn scopy_device_to_device() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn sgemv_2x3_times_3vec() {
     let (ctx, handle) = setup();
     // Column-major 2×3 matrix:

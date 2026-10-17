@@ -17,6 +17,7 @@
 // off-by-default no-op-stub posture), so the optimizer FFI these tests exercise
 // would not resolve at link time. No arch feature => this file compiles empty.
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer};
 use baracuda_optim::{AdamMode, LambConfig, LambStepPlan, TensorList};
@@ -94,7 +95,6 @@ fn lamb_step_cpu(
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn lamb_f32_two_tensors_trust_ratio() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();

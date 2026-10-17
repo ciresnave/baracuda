@@ -8,6 +8,7 @@
 // off-by-default no-op-stub posture), so the optimizer FFI these tests exercise
 // would not resolve at link time. No arch feature => this file compiles empty.
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer};
 use baracuda_optim::{SgdConfig, SgdStepPlan, TensorList};
@@ -51,7 +52,6 @@ fn sgd_step_cpu(
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn sgd_f32_momentum_nesterov_first_step() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -141,7 +141,6 @@ fn sgd_f32_momentum_nesterov_first_step() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn sgd_f32_vanilla_no_momentum() {
     // momentum=0 disables the velocity buffer path — verify the
     // zero-momentum branch.

@@ -14,12 +14,12 @@
 // static archive. Without an arch feature the -sys build is a no-op stub, so the
 // FFI these tests exercise would not resolve at link time. No arch => empty file.
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
 use baracuda_transformer_engine::{Fp8CastPlan, Fp8Format, Fp8Recipe};
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn recipe_history_starts_all_zero() {
     baracuda_driver::init().expect("driver init");
     let ctx = Context::new(&Device::get(0).expect("device")).expect("ctx");
@@ -39,7 +39,6 @@ fn recipe_history_starts_all_zero() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn recipe_advances_with_wrap_around() {
     baracuda_driver::init().expect("driver init");
     let ctx = Context::new(&Device::get(0).expect("device")).expect("ctx");
@@ -105,7 +104,6 @@ fn recipe_advances_with_wrap_around() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn invalid_history_length_rejected() {
     baracuda_driver::init().expect("driver init");
     let ctx = Context::new(&Device::get(0).expect("device")).expect("ctx");

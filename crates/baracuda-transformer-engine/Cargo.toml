@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-transformer-engine"
-version = "0.0.1-alpha.128"
+version = "0.0.1-alpha.129"
 description = "Safe Rust wrapper for baracuda's port of NVIDIA TransformerEngine's FP8 cast/transpose + delayed-scaling recipe primitives. Provides `Fp8Recipe` (delayed-scaling state with amax history), `Fp8CastPlan` for {f32, f16, bf16} → FP8 with running amax, `Fp8DequantPlan` for FP8 → {f32, f16, bf16}. Cast/recipe subset only — `normalization` / `fused_rope` / `fused_attn` / `fused_softmax` / `activation` / `gemm` skipped (overlap existing baracuda phases). NO cuDNN dep, NO pybind11. On Ada (sm_89) the FP8 wins are bandwidth-saving only (KV cache, weights); FP8 tensor-core math throughput equals BF16. Forward-compatible with Hopper / Blackwell where the compute wins also materialize."
 readme = "README.md"
 edition.workspace = true
@@ -19,6 +19,12 @@ exclude = ["*.profraw", "target/"]
 # from arch keeps `cargo check --workspace --no-default-features` cheap
 # and platform-agnostic.
 default = []
+
+# On-device integration tests: built only with this feature, so a plain `cargo test`
+# never compiles or runs a test that needs a GPU. CI type-checks them and the
+# self-hosted device runner builds and RUNS them (`cargo gpu-test -p baracuda-transformer-engine --features device-tests ...`).
+# See docs/DEVICE-TESTS.md.
+device-tests = []
 
 # Forward the vendored-source build to the -sys crate. Auto-enabled by
 # any arch feature (the cast / recipe shim is dead weight without an

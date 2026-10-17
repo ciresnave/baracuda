@@ -15,6 +15,7 @@
 // off-by-default no-op-stub posture), so the optimizer FFI these tests exercise
 // would not resolve at link time. No arch feature => this file compiles empty.
 #![cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer};
 use baracuda_optim::{AdamConfig, AdamMode, AdamStepPlan, TensorList};
@@ -66,7 +67,6 @@ fn adam_step_cpu(
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn adam_f32_two_tensors_step_1() {
     baracuda_driver::init().unwrap();
     let device = Device::get(0).unwrap();
@@ -190,7 +190,6 @@ fn adam_f32_two_tensors_step_1() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn adamw_f32_decoupled_decay() {
     // Same shapes, but mode = Decoupled — ensures the AdamW branch
     // takes the alternate `pi = pi - lr*(update + decay*pi)` path.

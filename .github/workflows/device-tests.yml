@@ -78,6 +78,21 @@ jobs:
         env:
           BARACUDA_RESULTS_FILE: device-test-results-runtime.json
         run: cargo gpu-test -p baracuda-runtime --features device-tests
+      - name: cargo gpu-test (baracuda-cublas, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-cublas.json
+        run: cargo gpu-test -p baracuda-cublas --features device-tests
+      - name: cargo gpu-test (baracuda-transformer-engine, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-transformer-engine.json
+        run: cargo gpu-test -p baracuda-transformer-engine --features sm89,device-tests
+      - name: cargo gpu-test (baracuda-optim, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-optim.json
+        run: cargo gpu-test -p baracuda-optim --features sm89,distributed_optim,device-tests
       - name: Upload run record
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -93,4 +108,7 @@ jobs:
             device-test-results-cuda-emit.json
             device-test-results-cuda-seam.json
             device-test-results-runtime.json
+            device-test-results-cublas.json
+            device-test-results-transformer-engine.json
+            device-test-results-optim.json
           if-no-files-found: error
