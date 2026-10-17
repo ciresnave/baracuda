@@ -1,14 +1,14 @@
 //! GPU-gated integration tests for `baracuda-runtime`.
 //!
-//! Run with `cargo test -p baracuda-runtime -- --ignored` on a machine
+//! Run with `cargo test -p baracuda-runtime --features device-tests` on a machine
 //! with an NVIDIA GPU.
+#![cfg(feature = "device-tests")]
 
 use baracuda_runtime::{Device, DeviceBuffer, Library, Stream};
 
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn device_enumeration() {
     let count = Device::count().expect("cudaGetDeviceCount");
     assert!(count >= 1, "no CUDA devices detected");
@@ -24,7 +24,6 @@ fn device_enumeration() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn memcpy_roundtrip() {
     Device::from_ordinal(0)
         .set_current()
@@ -37,7 +36,6 @@ fn memcpy_roundtrip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 12.0+; run with `cargo test -- --ignored`"]
 fn vector_add_via_library_api() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -84,7 +82,6 @@ fn vector_add_via_library_api() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
 fn runtime_version_visible() {
     let v = baracuda_runtime::runtime_version().expect("cudaRuntimeGetVersion");
     let d = baracuda_runtime::driver_version().expect("cudaDriverGetVersion");
