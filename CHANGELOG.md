@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.124 - 2026-10-16 (CI: --locked for tools/kiss-ref-diff (SUP-001))
+
+Workspace alpha.124 (proposed; PM allocates at gate).
+
+- The kiss-ref-diff check now runs with --locked against a committed tools/kiss-ref-diff/Cargo.lock; each alpha bump must regenerate that lock.
+
 ## 0.0.1-alpha.123 - 2026-10-16 (Test: retire #[ignore] in baracuda-cutlass; fix cuBLAS handle cache)
 
 Workspace alpha.123 (proposed; PM allocates at gate).
