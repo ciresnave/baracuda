@@ -12,12 +12,12 @@
 //! under `cargo gpu-test -p baracuda-cudf --features device-tests` on a machine
 //! that has `libcudf` on the loader path.
 
-use baracuda_cudf::{Column, Error, Result, Table, TypeId};
 #[cfg(feature = "device-tests")]
 use baracuda_cudf::version;
+use baracuda_cudf::{Column, Error, Result, Table, TypeId};
+use baracuda_cudf_sys::cudfStatus_t;
 #[cfg(feature = "device-tests")]
 use baracuda_driver::require_optional;
-use baracuda_cudf_sys::cudfStatus_t;
 
 // ---------------------------------------------------------------------------
 // Host-only checks: run everywhere, no libcudf needed.
