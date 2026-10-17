@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.128 - 2026-10-16 (Retire #[ignore] in kernels-bench, cuda-emit, cuda-seam behind device-tests)
+
+Workspace alpha.128 (proposed; PM allocates at gate).
+
+- baracuda-kernels-bench (16), baracuda-cuda-emit (10) and baracuda-cuda-seam (1) device tests move behind a per-crate `device-tests` feature, run by the self-hosted device runner; CI type-checks both feature states. Ran on RTX 4070 (sm_89): 36 + 424 + 17 passed, 0 failed.
+
 ## 0.0.1-alpha.127 - 2026-10-16 (Test: retire #[ignore] in baracuda-ozimmu; ozIMMU handle cache holds its Context)
 
 Workspace alpha.127 (proposed; PM allocates at gate).

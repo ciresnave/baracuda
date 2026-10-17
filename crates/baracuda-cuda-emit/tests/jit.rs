@@ -12,9 +12,10 @@ use unpopped::pattern::*;
 // The nvrtc-gated `nvrtc_compiles_*` tests build `OpDef`/`BinaryOp` IR directly;
 // the non-nvrtc synthesis tests reach the IR only through the seam `PatternNode`
 // path, so the `ir` glob is dead weight (and an unused-import warning) without it.
+#[cfg(feature = "device-tests")]
 #[cfg(feature = "nvrtc")]
 use baracuda_cuda_emit::NvrtcCompiler;
-#[cfg(feature = "nvrtc")]
+#[cfg(all(feature = "nvrtc", feature = "device-tests"))]
 use unpopped::ir::*;
 use unpopped_vocab::*;
 
@@ -507,10 +508,10 @@ fn zero_budget_is_rejected() {
 
 /// End-to-end on-device synthesis: region → kernel → real nvrtc PTX. Ignored
 /// by default (needs the nvrtc runtime + a CUDA install); run with
-/// `cargo test -p baracuda-cuda-emit --features nvrtc -- --ignored`.
+/// `cargo test -p baracuda-cuda-emit --features nvrtc --features device-tests`.
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_a_synthesized_kernel() {
     let region = op_node(
         "Relu",
@@ -538,7 +539,7 @@ fn nvrtc_compiles_a_synthesized_kernel() {
 /// unary (`sinf`) and a new binary fn (`fmaxf`). Ignored (needs nvrtc + CUDA).
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_broadened_ops() {
     let region = op_node(
         "Maximum",
@@ -568,7 +569,7 @@ fn nvrtc_compiles_broadened_ops() {
 /// Atan2/RemTrunc binary are the representative sweep. Ignored (needs nvrtc).
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_increment_0a_vocab() {
     use unpopped::generate;
     use unpopped::ir::{BinaryOp, UnaryOp, input};
@@ -609,7 +610,7 @@ fn nvrtc_compiles_increment_0a_vocab() {
 /// guards headerless portability. Ignored (needs nvrtc + CUDA).
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_multi_output_kernel() {
     use unpopped::generate;
     use unpopped::ir::input;
@@ -653,7 +654,7 @@ fn nvrtc_compiles_multi_output_kernel() {
 /// this guards headerless portability. Ignored (needs nvrtc + CUDA).
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_cmp_u8_kernel() {
     use unpopped::generate;
     use unpopped::ir::{input, konst};
@@ -714,7 +715,7 @@ fn nvrtc_compiles_cmp_u8_kernel() {
 /// guards headerless portability. Ignored (needs nvrtc + CUDA).
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_int_bitwise_and_u8_add() {
     use unpopped::generate;
     use unpopped::ir::input;
@@ -752,7 +753,7 @@ fn nvrtc_compiles_int_bitwise_and_u8_add() {
 /// this guards headerless portability. Ignored (needs nvrtc + CUDA).
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_select_kernels() {
     use unpopped::generate;
     use unpopped::ir::{BinaryOp, coord, input, konst};
@@ -807,7 +808,7 @@ fn nvrtc_compiles_select_kernels() {
 /// portability. Ignored (needs nvrtc + CUDA).
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_coord_kernels() {
     use unpopped::generate;
     use unpopped::ir::{coord, input, konst};
@@ -842,7 +843,7 @@ fn nvrtc_compiles_coord_kernels() {
 /// regression taught us. Ignored (needs nvrtc + CUDA).
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_reduction_kernels() {
     use unpopped::ir::UnaryOp;
     use unpopped::{ReduceOp, generate, input};
@@ -902,7 +903,7 @@ fn nvrtc_compiles_reduction_kernels() {
 /// nvcc host harness; this guards headerless portability. Ignored (needs nvrtc).
 #[cfg(feature = "nvrtc")]
 #[test]
-#[ignore = "requires nvrtc runtime + CUDA install"]
+#[cfg(feature = "device-tests")]
 fn nvrtc_compiles_rowreduce_kernels() {
     use unpopped::ir::{ReduceOp, ReduceStage, UnaryOp, konst, reduced};
     use unpopped::{generate, input};

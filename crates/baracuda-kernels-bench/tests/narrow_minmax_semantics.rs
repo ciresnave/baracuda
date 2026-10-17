@@ -48,8 +48,9 @@
 //! the other exists, because "NaN handling is already covered on device" is
 //! true of both and answers neither.
 //!
-//! `#[ignore]`d — needs a CUDA device + nvrtc. Run with:
-//! `cargo test -p baracuda-kernels-bench --test narrow_minmax_semantics -- --ignored`
+//! Gated behind the `device-tests` featured — needs a CUDA device + nvrtc. Run with:
+//! `cargo test -p baracuda-kernels-bench --test narrow_minmax_semantics --features device-tests`
+#![cfg(feature = "device-tests")]
 
 use baracuda_cuda_emit::{Cuda as _Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
@@ -151,7 +152,6 @@ fn probe_device(ctx: &Context, stream: &Stream) -> (Vec<i32>, Vec<u16>) {
 }
 
 #[test]
-#[ignore = "requires a CUDA device + nvrtc"]
 fn narrow_nan_test_and_payload_survival() {
     let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
         .lock()

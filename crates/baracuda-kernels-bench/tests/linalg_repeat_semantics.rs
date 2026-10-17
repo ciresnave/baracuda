@@ -24,7 +24,8 @@
 //!
 //! Run:
 //!   cargo test -p baracuda-kernels-bench --release \
-//!     --test linalg_repeat_semantics -- --ignored --nocapture
+//!     --test linalg_repeat_semantics --features device-tests -- --nocapture
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, DeviceBuffer, Stream};
 use baracuda_kernels::{
@@ -139,7 +140,6 @@ impl Fixture {
 }
 
 #[test]
-#[ignore = "requires a CUDA device; run explicitly with --ignored"]
 fn unrestored_cholesky_repeats_do_not_enter_a_failure_path() {
     let mut f = Fixture::new();
     let (infos, times) = f.arm(false, "UNRESTORED");

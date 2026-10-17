@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels-bench"
-version = "0.0.1-alpha.127"
+version = "0.0.1-alpha.128"
 description = "Benchmark harness for baracuda-kernels — CUDA-event-timed throughput sweeps across GEMM, Flash Attention, and Conv2d at LLM-typical / ResNet-typical shapes. Phase 10 Milestone 10.1 of the baracuda CUDA stack."
 edition.workspace = true
 license.workspace = true
@@ -27,6 +27,12 @@ bench = false
 # Arch features forwarded to baracuda-kernels. `sm89` enables the FP8
 # GEMM benches; without it the FP8 bench-group is skipped at runtime.
 default = []
+
+# On-device integration tests: built only with this feature, so a plain `cargo test`
+# never compiles or runs a test that needs a GPU. CI type-checks them and the
+# self-hosted device runner builds and RUNS them (`cargo gpu-test -p baracuda-kernels-bench --features sm89,device-tests ...`).
+# See docs/DEVICE-TESTS.md.
+device-tests = []
 sm80 = ["baracuda-kernels/sm80"]
 sm89 = ["baracuda-kernels/sm89"]
 sm90a = ["baracuda-kernels/sm90a"]

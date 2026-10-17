@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cuda-seam"
-version = "0.0.1-alpha.127"
+version = "0.0.1-alpha.128"
 description = "The Fuel kernel-seam `Synthesizer` implementation (`BaracudaSynthesizer`) over the CUDA backend in `baracuda-cuda-emit`. NOT PUBLISHED: it depends on `fuel-kernel-seam{,-types}` by git rev (fuel's board #106 Step A `JitRequest::target` is unreleased), which crates.io rejects."
 edition.workspace = true
 # No `rust-version.workspace = true`: no MSRV CI job builds this crate under 1.85
@@ -21,6 +21,12 @@ publish = false
 # Real on-demand NVRTC compile (needs the CUDA toolkit at run time). Off by
 # default: the synthesizer then falls back to `unpopped::StubCompiler`.
 nvrtc = ["baracuda-cuda-emit/nvrtc"]
+
+# On-device integration tests: built only with this feature, so a plain `cargo test`
+# never compiles or runs a test that needs a GPU. CI type-checks them and the
+# self-hosted device runner builds and RUNS them (`cargo gpu-test -p baracuda-cuda-seam --features nvrtc,device-tests ...`).
+# See docs/DEVICE-TESTS.md.
+device-tests = []
 
 [dependencies]
 baracuda-cuda-emit = { workspace = true }

@@ -16,8 +16,9 @@
 //! the TEXT. This runs it, because the emitted ternary mixes a narrow arm with a
 //! float-valued condition and nothing had established that nvrtc accepts it.
 //!
-//! `#[ignore]`d — needs a CUDA device + nvrtc. Run with:
-//! `cargo test -p baracuda-kernels-bench --test rowreduce_select_bitmove -- --ignored`
+//! Gated behind the `device-tests` featured — needs a CUDA device + nvrtc. Run with:
+//! `cargo test -p baracuda-kernels-bench --test rowreduce_select_bitmove --features device-tests`
+#![cfg(feature = "device-tests")]
 
 use baracuda_cuda_emit::{Cuda, NvrtcCompiler};
 use baracuda_driver::DeviceBuffer;
@@ -119,7 +120,6 @@ fn rows() -> Vec<u16> {
 }
 
 #[test]
-#[ignore = "requires a CUDA device + nvrtc"]
 fn select_bitmove_preserves_the_nan_payload() {
     let _serial = baracuda_kernels_bench::DEVICE_TIMING_LOCK
         .lock()

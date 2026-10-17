@@ -22,6 +22,12 @@ homepage.workspace = true
 # The real on-demand nvrtc compiler (`NvrtcCompiler`). Off by default so the crate
 # builds/tests without a CUDA toolchain; the Fuel synthesizer falls back to StubCompiler.
 nvrtc = ["dep:baracuda-nvrtc"]
+
+# On-device integration tests: built only with this feature, so a plain `cargo test`
+# never compiles or runs a test that needs a GPU. CI type-checks them and the
+# self-hosted device runner builds and RUNS them (`cargo gpu-test -p baracuda-cuda-emit --features nvrtc,device-tests ...`).
+# See docs/DEVICE-TESTS.md.
+device-tests = []
 # Enable the neutral generator's `convert` feature (tree-sitter CUDA/Slang lifters)
 # so the relocated lifter round-trip tests (`tests/convert.rs`) can reach
 # `unpopped::convert::*`. Test-only passthrough; no cuda-emit lib code
