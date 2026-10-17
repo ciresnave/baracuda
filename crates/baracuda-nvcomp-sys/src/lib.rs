@@ -8,7 +8,12 @@
 //! the wide surface of per-codec entry points (LZ4, Snappy, GDeflate, Zstd,
 //! Bitcomp, ANS, batched helpers) lands when we have a testable install.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use std::sync::OnceLock;
@@ -81,7 +86,6 @@ impl CudaStatus for nvcompStatus_t {
 use core::ffi::c_void;
 
 /// `nvcompType_t` — element type for batched APIs.
-#[allow(non_snake_case)]
 pub mod nvcompType {
     /// `CHAR` value of `nvcompType`.
     pub const CHAR: i32 = 0;
@@ -109,7 +113,6 @@ pub mod nvcompType {
 // with zero-default values.
 
 /// `nvcompDecompressBackend_t` — decompression-engine selector (nvCOMP 5+).
-#[allow(non_snake_case)]
 pub mod nvcompDecompressBackend {
     /// `DEFAULT` value of `nvcompDecompressBackend`.
     pub const DEFAULT: i32 = 0;

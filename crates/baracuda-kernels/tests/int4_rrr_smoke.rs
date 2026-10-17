@@ -72,7 +72,6 @@ fn sat_cast_u4(x: f32) -> u8 {
 // `D` row-major `[M, N]`, pair-packed along N.
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
 fn cpu_int4_gemm_rrr_identity(
     m: usize,
     n: usize,

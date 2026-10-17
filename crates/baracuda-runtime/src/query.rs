@@ -59,7 +59,10 @@ pub struct PointerAttributes {
 ///
 /// `ptr` can be any pointer — CUDA internally classifies it. This is a
 /// pure query and doesn't dereference `ptr`.
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "the pointer is stored or forwarded to the driver, never dereferenced in Rust"
+)]
 pub fn pointer_attributes(ptr: *const core::ffi::c_void) -> Result<PointerAttributes> {
     let r = runtime()?;
     let cu = r.cuda_pointer_get_attributes()?;

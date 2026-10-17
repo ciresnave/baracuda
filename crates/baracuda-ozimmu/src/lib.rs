@@ -454,7 +454,6 @@ impl Handle {
     /// live for the duration of the launch (the call is asynchronous
     /// on the bound stream — the caller is responsible for not
     /// freeing the underlying memory before a stream sync).
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn dgemm(
         &self,
         op_a: Op,
@@ -534,7 +533,6 @@ impl Handle {
     /// # Safety
     ///
     /// Same contract as [`Self::dgemm`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn dgemm_with_variant(
         &self,
         op_a: Op,

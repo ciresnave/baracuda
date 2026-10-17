@@ -110,7 +110,6 @@ impl InterpolateDescriptor {
     /// `F.interpolate` new-code default) and `scale_h / scale_w = None`
     /// (derive scale from `(ih, oh)` / `(iw, ow)`). Chain with the
     /// `with_*` setters to override.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         n: i32,
         c: i32,

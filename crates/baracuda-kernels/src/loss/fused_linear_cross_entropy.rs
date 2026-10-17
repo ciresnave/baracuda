@@ -792,7 +792,6 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
 
     /// Forwarding helper that dispatches to `cublasGemmEx` with the
     /// right `cudaDataType` and `cublasComputeType_t` tags for `T`.
-    #[allow(clippy::too_many_arguments)]
     fn gemm_ex(
         &self,
         handle: cublasHandle_t,

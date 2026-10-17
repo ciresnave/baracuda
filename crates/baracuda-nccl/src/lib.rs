@@ -349,7 +349,6 @@ impl Drop for Communicator {
 
 /// All-reduce: each rank sends `send` and receives the per-element
 /// reduction (across every rank) into `recv`. In-place use (`send == recv`) is legal.
-#[allow(clippy::too_many_arguments)]
 pub fn all_reduce<T: NcclScalar>(
     send: &DeviceBuffer<T>,
     recv: &mut DeviceBuffer<T>,

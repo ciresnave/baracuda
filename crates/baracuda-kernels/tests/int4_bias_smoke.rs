@@ -116,7 +116,6 @@ fn apply_activation(act: Option<ActivationKind>, x: f32) -> f32 {
 // bias: [N], f32 or i32.
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
 fn cpu_int4_gemm_bias(
     m: usize,
     n: usize,
@@ -195,7 +194,6 @@ fn cpu_int4_gemm_bias(
 // Per-SKU harness — generic over T ∈ {S4, U4} and BT ∈ {f32, i32}.
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
 fn run_int4_bias_smoke<T, BT>(
     m: i32,
     n: i32,

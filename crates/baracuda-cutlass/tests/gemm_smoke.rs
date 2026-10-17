@@ -21,7 +21,6 @@ use half::{bf16, f16};
 /// B: column-major [k, n], stride ldb
 /// C: optional row-major [m, n], stride ldc
 /// D: row-major [m, n] output (caller-provided, length m*n)
-#[allow(clippy::too_many_arguments)]
 fn cpu_gemm_rcr(
     m: usize,
     n: usize,

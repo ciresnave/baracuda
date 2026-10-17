@@ -29,7 +29,10 @@ pub fn event_open_handle(handle: CUipcEventHandle) -> Result<cudaEvent_t> {
 }
 
 /// Export a device allocation's pointer for peer-process import.
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "the pointer is stored or forwarded to the driver, never dereferenced in Rust"
+)]
 pub fn mem_get_handle(dev_ptr: *mut c_void) -> Result<CUipcMemHandle> {
     let r = runtime()?;
     let cu = r.cuda_ipc_get_mem_handle()?;
@@ -49,7 +52,10 @@ pub fn mem_open_handle(handle: CUipcMemHandle, flags: u32) -> Result<*mut c_void
 }
 
 /// Release a peer-imported memory handle.
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "the pointer is stored or forwarded to the driver, never dereferenced in Rust"
+)]
 pub fn mem_close_handle(ptr: *mut c_void) -> Result<()> {
     let r = runtime()?;
     let cu = r.cuda_ipc_close_mem_handle()?;

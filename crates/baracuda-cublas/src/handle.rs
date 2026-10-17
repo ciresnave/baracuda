@@ -50,7 +50,10 @@ impl Handle {
         // `HandleInner` is `!Sync` on purpose — cuBLAS handles are not
         // safe for concurrent use from multiple threads. Arc is still
         // correct: we want cheap clones for sharing within a thread.
-        #[allow(clippy::arc_with_non_send_sync)]
+        #[allow(
+            clippy::arc_with_non_send_sync,
+            reason = "handle is deliberately !Send/!Sync; the Arc only provides cheap same-thread clones"
+        )]
         let inner = Arc::new(HandleInner { handle: h });
         Ok(Self { inner })
     }

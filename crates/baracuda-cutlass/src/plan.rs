@@ -34,7 +34,6 @@ mod dispatch {
     /// `T::Scalar::IS_F64`. The non-bias path lives in
     /// [`gemm_sm80_run`].
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_bias_sm80_run(
         layout: LayoutSku,
         kind: ElementKind,
@@ -852,7 +851,6 @@ mod dispatch {
     }
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_bias_sm80_can_implement(
         layout: LayoutSku,
         kind: ElementKind,
@@ -1042,7 +1040,6 @@ mod dispatch {
     /// implemented. F32 routes through Ampere TF32 tensor cores. Any
     /// unknown pair returns status 3 (not implemented).
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_sm80_run(
         layout: LayoutSku,
         kind: ElementKind,
@@ -1321,7 +1318,6 @@ mod dispatch {
     }
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_sm80_can_implement(
         layout: LayoutSku,
         kind: ElementKind,
@@ -1412,7 +1408,6 @@ mod dispatch {
     // `T::Scalar::IS_F64` is true.
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_sm80_run_f64(
         layout: LayoutSku,
         m: i32,
@@ -1491,7 +1486,6 @@ mod dispatch {
     }
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_sm80_can_implement_f64(
         layout: LayoutSku,
         m: i32,
@@ -1524,7 +1518,6 @@ mod dispatch {
     // ---------- f64 bias-fused GEMM dispatch, sm_80 ----------
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_bias_sm80_run_f64(
         layout: LayoutSku,
         epilogue: EpilogueKind,
@@ -1761,7 +1754,6 @@ mod dispatch {
     }
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_bias_sm80_can_implement_f64(
         layout: LayoutSku,
         epilogue: EpilogueKind,
@@ -1831,7 +1823,6 @@ mod dispatch {
     //   - Rcr × F32, all Rrr           ✗
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn batched_gemm_sm80_run(
         layout: LayoutSku,
         kind: ElementKind,
@@ -1945,7 +1936,6 @@ mod dispatch {
     }
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn batched_gemm_sm80_can_implement(
         layout: LayoutSku,
         kind: ElementKind,
@@ -2174,7 +2164,6 @@ mod dispatch {
     }
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn grouped_gemm_rcr_sm80_run(
         kind: ElementKind,
         group_count: i32,
@@ -2275,7 +2264,6 @@ mod dispatch {
     // int8 dequant-in-epilogue convention).
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn int_gemm_rcr_sm80_run(
         layout: LayoutSku,
         kind: ElementKind,
@@ -2368,7 +2356,6 @@ mod dispatch {
     }
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn int_gemm_rcr_sm80_can_implement(
         layout: LayoutSku,
         kind: ElementKind,
@@ -2414,7 +2401,6 @@ mod dispatch {
     use crate::types::BiasElementKind;
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn int_gemm_bias_rcr_sm80_run(
         layout: LayoutSku,
         kind: ElementKind,
@@ -2861,7 +2847,6 @@ mod dispatch {
     }
 
     #[cfg(feature = "sm80")]
-    #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn int_gemm_bias_rcr_sm80_can_implement(
         layout: LayoutSku,
         kind: ElementKind,

@@ -26,7 +26,6 @@ fn setup() -> (Context, Stream) {
     (ctx, stream)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn cpu_ref_selective_scan_f32(
     u: &[f32],
     delta: &[f32],
@@ -117,7 +116,6 @@ fn make_inputs() -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
     (u, delta, a, b, c)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_fw_f32(
     ctx: &Context,
     stream: &Stream,

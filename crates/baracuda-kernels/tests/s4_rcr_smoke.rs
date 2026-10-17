@@ -72,7 +72,6 @@ fn sat_cast_s4(x: f32) -> u8 {
 // `D` row-major `[M, N]`, packed-pair bytes along N: byte at
 // `(i, j/2)` holds the pair `(D[i, 2*(j/2)], D[i, 2*(j/2)+1])`.
 
-#[allow(clippy::too_many_arguments)]
 fn cpu_s4_gemm_rcr_identity(
     m: usize,
     n: usize,

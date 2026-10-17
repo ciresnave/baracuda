@@ -579,7 +579,6 @@ fn copy_d2d_async(dst_dev: u64, src_dev: u64, bytes: usize, stream: *mut c_void)
     if bytes == 0 {
         return Ok(());
     }
-    #[allow(non_camel_case_types)]
     type CUresult = i32;
     unsafe extern "system" {
         fn cuMemcpyDtoDAsync_v2(

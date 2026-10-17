@@ -126,7 +126,6 @@ unsafe extern "C" {
     ///
     /// Returns `0` on success, `1` on validation failure, `5` on
     /// launch failure (`cudaGetLastError` returned non-zero).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_te_fused_cast_amax_run(
         x_in: *const c_void,
         x_out: *mut c_void,

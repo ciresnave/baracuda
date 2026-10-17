@@ -55,7 +55,6 @@ fn adaptive_avg_pool2d_4x4_to_2x2_f32() {
     // bespoke kernel uses per-output-cell variable windows; no single
     // (kernel, stride) pair represents the op. The deprecated getter
     // now returns `((0,0), (0,0))` for source-compat.
-    #[allow(deprecated)]
     {
         let ((kh, sh), (kw, sw)) = plan.derived_kernel_stride();
         assert_eq!((kh, sh), (0, 0));

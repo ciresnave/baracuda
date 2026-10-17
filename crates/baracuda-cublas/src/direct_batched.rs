@@ -18,7 +18,6 @@ use crate::error::{Result, check};
 /// Scalars supported by the batched direct solvers.
 pub trait BatchedDirectScalar: DeviceRepr + direct_sealed::Sealed {
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn getrf_batched_raw(
         h: cublasHandle_t,
         n: i32,
@@ -30,7 +29,6 @@ pub trait BatchedDirectScalar: DeviceRepr + direct_sealed::Sealed {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn getri_batched_raw(
         h: cublasHandle_t,
         n: i32,
@@ -44,7 +42,6 @@ pub trait BatchedDirectScalar: DeviceRepr + direct_sealed::Sealed {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn getrs_batched_raw(
         h: cublasHandle_t,
         trans: cublasOperation_t,
@@ -60,7 +57,6 @@ pub trait BatchedDirectScalar: DeviceRepr + direct_sealed::Sealed {
     ) -> cublasStatus_t;
 
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn matinv_batched_raw(
         h: cublasHandle_t,
         n: i32,
@@ -310,7 +306,6 @@ mod direct_sealed {
 /// # Safety
 /// Pointer arrays must be device-resident with at least `batch` valid
 /// entries; each matrix must be `n × n` column-major.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn getrf<T: BatchedDirectScalar>(
     handle: &crate::Handle,
     n: i32,
@@ -337,7 +332,6 @@ pub unsafe fn getrf<T: BatchedDirectScalar>(
 ///
 /// # Safety
 /// See [`getrf`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn getrs<T: BatchedDirectScalar>(
     handle: &crate::Handle,
     trans: Op,
@@ -372,7 +366,6 @@ pub unsafe fn getrs<T: BatchedDirectScalar>(
 ///
 /// # Safety
 /// See [`getrf`].
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn getri<T: BatchedDirectScalar>(
     handle: &crate::Handle,
     n: i32,
@@ -447,7 +440,6 @@ pub unsafe fn getri<T: BatchedDirectScalar>(
 /// let _ = (a, inv);
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn matinv<T: BatchedDirectScalar>(
     handle: &crate::Handle,
     n: i32,

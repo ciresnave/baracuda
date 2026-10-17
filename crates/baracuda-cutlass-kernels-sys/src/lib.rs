@@ -175,7 +175,6 @@ unsafe extern "C" {
     /// All pointer args must be device-resident. `bias` must be a
     /// device-resident length-`n` vector. See
     /// [`baracuda_cutlass_gemm_f16_rcr_sm80_run`] for the rest.
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -222,7 +221,6 @@ unsafe extern "C" {
     ///
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_bf16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -273,7 +271,6 @@ unsafe extern "C" {
     ///
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -322,7 +319,6 @@ unsafe extern "C" {
     /// `bf16` bias + ReLU activation GEMM, RCR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_bf16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -377,7 +373,6 @@ unsafe extern "C" {
     ///
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -426,7 +421,6 @@ unsafe extern "C" {
     /// `bf16` bias + GELU activation GEMM, RCR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_bf16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -480,7 +474,6 @@ unsafe extern "C" {
     ///
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -529,7 +522,6 @@ unsafe extern "C" {
     /// `bf16` bias + SiLU activation GEMM, RCR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_bf16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -699,7 +691,6 @@ unsafe extern "C" {
     /// `f16` bias-fused GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f16_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -743,7 +734,6 @@ unsafe extern "C" {
     /// `bf16` bias-fused GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_bf16_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -790,7 +780,6 @@ unsafe extern "C" {
     /// `f16` bias+ReLU GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f16_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -838,7 +827,6 @@ unsafe extern "C" {
     /// `bf16` bias+ReLU GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_bf16_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -888,7 +876,6 @@ unsafe extern "C" {
     /// `f16` bias+GELU GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f16_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -936,7 +923,6 @@ unsafe extern "C" {
     /// `bf16` bias+GELU GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_bf16_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -986,7 +972,6 @@ unsafe extern "C" {
     /// `f16` bias+SiLU GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f16_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -1034,7 +1019,6 @@ unsafe extern "C" {
     /// `bf16` bias+SiLU GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_bf16_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -1202,7 +1186,6 @@ unsafe extern "C" {
     /// `f32` (TF32) bias-fused GEMM, RCR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_tf32_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -1249,7 +1232,6 @@ unsafe extern "C" {
     /// `f32` (TF32) bias+ReLU GEMM, RCR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_tf32_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -1299,7 +1281,6 @@ unsafe extern "C" {
     /// `f32` (TF32) bias+GELU GEMM, RCR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_tf32_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -1349,7 +1330,6 @@ unsafe extern "C" {
     /// `f32` (TF32) bias+SiLU GEMM, RCR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_tf32_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -1411,7 +1391,6 @@ unsafe extern "C" {
     /// `f32` (TF32) bias-fused GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_tf32_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -1458,7 +1437,6 @@ unsafe extern "C" {
     /// `f32` (TF32) bias+ReLU GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_tf32_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -1508,7 +1486,6 @@ unsafe extern "C" {
     /// `f32` (TF32) bias+GELU GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_tf32_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -1558,7 +1535,6 @@ unsafe extern "C" {
     /// `f32` (TF32) bias+SiLU GEMM, RRR layout, sm_80.
     /// # Safety
     /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_tf32_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -1720,7 +1696,6 @@ unsafe extern "C" {
     // ---- RCR layout ----
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_f32_simt_rcr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f32_simt_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -1763,7 +1738,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_relu_f32_simt_rcr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f32_simt_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -1806,7 +1780,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_gelu_f32_simt_rcr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f32_simt_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -1849,7 +1822,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_silu_f32_simt_rcr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f32_simt_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -1894,7 +1866,6 @@ unsafe extern "C" {
     // ---- RRR layout ----
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_f32_simt_rrr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f32_simt_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -1937,7 +1908,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_relu_f32_simt_rrr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f32_simt_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -1980,7 +1950,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_gelu_f32_simt_rrr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f32_simt_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -2023,7 +1992,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_silu_f32_simt_rrr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f32_simt_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -2178,7 +2146,6 @@ unsafe extern "C" {
     // ---- RCR layout ----
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_f64_rcr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f64_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -2217,7 +2184,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_relu_f64_rcr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f64_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -2260,7 +2226,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_gelu_f64_rcr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f64_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -2303,7 +2268,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_silu_f64_rcr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f64_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -2348,7 +2312,6 @@ unsafe extern "C" {
     // ---- RRR layout ----
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_f64_rrr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f64_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -2387,7 +2350,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_relu_f64_rrr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f64_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -2430,7 +2392,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_gelu_f64_rrr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f64_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -2473,7 +2434,6 @@ unsafe extern "C" {
     ) -> i32;
 
     /// CUTLASS GEMM trampoline (launch gemm_bias_silu_f64_rrr_sm80).
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f64_rrr_sm80_run(
         m: i32,
         n: i32,
@@ -2534,7 +2494,6 @@ unsafe extern "C" {
     /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_run`]. Each batch's
     /// operand pointers are derived from base + `i * stride_*`; all
     /// derived addresses must be device-resident in the current context.
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_batched_f16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -2571,7 +2530,6 @@ unsafe extern "C" {
     ///
     /// # Safety
     /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_batched_f16_rcr_sm80_can_implement(
         m: i32,
         n: i32,
@@ -2595,7 +2553,6 @@ unsafe extern "C" {
     ///
     /// # Safety
     /// See [`baracuda_cutlass_gemm_batched_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_batched_bf16_rcr_sm80_run(
         m: i32,
         n: i32,
@@ -2632,7 +2589,6 @@ unsafe extern "C" {
     ///
     /// # Safety
     /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_batched_bf16_rcr_sm80_can_implement(
         m: i32,
         n: i32,
@@ -2715,7 +2671,6 @@ unsafe extern "C" {
     /// data as `d_problem_sizes`). `scratch` must be at least
     /// `scratch_bytes` bytes of writable device memory. `stream` must be a
     /// live CUDA stream.
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_grouped_gemm_f16_rcr_sm80_run(
         group_count: i32,
         threadblock_count: i32,
@@ -2768,7 +2723,6 @@ unsafe extern "C" {
 
     /// # Safety
     /// Same as [`baracuda_cutlass_grouped_gemm_f16_rcr_sm80_run`].
-    #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_grouped_gemm_bf16_rcr_sm80_run(
         group_count: i32,
         threadblock_count: i32,

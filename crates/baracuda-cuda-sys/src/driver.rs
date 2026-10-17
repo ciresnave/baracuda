@@ -37,7 +37,6 @@ macro_rules! driver_fns {
         fn $name:ident as $sym:literal : $pfn:ty;
     )*) => {
         /// Lazily-resolved CUDA Driver API function-pointer table.
-        #[allow(non_snake_case)]
         pub struct Driver {
             lib: Library,
             get_proc_address: OnceLock<PFN_cuGetProcAddress>,
@@ -67,7 +66,6 @@ macro_rules! driver_fns {
 
             $(
                 $(#[$attr])*
-                #[allow(non_snake_case)]
                 #[doc = concat!("Resolve `", $sym, "` and return the cached function pointer.")]
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }

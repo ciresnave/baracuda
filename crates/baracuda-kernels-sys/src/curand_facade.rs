@@ -57,8 +57,10 @@
 //! `*_workspace_size` queries always return `0`; the matching `*_run`
 //! ignores the `workspace` / `workspace_bytes` pair.
 
-#![allow(non_camel_case_types)]
-#![allow(clippy::too_many_arguments)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 
 use core::ffi::c_void;
 use core::ptr;

@@ -68,7 +68,6 @@ fn gelu_exact(x: f32) -> f32 {
     0.5 * x * (1.0 + erf_approx(x / std::f32::consts::SQRT_2))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn cpu_bias_gelu_rcr_f32(
     m: usize,
     n: usize,

@@ -491,7 +491,6 @@ impl<'h> BlockSparseTensorDescriptor<'h> {
     /// - `strides` — optional custom strides; `None` = packed
     /// - `block_indices` — array of `num_modes × block_count` ints identifying
     ///   the non-zero block locations (index per mode per block)
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         handle: &'h Handle,
         extents: &[i64],
@@ -556,7 +555,10 @@ impl BlockSparseContraction {
     /// # Safety
     ///
     /// `compute_desc` must be null or a live `cutensorComputeDescriptor_t`.
-    #[allow(clippy::too_many_arguments, clippy::new_ret_no_self)]
+    #[allow(
+        clippy::new_ret_no_self,
+        reason = "constructor returns the plan/descriptor it builds, not Self, by design"
+    )]
     pub unsafe fn new<'h>(
         handle: &'h Handle,
         a: &BlockSparseTensorDescriptor<'h>,
@@ -606,7 +608,10 @@ impl TrinaryContraction {
     /// # Safety
     ///
     /// `compute_desc` must be null or a live `cutensorComputeDescriptor_t`.
-    #[allow(clippy::too_many_arguments, clippy::new_ret_no_self)]
+    #[allow(
+        clippy::new_ret_no_self,
+        reason = "constructor returns the plan/descriptor it builds, not Self, by design"
+    )]
     pub unsafe fn new<'h>(
         handle: &'h Handle,
         a: &TensorDescriptor<'h>,
@@ -878,7 +883,10 @@ impl Contraction {
     /// # Safety
     ///
     /// `compute_desc` must be null or a valid `cutensorComputeDescriptor_t`.
-    #[allow(clippy::too_many_arguments, clippy::new_ret_no_self)]
+    #[allow(
+        clippy::new_ret_no_self,
+        reason = "constructor returns the plan/descriptor it builds, not Self, by design"
+    )]
     pub unsafe fn new<'h>(
         handle: &'h Handle,
         a: &TensorDescriptor<'h>,
@@ -932,7 +940,10 @@ impl Reduction {
     /// # Safety
     ///
     /// `compute_desc` must be null or valid.
-    #[allow(clippy::too_many_arguments, clippy::new_ret_no_self)]
+    #[allow(
+        clippy::new_ret_no_self,
+        reason = "constructor returns the plan/descriptor it builds, not Self, by design"
+    )]
     pub unsafe fn new<'h>(
         handle: &'h Handle,
         a: &TensorDescriptor<'h>,
@@ -979,7 +990,10 @@ impl ElementwiseBinary {
     /// # Safety
     ///
     /// `compute_desc` must be null or valid.
-    #[allow(clippy::too_many_arguments, clippy::new_ret_no_self)]
+    #[allow(
+        clippy::new_ret_no_self,
+        reason = "constructor returns the plan/descriptor it builds, not Self, by design"
+    )]
     pub unsafe fn new<'h>(
         handle: &'h Handle,
         a: &TensorDescriptor<'h>,
@@ -1029,7 +1043,10 @@ impl ElementwiseTrinary {
     /// # Safety
     ///
     /// `compute_desc` must be null or valid.
-    #[allow(clippy::too_many_arguments, clippy::new_ret_no_self)]
+    #[allow(
+        clippy::new_ret_no_self,
+        reason = "constructor returns the plan/descriptor it builds, not Self, by design"
+    )]
     pub unsafe fn new<'h>(
         handle: &'h Handle,
         a: &TensorDescriptor<'h>,
@@ -1087,7 +1104,10 @@ impl Permutation {
     /// # Safety
     ///
     /// `compute_desc` must be null or valid.
-    #[allow(clippy::too_many_arguments, clippy::new_ret_no_self)]
+    #[allow(
+        clippy::new_ret_no_self,
+        reason = "constructor returns the plan/descriptor it builds, not Self, by design"
+    )]
     pub unsafe fn new<'h>(
         handle: &'h Handle,
         a: &TensorDescriptor<'h>,
@@ -1284,7 +1304,6 @@ impl<'h> Plan<'h> {
     ///
     /// All device pointers must be live, tensor-descriptor-conforming,
     /// and aligned. `workspace` must be at least the estimated size.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn contract(
         &self,
         alpha: *const c_void,
@@ -1322,7 +1341,6 @@ impl<'h> Plan<'h> {
     /// # Safety
     ///
     /// Same as [`Self::contract`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn reduce(
         &self,
         alpha: *const c_void,
@@ -1358,7 +1376,6 @@ impl<'h> Plan<'h> {
     /// # Safety
     ///
     /// Same as [`Self::contract`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn elementwise_binary(
         &self,
         alpha: *const c_void,
@@ -1394,7 +1411,6 @@ impl<'h> Plan<'h> {
     /// # Safety
     ///
     /// Same as [`Self::contract`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn elementwise_trinary(
         &self,
         alpha: *const c_void,
@@ -1456,7 +1472,6 @@ impl<'h> Plan<'h> {
     /// Same as [`Self::contract`]; `a` must be a block-sparse device
     /// buffer matching the `BlockSparseTensorDescriptor` passed to
     /// [`BlockSparseContraction::new`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn contract_block_sparse(
         &self,
         alpha: *const c_void,
@@ -1499,7 +1514,6 @@ impl<'h> Plan<'h> {
     /// # Safety
     ///
     /// Same as [`Self::contract`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn contract_trinary(
         &self,
         alpha: *const c_void,

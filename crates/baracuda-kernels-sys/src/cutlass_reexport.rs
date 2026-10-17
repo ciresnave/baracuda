@@ -100,8 +100,10 @@
 //! - **CV-CUDA** — `baracuda-cvcuda` exists but no plan in
 //!   `baracuda-kernels` wraps it. Skip until a plan lands.
 
-#![allow(non_camel_case_types)]
-#![allow(clippy::too_many_arguments)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 
 use core::ffi::c_void;
 

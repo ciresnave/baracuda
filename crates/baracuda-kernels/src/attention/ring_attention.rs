@@ -629,7 +629,6 @@ impl<T: Element> RingAttentionPlan<T> {
 /// the bidirectional point-to-point. K and V are sent as a single
 /// concatenated chunk (the scratch layout puts them back-to-back).
 #[cfg(feature = "ring_attention")]
-#[allow(clippy::too_many_arguments)]
 fn rotate_kv<T: Element>(
     comm: &baracuda_nccl::Communicator,
     stream: &Stream,

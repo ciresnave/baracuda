@@ -470,7 +470,10 @@ fn mmvq_benches(c: &mut Criterion) {
 // `criterion_group!` expands into a `pub fn benches_grp` whose
 // signature is fixed by the macro - can't doc-comment it directly, so
 // suppress the workspace `missing_docs = deny` lint on the generated fn.
-#[allow(missing_docs)]
+#[allow(
+    missing_docs,
+    reason = "criterion_group!/criterion_main! expand to undocumented public items"
+)]
 mod criterion_glue {
     use super::*;
     criterion_group!(benches_grp, mmvq_benches);

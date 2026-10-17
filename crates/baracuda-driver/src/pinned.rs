@@ -28,7 +28,6 @@ use crate::error::{Result, check};
 /// process. `MAPPED` maps the allocation into device space so it can be
 /// used directly by kernels (zero-copy). `WRITECOMBINED` uses a write-only
 /// caching mode that speeds up HtoD at the cost of slow host reads.
-#[allow(non_snake_case)]
 pub mod flags {
     /// Allocation is portable across all CUDA contexts in the process
     /// (`CU_MEMHOSTALLOC_PORTABLE`).

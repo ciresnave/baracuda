@@ -43,7 +43,12 @@
 //! [`baracuda-nccl-sys`]: ../baracuda_nccl_sys/index.html
 //! [`libloading`]: https://docs.rs/libloading
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::{c_char, c_int, c_long, c_uint, c_void};

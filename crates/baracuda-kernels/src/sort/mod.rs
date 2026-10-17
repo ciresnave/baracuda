@@ -34,7 +34,10 @@ pub mod kthvalue_backward;
 pub mod msort;
 pub mod searchsorted;
 // Renaming this submodule is API-breaking (it is part of the public module path).
-#[allow(clippy::module_inception)]
+#[allow(
+    clippy::module_inception,
+    reason = "renaming this submodule is API-breaking (public module path)"
+)]
 pub mod sort;
 pub mod sort_backward;
 pub mod topk;

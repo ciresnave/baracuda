@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.131 - 2026-10-16 (Collapse no-reason lint allows: delete dead ones, reason the rest)
+
+Workspace alpha.131 (proposed; PM allocates at gate).
+
+- Deleted 394 dead `#[allow(clippy::too_many_arguments)]` (the workspace lint table already allows it; every crate inherits it) and 65 other allows that no longer fire; the 105 that remain all carry a `reason` (FFI-naming allows collapsed to one module-level allow per file). No-reason allow attributes: 708 -> 0. Clippy (workspace, sm89/device-tests/flashinfer/ozimmu variants) shows no new lint warnings.
+
 ## 0.0.1-alpha.129 - 2026-10-16 (Retire #[ignore] in cublas, transformer-engine, optim behind device-tests)
 
 Workspace alpha.129 (proposed; PM allocates at gate).

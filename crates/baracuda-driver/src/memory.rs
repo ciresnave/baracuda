@@ -1430,9 +1430,12 @@ mod slice_tests {
         let _ = s.slice(0..11);
     }
 
+    #[allow(
+        clippy::reversed_empty_ranges,
+        reason = "test intentionally slices with an inverted range to assert the panic"
+    )]
     #[test]
     #[should_panic(expected = "out of bounds")]
-    #[allow(clippy::reversed_empty_ranges)]
     // Intentionally inverted: this test verifies that `slice` rejects
     // start > end with the "out of bounds" panic message.
     fn slice_inverted_range_panics() {

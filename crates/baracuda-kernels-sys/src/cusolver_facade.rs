@@ -87,8 +87,10 @@
 //! async H2D — caller controls all device work) at the cost of
 //! one extra setup step at the call site.
 
-#![allow(non_camel_case_types)]
-#![allow(clippy::too_many_arguments)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 
 use core::ffi::c_void;
 use core::ptr;

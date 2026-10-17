@@ -31,7 +31,6 @@ fn setup() -> (Context, Stream) {
 
 /// CPU reference, takes Q/K/V at the given outer strides; head_dim
 /// (innermost) stride is implicit 1.
-#[allow(clippy::too_many_arguments)]
 fn host_sdpa_ref_f64(
     batch: usize,
     heads: usize,

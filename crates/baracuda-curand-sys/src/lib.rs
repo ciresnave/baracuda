@@ -4,7 +4,10 @@
 //! directly only if you need a function that the safe layer hasn't
 //! wrapped yet (in which case please file a bug).
 
-#![allow(non_camel_case_types)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::{c_int, c_void};
@@ -20,7 +23,6 @@ pub type curandGenerator_t = *mut c_void;
 /// Random number generator type.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-#[allow(non_camel_case_types)]
 pub enum curandRngType_t {
     /// Default pseudo-random: XORWOW.
     PSEUDO_DEFAULT = 100,
@@ -50,7 +52,6 @@ pub enum curandRngType_t {
 /// Ordering for the generated sequence.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-#[allow(non_camel_case_types)]
 pub enum curandOrdering_t {
     /// Library-chosen best ordering for pseudo-random.
     PSEUDO_BEST = 100,

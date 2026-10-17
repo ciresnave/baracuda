@@ -353,7 +353,6 @@ unsafe fn stage_q8_1<T: GgufMmvqActivation>(
 /// Phase 33 covered Q8_0; Phase 34 extends to the remaining 9 GGUF
 /// formats. Each (format, M) pair binds to a unique FFI symbol; the
 /// 10 formats × 4 M-sizes = 40 launchers are exhaustively matched here.
-#[allow(clippy::too_many_arguments, clippy::too_many_lines, non_snake_case)]
 unsafe fn dispatch_multim(
     fmt: GgufBlockFormat,
     m: i32,

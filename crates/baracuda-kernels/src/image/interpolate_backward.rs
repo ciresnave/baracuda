@@ -56,7 +56,6 @@ impl InterpolateBackwardDescriptor {
     /// scale_w = None`. Chain with the `with_*` setters to override.
     /// **Must mirror the FW descriptor's settings** — autograd cannot
     /// recover the correct gradient otherwise.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         n: i32,
         c: i32,

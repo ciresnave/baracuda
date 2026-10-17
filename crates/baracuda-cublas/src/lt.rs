@@ -389,7 +389,6 @@ pub struct MatmulHeuristic {
 
 /// Ask cuBLASLt for up to `capacity` matching algorithms. Returns only the
 /// algorithms whose status is Success.
-#[allow(clippy::too_many_arguments)]
 pub fn heuristics_search(
     handle: &LtHandle,
     desc: &MatmulDesc,
@@ -448,7 +447,6 @@ pub fn heuristics_search(
 /// All pointers must be device pointers of the correct size/type; the
 /// descriptor/layouts must match the actual buffers. The stream must be
 /// valid; using the cuBLASLt default (null) stream is allowed.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn matmul(
     handle: &LtHandle,
     desc: &MatmulDesc,

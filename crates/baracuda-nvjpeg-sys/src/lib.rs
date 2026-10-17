@@ -6,7 +6,12 @@
 //! [`baracuda-nvimagecodec`] is the modern (Phase 70) replacement and
 //! covers JPEG / PNG / TIFF; nvJPEG is kept for back-compat.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::{c_int, c_uchar, c_void};

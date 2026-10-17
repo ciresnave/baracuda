@@ -9,7 +9,12 @@
 //! status/version types so the crate compiles; concrete profiler wrappers
 //! will land as CI gains matching tooling.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::c_void;
@@ -93,7 +98,6 @@ impl CudaStatus for CUptiResult {
 // ---- activity API (the main "just collect kernel records" surface) ----
 
 /// `CUpti_ActivityKind` — selector for activity records.
-#[allow(non_snake_case)]
 pub mod CUpti_ActivityKind {
     /// invalid / sentinel
     pub const INVALID: u32 = 0;
@@ -146,7 +150,6 @@ pub type CUpti_BuffersCallbackCompleteFunc = unsafe extern "C" fn(
 // ---- callback API (point-in-time hooks on driver/runtime API calls) ----
 
 /// `CUpti_CallbackDomain`.
-#[allow(non_snake_case)]
 pub mod CUpti_CallbackDomain {
     /// invalid / sentinel
     pub const INVALID: u32 = 0;

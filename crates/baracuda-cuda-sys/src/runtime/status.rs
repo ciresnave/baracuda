@@ -11,7 +11,10 @@ use baracuda_types::CudaStatus;
 #[repr(transparent)]
 pub struct cudaError_t(pub i32);
 
-#[allow(non_upper_case_globals)]
+#[allow(
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI constants)"
+)]
 impl cudaError_t {
     /// `Success` — success.
     pub const Success: Self = Self(0);

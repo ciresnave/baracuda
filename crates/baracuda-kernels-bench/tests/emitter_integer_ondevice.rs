@@ -46,7 +46,6 @@ use unpopped::ir::{BinaryOp, OpDef, input};
 /// on-device over the `(in0, in1)` lanes, and assert the result is bit-exact
 /// with `expected`. Returns the device output for case-specific controls.
 /// `init` is a never-wrote sentinel chosen to differ from every expected value.
-#[allow(clippy::too_many_arguments)]
 fn run_binary_int<T>(
     ctx: &Context,
     stream: &Stream,

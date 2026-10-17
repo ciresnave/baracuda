@@ -316,7 +316,6 @@ impl MipmappedArray {
     /// Create a mipmap pyramid with `num_levels` levels. The base level is
     /// `(width, height, depth)`; each subsequent level is half-sized per
     /// axis (hardware-managed).
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         context: &Context,
         width: usize,

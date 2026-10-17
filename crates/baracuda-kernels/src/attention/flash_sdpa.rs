@@ -266,7 +266,6 @@ impl FlashSdpaDescriptor {
     ///
     /// Defaults: `window_size_left=None`, `window_size_right=None`,
     /// `softcap=0.0` (all FA2 v1-compatible).
-    #[allow(clippy::too_many_arguments)]
     #[inline]
     pub fn new(
         batch_size: i32,

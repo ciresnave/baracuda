@@ -184,7 +184,10 @@ fn benches(c: &mut Criterion) {
     let _ = f16::ONE; // suppress unused-import warning
 }
 
-#[allow(missing_docs)]
+#[allow(
+    missing_docs,
+    reason = "criterion_group!/criterion_main! expand to undocumented public items"
+)]
 mod criterion_glue {
     use super::*;
     criterion_group!(benches_grp, benches);

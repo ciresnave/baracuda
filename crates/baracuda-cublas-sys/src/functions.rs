@@ -1,6 +1,9 @@
 //! cuBLAS function-pointer types.
 
-#![allow(non_camel_case_types)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 
 use core::ffi::{c_int, c_void};
 

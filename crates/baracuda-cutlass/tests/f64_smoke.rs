@@ -48,7 +48,6 @@ fn silu(x: f64) -> f64 {
 }
 
 #[cfg(feature = "device-tests")]
-#[allow(clippy::too_many_arguments)]
 fn cpu_bias_act_gemm(
     layout: LayoutSku,
     m: usize,

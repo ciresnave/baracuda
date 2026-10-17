@@ -21,7 +21,6 @@ use crate::error::{Error, Result, check};
 /// `cudaMulticastObjectProp`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
-#[allow(non_camel_case_types)]
 pub struct MulticastProp {
     /// Number of devices that will be added via
     /// [`MulticastObject::add_device`].
