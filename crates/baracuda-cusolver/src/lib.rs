@@ -161,7 +161,6 @@ pub trait SolverScalar: DeviceRepr + Copy + 'static + sealed::Sealed {
 
     /// LU factorization.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn getrf(
         h: cusolverDnHandle_t,
         m: c_int,
@@ -175,7 +174,6 @@ pub trait SolverScalar: DeviceRepr + Copy + 'static + sealed::Sealed {
 
     /// LU solve.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn getrs(
         h: cusolverDnHandle_t,
         trans: cublasOperation_t,
@@ -202,7 +200,6 @@ pub trait SolverScalar: DeviceRepr + Copy + 'static + sealed::Sealed {
 
     /// QR factorization.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn geqrf(
         h: cusolverDnHandle_t,
         m: c_int,
@@ -228,7 +225,6 @@ pub trait SolverScalar: DeviceRepr + Copy + 'static + sealed::Sealed {
 
     /// Cholesky factorization.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn potrf(
         h: cusolverDnHandle_t,
         uplo: cublasFillMode_t,
@@ -242,7 +238,6 @@ pub trait SolverScalar: DeviceRepr + Copy + 'static + sealed::Sealed {
 
     /// Cholesky solve.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn potrs(
         h: cusolverDnHandle_t,
         uplo: cublasFillMode_t,
@@ -266,7 +261,6 @@ pub trait SolverScalar: DeviceRepr + Copy + 'static + sealed::Sealed {
 
     /// SVD (generic, taking real-valued S + rwork for complex variants).
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn gesvd(
         h: cusolverDnHandle_t,
         jobu: u8,
@@ -288,7 +282,6 @@ pub trait SolverScalar: DeviceRepr + Copy + 'static + sealed::Sealed {
 
     /// syevd / heevd buffer size.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn syevd_buf(
         h: cusolverDnHandle_t,
         jobz: cusolverEigMode_t,
@@ -302,7 +295,6 @@ pub trait SolverScalar: DeviceRepr + Copy + 'static + sealed::Sealed {
 
     /// syevd / heevd.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn syevd(
         h: cusolverDnHandle_t,
         jobz: cusolverEigMode_t,
@@ -939,7 +931,6 @@ complex_impl!(
 /// getrf::<f32>(&solver, n, n, &mut a, n, &mut ipiv, &mut info)?;
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn getrf<T: SolverScalar>(
     handle: &DnHandle,
     m: i32,
@@ -967,7 +958,6 @@ pub fn getrf<T: SolverScalar>(
 }
 
 /// Solve `op(A) * X = B` using the LU factorization from [`getrf`].
-#[allow(clippy::too_many_arguments)]
 pub fn getrs<T: SolverScalar>(
     handle: &DnHandle,
     trans: Op,
@@ -1023,7 +1013,6 @@ pub fn getrs<T: SolverScalar>(
 /// geqrf::<f32>(&solver, m, n, &mut a, m, &mut tau, &mut info)?;
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn geqrf<T: SolverScalar>(
     handle: &DnHandle,
     m: i32,
@@ -1112,7 +1101,6 @@ pub fn potrf<T: SolverScalar>(
 }
 
 /// Solve `A * X = B` using the Cholesky factorization from [`potrf`].
-#[allow(clippy::too_many_arguments)]
 pub fn potrs<T: SolverScalar>(
     handle: &DnHandle,
     uplo: Fill,
@@ -1177,7 +1165,6 @@ pub fn potrs<T: SolverScalar>(
 /// )?;
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn gesvd<T: SolverScalar>(
     handle: &DnHandle,
     jobu: u8,
@@ -1220,7 +1207,6 @@ pub fn gesvd<T: SolverScalar>(
 }
 
 /// Symmetric / Hermitian eigenvalue decomposition: `A = Q * diag(w) * Qᵀ`.
-#[allow(clippy::too_many_arguments)]
 pub fn syevd<T: SolverScalar>(
     handle: &DnHandle,
     jobz: EigMode,
@@ -1347,7 +1333,6 @@ impl Drop for GesvdjInfo {
 
 /// Jacobi symmetric/Hermitian eigendecomposition (smaller matrices than
 /// [`syevd`], faster convergence on well-conditioned problems).
-#[allow(clippy::too_many_arguments)]
 pub fn syevj<T: SolverScalar>(
     handle: &DnHandle,
     jobz: EigMode,
@@ -1461,7 +1446,6 @@ pub fn syevj<T: SolverScalar>(
 }
 
 /// Jacobi SVD: `A = U * diag(s) * Vᴴ`. `econ` selects thin-SVD when set.
-#[allow(clippy::too_many_arguments)]
 pub fn gesvdj<T: SolverScalar>(
     handle: &DnHandle,
     jobz: EigMode,
@@ -1602,7 +1586,6 @@ pub fn gesvdj<T: SolverScalar>(
 
 /// Generate the orthogonal matrix `Q` from the factorization produced by
 /// [`geqrf`]. After this, `a` holds the first `n` columns of `Q`.
-#[allow(clippy::too_many_arguments)]
 pub fn orgqr<T: SolverScalar>(
     handle: &DnHandle,
     m: i32,
@@ -1692,7 +1675,6 @@ impl Side {
 
 /// Apply `op(Q)` to `C`: `C = op(Q) * C` (Left) or `C = C * op(Q)` (Right),
 /// where `Q` is packed in `a`+`tau` from [`geqrf`].
-#[allow(clippy::too_many_arguments)]
 pub fn ormqr<T: SolverScalar>(
     handle: &DnHandle,
     side: Side,
@@ -1781,7 +1763,6 @@ pub fn ormqr<T: SolverScalar>(
 /// `A` is `m × n`, `B` is `m × nrhs`, `X` is `n × nrhs`. `A` and `B` may be
 /// overwritten. Returns `iter`: number of refinement iterations used (-1 =
 /// fallback to full precision).
-#[allow(clippy::too_many_arguments)]
 pub fn gels<T: SolverScalar>(
     handle: &DnHandle,
     m: i32,
@@ -1939,7 +1920,6 @@ pub fn potri<T: SolverScalar>(
 /// Batched Jacobi symmetric/Hermitian eigendecomposition. Every matrix in
 /// the batch is `n × n` and stride `n × n`. `w` holds `n * batch_size`
 /// eigenvalues, strided by `n`.
-#[allow(clippy::too_many_arguments)]
 pub fn syevj_batched<T: SolverScalar>(
     handle: &DnHandle,
     jobz: EigMode,
@@ -2063,7 +2043,6 @@ pub fn syevj_batched<T: SolverScalar>(
 }
 
 /// Batched Jacobi SVD: batch of `m × n` matrices with stride `m×n`.
-#[allow(clippy::too_many_arguments)]
 pub fn gesvdj_batched<T: SolverScalar>(
     handle: &DnHandle,
     jobz: EigMode,
@@ -2364,7 +2343,6 @@ pub mod mg {
     /// # Safety
     /// `array_d_a`, `array_d_ipiv` must be host arrays of device pointers
     /// matching the selected devices.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn getrf_buffer_size(
         handle: &Handle,
         m: i32,
@@ -2398,7 +2376,6 @@ pub mod mg {
 
     /// # Safety
     /// Same pointer-array requirements as [`getrf_buffer_size`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn getrf(
         handle: &Handle,
         m: i32,
@@ -2438,7 +2415,6 @@ pub mod mg {
     ///
     /// # Safety
     /// Same as [`getrf_buffer_size`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn potrf_buffer_size(
         handle: &Handle,
         uplo: Fill,
@@ -2470,7 +2446,6 @@ pub mod mg {
 
     /// # Safety
     /// Same as [`getrf_buffer_size`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn potrf(
         handle: &Handle,
         uplo: Fill,
@@ -2507,7 +2482,6 @@ pub mod mg {
     ///
     /// # Safety
     /// Same as [`getrf_buffer_size`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn syevd_buffer_size(
         handle: &Handle,
         jobz: EigMode,
@@ -2545,7 +2519,6 @@ pub mod mg {
 
     /// # Safety
     /// Same as [`getrf_buffer_size`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn syevd(
         handle: &Handle,
         jobz: EigMode,
@@ -2601,7 +2574,6 @@ pub fn sgetrf(
 }
 
 /// Shortcut for [`getrs`] on `f32`.
-#[allow(clippy::too_many_arguments)]
 pub fn sgetrs(
     handle: &DnHandle,
     trans: Op,
@@ -2673,7 +2645,6 @@ pub mod xapi {
     /// alignment or layout from it; the caller must ensure it is either
     /// null or a valid device address for an `m x n` matrix with leading
     /// dimension `lda` of `data_type_a`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn xgetrf_buffer_size(
         handle: &DnHandle,
         params: &Params,
@@ -2712,7 +2683,6 @@ pub mod xapi {
     /// `host_workspace`) must point to allocations of the appropriate type
     /// and size for the requested `(m, n, data_type_a, compute_type)`,
     /// and remain live until the call completes on `handle`'s stream.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn xgetrf(
         handle: &DnHandle,
         params: &Params,
@@ -2759,7 +2729,6 @@ pub mod xapi {
     /// `a`, `ipiv`, `b`, and `info` must point to live device memory of
     /// the sizes implied by `n`, `nrhs`, `lda`, and `ldb`, with element
     /// types matching `data_type_a` / `data_type_b`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn xgetrs(
         handle: &DnHandle,
         params: &Params,
@@ -2803,7 +2772,6 @@ pub mod xapi {
     /// # Safety
     ///
     /// See [`xgetrs`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn xpotrs(
         handle: &DnHandle,
         params: &Params,
@@ -2899,7 +2867,6 @@ pub mod sparse {
     /// `descr_a`, CSR arrays, b and x must live on-device (b + x on-device,
     /// CSR arrays + descriptor on-device) and satisfy cuSOLVER sparse
     /// format requirements.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn scsrlsvchol(
         handle: &SpHandle,
         m: i32,
@@ -2938,7 +2905,6 @@ pub mod sparse {
     ///
     /// # Safety
     /// Same as [`scsrlsvchol`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn scsrlsvqr(
         handle: &SpHandle,
         m: i32,

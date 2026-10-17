@@ -6,7 +6,6 @@
 //! that only the CUDA emitter lowers, so they live with the CUDA backend crate.
 //! The backend-free contract tests (bundle-framing, precision/flops helpers, the
 //! primitive-op-kind mapping) stayed neutral in `baracuda-kernelgen`.
-#![allow(clippy::approx_constant, clippy::excessive_precision)]
 
 use baracuda_cuda_emit::Cuda;
 use unpopped::backend::*;

@@ -183,7 +183,6 @@ pub mod image {
     ///
     /// All pointers must be device-addressable and cover `size.height`
     /// rows of `size.width * 4` bytes.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn add_32f_c1r(
         src1: *const f32,
         src1_step: i32,
@@ -205,7 +204,6 @@ pub mod image {
     /// # Safety
     ///
     /// Same as [`add_32f_c1r`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn mul_32f_c1r(
         src1: *const f32,
         src1_step: i32,
@@ -227,7 +225,6 @@ pub mod image {
     /// # Safety
     ///
     /// Same as [`add_32f_c1r`], with steps in bytes for 8u data.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn add_8u_c1r_sfs(
         src1: *const u8,
         src1_step: i32,
@@ -260,7 +257,6 @@ pub mod image {
     ///
     /// `src` must cover `src_size` at `src_step` pitch; `dst` must cover
     /// `dst_size` at `dst_step`.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn resize_8u_c1r(
         src: *const u8,
         src_step: i32,
@@ -294,7 +290,6 @@ pub mod image {
     /// # Safety
     ///
     /// Same as [`resize_8u_c1r`] with 4-byte pixels.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn resize_32f_c1r(
         src: *const f32,
         src_step: i32,
@@ -329,7 +324,6 @@ pub mod image {
     ///
     /// `src` must cover `size.height × src_step` bytes (RGB pixels are
     /// 3 bytes each); `dst` must cover `size.height × dst_step` bytes.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn rgb_to_gray_8u(
         src: *const u8,
         src_step: i32,
@@ -369,7 +363,6 @@ pub mod image {
     ///
     /// Same as [`add_32f_c1r`]. NPP requires an apron of ceil(mask/2)
     /// pixels on the source side.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn filter_box_8u_c1r(
         src: *const u8,
         src_step: i32,

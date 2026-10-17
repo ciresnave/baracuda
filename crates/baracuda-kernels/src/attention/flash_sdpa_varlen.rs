@@ -114,7 +114,6 @@ pub struct FlashSdpaVarlenDescriptor {
 impl FlashSdpaVarlenDescriptor {
     /// Build a `FlashSdpaVarlenDescriptor` with the required fields.
     /// Sliding window and softcap default to disabled.
-    #[allow(clippy::too_many_arguments)]
     #[inline]
     pub fn new(
         batch_size: i32,

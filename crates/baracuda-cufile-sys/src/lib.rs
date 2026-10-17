@@ -4,7 +4,12 @@
 //! no Windows/macOS analogue. On non-Linux platforms the loader returns
 //! [`LoaderError::UnsupportedPlatform`].
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::{c_char, c_int, c_uint, c_void};
@@ -192,7 +197,6 @@ pub type PFN_cuFileStreamDeregister = unsafe extern "C" fn(stream: *mut c_void) 
 // ---- Batched I/O (v1.6+) ----
 
 /// Opcode selector for `CUfileIOParams_t`.
-#[allow(non_snake_case)]
 pub mod CUfileOpcode {
     /// `READ` constant.
     pub const READ: i32 = 0;

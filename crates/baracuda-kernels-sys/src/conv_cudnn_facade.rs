@@ -439,7 +439,6 @@ impl Drop for WsHolder {
 
 /// Dispatch a Conv2d FW. `x`, `w`, `y` are device pointers; ws is
 /// optional. Returns OK / INVALID / INTERNAL.
-#[allow(clippy::too_many_arguments)]
 fn run_conv2d_fw(
     p: &Conv2dParams,
     dt: DtypeTag,
@@ -521,7 +520,6 @@ fn run_conv2d_fw(
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_conv2d_bw_data(
     p: &Conv2dParams,
     dt: DtypeTag,
@@ -603,7 +601,6 @@ fn run_conv2d_bw_data(
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_conv2d_bw_filter(
     p: &Conv2dParams,
     dt: DtypeTag,
@@ -1085,7 +1082,6 @@ fn build_conv1d_descs(g: &mut ConvDescGuard, p: &Conv1dParams, dt: DtypeTag) -> 
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_conv1d_dispatch(
     p: &Conv1dParams,
     dt: DtypeTag,
@@ -1567,7 +1563,6 @@ fn build_conv3d_descs(g: &mut ConvDescGuard, p: &Conv3dParams, dt: DtypeTag) -> 
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_conv3d_dispatch(
     p: &Conv3dParams,
     dt: DtypeTag,
@@ -1732,7 +1727,6 @@ macro_rules! conv3d_dir_impl {
         ///
         /// # Safety: all pointers must be live device memory; `stream` valid.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $name(
             batch: i32,
             c_in: i32,
@@ -2074,7 +2068,6 @@ fn build_convt2d_descs(g: &mut ConvDescGuard, p: &ConvT2dParams, dt: DtypeTag) -
 /// ConvTranspose2d FW = synthetic BackwardData. Args: x, w → y.
 /// The synthetic-conv mapping treats `y` as synth_x (output of cuDNN
 /// BackwardData), `x` as synth_y, and `w` as synth_w.
-#[allow(clippy::too_many_arguments)]
 fn run_convt2d_fw(
     p: &ConvT2dParams,
     dt: DtypeTag,
@@ -2170,7 +2163,6 @@ fn run_convt2d_fw(
 }
 
 /// ConvTranspose2d BW-data = synthetic Forward. Args: w, dy → dx.
-#[allow(clippy::too_many_arguments)]
 fn run_convt2d_bw_data(
     p: &ConvT2dParams,
     dt: DtypeTag,
@@ -2267,7 +2259,6 @@ fn run_convt2d_bw_data(
 /// ConvTranspose2d BW-filter = synthetic BackwardFilter with the FW
 /// role swap. Args: x, dy → dw. The cuDNN call uses synth_x = dy and
 /// synth_y = x (matches the Rust plan's `run_dw`).
-#[allow(clippy::too_many_arguments)]
 fn run_convt2d_bw_filter(
     p: &ConvT2dParams,
     dt: DtypeTag,
@@ -2367,7 +2358,6 @@ macro_rules! convt2d_dir_impl {
         ///
         /// # Safety: all pointers must be live device memory; `stream` valid.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $name(
             batch: i32,
             c_in: i32,
@@ -2639,7 +2629,6 @@ fn build_convt1d_descs(g: &mut ConvDescGuard, p: &ConvT1dParams, dt: DtypeTag) -
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_convt1d_fw(
     p: &ConvT1dParams,
     dt: DtypeTag,
@@ -2732,7 +2721,6 @@ fn run_convt1d_fw(
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_convt1d_bw_data(
     p: &ConvT1dParams,
     dt: DtypeTag,
@@ -2825,7 +2813,6 @@ fn run_convt1d_bw_data(
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_convt1d_bw_filter(
     p: &ConvT1dParams,
     dt: DtypeTag,
@@ -2924,7 +2911,6 @@ macro_rules! convt1d_dir_impl {
         ///
         /// # Safety: all pointers must be live device memory; `stream` valid.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $name(
             batch: i32,
             c_in: i32,
@@ -3230,7 +3216,6 @@ fn build_convt3d_descs(g: &mut ConvDescGuard, p: &ConvT3dParams, dt: DtypeTag) -
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_convt3d_fw(
     p: &ConvT3dParams,
     dt: DtypeTag,
@@ -3323,7 +3308,6 @@ fn run_convt3d_fw(
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_convt3d_bw_data(
     p: &ConvT3dParams,
     dt: DtypeTag,
@@ -3416,7 +3400,6 @@ fn run_convt3d_bw_data(
     OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_convt3d_bw_filter(
     p: &ConvT3dParams,
     dt: DtypeTag,
@@ -3515,7 +3498,6 @@ macro_rules! convt3d_dir_impl {
         ///
         /// # Safety: all pointers must be live device memory; `stream` valid.
         #[unsafe(no_mangle)]
-        #[allow(clippy::too_many_arguments)]
         pub unsafe extern "C" fn $name(
             batch: i32,
             c_in: i32,

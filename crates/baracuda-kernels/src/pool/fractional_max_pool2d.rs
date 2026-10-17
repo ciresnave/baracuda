@@ -128,7 +128,6 @@ impl FractionalMaxPool2dDescriptor {
     /// Build a descriptor with `seed = 0` (unused in Phase 16+ — the
     /// caller supplies samples; retained for ABI back-compat). Chain
     /// with [`Self::with_seed`] to override.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         batch: i32,
         channels: i32,

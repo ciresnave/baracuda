@@ -4,7 +4,10 @@
 //! as it appears in `cuda.h`. The [`Driver`](crate::Driver) struct caches
 //! a lazily-resolved function pointer per symbol.
 
-#![allow(non_camel_case_types)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 
 use core::ffi::{c_char, c_int, c_uint, c_void};
 

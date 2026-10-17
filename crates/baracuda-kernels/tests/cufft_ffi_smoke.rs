@@ -13,7 +13,10 @@
 //!
 //! Gated behind the `device-tests` feature — requires a real CUDA device.
 
-#![allow(unused_mut)]
+#![allow(
+    unused_mut,
+    reason = "test bindings are kept uniform across cases; some are never mutated"
+)]
 #![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;

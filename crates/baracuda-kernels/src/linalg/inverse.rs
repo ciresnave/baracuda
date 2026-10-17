@@ -363,7 +363,6 @@ unsafe fn copy_h2d(
     bytes: usize,
     stream: &Stream,
 ) -> Result<()> {
-    #[allow(non_camel_case_types)]
     type CUresult = i32;
     unsafe extern "system" {
         fn cuMemcpyHtoDAsync_v2(

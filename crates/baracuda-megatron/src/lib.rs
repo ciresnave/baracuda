@@ -268,7 +268,6 @@ pub trait MegatronGemmScalar: NcclScalar + Copy + Send + Sync + sealed::Sealed +
     /// `m*n` respectively. `handle` is bound to a stream owned by the
     /// caller. Caller must guarantee `m`, `n`, `k > 0`.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn row_major_gemm_nt(
         handle: &Handle,
         m: i32,
@@ -285,7 +284,6 @@ pub trait MegatronGemmScalar: NcclScalar + Copy + Send + Sync + sealed::Sealed +
     /// the second operand un-transposed: `D = α · A · B + β · D`,
     /// shapes `D=[m,n]`, `A=[m,k]`, `B=[k,n]`.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn row_major_gemm_nn(
         handle: &Handle,
         m: i32,
@@ -303,7 +301,6 @@ pub trait MegatronGemmScalar: NcclScalar + Copy + Send + Sync + sealed::Sealed +
     /// `D=[m,n]`, `A=[k,m]`, `B=[k,n]`. Used in the BW paths for
     /// computing `dW = dY^T @ X`.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn row_major_gemm_tn(
         handle: &Handle,
         m: i32,
@@ -429,7 +426,6 @@ mod half_impls {
     ///
     /// All pointers must be valid device pointers of the declared
     /// dtype, sized per the cuBLAS contract for the given m/n/k.
-    #[allow(clippy::too_many_arguments)]
     unsafe fn gemm_ex_half<T: MegatronGemmScalar>(
         handle: &Handle,
         op_first: Op,

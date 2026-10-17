@@ -112,7 +112,6 @@ pub mod crc32 {
     /// # Safety
     ///
     /// `config` must be filled by [`get_heuristic_conf`] or [`search_conf`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn compute_async(
         dev_data_ptrs: *const *const c_void,
         dev_data_bytes: *const usize,
@@ -177,7 +176,6 @@ pub unsafe fn decompress_alignment(
 ///
 /// `pfn` must be the codec's `GetDecompressSizeAsync`; pointers must be
 /// live + batch-consistent.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn get_decompress_size_async(
     pfn: unsafe extern "C" fn(
         *const *const c_void,
@@ -221,12 +219,14 @@ pub fn probe() -> Result<()> {
 
 /// Raw byte-pointer arrays passed to compress/decompress. Kept in a
 /// dedicated type so the call sites read nicer.
-#[allow(clippy::missing_safety_doc)]
+#[allow(
+    clippy::missing_safety_doc,
+    reason = "thin pass-throughs over the vendor C entry points; the contract is nvCOMP's"
+)]
 pub mod raw {
     use super::*;
 
     /// Result-agnostic launch of `compress_async` for any codec.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn compress_async<Opts>(
         pfn: unsafe extern "C" fn(
             *const *const c_void,
@@ -269,7 +269,6 @@ pub mod raw {
 
     /// Result-agnostic launch of `decompress_async` for any codec that
     /// follows the standard 10-argument signature.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn decompress_async(
         pfn: unsafe extern "C" fn(
             *const *const c_void,
@@ -371,7 +370,6 @@ macro_rules! codec_mod {
             /// # Safety
             ///
             /// All device pointers must be live and batch-consistent.
-            #[allow(clippy::too_many_arguments)]
             pub unsafe fn compress_async(
                 dev_uncompressed_ptrs: *const *const c_void,
                 dev_uncompressed_bytes: *const usize,
@@ -430,7 +428,6 @@ macro_rules! codec_mod {
             /// # Safety
             ///
             /// Same as [`compress_async`].
-            #[allow(clippy::too_many_arguments)]
             pub unsafe fn decompress_async(
                 dev_compressed_ptrs: *const *const c_void,
                 dev_compressed_bytes: *const usize,
@@ -506,7 +503,6 @@ pub mod deflate {
     /// # Safety
     ///
     /// Same as [`lz4::compress_async`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn compress_async(
         dev_uncompressed_ptrs: *const *const c_void,
         dev_uncompressed_bytes: *const usize,
@@ -540,7 +536,6 @@ pub mod deflate {
     /// # Safety
     ///
     /// Same as [`lz4::decompress_async`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn decompress_async(
         dev_compressed_ptrs: *const *const c_void,
         dev_compressed_bytes: *const usize,
@@ -579,7 +574,6 @@ pub mod bitcomp {
     /// # Safety
     ///
     /// Same as [`lz4::compress_async`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn compress_async(
         dev_uncompressed_ptrs: *const *const c_void,
         dev_uncompressed_bytes: *const usize,
@@ -613,7 +607,6 @@ pub mod bitcomp {
     /// # Safety
     ///
     /// Same as [`lz4::decompress_async`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn decompress_async(
         dev_compressed_ptrs: *const *const c_void,
         dev_compressed_bytes: *const usize,
@@ -652,7 +645,6 @@ pub mod ans {
     /// # Safety
     ///
     /// Same as [`lz4::compress_async`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn compress_async(
         dev_uncompressed_ptrs: *const *const c_void,
         dev_uncompressed_bytes: *const usize,
@@ -686,7 +678,6 @@ pub mod ans {
     /// # Safety
     ///
     /// Same as [`lz4::decompress_async`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn decompress_async(
         dev_compressed_ptrs: *const *const c_void,
         dev_compressed_bytes: *const usize,
@@ -725,7 +716,6 @@ pub mod cascaded {
     /// # Safety
     ///
     /// Same as [`lz4::compress_async`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn compress_async(
         dev_uncompressed_ptrs: *const *const c_void,
         dev_uncompressed_bytes: *const usize,
@@ -759,7 +749,6 @@ pub mod cascaded {
     /// # Safety
     ///
     /// Same as [`lz4::decompress_async`].
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn decompress_async(
         dev_compressed_ptrs: *const *const c_void,
         dev_compressed_bytes: *const usize,

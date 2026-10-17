@@ -41,7 +41,6 @@ fn dequantize_e5m2(bits: u8) -> f32 {
 }
 
 /// CPU reference, RCR layout (col-major B, indexed `b[j * ldb + k]`).
-#[allow(clippy::too_many_arguments)]
 fn cpu_fp8_e5m2_gemm_rcr(
     m: usize,
     n: usize,

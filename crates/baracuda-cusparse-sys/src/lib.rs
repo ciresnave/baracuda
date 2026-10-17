@@ -4,7 +4,12 @@
 //! crate directly only if you need a function that the safe layer
 //! hasn't wrapped yet (in which case please file a bug).
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::{c_int, c_void};

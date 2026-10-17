@@ -351,7 +351,6 @@ impl<'comm, T: AdamParamDtype + NcclScalar> DistributedAdamStepPlan<'comm, T> {
     /// Only the params + grads are all_reduce'd / all_gather'd in `T` —
     /// the f32 moment buffers stay on-rank (they're already sharded;
     /// that's the ZeRO-1 memory savings).
-    #[allow(clippy::too_many_arguments)]
     pub fn step_with_f32_state(
         &self,
         param_buffers: &mut [&mut DeviceBuffer<T>],

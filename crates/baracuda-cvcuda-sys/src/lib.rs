@@ -8,7 +8,12 @@
 //! Toolkit). v0.1 ships only the loader; the operator surface lands when
 //! we can test against an installed CV-CUDA.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use std::sync::OnceLock;
@@ -104,7 +109,6 @@ pub type CVCUDA_OperatorHandle = *mut c_void;
 // ---- Enums ----
 
 /// `NVCVInterpolationType`.
-#[allow(non_snake_case)]
 pub mod NVCVInterpolationType {
     /// `NEAREST` constant.
     pub const NEAREST: i32 = 0;
@@ -122,7 +126,6 @@ pub mod NVCVInterpolationType {
 
 /// `NVCVColorConversionCode` — opencv-style color conversion selector.
 /// Subset — full enum has ~200 values.
-#[allow(non_snake_case)]
 pub mod NVCVColorConversionCode {
     /// `BGR2BGRA` constant.
     pub const BGR2BGRA: i32 = 0;
@@ -266,7 +269,6 @@ pub type PFN_cvcudaSubmitInOut = unsafe extern "C" fn(
 // ---- Border / interpolation constants ----
 
 /// `NVCVBorderType` module.
-#[allow(non_snake_case)]
 pub mod NVCVBorderType {
     /// `CONSTANT` constant.
     pub const CONSTANT: i32 = 0;
@@ -283,7 +285,6 @@ pub mod NVCVBorderType {
 }
 
 /// `NVCVThresholdType` module.
-#[allow(non_snake_case)]
 pub mod NVCVThresholdType {
     /// `BINARY` constant.
     pub const BINARY: u32 = 1;
@@ -302,7 +303,6 @@ pub mod NVCVThresholdType {
 }
 
 /// `NVCVAdaptiveThresholdType` module.
-#[allow(non_snake_case)]
 pub mod NVCVAdaptiveThresholdType {
     /// `MEAN_C` constant.
     pub const MEAN_C: u32 = 0;
@@ -311,7 +311,6 @@ pub mod NVCVAdaptiveThresholdType {
 }
 
 /// `NVCVMorphologyType` module.
-#[allow(non_snake_case)]
 pub mod NVCVMorphologyType {
     /// `ERODE` constant.
     pub const ERODE: i32 = 0;

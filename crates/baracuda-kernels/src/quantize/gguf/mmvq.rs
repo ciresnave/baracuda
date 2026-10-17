@@ -312,7 +312,6 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
 ///
 /// One match per (dtype, strided) quadrant. Factored out of `run()` to
 /// keep the launch path readable.
-#[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_ffi<T: GgufMmvqActivation>(
     fmt: GgufBlockFormat,
     use_strided: bool,
@@ -414,7 +413,6 @@ unsafe fn dispatch_f32_contig(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_f32_strided(
     fmt: GgufBlockFormat,
     ncols: i32,
@@ -543,7 +541,6 @@ unsafe fn dispatch_f16_contig(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_f16_strided(
     fmt: GgufBlockFormat,
     ncols: i32,
@@ -672,7 +669,6 @@ unsafe fn dispatch_bf16_contig(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_bf16_strided(
     fmt: GgufBlockFormat,
     ncols: i32,

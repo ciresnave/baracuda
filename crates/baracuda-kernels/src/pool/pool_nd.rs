@@ -163,7 +163,6 @@ fn create_pool_nd(
 }
 
 /// Build the (x_desc, y_desc, pool_desc) trio for an Nd pool plan.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn ensure_descriptors_nd<T: Element>(
     x_dims: &[i32],
     y_dims: &[i32],

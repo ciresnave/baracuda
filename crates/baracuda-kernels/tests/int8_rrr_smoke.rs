@@ -92,7 +92,6 @@ fn sat_cast_u8(x: f32) -> u8 {
 /// `A` row-major `[M, K]`. `B` row-major `[K, N]` — indexed
 /// `b[k * ldb + j]`, the gmem layout the kernel consumes without
 /// transposing.
-#[allow(clippy::too_many_arguments)]
 fn cpu_int_gemm_rrr<TIn: Copy + Into<i32>, TBias: Copy>(
     m: usize,
     n: usize,

@@ -962,7 +962,6 @@ impl LambStepPlan {
     ///   (caller computes via baracuda-kernels reduce); used for the
     ///   global clip when it exceeds `cfg.max_global_grad_norm`.
     /// - `step_index`: 1-based step counter.
-    #[allow(clippy::too_many_arguments)]
     pub fn step(
         &self,
         params: &TensorList<'_, f32>,

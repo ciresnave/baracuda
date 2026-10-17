@@ -1,6 +1,9 @@
 //! Handle + enum types for cuBLAS.
 
-#![allow(non_camel_case_types)]
+#![allow(
+    non_camel_case_types,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 
 use core::ffi::c_void;
 

@@ -8,7 +8,12 @@
 //! available on any host with a functional NVIDIA GPU — no separate
 //! install needed.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::{c_char, c_uint, c_void};

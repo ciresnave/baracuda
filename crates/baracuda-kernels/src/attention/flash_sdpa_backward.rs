@@ -177,7 +177,6 @@ pub struct FlashSdpaBackwardDescriptor {
 impl FlashSdpaBackwardDescriptor {
     /// Build a `FlashSdpaBackwardDescriptor`. Defaults the Phase 59b
     /// extras to disabled (`window_size_*=None`, `softcap=0.0`).
-    #[allow(clippy::too_many_arguments)]
     #[inline]
     pub fn new(
         batch_size: i32,

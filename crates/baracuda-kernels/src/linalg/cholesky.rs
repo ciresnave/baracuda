@@ -532,7 +532,6 @@ pub(crate) unsafe fn copy_h2d(
     // we call the CUDA driver API directly. Linkage to `cuda` (CUDA
     // Driver API) is already pulled in transitively by the
     // baracuda-driver dependency, so the symbol resolves at link time.
-    #[allow(non_camel_case_types)]
     type CUresult = i32;
     unsafe extern "system" {
         fn cuMemcpyHtoDAsync_v2(

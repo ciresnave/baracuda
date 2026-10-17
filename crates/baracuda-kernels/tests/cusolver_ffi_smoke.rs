@@ -29,7 +29,10 @@
 // them through raw pointers), but the Rust side only reads `.as_raw()`
 // — the borrow checker can't see the write-through, so it warns about
 // unused-mut. Silence project-wide since every test exhibits this.
-#![allow(unused_mut)]
+#![allow(
+    unused_mut,
+    reason = "test bindings are kept uniform across cases; some are never mutated"
+)]
 #![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;

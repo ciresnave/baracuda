@@ -9,7 +9,12 @@
 //! "is NCCL actually installed?" question to runtime — [`nccl()`] returns
 //! `LoaderError::LibraryNotFound` on hosts without NCCL.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use core::ffi::{c_int, c_void};
@@ -73,10 +78,8 @@ pub enum ncclDataType_t {
 /// custom op IDs (≥ 5) that don't fit a closed Rust enum.
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-#[allow(non_camel_case_types)]
 pub struct ncclRedOp_t(pub i32);
 
-#[allow(non_upper_case_globals)]
 impl ncclRedOp_t {
     /// `ncclSum` — element-wise sum reduction.
     pub const Sum: Self = Self(0);

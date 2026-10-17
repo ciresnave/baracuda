@@ -22,7 +22,6 @@ use half::{bf16, f16};
 // ---------- CPU references ----------
 
 #[cfg(feature = "device-tests")]
-#[allow(clippy::too_many_arguments)]
 fn cpu_gemm_rrr(
     m: usize,
     n: usize,
@@ -56,7 +55,6 @@ fn cpu_gemm_rrr(
 }
 
 #[cfg(feature = "device-tests")]
-#[allow(clippy::too_many_arguments)]
 fn cpu_gemm_rcr(
     m: usize,
     n: usize,

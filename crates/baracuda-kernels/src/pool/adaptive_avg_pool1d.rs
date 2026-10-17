@@ -327,7 +327,6 @@ pub(crate) fn build_sku<T: Element>(op: PoolKind) -> KernelSku {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch_avg_fw<T: Element>(
     x: *const c_void,
     y: *mut c_void,
@@ -406,7 +405,6 @@ pub(crate) fn dispatch_avg_fw<T: Element>(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch_avg_bw<T: Element>(
     dy: *const c_void,
     dx: *mut c_void,
@@ -485,7 +483,6 @@ pub(crate) fn dispatch_avg_bw<T: Element>(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch_max_fw<T: Element>(
     x: *const c_void,
     y: *mut c_void,
@@ -564,7 +561,6 @@ pub(crate) fn dispatch_max_fw<T: Element>(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch_max_bw<T: Element>(
     x: *const c_void,
     dy: *const c_void,

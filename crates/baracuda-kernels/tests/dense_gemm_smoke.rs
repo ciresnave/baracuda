@@ -38,7 +38,6 @@ use half::{bf16, f16};
 
 /// `D[g] = α · A[g] · B[g] + β · D[g]` over `f64`-converted inputs.
 /// `a`/`b`/`d_init` are storage slices covering all batch slots.
-#[allow(clippy::too_many_arguments)]
 fn cpu_dense_gemm(
     m: usize,
     n: usize,
@@ -105,7 +104,6 @@ fn gpu_context() -> (Context, Stream) {
 // f32 harness — parameterized over layout, lds, batch, strides, α/β.
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
 fn run_dense_f32(
     m: i32,
     n: i32,

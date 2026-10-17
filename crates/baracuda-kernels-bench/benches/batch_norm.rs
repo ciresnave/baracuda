@@ -252,7 +252,10 @@ fn benches(c: &mut Criterion) {
     bench::<f16>(c, "f16", ElementKind::F16, f16::ONE, baseline_ref);
 }
 
-#[allow(missing_docs)]
+#[allow(
+    missing_docs,
+    reason = "criterion_group!/criterion_main! expand to undocumented public items"
+)]
 mod criterion_glue {
     use super::*;
     criterion_group!(benches_grp, benches);

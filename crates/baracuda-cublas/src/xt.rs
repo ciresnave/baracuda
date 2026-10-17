@@ -75,7 +75,6 @@ impl Drop for XtHandle {
 /// Scalars supported by cuBLASXt GEMM.
 pub trait XtScalar: DeviceRepr + xt_sealed::Sealed {
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn xt_gemm_raw(
         h: cublasXtHandle_t,
         transa: Op,
@@ -203,7 +202,6 @@ mod xt_sealed {
 ///
 /// # Safety
 /// `a`/`b`/`c` must point to live host memory of the expected sizes.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn gemm<T: XtScalar>(
     handle: &XtHandle,
     transa: Op,

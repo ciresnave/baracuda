@@ -48,7 +48,6 @@ fn sat_cast_u4(x: f32) -> u8 {
 // CPU reference — U4 RCR Identity.
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
 fn cpu_u4_gemm_rcr_identity(
     m: usize,
     n: usize,

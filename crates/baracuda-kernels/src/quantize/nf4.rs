@@ -604,6 +604,10 @@ fn build_sku(act_kind: ElementKind, op: QuantizeKind) -> KernelSku {
 // FFI dispatch wrappers (cfg-gated on `bnb_nf4`)
 // =============================================================================
 
+#[allow(
+    clippy::extra_unused_type_parameters,
+    reason = "T keeps this stub's signature identical to the cfg-gated real variant (call sites use turbofish)"
+)]
 #[cfg(feature = "bnb_nf4")]
 #[inline]
 unsafe fn dispatch_dequant<T: Nf4Activation>(
@@ -639,7 +643,6 @@ unsafe fn dispatch_dequant<T: Nf4Activation>(
 #[inline]
 // `T` is unused in this feature-off stub but must match the `bnb_nf4` variant's
 // signature: call sites use turbofish (`dispatch_dequant::<T>`).
-#[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_dequant<T: Nf4Activation>(
     _: i32,
     _: i32,
@@ -654,6 +657,10 @@ unsafe fn dispatch_dequant<T: Nf4Activation>(
     3
 }
 
+#[allow(
+    clippy::extra_unused_type_parameters,
+    reason = "T keeps this stub's signature identical to the cfg-gated real variant (call sites use turbofish)"
+)]
 #[cfg(feature = "bnb_nf4")]
 #[inline]
 unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
@@ -685,7 +692,6 @@ unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
 #[inline]
 // `T` is unused in this feature-off stub but must match the `bnb_nf4` variant's
 // signature: call sites use turbofish (`dispatch_gemv_m1::<T>`).
-#[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
     _: i32,
     _: i32,
@@ -699,6 +705,10 @@ unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
     3
 }
 
+#[allow(
+    clippy::extra_unused_type_parameters,
+    reason = "T keeps this stub's signature identical to the cfg-gated real variant (call sites use turbofish)"
+)]
 #[cfg(feature = "bnb_nf4")]
 #[inline]
 unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
@@ -762,7 +772,6 @@ unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
 #[inline]
 // `T` is unused in this feature-off stub but must match the `bnb_nf4` variant's
 // signature: call sites use turbofish (`dispatch_gemv_multim::<T>`).
-#[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
     _: i32,
     _: i32,

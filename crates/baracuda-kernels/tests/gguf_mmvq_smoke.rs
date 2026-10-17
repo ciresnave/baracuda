@@ -12,7 +12,10 @@
 // GGUF block format names (Q2_K, Q3_K, ..., Q8_K) come from upstream
 // llama.cpp and are part of the public quantization vocabulary; keep
 // the capital `K` in test names.
-#![allow(non_snake_case)]
+#![allow(
+    non_snake_case,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};

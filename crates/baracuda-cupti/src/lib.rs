@@ -351,7 +351,6 @@ pub mod metric {
     /// # Safety
     /// `event_ids` and `event_values` must have equal length; `metric_value`
     /// must be a writable buffer sized for the metric's value type.
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn get_value(
         device: i32,
         metric: CUpti_MetricID,

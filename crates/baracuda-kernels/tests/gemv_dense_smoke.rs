@@ -42,7 +42,6 @@ use half::bf16;
 // `a`/`b`/`d_init` are storage slices covering all batch slots.
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
 fn cpu_gemv(
     n: usize,
     k: usize,
@@ -91,7 +90,6 @@ fn gpu_context() -> (Context, Stream) {
 // f32 harness — parameterized over n, k, batch, lds, strides, α/β.
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
 fn run_gemv_f32(
     n: i32,
     k: i32,

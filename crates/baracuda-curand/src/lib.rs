@@ -192,7 +192,10 @@ impl Generator {
         let mut handle: curandGenerator_t = core::ptr::null_mut();
         check(unsafe { cu(&mut handle, kind.raw()) })?;
         // !Sync on purpose: cuRAND generators are not thread-safe.
-        #[allow(clippy::arc_with_non_send_sync)]
+        #[allow(
+            clippy::arc_with_non_send_sync,
+            reason = "handle is deliberately !Send/!Sync; the Arc only provides cheap same-thread clones"
+        )]
         let inner = Arc::new(GeneratorInner { handle });
         Ok(Self { inner })
     }
@@ -266,7 +269,10 @@ impl Generator {
         let cu = c.curand_create_generator_host()?;
         let mut handle: curandGenerator_t = core::ptr::null_mut();
         check(unsafe { cu(&mut handle, kind.raw()) })?;
-        #[allow(clippy::arc_with_non_send_sync)]
+        #[allow(
+            clippy::arc_with_non_send_sync,
+            reason = "handle is deliberately !Send/!Sync; the Arc only provides cheap same-thread clones"
+        )]
         let inner = Arc::new(GeneratorInner { handle });
         Ok(Self { inner })
     }

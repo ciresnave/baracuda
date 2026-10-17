@@ -9,7 +9,12 @@
 //! loader + status enum; concrete contraction/permutation/reduction
 //! wrappers follow once CI has a cuTENSOR install.
 
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    reason = "names mirror the vendor C API (FFI bindings)"
+)]
 #![warn(missing_debug_implementations)]
 
 use std::sync::OnceLock;
@@ -110,7 +115,6 @@ pub type cutensorPlanPreference_t = *mut core::ffi::c_void;
 pub type cutensorPlan_t = *mut core::ffi::c_void;
 
 /// `cutensorDataType_t` — element type enum.
-#[allow(non_snake_case)]
 pub mod cutensorDataType {
     /// `CUTENSOR_R_16F` — real fp16.
     pub const R_16F: i32 = 2; // fp16
@@ -198,7 +202,6 @@ impl Cutensor {
 }
 
 /// `cutensorOperator_t` — element-wise op selector.
-#[allow(non_snake_case)]
 pub mod cutensorOperator {
     /// `CUTENSOR_OP_IDENTITY` — identity (pass-through).
     pub const IDENTITY: i32 = 1;
@@ -225,7 +228,6 @@ pub mod cutensorOperator {
 }
 
 /// `cutensorAlgo_t` — algorithm selector for contraction planning.
-#[allow(non_snake_case)]
 pub mod cutensorAlgo {
     /// `CUTENSOR_ALGO_DEFAULT` — library-chosen algorithm.
     pub const DEFAULT: i32 = -1;
@@ -238,7 +240,6 @@ pub mod cutensorAlgo {
 }
 
 /// `cutensorJitMode_t` — Just-in-time-compile selector (cuTENSOR 2.x).
-#[allow(non_snake_case)]
 pub mod cutensorJitMode {
     /// `CUTENSOR_JIT_MODE_NONE` — JIT compilation disabled.
     pub const NONE: i32 = 0;
@@ -247,7 +248,6 @@ pub mod cutensorJitMode {
 }
 
 /// `cutensorWorksizePreference_t`.
-#[allow(non_snake_case)]
 pub mod cutensorWorksizePreference {
     /// `CUTENSOR_WORKSPACE_MIN` — request minimum workspace.
     pub const MIN: i32 = 1;

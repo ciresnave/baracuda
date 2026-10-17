@@ -27,7 +27,6 @@ const L: usize = 4;
 const DIM: usize = 2;
 const DSTATE: usize = 4;
 
-#[allow(clippy::too_many_arguments)]
 fn run_fw_and_sum(
     ctx: &Context,
     stream: &Stream,

@@ -19,7 +19,6 @@ use crate::error::{Result, check};
 /// Dispatch trait for `gemm_batched` (fixed, non-strided pointer arrays).
 pub trait BatchedGemmScalar: DeviceRepr + batched_sealed::Sealed {
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn gemm_batched_raw(
         h: cublasHandle_t,
         transa: cublasOperation_t,
@@ -228,7 +227,6 @@ mod batched_sealed {
 /// All three pointer arrays must be on-device arrays of at least
 /// `batch_count` valid device pointers; each pointed-to matrix must have the
 /// expected shape.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn gemm_batched<T: BatchedGemmScalar>(
     handle: &crate::Handle,
     transa: Op,
@@ -276,7 +274,6 @@ pub unsafe fn gemm_batched<T: BatchedGemmScalar>(
 /// # Safety
 /// `alpha`/`beta`/`a`/`b`/`c` must point to valid, correctly-typed buffers
 /// (host for scalars in the default pointer mode, device for matrix data).
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn gemm_ex(
     handle: &crate::Handle,
     transa: Op,
@@ -330,7 +327,6 @@ pub unsafe fn gemm_ex(
 /// # Safety
 /// Same requirements as [`gemm_ex`] plus valid strides for all batch
 /// dimensions.
-#[allow(clippy::too_many_arguments)]
 pub unsafe fn gemm_strided_batched_ex(
     handle: &crate::Handle,
     transa: Op,

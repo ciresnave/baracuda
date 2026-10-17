@@ -298,7 +298,6 @@ unsafe fn copy_h2d_async(
     if bytes == 0 {
         return Ok(());
     }
-    #[allow(non_camel_case_types)]
     type CUresult = i32;
     unsafe extern "system" {
         fn cuMemcpyHtoDAsync_v2(
@@ -320,7 +319,6 @@ unsafe fn copy_d2h_async(dst: *mut c_void, src: u64, bytes: usize, stream: &Stre
     if bytes == 0 {
         return Ok(());
     }
-    #[allow(non_camel_case_types)]
     type CUresult = i32;
     unsafe extern "system" {
         fn cuMemcpyDtoHAsync_v2(

@@ -38,7 +38,6 @@ fn adaptive_avg_pool1d_8_to_4_f32() {
     // bespoke kernel uses per-output-cell variable windows; no single
     // (kernel, stride) pair represents the op. The deprecated getter
     // returns `(0, 0)` for source-compat.
-    #[allow(deprecated)]
     {
         assert_eq!(plan.derived_kernel_stride(), (0, 0));
     }

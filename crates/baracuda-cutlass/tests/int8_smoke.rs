@@ -90,7 +90,6 @@ fn sat_cast_u8(x: f32) -> u8 {
 /// vectors through the same routine; the CPU side does dequant
 /// arithmetic in `f32` to match the kernel's `ElementCompute = float`
 /// epilogue.
-#[allow(clippy::too_many_arguments)]
 fn cpu_int_gemm_rcr<TIn: Copy + Into<i32>, TBias: Copy>(
     m: usize,
     n: usize,

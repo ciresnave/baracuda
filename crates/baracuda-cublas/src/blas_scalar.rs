@@ -23,7 +23,6 @@ pub trait BlasScalar: DeviceRepr + sealed::Sealed {
     /// elements of `Self` respectively, using column-major storage with
     /// leading dimensions `lda`/`ldb`/`ldc`.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn gemm_raw(
         handle: cublasHandle_t,
         transa: cublasOperation_t,
@@ -55,7 +54,6 @@ pub trait BlasScalar: DeviceRepr + sealed::Sealed {
 
     /// Dispatch `cublas?gemmStridedBatched` for this element type.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     unsafe fn gemm_strided_batched_raw(
         handle: cublasHandle_t,
         transa: cublasOperation_t,
@@ -540,7 +538,6 @@ impl Op {
 ///
 /// Column-major: for a tightly packed `m×k` matrix with no transpose,
 /// `lda = m`.
-#[allow(clippy::too_many_arguments)]
 pub fn gemm<T: BlasScalar>(
     handle: &crate::Handle,
     transa: Op,
@@ -662,7 +659,6 @@ pub fn axpy<T: BlasScalar>(
 /// )?;
 /// # Ok(()) }
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn gemm_strided_batched<T: BlasScalar>(
     handle: &crate::Handle,
     transa: Op,
