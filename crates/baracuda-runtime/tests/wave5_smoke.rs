@@ -1,18 +1,25 @@
 //! Runtime Wave 5: arrays + tex/surf, 3D memcpy, launch-ex, profiler,
 //! VMM, multicast, green contexts.
 
+#[cfg(feature = "device-tests")]
 use baracuda_cuda_sys::runtime::types::{cudaChannelFormatKind, cudaExtent, cudaTextureDesc};
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::require_optional;
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::array::{Array, MipmappedArray, SurfaceObject, TextureObject, channel_desc};
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::launch_attr::LaunchExBuilder;
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::memcpy3d::Pitched3dBuffer;
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::{Device, Library, Stream, profiler, vmm};
 
+#[cfg(feature = "device-tests")]
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn array_2d_alloc_info_roundtrip() {
     Device::from_ordinal(0).set_current().unwrap();
     let desc = channel_desc(8, 0, 0, 0, cudaChannelFormatKind::UNSIGNED);
@@ -25,7 +32,7 @@ fn array_2d_alloc_info_roundtrip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn texture_object_round_trip() {
     Device::from_ordinal(0).set_current().unwrap();
     let desc = channel_desc(32, 0, 0, 0, cudaChannelFormatKind::FLOAT);
@@ -41,7 +48,7 @@ fn texture_object_round_trip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn surface_object_round_trip() {
     Device::from_ordinal(0).set_current().unwrap();
     let desc = channel_desc(32, 0, 0, 0, cudaChannelFormatKind::FLOAT);
@@ -53,7 +60,7 @@ fn surface_object_round_trip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn mipmapped_array_levels() {
     Device::from_ordinal(0).set_current().unwrap();
     let desc = channel_desc(8, 0, 0, 0, cudaChannelFormatKind::UNSIGNED);
@@ -70,7 +77,7 @@ fn mipmapped_array_levels() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn pitched_3d_buffer_alloc() {
     Device::from_ordinal(0).set_current().unwrap();
     let buf: Pitched3dBuffer<u32> = Pitched3dBuffer::new(64, 32, 8).unwrap();
@@ -82,7 +89,7 @@ fn pitched_3d_buffer_alloc() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn launch_ex_basic_vector_add() {
     Device::from_ordinal(0).set_current().unwrap();
     let stream = Stream::new().unwrap();
@@ -135,7 +142,7 @@ fn launch_ex_basic_vector_add() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn profiler_start_stop_no_error() {
     Device::from_ordinal(0).set_current().unwrap();
     profiler::start().unwrap();
@@ -146,7 +153,7 @@ fn profiler_start_stop_no_error() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn vmm_end_to_end() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -185,7 +192,7 @@ fn vmm_end_to_end() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn green_ctx_surface_is_feature_gated_or_works() {
     Device::from_ordinal(0).set_current().unwrap();
     // We don't have a cudaDevResourceDesc builder in the runtime crate

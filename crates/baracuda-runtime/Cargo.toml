@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-runtime"
-version = "0.0.1-alpha.124"
+version = "0.0.1-alpha.125"
 description = "Safe Rust wrappers for the CUDA Runtime API (devices, streams, events, managed memory, kernel launch via the library API)."
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,13 @@ categories.workspace = true
 
 [features]
 default = []
+
+# On-device integration tests (`tests/*`): built only with this feature, so a
+# plain `cargo test` never compiles or runs a test that needs a GPU. CI type-checks
+# them (`cargo clippy --tests --features device-tests`) and the self-hosted device
+# runner builds and RUNS them (`cargo gpu-test -p baracuda-runtime --features
+# device-tests`). See docs/DEVICE-TESTS.md.
+device-tests = []
 # Zero-cost interop with `baracuda-driver`. Enabled when the umbrella's
 # `driver + runtime` bundle is active.
 driver-interop = ["dep:baracuda-driver"]

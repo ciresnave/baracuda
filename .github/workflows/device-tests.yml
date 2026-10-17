@@ -48,6 +48,11 @@ jobs:
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cutlass.json
         run: cargo gpu-test -p baracuda-cutlass --features device-tests
+      - name: cargo gpu-test (baracuda-runtime, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-runtime.json
+        run: cargo gpu-test -p baracuda-runtime --features device-tests
       - name: Upload run record
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -57,4 +62,5 @@ jobs:
             device-test-results.json
             device-test-results-kernels.json
             device-test-results-cutlass.json
+            device-test-results-runtime.json
           if-no-files-found: error

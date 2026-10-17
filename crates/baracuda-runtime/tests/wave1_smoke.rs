@@ -1,6 +1,7 @@
 //! Runtime Wave 1: memory pools, 2D memcpy, host callbacks, write/wait
 //! value, pointer attributes, device properties, explicit graph nodes,
 //! graph exec update, func attrs.
+#![cfg(feature = "device-tests")]
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -13,7 +14,6 @@ use baracuda_runtime::{CaptureMode, Device, DeviceBuffer, Graph, Library, Stream
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn mempool_roundtrip() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -68,7 +68,6 @@ fn mempool_roundtrip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn default_and_current_pool_queries() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -79,7 +78,6 @@ fn default_and_current_pool_queries() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pitched_2d_roundtrip() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -108,7 +106,6 @@ fn pitched_2d_roundtrip() {
 static HOST_CALLBACK_FIRED: AtomicU32 = AtomicU32::new(0);
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_launch_host_func() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -125,7 +122,6 @@ fn stream_launch_host_func() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_write_value_32() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -152,7 +148,6 @@ fn stream_write_value_32() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pointer_attributes_classifies_device_memory() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -164,7 +159,6 @@ fn pointer_attributes_classifies_device_memory() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pointer_attributes_classifies_host_pinned() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -176,7 +170,6 @@ fn pointer_attributes_classifies_host_pinned() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn device_properties_reads_nonzero_fields() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -201,7 +194,6 @@ fn device_properties_reads_nonzero_fields() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn func_attributes_returns_kernel_metadata() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -225,7 +217,6 @@ unsafe extern "C" fn bump_counter(_: *mut c_void) {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn explicit_graph_kernel_and_host_nodes() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -292,7 +283,6 @@ fn explicit_graph_kernel_and_host_nodes() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn graph_exec_update_retargets_output() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -353,7 +343,6 @@ fn graph_exec_update_retargets_output() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn capture_mode_enum_also_works() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();

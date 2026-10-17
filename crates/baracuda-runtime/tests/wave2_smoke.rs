@@ -1,17 +1,23 @@
 //! Runtime Wave 2: arrays + tex/surf sys, user objects, cooperative
 //! launch, stream attach/attrs, IPC, device-flag config.
 
+#[cfg(feature = "device-tests")]
 use core::ffi::c_void;
+#[cfg(feature = "device-tests")]
 use std::sync::atomic::{AtomicU32, Ordering};
 
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::ipc;
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::user_object::UserObject;
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::{Device, DeviceBuffer, Event, Graph, Stream, get_device_flags, memory};
 
+#[cfg(feature = "device-tests")]
 static DESTRUCTOR_RAN: AtomicU32 = AtomicU32::new(0);
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn user_object_destructor_fires() {
     Device::from_ordinal(0).set_current().unwrap();
     DESTRUCTOR_RAN.store(0, Ordering::SeqCst);
@@ -35,7 +41,7 @@ fn user_object_destructor_fires() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn stream_attach_mem_and_copy_attrs() {
     Device::from_ordinal(0).set_current().unwrap();
     let s1 = Stream::new().unwrap();
@@ -56,7 +62,7 @@ fn stream_attach_mem_and_copy_attrs() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn device_flags_round_trip() {
     Device::from_ordinal(0).set_current().unwrap();
     // Calling set_device_flags after context creation typically returns
@@ -71,7 +77,7 @@ fn device_flags_round_trip() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn ipc_symbols_resolve_gracefully() {
     Device::from_ordinal(0).set_current().unwrap();
 

@@ -1,7 +1,11 @@
 # On-device tests
 
 Tests that need an NVIDIA GPU are **not** `#[ignore]`d. In a migrated crate (`baracuda-driver`,
+<<<<<<< HEAD
 `baracuda-kernels`, `baracuda-cutlass`) they sit behind the crate's `device-tests` cargo feature, and three
+=======
+`baracuda-kernels`, `baracuda-runtime`) they sit behind the crate's `device-tests` cargo feature, and three
+>>>>>>> ed330774 (test(runtime): retire #[ignore] behind device-tests)
 things keep that from being a way to hide them:
 
 1. **Type-checked on every PR.** CI runs

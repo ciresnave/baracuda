@@ -1,16 +1,21 @@
 //! Runtime Wave 3: batch mem ops, conditional graph handles,
 //! driver-entry-point bridge, occupancy-with-flags + available-smem.
 
+#[cfg(feature = "device-tests")]
 use baracuda_cuda_sys::types::{CUdeviceptr, CUstreamBatchMemOpParams, CUstreamWriteValue_flags};
 
+#[cfg(feature = "device-tests")]
 use baracuda_driver::require_optional;
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::driver_entry::{self, DriverEntryPoint};
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::{Device, DeviceBuffer, Graph, Library, Stream};
 
+#[cfg(feature = "device-tests")]
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn stream_batch_mem_op_write_and_readback() {
     Device::from_ordinal(0).set_current().unwrap();
     let stream = Stream::new().unwrap();
@@ -56,7 +61,7 @@ fn stream_batch_mem_op_write_and_readback() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn occupancy_with_flags_and_available_smem() {
     Device::from_ordinal(0).set_current().unwrap();
     let lib = Library::load_ptx(VECTOR_ADD_PTX).unwrap();
@@ -78,7 +83,7 @@ fn occupancy_with_flags_and_available_smem() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn driver_entry_point_resolves_known_symbol() {
     Device::from_ordinal(0).set_current().unwrap();
     let DriverEntryPoint { fn_ptr, status } =
@@ -89,7 +94,7 @@ fn driver_entry_point_resolves_known_symbol() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
+#[cfg(feature = "device-tests")]
 fn conditional_handle_requires_12_3() {
     Device::from_ordinal(0).set_current().unwrap();
     let graph = Graph::new().unwrap();

@@ -268,6 +268,10 @@ jobs:
       # stale run is caught by device-tests-detector.yml. See docs/DEVICE-TESTS.md.
       - name: clippy device-tests targets (type-check, CUDA-free)
         run: cargo clippy --locked -p baracuda-driver --tests --features device-tests -- -D warnings
+      - name: clippy baracuda-runtime --tests (device-tests off / on)
+        run: |
+          cargo clippy --locked -p baracuda-runtime --tests -- -D warnings
+          cargo clippy --locked -p baracuda-runtime --tests --features device-tests -- -D warnings
 
   msrv-driver-free:
     name: MSRV 1.85 (driver-free surface)

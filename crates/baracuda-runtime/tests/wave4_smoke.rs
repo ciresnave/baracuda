@@ -8,6 +8,7 @@
 //! 2. Exercise `cudaGLGetDevices` with no current GL context — should
 //!    return an empty list, not panic.
 
+#[cfg(feature = "device-tests")]
 use baracuda_runtime::graphics::gl;
 
 #[test]
@@ -83,7 +84,7 @@ fn runtime_wave4_nvsci_symbols_resolve() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU (safe even with no GL context)"]
+#[cfg(feature = "device-tests")]
 fn gl_get_devices_without_context_is_empty() {
     use baracuda_runtime::Device;
     Device::from_ordinal(0).set_current().unwrap();

@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.125 - 2026-10-16 (Test: retire #[ignore] in baracuda-runtime)
+
+Workspace alpha.125 (proposed; PM allocates at gate).
+
+- baracuda-runtime device tests now behind the device-tests feature (59 run on the sm_89 device runner: 0 failed; 3 declared skips for exports absent on this Windows box).
+
 ## 0.0.1-alpha.124 - 2026-10-16 (CI: --locked for tools/kiss-ref-diff (SUP-001))
 
 Workspace alpha.124 (proposed; PM allocates at gate).

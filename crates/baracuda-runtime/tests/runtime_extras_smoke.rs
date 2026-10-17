@@ -1,6 +1,7 @@
 //! Additional GPU-gated smoke tests for the runtime-API safe wrapper —
 //! covers stream priority, peer access, managed / pinned / async memory,
 //! mem prefetch/advise, graph capture, occupancy, and func attrs.
+#![cfg(feature = "device-tests")]
 
 use baracuda_runtime::memory::{self, PrefetchTarget};
 use baracuda_runtime::{
@@ -10,7 +11,6 @@ use baracuda_runtime::{
 const VECTOR_ADD_PTX: &str = include_str!("kernels/vector_add.ptx");
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_priority_and_wait_event() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -33,7 +33,6 @@ fn stream_priority_and_wait_event() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn self_peer_access_query() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -42,7 +41,6 @@ fn self_peer_access_query() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn managed_buffer_and_prefetch_advise() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -79,7 +77,6 @@ fn managed_buffer_and_prefetch_advise() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn pinned_host_alloc_and_device_ptr() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -99,7 +96,6 @@ fn pinned_host_alloc_and_device_ptr() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn async_alloc_round_trip() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -120,7 +116,6 @@ fn async_alloc_round_trip() {
 /// explicit `free_async`) reclaims via `cudaFreeAsync` on the retained
 /// stream — the implicit stream-ordered free Fuel's async dispatch relies on.
 #[test]
-#[ignore = "requires an NVIDIA GPU + CUDA 11.2+"]
 fn zeros_async_and_implicit_stream_drop() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -156,7 +151,6 @@ fn zeros_async_and_implicit_stream_drop() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn stream_capture_and_replay_vector_add() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -213,7 +207,6 @@ fn stream_capture_and_replay_vector_add() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn kernel_occupancy_and_attributes() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
@@ -227,7 +220,6 @@ fn kernel_occupancy_and_attributes() {
 }
 
 #[test]
-#[ignore = "requires an NVIDIA GPU"]
 fn mem_get_info_reports_nonzero_totals() {
     let device = Device::from_ordinal(0);
     device.set_current().unwrap();
