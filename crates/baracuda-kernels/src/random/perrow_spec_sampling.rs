@@ -10,12 +10,16 @@
 //!
 //! Both require the `flashinfer` cargo feature for `run`.
 
+#[cfg(feature = "flashinfer")]
+use crate::attention::map_status;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ElementKind, KernelSku, MathPrecision, OpCategory, PlanPreference,
     PrecisionGuarantee, RandomKind, TensorMut, TensorRef, Workspace,
 };
+#[cfg(feature = "flashinfer")]
+use core::ffi::c_void;
 
 /// Which per-row sampler to run (thresholds supplied as device arrays in
 /// the args, not the descriptor).

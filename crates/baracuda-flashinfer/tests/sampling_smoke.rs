@@ -10,10 +10,11 @@
 //!      Phase 46 deferral ("sampler vs reference") for the deterministic
 //!      case.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `flashinfer` cargo feature.
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::sampling::{
@@ -30,7 +31,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn sampling_plan_select_validates() {
     let (_ctx, stream) = setup();
     let mk = |sampler| TopKTopPSamplingDescriptor {
@@ -101,7 +101,6 @@ fn sampling_plan_select_validates() {
 /// A one-hot probability row admits exactly one token; every sampler
 /// must return its index, for any seed.
 #[test]
-#[ignore]
 fn sampling_one_hot_is_deterministic() {
     let (ctx, stream) = setup();
 

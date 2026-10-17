@@ -1,7 +1,8 @@
 //! Smoke tests for per-row sampling + speculative-decode verification —
-//! Phase 66 Tier 2. `#[ignore]` + `flashinfer` feature.
+//! Phase 66 Tier 2. gated behind the `device-tests` feature + `flashinfer` feature.
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::sampling::{
@@ -21,7 +22,6 @@ fn setup() -> (Context, Stream) {
 /// Per-row top-K+top-P over one-hot rows must return each row's hot index
 /// (per-row top_k=1 i32 array, per-row top_p=1.0 f32 array).
 #[test]
-#[ignore]
 fn perrow_top_k_top_p_one_hot() {
     let (ctx, stream) = setup();
     const VOCAB: usize = 16;
@@ -90,7 +90,6 @@ fn perrow_top_k_top_p_one_hot() {
 /// Standalone per-row top-K (i32 array, converted to float internally) over
 /// one-hot rows must return each row's hot index.
 #[test]
-#[ignore]
 fn perrow_top_k_one_hot() {
     let (ctx, stream) = setup();
     const VOCAB: usize = 16;
@@ -149,7 +148,6 @@ fn perrow_top_k_one_hot() {
 /// Identical draft + target one-hot distributions ⇒ every draft token is
 /// accepted; the bonus token is sampled from the target's extra step.
 #[test]
-#[ignore]
 fn speculative_all_accept() {
     let (ctx, stream) = setup();
     const VOCAB: usize = 4;

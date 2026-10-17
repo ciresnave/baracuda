@@ -1,7 +1,8 @@
 //! Smoke test for the bespoke token-penalty logit transform — Phase 66
 //! Tier 2. Native baracuda op (not behind the `flashinfer` feature).
 //!
-//! `#[ignore]` by default — requires a real CUDA device.
+//! Gated behind the `device-tests` feature — requires a real CUDA device.
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::sampling::{TokenPenaltyArgs, TokenPenaltyDescriptor, TokenPenaltyPlan};
@@ -16,7 +17,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn token_penalty_closed_form() {
     let (ctx, stream) = setup();
 

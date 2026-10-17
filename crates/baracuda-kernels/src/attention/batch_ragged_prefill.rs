@@ -20,6 +20,10 @@
 //! `head_dim ∈ {64,128,256}`, integer GQA, `T ∈ {f16, bf16}`, causal or
 //! full, optional KV-split, synchronous `run`.
 
+#[cfg(feature = "flashinfer")]
+use super::map_status;
+#[cfg(feature = "flashinfer")]
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};

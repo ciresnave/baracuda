@@ -11,10 +11,11 @@
 //!      of Q / K). This is the Phase 46 deferral ("decode output vs
 //!      reference") closed for the minimal case.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `flashinfer` cargo feature.
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
@@ -35,7 +36,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn paged_decode_plan_select_validates() {
     let (_ctx, stream) = setup();
     let paged = PagedKvCacheDescriptor {
@@ -87,7 +87,6 @@ fn paged_decode_plan_select_validates() {
 /// (= 1.0), so the decode output equals that token's V vector exactly
 /// (up to f16 rounding), regardless of Q / K. A clean closed-form check.
 #[test]
-#[ignore]
 fn paged_decode_single_token_equals_v() {
     let (ctx, stream) = setup();
 

@@ -41,12 +41,16 @@
 //!   sample was accepted; 0 means rejection sampling timed out and
 //!   the caller should re-draw with a fresh seed.
 
+#[cfg(feature = "flashinfer")]
+use crate::attention::map_status;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, ElementKind, KernelSku, MathPrecision, OpCategory, PlanPreference,
     PrecisionGuarantee, RandomKind, TensorMut, TensorRef, Workspace,
 };
+#[cfg(feature = "flashinfer")]
+use core::ffi::c_void;
 
 /// Which sort-free sampler to run.
 ///

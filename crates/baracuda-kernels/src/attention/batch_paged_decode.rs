@@ -51,6 +51,8 @@
 //! allocator (`BlockManager` / `BlockTable` in vLLM terminology). This
 //! plan only consumes the page table once it's been built.
 
+#[cfg(feature = "flashinfer")]
+use super::map_status;
 use core::ffi::c_void;
 use core::marker::PhantomData;
 

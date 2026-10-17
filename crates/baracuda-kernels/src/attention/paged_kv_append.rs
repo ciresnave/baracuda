@@ -14,6 +14,10 @@
 //!   must allocate a new page and extend `indices` / `indptr` BEFORE
 //!   the next call.
 
+#[cfg(feature = "flashinfer")]
+use super::map_status;
+#[cfg(feature = "flashinfer")]
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};

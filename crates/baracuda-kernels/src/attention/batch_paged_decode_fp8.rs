@@ -14,6 +14,8 @@
 //! 256}`, integer GQA, Q/O ∈ {f16, bf16}, RoPE applied before the cache,
 //! no mask / sliding-window / soft-cap / ALiBi. Same auxiliary workspace.
 
+#[cfg(feature = "flashinfer")]
+use super::map_status;
 use core::ffi::c_void;
 use core::marker::PhantomData;
 

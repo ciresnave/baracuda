@@ -44,6 +44,10 @@
 //! in v1 (it syncs the stream before returning). Prefill is not the
 //! per-token hot path, so this is acceptable.
 
+#[cfg(feature = "flashinfer")]
+use super::map_status;
+#[cfg(feature = "flashinfer")]
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};

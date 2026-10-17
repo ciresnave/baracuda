@@ -48,6 +48,11 @@ jobs:
         env:
           BARACUDA_RESULTS_FILE: device-test-results-cutlass.json
         run: cargo gpu-test -p baracuda-cutlass --features device-tests
+      - name: cargo gpu-test (baracuda-flashinfer, device-tests)
+        shell: bash
+        env:
+          BARACUDA_RESULTS_FILE: device-test-results-flashinfer.json
+        run: cargo gpu-test -p baracuda-flashinfer --features flashinfer,device-tests
       - name: cargo gpu-test (baracuda-runtime, device-tests)
         shell: bash
         env:
@@ -62,5 +67,6 @@ jobs:
             device-test-results.json
             device-test-results-kernels.json
             device-test-results-cutlass.json
+            device-test-results-flashinfer.json
             device-test-results-runtime.json
           if-no-files-found: error

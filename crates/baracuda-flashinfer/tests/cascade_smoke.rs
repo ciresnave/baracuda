@@ -9,10 +9,11 @@
 //!      `s + 1` (since `log2(1 + 1) = 1`). Closes the Phase 46 deferral
 //!      ("cascade vs CPU LSE-merge formula") for the symmetric case.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `flashinfer` cargo feature.
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
@@ -33,7 +34,6 @@ fn setup() -> (Context, Stream) {
 }
 
 #[test]
-#[ignore]
 fn cascade_plan_select_validates() {
     let (_ctx, stream) = setup();
     let desc = CascadeAttentionDescriptor {
@@ -56,7 +56,6 @@ fn cascade_plan_select_validates() {
 /// Equal base-2 LSE on both sides → merged `v` is the mean, merged LSE
 /// is `s + 1`.
 #[test]
-#[ignore]
 fn cascade_equal_lse_averages() {
     let (ctx, stream) = setup();
 
@@ -129,7 +128,6 @@ fn cascade_equal_lse_averages() {
 }
 
 #[test]
-#[ignore]
 fn cascade_merge_states_select_validates() {
     let (_ctx, stream) = setup();
     let desc = CascadeMergeStatesDescriptor {
@@ -161,7 +159,6 @@ fn cascade_merge_states_select_validates() {
 /// N `v` vectors, merged LSE = s + log2(N). Closed-form check of the
 /// `MergeStates` path (Phase 66).
 #[test]
-#[ignore]
 fn cascade_merge_states_equal_lse_averages() {
     let (ctx, stream) = setup();
 

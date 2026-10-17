@@ -6,10 +6,11 @@
 //! attended V vectors — independent of Q. That gives exact references for
 //! both the non-causal (attend all) and causal (attend prefix) paths.
 //!
-//! `#[ignore]` by default — requires a real CUDA device + the
+//! Gated behind the `device-tests` feature — requires a real CUDA device + the
 //! `flashinfer` cargo feature.
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
@@ -32,7 +33,6 @@ fn setup() -> (Context, Stream) {
 const HEAD_DIM: usize = 128;
 
 #[test]
-#[ignore]
 fn paged_prefill_plan_select_validates() {
     let (_ctx, stream) = setup();
     let paged = PagedKvCacheDescriptor {
@@ -207,7 +207,6 @@ fn run_prefill(
 
 /// Non-causal: every query attends all KV → output = mean(V) for all rows.
 #[test]
-#[ignore]
 fn paged_prefill_uniform_key_non_causal_is_mean() {
     let (ctx, stream) = setup();
     let v_vals = [1.0f32, 3.0];
@@ -227,7 +226,6 @@ fn paged_prefill_uniform_key_non_causal_is_mean() {
 /// Causal (right-aligned): with qo_len == kv_len, query row i attends
 /// KV[0..=i]. With identical keys, row i's output = mean(V[0..=i]).
 #[test]
-#[ignore]
 fn paged_prefill_uniform_key_causal_is_prefix_mean() {
     let (ctx, stream) = setup();
     let v_vals = [1.0f32, 3.0];
@@ -253,7 +251,6 @@ fn paged_prefill_uniform_key_causal_is_prefix_mean() {
 /// is the regime the scheduler splits; uniform keys ⇒ output = mean(V),
 /// independent of the split decision. We assert split == no-split == mean.
 #[test]
-#[ignore]
 fn paged_prefill_kv_split_matches_no_split() {
     let (ctx, stream) = setup();
     // 1 query row, 512 KV tokens, identical keys, V[t] = (t % 4) as a value.

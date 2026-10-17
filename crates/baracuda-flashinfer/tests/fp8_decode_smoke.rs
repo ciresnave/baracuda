@@ -1,5 +1,5 @@
 //! Smoke tests for FP8 KV-cache paged decode — Phase 66 Tier 2.
-//! `#[ignore]` + `flashinfer` feature.
+//! Gated behind the `device-tests` feature + `flashinfer` feature.
 //!
 //! With a single KV token the softmax is over one score, so the decode
 //! output equals that token's (dequantized) V vector. Storing V as the
@@ -7,6 +7,7 @@
 //! reference of 1.0.
 
 #![cfg(feature = "flashinfer")]
+#![cfg(feature = "device-tests")]
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_flashinfer::attention::{
@@ -30,7 +31,6 @@ const HEAD_DIM: usize = 128;
 const E4M3_ONE: u8 = 0x38;
 
 #[test]
-#[ignore]
 fn fp8_decode_plan_select_validates() {
     let (_ctx, stream) = setup();
     let desc = BatchPagedDecodeFp8Descriptor {
@@ -56,7 +56,6 @@ fn fp8_decode_plan_select_validates() {
 }
 
 #[test]
-#[ignore]
 fn fp8_decode_single_token_equals_v() {
     let (ctx, stream) = setup();
     let desc = BatchPagedDecodeFp8Descriptor {
