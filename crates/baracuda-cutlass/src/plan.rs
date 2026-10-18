@@ -5443,7 +5443,17 @@ impl<'a, T: CutlassElement> PreparedGroupedGemm<'a, T> {
     /// Uploads the packed metadata to the start of `workspace` via async
     /// H2D on `stream`, then enqueues the grouped kernel using the
     /// remainder of the workspace as CUTLASS internal scratch.
-    pub fn run(&self, stream: &Stream, workspace: Workspace<'_>) -> Result<()> {
+    ///
+    /// # Safety
+    ///
+    /// The metadata upload is an asynchronous copy out of this struct's pinned
+    /// buffer, and the packed pointer arrays name the input / output device
+    /// buffers by raw address. The caller must keep `self` and every device
+    /// buffer passed to [`prepare`](GroupedGemmPlan::prepare) alive, and not
+    /// mutate them, until all work enqueued on `stream` by this call has
+    /// completed (stream synchronize), and for as long as any graph captured
+    /// from this launch can be replayed (see the type-level lifetime contract).
+    pub unsafe fn run(&self, stream: &Stream, workspace: Workspace<'_>) -> Result<()> {
         let needed = self.workspace_size();
         let workspace_slice = match workspace {
             Workspace::None => {
@@ -5470,7 +5480,9 @@ impl<'a, T: CutlassElement> PreparedGroupedGemm<'a, T> {
         {
             let mut workspace_for_meta = workspace_slice;
             let metadata_dst = workspace_for_meta.slice_mut(0..self.layout.metadata_end);
-            metadata_dst.copy_from_host_async(&self.pinned, stream)?;
+            // SAFETY: `self.pinned` lives as long as `self`, which the caller of this
+            // `unsafe fn` must keep alive until the stream work completes (see `# Safety`).
+            unsafe { metadata_dst.copy_from_host_async(&self.pinned, stream) }?;
         }
 
         // Compute device pointers via base + offset arithmetic. The C

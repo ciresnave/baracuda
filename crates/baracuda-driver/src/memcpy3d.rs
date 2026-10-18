@@ -240,7 +240,15 @@ impl Array3D {
     /// Async variant of [`Array3D::copy_from_host`] on `stream`.
     /// Note: CUDA requires the host buffer to be pinned for real async
     /// behavior — otherwise the driver falls back to a sync copy.
-    pub fn copy_from_host_async<T: DeviceRepr>(&self, host: &[T], stream: &Stream) -> Result<()> {
+    ///
+    /// # Safety
+    ///
+    /// `host` must stay valid until the copy has *completed* on `stream` (synchronize the stream,
+    /// or wait on an event recorded after the copy). The Rust borrow ends when this call returns,
+    /// but with page-locked memory (`PinnedBuffer` / `PinnedRegistration`) the DMA runs afterwards:
+    /// dropping, moving, or writing the host slice before completion is a use-after-free / data
+    /// race. The driver stages pageable memory itself, but do not rely on that.
+    pub unsafe fn copy_from_host_async<T: DeviceRepr>(&self, host: &[T], stream: &Stream) -> Result<()> {
         assert_eq!(size_of::<T>(), self.bytes_per_element());
         assert_eq!(host.len(), self.inner.width * self.slice_count());
         let d = driver()?;

@@ -205,7 +205,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         let mut workspace: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, prepared.workspace_size())?;
-        prepared.run(&stream, Workspace::Borrowed(workspace.as_slice_mut()))?;
+        // SAFETY: `prepared`, `workspace` and the expert buffers outlive the
+        // synchronizing `copy_to_host` calls below that read the result.
+        unsafe { prepared.run(&stream, Workspace::Borrowed(workspace.as_slice_mut())) }?;
 
         let tol = (k as f32) * 5e-3;
         for (e, &m) in token_counts.iter().enumerate() {

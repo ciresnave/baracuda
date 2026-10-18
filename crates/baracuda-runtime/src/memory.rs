@@ -104,7 +104,15 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
     }
 
     /// Asynchronous H2D copy on `stream`.
-    pub fn copy_from_host_async(&self, src: &[T], stream: &Stream) -> Result<()> {
+    ///
+    /// # Safety
+    ///
+    /// `src` must stay valid until the copy has *completed* on `stream` (synchronize the stream,
+    /// or wait on an event recorded after the copy). The Rust borrow ends when this call returns,
+    /// but with page-locked memory (`PinnedBuffer` / `PinnedRegistration`) the DMA runs afterwards:
+    /// dropping, moving, or writing the host slice before completion is a use-after-free / data
+    /// race. The driver stages pageable memory itself, but do not rely on that.
+    pub unsafe fn copy_from_host_async(&self, src: &[T], stream: &Stream) -> Result<()> {
         assert_eq!(src.len(), self.len);
         let r = runtime()?;
         let cu = r.cuda_memcpy_async()?;
@@ -121,7 +129,15 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
     }
 
     /// Asynchronous D2H copy on `stream`.
-    pub fn copy_to_host_async(&self, dst: &mut [T], stream: &Stream) -> Result<()> {
+    ///
+    /// # Safety
+    ///
+    /// `dst` must stay valid until the copy has *completed* on `stream` (synchronize the stream,
+    /// or wait on an event recorded after the copy). The Rust borrow ends when this call returns,
+    /// but with page-locked memory (`PinnedBuffer` / `PinnedRegistration`) the DMA runs afterwards:
+    /// dropping, moving, or reading the host slice before completion is a use-after-free / data
+    /// race. The driver stages pageable memory itself, but do not rely on that.
+    pub unsafe fn copy_to_host_async(&self, dst: &mut [T], stream: &Stream) -> Result<()> {
         assert_eq!(dst.len(), self.len);
         let r = runtime()?;
         let cu = r.cuda_memcpy_async()?;

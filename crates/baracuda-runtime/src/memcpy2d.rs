@@ -145,7 +145,15 @@ pub fn copy_d_to_h_2d<T: DeviceRepr>(
 }
 
 /// Async variant of [`copy_h_to_d_2d`].
-pub fn copy_h_to_d_2d_async<T: DeviceRepr>(
+///
+/// # Safety
+///
+/// `src` must stay valid until the copy has *completed* on `stream` (synchronize the stream,
+/// or wait on an event recorded after the copy). The Rust borrow ends when this call returns,
+/// but with page-locked memory (`PinnedBuffer` / `PinnedRegistration`) the DMA runs afterwards:
+/// dropping, moving, or writing the host slice before completion is a use-after-free / data
+/// race. The driver stages pageable memory itself, but do not rely on that.
+pub unsafe fn copy_h_to_d_2d_async<T: DeviceRepr>(
     src: &[T],
     src_host_pitch_bytes: usize,
     dst: &PitchedBuffer<T>,

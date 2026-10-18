@@ -272,7 +272,25 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
     }
 
     /// Asynchronous H2D copy on `stream`. No-op on empty buffers.
-    pub fn copy_from_host_async(&self, src: &[T], stream: &Stream) -> Result<()> {
+    ///
+    /// # Safety
+    ///
+    /// `src` must stay valid until the copy has *completed* on `stream` (synchronize the stream,
+    /// or wait on an event recorded after the copy). The Rust borrow ends when this call returns,
+    /// but with page-locked memory (`PinnedBuffer` / `PinnedRegistration`) the DMA runs afterwards:
+    /// dropping, moving, or writing the host slice before completion is a use-after-free / data
+    /// race. The driver stages pageable memory itself, but do not rely on that.
+    ///
+    /// Calling it without an `unsafe` block must not compile (regression test for the
+    /// removed safe signature):
+    ///
+    /// ```compile_fail,E0133
+    /// # use baracuda_driver::{DeviceBuffer, Stream};
+    /// fn f(buf: &DeviceBuffer<f32>, src: &[f32], stream: &Stream) {
+    ///     let _ = buf.copy_from_host_async(src, stream);
+    /// }
+    /// ```
+    pub unsafe fn copy_from_host_async(&self, src: &[T], stream: &Stream) -> Result<()> {
         assert_eq!(src.len(), self.len);
         let bytes = self.len * size_of::<T>();
         if bytes == 0 {
@@ -291,7 +309,25 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
     }
 
     /// Asynchronous D2H copy on `stream`. No-op on empty buffers.
-    pub fn copy_to_host_async(&self, dst: &mut [T], stream: &Stream) -> Result<()> {
+    ///
+    /// # Safety
+    ///
+    /// `dst` must stay valid until the copy has *completed* on `stream` (synchronize the stream,
+    /// or wait on an event recorded after the copy). The Rust borrow ends when this call returns,
+    /// but with page-locked memory (`PinnedBuffer` / `PinnedRegistration`) the DMA runs afterwards:
+    /// dropping, moving, or reading the host slice before completion is a use-after-free / data
+    /// race. The driver stages pageable memory itself, but do not rely on that.
+    ///
+    /// Calling it without an `unsafe` block must not compile (regression test for the
+    /// removed safe signature):
+    ///
+    /// ```compile_fail,E0133
+    /// # use baracuda_driver::{DeviceBuffer, Stream};
+    /// fn f(buf: &DeviceBuffer<f32>, dst: &mut [f32], stream: &Stream) {
+    ///     let _ = buf.copy_to_host_async(dst, stream);
+    /// }
+    /// ```
+    pub unsafe fn copy_to_host_async(&self, dst: &mut [T], stream: &Stream) -> Result<()> {
         assert_eq!(dst.len(), self.len);
         let bytes = self.len * size_of::<T>();
         if bytes == 0 {
@@ -1176,7 +1212,15 @@ impl<'a, T: DeviceRepr> DeviceSliceMut<'a, T> {
     /// for slice views — useful when the destination is a sub-range of a
     /// larger device buffer (e.g. packing CUTLASS grouped-GEMM metadata
     /// into a caller-supplied workspace).
-    pub fn copy_from_host_async(&self, src: &[T], stream: &Stream) -> Result<()> {
+    ///
+    /// # Safety
+    ///
+    /// `src` must stay valid until the copy has *completed* on `stream` (synchronize the stream,
+    /// or wait on an event recorded after the copy). The Rust borrow ends when this call returns,
+    /// but with page-locked memory (`PinnedBuffer` / `PinnedRegistration`) the DMA runs afterwards:
+    /// dropping, moving, or writing the host slice before completion is a use-after-free / data
+    /// race. The driver stages pageable memory itself, but do not rely on that.
+    pub unsafe fn copy_from_host_async(&self, src: &[T], stream: &Stream) -> Result<()> {
         assert_eq!(src.len(), self.len);
         let bytes = self.len * size_of::<T>();
         if bytes == 0 {

@@ -148,8 +148,9 @@ fn grouped_gemm_f16_moe_4_experts() {
     let mut workspace: DeviceBuffer<u8> =
         DeviceBuffer::zeros(&ctx, workspace_bytes).expect("alloc workspace");
 
-    prepared
-        .run(&stream, Workspace::Borrowed(workspace.as_slice_mut()))
+    // SAFETY: `prepared`, `workspace` and the groups' device buffers all outlive
+    // the copy_to_host (a synchronizing copy) that reads the result below.
+    unsafe { prepared.run(&stream, Workspace::Borrowed(workspace.as_slice_mut())) }
         .expect("grouped run");
 
     // Drop groups before reading dev_d (the groups borrow dev_d mutably).
@@ -270,8 +271,9 @@ fn grouped_gemm_bf16_moe_3_experts() {
     let workspace_bytes = prepared.workspace_size();
     let mut workspace: DeviceBuffer<u8> =
         DeviceBuffer::zeros(&ctx, workspace_bytes).expect("alloc workspace");
-    prepared
-        .run(&stream, Workspace::Borrowed(workspace.as_slice_mut()))
+    // SAFETY: `prepared`, `workspace` and the groups' device buffers all outlive
+    // the copy_to_host (a synchronizing copy) that reads the result below.
+    unsafe { prepared.run(&stream, Workspace::Borrowed(workspace.as_slice_mut())) }
         .expect("grouped run");
 
     drop(groups);
@@ -408,8 +410,8 @@ fn grouped_gemm_capture_replay() {
     // pointers) must outlive any replay of `exec`.
     let graph = stream
         .capture(CaptureMode::ThreadLocal, |s| {
-            prepared
-                .run(s, Workspace::Borrowed(workspace.as_slice_mut()))
+            // SAFETY: `prepared`, `workspace` and `dev_*` outlive every replay of `exec`.
+            unsafe { prepared.run(s, Workspace::Borrowed(workspace.as_slice_mut())) }
                 .expect("grouped run inside capture");
             Ok(())
         })

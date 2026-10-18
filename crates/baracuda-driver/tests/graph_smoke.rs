@@ -82,10 +82,12 @@ fn async_alloc_roundtrip() {
 
     // Async allocate on `stream`, async-copy data, async-free.
     let buf = DeviceBuffer::<f32>::new_async(&ctx, n, &stream).unwrap();
-    buf.copy_from_host_async(&host, &stream).unwrap();
+    // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+    unsafe { buf.copy_from_host_async(&host, &stream) }.unwrap();
 
     let mut back = vec![0.0f32; n];
-    buf.copy_to_host_async(&mut back, &stream).unwrap();
+    // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+    unsafe { buf.copy_to_host_async(&mut back, &stream) }.unwrap();
 
     // Explicit async free (consumes buf so the sync Drop won't also run).
     buf.free_async(&stream).expect("cuMemFreeAsync");
@@ -122,8 +124,10 @@ fn async_drop_is_stream_ordered() {
         // (→ cuMemFreeAsync) while the kernel is still pending on the stream.
         let d_a = DeviceBuffer::<f32>::new_async(&ctx, n as usize, &stream).unwrap();
         let d_b = DeviceBuffer::<f32>::new_async(&ctx, n as usize, &stream).unwrap();
-        d_a.copy_from_host_async(&a, &stream).unwrap();
-        d_b.copy_from_host_async(&b, &stream).unwrap();
+        // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+        unsafe { d_a.copy_from_host_async(&a, &stream) }.unwrap();
+        // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+        unsafe { d_b.copy_from_host_async(&b, &stream) }.unwrap();
 
         // SAFETY: arg types/order match the PTX signature.
         unsafe {
@@ -144,7 +148,8 @@ fn async_drop_is_stream_ordered() {
     }
 
     let mut got = vec![0.0f32; n as usize];
-    d_c.copy_to_host_async(&mut got, &stream).unwrap();
+    // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+    unsafe { d_c.copy_to_host_async(&mut got, &stream) }.unwrap();
     stream.synchronize().unwrap();
     assert_eq!(
         expected, got,
@@ -160,7 +165,8 @@ fn zeros_async_is_zeroed() {
     let buf: DeviceBuffer<f32> = DeviceBuffer::zeros_async(&ctx, n, &stream).unwrap();
 
     let mut back = vec![1.0f32; n];
-    buf.copy_to_host_async(&mut back, &stream).unwrap();
+    // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+    unsafe { buf.copy_to_host_async(&mut back, &stream) }.unwrap();
     stream.synchronize().unwrap();
 
     assert!(
