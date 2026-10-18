@@ -248,7 +248,11 @@ impl Array3D {
     /// but with page-locked memory (`PinnedBuffer` / `PinnedRegistration`) the DMA runs afterwards:
     /// dropping, moving, or writing the host slice before completion is a use-after-free / data
     /// race. The driver stages pageable memory itself, but do not rely on that.
-    pub unsafe fn copy_from_host_async<T: DeviceRepr>(&self, host: &[T], stream: &Stream) -> Result<()> {
+    pub unsafe fn copy_from_host_async<T: DeviceRepr>(
+        &self,
+        host: &[T],
+        stream: &Stream,
+    ) -> Result<()> {
         assert_eq!(size_of::<T>(), self.bytes_per_element());
         assert_eq!(host.len(), self.inner.width * self.slice_count());
         let d = driver()?;
