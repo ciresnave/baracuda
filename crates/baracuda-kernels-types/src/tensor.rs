@@ -61,11 +61,22 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorRef<'a, T, N> {
     /// can describe a view that reaches outside its slice. (Plans re-check
     /// every view in `can_implement`, so a bad literal is rejected at launch
     /// rather than read or written.)
-    pub fn new(data: DeviceSlice<'a, T>, shape: [i32; N], stride: [i64; N]) -> Result<Self, ViewError> {
+    pub fn new(
+        data: DeviceSlice<'a, T>,
+        shape: [i32; N],
+        stride: [i64; N],
+    ) -> Result<Self, ViewError> {
         match required_len(&shape, &stride) {
             None => Err(ViewError::NotAddressable),
-            Some(needed) if needed > data.len() => Err(ViewError::TooSmall { needed, got: data.len() }),
-            Some(_) => Ok(Self { data, shape, stride }),
+            Some(needed) if needed > data.len() => Err(ViewError::TooSmall {
+                needed,
+                got: data.len(),
+            }),
+            Some(_) => Ok(Self {
+                data,
+                shape,
+                stride,
+            }),
         }
     }
 
@@ -129,11 +140,22 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorMut<'a, T, N> {
     /// can describe a view that reaches outside its slice. (Plans re-check
     /// every view in `can_implement`, so a bad literal is rejected at launch
     /// rather than read or written.)
-    pub fn new(data: DeviceSliceMut<'a, T>, shape: [i32; N], stride: [i64; N]) -> Result<Self, ViewError> {
+    pub fn new(
+        data: DeviceSliceMut<'a, T>,
+        shape: [i32; N],
+        stride: [i64; N],
+    ) -> Result<Self, ViewError> {
         match required_len(&shape, &stride) {
             None => Err(ViewError::NotAddressable),
-            Some(needed) if needed > data.len() => Err(ViewError::TooSmall { needed, got: data.len() }),
-            Some(_) => Ok(Self { data, shape, stride }),
+            Some(needed) if needed > data.len() => Err(ViewError::TooSmall {
+                needed,
+                got: data.len(),
+            }),
+            Some(_) => Ok(Self {
+                data,
+                shape,
+                stride,
+            }),
         }
     }
 
@@ -457,7 +479,10 @@ mod required_len_tests {
 
     #[test]
     fn contiguous_equals_numel() {
-        assert_eq!(required_len(&[8, 128, 128], &[128 * 128, 128, 1]), Some(8 * 128 * 128));
+        assert_eq!(
+            required_len(&[8, 128, 128], &[128 * 128, 128, 1]),
+            Some(8 * 128 * 128)
+        );
     }
 
     #[test]
@@ -491,7 +516,9 @@ mod required_len_tests {
 
     #[test]
     fn overflow_is_unaddressable_not_wrapped() {
-        assert_eq!(required_len(&[i32::MAX, i32::MAX], &[i64::MAX, i64::MAX]), None);
+        assert_eq!(
+            required_len(&[i32::MAX, i32::MAX], &[i64::MAX, i64::MAX]),
+            None
+        );
     }
 }
-

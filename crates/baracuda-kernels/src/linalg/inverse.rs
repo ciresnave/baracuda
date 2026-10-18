@@ -272,10 +272,10 @@ macro_rules! impl_inverse_run {
                 workspace: Workspace<'_>,
                 args: InverseArgs<'_, $T>,
             ) -> Result<()> {
-        crate::view_check::check_dense(&args.a)?;
-        crate::view_check::check_dense(&args.inv)?;
-        crate::view_check::check_dense(&args.pivot)?;
-        crate::view_check::check_dense(&args.info)?;
+                crate::view_check::check_dense(&args.a)?;
+                crate::view_check::check_dense(&args.inv)?;
+                crate::view_check::check_dense(&args.pivot)?;
+                crate::view_check::check_dense(&args.info)?;
                 self.check_args(&args)?;
                 let h = self.ensure_handle()?;
                 self.bind_stream(h, stream)?;

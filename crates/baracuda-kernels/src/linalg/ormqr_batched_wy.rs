@@ -431,9 +431,9 @@ macro_rules! impl_batched_ormqr_wy_run {
                 workspace: Workspace<'_>,
                 args: BatchedOrmqrWyArgs<'_, $T>,
             ) -> Result<()> {
-        crate::view_check::check_dense(&args.a)?;
-        crate::view_check::check_dense(&args.tau)?;
-        crate::view_check::check_dense(&args.c)?;
+                crate::view_check::check_dense(&args.a)?;
+                crate::view_check::check_dense(&args.tau)?;
+                crate::view_check::check_dense(&args.c)?;
                 self.check_args(&args)?;
                 let h = self.ensure_handle()?;
                 self.bind_stream(h, stream)?;

@@ -346,10 +346,10 @@ macro_rules! impl_qr_run {
                 workspace: Workspace<'_>,
                 args: QrArgs<'_, $T>,
             ) -> Result<()> {
-        crate::view_check::check_dense(&args.a)?;
-        crate::view_check::check_dense(&args.q)?;
-        crate::view_check::check_dense(&args.r)?;
-        crate::view_check::check_dense(&args.info)?;
+                crate::view_check::check_dense(&args.a)?;
+                crate::view_check::check_dense(&args.q)?;
+                crate::view_check::check_dense(&args.r)?;
+                crate::view_check::check_dense(&args.info)?;
                 self.check_args(&args)?;
                 let h = self.ensure_handle()?;
                 self.bind_stream(h, stream)?;

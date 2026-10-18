@@ -16,6 +16,15 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.135 - 2026-10-18 (BREAKING (stricter validation): every plan bounds-checks its tensor views; fixes safe-API out-of-bounds read/write)
+
+Workspace alpha.135 (proposed; PM allocates at gate).
+
+- **BREAKING (behaviour):** every kernels plan now rejects a launch whose `TensorRef`/`TensorMut`/`MatrixRef` shape+strides reach past the `DeviceSlice` behind it (`Error::BufferTooSmall` / `InvalidProblem`). Previously the safe `run()` bounded buffers only by element count, so `shape=[N], stride=[2]` over an N-element slice read/wrote N-1 elements past it (reproduced on an RTX 4070: 32/64 elements clobbered or leaked). Soundness fix; affected-from baracuda-kernels alpha.26.
+- Scope: 172 `can_implement` fns (script `tools/soundness/insert_check_fits.py`), 48 plan files / 89 `run()` fns that had no `can_implement` (`insert_run_checks.py`, dense `numel` check, stride-aware for 3 loss plans), `bin`/`fp8`/`int4`/bespoke-`int` GEMM (no buffer check at all, `run()` now calls `can_implement`), `ContiguizePlan` bounds `source_offset` + strides, packed S4/U4/Bin views counted in slots. Counts of `view_check::check_*` call sites: 0 on origin/main, 952 across 218 files now.
+- baracuda-kernels-types: new `TensorRef/TensorMut::new` / `::contiguous` (validated, return `ViewError`), `required_len()`, `required_len(shape, stride)`. The public struct fields stay (making them private is a separate later change).
+- Tests: `soundness_tensor_view_bounds` (5, red on origin/main) and `soundness_family_views` (17, one per op family). `flash_decoding_smoke` validation case now sizes its buffer for the strided reach.
+
 ## 0.0.1-alpha.134 - 2026-10-16 (cuda-sys: layout assertions; fix 5 drifted FFI struct layouts)
 
 Workspace alpha.134 (proposed; PM allocates at gate).
