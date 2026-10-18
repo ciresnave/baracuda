@@ -13,6 +13,38 @@ use syn::{Data, DeriveInput, Fields, Meta, parse_macro_input};
 /// `#[derive(DeviceRepr)]` — implement `baracuda_types::DeviceRepr` for a
 /// `#[repr(C)]` or `#[repr(transparent)]` struct whose fields are all
 /// `DeviceRepr`. Enums and unions are rejected (use a `#[repr(C)]` struct).
+///
+/// # Rejected shapes
+///
+/// Each of these must fail to compile (the `compile_fail` doctests below are
+/// the regression tests; they assert failure only, not rustc's wording, so
+/// they do not drift with compiler releases).
+///
+/// No `#[repr(C)]` / `#[repr(transparent)]`:
+///
+/// ```compile_fail
+/// use baracuda_types::DeviceRepr;
+/// #[derive(Clone, Copy, DeviceRepr)]
+/// struct NoRepr { x: u32 }
+/// ```
+///
+/// An enum:
+///
+/// ```compile_fail
+/// use baracuda_types::DeviceRepr;
+/// #[derive(Clone, Copy, DeviceRepr)]
+/// #[repr(C)]
+/// enum E { A, B }
+/// ```
+///
+/// A field that is not itself `DeviceRepr`:
+///
+/// ```compile_fail,E0277
+/// use baracuda_types::DeviceRepr;
+/// #[derive(DeviceRepr)]
+/// #[repr(C)]
+/// struct HasVec { v: Vec<u8> }
+/// ```
 #[proc_macro_derive(DeviceRepr)]
 pub fn derive_device_repr(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
