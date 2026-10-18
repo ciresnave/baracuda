@@ -45,6 +45,36 @@ fn version_is_queryable() {
     let _ = baracuda_cufft::version().expect("cufftGetVersion");
 }
 
+/// Gather each column of the row-major `rows x cols` matrix `m`, run it through a
+/// contiguous `Plan1d`, and return the max abs error against `got` (the strided result).
+fn max_err_vs_contiguous(
+    ctx: &Context,
+    m: &[Complex32],
+    got: &[Complex32],
+    rows: usize,
+    cols: usize,
+) -> f32 {
+    let ref_plan = Plan1d::new(rows as i32, Transform::C2C, 1).unwrap();
+    let mut max_err = 0.0f32;
+    for c in 0..cols {
+        let col: Vec<Complex32> = (0..rows).map(|r| m[r * cols + c]).collect();
+        let mut d_c = DeviceBuffer::from_slice(ctx, &col).unwrap();
+        let mut d_f: DeviceBuffer<Complex32> = DeviceBuffer::new(ctx, rows).unwrap();
+        ref_plan
+            .exec_c2c(&mut d_c, &mut d_f, Direction::Forward)
+            .unwrap();
+        let mut want = vec![Complex32::default(); rows];
+        d_f.copy_to_host(&mut want).unwrap();
+        for r in 0..rows {
+            let g = got[r * cols + c];
+            max_err = max_err
+                .max((g.re - want[r].re).abs())
+                .max((g.im - want[r].im).abs());
+        }
+    }
+    max_err
+}
+
 /// Advanced data layout: FFT down the columns of a row-major `rows x cols`
 /// matrix (`istride = cols`, `idist = 1`) without packing, compared with
 /// the same columns copied out and run through a contiguous `Plan1d`.
@@ -85,25 +115,7 @@ fn strided_c2c_columns_match_contiguous() {
     let mut got = vec![Complex32::default(); rows * cols];
     d_out.copy_to_host(&mut got).unwrap();
 
-    // Reference: gather each column, contiguous transform.
-    let ref_plan = Plan1d::new(rows as i32, Transform::C2C, 1).unwrap();
-    let mut max_err = 0.0f32;
-    for c in 0..cols {
-        let col: Vec<Complex32> = (0..rows).map(|r| m[r * cols + c]).collect();
-        let mut d_c = DeviceBuffer::from_slice(&ctx, &col).unwrap();
-        let mut d_f: DeviceBuffer<Complex32> = DeviceBuffer::new(&ctx, rows).unwrap();
-        ref_plan
-            .exec_c2c(&mut d_c, &mut d_f, Direction::Forward)
-            .unwrap();
-        let mut want = vec![Complex32::default(); rows];
-        d_f.copy_to_host(&mut want).unwrap();
-        for r in 0..rows {
-            let g = got[r * cols + c];
-            max_err = max_err
-                .max((g.re - want[r].re).abs())
-                .max((g.im - want[r].im).abs());
-        }
-    }
+    let max_err = max_err_vs_contiguous(&ctx, &m, &got, rows, cols);
     assert!(
         max_err < 1e-3,
         "strided vs contiguous FFT mismatch: {max_err}"
