@@ -129,13 +129,6 @@ pub(crate) fn map_status(code: i32) -> Result<()> {
     }
 }
 
-/// Crate-wide re-export of [`map_status`] for the sibling op-family
-/// modules (Phase 54 — `gemm::sparse24` etc.) that share the same
-/// status-code convention with the attention family. Dead-code allowed
-/// because the call sites are feature-gated (`xformers_sparse24`) and
-/// the function ships unconditionally.
-#[doc(hidden)]
-
 /// Default RoPE base — `10000.0`, matching the original Llama /
 /// Mistral / Gemma conventions.
 pub const ROPE_DEFAULT_BASE: f32 = 10000.0;

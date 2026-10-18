@@ -290,6 +290,12 @@ it was deliberately not a CI job until the policy (R4) was adopted, because a ga
 rule only produces noise. R4 is adopted (§4.2), so a C-ABI diff gate is now a candidate follow-up; it is
 not built here.
 
+**Gate re-run at `272d9d18` (alpha.131):** totals identical (20 076 items), but one delta surfaced and was a bug, not a
+decision: `baracuda_kernels::ROPE_DEFAULT_BASE` had become `doc(hidden)` because #185 left an orphaned `#[doc(hidden)]`
+(for the removed `map_status_pub`) directly above it. Fixed at alpha.132; with the fix the census matches the committed
+TSVs on every column except line numbers (compared with `cut -f1,4-8 | sort`). The committed TSVs are not rewritten for
+line-number drift alone.
+
 ## 8. What this slice does not decide
 
 Per-item stable/hidden/removal verdicts for the 9 905 `stable` items; whether beta.0 happens at all.

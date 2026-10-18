@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.132 - 2026-10-16 (api-freeze: restore ROPE_DEFAULT_BASE visibility)
+
+Workspace alpha.132 (proposed; PM allocates at gate).
+
+- Census re-run found ROPE_DEFAULT_BASE hidden by an orphaned doc(hidden) left by #185; removed it.
+
 ## 0.0.1-alpha.131 - 2026-10-16 (lint: collapse no-reason allow attributes)
 
 Workspace alpha.131 (proposed; PM allocates at gate).
