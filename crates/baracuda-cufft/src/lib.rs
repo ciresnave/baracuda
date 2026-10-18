@@ -476,7 +476,9 @@ pub struct PlanMany {
 impl PlanMany {
     /// Construct a batched plan. `n[rank]` is the transform shape;
     /// `inembed` / `onembed` are the actual memory layouts of in/out
-    /// (pass `None` for packed). `istride`/`ostride` are element strides
+    /// (pass `None` for packed — cuFFT then **ignores** the strides and
+    /// distances; pass `Some` embeds to use a strided / advanced layout,
+    /// see the `strided_c2c_columns_match_contiguous` test). `istride`/`ostride` are element strides
     /// between successive elements; `idist`/`odist` are element strides
     /// between successive batches.
     ///

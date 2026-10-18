@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-`main` is at **v0.0.1-alpha.132** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
+`main` is at **v0.0.1-alpha.133** (2026-10-16; `baracuda-cuda-emit` 0.19.0); see
 `CHANGELOG.md` for what is published versus merged (merging is not a publish). The per-phase
 write-ups below are a historical log (see the note at the end of this
 paragraph); `CHANGELOG.md` has the release-by-release record. The 6 critical
@@ -1519,7 +1519,11 @@ backends, etc.). Better to land before publishing comparison tables.
 
 cuFFT's "advanced data layout" (`istride` / `idist` / `ostride` /
 `odist`) is native; lets callers FFT a non-contiguous slice without
-packing. Cheap plumbing.
+packing. **Already exposed** as `baracuda_cufft::PlanMany::new` (embed
+arrays + strides + dists); verified on device at alpha.133 by
+`strided_c2c_columns_match_contiguous` (column FFT of a row-major matrix
+vs contiguous `Plan1d`). Note cuFFT ignores stride/dist when the embed is
+NULL. Not covered: a strided sibling for the 2-D/3-D plan types.
 
 **Scope:** strided sibling for the FFT families. Same descriptor-
 plumbing pattern as the cuDNN work above.

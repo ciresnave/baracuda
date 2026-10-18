@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.133 - 2026-10-16 (cufft: device test for strided PlanMany; docs)
+
+Workspace alpha.133 (proposed; PM allocates at gate).
+
+- Added strided_c2c_columns_match_contiguous (advanced data layout), documented that NULL embeds ignore stride/dist, ROADMAP cuFFT row marked already exposed.
+
 ## 0.0.1-alpha.132 - 2026-10-16 (api-freeze: restore ROPE_DEFAULT_BASE visibility)
 
 Workspace alpha.132 (proposed; PM allocates at gate).
