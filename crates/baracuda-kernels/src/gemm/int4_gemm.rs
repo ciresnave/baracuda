@@ -290,6 +290,20 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
         {
             return Err(Error::InvalidProblem("bias length must equal N"));
         }
+        let (m, n, k) = (self.desc.m as i64, self.desc.n as i64, self.desc.k as i64);
+        let eb = core::mem::size_of::<T>();
+        let (k_bytes, n_bytes) = ((k + 1) / 2, (n + 1) / 2);
+        let (b_major, b_minor) = match self.sku.layout {
+            LayoutSku::Rcr => (n, k_bytes),
+            LayoutSku::Rrr => (k, n_bytes),
+        };
+        // Packed-pair int4: `ld` and the per-line extent are counted in bytes.
+        crate::view_check::check_matrix(m, k_bytes, args.a.ld, 1, args.a.data.len(), eb)?;
+        crate::view_check::check_matrix(b_major, b_minor, args.b.ld, 1, args.b.data.len(), eb)?;
+        if let Some(c) = &args.c {
+            crate::view_check::check_matrix(m, n_bytes, c.ld, 1, c.data.len(), eb)?;
+        }
+        crate::view_check::check_matrix(m, n_bytes, args.d.ld, 1, args.d.data.len(), eb)?;
         Ok(())
     }
 
@@ -321,6 +335,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
         workspace: Workspace<'_>,
         args: Int4GemmArgs<'_, T, BT>,
     ) -> Result<()> {
+        self.can_implement(&args)?;
         let _ = workspace; // int4 kernels take no scratch
 
         let a_ptr = args.a.data.as_raw().0 as *const c_void;

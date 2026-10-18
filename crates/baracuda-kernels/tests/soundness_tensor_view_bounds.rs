@@ -12,7 +12,8 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, LossReduction, MseLossArgs,
+    Bin, BinGemmArgs, BinGemmDescriptor, BinGemmPlan, BinaryArgs, BinaryDescriptor, BinaryKind,
+    BinaryPlan, ElementKind, LayoutSku, LossReduction, MatrixMut, MatrixRef, MseLossArgs,
     MseLossDescriptor, MseLossPlan, PlanPreference, TensorMut, TensorRef, Workspace,
     contiguous_stride,
 };
@@ -159,5 +160,54 @@ fn run_only_family_rejects_view_longer_than_its_slice() {
     assert!(
         res.is_err(),
         "run() accepted a pred view of 16 elements over an 8-element slice"
+    );
+}
+
+/// GEMM operands carry `rows` / `cols` / `ld` as public fields. `BinGemmPlan::run`
+/// used to launch without any length check: here A's slice holds half the bytes
+/// the `[M, K]` bit matrix needs.
+#[test]
+fn gemm_matrix_operand_shorter_than_its_footprint_is_rejected() {
+    let (ctx, stream, _) = setup();
+    let (m, n, k) = (128i32, 128i32, 512i32);
+    let k_bytes = (k / 8) as usize;
+    let a_short = DeviceBuffer::from_slice(&ctx, &vec![0u8; m as usize * k_bytes / 2]).unwrap();
+    let b = DeviceBuffer::from_slice(&ctx, &vec![0u8; n as usize * k_bytes]).unwrap();
+    let mut d: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, (m * n) as usize).unwrap();
+    let desc = BinGemmDescriptor {
+        m,
+        n,
+        k,
+        layout: LayoutSku::Rcr,
+    };
+    let plan = BinGemmPlan::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let res = plan.run(
+        &stream,
+        Workspace::None,
+        BinGemmArgs {
+            a: MatrixRef {
+                data: a_short.view_as::<Bin>(),
+                rows: m,
+                cols: k,
+                ld: k_bytes as i64,
+            },
+            b: MatrixRef {
+                data: b.view_as::<Bin>(),
+                rows: k,
+                cols: n,
+                ld: k_bytes as i64,
+            },
+            d: MatrixMut {
+                data: d.as_slice_mut(),
+                rows: m,
+                cols: n,
+                ld: n as i64,
+            },
+        },
+    );
+    stream.synchronize().unwrap();
+    assert!(
+        res.is_err(),
+        "run() accepted an A operand shorter than its footprint"
     );
 }

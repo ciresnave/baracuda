@@ -154,6 +154,14 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                         "D shape mismatch with descriptor (M, N)",
                     ));
                 }
+                let (m, n, k) = (self.desc.m as i64, self.desc.n as i64, self.desc.k as i64);
+                let eb = core::mem::size_of::<T>();
+                crate::view_check::check_matrix(m, k, args.a.ld, eb, args.a.data.len(), eb)?;
+                crate::view_check::check_matrix(k, n, args.b.ld, eb, args.b.data.len(), eb)?;
+                if let Some(c) = &args.c {
+                    crate::view_check::check_matrix(m, n, c.ld, eb, c.data.len(), eb)?;
+                }
+                crate::view_check::check_matrix(m, n, args.d.ld, eb, args.d.data.len(), eb)?;
                 Ok(())
             }
         }
@@ -195,6 +203,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
         match &self.backend {
             Backend::Cutlass(inner) => inner.run(stream, workspace, args),
             Backend::Bespoke(_) => {
+                self.can_implement(&args)?;
                 // Sanity: workspace is always None for bespoke SKUs today.
                 let _ = workspace; // silence unused-binding warning
 

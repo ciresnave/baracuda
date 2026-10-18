@@ -87,3 +87,37 @@ pub(crate) fn check_dense<V: View>(view: &V) -> Result<()> {
         Some(_) => Ok(()),
     }
 }
+
+/// Bounds check for a matrix operand (`MatrixRef` / `MatrixMut`): `major`
+/// lines of `ld` units each, the last one `minor` units long, so the operand
+/// touches `(major - 1) * ld + minor` units of `unit_bytes` bytes each. The
+/// backing slice holds `backing_len` elements of `backing_elem_bytes` bytes.
+/// (Packed int4 / bit operands count `ld` and `minor` in bytes.)
+pub(crate) fn check_matrix(
+    major: i64,
+    minor: i64,
+    ld: i64,
+    unit_bytes: usize,
+    backing_len: usize,
+    backing_elem_bytes: usize,
+) -> Result<()> {
+    if major <= 0 || minor <= 0 {
+        return Ok(());
+    }
+    if ld < 0 {
+        return Err(Error::InvalidProblem(
+            "matrix operand has a negative leading dimension",
+        ));
+    }
+    let units = (major as i128 - 1) * ld as i128 + minor as i128;
+    let need_bytes = units * unit_bytes as i128;
+    let got_bytes = backing_len as i128 * backing_elem_bytes as i128;
+    if need_bytes > got_bytes {
+        let eb = backing_elem_bytes.max(1) as i128;
+        return Err(Error::BufferTooSmall {
+            needed: usize::try_from((need_bytes + eb - 1) / eb).unwrap_or(usize::MAX),
+            got: backing_len,
+        });
+    }
+    Ok(())
+}

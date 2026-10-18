@@ -170,6 +170,18 @@ impl BinGemmPlan {
                 "D leading dimension (i32 elements) must be >= N for row-major i32 D",
             ));
         }
+        let (m, n, k) = (self.desc.m as i64, self.desc.n as i64, self.desc.k as i64);
+        let eb = core::mem::size_of::<Bin>();
+        let (k_bytes, n_bytes) = ((k + 7) / 8, (n + 7) / 8);
+        let (b_major, b_minor) = match self.sku.layout {
+            LayoutSku::Rcr => (n, k_bytes),
+            LayoutSku::Rrr => (k, n_bytes),
+        };
+        // Packed bits: `ld` and the per-line extent of A / B are counted in bytes;
+        // D is plain i32 with `ld` in elements.
+        crate::view_check::check_matrix(m, k_bytes, args.a.ld, 1, args.a.data.len(), eb)?;
+        crate::view_check::check_matrix(b_major, b_minor, args.b.ld, 1, args.b.data.len(), eb)?;
+        crate::view_check::check_matrix(m, n, args.d.ld, 4, args.d.data.len(), 4)?;
         Ok(())
     }
 
@@ -200,6 +212,7 @@ impl BinGemmPlan {
         workspace: Workspace<'_>,
         args: BinGemmArgs<'_>,
     ) -> Result<()> {
+        self.can_implement(&args)?;
         let _ = workspace; // bin kernel takes no scratch
 
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
