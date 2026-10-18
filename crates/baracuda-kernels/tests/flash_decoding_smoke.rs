@@ -1191,8 +1191,12 @@ fn flash_decoding_a_mean_validation_rejects() {
         );
     }
 
-    // Case 2: non-contiguous a (last-dim stride 2 instead of 1).
+    // Case 2: non-contiguous a (last-dim stride 2 instead of 1). The buffer is
+    // sized for the strided reach so the view-bounds check passes and the
+    // contiguity check is what rejects it.
     {
+        let mut da_wide: DeviceBuffer<f32> =
+            DeviceBuffer::zeros(&ctx, (2 * B * H * K) as usize).expect("a wide");
         let (q, k, v) = qkv!();
         let args = FlashDecodingArgs::<f16> {
             q,
@@ -1204,9 +1208,9 @@ fn flash_decoding_a_mean_validation_rejects() {
                 stride: contiguous_stride([B, H, D]),
             },
             a: Some(TensorMut {
-                data: da.as_slice_mut(),
+                data: da_wide.as_slice_mut(),
                 shape: [B, H, K],
-                stride: [(H * K) as i64, K as i64, 2],
+                stride: [(2 * H * K) as i64, (2 * K) as i64, 2],
             }),
             a_mean: None,
         };
@@ -1219,6 +1223,8 @@ fn flash_decoding_a_mean_validation_rejects() {
 
     // Case 3: contiguous a, but non-contiguous a_mean (last-dim stride 2).
     {
+        let mut dam_wide: DeviceBuffer<f32> =
+            DeviceBuffer::zeros(&ctx, (2 * B * K) as usize).expect("am wide");
         let (q, k, v) = qkv!();
         let args = FlashDecodingArgs::<f16> {
             q,
@@ -1235,9 +1241,9 @@ fn flash_decoding_a_mean_validation_rejects() {
                 stride: contiguous_stride([B, H, K]),
             }),
             a_mean: Some(TensorMut {
-                data: dam.as_slice_mut(),
+                data: dam_wide.as_slice_mut(),
                 shape: [B, K],
-                stride: [K as i64, 2],
+                stride: [(2 * K) as i64, 2],
             }),
         };
         let r = plan.can_implement(&args);

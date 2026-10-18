@@ -13,9 +13,9 @@
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
     Bin, BinGemmArgs, BinGemmDescriptor, BinGemmPlan, BinaryArgs, BinaryDescriptor, BinaryKind,
-    BinaryPlan, ElementKind, LayoutSku, LossReduction, MatrixMut, MatrixRef, MseLossArgs,
-    MseLossDescriptor, MseLossPlan, PlanPreference, TensorMut, TensorRef, Workspace,
-    contiguous_stride,
+    BinaryPlan, ContiguizeArgs, ContiguizeDescriptor, ContiguizePlan, ElementKind, LayoutSku,
+    LossReduction, MatrixMut, MatrixRef, MseLossArgs, MseLossDescriptor, MseLossPlan,
+    PlanPreference, TensorMut, TensorRef, Workspace, contiguous_stride,
 };
 
 const N: usize = 64;
@@ -209,5 +209,45 @@ fn gemm_matrix_operand_shorter_than_its_footprint_is_rejected() {
     assert!(
         res.is_err(),
         "run() accepted an A operand shorter than its footprint"
+    );
+}
+
+/// `ContiguizePlan` addresses `source_offset + sum(i * stride)` from the start
+/// of its source slice. The offset lives in the (public) descriptor, so the
+/// plan has to bound it: here it points 4 elements past the end of the slice.
+#[test]
+fn contiguize_source_offset_past_the_slice_is_rejected() {
+    let (ctx, stream, _) = setup();
+    let shape = [4i32, 3];
+    let numel = 12usize;
+    let src = DeviceBuffer::from_slice(&ctx, &vec![1.0f32; numel]).unwrap();
+    let mut y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel).unwrap();
+    let desc = ContiguizeDescriptor::<2> {
+        shape,
+        source_strides: contiguous_stride(shape),
+        source_offset: 4,
+        element: ElementKind::F32,
+    };
+    let plan = ContiguizePlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let res = plan.run(
+        &stream,
+        Workspace::None,
+        ContiguizeArgs::<f32, 2> {
+            source: TensorRef {
+                data: src.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            dest: TensorMut {
+                data: y.as_slice_mut(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+        },
+    );
+    stream.synchronize().unwrap();
+    assert!(
+        res.is_err(),
+        "run() accepted source_offset 4 over a 12-element slice needing 16"
     );
 }
