@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.137 - 2026-10-18 (types-derive: real compile_fail doctests; drop unused trybuild)
+
+Workspace alpha.137 (proposed; PM allocates at gate).
+
+- `derive_device_repr` docs claimed compile_fail doctests that did not exist and `trybuild` was declared in the workspace but unused. Added three real `compile_fail` doctests (no repr, enum, non-DeviceRepr field; each verified to fail for the intended reason) and removed the unused `trybuild` workspace dependency.
+
 ## 0.0.1-alpha.136 - 2026-10-18 (BREAKING: async host copies and PreparedGroupedGemm::run are unsafe fns)
 
 Workspace alpha.136 (proposed; PM allocates at gate).
