@@ -175,7 +175,10 @@ let prepared = plan.prepare(&groups)?;
 
 // Allocate one workspace big enough for the packed metadata + CUTLASS scratch.
 let mut workspace: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, prepared.workspace_size())?;
-prepared.run(&stream, Workspace::Borrowed(workspace.as_slice_mut()))?;
+// SAFETY: `prepared`, `workspace` and the group buffers stay alive until the stream
+// is synchronized.
+unsafe { prepared.run(&stream, Workspace::Borrowed(workspace.as_slice_mut())) }?;
+stream.synchronize()?;
 # Ok(()) }
 ```
 

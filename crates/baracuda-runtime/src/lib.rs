@@ -47,10 +47,11 @@
 //!
 //! let host: Vec<f32> = (0..4096).map(|i| i as f32).collect();
 //! let device: DeviceBuffer<f32> = DeviceBuffer::new(host.len())?;
-//! device.copy_from_host_async(&host, &stream)?;
+//! // SAFETY: `host` and `back` are pageable Vecs that outlive the synchronize() below.
+//! unsafe { device.copy_from_host_async(&host, &stream) }?;
 //!
 //! let mut back = vec![0.0f32; host.len()];
-//! device.copy_to_host_async(&mut back, &stream)?;
+//! unsafe { device.copy_to_host_async(&mut back, &stream) }?;
 //! stream.synchronize()?;
 //! assert_eq!(host, back);
 //! # Ok(()) }

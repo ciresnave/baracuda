@@ -32,8 +32,13 @@ buf.copy_from_host(&host_data)?;
 buf.copy_to_host(&mut host_out)?;
 
 // Async transfer (on a stream):
-buf.copy_from_host_async(&host_data, &stream)?;
-buf.copy_to_host_async(&mut host_out, &stream)?;
+// `unsafe`: the host slices must stay valid (and untouched) until the copy has completed
+// on the stream — with pinned memory the DMA runs after the call returns.
+unsafe {
+    buf.copy_from_host_async(&host_data, &stream)?;
+    buf.copy_to_host_async(&mut host_out, &stream)?;
+}
+stream.synchronize()?; // host_data / host_out must not be dropped or touched before this
 ```
 
 ## Stream-ordered memory pools
@@ -93,7 +98,8 @@ use baracuda::driver::PinnedVec;
 let mut pinned: PinnedVec<f32> = PinnedVec::new(&ctx, 1_000_000)?;
 pinned.as_mut_slice().fill(1.0);
 
-d_buf.copy_from_host_async(&pinned, &stream)?;
+// SAFETY: `pinned` is not dropped or touched until the synchronize() below.
+unsafe { d_buf.copy_from_host_async(&pinned, &stream)? };
 stream.synchronize()?;
 ```
 

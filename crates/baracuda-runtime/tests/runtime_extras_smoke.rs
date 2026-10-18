@@ -104,9 +104,11 @@ fn async_alloc_round_trip() {
     let n = 2048usize;
     let host: Vec<f32> = (0..n).map(|i| i as f32 * 0.5).collect();
     let buf = DeviceBuffer::<f32>::new_async(n, &stream).unwrap();
-    buf.copy_from_host_async(&host, &stream).unwrap();
+    // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+    unsafe { buf.copy_from_host_async(&host, &stream) }.unwrap();
     let mut back = vec![0.0f32; n];
-    buf.copy_to_host_async(&mut back, &stream).unwrap();
+    // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+    unsafe { buf.copy_to_host_async(&mut back, &stream) }.unwrap();
     buf.free_async(&stream).unwrap();
     stream.synchronize().unwrap();
     assert_eq!(host, back);
@@ -128,7 +130,8 @@ fn zeros_async_and_implicit_stream_drop() {
         // Stream-ordered zeroed output buffer.
         let zeroed = DeviceBuffer::<f32>::zeros_async(n, &stream).unwrap();
         let mut back = vec![1.0f32; n];
-        zeroed.copy_to_host_async(&mut back, &stream).unwrap();
+        // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+        unsafe { zeroed.copy_to_host_async(&mut back, &stream) }.unwrap();
         stream.synchronize().unwrap();
         assert!(
             back.iter().all(|&x| x == 0.0),
@@ -138,9 +141,11 @@ fn zeros_async_and_implicit_stream_drop() {
         // A second async buffer we DON'T free explicitly: it drops at the end
         // of this scope and must reclaim via cudaFreeAsync on `stream`.
         let buf = DeviceBuffer::<f32>::new_async(n, &stream).unwrap();
-        buf.copy_from_host_async(&host, &stream).unwrap();
+        // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+        unsafe { buf.copy_from_host_async(&host, &stream) }.unwrap();
         let mut echo = vec![0.0f32; n];
-        buf.copy_to_host_async(&mut echo, &stream).unwrap();
+        // SAFETY: the host Vec is pageable and outlives the stream synchronize() that follows.
+        unsafe { buf.copy_to_host_async(&mut echo, &stream) }.unwrap();
         stream.synchronize().unwrap();
         assert_eq!(host, echo);
         // `buf` and `zeroed` drop here → implicit cudaFreeAsync, no panic.

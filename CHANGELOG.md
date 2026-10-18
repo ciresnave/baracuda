@@ -16,6 +16,13 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.136 - 2026-10-18 (BREAKING: async host copies and PreparedGroupedGemm::run are unsafe fns)
+
+Workspace alpha.136 (proposed; PM allocates at gate).
+
+- **BREAKING (API):** `DeviceBuffer/DeviceSlice::copy_from_host_async`, `copy_to_host_async` (baracuda-driver, baracuda-runtime), `copy_h_to_d_2d_async` (driver + runtime), driver `memcpy3d` `copy_from_host_async` and `baracuda_cutlass::PreparedGroupedGemm::run` are now `unsafe fn` with a `# Safety` contract. They borrowed the host slice only for the call, but with pinned memory the DMA runs after the call returns, so safe code could free or mutate the host buffer under an in-flight copy. Soundness fix; call sites need `unsafe { .. }` and must keep the host memory alive and untouched until the stream is synchronized. Affected-from: baracuda-driver/runtime alpha.2, baracuda-cutlass alpha.6.
+- Proof: `compile_fail,E0133` doctests on the driver async copies (a safe call no longer compiles).
+
 ## 0.0.1-alpha.135 - 2026-10-18 (BREAKING (stricter validation): every plan bounds-checks its tensor views; fixes safe-API out-of-bounds read/write)
 
 Workspace alpha.135 (proposed; PM allocates at gate).

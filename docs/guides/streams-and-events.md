@@ -58,7 +58,8 @@ let compute = Stream::new(&ctx)?;
 let done_copying = Event::new(&ctx)?;
 
 // Stream 1: H2D
-d_input.copy_from_host_async(&host, &h2d)?;
+// SAFETY: `host` is kept alive and untouched until `done_copying` has completed.
+unsafe { d_input.copy_from_host_async(&host, &h2d)? };
 done_copying.record(&h2d)?;
 
 // Stream 2: compute — waits for the copy to finish
@@ -88,13 +89,15 @@ for chunk in 0..n_chunks {
     if chunk >= 2 { e.synchronize()?; }
 
     // stage 1: H2D
-    d_in.copy_from_host_async(&host_chunks[chunk], s)?;
+    // SAFETY: host_chunks / host_out outlive the final event synchronize below
+    // and a slot is only reused after its event completed.
+    unsafe { d_in.copy_from_host_async(&host_chunks[chunk], s)? };
 
     // stage 2: compute
     kernel.launch()...stream(s).launch()?;
 
     // stage 3: D2H
-    d_out.copy_to_host_async(&mut host_out[chunk], s)?;
+    unsafe { d_out.copy_to_host_async(&mut host_out[chunk], s)? };
 
     e.record(s)?;
 }
