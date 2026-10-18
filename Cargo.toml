@@ -207,7 +207,6 @@ float8 = { version = "0.7", default-features = false }
 futures-core = { version = "0.3", default-features = false }
 
 # Test plumbing
-trybuild = "1"
 proptest = "1"
 
 # Bench plumbing — pulled in by `baracuda-kernels-bench`. We avoid the
