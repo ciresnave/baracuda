@@ -16,6 +16,12 @@ on this line since alpha.81 (`baracuda-cuda-emit 0.11.0` ships with
 `0.0.1-alpha.81` and goes with `unpopped 0.11`); `baracuda-cuda-parse` joined
 at alpha.82.
 
+## 0.0.1-alpha.134 - 2026-10-16 (cuda-sys: layout assertions; fix 5 drifted FFI struct layouts)
+
+Workspace alpha.134 (proposed; PM allocates at gate).
+
+- Found by comparing size_of/align_of with CUDA 13.3 headers: cudaPointerAttributes 24->56 (runtime wrote past it), cudaResourceViewDesc 48->112 (safe baracuda-runtime wrappers passed a short struct that C reads), CUdevSmResource +flags, CUlaunchAttributeValue/CUlaunchAttribute align 8. New src/layout.rs asserts 60 structs at compile time.
+
 ## 0.0.1-alpha.133 - 2026-10-16 (cufft: device test for strided PlanMany; docs)
 
 Workspace alpha.133 (proposed; PM allocates at gate).

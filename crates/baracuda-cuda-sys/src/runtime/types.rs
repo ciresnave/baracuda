@@ -389,6 +389,9 @@ pub struct cudaResourceViewDesc {
     pub first_layer: core::ffi::c_uint,
     /// `last_layer` field.
     pub last_layer: core::ffi::c_uint,
+    /// `reserved[16]` — "must be zero" in `driver_types.h`. Present so the
+    /// struct is the 112 bytes the runtime reads through `pResViewDesc`.
+    pub reserved: [core::ffi::c_uint; 16],
 }
 
 /// `cudaLaunchAttributeID` — selectors for extended launch attributes.
@@ -968,7 +971,9 @@ pub mod cudaGraphExecUpdateResult {
 
 /// `cudaPointerAttributes` — returned by `cudaPointerGetAttributes`.
 ///
-/// The C struct is 48 bytes. We model the fields directly.
+/// The C struct (CUDA 13.3 `driver_types.h`) ends in `long reserved[8]`, so it
+/// is 56 bytes on Windows (`long` = 4) and 88 on LP64 Linux. The runtime
+/// writes into the reserved tail, so the Rust mirror must be that big.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct cudaPointerAttributes {
@@ -980,6 +985,8 @@ pub struct cudaPointerAttributes {
     pub device_pointer: *mut c_void,
     /// Host-addressable pointer (null for plain device memory).
     pub host_pointer: *mut c_void,
+    /// `long reserved[8]` — written by the runtime; callers should ignore it.
+    pub reserved: [core::ffi::c_long; 8],
 }
 
 impl Default for cudaPointerAttributes {
@@ -989,6 +996,7 @@ impl Default for cudaPointerAttributes {
             device: 0,
             device_pointer: core::ptr::null_mut(),
             host_pointer: core::ptr::null_mut(),
+            reserved: [0; 8],
         }
     }
 }

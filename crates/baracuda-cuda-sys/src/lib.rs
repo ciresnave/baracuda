@@ -27,6 +27,7 @@
 pub mod driver;
 /// `functions` — submodule grouping related items.
 pub mod functions;
+mod layout;
 /// `runtime` — submodule grouping related items.
 pub mod runtime;
 /// `status` — submodule grouping related items.

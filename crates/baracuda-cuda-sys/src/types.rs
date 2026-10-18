@@ -708,7 +708,9 @@ pub mod CUlaunchAttributeID {
 /// `CUlaunchAttributeValue` — union of payloads for a launch attribute.
 /// 64-byte fixed-size union in `cuda.h`; we expose it as an opaque byte
 /// array so callers can bit-cast. Zero-initialized for "no payload".
-#[repr(C)]
+/// `align(8)` because the C union holds 8-byte members (pointers, `size_t`,
+/// `long long`), so `CUlaunchAttribute` must be 8-aligned like the C one.
+#[repr(C, align(8))]
 #[derive(Copy, Clone, Debug)]
 pub struct CUlaunchAttributeValue(pub [u8; 64]);
 
@@ -1268,7 +1270,7 @@ pub mod CUdevResourceType {
     pub const SM: i32 = 1;
 }
 
-/// `CUdevSmResource` — SM-count resource payload (12 bytes).
+/// `CUdevSmResource` — SM-count resource payload (16 bytes in CUDA 13.3).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct CUdevSmResource {
@@ -1278,6 +1280,8 @@ pub struct CUdevSmResource {
     pub min_sm_partition_size: core::ffi::c_uint,
     /// `sm_coscheduled_alignment` field.
     pub sm_coscheduled_alignment: core::ffi::c_uint,
+    /// `flags` field (`CUdevSmResourceGroup_flags`).
+    pub flags: core::ffi::c_uint,
 }
 
 /// `CUdevResource` — 144-byte resource descriptor. Tagged by `type_`;
@@ -1317,8 +1321,8 @@ impl CUdevResource {
     /// View the SM-specific payload. Only meaningful when `type_ == SM`.
     #[inline]
     pub fn as_sm(&self) -> CUdevSmResource {
-        // SAFETY: res is 48 bytes 8-byte aligned; CUdevSmResource is 12
-        // bytes 4-byte aligned — reading the first 12 bytes is well-defined.
+        // SAFETY: res is 48 bytes 8-byte aligned; CUdevSmResource is 16
+        // bytes 4-byte aligned — reading the first 16 bytes is well-defined.
         unsafe { core::ptr::read(self.res.as_ptr() as *const CUdevSmResource) }
     }
 }
