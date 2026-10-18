@@ -134,6 +134,10 @@ impl<T: Element> RoiPoolBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RoiPoolBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dout)?;
+        crate::view_check::check_fits(&args.rois)?;
+        crate::view_check::check_fits(&args.argmax)?;
+        crate::view_check::check_fits(&args.dinput)?;
         let dout_shape = [
             self.desc.num_rois,
             self.desc.c,

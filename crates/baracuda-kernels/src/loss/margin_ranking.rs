@@ -124,6 +124,10 @@ impl<T: Element, const N: usize> MarginRankingLossPlan<T, N> {
         workspace: Workspace<'_>,
         args: MarginRankingLossArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x1)?;
+        crate::view_check::check_dense(&args.x2)?;
+        crate::view_check::check_dense(&args.t)?;
+        crate::view_check::check_dense(&args.out)?;
         if args.x1.shape != self.desc.input_shape
             || args.x2.shape != self.desc.input_shape
             || args.t.shape != self.desc.input_shape
@@ -285,6 +289,12 @@ impl<T: Element, const N: usize> MarginRankingLossBackwardPlan<T, N> {
         _workspace: Workspace<'_>,
         args: MarginRankingLossBackwardArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x1)?;
+        crate::view_check::check_dense(&args.x2)?;
+        crate::view_check::check_dense(&args.t)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.dx1)?;
+        crate::view_check::check_dense(&args.dx2)?;
         if args.x1.shape != self.desc.input_shape
             || args.x2.shape != self.desc.input_shape
             || args.t.shape != self.desc.input_shape

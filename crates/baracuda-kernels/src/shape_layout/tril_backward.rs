@@ -118,6 +118,8 @@ impl<T: Element, const N: usize> TrilBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &TrilBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.grad_output)?;
+        crate::view_check::check_fits(&args.grad_input)?;
         if args.grad_output.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TrilBackwardPlan: grad_output shape mismatch with descriptor",

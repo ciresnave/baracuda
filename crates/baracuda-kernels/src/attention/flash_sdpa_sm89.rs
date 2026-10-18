@@ -176,6 +176,11 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &FlashSdpaSm89Args<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.k)?;
+        crate::view_check::check_fits(&args.v)?;
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.lse)?;
         let shape_q = [
             self.desc.batch_size,
             self.desc.num_heads,

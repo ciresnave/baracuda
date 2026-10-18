@@ -96,6 +96,8 @@ impl GgufDequantizePlan {
 
     /// Validate args at run time.
     pub fn can_implement(&self, args: &GgufDequantizeArgs<'_>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.output.shape != [self.desc.numel as i32] {
             return Err(Error::InvalidProblem(
                 "GgufDequantizePlan: output shape != [numel]",

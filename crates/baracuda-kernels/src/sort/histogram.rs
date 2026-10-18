@@ -102,6 +102,8 @@ impl<T: Element> HistogramPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &HistogramArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         if (args.input.shape[0] as i64) != self.desc.numel {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HistogramPlan: input shape[0] != descriptor numel",

@@ -124,6 +124,9 @@ impl<T: Element, const N: usize> PoissonNllLossPlan<T, N> {
         workspace: Workspace<'_>,
         args: PoissonNllLossArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.out)?;
         if args.input.shape != self.desc.input_shape || args.target.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PoissonNllLossPlan: input / target shape mismatch",
@@ -306,6 +309,10 @@ impl<T: Element, const N: usize> PoissonNllLossBackwardPlan<T, N> {
         _workspace: Workspace<'_>,
         args: PoissonNllLossBackwardArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.dinput)?;
         if args.input.shape != self.desc.input_shape
             || args.target.shape != self.desc.input_shape
             || args.dinput.shape != self.desc.input_shape

@@ -97,6 +97,20 @@ impl<T: Element, const N: usize> InstanceNormBackwardPlan<T, N> {
         workspace: Workspace<'_>,
         args: InstanceNormBackwardArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.x)?;
+        if let Some(t) = &args.gamma {
+            crate::view_check::check_dense(t)?;
+        }
+        crate::view_check::check_dense(&args.saved_mean)?;
+        crate::view_check::check_dense(&args.saved_rstd)?;
+        crate::view_check::check_dense(&args.dx)?;
+        if let Some(t) = &args.dgamma {
+            crate::view_check::check_dense(t)?;
+        }
+        if let Some(t) = &args.dbeta {
+            crate::view_check::check_dense(t)?;
+        }
         let inner_args = GroupNormBackwardArgs::<T, N> {
             dy: args.dy,
             x: args.x,

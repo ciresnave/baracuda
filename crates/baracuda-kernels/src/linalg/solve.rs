@@ -272,6 +272,10 @@ macro_rules! impl_solve_run {
                 workspace: Workspace<'_>,
                 args: SolveArgs<'_, $T>,
             ) -> Result<()> {
+                crate::view_check::check_dense(&args.a)?;
+                crate::view_check::check_dense(&args.b)?;
+                crate::view_check::check_dense(&args.pivot)?;
+                crate::view_check::check_dense(&args.info)?;
                 self.check_args(&args)?;
                 let h = self.ensure_handle()?;
                 self.bind_stream(h, stream)?;

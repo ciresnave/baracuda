@@ -119,6 +119,9 @@ impl<T: Element, const N: usize> MaskedFillBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &MaskedFillBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dout)?;
+        crate::view_check::check_fits(&args.mask)?;
+        crate::view_check::check_fits(&args.dsrc)?;
         if args.dout.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::MaskedFillBackwardPlan: dout shape mismatch with descriptor",

@@ -215,6 +215,8 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &ContiguizeArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits_at(&args.source, self.desc.source_offset)?;
+        crate::view_check::check_fits(&args.dest)?;
         if args.source.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ContiguizePlan: source shape mismatch with descriptor",
@@ -246,12 +248,8 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
                 got: dest_len as usize,
             });
         }
-        // Source buffer length sanity: numel must fit, but we don't
-        // tightly bound because the source view may legitimately
-        // index well past `source.data.len()` once `source_offset`
-        // and signed strides are applied (the buffer behind a strided
-        // view is opaque to baracuda-kernels). The caller owns this
-        // contract.
+        // The source view starts `source_offset` elements into its slice;
+        // `check_fits_at` above bounds the whole reachable range.
         Ok(())
     }
 

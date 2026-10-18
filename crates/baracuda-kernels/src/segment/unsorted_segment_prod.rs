@@ -105,6 +105,9 @@ impl<T: Element> UnsortedSegmentProdPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &UnsortedSegmentProdArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.segment_ids)?;
+        crate::view_check::check_fits(&args.output)?;
         validate_unsorted_args(
             self.desc.num_inputs,
             self.desc.embedding_dim,

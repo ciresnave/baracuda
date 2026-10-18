@@ -303,6 +303,11 @@ impl<T: Element> RingAttentionPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &RingAttentionArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.y)?;
+        if let Some(t) = &args.lse {
+            crate::view_check::check_fits(t)?;
+        }
         let shape_q = [
             self.desc.batch_size,
             self.desc.num_heads,

@@ -243,6 +243,11 @@ impl<T: MarlinActivation> Int4MarlinGemmPlan<T> {
 
     /// Validate args against the plan.
     pub fn can_implement(&self, args: &Int4MarlinGemmArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.activation)?;
+        crate::view_check::check_fits(&args.weight_packed)?;
+        crate::view_check::check_fits(&args.scales)?;
+        crate::view_check::check_fits(&args.workspace)?;
+        crate::view_check::check_fits(&args.output)?;
         let m = self.desc.m;
         let n = self.desc.n;
         let k = self.desc.k;

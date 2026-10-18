@@ -129,6 +129,9 @@ impl<T: Element> AlibiPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &AlibiArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.scores)?;
+        crate::view_check::check_fits(&args.slopes)?;
+        crate::view_check::check_fits(&args.out)?;
         let want_shape = [
             self.desc.batch_size,
             self.desc.num_heads,

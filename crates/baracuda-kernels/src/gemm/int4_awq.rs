@@ -234,6 +234,11 @@ impl<T: AwqActivation> Int4AwqGemmPlan<T> {
 
     /// Validate args against the plan.
     pub fn can_implement(&self, args: &Int4AwqGemmArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.activation)?;
+        crate::view_check::check_fits(&args.weight_packed)?;
+        crate::view_check::check_fits(&args.scales)?;
+        crate::view_check::check_fits(&args.zeros)?;
+        crate::view_check::check_fits(&args.output)?;
         let m = self.desc.m;
         let ic = self.desc.ic;
         let oc = self.desc.oc;

@@ -55,6 +55,43 @@ pub struct TensorMut<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
 }
 
 impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorRef<'a, T, N> {
+    /// Build a view, checking that `shape` / `stride` stay inside `data`.
+    ///
+    /// Prefer this over a struct literal: the fields are public, so a literal
+    /// can describe a view that reaches outside its slice. (Plans re-check
+    /// every view in `can_implement`, so a bad literal is rejected at launch
+    /// rather than read or written.)
+    pub fn new(
+        data: DeviceSlice<'a, T>,
+        shape: [i32; N],
+        stride: [i64; N],
+    ) -> Result<Self, ViewError> {
+        match required_len(&shape, &stride) {
+            None => Err(ViewError::NotAddressable),
+            Some(needed) if needed > data.len() => Err(ViewError::TooSmall {
+                needed,
+                got: data.len(),
+            }),
+            Some(_) => Ok(Self {
+                data,
+                shape,
+                stride,
+            }),
+        }
+    }
+
+    /// Row-major contiguous view of `data` with the given `shape`.
+    pub fn contiguous(data: DeviceSlice<'a, T>, shape: [i32; N]) -> Result<Self, ViewError> {
+        Self::new(data, shape, contiguous_stride(shape))
+    }
+
+    /// Elements this view can touch; see [`required_len`]. `None` if the
+    /// shape / stride pair is not addressable inside any slice.
+    #[inline]
+    pub fn required_len(&self) -> Option<usize> {
+        required_len(&self.shape, &self.stride)
+    }
+
     /// Total number of logical elements (product of `shape`).
     ///
     /// Returns `1` for the rank-0 (scalar) case. Saturates on overflow
@@ -97,6 +134,43 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorRef<'a, T, N> {
 }
 
 impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorMut<'a, T, N> {
+    /// Build a view, checking that `shape` / `stride` stay inside `data`.
+    ///
+    /// Prefer this over a struct literal: the fields are public, so a literal
+    /// can describe a view that reaches outside its slice. (Plans re-check
+    /// every view in `can_implement`, so a bad literal is rejected at launch
+    /// rather than read or written.)
+    pub fn new(
+        data: DeviceSliceMut<'a, T>,
+        shape: [i32; N],
+        stride: [i64; N],
+    ) -> Result<Self, ViewError> {
+        match required_len(&shape, &stride) {
+            None => Err(ViewError::NotAddressable),
+            Some(needed) if needed > data.len() => Err(ViewError::TooSmall {
+                needed,
+                got: data.len(),
+            }),
+            Some(_) => Ok(Self {
+                data,
+                shape,
+                stride,
+            }),
+        }
+    }
+
+    /// Row-major contiguous view of `data` with the given `shape`.
+    pub fn contiguous(data: DeviceSliceMut<'a, T>, shape: [i32; N]) -> Result<Self, ViewError> {
+        Self::new(data, shape, contiguous_stride(shape))
+    }
+
+    /// Elements this view can touch; see [`required_len`]. `None` if the
+    /// shape / stride pair is not addressable inside any slice.
+    #[inline]
+    pub fn required_len(&self) -> Option<usize> {
+        required_len(&self.shape, &self.stride)
+    }
+
     /// See [`TensorRef::numel`].
     #[inline]
     pub fn numel(&self) -> i64 {
@@ -126,6 +200,78 @@ impl<'a, T: DeviceRepr + Copy + 'static, const N: usize> TensorMut<'a, T, N> {
         }
         true
     }
+}
+
+/// Why a `shape` / `stride` pair cannot be a valid view of a slice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ViewError {
+    /// An extent is negative, or a negative stride reaches before element `0`.
+    NotAddressable,
+    /// The highest element the view can reach is past the end of the slice.
+    TooSmall {
+        /// Elements the view can reach (see [`required_len`]).
+        needed: usize,
+        /// Length of the backing slice.
+        got: usize,
+    },
+}
+
+impl core::fmt::Display for ViewError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::NotAddressable => f.write_str(
+                "tensor view is not addressable (negative extent, or a negative stride                  that reaches before the start of its buffer)",
+            ),
+            Self::TooSmall { needed, got } => {
+                write!(f, "tensor view reaches {needed} elements but its buffer holds {got}")
+            }
+        }
+    }
+}
+
+impl core::error::Error for ViewError {}
+
+/// Number of elements a view with this `shape` / `stride` can touch, counted
+/// from the start of its backing slice: `1 + Σ (shape[i]-1)·stride[i]` over
+/// axes with `shape[i] > 1` (or `0` when any extent is `0`).
+///
+/// Returns `None` when the view cannot be addressed inside *any* slice: a
+/// negative extent, a negative stride that reaches before element `0`, or
+/// an offset that overflows. This is the bound a launch must check against
+/// `data.len()` before strides are handed to a kernel — `numel()` alone
+/// under-counts any view with a stride larger than its extent product (for
+/// example `shape = [n]`, `stride = [2]` touches `2n - 1` elements).
+///
+/// `stride == 0` (broadcast) axes contribute nothing.
+#[must_use]
+pub fn required_len(shape: &[i32], stride: &[i64]) -> Option<usize> {
+    debug_assert_eq!(shape.len(), stride.len());
+    let mut lo: i128 = 0;
+    let mut hi: i128 = 0;
+    let mut empty = false;
+    for (&n, &s) in shape.iter().zip(stride) {
+        if n < 0 {
+            return None;
+        }
+        if n == 0 {
+            empty = true;
+            continue;
+        }
+        let ext = (n as i128 - 1) * s as i128;
+        if ext < 0 {
+            lo += ext;
+        } else {
+            hi += ext;
+        }
+    }
+    if lo < 0 {
+        return None;
+    }
+    if empty {
+        return Some(0);
+    }
+    usize::try_from(hi + 1).ok()
 }
 
 /// Compute the row-major contiguous stride for the given `shape`.
@@ -324,5 +470,55 @@ mod tests {
         let stride = contiguous_stride(shape);
         // stride[0] * shape[0] should give the total element count.
         assert_eq!(stride[0] * shape[0] as i64, 32);
+    }
+}
+
+#[cfg(test)]
+mod required_len_tests {
+    use super::required_len;
+
+    #[test]
+    fn contiguous_equals_numel() {
+        assert_eq!(
+            required_len(&[8, 128, 128], &[128 * 128, 128, 1]),
+            Some(8 * 128 * 128)
+        );
+    }
+
+    #[test]
+    fn stride_larger_than_extent_reaches_further_than_numel() {
+        // 64 elements at stride 2 touch indices 0..=126.
+        assert_eq!(required_len(&[64], &[2]), Some(127));
+    }
+
+    #[test]
+    fn broadcast_axis_costs_nothing() {
+        assert_eq!(required_len(&[4, 16], &[0, 1]), Some(16));
+    }
+
+    #[test]
+    fn transposed_view_needs_the_whole_buffer() {
+        assert_eq!(required_len(&[3, 5], &[1, 3]), Some(15));
+    }
+
+    #[test]
+    fn empty_view_needs_nothing() {
+        assert_eq!(required_len(&[0, 7], &[7, 1]), Some(0));
+    }
+
+    #[test]
+    fn negative_extent_or_negative_reach_is_unaddressable() {
+        assert_eq!(required_len(&[-1], &[1]), None);
+        assert_eq!(required_len(&[4], &[-1]), None);
+        // a negative stride on a size-1 axis never moves, so it is fine
+        assert_eq!(required_len(&[1, 4], &[-9, 1]), Some(4));
+    }
+
+    #[test]
+    fn overflow_is_unaddressable_not_wrapped() {
+        assert_eq!(
+            required_len(&[i32::MAX, i32::MAX], &[i64::MAX, i64::MAX]),
+            None
+        );
     }
 }

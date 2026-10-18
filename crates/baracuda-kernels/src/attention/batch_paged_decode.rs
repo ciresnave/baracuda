@@ -200,6 +200,14 @@ impl<T: Element> BatchPagedDecodePlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &BatchPagedDecodeArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.k_data)?;
+        crate::view_check::check_fits(&args.v_data)?;
+        crate::view_check::check_fits(&args.indices)?;
+        crate::view_check::check_fits(&args.indptr)?;
+        crate::view_check::check_fits(&args.last_page_len)?;
+        crate::view_check::check_fits(&args.o)?;
+        crate::view_check::check_fits(&args.lse)?;
         let q_shape = [
             self.desc.batch_size,
             self.desc.num_qo_heads,

@@ -153,6 +153,8 @@ impl<T: Element, const N: usize> RepeatBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RepeatBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.dx)?;
         if args.dx.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RepeatBackwardPlan: dx shape mismatch with descriptor \

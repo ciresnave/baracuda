@@ -290,6 +290,7 @@ impl<const N: usize> RandomPlan<f32, N> {
         _workspace: Workspace<'_>,
         args: RandomArgs<'_, f32, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.y)?;
         let numel = self.check_shape(&args.y)?;
         if numel == 0 {
             return Ok(());
@@ -354,6 +355,7 @@ impl<const N: usize> RandomPlan<f64, N> {
         _workspace: Workspace<'_>,
         args: RandomArgs<'_, f64, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.y)?;
         let numel = self.check_shape(&args.y)?;
         if numel == 0 {
             return Ok(());
@@ -409,6 +411,7 @@ impl<const N: usize> RandomPlan<Bool, N> {
         workspace: Workspace<'_>,
         args: RandomBoolArgs<'_, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.y)?;
         if !matches!(self.desc.kind, RandomKind::Bernoulli) {
             return Err(Error::Unsupported(
                 "baracuda-kernels::RandomPlan<Bool>: only Bernoulli is wired \

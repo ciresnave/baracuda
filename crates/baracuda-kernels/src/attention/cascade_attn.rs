@@ -158,6 +158,10 @@ impl<T: Element> CascadeAttentionPlan<T> {
 
     /// Validate args against the descriptor (shape + contiguity checks).
     pub fn can_implement(&self, args: &CascadeAttentionArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.v)?;
+        crate::view_check::check_fits(&args.s)?;
+        crate::view_check::check_fits(&args.v_other)?;
+        crate::view_check::check_fits(&args.s_other)?;
         let v_shape = [self.desc.seq_len, self.desc.num_heads, self.desc.head_dim];
         let s_shape = [self.desc.seq_len, self.desc.num_heads];
         if args.v.shape != v_shape || args.v_other.shape != v_shape {
@@ -386,6 +390,10 @@ impl<T: Element> CascadeMergeStatesPlan<T> {
 
     /// Validate args against the descriptor (shape + contiguity checks).
     pub fn can_implement(&self, args: &CascadeMergeStatesArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.v)?;
+        crate::view_check::check_fits(&args.s)?;
+        crate::view_check::check_fits(&args.v_merged)?;
+        crate::view_check::check_fits(&args.s_merged)?;
         let v_shape = [
             self.desc.seq_len,
             self.desc.num_index_sets,

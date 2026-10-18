@@ -91,6 +91,9 @@ impl<T: Element> SortBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &SortBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.indices)?;
+        crate::view_check::check_fits(&args.dx)?;
         let expected = [self.desc.batch, self.desc.row_len];
         if args.dy.shape != expected || args.indices.shape != expected || args.dx.shape != expected
         {

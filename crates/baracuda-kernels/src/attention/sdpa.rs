@@ -187,6 +187,14 @@ impl<T: Element> SdpaPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &SdpaArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.k)?;
+        crate::view_check::check_fits(&args.v)?;
+        if let Some(t) = &args.mask {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.attn)?;
         let shape_q = [
             self.desc.batch_size,
             self.desc.num_heads,

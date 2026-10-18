@@ -259,6 +259,11 @@ impl<TIn: Element, TWQ: IntElement> SmoothQuantLinearPlan<TIn, TWQ> {
 
     /// Validate args at run time.
     pub fn can_implement(&self, args: &SmoothQuantLinearArgs<'_, TIn, TWQ>) -> Result<()> {
+        crate::view_check::check_fits(&args.act_q)?;
+        crate::view_check::check_fits(&args.weight_q)?;
+        crate::view_check::check_fits(&args.weight_scale)?;
+        crate::view_check::check_fits(&args.output)?;
+        crate::view_check::check_fits(&args.act_scale_scratch)?;
         if args.act_q.shape != [self.desc.m, self.desc.k] {
             return Err(Error::InvalidProblem(
                 "SmoothQuantLinearPlan: act_q shape != [M, K]",

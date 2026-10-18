@@ -123,6 +123,8 @@ impl<T: Element> AffineGridPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &AffineGridArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.theta)?;
+        crate::view_check::check_fits(&args.grid)?;
         if args.theta.shape != [self.desc.n, 2, 3] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::AffineGridPlan: theta must be [N, 2, 3]",

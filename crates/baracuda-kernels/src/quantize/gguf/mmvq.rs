@@ -207,6 +207,9 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &GgufMmvqArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.weight)?;
+        crate::view_check::check_fits(&args.activation)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.activation.shape != [self.desc.ncols] {
             return Err(Error::InvalidProblem(
                 "GgufMmvqPlan: activation shape != [ncols]",

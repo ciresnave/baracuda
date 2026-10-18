@@ -211,6 +211,9 @@ impl<const N: usize> DropoutPlan<f32, N> {
         workspace: Workspace<'_>,
         args: DropoutArgs<'_, f32, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.y)?;
+        crate::view_check::check_dense(&args.mask)?;
         let numel = self.check_args(&args)?;
         if numel == 0 {
             return Ok(());
@@ -285,6 +288,9 @@ impl<const N: usize> DropoutPlan<f64, N> {
         workspace: Workspace<'_>,
         args: DropoutArgs<'_, f64, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.y)?;
+        crate::view_check::check_dense(&args.mask)?;
         let numel = self.check_args(&args)?;
         if numel == 0 {
             return Ok(());
@@ -505,6 +511,9 @@ impl<const N: usize> DropoutBackwardPlan<f32, N> {
         _workspace: Workspace<'_>,
         args: DropoutBackwardArgs<'_, f32, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.mask)?;
+        crate::view_check::check_dense(&args.dx)?;
         let numel = self.check_args(&args)?;
         if numel == 0 {
             return Ok(());
@@ -544,6 +553,9 @@ impl<const N: usize> DropoutBackwardPlan<f64, N> {
         _workspace: Workspace<'_>,
         args: DropoutBackwardArgs<'_, f64, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.mask)?;
+        crate::view_check::check_dense(&args.dx)?;
         let numel = self.check_args(&args)?;
         if numel == 0 {
             return Ok(());

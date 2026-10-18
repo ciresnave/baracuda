@@ -147,6 +147,10 @@ impl<T: Element, const N: usize> TernaryPlan<T, N> {
     /// Per-axis broadcast compatibility: each input's `shape[d]` must
     /// match `y.shape[d]` or be 1 with `stride[d] == 0`.
     pub fn can_implement(&self, args: &TernaryArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.a)?;
+        crate::view_check::check_fits(&args.b)?;
+        crate::view_check::check_fits(&args.c)?;
+        crate::view_check::check_fits(&args.y)?;
         if args.y.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TernaryPlan: Y shape mismatch with descriptor",

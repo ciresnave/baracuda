@@ -318,6 +318,8 @@ impl CholeskyPlan<f32> {
         workspace: Workspace<'_>,
         args: CholeskyArgs<'_, f32>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;
@@ -403,6 +405,8 @@ impl CholeskyPlan<f64> {
         workspace: Workspace<'_>,
         args: CholeskyArgs<'_, f64>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;

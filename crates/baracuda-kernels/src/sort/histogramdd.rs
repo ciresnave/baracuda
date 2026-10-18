@@ -96,6 +96,8 @@ impl<T: Element> HistogramddPlan<T> {
 
     /// Validate args — always returns `Unsupported`.
     pub fn can_implement(&self, _args: &HistogramddArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&_args.input)?;
+        crate::view_check::check_fits(&_args.output)?;
         Err(Error::Unsupported(
             "baracuda-kernels::HistogramddPlan: reserved API surface",
         ))

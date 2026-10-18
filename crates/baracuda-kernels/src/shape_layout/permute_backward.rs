@@ -156,6 +156,8 @@ impl<T: Element, const N: usize> PermuteBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &PermuteBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.dx)?;
         if args.dx.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PermuteBackwardPlan: dx shape != desc.input_shape",

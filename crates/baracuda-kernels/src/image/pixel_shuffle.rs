@@ -128,6 +128,8 @@ impl<T: Element> PixelShufflePlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &PixelShuffleArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         let r = self.desc.upscale_factor;
         let cin = self.desc.c * r * r;
         if args.input.shape != [self.desc.n, cin, self.desc.h, self.desc.w] {

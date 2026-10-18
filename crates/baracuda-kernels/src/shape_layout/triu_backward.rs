@@ -130,6 +130,8 @@ impl<T: Element, const N: usize> TriuBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &TriuBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.grad_output)?;
+        crate::view_check::check_fits(&args.grad_input)?;
         if args.grad_output.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TriuBackwardPlan: grad_output shape mismatch with descriptor",

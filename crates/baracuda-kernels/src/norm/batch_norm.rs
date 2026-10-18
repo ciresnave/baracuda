@@ -155,6 +155,16 @@ impl<T: Element, const N: usize> BatchNormPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &BatchNormArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        if let Some(t) = &args.gamma {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.beta {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.saved_mean)?;
+        crate::view_check::check_fits(&args.saved_rstd)?;
         if args.x.shape != self.desc.input_shape || args.y.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BatchNormPlan: x / y shape mismatch",

@@ -145,6 +145,10 @@ impl<T: Element, const N: usize> WherePlan<T, N> {
 
     /// Validate that this plan can launch with `args`.
     pub fn can_implement(&self, args: &WhereArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.cond)?;
+        crate::view_check::check_fits(&args.a)?;
+        crate::view_check::check_fits(&args.b)?;
+        crate::view_check::check_fits(&args.y)?;
         if args.y.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WherePlan: Y shape mismatch with descriptor",

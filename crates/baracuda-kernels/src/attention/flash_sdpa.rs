@@ -535,6 +535,17 @@ impl<T: Element> FlashSdpaPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &FlashSdpaArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.k)?;
+        crate::view_check::check_fits(&args.v)?;
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.lse)?;
+        if let Some(t) = &args.mask {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.alibi_slopes {
+            crate::view_check::check_fits(t)?;
+        }
         // Q always has H heads; K/V have H_k heads (derived from args.k.shape[1]).
         let num_heads_k = args.k.shape[1];
         if num_heads_k <= 0

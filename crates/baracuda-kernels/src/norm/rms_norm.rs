@@ -214,6 +214,12 @@ impl<T: Element, const N: usize> RMSNormPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RMSNormArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        if let Some(t) = &args.gamma {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.rms)?;
         if args.x.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RMSNormPlan: x shape mismatch",

@@ -269,6 +269,8 @@ impl FftPlan<Complex64> {
         _workspace: Workspace<'_>,
         args: FftArgs<'_, Complex64>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.y)?;
         let numel = self.check_args(&args.x, &args.y)?;
         if numel == 0 {
             return Ok(());
@@ -317,6 +319,8 @@ impl FftPlan<Complex128> {
         _workspace: Workspace<'_>,
         args: FftArgs<'_, Complex128>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.y)?;
         let numel = self.check_args(&args.x, &args.y)?;
         if numel == 0 {
             return Ok(());

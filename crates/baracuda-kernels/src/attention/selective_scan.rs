@@ -196,6 +196,24 @@ impl<T: Element> SelectiveScanPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &SelectiveScanArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.u)?;
+        crate::view_check::check_fits(&args.delta)?;
+        crate::view_check::check_fits(&args.a)?;
+        crate::view_check::check_fits(&args.b)?;
+        crate::view_check::check_fits(&args.c)?;
+        if let Some(t) = &args.d_skip {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.z {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.delta_bias {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.y)?;
+        if let Some(t) = &args.last_state {
+            crate::view_check::check_fits(t)?;
+        }
         let shape_udy = [self.desc.batch_size, self.desc.seq_len, self.desc.dim];
         let shape_a = [self.desc.dim, self.desc.dstate];
         let shape_bc = [self.desc.batch_size, self.desc.seq_len, self.desc.dstate];

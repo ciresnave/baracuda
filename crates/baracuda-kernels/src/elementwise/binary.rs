@@ -243,6 +243,9 @@ impl<T: Element, const N: usize> BinaryPlan<T, N> {
     /// contiguous, though the strided kernel accepts arbitrary `y`
     /// strides too.
     pub fn can_implement(&self, args: &BinaryArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.a)?;
+        crate::view_check::check_fits(&args.b)?;
+        crate::view_check::check_fits(&args.y)?;
         // Output must match the descriptor exactly. No broadcast on the
         // output side — `y` is the destination of the broadcast, not
         // a participant in it.

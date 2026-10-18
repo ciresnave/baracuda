@@ -237,6 +237,12 @@ impl<T: Element> HyperConnectionPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &HyperConnectionArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.x_expanded)?;
+        crate::view_check::check_fits(&args.rmsnorm_weight)?;
+        crate::view_check::check_fits(&args.h_pre)?;
+        crate::view_check::check_fits(&args.h_post)?;
+        crate::view_check::check_fits(&args.h_res)?;
+        crate::view_check::check_fits(&args.out)?;
         let b = self.desc.batch;
         let n = self.desc.n_streams;
         let c = self.desc.hidden_dim;

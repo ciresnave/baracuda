@@ -108,6 +108,16 @@ impl<T: Element, const N: usize> InstanceNormPlan<T, N> {
         workspace: Workspace<'_>,
         args: InstanceNormArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        if let Some(t) = &args.gamma {
+            crate::view_check::check_dense(t)?;
+        }
+        if let Some(t) = &args.beta {
+            crate::view_check::check_dense(t)?;
+        }
+        crate::view_check::check_dense(&args.y)?;
+        crate::view_check::check_dense(&args.saved_mean)?;
+        crate::view_check::check_dense(&args.saved_rstd)?;
         let inner_args = GroupNormArgs::<T, N> {
             x: args.x,
             gamma: args.gamma,

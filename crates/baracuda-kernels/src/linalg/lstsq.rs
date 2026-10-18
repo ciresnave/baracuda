@@ -473,6 +473,13 @@ macro_rules! impl_lstsq_run {
                 workspace: Workspace<'_>,
                 args: LstSqArgs<'_, $T>,
             ) -> Result<()> {
+                crate::view_check::check_dense(&args.a)?;
+                crate::view_check::check_dense(&args.b)?;
+                crate::view_check::check_dense(&args.x)?;
+                crate::view_check::check_dense(&args.info)?;
+                if let Some(t) = &args.a_backup {
+                    crate::view_check::check_dense(t)?;
+                }
                 self.check_args(&args)?;
                 let h = self.ensure_handle()?;
                 self.bind_stream(h, stream)?;

@@ -159,6 +159,8 @@ impl<T: Element, const N: usize> GatedActivationPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &GatedActivationArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        crate::view_check::check_fits(&args.y)?;
         let output_shape = self.desc.output_shape();
         if args.x.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(

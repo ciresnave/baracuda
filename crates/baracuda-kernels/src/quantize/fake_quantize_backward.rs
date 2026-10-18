@@ -108,6 +108,9 @@ impl<TIn: Element> FakeQuantizeBackwardPlan<TIn> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &FakeQuantizeBackwardArgs<'_, TIn>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.d_output)?;
+        crate::view_check::check_fits(&args.d_input)?;
         let expected = [self.desc.numel];
         if args.input.shape != expected
             || args.d_output.shape != expected

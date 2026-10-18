@@ -155,6 +155,10 @@ impl<TIn: Element, TOut: IntElement> QuantizePerGroupPlan<TIn, TOut> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &QuantizePerGroupArgs<'_, TIn, TOut>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.scale)?;
+        crate::view_check::check_fits(&args.zero_point)?;
+        crate::view_check::check_fits(&args.output)?;
         let expect_io = [self.desc.outer_size, self.desc.axis_size];
         if args.input.shape != expect_io || args.output.shape != expect_io {
             return Err(Error::InvalidProblem(

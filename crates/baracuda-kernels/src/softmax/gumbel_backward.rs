@@ -140,6 +140,9 @@ impl<T: Element, const N: usize> GumbelSoftmaxBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &GumbelSoftmaxBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.dx)?;
         if args.dy.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GumbelSoftmaxBackwardPlan: dy shape mismatch",

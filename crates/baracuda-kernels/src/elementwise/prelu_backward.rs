@@ -150,6 +150,11 @@ impl<T: Element, const N: usize> PReluBackwardPlan<T, N> {
         _workspace: Workspace<'_>,
         args: PReluBackwardArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.weight)?;
+        crate::view_check::check_dense(&args.dx)?;
+        crate::view_check::check_dense(&args.dweight)?;
         if args.x.shape != self.desc.input_shape
             || args.dy.shape != self.desc.input_shape
             || args.dx.shape != self.desc.input_shape

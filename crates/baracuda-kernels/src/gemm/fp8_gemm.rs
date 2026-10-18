@@ -208,6 +208,18 @@ impl<T: FpElement> Fp8GemmPlan<T> {
         {
             return Err(Error::InvalidProblem("bias length must equal N"));
         }
+        let (m, n, k) = (self.desc.m as i64, self.desc.n as i64, self.desc.k as i64);
+        let eb = core::mem::size_of::<T>();
+        let (b_major, b_minor) = match self.sku.layout {
+            LayoutSku::Rcr => (n, k),
+            LayoutSku::Rrr => (k, n),
+        };
+        crate::view_check::check_matrix(m, k, args.a.ld, eb, args.a.data.len(), eb)?;
+        crate::view_check::check_matrix(b_major, b_minor, args.b.ld, eb, args.b.data.len(), eb)?;
+        if let Some(c) = &args.c {
+            crate::view_check::check_matrix(m, n, c.ld, eb, c.data.len(), eb)?;
+        }
+        crate::view_check::check_matrix(m, n, args.d.ld, eb, args.d.data.len(), eb)?;
         Ok(())
     }
 
@@ -236,6 +248,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
         workspace: Workspace<'_>,
         args: Fp8GemmArgs<'_, T>,
     ) -> Result<()> {
+        self.can_implement(&args)?;
         let _ = workspace; // FP8 kernels take no scratch
 
         let a_ptr = args.a.data.as_raw().0 as *const c_void;

@@ -256,6 +256,11 @@ impl SvdPlan<f32> {
         workspace: Workspace<'_>,
         args: SvdArgs<'_, f32>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.s)?;
+        crate::view_check::check_dense(&args.u)?;
+        crate::view_check::check_dense(&args.vt)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;
@@ -315,6 +320,11 @@ impl SvdPlan<f64> {
         workspace: Workspace<'_>,
         args: SvdArgs<'_, f64>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.s)?;
+        crate::view_check::check_dense(&args.u)?;
+        crate::view_check::check_dense(&args.vt)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;

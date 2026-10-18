@@ -175,6 +175,11 @@ impl<T: Element> KvCacheAppendPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &KvCacheAppendArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.k_new)?;
+        crate::view_check::check_fits(&args.v_new)?;
+        crate::view_check::check_fits(&args.cache_offsets)?;
+        crate::view_check::check_fits(&args.k_cache)?;
+        crate::view_check::check_fits(&args.v_cache)?;
         let shape_k_new = [
             self.desc.batch_size,
             self.desc.num_heads,

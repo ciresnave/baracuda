@@ -169,6 +169,16 @@ impl<T: Element, const N: usize> RMSNormBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RMSNormBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.x)?;
+        if let Some(t) = &args.gamma {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.rms)?;
+        crate::view_check::check_fits(&args.dx)?;
+        if let Some(t) = &args.dgamma {
+            crate::view_check::check_fits(t)?;
+        }
         if args.dy.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RMSNormBackwardPlan: dy shape mismatch",

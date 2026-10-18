@@ -122,6 +122,9 @@ impl<T: Element, const N: usize> BceWithLogitsLossPlan<T, N> {
         workspace: Workspace<'_>,
         args: BceWithLogitsLossArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.logits)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.out)?;
         if args.logits.shape != self.desc.input_shape || args.target.shape != self.desc.input_shape
         {
             return Err(Error::InvalidProblem(
@@ -270,6 +273,10 @@ impl<T: Element, const N: usize> BceWithLogitsLossBackwardPlan<T, N> {
         _workspace: Workspace<'_>,
         args: BceWithLogitsLossBackwardArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.logits)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.dlogits)?;
         if args.logits.shape != self.desc.input_shape
             || args.target.shape != self.desc.input_shape
             || args.dlogits.shape != self.desc.input_shape

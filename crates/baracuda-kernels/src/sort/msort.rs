@@ -82,6 +82,9 @@ impl<T: Element> MsortPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &MsortArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.values)?;
+        crate::view_check::check_fits(&args.indices)?;
         validate_sort_args_2(
             self.desc.batch,
             self.desc.row_len,
@@ -265,6 +268,9 @@ impl<T: Element> MsortBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &MsortBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.indices)?;
+        crate::view_check::check_fits(&args.dx)?;
         let expected = [self.desc.batch, self.desc.row_len];
         if args.dy.shape != expected || args.indices.shape != expected || args.dx.shape != expected
         {

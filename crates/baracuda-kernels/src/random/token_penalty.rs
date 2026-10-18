@@ -91,6 +91,8 @@ impl TokenPenaltyPlan {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &TokenPenaltyArgs<'_>) -> Result<()> {
+        crate::view_check::check_fits(&args.logits)?;
+        crate::view_check::check_fits(&args.counts)?;
         let shape = [self.desc.batch_size, self.desc.vocab_size];
         if args.logits.shape != shape || args.counts.shape != shape {
             return Err(Error::InvalidProblem(

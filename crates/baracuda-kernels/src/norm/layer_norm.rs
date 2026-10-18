@@ -165,6 +165,16 @@ impl<T: Element, const N: usize> LayerNormPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &LayerNormArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        if let Some(t) = &args.gamma {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.beta {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.mean)?;
+        crate::view_check::check_fits(&args.inv_std)?;
         if args.x.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::LayerNormPlan: x shape mismatch",

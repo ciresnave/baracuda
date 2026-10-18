@@ -92,6 +92,8 @@ impl<T: Element> BincountPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &BincountArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         if (args.input.shape[0] as i64) != self.desc.numel {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BincountPlan: input shape[0] != descriptor numel",

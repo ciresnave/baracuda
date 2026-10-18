@@ -144,6 +144,10 @@ impl<T: Element> RoiPoolPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RoiPoolArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.rois)?;
+        crate::view_check::check_fits(&args.output)?;
+        crate::view_check::check_fits(&args.argmax)?;
         if args.input.shape != [self.desc.n, self.desc.c, self.desc.h, self.desc.w] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiPoolPlan: input shape mismatch",

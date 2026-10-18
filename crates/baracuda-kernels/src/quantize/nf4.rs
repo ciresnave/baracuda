@@ -209,6 +209,9 @@ impl<T: Nf4Activation> Nf4DequantizePlan<T> {
 
     /// Validate args against the plan.
     pub fn can_implement(&self, args: &Nf4DequantizeArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.weight)?;
+        crate::view_check::check_fits(&args.absmax)?;
+        crate::view_check::check_fits(&args.output)?;
         let n = self.desc.n;
         let k = self.desc.k;
         let bs = self.desc.block_size;
@@ -326,6 +329,10 @@ impl<T: Nf4Activation> Nf4MmvqPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &Nf4MmvqArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.weight)?;
+        crate::view_check::check_fits(&args.absmax)?;
+        crate::view_check::check_fits(&args.activation)?;
+        crate::view_check::check_fits(&args.output)?;
         let n = self.desc.n;
         let k = self.desc.k;
         let bs = self.desc.block_size;
@@ -461,6 +468,10 @@ impl<T: Nf4Activation> Nf4MmvqMultiMPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &Nf4MmvqMultiMArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.weight)?;
+        crate::view_check::check_fits(&args.absmax)?;
+        crate::view_check::check_fits(&args.activations)?;
+        crate::view_check::check_fits(&args.output)?;
         let n = self.desc.base.n;
         let k = self.desc.base.k;
         let bs = self.desc.base.block_size;

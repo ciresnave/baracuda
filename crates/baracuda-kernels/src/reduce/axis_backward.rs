@@ -208,6 +208,14 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &ReduceBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        if let Some(t) = &args.x {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.y {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.dx)?;
         if args.dx.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ReduceBackwardPlan: dx shape must equal input_shape",

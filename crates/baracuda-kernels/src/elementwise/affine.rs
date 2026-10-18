@@ -120,6 +120,8 @@ impl<T: Element> AffinePlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &AffineArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         let expected = self.desc.numel as i64;
         if args.input.numel() != expected {
             return Err(Error::InvalidProblem(

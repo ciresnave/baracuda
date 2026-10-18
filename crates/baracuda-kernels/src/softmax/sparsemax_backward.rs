@@ -123,6 +123,9 @@ impl<T: Element, const N: usize> SparsemaxBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &SparsemaxBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.dx)?;
         if args.dy.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SparsemaxBackwardPlan: dy shape mismatch",

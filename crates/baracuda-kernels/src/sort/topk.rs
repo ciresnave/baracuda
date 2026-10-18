@@ -124,6 +124,9 @@ impl<T: Element> TopkPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &TopkArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.values)?;
+        crate::view_check::check_fits(&args.indices)?;
         let in_shape = [self.desc.batch, self.desc.row_len];
         let out_shape = [self.desc.batch, self.desc.k];
         if args.input.shape != in_shape {

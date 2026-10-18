@@ -126,6 +126,9 @@ impl<T: Element, const N: usize> HuberLossPlan<T, N> {
         workspace: Workspace<'_>,
         args: HuberLossArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.pred)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.out)?;
         if args.pred.shape != self.desc.input_shape || args.target.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HuberLossPlan: pred / target shape mismatch",
@@ -281,6 +284,10 @@ impl<T: Element, const N: usize> HuberLossBackwardPlan<T, N> {
         _workspace: Workspace<'_>,
         args: HuberLossBackwardArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.pred)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.dpred)?;
         if args.pred.shape != self.desc.input_shape
             || args.target.shape != self.desc.input_shape
             || args.dpred.shape != self.desc.input_shape

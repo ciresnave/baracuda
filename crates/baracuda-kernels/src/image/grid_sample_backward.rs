@@ -131,6 +131,11 @@ impl<T: Element> GridSampleBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &GridSampleBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dout)?;
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.grid)?;
+        crate::view_check::check_fits(&args.dinput)?;
+        crate::view_check::check_fits(&args.dgrid)?;
         if args.dout.shape != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow]
             || args.input.shape != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw]
             || args.grid.shape != [self.desc.n, self.desc.oh, self.desc.ow, 2]

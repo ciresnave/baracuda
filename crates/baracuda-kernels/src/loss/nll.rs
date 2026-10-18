@@ -128,6 +128,9 @@ impl<T: Element> NllLossPlan<T> {
         workspace: Workspace<'_>,
         args: NllLossArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.out)?;
         let n_rows = self.desc.n_rows as i64;
         let class_extent = self.desc.class_extent;
         if n_rows == 0 {
@@ -324,6 +327,9 @@ impl<T: Element> NllLossBackwardPlan<T> {
         _workspace: Workspace<'_>,
         args: NllLossBackwardArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.dinput)?;
         let n_rows = self.desc.n_rows as i64;
         let class_extent = self.desc.class_extent;
         if n_rows == 0 {

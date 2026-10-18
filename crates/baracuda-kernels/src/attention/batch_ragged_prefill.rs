@@ -149,6 +149,13 @@ impl<T: Element> BatchRaggedPrefillPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &BatchRaggedPrefillArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.q_indptr)?;
+        crate::view_check::check_fits(&args.k_data)?;
+        crate::view_check::check_fits(&args.v_data)?;
+        crate::view_check::check_fits(&args.kv_indptr)?;
+        crate::view_check::check_fits(&args.o)?;
+        crate::view_check::check_fits(&args.lse)?;
         let d = &self.desc;
         let qo_shape = [d.total_num_rows, d.num_qo_heads, d.head_dim];
         if args.q.shape != qo_shape || args.o.shape != qo_shape {
