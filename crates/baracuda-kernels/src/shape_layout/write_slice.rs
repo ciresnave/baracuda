@@ -246,6 +246,8 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
     /// Validate `args` against the descriptor: shapes match, device
     /// buffers are large enough.
     pub fn can_implement(&self, args: &WriteSliceArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dest)?;
+        crate::view_check::check_fits(&args.source)?;
         if args.dest.shape != self.desc.dest_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WriteSlicePlan: dest shape mismatch with descriptor",

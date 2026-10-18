@@ -132,6 +132,11 @@ impl<TIn: Element> QuantizePerGroupBackwardPlan<TIn> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &QuantizePerGroupBackwardArgs<'_, TIn>) -> Result<()> {
+        crate::view_check::check_fits(&args.d_output)?;
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.scale)?;
+        crate::view_check::check_fits(&args.zero_point)?;
+        crate::view_check::check_fits(&args.d_input)?;
         let expect_io = [self.desc.outer_size, self.desc.axis_size];
         if args.d_output.shape != expect_io
             || args.input.shape != expect_io

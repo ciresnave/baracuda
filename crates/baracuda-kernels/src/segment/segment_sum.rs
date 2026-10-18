@@ -99,6 +99,9 @@ impl<T: Element> SegmentSumPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &SegmentSumArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.segment_ids)?;
+        crate::view_check::check_fits(&args.output)?;
         validate_args(
             &self.desc,
             args.input.shape,

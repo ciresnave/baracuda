@@ -136,6 +136,9 @@ impl<T: Element> RoiAlignBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RoiAlignBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dout)?;
+        crate::view_check::check_fits(&args.rois)?;
+        crate::view_check::check_fits(&args.dinput)?;
         if args.dout.shape
             != [
                 self.desc.num_rois,

@@ -96,6 +96,9 @@ impl<T: Element> SortPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &SortArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.values)?;
+        crate::view_check::check_fits(&args.indices)?;
         validate_sort_args_2(
             self.desc.batch,
             self.desc.row_len,

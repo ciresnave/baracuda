@@ -275,6 +275,16 @@ impl<T: Element> FlashSdpaVarlenPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &FlashSdpaVarlenArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.k)?;
+        crate::view_check::check_fits(&args.v)?;
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.lse)?;
+        crate::view_check::check_fits(&args.cu_seqlens_q)?;
+        crate::view_check::check_fits(&args.cu_seqlens_k)?;
+        if let Some(t) = &args.alibi_slopes {
+            crate::view_check::check_fits(t)?;
+        }
         let total_q = args.q.shape[0];
         let total_k = args.k.shape[0];
 
@@ -555,6 +565,20 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &FlashSdpaVarlenBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.k)?;
+        crate::view_check::check_fits(&args.v)?;
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.lse)?;
+        crate::view_check::check_fits(&args.cu_seqlens_q)?;
+        crate::view_check::check_fits(&args.cu_seqlens_k)?;
+        crate::view_check::check_fits(&args.dq)?;
+        crate::view_check::check_fits(&args.dk)?;
+        crate::view_check::check_fits(&args.dv)?;
+        if let Some(t) = &args.alibi_slopes {
+            crate::view_check::check_fits(t)?;
+        }
         let total_q = args.q.shape[0];
         let total_k = args.k.shape[0];
         let shape_q = [total_q, self.desc.num_heads, self.desc.d_k];

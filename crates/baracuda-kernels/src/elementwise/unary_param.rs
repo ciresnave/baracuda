@@ -155,6 +155,8 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &UnaryParamArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        crate::view_check::check_fits(&args.y)?;
         if args.x.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnaryParamPlan: X shape mismatch with descriptor",

@@ -117,6 +117,9 @@ impl<T: Element, const N: usize> BinaryParamPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &BinaryParamArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.a)?;
+        crate::view_check::check_fits(&args.b)?;
+        crate::view_check::check_fits(&args.y)?;
         if args.a.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryParamPlan: A shape mismatch",

@@ -118,6 +118,9 @@ impl<T: Element> NmsPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &NmsArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.boxes)?;
+        crate::view_check::check_fits(&args.keep_mask)?;
+        crate::view_check::check_fits(&args.count)?;
         if args.boxes.shape != [self.desc.num_boxes, 4] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NmsPlan: boxes must be [num_boxes, 4]",

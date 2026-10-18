@@ -127,6 +127,13 @@ impl<T: Element> PagedKvAppendPlan<T> {
 
     /// Validate args against the descriptor (shape + contiguity checks).
     pub fn can_implement(&self, args: &PagedKvAppendArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.key)?;
+        crate::view_check::check_fits(&args.value)?;
+        crate::view_check::check_fits(&args.k_data)?;
+        crate::view_check::check_fits(&args.v_data)?;
+        crate::view_check::check_fits(&args.indices)?;
+        crate::view_check::check_fits(&args.indptr)?;
+        crate::view_check::check_fits(&args.last_page_len)?;
         let kv_row_shape = [
             self.desc.batch_size,
             self.desc.paged_kv.num_kv_heads,

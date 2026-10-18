@@ -168,6 +168,14 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &ScanBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.dx)?;
+        if let Some(t) = &args.x {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.y {
+            crate::view_check::check_fits(t)?;
+        }
         if args.dy.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ScanBackwardPlan: dy shape mismatch",

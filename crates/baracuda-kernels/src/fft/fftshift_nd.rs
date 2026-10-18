@@ -246,6 +246,8 @@ impl<T: Element, const N: usize> FftShiftNdPlan<T, N> {
 
     /// Validate the arg bundle against the descriptor.
     pub fn can_implement(&self, args: &FftShiftNdArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         let ndim = self.desc.ndim as usize;
         let mut expected_shape = [0i32; N];
         // Copy the leading `ndim` entries (guaranteed == N by `select`).

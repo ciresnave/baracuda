@@ -240,6 +240,9 @@ impl<TIn: Element, TOut: IntElement> DynamicRangeQuantizePlan<TIn, TOut> {
 
     /// Validate args at run time.
     pub fn can_implement(&self, args: &DynamicRangeQuantizeArgs<'_, TIn, TOut>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.scale_out)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.input.shape != [self.desc.n, self.desc.d] {
             return Err(Error::InvalidProblem(
                 "DynamicRangeQuantizePlan: input shape != [n, d]",

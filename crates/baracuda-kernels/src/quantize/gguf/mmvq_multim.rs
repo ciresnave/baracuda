@@ -171,6 +171,9 @@ impl<T: GgufMmvqActivation> GgufMmvqMultiMPlan<T> {
 
     /// Validate args against the plan.
     pub fn can_implement(&self, args: &GgufMmvqMultiMArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.weight)?;
+        crate::view_check::check_fits(&args.activations)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.activations.shape != [self.desc.m, self.desc.ncols] {
             return Err(Error::InvalidProblem(
                 "GgufMmvqMultiMPlan: activations shape != [M, ncols]",

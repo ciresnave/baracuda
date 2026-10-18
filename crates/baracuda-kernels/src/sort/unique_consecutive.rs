@@ -124,6 +124,10 @@ impl<T: Element> UniqueConsecutivePlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &UniqueConsecutiveArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.values)?;
+        crate::view_check::check_fits(&args.counts)?;
+        crate::view_check::check_fits(&args.counter)?;
         if args.input.shape != [self.desc.batch, self.desc.row_len] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UniqueConsecutivePlan: input shape != [batch, row_len]",

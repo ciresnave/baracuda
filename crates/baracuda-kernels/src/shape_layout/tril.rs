@@ -126,6 +126,8 @@ impl<T: Element, const N: usize> TrilPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &TrilArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.input.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TrilPlan: input shape mismatch with descriptor",

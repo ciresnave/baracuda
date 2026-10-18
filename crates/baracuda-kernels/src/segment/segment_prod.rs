@@ -105,6 +105,9 @@ impl<T: Element> SegmentProdPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &SegmentProdArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.segment_ids)?;
+        crate::view_check::check_fits(&args.output)?;
         let proxy = SegmentSumDescriptor {
             num_inputs: self.desc.num_inputs,
             embedding_dim: self.desc.embedding_dim,

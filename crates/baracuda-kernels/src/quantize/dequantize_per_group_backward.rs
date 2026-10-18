@@ -124,6 +124,9 @@ impl<TIn: Element, TOut: IntElement> DequantizePerGroupBackwardPlan<TIn, TOut> {
         &self,
         args: &DequantizePerGroupBackwardArgs<'_, TIn, TOut>,
     ) -> Result<()> {
+        crate::view_check::check_fits(&args.d_output)?;
+        crate::view_check::check_fits(&args.scale)?;
+        crate::view_check::check_fits(&args.d_input)?;
         let expect_io = [self.desc.outer_size, self.desc.axis_size];
         if args.d_output.shape != expect_io || args.d_input.shape != expect_io {
             return Err(Error::InvalidProblem(

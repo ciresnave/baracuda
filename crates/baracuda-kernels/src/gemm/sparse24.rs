@@ -208,6 +208,10 @@ impl<T: Element> GemmSparse24Plan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &GemmSparse24Args<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.w_compressed)?;
+        crate::view_check::check_fits(&args.w_metadata)?;
+        crate::view_check::check_fits(&args.x)?;
+        crate::view_check::check_fits(&args.y)?;
         if args.w_compressed.shape != [self.desc.m, self.desc.k / 2] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GemmSparse24Plan: w_compressed shape must be [M, K/2]",

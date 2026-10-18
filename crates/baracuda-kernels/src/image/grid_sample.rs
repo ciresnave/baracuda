@@ -126,6 +126,9 @@ impl<T: Element> GridSamplePlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &GridSampleArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.grid)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.input.shape != [self.desc.n, self.desc.c, self.desc.ih, self.desc.iw] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GridSamplePlan: input shape mismatch",

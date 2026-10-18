@@ -102,6 +102,9 @@ impl<T: Element> KthvalueBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &KthvalueBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.indices)?;
+        crate::view_check::check_fits(&args.dx)?;
         if args.dy.shape != [self.desc.batch] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::KthvalueBackwardPlan: dy shape != [batch]",

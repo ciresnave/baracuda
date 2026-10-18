@@ -197,6 +197,11 @@ impl TopKTopPSamplingPlan {
 
     /// Validate args against the descriptor (shape + contiguity check).
     pub fn can_implement(&self, args: &TopKTopPSamplingArgs<'_>) -> Result<()> {
+        crate::view_check::check_fits(&args.probs)?;
+        crate::view_check::check_fits(&args.output)?;
+        if let Some(t) = &args.valid {
+            crate::view_check::check_fits(t)?;
+        }
         if args.probs.shape != [self.desc.batch_size, self.desc.vocab_size] {
             return Err(Error::InvalidProblem(
                 "TopKTopPSamplingPlan: probs shape must be [batch_size, vocab_size]",

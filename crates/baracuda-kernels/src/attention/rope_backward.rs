@@ -131,6 +131,11 @@ impl<T: Element> RopeBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RopeBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        if let Some(t) = &args.positions {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.dx)?;
         let want_shape = [
             self.desc.batch_size,
             self.desc.num_heads,

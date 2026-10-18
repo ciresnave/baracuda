@@ -187,6 +187,15 @@ impl<T: Element, const N: usize> BinaryBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &BinaryBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        if let Some(t) = &args.a {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.b {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.da)?;
+        crate::view_check::check_fits(&args.db)?;
         if args.dy.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::BinaryBackwardPlan: dy shape mismatch",

@@ -123,6 +123,11 @@ impl<TIn: Element, TOut: IntElement> QuantizePerChannelBackwardPlan<TIn, TOut> {
         &self,
         args: &QuantizePerChannelBackwardArgs<'_, TIn, TOut>,
     ) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.scale)?;
+        crate::view_check::check_fits(&args.zero_point)?;
+        crate::view_check::check_fits(&args.d_output)?;
+        crate::view_check::check_fits(&args.d_input)?;
         if args.input.shape != self.desc.shape
             || args.d_output.shape != self.desc.shape
             || args.d_input.shape != self.desc.shape

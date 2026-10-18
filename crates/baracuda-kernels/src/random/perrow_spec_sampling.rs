@@ -112,6 +112,20 @@ impl PerRowSamplingPlan {
 
     /// Validate args (shapes + presence of the required array).
     pub fn can_implement(&self, args: &PerRowSamplingArgs<'_>) -> Result<()> {
+        crate::view_check::check_fits(&args.probs)?;
+        if let Some(t) = &args.top_k_arr {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.top_p_arr {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.min_p_arr {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.output)?;
+        if let Some(t) = &args.valid {
+            crate::view_check::check_fits(t)?;
+        }
         let b = self.desc.batch_size;
         if args.probs.shape != [b, self.desc.vocab_size] {
             return Err(Error::InvalidProblem(
@@ -379,6 +393,12 @@ impl SpeculativeSamplingPlan {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &SpeculativeSamplingArgs<'_>) -> Result<()> {
+        crate::view_check::check_fits(&args.draft_probs)?;
+        crate::view_check::check_fits(&args.draft_token_ids)?;
+        crate::view_check::check_fits(&args.target_probs)?;
+        crate::view_check::check_fits(&args.output_token_ids)?;
+        crate::view_check::check_fits(&args.output_accepted_token_num)?;
+        crate::view_check::check_fits(&args.output_emitted_draft_token_num)?;
         let d = &self.desc;
         if args.draft_probs.shape != [d.batch_size, d.num_speculative_tokens, d.vocab_size] {
             return Err(Error::InvalidProblem(

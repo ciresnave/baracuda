@@ -108,6 +108,9 @@ impl<T: Element> TopkBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &TopkBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.indices)?;
+        crate::view_check::check_fits(&args.dx)?;
         let dy_shape = [self.desc.batch, self.desc.k];
         let dx_shape = [self.desc.batch, self.desc.row_len];
         if args.dy.shape != dy_shape {

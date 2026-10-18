@@ -154,6 +154,9 @@ impl<T: Element> RoiAlignPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RoiAlignArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.rois)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.input.shape != [self.desc.n, self.desc.c, self.desc.h, self.desc.w] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RoiAlignPlan: input shape mismatch",

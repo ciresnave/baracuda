@@ -273,6 +273,14 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
     /// the descriptor's `(n_experts, n_rows_per_expert, n_cols, format)`
     /// product.
     pub fn can_implement(&self, args: &GgufMmvqBatchedArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.weights)?;
+        crate::view_check::check_fits(&args.activations)?;
+        crate::view_check::check_fits(&args.sorted_token_ids)?;
+        crate::view_check::check_fits(&args.expert_offsets)?;
+        if let Some(t) = &args.topk_weights {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.output)?;
         if args.activations.shape[1] != self.desc.n_cols {
             return Err(Error::InvalidProblem(
                 "GgufMmvqBatchedPlan: activations.shape[1] != n_cols",

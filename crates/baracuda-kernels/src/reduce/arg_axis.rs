@@ -167,6 +167,8 @@ impl<T: Element, const N: usize, I: IndexOutputElement> ArgReducePlan<T, N, I> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &ArgReduceArgs<'_, T, N, I>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        crate::view_check::check_fits(&args.y)?;
         if args.x.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ArgReducePlan: X shape mismatch with descriptor",

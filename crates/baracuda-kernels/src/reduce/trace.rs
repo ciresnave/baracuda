@@ -109,6 +109,8 @@ impl<T: Element> TracePlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &TraceArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        crate::view_check::check_fits(&args.y)?;
         if args.x.shape != [self.desc.n, self.desc.n] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TracePlan: X shape must be [n, n] (square)",

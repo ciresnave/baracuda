@@ -103,6 +103,9 @@ impl<T: Element> UnsortedSegmentSumBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &UnsortedSegmentSumBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.d_output)?;
+        crate::view_check::check_fits(&args.segment_ids)?;
+        crate::view_check::check_fits(&args.d_input)?;
         if args.d_output.shape != [self.desc.num_segments, self.desc.embedding_dim] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::UnsortedSegmentSumBackwardPlan: d_output shape != [num_segments, D]",

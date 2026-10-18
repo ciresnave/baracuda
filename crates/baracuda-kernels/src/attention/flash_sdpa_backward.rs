@@ -413,6 +413,22 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &FlashSdpaBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.k)?;
+        crate::view_check::check_fits(&args.v)?;
+        crate::view_check::check_fits(&args.y)?;
+        crate::view_check::check_fits(&args.lse)?;
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.d_ws)?;
+        crate::view_check::check_fits(&args.dq)?;
+        crate::view_check::check_fits(&args.dk)?;
+        crate::view_check::check_fits(&args.dv)?;
+        if let Some(t) = &args.lse_f32 {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.alibi_slopes {
+            crate::view_check::check_fits(t)?;
+        }
         // Bespoke uses H_k = H; FA2 derives H_k from args.k.shape[1].
         let num_heads_k = args.k.shape[1];
         if num_heads_k <= 0

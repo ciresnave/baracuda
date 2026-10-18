@@ -115,6 +115,8 @@ impl<T: Element> ArgsortPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &ArgsortArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.indices)?;
         let expected = [self.desc.batch, self.desc.row_len];
         if args.input.shape != expected {
             return Err(Error::InvalidProblem(

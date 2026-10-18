@@ -125,6 +125,9 @@ impl<T: Element> SearchsortedPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &SearchsortedArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.sorted_seq)?;
+        crate::view_check::check_fits(&args.values)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.sorted_seq.shape != [self.desc.len_sorted] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::SearchsortedPlan: sorted_seq shape != [len_sorted]",

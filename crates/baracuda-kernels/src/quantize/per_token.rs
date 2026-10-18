@@ -119,6 +119,10 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTokenPlan<TIn, TOut> {
 
     /// Validate args at run time.
     pub fn can_implement(&self, args: &QuantizePerTokenArgs<'_, TIn, TOut>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.scale)?;
+        crate::view_check::check_fits(&args.zero_point)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.input.shape != [self.desc.n, self.desc.d] {
             return Err(Error::InvalidProblem(
                 "QuantizePerTokenPlan: input shape != [n, d]",

@@ -117,6 +117,12 @@ impl<T: Element> UniquePlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &UniqueArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.sorted_scratch)?;
+        crate::view_check::check_fits(&args.sorted_idx_scratch)?;
+        crate::view_check::check_fits(&args.values)?;
+        crate::view_check::check_fits(&args.counts)?;
+        crate::view_check::check_fits(&args.counter)?;
         let in_shape = [self.desc.batch, self.desc.row_len];
         let out_shape = [self.desc.batch, self.desc.max_unique];
         if args.input.shape != in_shape {

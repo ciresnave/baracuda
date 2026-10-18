@@ -142,6 +142,8 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
 
     /// Validate args at run time.
     pub fn can_implement(&self, args: &QuantizePerTensorArgs<'_, TIn, TOut>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.input.shape != [self.desc.numel] {
             return Err(Error::InvalidProblem(
                 "QuantizePerTensorPlan: input shape != [numel]",

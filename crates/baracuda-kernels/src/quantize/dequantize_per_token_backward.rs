@@ -105,6 +105,9 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTokenBackwardPlan<TIn, TOut> {
         &self,
         args: &DequantizePerTokenBackwardArgs<'_, TIn, TOut>,
     ) -> Result<()> {
+        crate::view_check::check_fits(&args.scale)?;
+        crate::view_check::check_fits(&args.d_output)?;
+        crate::view_check::check_fits(&args.d_input)?;
         let expect = [self.desc.n, self.desc.d];
         if args.d_output.shape != expect || args.d_input.shape != expect {
             return Err(Error::InvalidProblem(

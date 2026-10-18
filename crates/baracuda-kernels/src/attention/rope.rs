@@ -150,6 +150,11 @@ impl<T: Element> RopePlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &RopeArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        if let Some(t) = &args.positions {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.y)?;
         let want_shape = [
             self.desc.batch_size,
             self.desc.num_heads,

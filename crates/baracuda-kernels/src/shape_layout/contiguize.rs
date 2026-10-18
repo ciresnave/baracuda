@@ -215,6 +215,8 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &ContiguizeArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.source)?;
+        crate::view_check::check_fits(&args.dest)?;
         if args.source.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ContiguizePlan: source shape mismatch with descriptor",

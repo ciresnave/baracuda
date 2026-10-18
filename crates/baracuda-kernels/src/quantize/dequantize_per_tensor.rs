@@ -112,6 +112,8 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorPlan<TIn, TOut> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &DequantizePerTensorArgs<'_, TIn, TOut>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         let expected = [self.desc.numel];
         if args.input.shape != expected || args.output.shape != expected {
             return Err(Error::InvalidProblem(

@@ -137,6 +137,20 @@ impl<T: Element, const N: usize> BatchNormBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &BatchNormBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.x)?;
+        if let Some(t) = &args.gamma {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.saved_mean)?;
+        crate::view_check::check_fits(&args.saved_rstd)?;
+        crate::view_check::check_fits(&args.dx)?;
+        if let Some(t) = &args.dgamma {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.dbeta {
+            crate::view_check::check_fits(t)?;
+        }
         if args.dy.shape != self.desc.input_shape
             || args.x.shape != self.desc.input_shape
             || args.dx.shape != self.desc.input_shape

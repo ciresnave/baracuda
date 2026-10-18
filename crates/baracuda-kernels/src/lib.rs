@@ -91,6 +91,7 @@ pub use baracuda_cutlass::{
 // dense FP family (`DenseGemmPlan` — cuBLAS-backed, RRR / RCR / CRR,
 // strided-batch).
 pub mod gemm;
+mod view_check;
 
 pub use gemm::{
     BinGemmArgs, BinGemmDescriptor, BinGemmPlan, DenseGemmArgs, DenseGemmDescriptor,

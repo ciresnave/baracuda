@@ -116,6 +116,11 @@ impl<TIn: Element> QuantizePerTokenBackwardPlan<TIn> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &QuantizePerTokenBackwardArgs<'_, TIn>) -> Result<()> {
+        crate::view_check::check_fits(&args.d_output)?;
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.scale)?;
+        crate::view_check::check_fits(&args.zero_point)?;
+        crate::view_check::check_fits(&args.d_input)?;
         let expect = [self.desc.n, self.desc.d];
         if args.d_output.shape != expect
             || args.input.shape != expect

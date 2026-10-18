@@ -171,6 +171,9 @@ impl<T: Element, const N: usize> ConcatBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &ConcatBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.da)?;
+        crate::view_check::check_fits(&args.db)?;
         if args.dy.shape != self.desc.output_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConcatBackwardPlan: dy shape mismatch with descriptor \

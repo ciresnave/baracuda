@@ -176,6 +176,12 @@ impl<T: Element> CausalConv1dPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &CausalConv1dArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        crate::view_check::check_fits(&args.weight)?;
+        if let Some(t) = &args.bias {
+            crate::view_check::check_fits(t)?;
+        }
+        crate::view_check::check_fits(&args.y)?;
         let shape_x = [self.desc.batch_size, self.desc.channels, self.desc.seq_len];
         let shape_w = [self.desc.channels, self.desc.width];
         if args.x.shape != shape_x || args.y.shape != shape_x {

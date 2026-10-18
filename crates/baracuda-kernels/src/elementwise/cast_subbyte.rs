@@ -189,6 +189,8 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
     /// U4 packed-buffer accounting collapses to `numel / 2` bytes,
     /// which is `numel / 2` packed-slot elements at the buffer layer).
     pub fn can_implement(&self, args: &CastSubByteArgs<'_, TIn, TOut>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         let expected = self.desc.numel as i64;
         // For S4 / U4 endpoints, the TensorRef's `numel()` returns the
         // packed-slot count (one slot per byte = two logical elements).

@@ -154,6 +154,9 @@ impl<T: Element, const N: usize> ConcatPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &ConcatArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.a)?;
+        crate::view_check::check_fits(&args.b)?;
+        crate::view_check::check_fits(&args.y)?;
         if args.a.shape != self.desc.a_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ConcatPlan: A shape mismatch with descriptor a_shape",

@@ -132,6 +132,13 @@ impl<T: Element> AlibiBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &AlibiBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        if let Some(t) = &args.dscores {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.dslopes {
+            crate::view_check::check_fits(t)?;
+        }
         let want_shape = [
             self.desc.batch_size,
             self.desc.num_heads,

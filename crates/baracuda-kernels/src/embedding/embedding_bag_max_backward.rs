@@ -116,6 +116,9 @@ impl<T: Element> EmbeddingBagMaxBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &EmbeddingBagMaxBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dout)?;
+        crate::view_check::check_fits(&args.output_index)?;
+        crate::view_check::check_fits(&args.dweight)?;
         if args.dout.shape[0] != self.desc.num_bags || args.dout.shape[1] != self.desc.embedding_dim
         {
             return Err(Error::InvalidProblem(

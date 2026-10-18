@@ -126,6 +126,8 @@ impl<T: Element, const N: usize> FlipBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &FlipBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.dx)?;
         if args.dy.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlipBackwardPlan: dy shape mismatch with descriptor",

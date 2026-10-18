@@ -174,6 +174,13 @@ impl<T: Element, const N: usize> TernaryBackwardPlan<T, N> {
     /// Validate args. Trailblazer constraints: contig-only, same shape
     /// across all 7 tensors (dy / a / b / c / da / db / dc).
     pub fn can_implement(&self, args: &TernaryBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.a)?;
+        crate::view_check::check_fits(&args.b)?;
+        crate::view_check::check_fits(&args.c)?;
+        crate::view_check::check_fits(&args.da)?;
+        crate::view_check::check_fits(&args.db)?;
+        crate::view_check::check_fits(&args.dc)?;
         if args.dy.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::TernaryBackwardPlan: dy shape mismatch",

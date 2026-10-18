@@ -122,6 +122,8 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorBackwardPlan<TIn, TOut> 
         &self,
         args: &DequantizePerTensorBackwardArgs<'_, TIn, TOut>,
     ) -> Result<()> {
+        crate::view_check::check_fits(&args.d_output)?;
+        crate::view_check::check_fits(&args.d_input)?;
         let expected = [self.desc.numel];
         if args.d_output.shape != expected || args.d_input.shape != expected {
             return Err(Error::InvalidProblem(

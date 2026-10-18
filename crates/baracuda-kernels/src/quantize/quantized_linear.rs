@@ -205,6 +205,12 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
 
     /// Validate args at run time.
     pub fn can_implement(&self, args: &QuantizedLinearArgs<'_, TIn, TWQ>) -> Result<()> {
+        crate::view_check::check_fits(&args.activation)?;
+        crate::view_check::check_fits(&args.weight_q)?;
+        crate::view_check::check_fits(&args.weight_scale)?;
+        crate::view_check::check_fits(&args.output)?;
+        crate::view_check::check_fits(&args.act_q_scratch)?;
+        crate::view_check::check_fits(&args.act_scale_scratch)?;
         if args.activation.shape != [self.desc.m, self.desc.k] {
             return Err(Error::InvalidProblem(
                 "QuantizedLinearPlan: activation shape != [M, K]",

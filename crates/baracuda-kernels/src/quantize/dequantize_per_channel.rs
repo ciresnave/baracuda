@@ -108,6 +108,10 @@ impl<TIn: Element, TOut: IntElement> DequantizePerChannelPlan<TIn, TOut> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &DequantizePerChannelArgs<'_, TIn, TOut>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.scale)?;
+        crate::view_check::check_fits(&args.zero_point)?;
+        crate::view_check::check_fits(&args.output)?;
         if args.input.shape != self.desc.shape || args.output.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "DequantizePerChannelPlan: tensor shape mismatch",

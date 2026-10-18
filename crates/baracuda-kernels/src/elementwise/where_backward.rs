@@ -152,6 +152,10 @@ impl<T: Element, const N: usize> WhereBackwardPlan<T, N> {
 
     /// Validate that this plan can launch with `args`.
     pub fn can_implement(&self, args: &WhereBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.cond)?;
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.da)?;
+        crate::view_check::check_fits(&args.db)?;
         if args.dy.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::WhereBackwardPlan: dy shape mismatch with descriptor",

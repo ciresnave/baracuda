@@ -187,6 +187,15 @@ impl<T: Element> SdpaBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &SdpaBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.k)?;
+        crate::view_check::check_fits(&args.v)?;
+        crate::view_check::check_fits(&args.attn)?;
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.dscores_ws)?;
+        crate::view_check::check_fits(&args.dq)?;
+        crate::view_check::check_fits(&args.dk)?;
+        crate::view_check::check_fits(&args.dv)?;
         let shape_q = [
             self.desc.batch_size,
             self.desc.num_heads,

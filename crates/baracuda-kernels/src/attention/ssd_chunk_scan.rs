@@ -198,6 +198,12 @@ impl<T: Element> SsdChunkScanPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &SsdChunkScanArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.x)?;
+        crate::view_check::check_fits(&args.dt)?;
+        crate::view_check::check_fits(&args.a)?;
+        crate::view_check::check_fits(&args.b)?;
+        crate::view_check::check_fits(&args.c)?;
+        crate::view_check::check_fits(&args.y)?;
         let shape_x = [
             self.desc.batch_size,
             self.desc.seq_len,

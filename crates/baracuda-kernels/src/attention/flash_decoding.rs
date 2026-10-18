@@ -292,6 +292,16 @@ impl<T: Element> FlashDecodingPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &FlashDecodingArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.q)?;
+        crate::view_check::check_fits(&args.k)?;
+        crate::view_check::check_fits(&args.v)?;
+        crate::view_check::check_fits(&args.y)?;
+        if let Some(t) = &args.a {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.a_mean {
+            crate::view_check::check_fits(t)?;
+        }
         let d = self.desc.head_dim;
         let b = self.desc.batch_size;
         let h_q = self.desc.num_heads;

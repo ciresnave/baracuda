@@ -219,6 +219,8 @@ impl<T: Element> InterpolateBackwardPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &InterpolateBackwardArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.dout)?;
+        crate::view_check::check_fits(&args.dinput)?;
         if args.dout.shape != [self.desc.n, self.desc.c, self.desc.oh, self.desc.ow] {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::InterpolateBackwardPlan: dout shape mismatch",

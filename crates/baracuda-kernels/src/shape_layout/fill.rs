@@ -132,6 +132,7 @@ impl<T: Element> FillPlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &FillArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.output)?;
         let expected = self.desc.numel as i64;
         if args.output.numel() != expected {
             return Err(Error::InvalidProblem(

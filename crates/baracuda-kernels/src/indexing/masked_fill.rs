@@ -175,6 +175,9 @@ impl<T: Element, const N: usize> MaskedFillPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &MaskedFillArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.src)?;
+        crate::view_check::check_fits(&args.mask)?;
+        crate::view_check::check_fits(&args.out)?;
         if args.src.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::MaskedFillPlan: src shape mismatch with descriptor",

@@ -122,6 +122,8 @@ impl<T: Element> PixelUnshufflePlan<T> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &PixelUnshuffleArgs<'_, T>) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_fits(&args.output)?;
         let r = self.desc.downscale_factor;
         if args.input.shape != [self.desc.n, self.desc.c, self.desc.h * r, self.desc.w * r] {
             return Err(Error::InvalidProblem(

@@ -158,6 +158,9 @@ impl<T: Element, const N: usize> GatedActivationBackwardPlan<T, N> {
 
     /// Validate args.
     pub fn can_implement(&self, args: &GatedActivationBackwardArgs<'_, T, N>) -> Result<()> {
+        crate::view_check::check_fits(&args.dy)?;
+        crate::view_check::check_fits(&args.x)?;
+        crate::view_check::check_fits(&args.dx)?;
         let output_shape = self.desc.output_shape();
         if args.dy.shape != output_shape {
             return Err(Error::InvalidProblem(
