@@ -286,6 +286,9 @@ impl<T: Element> CtcLossCudnnPlan<T> {
         workspace: Workspace<'_>,
         args: CtcLossCudnnArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.log_probs)?;
+        crate::view_check::check_dense(&args.costs)?;
+        crate::view_check::check_dense(&args.grads)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;

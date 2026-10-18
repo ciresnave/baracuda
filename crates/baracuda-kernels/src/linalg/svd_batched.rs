@@ -329,6 +329,11 @@ macro_rules! impl_batched_svd_run {
                 workspace: Workspace<'_>,
                 args: BatchedSvdArgs<'_, $T>,
             ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.s)?;
+        crate::view_check::check_dense(&args.u)?;
+        crate::view_check::check_dense(&args.v)?;
+        crate::view_check::check_dense(&args.info)?;
                 self.check_args(&args)?;
                 let h = self.ensure_handle()?;
                 let p = self.ensure_params()?;

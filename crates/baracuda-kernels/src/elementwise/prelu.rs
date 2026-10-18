@@ -154,6 +154,9 @@ impl<T: Element, const N: usize> PReluPlan<T, N> {
         _workspace: Workspace<'_>,
         args: PReluArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.weight)?;
+        crate::view_check::check_dense(&args.y)?;
         if args.x.shape != self.desc.input_shape || args.y.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::PReluPlan: x / y shape mismatch",

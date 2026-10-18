@@ -12,8 +12,9 @@
 
 use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use baracuda_kernels::{
-    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, PlanPreference, TensorMut,
-    TensorRef, Workspace,
+    BinaryArgs, BinaryDescriptor, BinaryKind, BinaryPlan, ElementKind, LossReduction, MseLossArgs,
+    MseLossDescriptor, MseLossPlan, PlanPreference, TensorMut, TensorRef, Workspace,
+    contiguous_stride,
 };
 
 const N: usize = 64;
@@ -113,4 +114,50 @@ fn strided_input_view_cannot_read_past_its_slice() {
          outputs contain values from outside the slice"
     );
     assert_eq!(leaked, 0, "values outside a's slice were read");
+}
+
+/// Plans with no `can_implement` (loss, conv, fft, linalg, ..) are guarded in
+/// `run()` itself. `pred` claims shape `[2, 8]` but its slice holds 8 elements;
+/// the stride-ignoring kernel would read 16.
+#[test]
+fn run_only_family_rejects_view_longer_than_its_slice() {
+    let (ctx, stream, _) = setup();
+    let shape = [2i32, 8];
+    let numel = 16usize;
+    let short = DeviceBuffer::from_slice(&ctx, &vec![1.0f32; numel / 2]).unwrap();
+    let full = DeviceBuffer::from_slice(&ctx, &vec![1.0f32; numel]).unwrap();
+    let mut y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).unwrap();
+    let mut ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, numel * 4).unwrap();
+    let desc = MseLossDescriptor {
+        input_shape: shape,
+        reduction: LossReduction::Mean,
+        element: ElementKind::F32,
+    };
+    let plan = MseLossPlan::<f32, 2>::select(&stream, &desc, PlanPreference::default()).unwrap();
+    let res = plan.run(
+        &stream,
+        Workspace::Borrowed(ws.as_slice_mut()),
+        MseLossArgs {
+            pred: TensorRef {
+                data: short.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            target: TensorRef {
+                data: full.as_slice(),
+                shape,
+                stride: contiguous_stride(shape),
+            },
+            out: TensorMut {
+                data: y.as_slice_mut(),
+                shape: [1, 1],
+                stride: [1, 1],
+            },
+        },
+    );
+    stream.synchronize().unwrap();
+    assert!(
+        res.is_err(),
+        "run() accepted a pred view of 16 elements over an 8-element slice"
+    );
 }

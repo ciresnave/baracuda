@@ -122,6 +122,9 @@ impl<T: Element, const N: usize> HingeEmbeddingLossPlan<T, N> {
         workspace: Workspace<'_>,
         args: HingeEmbeddingLossArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.out)?;
         if args.input.shape != self.desc.input_shape || args.target.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HingeEmbeddingLossPlan: shape mismatch",
@@ -275,6 +278,10 @@ impl<T: Element, const N: usize> HingeEmbeddingLossBackwardPlan<T, N> {
         _workspace: Workspace<'_>,
         args: HingeEmbeddingLossBackwardArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.dinput)?;
         if args.input.shape != self.desc.input_shape
             || args.target.shape != self.desc.input_shape
             || args.dinput.shape != self.desc.input_shape

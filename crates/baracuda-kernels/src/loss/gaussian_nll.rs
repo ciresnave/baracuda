@@ -129,6 +129,10 @@ impl<T: Element, const N: usize> GaussianNllLossPlan<T, N> {
         workspace: Workspace<'_>,
         args: GaussianNllLossArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.var)?;
+        crate::view_check::check_dense(&args.out)?;
         if args.input.shape != self.desc.input_shape
             || args.target.shape != self.desc.input_shape
             || args.var.shape != self.desc.input_shape
@@ -294,6 +298,11 @@ impl<T: Element, const N: usize> GaussianNllLossBackwardPlan<T, N> {
         _workspace: Workspace<'_>,
         args: GaussianNllLossBackwardArgs<'_, T, N>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.var)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.dinput)?;
         if args.input.shape != self.desc.input_shape
             || args.target.shape != self.desc.input_shape
             || args.var.shape != self.desc.input_shape

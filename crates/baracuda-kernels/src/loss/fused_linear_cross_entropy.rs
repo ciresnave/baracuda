@@ -338,6 +338,16 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
         _workspace: Workspace<'_>,
         args: FusedLinearCrossEntropyArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_fits(&args.input)?;
+        crate::view_check::check_dense(&args.weight)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.out)?;
+        if let Some(t) = &args.grad_input {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.grad_weight {
+            crate::view_check::check_dense(t)?;
+        }
         // ---- Shape validation -------------------------------------
         let bt = self.desc.bt;
         let h = self.desc.h;
@@ -1100,6 +1110,12 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
         _workspace: Workspace<'_>,
         args: FusedLinearCrossEntropyBackwardArgs<'_, T>,
     ) -> Result<()> {
+        if let Some(t) = &args.grad_input {
+            crate::view_check::check_fits(t)?;
+        }
+        if let Some(t) = &args.grad_weight {
+            crate::view_check::check_dense(t)?;
+        }
         let dy_scalar_f32 = args.dy_scalar;
 
         // Fast path: dy == 1.0 — no scale needed.

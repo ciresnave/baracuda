@@ -17,6 +17,17 @@ pub(crate) trait View {
     fn reachable_len(&self) -> Option<usize>;
     /// Length of the backing slice, in elements.
     fn backing_len(&self) -> usize;
+    /// `Π shape` — what a stride-ignoring (dense) kernel will touch — or `None`
+    /// for a negative extent / overflow.
+    fn dense_len(&self) -> Option<usize>;
+}
+
+fn dense_len_of(shape: &[i32]) -> Option<usize> {
+    let mut n: u128 = 1;
+    for &d in shape {
+        n = n.checked_mul(u128::try_from(d).ok()?)?;
+    }
+    usize::try_from(n).ok()
 }
 
 impl<T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize> View for TensorRef<'_, T, N> {
@@ -26,6 +37,9 @@ impl<T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize> View for Te
     fn backing_len(&self) -> usize {
         self.data.len()
     }
+    fn dense_len(&self) -> Option<usize> {
+        dense_len_of(&self.shape)
+    }
 }
 
 impl<T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize> View for TensorMut<'_, T, N> {
@@ -34,6 +48,9 @@ impl<T: baracuda_types::DeviceRepr + Copy + 'static, const N: usize> View for Te
     }
     fn backing_len(&self) -> usize {
         self.data.len()
+    }
+    fn dense_len(&self) -> Option<usize> {
+        dense_len_of(&self.shape)
     }
 }
 
@@ -47,6 +64,21 @@ pub(crate) fn check_fits<V: View>(view: &V) -> Result<()> {
         None => Err(Error::InvalidProblem(
             "tensor view is not addressable (negative extent, or a negative stride \
              that reaches before the start of its buffer)",
+        )),
+        Some(needed) if needed > view.backing_len() => Err(Error::BufferTooSmall {
+            needed,
+            got: view.backing_len(),
+        }),
+        Some(_) => Ok(()),
+    }
+}
+
+/// [`check_fits`] for kernels that ignore `stride` and address `numel()`
+/// contiguous elements from the slice start: the slice must hold `Π shape`.
+pub(crate) fn check_dense<V: View>(view: &V) -> Result<()> {
+    match view.dense_len() {
+        None => Err(Error::InvalidProblem(
+            "tensor view has a negative or overflowing extent",
         )),
         Some(needed) if needed > view.backing_len() => Err(Error::BufferTooSmall {
             needed,

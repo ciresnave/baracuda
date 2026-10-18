@@ -341,6 +341,9 @@ impl EighPlan<f32> {
         workspace: Workspace<'_>,
         args: EighArgs<'_, f32, f32>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.w)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;
@@ -390,6 +393,9 @@ impl EighPlan<f64> {
         workspace: Workspace<'_>,
         args: EighArgs<'_, f64, f64>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.w)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;
@@ -440,6 +446,9 @@ impl EighPlan<Complex64> {
         workspace: Workspace<'_>,
         args: EighArgs<'_, Complex64, f32>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.w)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;
@@ -490,6 +499,9 @@ impl EighPlan<Complex128> {
         workspace: Workspace<'_>,
         args: EighArgs<'_, Complex128, f64>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.w)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;

@@ -393,6 +393,15 @@ impl<T: Element> EigPlan<T> {
         workspace: Workspace<'_>,
         args: EigArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.w)?;
+        if let Some(t) = &args.vl {
+            crate::view_check::check_dense(t)?;
+        }
+        if let Some(t) = &args.vr {
+            crate::view_check::check_dense(t)?;
+        }
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         let params = self.ensure_params()?;

@@ -259,6 +259,10 @@ impl<T: Element> BatchedQrMaterializePlan<T> {
         _workspace: Workspace<'_>,
         args: BatchedQrMaterializeArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a_packed)?;
+        crate::view_check::check_dense(&args.tau)?;
+        crate::view_check::check_dense(&args.q)?;
+        crate::view_check::check_dense(&args.r)?;
         self.check_args(&args)?;
         let b = self.desc.batch_size;
         let m = self.desc.m;

@@ -190,6 +190,8 @@ impl<T: Element> FftShiftPlan<T> {
         _workspace: Workspace<'_>,
         args: FftShiftArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.y)?;
         let expected = [self.desc.batch, self.desc.n];
         if args.x.shape != expected {
             return Err(Error::InvalidProblem(

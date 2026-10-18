@@ -381,6 +381,15 @@ macro_rules! impl_batched_svda_run {
                 workspace: Workspace<'_>,
                 mut args: BatchedSvdaArgs<'_, $T>,
             ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.s)?;
+        if let Some(t) = &args.u {
+            crate::view_check::check_dense(t)?;
+        }
+        if let Some(t) = &args.v {
+            crate::view_check::check_dense(t)?;
+        }
+        crate::view_check::check_dense(&args.info)?;
                 self.check_args(&args)?;
                 let h = self.ensure_handle()?;
                 self.bind_stream(h, stream)?;

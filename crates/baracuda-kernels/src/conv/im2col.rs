@@ -197,6 +197,8 @@ impl<T: Element> Im2ColPlan<T> {
         _workspace: Workspace<'_>,
         args: Im2ColArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.output)?;
         self.check_args(&args)?;
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let output_ptr = args.output.data.as_raw().0 as *mut c_void;

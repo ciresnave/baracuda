@@ -215,6 +215,8 @@ impl RfftPlan<f32> {
         _workspace: Workspace<'_>,
         args: RfftArgs<'_, f32, Complex64>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.y)?;
         let n = self.desc.n;
         let batch = self.desc.batch;
         let in_shape = [batch, n];
@@ -268,6 +270,8 @@ impl RfftPlan<f64> {
         _workspace: Workspace<'_>,
         args: RfftArgs<'_, f64, Complex128>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.y)?;
         let n = self.desc.n;
         let batch = self.desc.batch;
         let in_shape = [batch, n];
@@ -509,6 +513,8 @@ impl IrfftPlan<f32> {
         _workspace: Workspace<'_>,
         args: IrfftArgs<'_, f32, Complex64>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.y)?;
         let n = self.desc.n;
         let batch = self.desc.batch;
         let in_shape = [batch, n / 2 + 1];
@@ -576,6 +582,8 @@ impl IrfftPlan<f64> {
         _workspace: Workspace<'_>,
         args: IrfftArgs<'_, f64, Complex128>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x)?;
+        crate::view_check::check_dense(&args.y)?;
         let n = self.desc.n;
         let batch = self.desc.batch;
         let in_shape = [batch, n / 2 + 1];

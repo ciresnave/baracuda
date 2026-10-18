@@ -260,6 +260,9 @@ impl LuPlan<f32> {
         workspace: Workspace<'_>,
         args: LuArgs<'_, f32>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.pivot)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;
@@ -294,6 +297,9 @@ impl LuPlan<f64> {
         workspace: Workspace<'_>,
         args: LuArgs<'_, f64>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a)?;
+        crate::view_check::check_dense(&args.pivot)?;
+        crate::view_check::check_dense(&args.info)?;
         self.check_args(&args)?;
         let h = self.ensure_handle()?;
         self.bind_stream(h, stream)?;

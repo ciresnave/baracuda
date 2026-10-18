@@ -210,6 +210,12 @@ impl<T: Element> CtcLossPlan<T> {
         workspace: Workspace<'_>,
         args: CtcLossArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.log_probs)?;
+        crate::view_check::check_dense(&args.targets)?;
+        crate::view_check::check_dense(&args.input_lengths)?;
+        crate::view_check::check_dense(&args.target_lengths)?;
+        crate::view_check::check_dense(&args.loss)?;
+        crate::view_check::check_dense(&args.alpha)?;
         if self.desc.batch_size == 0 || self.desc.max_time == 0 {
             return Ok(());
         }
@@ -508,6 +514,14 @@ impl<T: Element> CtcLossBackwardPlan<T> {
         workspace: Workspace<'_>,
         args: CtcLossBackwardArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.log_probs)?;
+        crate::view_check::check_dense(&args.targets)?;
+        crate::view_check::check_dense(&args.input_lengths)?;
+        crate::view_check::check_dense(&args.target_lengths)?;
+        crate::view_check::check_dense(&args.per_sample_loss)?;
+        crate::view_check::check_dense(&args.alpha)?;
+        crate::view_check::check_dense(&args.dloss)?;
+        crate::view_check::check_dense(&args.dlog_probs)?;
         if self.desc.batch_size == 0 || self.desc.max_time == 0 {
             return Ok(());
         }

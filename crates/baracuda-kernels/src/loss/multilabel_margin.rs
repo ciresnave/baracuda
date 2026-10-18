@@ -121,6 +121,9 @@ impl<T: Element> MultilabelMarginLossPlan<T> {
         workspace: Workspace<'_>,
         args: MultilabelMarginLossArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.out)?;
         if self.desc.n_rows == 0 {
             return Ok(());
         }
@@ -311,6 +314,10 @@ impl<T: Element> MultilabelMarginLossBackwardPlan<T> {
         _workspace: Workspace<'_>,
         args: MultilabelMarginLossBackwardArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.dinput)?;
         if self.desc.n_rows == 0 {
             return Ok(());
         }

@@ -129,6 +129,9 @@ impl<T: Element> MultiMarginLossPlan<T> {
         workspace: Workspace<'_>,
         args: MultiMarginLossArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.out)?;
         if self.desc.n_rows == 0 {
             return Ok(());
         }
@@ -333,6 +336,10 @@ impl<T: Element> MultiMarginLossBackwardPlan<T> {
         _workspace: Workspace<'_>,
         args: MultiMarginLossBackwardArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.input)?;
+        crate::view_check::check_dense(&args.target)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.dinput)?;
         if self.desc.n_rows == 0 {
             return Ok(());
         }

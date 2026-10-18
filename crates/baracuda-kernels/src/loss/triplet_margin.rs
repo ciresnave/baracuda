@@ -131,6 +131,10 @@ impl<T: Element> TripletMarginLossPlan<T> {
         workspace: Workspace<'_>,
         args: TripletMarginLossArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.anchor)?;
+        crate::view_check::check_dense(&args.positive)?;
+        crate::view_check::check_dense(&args.negative)?;
+        crate::view_check::check_dense(&args.out)?;
         if self.desc.n_rows == 0 {
             return Ok(());
         }
@@ -302,6 +306,13 @@ impl<T: Element> TripletMarginLossBackwardPlan<T> {
         _workspace: Workspace<'_>,
         args: TripletMarginLossBackwardArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.anchor)?;
+        crate::view_check::check_dense(&args.positive)?;
+        crate::view_check::check_dense(&args.negative)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.d_anchor)?;
+        crate::view_check::check_dense(&args.d_positive)?;
+        crate::view_check::check_dense(&args.d_negative)?;
         if self.desc.n_rows == 0 {
             return Ok(());
         }

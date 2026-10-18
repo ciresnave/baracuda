@@ -138,6 +138,10 @@ impl<T: Element> CosineEmbeddingLossPlan<T> {
         workspace: Workspace<'_>,
         args: CosineEmbeddingLossArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x1)?;
+        crate::view_check::check_dense(&args.x2)?;
+        crate::view_check::check_dense(&args.t)?;
+        crate::view_check::check_dense(&args.out)?;
         if self.desc.n_rows == 0 {
             return Ok(());
         }
@@ -339,6 +343,12 @@ impl<T: Element> CosineEmbeddingLossBackwardPlan<T> {
         _workspace: Workspace<'_>,
         args: CosineEmbeddingLossBackwardArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.x1)?;
+        crate::view_check::check_dense(&args.x2)?;
+        crate::view_check::check_dense(&args.t)?;
+        crate::view_check::check_dense(&args.dy)?;
+        crate::view_check::check_dense(&args.dx1)?;
+        crate::view_check::check_dense(&args.dx2)?;
         if self.desc.n_rows == 0 {
             return Ok(());
         }

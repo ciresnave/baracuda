@@ -319,6 +319,9 @@ impl<T: Element> BatchedOrmqrPlan<T> {
         _workspace: Workspace<'_>,
         args: BatchedOrmqrArgs<'_, T>,
     ) -> Result<()> {
+        crate::view_check::check_dense(&args.a_packed)?;
+        crate::view_check::check_dense(&args.tau)?;
+        crate::view_check::check_dense(&args.c)?;
         self.check_args(&args)?;
         let stream_ptr = stream.as_raw();
         let a_ptr = args.a_packed.data.as_raw().0 as *const c_void;
