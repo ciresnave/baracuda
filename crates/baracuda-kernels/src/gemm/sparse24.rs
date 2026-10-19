@@ -63,6 +63,8 @@
 //! `M * K * sizeof(T)` bytes for the inflated dense W. Query via
 //! [`GemmSparse24Plan::workspace_size`].
 
+#[cfg(feature = "xformers_sparse24")]
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -178,7 +180,7 @@ impl<T: Element> GemmSparse24Plan<T> {
                     _ => 3,
                 }
             };
-            super::super::attention::map_status_pub(probe)?;
+            crate::attention::map_status(probe)?;
         }
 
         let precision_guarantee = PrecisionGuarantee {
@@ -345,7 +347,7 @@ impl<T: Element> GemmSparse24Plan<T> {
                     }
                 }
             };
-            super::super::attention::map_status_pub(status)
+            crate::attention::map_status(status)
         }
         #[cfg(not(feature = "xformers_sparse24"))]
         {

@@ -211,7 +211,7 @@ pub type PFN_createInferRuntime =
 pub const SHIM_BUILT: bool = cfg!(feature = "shim");
 
 #[cfg(feature = "shim")]
-extern "C" {
+unsafe extern "C" {
     /// TensorRT shim: Runtime Deserialize Cuda Engine.
     pub fn trtRuntimeDeserializeCudaEngine(
         runtime: trtIRuntime_t,

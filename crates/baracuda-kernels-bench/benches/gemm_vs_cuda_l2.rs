@@ -74,9 +74,11 @@ const REFERENCE_PROBE_NUMBERS: &[(i32, i32, f64, f64)] = &[
 
 #[cfg(feature = "cuda_l2")]
 mod cuda_l2_ffi {
-    use baracuda_driver::cuda_sys::cudaStream_t;
-    use core::ffi::c_int;
+    use core::ffi::{c_int, c_void};
     use half::f16;
+
+    /// The CUDA runtime stream handle (`cudaStream_t`) the wrappers take.
+    pub type StreamHandle = *mut c_void;
 
     unsafe extern "C" {
         /// `wrapper_m128.cu` — 128_4096_4096 CUDA-L2 kernel. Operand
@@ -89,7 +91,7 @@ mod cuda_l2_ffi {
             m: c_int,
             n: c_int,
             k: c_int,
-            stream: cudaStream_t,
+            stream: StreamHandle,
         );
 
         /// `wrapper_m2048.cu` — 2048_4096_4096 CUDA-L2 kernel. Same
@@ -101,18 +103,18 @@ mod cuda_l2_ffi {
             m: c_int,
             n: c_int,
             k: c_int,
-            stream: cudaStream_t,
+            stream: StreamHandle,
         );
     }
 
     pub fn dispatch(
-        m: u32,
-        n: u32,
-        k: u32,
+        m: i32,
+        n: i32,
+        k: i32,
         a: *const f16,
         b_col_major: *const f16,
         c: *mut f16,
-        stream: cudaStream_t,
+        stream: StreamHandle,
     ) {
         let m_i = m as c_int;
         let n_i = n as c_int;
@@ -443,10 +445,10 @@ fn bench_cuda_l2_f16(c: &mut Criterion) {
                 m,
                 n,
                 k,
-                dev_a.as_slice().as_ptr(),
-                dev_b.as_slice().as_ptr(),
-                dev_c.as_slice_mut().as_mut_ptr(),
-                stream.as_raw().0 as _,
+                dev_a.as_raw().0 as *const f16,
+                dev_b.as_raw().0 as *const f16,
+                dev_c.as_raw().0 as *mut f16,
+                stream.as_raw() as cuda_l2_ffi::StreamHandle,
             );
         };
         warmup(&stream, launch);
@@ -456,10 +458,10 @@ fn bench_cuda_l2_f16(c: &mut Criterion) {
                 m,
                 n,
                 k,
-                dev_a.as_slice().as_ptr(),
-                dev_b.as_slice().as_ptr(),
-                dev_c.as_slice_mut().as_mut_ptr(),
-                stream.as_raw().0 as _,
+                dev_a.as_raw().0 as *const f16,
+                dev_b.as_raw().0 as *const f16,
+                dev_c.as_raw().0 as *mut f16,
+                stream.as_raw() as cuda_l2_ffi::StreamHandle,
             );
         });
         append_csv_row(
@@ -483,10 +485,10 @@ fn bench_cuda_l2_f16(c: &mut Criterion) {
                         m,
                         n,
                         k,
-                        dev_a.as_slice().as_ptr(),
-                        dev_b.as_slice().as_ptr(),
-                        dev_c.as_slice_mut().as_mut_ptr(),
-                        stream.as_raw().0 as _,
+                        dev_a.as_raw().0 as *const f16,
+                        dev_b.as_raw().0 as *const f16,
+                        dev_c.as_raw().0 as *mut f16,
+                        stream.as_raw() as cuda_l2_ffi::StreamHandle,
                     );
                 })
             });

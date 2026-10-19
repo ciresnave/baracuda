@@ -486,7 +486,7 @@ impl<T: Element> RingAttentionPlan<T> {
         // kv_scratch_a (we staged them there above).
         let mut current_in_a = true;
         let q_global_base = rank * self.desc.query_len;
-        let q_ptr = args.q.data.as_raw().0 as *const c_void;
+        let q_ptr = args.q.data().as_raw().0 as *const c_void;
 
         for step in 0..world_size {
             // Which rank originally owned the chunk that's resident now?
@@ -580,11 +580,11 @@ impl<T: Element> RingAttentionPlan<T> {
         }
 
         // Finalize: divide o_acc by l_acc and emit y (+ optional lse).
-        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let y_ptr = args.y.data().as_raw().0 as *mut c_void;
         let lse_ptr = args
             .lse
             .as_mut()
-            .map(|t| t.data.as_raw().0 as *mut c_void)
+            .map(|t| t.data().as_raw().0 as *mut c_void)
             .unwrap_or(core::ptr::null_mut());
         let fin_status = match T::KIND {
             ElementKind::F16 => unsafe {

@@ -120,4 +120,10 @@ for c in "${ALL_FEATURES[@]}"; do
   done
 done
 
+# ── 7. The every-feature job exists: a feature that gates code but is enabled by NO
+#      step (the mhc / xformers_* drift) is caught by scripts/check-each-feature.py;
+#      make sure the workflow still runs it, so the job cannot be deleted silently.
+[ -f scripts/check-each-feature.py ] || fail "scripts/check-each-feature.py is missing."
+grep -qE "^[[:space:]]*run:[[:space:]]*python3? scripts/check-each-feature\.py" "$CI" || fail "$CI no longer runs scripts/check-each-feature.py — features beyond the arch ones are back to being built by nobody."
+
 echo "feature-coverage OK: ${#gated[@]} feature-gated crates, all classified; ALL_FEATURES steps present in ci.yml; ENUMERATED features accounted for; no ALL_FEATURES step pulls an unconditional-nvcc crate."

@@ -59,8 +59,12 @@
 //! Zero — `lse` is the only saved tensor (for prospective BW; FW
 //! doesn't need it as scratch).
 
+#[cfg(feature = "xformers_blocksparse")]
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
+#[cfg(feature = "xformers_blocksparse")]
+use super::map_status;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{

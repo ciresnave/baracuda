@@ -31,6 +31,8 @@
 //! calls to amortize the alloc cost — that's the whole point of the
 //! stateful design upstream.
 
+#[cfg(feature = "mhc")]
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};

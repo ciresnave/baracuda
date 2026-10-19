@@ -20,6 +20,16 @@
 fn build_cuda_l2() {
     use baracuda_forge::KernelBuilder;
 
+    // DOCS_RS=1 (docs.rs, and CI's no-CUDA per-feature check) means type-check
+    // only: skip the nvcc build of the probe wrappers. `cargo check` does not
+    // link, so the missing `baracuda_cuda_l2_*_launch` symbols never matter.
+    if std::env::var_os("DOCS_RS").is_some() {
+        println!(
+            "cargo:warning=baracuda-kernels-bench: DOCS_RS=1 detected; skipping the nvcc build of the CUDA-L2 probes"
+        );
+        return;
+    }
+
     let sources = [
         "external/cuda-l2-probes/wrapper_m128.cu",
         "external/cuda-l2-probes/wrapper_m2048.cu",

@@ -77403,6 +77403,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 dequantize kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_dequantize_f16_can_implement(
         n: i32,
         k: i32,
@@ -77419,6 +77420,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 dequantize kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_dequantize_bf16_can_implement(
         n: i32,
         k: i32,
@@ -77435,6 +77437,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 dequantize kernel (`f32`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_dequantize_f32_can_implement(
         n: i32,
         k: i32,
@@ -77453,6 +77456,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 gemv M=1 kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_gemv_m1_f16_can_implement(n: i32, k: i32, block_size: i32) -> i32;
 
     /// NF4 W4A16 GEMV (M=1), bf16 activation.
@@ -77466,6 +77470,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 gemv M=1 kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_gemv_m1_bf16_can_implement(n: i32, k: i32, block_size: i32) -> i32;
 
     // -------- GEMV multi-M (compile-time M ∈ {2, 4, 8}) ------------------
@@ -77480,6 +77485,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 gemv M=2 kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_gemv_m2_f16_can_implement(n: i32, k: i32, block_size: i32) -> i32;
 
     /// NF4 W4A16 GEMV multi-M=4, f16 activation. Output `[4, N]`.
@@ -77493,6 +77499,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 gemv M=4 kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_gemv_m4_f16_can_implement(n: i32, k: i32, block_size: i32) -> i32;
 
     /// NF4 W4A16 GEMV multi-M=8, f16 activation. Output `[8, N]`.
@@ -77506,6 +77513,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 gemv M=8 kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_gemv_m8_f16_can_implement(n: i32, k: i32, block_size: i32) -> i32;
 
     /// NF4 W4A16 GEMV multi-M=2, bf16 activation.
@@ -77519,6 +77527,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 gemv M=2 kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_gemv_m2_bf16_can_implement(n: i32, k: i32, block_size: i32) -> i32;
 
     /// NF4 W4A16 GEMV multi-M=4, bf16 activation.
@@ -77532,6 +77541,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 gemv M=4 kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_gemv_m4_bf16_can_implement(n: i32, k: i32, block_size: i32) -> i32;
 
     /// NF4 W4A16 GEMV multi-M=8, bf16 activation.
@@ -77545,6 +77555,7 @@ unsafe extern "C" {
         out: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the NF4 gemv M=8 kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_nf4_gemv_m8_bf16_can_implement(n: i32, k: i32, block_size: i32) -> i32;
 }
 
@@ -77582,6 +77593,7 @@ unsafe extern "C" {
 
 #[cfg(feature = "xformers_blocksparse")]
 unsafe extern "C" {
+    /// Launch the block-sparse SDPA kernel (`f32`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_sdpa_f32_block_sparse_run(
         batch: i32,
         heads: i32,
@@ -77602,6 +77614,7 @@ unsafe extern "C" {
         workspace_bytes: u64,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the block-sparse SDPA kernel (`f16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_sdpa_f16_block_sparse_run(
         batch: i32,
         heads: i32,
@@ -77622,6 +77635,7 @@ unsafe extern "C" {
         workspace_bytes: u64,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the block-sparse SDPA kernel (`bf16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_sdpa_bf16_block_sparse_run(
         batch: i32,
         heads: i32,
@@ -77642,6 +77656,7 @@ unsafe extern "C" {
         workspace_bytes: u64,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the block-sparse SDPA kernel (`f64`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_sdpa_f64_block_sparse_run(
         batch: i32,
         heads: i32,
@@ -77662,6 +77677,7 @@ unsafe extern "C" {
         workspace_bytes: u64,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the block-sparse SDPA kernel (`f32`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_sdpa_f32_block_sparse_can_implement(
         batch: i32,
         heads: i32,
@@ -77671,6 +77687,7 @@ unsafe extern "C" {
         d_v: i32,
         block_size: i32,
     ) -> i32;
+    /// Pre-flight check for the block-sparse SDPA kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_sdpa_f16_block_sparse_can_implement(
         batch: i32,
         heads: i32,
@@ -77681,6 +77698,7 @@ unsafe extern "C" {
         block_size: i32,
     ) -> i32;
 
+    /// Pre-flight check for the block-sparse SDPA kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_sdpa_bf16_block_sparse_can_implement(
         batch: i32,
         heads: i32,
@@ -77691,6 +77709,7 @@ unsafe extern "C" {
         block_size: i32,
     ) -> i32;
 
+    /// Pre-flight check for the block-sparse SDPA kernel (`f64`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_sdpa_f64_block_sparse_can_implement(
         batch: i32,
         heads: i32,
@@ -77746,6 +77765,7 @@ unsafe extern "C" {
         w_dense: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Expand the compressed 2:4 sparse operand (`f16`) into its dense form. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported; any other value is a launch or internal error).
     pub fn baracuda_kernels_gemm_f16_sparse24_inflate(
         m: i32,
         k: i32,
@@ -77754,6 +77774,7 @@ unsafe extern "C" {
         w_dense: *mut c_void,
         stream: *mut c_void,
     ) -> i32;
+    /// Expand the compressed 2:4 sparse operand (`bf16`) into its dense form. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported; any other value is a launch or internal error).
     pub fn baracuda_kernels_gemm_bf16_sparse24_inflate(
         m: i32,
         k: i32,
@@ -77778,6 +77799,7 @@ unsafe extern "C" {
         workspace_bytes: u64,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the 2:4 sparse GEMM (`f16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_gemm_f16_sparse24_gemm_run(
         n: i32,
         m: i32,
@@ -77790,6 +77812,7 @@ unsafe extern "C" {
         workspace_bytes: u64,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the 2:4 sparse GEMM (`bf16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_gemm_bf16_sparse24_gemm_run(
         n: i32,
         m: i32,
@@ -77803,12 +77826,18 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// Pre-flight check for the gemm sparse24 gemm kernel (`f32`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_gemm_f32_sparse24_gemm_can_implement(n: i32, m: i32, k: i32) -> i32;
+    /// Pre-flight check for the gemm sparse24 gemm kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_gemm_f16_sparse24_gemm_can_implement(n: i32, m: i32, k: i32) -> i32;
+    /// Pre-flight check for the gemm sparse24 gemm kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_gemm_bf16_sparse24_gemm_can_implement(n: i32, m: i32, k: i32) -> i32;
 
+    /// Scratch bytes the gemm sparse24 gemm kernel needs for this problem; pass a device buffer at least this large to the matching `_run`.
     pub fn baracuda_kernels_gemm_f32_sparse24_gemm_workspace_bytes(n: i32, m: i32, k: i32) -> u64;
+    /// Scratch bytes the gemm sparse24 gemm kernel needs for this problem; pass a device buffer at least this large to the matching `_run`.
     pub fn baracuda_kernels_gemm_f16_sparse24_gemm_workspace_bytes(n: i32, m: i32, k: i32) -> u64;
+    /// Scratch bytes the gemm sparse24 gemm kernel needs for this problem; pass a device buffer at least this large to the matching `_run`.
     pub fn baracuda_kernels_gemm_bf16_sparse24_gemm_workspace_bytes(n: i32, m: i32, k: i32) -> u64;
 }
 
@@ -77845,6 +77874,7 @@ unsafe extern "C" {
     // -----------------------------------------------------------------
     // causal-conv1d FW (Phase 50)
     // -----------------------------------------------------------------
+    /// Launch the causal conv1d kernel (`f32`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_causal_conv1d_f32_run(
         batch: i32,
         channels: i32,
@@ -77859,6 +77889,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the causal conv1d kernel (`f16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_causal_conv1d_f16_run(
         batch: i32,
         channels: i32,
@@ -77873,6 +77904,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the causal conv1d kernel (`bf16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_causal_conv1d_bf16_run(
         batch: i32,
         channels: i32,
@@ -77887,6 +77919,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the causal conv1d kernel (`f64`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_causal_conv1d_f64_run(
         batch: i32,
         channels: i32,
@@ -77902,18 +77935,21 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// Pre-flight check for the causal conv1d kernel (`f32`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_causal_conv1d_f32_can_implement(
         batch: i32,
         channels: i32,
         seqlen: i32,
         width: i32,
     ) -> i32;
+    /// Pre-flight check for the causal conv1d kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_causal_conv1d_f16_can_implement(
         batch: i32,
         channels: i32,
         seqlen: i32,
         width: i32,
     ) -> i32;
+    /// Pre-flight check for the causal conv1d kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_causal_conv1d_bf16_can_implement(
         batch: i32,
         channels: i32,
@@ -77921,6 +77957,7 @@ unsafe extern "C" {
         width: i32,
     ) -> i32;
 
+    /// Pre-flight check for the causal conv1d kernel (`f64`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_causal_conv1d_f64_can_implement(
         batch: i32,
         channels: i32,
@@ -77931,6 +77968,7 @@ unsafe extern "C" {
     // -----------------------------------------------------------------
     // causal-conv1d BW (Phase 50)
     // -----------------------------------------------------------------
+    /// Launch the backward causal conv1d kernel (`f32`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_causal_conv1d_f32_backward_run(
         batch: i32,
         channels: i32,
@@ -77948,6 +77986,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the backward causal conv1d kernel (`f32`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_causal_conv1d_f32_backward_can_implement(
         batch: i32,
         channels: i32,
@@ -77956,6 +77995,7 @@ unsafe extern "C" {
         use_silu: i32,
     ) -> i32;
 
+    /// Launch the backward causal conv1d kernel (`f16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_causal_conv1d_f16_backward_run(
         batch: i32,
         channels: i32,
@@ -77973,6 +78013,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the backward causal conv1d kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_causal_conv1d_f16_backward_can_implement(
         batch: i32,
         channels: i32,
@@ -77980,6 +78021,7 @@ unsafe extern "C" {
         width: i32,
         use_silu: i32,
     ) -> i32;
+    /// Launch the backward causal conv1d kernel (`bf16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_causal_conv1d_bf16_backward_run(
         batch: i32,
         channels: i32,
@@ -77997,6 +78039,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the backward causal conv1d kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_causal_conv1d_bf16_backward_can_implement(
         batch: i32,
         channels: i32,
@@ -78004,6 +78047,7 @@ unsafe extern "C" {
         width: i32,
         use_silu: i32,
     ) -> i32;
+    /// Launch the backward causal conv1d kernel (`f64`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_causal_conv1d_f64_backward_run(
         batch: i32,
         channels: i32,
@@ -78021,6 +78065,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the backward causal conv1d kernel (`f64`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_causal_conv1d_f64_backward_can_implement(
         batch: i32,
         channels: i32,
@@ -78032,6 +78077,7 @@ unsafe extern "C" {
     // -----------------------------------------------------------------
     // SSD chunk-scan FW (Phase 50)
     // -----------------------------------------------------------------
+    /// Launch the SSD chunk-scan kernel (`f32`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_ssd_chunk_scan_f32_run(
         batch: i32,
         seqlen: i32,
@@ -78049,6 +78095,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the SSD chunk-scan kernel (`f16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_ssd_chunk_scan_f16_run(
         batch: i32,
         seqlen: i32,
@@ -78066,6 +78113,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the SSD chunk-scan kernel (`bf16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_ssd_chunk_scan_bf16_run(
         batch: i32,
         seqlen: i32,
@@ -78084,6 +78132,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// Pre-flight check for the SSD chunk-scan kernel (`f32`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_ssd_chunk_scan_f32_can_implement(
         batch: i32,
         seqlen: i32,
@@ -78092,6 +78141,7 @@ unsafe extern "C" {
         state_dim: i32,
         chunk_size: i32,
     ) -> i32;
+    /// Pre-flight check for the SSD chunk-scan kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_ssd_chunk_scan_f16_can_implement(
         batch: i32,
         seqlen: i32,
@@ -78101,6 +78151,7 @@ unsafe extern "C" {
         chunk_size: i32,
     ) -> i32;
 
+    /// Pre-flight check for the SSD chunk-scan kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_ssd_chunk_scan_bf16_can_implement(
         batch: i32,
         seqlen: i32,
@@ -78113,6 +78164,7 @@ unsafe extern "C" {
     // -----------------------------------------------------------------
     // SSD chunk-scan BW (Phase 50)
     // -----------------------------------------------------------------
+    /// Scratch bytes the SSD chunk-scan kernel needs for this problem; pass a device buffer at least this large to the matching `_run`.
     pub fn baracuda_kernels_ssd_chunk_scan_workspace_bytes(
         batch: i32,
         seqlen: i32,
@@ -78123,6 +78175,7 @@ unsafe extern "C" {
         dtype_id: i32,
     ) -> usize;
 
+    /// Launch the backward SSD chunk-scan kernel (`f32`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_ssd_chunk_scan_f32_backward_run(
         batch: i32,
         seqlen: i32,
@@ -78145,6 +78198,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the backward SSD chunk-scan kernel (`f32`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_ssd_chunk_scan_f32_backward_can_implement(
         batch: i32,
         seqlen: i32,
@@ -78153,6 +78207,7 @@ unsafe extern "C" {
         state_dim: i32,
         chunk_size: i32,
     ) -> i32;
+    /// Launch the backward SSD chunk-scan kernel (`f16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_ssd_chunk_scan_f16_backward_run(
         batch: i32,
         seqlen: i32,
@@ -78175,6 +78230,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the backward SSD chunk-scan kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_ssd_chunk_scan_f16_backward_can_implement(
         batch: i32,
         seqlen: i32,
@@ -78183,6 +78239,7 @@ unsafe extern "C" {
         state_dim: i32,
         chunk_size: i32,
     ) -> i32;
+    /// Launch the backward SSD chunk-scan kernel (`bf16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_ssd_chunk_scan_bf16_backward_run(
         batch: i32,
         seqlen: i32,
@@ -78205,6 +78262,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Pre-flight check for the backward SSD chunk-scan kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_ssd_chunk_scan_bf16_backward_can_implement(
         batch: i32,
         seqlen: i32,
@@ -78217,6 +78275,7 @@ unsafe extern "C" {
     // -----------------------------------------------------------------
     // selective_scan FW (Phase 50b)
     // -----------------------------------------------------------------
+    /// Launch the selective scan kernel (`f32`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_selective_scan_f32_run(
         batch: i32,
         seqlen: i32,
@@ -78237,6 +78296,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the selective scan kernel (`f16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_selective_scan_f16_run(
         batch: i32,
         seqlen: i32,
@@ -78257,6 +78317,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Launch the selective scan kernel (`bf16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_selective_scan_bf16_run(
         batch: i32,
         seqlen: i32,
@@ -78278,12 +78339,14 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// Pre-flight check for the selective scan kernel (`f32`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_selective_scan_f32_can_implement(
         batch: i32,
         seqlen: i32,
         dim: i32,
         dstate: i32,
     ) -> i32;
+    /// Pre-flight check for the selective scan kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_selective_scan_f16_can_implement(
         batch: i32,
         seqlen: i32,
@@ -78291,6 +78354,7 @@ unsafe extern "C" {
         dstate: i32,
     ) -> i32;
 
+    /// Pre-flight check for the selective scan kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_selective_scan_bf16_can_implement(
         batch: i32,
         seqlen: i32,
@@ -78301,6 +78365,7 @@ unsafe extern "C" {
     // -----------------------------------------------------------------
     // selective_scan BW (Phase 50b)
     // -----------------------------------------------------------------
+    /// Scratch bytes the selective scan kernel needs for this problem; pass a device buffer at least this large to the matching `_run`.
     pub fn baracuda_kernels_selective_scan_workspace_bytes(
         batch: i32,
         seqlen: i32,
@@ -78309,6 +78374,7 @@ unsafe extern "C" {
         dtype_id: i32,
     ) -> usize;
 
+    /// Launch the backward selective scan kernel (`f32`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_selective_scan_f32_backward_run(
         batch: i32,
         seqlen: i32,
@@ -78337,12 +78403,14 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// Pre-flight check for the backward selective scan kernel (`f32`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_selective_scan_f32_backward_can_implement(
         batch: i32,
         seqlen: i32,
         dim: i32,
         dstate: i32,
     ) -> i32;
+    /// Launch the backward selective scan kernel (`f16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_selective_scan_f16_backward_run(
         batch: i32,
         seqlen: i32,
@@ -78371,12 +78439,14 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// Pre-flight check for the backward selective scan kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_selective_scan_f16_backward_can_implement(
         batch: i32,
         seqlen: i32,
         dim: i32,
         dstate: i32,
     ) -> i32;
+    /// Launch the backward selective scan kernel (`bf16`) on `stream`. Returns a baracuda status code (0 ok; 2 invalid problem, 3 unsupported, 4 workspace too small; any other value is a launch or internal error).
     pub fn baracuda_kernels_selective_scan_bf16_backward_run(
         batch: i32,
         seqlen: i32,
@@ -78405,6 +78475,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// Pre-flight check for the backward selective scan kernel (`bf16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_selective_scan_bf16_backward_can_implement(
         batch: i32,
         seqlen: i32,
@@ -78554,6 +78625,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// Pre-flight check for the int4 AWQ dequantize kernel (`f16`): 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_int4_awq_dequantize_f16_can_implement(
         N: i32,
         K: i32,
@@ -78612,6 +78684,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// Pre-flight check for the ring attention init kernel: 0 if the problem is supported, otherwise a baracuda status code (2 invalid problem, 3 unsupported; others are internal errors). Launches nothing.
     pub fn baracuda_kernels_ring_attention_init_can_implement(
         o_acc: *const c_void,
         m_acc: *const c_void,
